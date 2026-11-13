@@ -68,9 +68,10 @@
  * A script hook that sets `async`, `async rewake`, or `waits` is a lifecycle
  * hook (D-BG-12). Right after recording, its script writes its pid to
  * `<harness dir>/hook-<name>-<pid>.pid`, which the release of the profile Pi
- * reads to stop the script and then checks as a stand-in's, and runs the
- * recorder in its lifecycle mode with
- * `start`. When it exits, it runs the recorder with `end` and its exit code,
+ * reads to stop the script and then checks as a stand-in's. The release also
+ * reads the bridge's PID table to stop a child before its script writes that
+ * file. The script runs the recorder in its lifecycle mode with `start`.
+ * When it exits, it runs the recorder with `end` and its exit code,
  * then removes the pid file. Every other hook writes neither.
  *
  * A run names the hook that made it, so two hooks on one matcher are two
@@ -545,14 +546,111 @@ export async function readHookScriptPids(harness: string): Promise<readonly numb
   );
 }
 
+interface RegisteredHookProcess {
+  readonly pid: number;
+  readonly dispatchId: string;
+}
+
+async function registeredHookProcesses(scopeRoot: string): Promise<RegisteredHookProcess[]> {
+  const table = path.join(
+    scopeRoot,
+    "pi-claude-marketplace",
+    "data",
+    "_shared",
+    "async-rewake-pids.json",
+  );
+  let raw: string;
+  try {
+    raw = await readFile(table, "utf8");
+  } catch (error: unknown) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return [];
+    }
+
+    throw error;
+  }
+
+  const tableValue: unknown = JSON.parse(raw);
+  if (
+    typeof tableValue !== "object" ||
+    tableValue === null ||
+    !("version" in tableValue) ||
+    tableValue.version !== 1 ||
+    !("entries" in tableValue) ||
+    !Array.isArray(tableValue.entries)
+  ) {
+    throw new Error(`invalid hook PID table: ${table}`);
+  }
+
+  const entries: unknown[] = tableValue.entries;
+  return entries.map((entry) => {
+    if (
+      typeof entry !== "object" ||
+      entry === null ||
+      !("pid" in entry) ||
+      typeof entry.pid !== "number" ||
+      !Number.isSafeInteger(entry.pid) ||
+      entry.pid < 2 ||
+      !("dispatchId" in entry) ||
+      typeof entry.dispatchId !== "string"
+    ) {
+      throw new Error(`invalid hook PID table entry: ${table}`);
+    }
+
+    return { pid: entry.pid, dispatchId: entry.dispatchId };
+  });
+}
+
+async function isRegisteredHookProcess(entry: RegisteredHookProcess): Promise<boolean> {
+  if (process.platform !== "linux") {
+    return true;
+  }
+
+  try {
+    const environ = await readFile(`/proc/${entry.pid}/environ`, "utf8");
+    return environ
+      .split("\0")
+      .includes(`PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=${entry.dispatchId}`);
+  } catch (error: unknown) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+async function stopRegisteredHookProcess(entry: RegisteredHookProcess): Promise<void> {
+  if (!(await isRegisteredHookProcess(entry))) {
+    return;
+  }
+
+  try {
+    process.kill(-entry.pid, "SIGKILL");
+  } catch {
+    try {
+      process.kill(entry.pid, "SIGKILL");
+    } catch {
+      // The child already exited.
+    }
+  }
+}
+
 /**
- * SIGKILLs each lifecycle hook script that a pid file in `harness` names and
- * that still runs. Pi starts each hook as the leader of a process group of its
- * own, so stopping a Pi and its group leaves the hook running; a scenario's
- * release stops what the scenario left, so that a waiting script cannot take
- * the release marker of a later scenario.
+ * Stops registered hook groups before checking script PID files. A child can
+ * start its script after the PID-file check, so the registry's table covers
+ * the gap before the script writes its own file.
  */
-export async function stopHookScripts(harness: string): Promise<void> {
+export async function stopHookScripts(
+  harness: string,
+  scopeRoots: readonly string[],
+): Promise<void> {
+  for (const scopeRoot of scopeRoots) {
+    for (const entry of await registeredHookProcesses(scopeRoot)) {
+      await stopRegisteredHookProcess(entry);
+    }
+  }
+
   for (const pid of await readHookScriptPids(harness)) {
     try {
       process.kill(pid, "SIGKILL");

@@ -1053,7 +1053,7 @@ export class ScenarioWorld extends World {
     }
 
     await this.pi.stop();
-    await stopHookScripts(harness);
+    await stopHookScripts(harness, [this.scopeRoot("user"), this.scopeRoot("project")]);
     await assertStandInsStopped(harness);
     if (restart === "builtin-on") {
       await turnOnBuiltinMcp(agentDir);
@@ -1105,10 +1105,10 @@ export class ScenarioWorld extends World {
     // HAR-05: the profile Pi stops first, so a stand-in that exits when its
     // stdin closes has exited before its pid file is checked. Pi starts each
     // hook in a process group of its own, which stopping Pi leaves running,
-    // so the release stops the hook scripts apart.
+    // so the release stops each registered group and script apart.
     this.onRelease(async () => {
       await pi.stop();
-      await stopHookScripts(harness);
+      await stopHookScripts(harness, [this.scopeRoot("user"), this.scopeRoot("project")]);
       await assertStandInsStopped(harness);
     });
     this.scenarioPi = pi;
