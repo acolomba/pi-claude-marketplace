@@ -18,6 +18,7 @@ import { homedir } from "node:os";
 
 import { mapPiToClaudeToolName } from "../../../domain/components/hook-tool-names.ts";
 import { toHookToolInput } from "../tool-input.ts";
+import { fileToolResponse } from "../tool-result-files.ts";
 
 import type { ToolResultEvent } from "../../../platform/pi-api.ts";
 import type { TranslationContext } from "../translation-context.ts";
@@ -43,6 +44,6 @@ export function translatePostToolUse(
     hook_event_name: "PostToolUse",
     tool_name: mapPiToClaudeToolName(event.toolName),
     tool_input: toHookToolInput(event.toolName, event.input, ctx.cwd, homedir()),
-    tool_response: event.content,
+    tool_response: fileToolResponse(event, ctx.cwd) ?? event.content,
   };
 }

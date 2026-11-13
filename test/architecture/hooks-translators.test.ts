@@ -198,3 +198,35 @@ test("gives all three plain tool translators the same translated Read input", as
     })),
   );
 });
+
+test("keeps successful file results on the shared translator boundary", async () => {
+  const context = {
+    sessionId: "file-result-session",
+    transcriptPath: "/sessions/file-result.jsonl",
+    cwd: "/workspace/plain",
+  } satisfies TranslationContext;
+  const translate = (await loadTranslator("PostToolUse")) as Translator;
+  const payload = translate(
+    {
+      type: "tool_result",
+      toolCallId: "read-file-result",
+      toolName: "read",
+      input: { path: "note.txt" },
+      content: [{ type: "text", text: "content" }],
+      details: undefined,
+      isError: false,
+    },
+    context,
+  ) as Record<string, unknown>;
+
+  assert.deepStrictEqual(payload.tool_response, {
+    type: "text",
+    file: {
+      filePath: "/workspace/plain/note.txt",
+      content: "content",
+      startLine: 1,
+      numLines: 1,
+      totalLines: 1,
+    },
+  });
+});

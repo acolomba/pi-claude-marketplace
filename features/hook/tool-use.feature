@@ -8,6 +8,115 @@ Feature: Hook tool use
   proxy call (MHK-02).
   A tool whose cut name has a proxy's shape is still a tool under either implementation.
 
+  Scenario: A file result replacement changes what the model reads
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event       | matcher | form   | output                                                                                         |
+      | replace | PostToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"type":"text","file":{"content":"safe"}}}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "secret.txt" with the text "OLD_SECRET" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments             |
+      |       | read | {"path":"secret.txt"} |
+      | Done. |      |                       |
+    When the user prompts "read the secret"
+    Then the project file "secret.txt" has the text "OLD_SECRET" after a tool hook
+    Then the model receives these calls:
+      | call | role        | text                                  |
+      | 1    | user        | read the secret                       |
+      | 2    | user        | read the secret                       |
+      | 2    | assistant   | tool call read {"path":"secret.txt"} |
+      | 2    | tool result | read returned: safe                   |
+
+  Scenario: A redacted result leaves no original data for another Pi handler
+    Given pi runs with the scripted model and a downstream file result observer
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event       | matcher | form   | output                                                                                         |
+      | replace | PostToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"type":"text","file":{"content":"safe"}}}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "secret.txt" with the text "OLD_TEXT_SECRET" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments             |
+      |       | read | {"path":"secret.txt"} |
+      | Done. |      |                       |
+    When the user prompts "read the secret"
+    Then another pi handler observes these complete file results:
+      | record                                                                                       |
+      | {"toolName":"read","content":[{"type":"text","text":"safe"}],"details":null,"structuredContent":null,"isError":false} |
+    Then the model receives these calls:
+      | call | role        | text                                  |
+      | 1    | user        | read the secret                       |
+      | 2    | user        | read the secret                       |
+      | 2    | assistant   | tool call read {"path":"secret.txt"} |
+      | 2    | tool result | read returned: safe                   |
+
+  Scenario: An image result replacement preserves only the supplied image
+    Given pi runs with the scripted model and a downstream file result observer
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event       | matcher | form   | output |
+      | replace | PostToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"type":"image","file":{"base64":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12NgYPj/HwADAgH/HXJk1AAAAABJRU5ErkJggg==","type":"image/png"}}}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the tiny red image "original.png" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments               |
+      |       | read | {"path":"original.png"} |
+      | Done. |      |                         |
+    When the user prompts "read the image"
+    Then the tiny red image "original.png" is unchanged after a tool hook
+    Then another pi handler observes these complete file results:
+      | record |
+      | {"toolName":"read","content":[{"type":"image","data":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12NgYPj/HwADAgH/HXJk1AAAAABJRU5ErkJggg==","mimeType":"image/png"}],"details":null,"structuredContent":null,"isError":false} |
+    Then the model receives these calls:
+      | call | role        | text                                    |
+      | 1    | user        | read the image                          |
+      | 2    | user        | read the image                          |
+      | 2    | assistant   | tool call read {"path":"original.png"} |
+      | 2    | tool result | read returned: image                    |
+
+  Scenario: An empty replacement removes the original file result
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event       | matcher | form   | output                                                                                     |
+      | replace | PostToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"type":"text","file":{"content":""}}}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "secret.txt" with the text "OLD_SECRET" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments             |
+      |       | read | {"path":"secret.txt"} |
+      | Done. |      |                       |
+    When the user prompts "read the secret"
+    Then the project file "secret.txt" has the text "OLD_SECRET" after a tool hook
+    Then the model receives these calls, with an empty file result:
+      | call | role        | text                                  |
+      | 1    | user        | read the secret                       |
+      | 2    | user        | read the secret                       |
+      | 2    | assistant   | tool call read {"path":"secret.txt"} |
+      | 2    | tool result | read returned: <empty>                |
+
   Scenario: Every edit result hook receives the same actual batch result
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source
@@ -28,8 +137,8 @@ Feature: Hook tool use
     When the user prompts "edit both blocks"
     Then the hooks record these runs in any order:
       | event       | session | tool name | tool input                                                                            | tool response                                                                         | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | PostToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"first","new_string":"one"}   | [{"type":"text","text":"Successfully replaced 2 block(s) in document.txt."}] | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
-      | PostToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"second","new_string":"two"} | [{"type":"text","text":"Successfully replaced 2 block(s) in document.txt."}] | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"first","new_string":"one"}   | {"filePath":"{project dir}/document.txt","oldString":"first","newString":"one","replaceAll":false,"structuredPatch":[{"oldStart":1,"oldLines":3,"newStart":1,"newLines":3,"lines":["-first","+one"," middle","-second","+two"]}]} | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"second","new_string":"two"} | {"filePath":"{project dir}/document.txt","oldString":"second","newString":"two","replaceAll":false,"structuredPatch":[{"oldStart":1,"oldLines":3,"newStart":1,"newLines":3,"lines":["-first","+one"," middle","-second","+two"]}]} | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the project file "document.txt" has the text "one\nmiddle\ntwo\n" after a tool hook
     Then the model receives these calls:
       | call | role        | text                                                                                                                     |
@@ -46,7 +155,7 @@ Feature: Hook tool use
       | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
       | name    | event       | matcher | form   | output                                                                                                                     |
-      | replace | PostToolUse | Edit    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"content":[{"type":"text","text":"replaced"}]}}} |
+      | replace | PostToolUse | Edit    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"filePath":"{project dir}/document.txt","newString":"replaced"}}} |
       | observe | PostToolUse | Edit    |        |                                                                                                                            |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
@@ -59,17 +168,17 @@ Feature: Hook tool use
     When the user prompts "edit both blocks"
     Then the hooks record these runs in any order:
       | event       | session | tool name | tool input                                                                            | tool response                                                                         | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | PostToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"first","new_string":"one"}   | [{"type":"text","text":"Successfully replaced 2 block(s) in document.txt."}] | {project dir} |                 | replace   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
-      | PostToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"first","new_string":"one"}   | [{"type":"text","text":"Successfully replaced 2 block(s) in document.txt."}] | {project dir} |                 | observe   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
-      | PostToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"second","new_string":"two"} | [{"type":"text","text":"Successfully replaced 2 block(s) in document.txt."}] | {project dir} |                 | replace   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
-      | PostToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"second","new_string":"two"} | [{"type":"text","text":"Successfully replaced 2 block(s) in document.txt."}] | {project dir} |                 | observe   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"first","new_string":"one"}   | {"filePath":"{project dir}/document.txt","oldString":"first","newString":"one","replaceAll":false,"structuredPatch":[{"oldStart":1,"oldLines":3,"newStart":1,"newLines":3,"lines":["-first","+one"," middle","-second","+two"]}]} | {project dir} |                 | replace   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"first","new_string":"one"}   | {"filePath":"{project dir}/document.txt","oldString":"first","newString":"one","replaceAll":false,"structuredPatch":[{"oldStart":1,"oldLines":3,"newStart":1,"newLines":3,"lines":["-first","+one"," middle","-second","+two"]}]} | {project dir} |                 | observe   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"second","new_string":"two"} | {"filePath":"{project dir}/document.txt","oldString":"second","newString":"two","replaceAll":false,"structuredPatch":[{"oldStart":1,"oldLines":3,"newStart":1,"newLines":3,"lines":["-first","+one"," middle","-second","+two"]}]} | {project dir} |                 | replace   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse | first   | Edit      | {"file_path":"{project dir}/document.txt","old_string":"second","new_string":"two"} | {"filePath":"{project dir}/document.txt","oldString":"second","newString":"two","replaceAll":false,"structuredPatch":[{"oldStart":1,"oldLines":3,"newStart":1,"newLines":3,"lines":["-first","+one"," middle","-second","+two"]}]} | {project dir} |                 | observe   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the project file "document.txt" has the text "one\nmiddle\ntwo\n" after a tool hook
     Then the model receives these calls:
       | call | role        | text                                                                                                                     |
       | 1    | user        | edit both blocks                                                                                                         |
       | 2    | user        | edit both blocks                                                                                                         |
       | 2    | assistant   | tool call edit {"path":"document.txt","edits":[{"oldText":"first","newText":"one"},{"oldText":"second","newText":"two"}]} |
-      | 2    | tool result | edit returned: replaced                                                                                                 |
+      | 2    | tool result | edit returned: {project dir}/document.txt: replaced                                                                     |
 
   Scenario: A hook sees each edit pair before the batch runs
     Given pi runs with the scripted model
@@ -1148,7 +1257,7 @@ Feature: Hook tool use
       | 2    | assistant   | tool call grep {"pattern":"original","path":"search.txt"} |
       | 2    | tool result | grep returned: search.txt:1: original                      |
 
-  Scenario Outline: Successful tool hooks receive the translated input that executed for <name>
+  Scenario Outline: File result hooks receive the facts Pi supplies for <name>
     Given pi runs with the scripted model and search tools
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -1175,8 +1284,8 @@ Feature: Hook tool use
 
     Examples:
       | name  | tool  | arguments                                               | hook input                                                                          | response                                                                 |
-      | Read  | read  | {"path":"search.txt"}                                  | {"file_path":"{project dir}/search.txt"}                                         | [{"type":"text","text":"needle\\nother"}]                                 |
-      | Write | write | {"path":"output.txt","content":"written"}            | {"file_path":"{project dir}/output.txt","content":"written"}                  | [{"type":"text","text":"Successfully wrote to output.txt"}]             |
+      | Read  | read  | {"path":"search.txt"}                                  | {"file_path":"{project dir}/search.txt"}                                         | {"type":"text","file":{"filePath":"{project dir}/search.txt","content":"needle\\nother","startLine":1,"numLines":2,"totalLines":2}} |
+      | Write | write | {"path":"output.txt","content":"written"}            | {"file_path":"{project dir}/output.txt","content":"written"}                  | {"filePath":"{project dir}/output.txt","content":"written"} |
       | Bash  | bash  | {"command":"echo ready","timeout":0.5}                | {"command":"echo ready","timeout":500}                                         | [{"type":"text","text":"ready\\n"}]                                       |
       | Glob  | find  | {"pattern":"found*.md","limit":2}                      | {"pattern":"found*.md"}                                                           | [{"type":"text","text":"found.md"}]                                      |
       | Grep  | grep  | {"pattern":"needle","path":"search.txt","limit":2} | {"pattern":"needle","path":"search.txt","output_mode":"content","-n":true,"head_limit":2} | [{"type":"text","text":"search.txt:1: needle"}]                          |

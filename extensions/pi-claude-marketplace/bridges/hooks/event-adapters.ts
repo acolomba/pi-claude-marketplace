@@ -60,6 +60,7 @@
 // hook on one snapshot, so a mutation applies once, after every hook ran.
 
 import { homedir } from "node:os";
+import { isDeepStrictEqual } from "node:util";
 
 import { mapPiToClaudeToolName } from "../../domain/components/hook-tool-names.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -69,6 +70,7 @@ import { openNotificationRun } from "../../shared/notification-run.ts";
 
 import { hookBlockingErrorText, hookErrorText, hookEventLabel } from "./hook-labels.ts";
 import { decodeHookToolInput } from "./tool-input.ts";
+import { renderFileToolOutput } from "./tool-output-files.ts";
 
 import type { HookExecResult } from "./exec-result.ts";
 import type { PendingPromptContext, RoutingEntry } from "./routing-state.ts";
@@ -170,18 +172,48 @@ export function replaceToolCallInput(
  * only the changes a handler returns, so a change made to the event in place
  * would never reach the model. `undefined` when neither field is valid.
  */
-function toolResultPatch(updatedToolOutput: unknown): ToolResultEventResult | undefined {
+function toolResultPatch(
+  updatedToolOutput: unknown,
+  event: ToolResultEvent,
+  cwd: string,
+): ToolResultEventResult | undefined {
   if (updatedToolOutput === null || typeof updatedToolOutput !== "object") {
     return undefined;
   }
 
-  const patch = updatedToolOutput as Partial<Pick<ToolResultEvent, "content" | "isError">>;
-  const toolResult: ToolResultEventResult = {};
-  if (Array.isArray(patch.content)) {
-    toolResult.content = patch.content;
+  if (["read", "edit", "write"].includes(event.toolName.toLowerCase())) {
+    return renderFileToolOutput(event, updatedToolOutput, cwd);
   }
 
-  if (typeof patch.isError === "boolean") {
+  const patch = updatedToolOutput as Partial<Pick<ToolResultEvent, "content" | "isError">>;
+  const validContent =
+    Array.isArray(patch.content) &&
+    patch.content.every(
+      (block) =>
+        typeof block === "object" &&
+        ((block.type === "text" && typeof block.text === "string") ||
+          (block.type === "image" &&
+            typeof block.data === "string" &&
+            typeof block.mimeType === "string")),
+    );
+  if (
+    (patch.content !== undefined && !validContent) ||
+    (patch.isError !== undefined && typeof patch.isError !== "boolean")
+  ) {
+    return undefined;
+  }
+
+  const toolResult: ToolResultEventResult = {};
+  if (
+    Array.isArray(patch.content) &&
+    validContent &&
+    !isDeepStrictEqual(patch.content, event.content)
+  ) {
+    toolResult.content = patch.content;
+    toolResult.details = null;
+  }
+
+  if (typeof patch.isError === "boolean" && patch.isError !== event.isError) {
     toolResult.isError = patch.isError;
   }
 
@@ -369,13 +401,24 @@ export function adaptToolResultResult(
   context: HookAdapterContext,
 ): ToolResultEventResult | undefined {
   switch (result.kind) {
-    case "block":
+    case "block": {
       // D-CF5-11: the tool already ran, so its output stays and the hook's
       // feedback follows it; the result is not marked an error.
-      return { content: withFeedback(event, result, context) };
+      const feedbackResult: ToolResultEventResult = {
+        content: withFeedback(event, result, context),
+        isError: event.isError,
+      };
+      if (event.structuredContent !== undefined) {
+        feedbackResult.structuredContent = event.structuredContent;
+      }
+
+      return feedbackResult;
+    }
 
     case "mutate":
-      return event.isError ? failedResultPatch(result) : toolResultPatch(result.updatedToolOutput);
+      return event.isError
+        ? failedResultPatch(result)
+        : toolResultPatch(result.updatedToolOutput, event, context.ctx.cwd);
 
     case "stop":
       hookDebugLog(
