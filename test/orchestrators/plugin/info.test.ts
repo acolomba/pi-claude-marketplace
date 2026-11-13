@@ -5155,7 +5155,7 @@ test("PHOOK-05 / D-71-05: strict reader lists the kept `PostToolUse(Bash)` group
   });
 });
 
-test("PHOOK-05 / D-71-05: strict reader enumerates an intra-event dropped matcher group as `PreToolUse(.*) (unsupported)`", async () => {
+test("strict reader enumerates a dropped invalid matcher group as unsupported", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -5172,8 +5172,8 @@ test("PHOOK-05 / D-71-05: strict reader enumerates an intra-event dropped matche
     });
 
     // Intra-event matcher-group partition (D-71-02): PreToolUse declares a
-    // supportable `Edit` group and an unsupportable regex `.*` group. The
-    // partition keeps the Edit group and drops the regex group, so the plugin
+    // supportable `Edit` group and an invalid regex `[` group. The
+    // partition keeps the Edit group and drops the invalid group, so the plugin
     // resolves `partially-available` with `hooksConfigPath` recorded. The strict
     // reader renders the kept group plain and the dropped group at
     // matcher-group granularity with the (unsupported) suffix.
@@ -5185,7 +5185,7 @@ test("PHOOK-05 / D-71-05: strict reader enumerates an intra-event dropped matche
         hooks: {
           PreToolUse: [
             { matcher: "Edit", hooks: [{ type: "command", command: "echo edit" }] },
-            { matcher: ".*", hooks: [{ type: "command", command: "echo regex" }] },
+            { matcher: "[", hooks: [{ type: "command", command: "echo invalid" }] },
           ],
         },
       }),
@@ -5199,11 +5199,8 @@ test("PHOOK-05 / D-71-05: strict reader enumerates an intra-event dropped matche
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
     assert.match(msg, /\(partially-available\) \{unsupported hooks\}/);
-    // Kept group plain, dropped regex group at matcher-group granularity.
-    assert.match(
-      msg,
-      /\n {4}hooks:\n {6}PreToolUse\(Edit\)\n {6}PreToolUse\(\.\*\) \(unsupported\)/,
-    );
+    // Kept group plain, dropped invalid group at matcher-group granularity.
+    assert.match(msg, /\n {4}hooks:\n {6}PreToolUse\(Edit\)\n {6}PreToolUse\(\[\) \(unsupported\)/);
   });
 });
 
@@ -8595,8 +8592,8 @@ test("strict hook inventory deduplicates two dropped matcher groups exactly", as
         hooks: {
           PreToolUse: [
             { matcher: "Edit", hooks: [{ type: "command", command: "echo edit" }] },
-            { matcher: ".*", hooks: [{ type: "command", command: "echo one" }] },
-            { matcher: ".*", hooks: [{ type: "command", command: "echo two" }] },
+            { matcher: "[", hooks: [{ type: "command", command: "echo one" }] },
+            { matcher: "[", hooks: [{ type: "command", command: "echo two" }] },
           ],
         },
       }),
@@ -8615,7 +8612,7 @@ test("strict hook inventory deduplicates two dropped matcher groups exactly", as
           "  ⊖ alpha v1.0.0 (partially-available) {unsupported hooks}",
           "    hooks:",
           "      PreToolUse(Edit)",
-          "      PreToolUse(.*) (unsupported)",
+          "      PreToolUse([) (unsupported)",
         ].join("\n"),
       },
     ]);

@@ -177,6 +177,22 @@ test("parseHooksConfig rejects invalid JSON", () => {
   }
 });
 
+test("parseHooksConfig rejects a null matcher through schema validation", () => {
+  // arrange
+  const raw = JSON.stringify({
+    PreToolUse: [{ matcher: null, hooks: [{ type: "command", command: "echo x" }] }],
+  });
+
+  // act
+  const result = parseHooksConfig(raw, TEST_IF_CTX, () => null);
+
+  // assert
+  assert.deepStrictEqual(result, {
+    ok: false,
+    reason: "hooks.json failed schema validation: /PreToolUse/0/matcher: must be string",
+  });
+});
+
 for (const { description, raw, reason } of [
   {
     description: "a non-array handler group",
@@ -213,7 +229,7 @@ test("parseHooksConfig keeps supported handlers, drops rejected groups and handl
         ],
       },
       {
-        matcher: ".*",
+        matcher: "[",
         hooks: [{ type: "command", command: "/bin/regex", if: "never compile" }],
       },
       {
@@ -250,7 +266,7 @@ test("parseHooksConfig keeps supported handlers, drops rejected groups and handl
         matcher: "Edit",
         handlerType: "future-handler",
       },
-      { kind: "group", event: "PostToolUse", matcher: ".*", cond: "regex" },
+      { kind: "group", event: "PostToolUse", matcher: "[", cond: "regex" },
       {
         kind: "handler",
         event: "PostToolUse",
@@ -455,7 +471,7 @@ test("parseHooksConfig keeps a supported event while dropping an unsupported sib
   });
 });
 
-test("parseHooksConfig keeps a clean matcher group while dropping a regex group", async () => {
+test("parseHooksConfig keeps a clean matcher group while dropping an invalid regex group", async () => {
   // arrange
   const raw = await readFile(
     path.resolve(FIXTURE_DIR, "../../fixtures/hooks-pretooluse-matcher-mix.json"),
@@ -476,7 +492,35 @@ test("parseHooksConfig keeps a clean matcher group while dropping a regex group"
         },
       ],
     },
-    dropped: [{ kind: "group", event: "PreToolUse", matcher: ".*", cond: "regex" }],
+    dropped: [{ kind: "group", event: "PreToolUse", matcher: "[", cond: "regex" }],
+    ifPredicates: new Map(),
+    declaresModule: false,
+  });
+});
+
+test("parseHooksConfig admits valid regex groups and drops malformed siblings", () => {
+  // arrange
+  const raw = JSON.stringify({
+    PreToolUse: [
+      { matcher: "^Ba.*", hooks: [{ type: "command", command: "echo bash" }] },
+      { matcher: "[", hooks: [{ type: "command", command: "echo invalid" }] },
+      { matcher: "(Read|Write)", hooks: [{ type: "command", command: "echo files" }] },
+    ],
+  });
+
+  // act
+  const result = parseHooksConfig(raw, TEST_IF_CTX, () => null, { skipIfMap: true });
+
+  // assert
+  assert.deepStrictEqual(result, {
+    ok: true,
+    value: {
+      PreToolUse: [
+        { matcher: "^Ba.*", hooks: [{ type: "command", command: "echo bash" }] },
+        { matcher: "(Read|Write)", hooks: [{ type: "command", command: "echo files" }] },
+      ],
+    },
+    dropped: [{ kind: "group", event: "PreToolUse", matcher: "[", cond: "regex" }],
     ifPredicates: new Map(),
     declaresModule: false,
   });

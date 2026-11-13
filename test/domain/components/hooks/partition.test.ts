@@ -59,11 +59,26 @@ describe("partitionHooks", () => {
     });
   });
 
-  test("drops regex and unmapped tool groups but keeps their supported sibling", () => {
+  test("keeps exact lists with spaces and separators without widening an empty list", () => {
+    // arrange
+    const groups = [
+      { matcher: "Read Write, Bash | Bash", hooks: [{ type: "command", command: "bash" }] },
+      { matcher: " , | , ", hooks: [{ type: "command", command: "never" }] },
+    ];
+
+    // act
+    const partition = partitionHooks({ PreToolUse: groups });
+
+    // assert
+    assert.deepStrictEqual(partition, { supported: { PreToolUse: groups }, dropped: [] });
+  });
+
+  test("keeps valid regex and exact groups beside invalid and unmapped groups", () => {
     // arrange
     const config = {
       PostToolUse: [
         { matcher: "Edit.*", hooks: [{ type: "command", command: "regex" }] },
+        { matcher: "[", hooks: [{ type: "command", command: "invalid" }] },
         { matcher: "MultiEdit", hooks: [{ type: "command", command: "unmapped" }] },
         { matcher: "Write", hooks: [{ type: "command", command: "write" }] },
       ],
@@ -75,10 +90,13 @@ describe("partitionHooks", () => {
     // assert
     assert.deepStrictEqual(partition, {
       supported: {
-        PostToolUse: [{ matcher: "Write", hooks: [{ type: "command", command: "write" }] }],
+        PostToolUse: [
+          { matcher: "Edit.*", hooks: [{ type: "command", command: "regex" }] },
+          { matcher: "Write", hooks: [{ type: "command", command: "write" }] },
+        ],
       },
       dropped: [
-        { kind: "group", event: "PostToolUse", matcher: "Edit.*", cond: "regex" },
+        { kind: "group", event: "PostToolUse", matcher: "[", cond: "regex" },
         {
           kind: "group",
           event: "PostToolUse",
@@ -89,7 +107,7 @@ describe("partitionHooks", () => {
     });
   });
 
-  test("ANAME-02: keeps a server-prefix MCP matcher group as supported", () => {
+  test("keeps MCP whole regex groups as supported", () => {
     // arrange
     const config = {
       PreToolUse: [
@@ -106,9 +124,10 @@ describe("partitionHooks", () => {
       supported: {
         PreToolUse: [
           { matcher: "mcp__plugin_acme_db__.*", hooks: [{ type: "command", command: "prefix" }] },
+          { matcher: "mcp__*", hooks: [{ type: "command", command: "wildcard" }] },
         ],
       },
-      dropped: [{ kind: "group", event: "PreToolUse", matcher: "mcp__*", cond: "regex" }],
+      dropped: [],
     });
   });
 
@@ -128,7 +147,7 @@ describe("partitionHooks", () => {
     });
   });
 
-  test("drops a matcher from an event without matcher support", () => {
+  test("ignores a matcher on an event without matcher support", () => {
     // arrange
     const config = {
       UserPromptSubmit: [{ matcher: "prompt", hooks: [{ type: "command", command: "prompt" }] }],
@@ -139,16 +158,32 @@ describe("partitionHooks", () => {
 
     // assert
     assert.deepStrictEqual(partition, {
-      supported: {},
-      dropped: [
-        {
-          kind: "group",
-          event: "UserPromptSubmit",
-          matcher: "prompt",
-          cond: "no-matcher-support",
-        },
-      ],
+      supported: {
+        UserPromptSubmit: [{ matcher: "prompt", hooks: [{ type: "command", command: "prompt" }] }],
+      },
+      dropped: [],
     });
+  });
+
+  test("keeps invalid, empty, and absent matchers on prompt and Stop groups", () => {
+    // arrange
+    const config = {
+      UserPromptSubmit: [
+        { matcher: "[", hooks: [{ type: "command", command: "invalid" }] },
+        { matcher: "", hooks: [{ type: "command", command: "empty" }] },
+        { hooks: [{ type: "command", command: "absent" }] },
+      ],
+      Stop: [
+        { matcher: "[", hooks: [{ type: "command", command: "invalid" }] },
+        { matcher: "", hooks: [{ type: "command", command: "empty" }] },
+      ],
+    };
+
+    // act
+    const partition = partitionHooks(config);
+
+    // assert
+    assert.deepStrictEqual(partition, { supported: config, dropped: [] });
   });
 
   test("keeps absent and star matchers on events without matcher support", () => {
@@ -354,7 +389,7 @@ describe("partitionHooks", () => {
             { type: "prompt", command: "drop-second" },
           ],
         },
-        { matcher: "Edit.*", hooks: [{ type: "command", command: "regex" }] },
+        { matcher: "[", hooks: [{ type: "command", command: "invalid" }] },
       ],
       SessionStart: [{ matcher: "bogus", hooks: [{ type: "command", command: "bogus" }] }],
     };
@@ -376,7 +411,7 @@ describe("partitionHooks", () => {
         { kind: "event", event: "Notification" },
         { kind: "handler", event: "PreToolUse", matcher: "Edit", handlerType: "http" },
         { kind: "handler", event: "PreToolUse", matcher: "Edit", handlerType: "prompt" },
-        { kind: "group", event: "PreToolUse", matcher: "Edit.*", cond: "regex" },
+        { kind: "group", event: "PreToolUse", matcher: "[", cond: "regex" },
         { kind: "group", event: "SessionStart", matcher: "bogus", cond: "closed-set" },
       ],
     });

@@ -394,7 +394,9 @@ function pushGroupHandlers(
 ): number {
   const { claudeEvent, groupIndex } = position;
   const rawMatcher = group.matcher ?? "";
-  const matcher = parseMatcher(rawMatcher);
+  const matcher = parseMatcher(
+    claudeEvent === "UserPromptSubmit" || claudeEvent === "Stop" ? "" : rawMatcher,
+  );
   let declarationIndex = startIndex;
 
   for (let handlerIndex = 0; handlerIndex < group.hooks.length; handlerIndex++) {

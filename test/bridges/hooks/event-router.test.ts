@@ -1799,6 +1799,63 @@ test("rebuildRoutingTables preserves stable plugin and declaration order in all 
   }
 });
 
+test("rebuildRoutingTables ignores prompt and Stop matcher text on every rebuild", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const config: HooksConfig = {
+    UserPromptSubmit: [
+      { matcher: "[", hooks: [{ type: "command", command: "prompt-invalid" }] },
+      { hooks: [{ type: "command", command: "prompt-absent" }] },
+    ],
+    Stop: [
+      { matcher: "[", hooks: [{ type: "command", command: "stop-invalid" }] },
+      { matcher: "", hooks: [{ type: "command", command: "stop-empty" }] },
+    ],
+  };
+  seedPluginConfig(
+    runtime,
+    "project",
+    "catalog",
+    "ignored",
+    asAbsolutePluginRoot("/router/project/ignored"),
+    config,
+    new Map(),
+  );
+  const routing = createHooksRouting(runtime, { readHooksJson });
+  const events = ["UserPromptSubmit", "Stop"] as const satisfies readonly BucketAEvent[];
+
+  // act
+  routing.rebuildRoutingTables();
+  const first = events.map((event) =>
+    runtime.getRoutingBucket(event).map((entry) => ({
+      command: entry.handlerDecl.command,
+      rawMatcher: entry.rawMatcher,
+      matcher: entry.matcher,
+    })),
+  );
+  routing.rebuildRoutingTables();
+  const second = events.map((event) =>
+    runtime.getRoutingBucket(event).map((entry) => ({
+      command: entry.handlerDecl.command,
+      rawMatcher: entry.rawMatcher,
+      matcher: entry.matcher,
+    })),
+  );
+
+  // assert
+  assert.deepStrictEqual(first, [
+    [
+      { command: "prompt-invalid", rawMatcher: "[", matcher: { kind: "match-all" } },
+      { command: "prompt-absent", rawMatcher: "", matcher: { kind: "match-all" } },
+    ],
+    [
+      { command: "stop-invalid", rawMatcher: "[", matcher: { kind: "match-all" } },
+      { command: "stop-empty", rawMatcher: "", matcher: { kind: "match-all" } },
+    ],
+  ]);
+  assert.deepStrictEqual(second, first);
+});
+
 test("rebuildRoutingTables tolerates valid record keys and sparse arrays defensively", () => {
   // arrange
   const runtime = createHooksRuntime();

@@ -53,12 +53,12 @@
 // generation changed while its hooks ran folds to noop.
 
 import { closedSetMatcherValues } from "../../domain/components/hook-events.ts";
+import { mapPiToClaudeToolName } from "../../domain/components/hook-tool-names.ts";
 import {
   claudeFormToolName,
   looksLikeCutAdapterToolName,
   MCP_TOOL_PREFIX,
   recoverAdapterToolName,
-  serverPrefixNames,
   toolLiteralNames,
 } from "../../domain/components/hooks/builtin-mcp-tool-names.ts";
 import { joinedAdapterToolName } from "../../domain/mcp-implementation.ts";
@@ -143,28 +143,18 @@ export type HookExecutor = (
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * Tool-event matcher-fires predicate. A tool-set matcher fires when one of
- * its `toolNames` -- the Pi tool literals a Claude matcher token maps to,
- * plus the MCP tool literals -- names the event's tool, or one of its MCP
- * server `toolPrefixes` names the tool's server (ANAME-02). For a tool of
- * Pi's built-in MCP an MCP literal or prefix names the server as it
- * registered, with `-` kept (D-P5-04); for every other tool the literal is
- * adapter's full name can be recovered once per event from tool-event hook
- * literals (D-PG1-08). The comparison is exact and
- * case-sensitive. The parser already filters regex/unmapped matchers at
- * parse time so those arms are unreachable at dispatch; defensive `false`
- * keeps the switch exhaustive.
+ * Exact members retain the native mapping and MCP recovery rules. Regexes
+ * test the recovered Claude-form name, including mapped native tool names.
  */
 function matcherFiresOnToolEvent(matcher: ParsedMatcher, tool: McpToolIdentity): boolean {
   switch (matcher.kind) {
     case "match-all":
       return true;
     case "tool-set":
-      return (
-        [...matcher.toolNames].some((literal) => toolLiteralNames(literal, tool)) ||
-        (matcher.toolPrefixes?.some((prefix) => serverPrefixNames(prefix, tool)) ?? false)
-      );
+      return [...matcher.toolNames].some((literal) => toolLiteralNames(literal, tool));
     case "regex":
+      return matcher.pattern.test(mapPiToClaudeToolName(claudeFormToolName(tool)));
+    case "invalid-pattern":
     case "unmapped":
       return false;
   }

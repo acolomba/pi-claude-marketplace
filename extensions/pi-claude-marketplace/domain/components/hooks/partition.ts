@@ -34,7 +34,7 @@ const TOOL_EVENT_MEMBERS = new Set<string>(TOOL_EVENTS);
 
 function toolMatcherCondition(rawMatcher: string): MatcherCondition | null {
   const matcher = parseMatcher(rawMatcher);
-  if (matcher.kind === "regex") {
+  if (matcher.kind === "invalid-pattern") {
     return "regex";
   }
 
@@ -50,7 +50,7 @@ function nonToolMatcherCondition(
   rawMatcher: string,
 ): MatcherCondition | null {
   if (NON_TOOL_EVENT_FIELDS[event] === null) {
-    return "no-matcher-support";
+    return null;
   }
 
   // D-BG-302, CLOSEDLIST-01: a list is kept when one listed value is in the set.
