@@ -12,12 +12,12 @@ provides:
   - Real downstream Pi handler and model evidence for text and image results
 affects: [hook-result-docs, PG-HOOK-01, HOOKRESULT-01]
 actuals:
-  tokens: 22025
+  tokens: 22399
   tasks: 3
-  commits: 3
-commits: 3
+  commits: 5
+commits: 5
 plan_head_before: 44fce3f3ecfbf82d3eca896853b06aa1fe44b8e6
-plan_head_after: 876dbfab8797fe3997340eecbf46bb89bb0c0545
+plan_head_after: f8fce88299a00d9e4b8776b54ce8cb71631bf990
 tech-stack:
   added: []
   patterns:
@@ -83,7 +83,7 @@ coverage:
         ref: "features/hook/tool-use.feature#An image result replacement preserves only the supplied image"
         status: pass
     human_judgment: false
-duration: 44 min
+duration: 53 min
 completed: 2026-11-13
 status: complete
 ---
@@ -94,12 +94,12 @@ status: complete
 
 ## Performance
 
-- **Duration:** 44 min, measured from the first task commit
+- **Duration:** 53 min, measured from the first task commit
 - **Started:** 2026-11-13T04:15:35Z (first task commit)
-- **Completed:** 2026-11-13T04:59:11Z
+- **Completed:** 2026-11-13T05:08:04Z
 - **Tasks:** 3
 - **Files modified:** 16
-- **Diff scale:** 88,100 characters / 4 = 22,025 estimate tokens
+- **Diff scale:** 89,596 characters / 4 = 22,399 estimate tokens
 
 ## Accomplishments
 
@@ -114,12 +114,16 @@ status: complete
 | 02-05-01 | Project file result facts and owner tests | `aa0906b088f1d5cecda8c7b030ac868f8810a377` |
 | 02-05-02 | Render replacements and clear stale output | `c8e4433cebd61fac480ee9b20576ad579d4b4408` |
 | 02-05-03 | Observe real downstream results and update affected fixtures | `876dbfab8797fe3997340eecbf46bb89bb0c0545` |
+| 02-05-03 follow-up | Correct the remaining skill Read replacement fixture | `f8fce88299a00d9e4b8776b54ce8cb71631bf990` |
+
+The frontmatter commit count measures `plan_head_before..plan_head_after`: four task commits plus the first committed summary. This final evidence correction is committed separately without rewriting history.
 
 ## Verification
 
 - **RED evidence:** Task 1's new successful Write assertion failed against the old raw content array. Task 2's new Read replacement assertion failed when the adapter returned `undefined` instead of safe content and `details: null`. Task 3's real observer scenario failed with no downstream record before the observer fixture was loaded. Each failed on the intended behavior before the corresponding implementation.
 - **GREEN evidence:** The exact owner direct-coverage commands passed for `tool-result-files.ts`, `post-tool-use.ts`, `tool-output-files.ts`, `event-adapters.ts`, and `pi-api.ts`; the new source owners reached 100% direct coverage. The installed Pi runner integration test passed all five cases, and the architecture translator test passed.
-- Real Pi Cucumber runs passed 6 projection scenarios (91 steps), 2 replacement scenarios (30 steps), 3 downstream/Edit scenarios (47 steps), the affected async Edit scenario (18 steps), and the affected skill Read scenario (15 steps). The full tool-use feature ran 49 of 50 scenarios green before the remaining legacy Edit fixture was corrected; its corrected scenario then passed in the 3-scenario run.
+- Real Pi Cucumber runs passed 6 projection scenarios (91 steps), 2 replacement scenarios (30 steps), 3 downstream/Edit scenarios (47 steps), the affected async Edit scenario (18 steps), the skill Read payload scenario (15 steps), and the corrected skill Read replacement scenario. The full tool-use feature ran 49 of 50 scenarios green before the remaining legacy Edit fixture was corrected; its corrected scenario then passed in the 3-scenario run.
+- The broad affected run after the first corrections passed 72 of 74 scenarios. Its two remaining failures were the known ASYNCLIFECYCLE-01 reload cleanup issue and the skill replacement fixture corrected and passed afterward. The broad suite was not rerun after that correction.
 - `npm run typecheck`, `npm run check:features`, ESLint on changed TypeScript, `fallow audit --base aa0906b0^`, and all three normal commit hooks passed. The parent owns the Wave 6 combined-tree `npm run check` after merge; it was not run in this isolated worktree.
 
 ## Available-Fact Boundary
@@ -141,11 +145,11 @@ status: complete
 **1. [Rule 1 - Bug] Updated directly invalidated behavioral assertions**
 
 - **Found during:** Task 3 broad affected Cucumber run
-- **Issue:** Async Edit and skill Read scenarios still expected raw Pi result arrays; one Edit replacement fixture used the retired raw array shape.
-- **Fix:** Updated the affected assertions and used a Claude-shaped Edit replacement. No unrelated scenario expectation was weakened.
+- **Issue:** Async Edit and skill Read scenarios still expected raw Pi result arrays; Edit and skill Read replacement fixtures used the retired raw array shape.
+- **Fix:** Updated the affected assertions and used Claude-shaped Edit and Read replacements. No unrelated scenario expectation was weakened.
 - **Files modified:** `features/hook/async.feature`, `features/skill/model-reads.feature`, `features/hook/tool-use.feature`
-- **Verification:** The affected real Pi scenarios passed, including the later hook's unchanged input and the model's replacement text.
-- **Committed in:** `876dbfab8797fe3997340eecbf46bb89bb0c0545`
+- **Verification:** The affected real Pi scenarios passed, including the later hook's unchanged input and both model replacement texts.
+- **Committed in:** `876dbfab8797fe3997340eecbf46bb89bb0c0545`, `f8fce88299a00d9e4b8776b54ce8cb71631bf990`
 
 **2. [Rule 1 - Bug] Closed reverse-renderer count and echo gaps**
 
@@ -160,7 +164,7 @@ status: complete
 
 ## Issues Encountered
 
-- The first broad affected Cucumber run found five stale result expectations. The focused reruns above passed after the directly caused fixture corrections. The existing ASYNCLIFECYCLE-01 / WINDOWS #114 intermittent async cleanup issue remains open; a passing async rerun does not resolve it.
+- The broad affected Cucumber run passed 72 of 74 scenarios after the first corrections. One failure was the remaining skill replacement fixture, now corrected and passing in its targeted real Pi run. The other was the existing ASYNCLIFECYCLE-01 / WINDOWS #114 reload cleanup issue; a passing async rerun does not resolve it.
 - Fallow audit initially identified reverse-renderer complexity. Extracting text and image validation brought the audit to zero issues without changing behavior.
 
 ## Threat Flags
@@ -177,4 +181,4 @@ The file-result portion of PG-HOOK-01 is ready for the parent Wave 6 combined-tr
 
 ## Self-Check: PASSED
 
-All four created deliverables exist, all three exact task commits are ancestors of this summary commit, the task acceptance checks and assigned focused verification passed, and the worktree had no outstanding code changes before this summary was written. The combined-tree gate remains assigned to the parent after merge.
+All four created deliverables exist, all four exact task commits are ancestors of this evidence correction, the task acceptance checks and assigned focused verification passed, and the worktree had no outstanding code changes before this summary correction. The broad suite still has the pre-existing async cleanup failure; the combined-tree gate remains assigned to the parent after merge.
