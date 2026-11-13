@@ -280,6 +280,30 @@ test("passes custom structured output without a built-in codec", () => {
   assert.deepStrictEqual(payload.tool_response, { rows: [{ value: 7 }] });
 });
 
+for (const toolName of ["Bash", "Read"]) {
+  test(`keeps the structured result of a custom ${toolName} tool`, () => {
+    const event = {
+      type: "tool_result",
+      toolCallId: `custom-${toolName}`,
+      toolName,
+      input: { query: "hello" },
+      content: [{ type: "text", text: "public" }],
+      structuredContent: { rows: [{ value: "custom" }] },
+      details: { secret: "old" },
+      isError: false,
+    } satisfies ToolResultEvent;
+    const context = {
+      sessionId: "session",
+      transcriptPath: "/sessions/session.jsonl",
+      cwd: "/workspace",
+    } satisfies TranslationContext;
+
+    assert.deepStrictEqual(translatePostToolUse(event, context).tool_response, {
+      rows: [{ value: "custom" }],
+    });
+  });
+}
+
 test("preserves an explicit null custom structured result", () => {
   // arrange
   const event = {

@@ -134,6 +134,7 @@ test("malformed and unknown search replacements keep the complete event", () => 
   for (const [tool, candidate] of [
     ["find", null],
     ["ls", { filenames: [] }],
+    ["Bash", { stdout: "replacement" }],
     ["find", { filenames: "a" }],
     ["find", { filenames: [1] }],
     ["find", { filenames: ["a"], numFiles: -1 }],

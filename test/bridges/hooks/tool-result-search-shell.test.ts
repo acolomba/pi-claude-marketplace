@@ -158,6 +158,10 @@ test("glob resolves native search roots before reporting a filename", () => {
 
 test("unsupported or contentless results fall through unchanged", () => {
   assert.strictEqual(
+    searchShellToolResponse(result("Bash", [{ type: "text", text: "custom" }]), "/work"),
+    undefined,
+  );
+  assert.strictEqual(
     searchShellToolResponse(result("ls", [{ type: "text", text: "native" }]), "/work"),
     undefined,
   );

@@ -128,7 +128,7 @@ export function searchShellToolResponse(event: ToolResultEvent, cwd: string): un
     return undefined;
   }
 
-  switch (event.toolName.toLowerCase()) {
+  switch (event.toolName) {
     case "find":
       return globResponse(event, cwd);
     case "grep":

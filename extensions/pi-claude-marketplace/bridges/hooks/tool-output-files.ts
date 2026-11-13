@@ -226,7 +226,7 @@ export function renderFileToolOutput(
     return undefined;
   }
 
-  switch (event.toolName.toLowerCase()) {
+  switch (event.toolName) {
     case "read":
       return renderRead(event, candidate, cwd);
     case "edit":

@@ -173,7 +173,7 @@ export function fileToolResponse(event: ToolResultEvent, cwd: string): unknown {
     return undefined;
   }
 
-  const tool = event.toolName.toLowerCase();
+  const tool = event.toolName;
   if (tool !== "read" && tool !== "edit" && tool !== "write") {
     return undefined;
   }

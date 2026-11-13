@@ -194,7 +194,7 @@ export function renderSearchShellToolOutput(
     return undefined;
   }
 
-  const tool = event.toolName.toLowerCase();
+  const tool = event.toolName;
   if (tool !== "find" && tool !== "grep" && tool !== "bash" && tool !== "powershell") {
     return undefined;
   }

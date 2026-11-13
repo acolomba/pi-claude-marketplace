@@ -574,6 +574,31 @@ describe("adaptToolCallResult", () => {
 });
 
 describe("adaptToolResultResult", () => {
+  for (const toolName of ["Bash", "Read"]) {
+    test(`replaces a custom ${toolName} result through the generic schema`, () => {
+      const event = {
+        type: "tool_result",
+        toolCallId: `custom-${toolName}`,
+        toolName,
+        input: { query: "hello" },
+        content: [{ type: "text" as const, text: "original" }],
+        structuredContent: { secret: "original" },
+        details: { secret: "original" },
+        isError: false,
+      } satisfies ToolResultEvent;
+
+      assert.deepStrictEqual(
+        adaptToolResultResult(
+          { kind: "mutate", updatedToolOutput: { content: [{ type: "text", text: "redacted" }] } },
+          event,
+          adapterContext(guardEntry()),
+        ),
+        { content: [{ type: "text", text: "redacted" }], details: null },
+      );
+      assert.deepStrictEqual(event.structuredContent, { secret: "original" });
+    });
+  }
+
   test("a search replacement clears every stale output carrier", () => {
     const event = {
       type: "tool_result",

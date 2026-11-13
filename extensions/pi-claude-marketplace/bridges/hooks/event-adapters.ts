@@ -241,7 +241,7 @@ function toolResultPatch(
     return undefined;
   }
 
-  const toolName = event.toolName.toLowerCase();
+  const toolName = event.toolName;
   if (["read", "edit", "write"].includes(toolName)) {
     return renderFileToolOutput(event, updatedToolOutput, cwd);
   }

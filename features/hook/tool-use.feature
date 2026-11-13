@@ -241,7 +241,7 @@ Feature: Hook tool use
     Then the hooks record these runs:
       | event       | session | tool name | tool input                                   | tool response                                                                 | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | PostToolUse | first   | Read      | {"file_path":"{project dir}/visible.txt"} | {"type":"text","file":{"filePath":"{project dir}/visible.txt","content":"ORIGINAL","startLine":1,"numLines":1,"totalLines":1}} | {project dir} |                 | legacy    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
-    Then another pi handler observes these complete file results:
+    Then another pi handler observes these complete tool results:
       | record |
       | {"toolName":"read","content":[{"type":"text","text":"ORIGINAL"}],"details":null,"structuredContent":"ORIGINAL","isError":false} |
     Then the model receives these calls:
@@ -269,7 +269,7 @@ Feature: Hook tool use
       |       | find | {"pattern":"*.md"}  |
       | Done. |      |                      |
     When the user prompts "find the secret"
-    Then another pi handler observes these complete file results:
+    Then another pi handler observes these complete tool results:
       | record |
       | {"toolName":"find","content":[{"type":"text","text":"SAFE_PATH"}],"details":null,"structuredContent":null,"isError":false} |
     Then the model receives these calls:
@@ -300,7 +300,7 @@ Feature: Hook tool use
     Then the hooks record these runs:
       | event       | session | tool name | tool input | tool response | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | PostToolUse | first   | Grep      | {"pattern":"matches","path":"notice.txt","output_mode":"content","-n":true,"head_limit":100} | {"mode":"content","content":"notice.txt:1: [2 matches limit reached]","numLines":1} | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
-    Then another pi handler observes these complete file results:
+    Then another pi handler observes these complete tool results:
       | record |
       | {"toolName":"grep","content":[{"type":"text","text":"notice.txt:1: [2 matches limit reached]"}],"details":null,"structuredContent":null,"isError":false} |
     Then the model receives these calls:
@@ -331,7 +331,7 @@ Feature: Hook tool use
     Then the hooks record these runs:
       | event       | session | tool name | tool input                                    | tool response | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | PostToolUse | first   | Glob      | {"pattern":"No files found matching pattern"} | {}            | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
-    Then another pi handler observes these complete file results:
+    Then another pi handler observes these complete tool results:
       | record                                                                                                                                           |
       | {"toolName":"find","content":[{"type":"text","text":"No files found matching pattern"}],"details":null,"structuredContent":null,"isError":false} |
     Then the model receives these calls:
@@ -342,6 +342,35 @@ Feature: Hook tool use
       | 2    | tool result | find returned: No files found matching pattern               |
 
 
+  Scenario: A custom Bash result keeps its schema and accepts a redaction
+    Given pi runs with the scripted model and custom case-sensitive tools
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event       | matcher | form   | output |
+      | redact  | PostToolUse | *       | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"content":[{"type":"text","text":"redacted"}]}}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments         |
+      |       | Bash | {"query":"hello"} |
+      | Done. |      |                   |
+    When the user prompts "run custom Bash"
+    Then the model receives these calls:
+      | call | role        | text                                  |
+      | 1    | user        | run custom Bash                       |
+      | 2    | user        | run custom Bash                       |
+      | 2    | assistant   | tool call Bash {"query":"hello"}     |
+      | 2    | tool result | Bash returned: redacted               |
+    Then the hooks record these runs:
+      | event       | session | tool name | tool input        | tool response                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PostToolUse | first   | Bash      | {"query":"hello"} | {"secret":"OLD_STRUCTURED"} | {project dir} |                 | redact    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then another pi handler observes these complete tool results:
+      | record |
+      | {"toolName":"Bash","content":[{"type":"text","text":"redacted"}],"details":null,"structuredContent":null,"isError":false} |
   Scenario: A shell result replacement preserves supplied images
     Given pi runs with the scripted model and a downstream file result observer
     Given the marketplace "fixtures" is published as a dir source
@@ -359,7 +388,7 @@ Feature: Hook tool use
       |       | bash | {"command":"printf OLD_SECRET"} |
       | Done. |      |                                  |
     When the user prompts "run the shell"
-    Then another pi handler observes these complete file results:
+    Then another pi handler observes these complete tool results:
       | record |
       | {"toolName":"bash","content":[{"type":"image","data":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12NgYPj/HwADAgH/HXJk1AAAAABJRU5ErkJggg==","mimeType":"image/png"}],"details":null,"structuredContent":null,"isError":false} |
     Then the model receives these calls:
@@ -387,7 +416,7 @@ Feature: Hook tool use
       |       | find | {"pattern":"*.md"} |
       | Done. |      |                    |
     When the user prompts "clear output"
-    Then another pi handler observes these complete file results:
+    Then another pi handler observes these complete tool results:
       | record                                                                                                            |
       | {"toolName":"find","content":[{"type":"text","text":""}],"details":null,"structuredContent":null,"isError":false} |
     Then the model receives these calls, with an empty tool result:
@@ -415,7 +444,7 @@ Feature: Hook tool use
       |       | bash | {"command":"printf OLD_SECRET"} |
       | Done. |      |                                 |
     When the user prompts "clear output"
-    Then another pi handler observes these complete file results:
+    Then another pi handler observes these complete tool results:
       | record                                                                                                            |
       | {"toolName":"bash","content":[{"type":"text","text":""}],"details":null,"structuredContent":null,"isError":false} |
     Then the model receives these calls, with an empty tool result:
@@ -469,7 +498,7 @@ Feature: Hook tool use
       |       | read | {"path":"secret.txt"} |
       | Done. |      |                       |
     When the user prompts "read the secret"
-    Then another pi handler observes these complete file results:
+    Then another pi handler observes these complete tool results:
       | record                                                                                       |
       | {"toolName":"read","content":[{"type":"text","text":"safe"}],"details":null,"structuredContent":null,"isError":false} |
     Then the model receives these calls:
@@ -498,7 +527,7 @@ Feature: Hook tool use
       | Done. |      |                         |
     When the user prompts "read the image"
     Then the tiny red image "original.png" is unchanged after a tool hook
-    Then another pi handler observes these complete file results:
+    Then another pi handler observes these complete tool results:
       | record |
       | {"toolName":"read","content":[{"type":"image","data":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12NgYPj/HwADAgH/HXJk1AAAAABJRU5ErkJggg==","mimeType":"image/png"}],"details":null,"structuredContent":null,"isError":false} |
     Then the model receives these calls:

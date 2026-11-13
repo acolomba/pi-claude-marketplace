@@ -22,7 +22,7 @@ function result(
 }
 
 test("text replacement clears details and makes empty text visible", () => {
-  const event = result("Read", [{ type: "text", text: "OLD_SECRET" }]);
+  const event = result("read", [{ type: "text", text: "OLD_SECRET" }]);
   assert.deepStrictEqual(
     renderFileToolOutput(event, { type: "text", file: { content: "" } }, "/work"),
     {
@@ -314,4 +314,12 @@ test("invalid file replacements preserve the original result", () => {
   }
 
   assert.strictEqual(renderFileToolOutput(result("bash", []), {}, "/work"), undefined);
+  assert.strictEqual(
+    renderFileToolOutput(
+      result("Read", [{ type: "text", text: "custom" }]),
+      { type: "text", file: { content: "replacement" } },
+      "/work",
+    ),
+    undefined,
+  );
 });

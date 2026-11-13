@@ -25,7 +25,7 @@ function result(
 test("read exposes an unambiguous complete text slice", () => {
   assert.deepStrictEqual(
     fileToolResponse(
-      result("Read", { path: "file.txt" }, [{ type: "text", text: "first\nsecond\n" }]),
+      result("read", { path: "file.txt" }, [{ type: "text", text: "first\nsecond\n" }]),
       "/work",
     ),
     {
@@ -115,7 +115,7 @@ test("edit gives each pair the actual shared patch as validated hunks", () => {
   assert.deepStrictEqual(
     fileToolResponse(
       result(
-        "Edit",
+        "edit",
         {
           file_path: "/work/file.txt",
           old_string: "old",
@@ -262,6 +262,10 @@ test("leaves a result without a tool name unprojected", () => {
 
 test("unsupported or incomplete file observations stay unprojected", () => {
   assert.strictEqual(fileToolResponse(result("bash", {}, []), "/work"), undefined);
+  assert.strictEqual(
+    fileToolResponse(result("Read", { path: "file" }, [{ type: "text", text: "custom" }]), "/work"),
+    undefined,
+  );
   assert.strictEqual(fileToolResponse(result("read", {}, []), "/work"), undefined);
   assert.strictEqual(
     fileToolResponse(

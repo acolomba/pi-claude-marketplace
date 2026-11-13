@@ -29,6 +29,7 @@ import { setTimeout as pause } from "node:timers/promises";
 
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
+import { HOOK_CASE_TOOLS_EXTENSION } from "../../lib/hook-case-tools.ts";
 import { hookMcpCallScript } from "../../lib/hook-mcp-calls.ts";
 import { HOOK_MCP_TOOL_SERVER } from "../../lib/hook-mcp-tool-server.ts";
 import { HOOK_RUNS_LOG } from "../../lib/hook-recorder.ts";
@@ -98,6 +99,17 @@ Given(
 );
 
 Given(
+  "pi runs with the scripted model and custom case-sensitive tools",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    await this.usePiWithProfile({
+      companions: [],
+      extraExtensions: [HOOK_CASE_TOOLS_EXTENSION, HOOK_RESULT_OBSERVER_EXTENSION],
+    });
+  },
+);
+
+Given(
   "pi runs with the scripted model, the mcp implementation and a downstream result observer",
   { timeout: PROFILE_PI_START_TIMEOUT_MS },
   async function (this: ScenarioWorld) {
@@ -149,7 +161,7 @@ Then(
 );
 
 Then(
-  "another pi handler observes these complete file results:",
+  "another pi handler observes these complete tool results:",
   function (this: ScenarioWorld, table: DataTable) {
     const actual = observedResultRows(this);
     const expected = table.hashes().map(({ record }) => {
