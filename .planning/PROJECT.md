@@ -77,6 +77,10 @@ marketplace) work end to end on Pi.
 
 ### Phase 2 hook decisions implemented (2026-11-13)
 
+Validated in parity-gaps Phase 2: PG-HOOK-01, PG-HOOK-03 and PG-HOOK-13.
+Goal verification passed 55/55 must-haves with no manual checks remaining;
+all review findings are fixed and the final combined-tree gate passed.
+
 The accepted choices below apply to PG-HOOK-01/03/13. The [current hook contract](../docs/hooks-compatibility.md#current-tool-contract-phase-2-2026-11-13) names supported fields and limitations; [Phase 2 validation](phases/02-hook-payloads-matchers-and-stop-limit/02-VALIDATION.md) ties each outcome to owner and real Pi tests. These decisions preserve Claude Code parity where Pi provides the necessary facts. The original-call fallback in D-PG2-09 is an intentional project decision where Pi cannot perform a requested rewrite.
 
 | Decision | Actual outcome and evidence |
@@ -2681,3 +2685,5 @@ _Last updated: 2026-11-11 after starting the parity-gaps milestone._
 _Last updated: 2026-11-12 during parity-gaps Phase 1; Key Decisions gains D-PG1-01 to D-PG1-14, with D-PG1-02 amending PIFL-02 and D-PG1-11 amending ANAME-07._
 
 _Last updated: 2026-11-12 after parity-gaps Phase 1 closed: three requirements verified; PG-MCP-02 partially verified with user-approved companion-adoption deferral AGTAMBIENT-01 / SEED-261112-81c. Phase 2 is next. No workaround or dependency upgrade was introduced._
+
+_Last updated: 2026-11-13 after parity-gaps Phase 2 passed all verification gates; Phase 3 Background Subagents is next._

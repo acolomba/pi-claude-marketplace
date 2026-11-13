@@ -20,10 +20,10 @@
 
 ### Hooks
 
-- [ ] **PG-HOOK-01**: For the tools in the hook table, a hook receives a Claude-shaped `tool_input` (`file_path`, `old_string`, `new_string`), and a Claude-shaped `updatedInput` changes the call as the hook intended. No pair of a multi-pair `edit` escapes a hook that matches `Edit`. `updatedMCPToolOutput` is honored as `updatedToolOutput` is. (P0)
+- [x] **PG-HOOK-01**: For the tools in the hook table, a hook receives a Claude-shaped `tool_input` (`file_path`, `old_string`, `new_string`), and a Claude-shaped `updatedInput` changes the call as the hook intended. No pair of a multi-pair `edit` escapes a hook that matches `Edit`. `updatedMCPToolOutput` is honored as `updatedToolOutput` is. (P0)
   - Design resolution accepted 2026-11-12 (D-PG2-01..09): include available-field result translation and reverse result rewriting; document missing fields and carry full execution wrappers as HOOKRESULT-01. Unsupported input rewrites run the original call with a notice; explicit denials and conflicting multi-edit file targets still block.
-- [ ] **PG-HOOK-03**: A hook matcher follows Claude Code's rules: (a) an exact list with commas or spaces matches each listed tool; (b) a matcher on `UserPromptSubmit` or `Stop` is ignored, and the group runs; (c) any other matcher is an unanchored regular expression tested against the Claude-form tool name, a pattern that does not compile drops the group, and `info` reports a regular expression group as supported. (P0; decisions 6 and 24 answered)
-- [ ] **PG-HOOK-13**: A `Stop` hook can block eight times in a row before the limit applies, and a run that called a tool starts the count again. (P0)
+- [x] **PG-HOOK-03**: A hook matcher follows Claude Code's rules: (a) an exact list with commas or pipes matches each listed tool, trims surrounding spaces and keeps internal spaces literal; (b) a matcher on `UserPromptSubmit` or `Stop` is ignored, and the group runs; (c) any other matcher is an unanchored regular expression tested against the Claude-form tool name, a pattern that does not compile drops the group, and `info` reports a regular expression group as supported. (P0; decisions 6 and 24 answered)
+- [x] **PG-HOOK-13**: A `Stop` hook can block eight times in a row before the limit applies, and a run that called a tool starts the count again. (P0)
 - [ ] **PG-HOOK-07a**: In a pi-subagents child, the plugin's `SessionStart`, `UserPromptSubmit`, `Stop`, and `SessionEnd` hooks do not run, and tool hook payloads carry `agent_type`, and `agent_id` when the child can know it. Lands with PG-AGENT-01. (P0)
 - [ ] **PG-HOOK-02**: A `Stop` hook that blocks continues the same run, on Pi's `agent_before_settle` event. Listeners of `agent_settled` see one event for a run, however many times a `Stop` hook blocked. (P1; spike S1 ran in print mode only)
 - [ ] **PG-HOOK-04**: A hook receives `tool_use_id` on the three tool events, `duration_ms` on `PostToolUse` and `PostToolUseFailure`, `mcp_server` for MCP tools, `custom_instructions` on `PreCompact`, `model` and `session_title` on `SessionStart`, and `effort` when Pi's level is one of Claude's levels. (P1; decisions 9 and 25)
@@ -172,9 +172,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement  | Phase    | Status  |
 | ------------ | -------- | ------- |
-| PG-HOOK-01   | Phase 2  | Pending |
-| PG-HOOK-03   | Phase 2  | Pending |
-| PG-HOOK-13   | Phase 2  | Pending |
+| PG-HOOK-01   | Phase 2  | Complete |
+| PG-HOOK-03   | Phase 2  | Complete |
+| PG-HOOK-13   | Phase 2  | Complete |
 | PG-HOOK-07a  | Phase 3  | Pending |
 | PG-HOOK-02   | Phase 5  | Pending |
 | PG-HOOK-04   | Phase 6  | Pending |

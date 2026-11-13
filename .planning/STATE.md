@@ -2,49 +2,51 @@
 gsd_state_version: "1.0"
 milestone: parity-gaps
 milestone_name: Claude Code Parity Gaps and Defects
-current_phase: 02
-current_phase_name: Hook Payloads, Matchers, and Stop Limit
-status: executing
-stopped_at: parity-gaps Phase 2 all waves verified; phase audits next
-last_updated: "2026-11-13T12:21:57.272Z"
+current_phase: 3
+current_phase_name: Background Subagents
+status: planning
+stopped_at: Phase 02 verified complete; Phase 03 discussion next
+last_updated: "2026-11-13T14:17:57.889Z"
 last_activity: 2026-11-13
-last_activity_desc: Adopted pi-subagents 0.88.1; Phase 02 audits remain pending
-state_head: 2db3b81a9cc97098bee6bc744d451aeab4fe9fad
+last_activity_desc: Phase 02 complete, transitioned to Phase 3
+state_head: 26aa7607dbd1cd3a29c55374319840aebadb854f
 progress:
   total_phases: 11
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 21
   completed_plans: 21
-  percent: 9
+  percent: 18
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-11-08 when the behavioral-gaps milestone closed)
+See: `.planning/PROJECT.md` (updated 2026-11-13 after parity-gaps Phase 2)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 02 — Hook Payloads, Matchers, and Stop Limit
+**Current focus:** Phase 03 — Background Subagents
 
 ## Current Position
 
-Phase: 02 (Hook Payloads, Matchers, and Stop Limit) — EXECUTING
-Plan: 10 of 10 executed; phase audits and goal verification next
-Status: Executing Phase 02
-Last activity: 2026-11-13 — Completed quick task 261113-8yn; pi-subagents 0.88.1 adopted and full gate passed
+Phase: 3 — Background Subagents
+Plan: Not started
+Status: Ready to discuss Phase 03
+Last activity: 2026-11-13 — Phase 02 complete, transitioned to Phase 3
 
-Progress: [█░░░░░░░░░] 9%
+Progress: [██░░░░░░░░] 18%
 
 
 ### parity-gaps Phase 2 execution
 
 All nine waves and ten plans are merged and verified.
 `npm run check` exited 0 at `fae378d2b58ea520a6557a61d198c77e71a7d03e`, Node v26.13.0: 1867 adapter scenarios / 22776 steps and 161 built-in scenarios / 2193 steps. Merged LCOV: coverage/direct.lcov (361 records). Log: `/tmp/pg2-wave9-check.log`.
-Nyquist validation, security review, code review and goal verification remain.
-PG-HOOK-01 remains in progress; matcher and Stop plans cover PG-HOOK-03/13.
+All phase gates are complete. Goal verification passed 55/55 must-haves;
+PG-HOOK-01, PG-HOOK-03 and PG-HOOK-13 are complete. The final full gate at
+`d8930842` on Node v26.13.1 passed 1869 adapter scenarios, 162 builtin
+scenarios and all 361 direct coverage pairs. See `02-VALIDATION.md`.
 The Stop checks observed eight continuations before ninth override, ten
 tool-separated blocks with no cap notice, and a fresh eight after reload.
 
@@ -54,8 +56,10 @@ passed. Parent review restored an accidentally removed UserPromptSubmit
 context explanation in `fae378d2`; the combined gate above includes it.
 Nyquist validation corrected the stale scenario filter and verified all five
 current scenarios (75 steps). All 29 tasks have automated coverage; the latest
-combined-tree gate also passes with pi-subagents 0.88.1. Security, code review
-and goal verification are next.
+combined-tree gate also passes with pi-subagents 0.88.1. Independent code
+review found four runtime defects and one documentation issue; all were fixed
+and independently rechecked. The refreshed security audit closes 27/27 threats.
+No manual verification remains.
 
 Wave 8 selects MCP output aliases after identity recovery, preserves native
 MCP/custom result schemas, and replaces all stale result carriers. Both MCP
@@ -1011,6 +1015,11 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ### Recent Decisions
 
+- [parity-gaps Phase 2] D-PG2-01..12 are implemented and verified: per-pair
+  Edit checks, available-field result translation, whole-original fallback,
+  whole regex matchers and eight Stop continuations. HOOKRESULT-01 and
+  Phase 5 Stop timing/environment work remain scoped follow-ups.
+
 Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the user's review; D-CF1-01..17).
 
 - [mcp-builtin Phase 6] DUAL-04 reads `{requires mcp}` with one read-only
@@ -1106,6 +1115,14 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-13T08:05:18.829651+00:00
-Stopped at: parity-gaps Phase 2 wave 7 verified; wave 8 next
+Last session: 2026-11-13T14:18:54.541735+00:00
+Stopped at: Phase 02 verified complete; Phase 03 discussion next
 Resume file: None
+
+### Phase 2 completion-helper notes
+
+The completion helper mistook command strings and short module aliases for
+missing paths. The independent verifier checked all 22 artifacts and 20 links
+against real paths. Its requirement-list parser also rejected PG-prefixed IDs;
+`requirements.mark-complete PG-HOOK-01 PG-HOOK-03 PG-HOOK-13` updated all three
+checkboxes and traceability rows successfully. No verification gate was waived.
