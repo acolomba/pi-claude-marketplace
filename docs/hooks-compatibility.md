@@ -302,13 +302,13 @@ The default, `continue`, lets the failure pass. The bridge ignores `onFailure` o
 
 Each hook's `additionalContext` reaches the model. When several hooks of one event give context, the bridge keeps every value, in routing order (D-CF5-09, D-CF5-13).
 
-| Event                                                    | How the model gets the context                                                                                                                                         |
-| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `SessionStart`                                           | as `SessionStart hook additional context: <text>` in a hidden message before the first prompt of the session. The message stays in the session history for later turns |
-| `UserPromptSubmit`                                       | ✓                                                                                                                                                                      |
-| `PreToolUse`, `PostToolUse`, `PostToolUseFailure`        | as `<Event>:<Tool> hook additional context: <text>` in a hidden message after the tool result. A call that the hook denies also sends its context                      |
-| `Stop`                                                   | as a `Stop hook feedback:\n<text>` part of the Stop re-entry message (D-CF5-25)                                                                                        |
-| `SessionEnd`, `PreCompact`, `PostCompact`, `StopFailure` | not sent, as upstream                                                                                                                                                  |
+| Event                                                    | How the model gets the context                                                                                                                                                                                      |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SessionStart`                                           | as `SessionStart hook additional context: <text>` in a hidden message before the first prompt of the session. The message stays in the session history for later turns                                              |
+| `UserPromptSubmit`                                       | as `UserPromptSubmit hook additional context: <text>` after your prompt, which reaches the model unchanged. Upstream adds the text to the same request. Pi adds a separate hidden message after the prompt (Pi gap) |
+| `PreToolUse`, `PostToolUse`, `PostToolUseFailure`        | as `<Event>:<Tool> hook additional context: <text>` in a hidden message after the tool result. A call that the hook denies also sends its context                                                                   |
+| `Stop`                                                   | as a `Stop hook feedback:\n<text>` part of the Stop re-entry message (D-CF5-25)                                                                                                                                     |
+| `SessionEnd`, `PreCompact`, `PostCompact`, `StopFailure` | not sent, as upstream                                                                                                                                                                                               |
 
 When `SessionStart` and `UserPromptSubmit` both give context for one prompt, one message carries both parts, `SessionStart` first. A value that is empty or only white space adds nothing. Each bridge load, `/reload` included, empties the context that waits for the next prompt.
 
