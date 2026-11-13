@@ -35,7 +35,7 @@ const WARNING_GENERATIONS = [MCP_ASYNC_WARNINGS, CORRECTED_WARNINGS];
 
 /** D-CF6-10: the async warning of an agent rendered for one MCP implementation. */
 export function mcpAsyncWarning(id: McpImplementationId): string {
-  return MCP_ASYNC_WARNINGS[id];
+  return CORRECTED_WARNINGS[id];
 }
 
 /** Whether a stored warning exactly names one known generation for `id`. */

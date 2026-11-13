@@ -2503,7 +2503,7 @@ test("ANAME-02: a server left out by a partial install is not granted to the plu
     {
       kind: "hygiene",
       message:
-        "[bot] tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before pi-mcp-adapter has cached the server's tools still fails",
+        "[bot] tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before pi-mcp-adapter has cached the server's tools still fails",
     },
     { kind: "hygiene", message: "[bot] dropped tools: mcp__plugin_empty_live__stream" },
   ]);
@@ -2560,7 +2560,7 @@ test("MGRT-01: an install under Pi's built-in MCP stages the built-in grant and 
     {
       kind: "hygiene",
       message:
-        "[bot] tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before Pi's built-in MCP has listed the server's tools still fails",
+        "[bot] tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before Pi's built-in MCP has listed the server's tools still fails",
     },
   ]);
   assert.deepStrictEqual(installed.rows, [
