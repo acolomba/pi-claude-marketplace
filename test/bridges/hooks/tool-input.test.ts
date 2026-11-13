@@ -279,6 +279,18 @@ describe("decodeHookToolInput", () => {
     { name: "missing read path", tool: "read", candidate: { offset: 1 }, category: "value" },
     { name: "empty read path", tool: "read", candidate: { file_path: "" }, category: "value" },
     {
+      name: "malformed read file URL",
+      tool: "read",
+      candidate: { file_path: "file:///tmp/%ZZ" },
+      category: "value",
+    },
+    {
+      name: "read file URL with a remote host",
+      tool: "read",
+      candidate: { file_path: "file://remotehost/tmp/secret" },
+      category: "value",
+    },
+    {
       name: "fractional offset",
       tool: "read",
       candidate: { file_path: "x", offset: 1.5 },
@@ -294,6 +306,18 @@ describe("decodeHookToolInput", () => {
       name: "missing write content",
       tool: "write",
       candidate: { file_path: "x" },
+      category: "value",
+    },
+    {
+      name: "malformed write file URL",
+      tool: "write",
+      candidate: { file_path: "file:///tmp/%ZZ", content: "replacement" },
+      category: "value",
+    },
+    {
+      name: "write file URL with a remote host",
+      tool: "write",
+      candidate: { file_path: "file://remotehost/tmp/secret", content: "replacement" },
       category: "value",
     },
     {

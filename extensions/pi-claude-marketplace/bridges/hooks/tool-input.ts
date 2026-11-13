@@ -153,7 +153,14 @@ function decodeFileInput(
     return { kind: "ignored", category: "field" };
   }
 
-  const native: Input = { path: requestedPath(candidate.file_path, cwd, home) };
+  let resolvedPath: string;
+  try {
+    resolvedPath = requestedPath(candidate.file_path, cwd, home);
+  } catch (_error: unknown) {
+    return { kind: "ignored", category: "value" };
+  }
+
+  const native: Input = { path: resolvedPath };
   return tool === "read"
     ? decodeReadFields(candidate, native)
     : decodeWriteFields(candidate, native);

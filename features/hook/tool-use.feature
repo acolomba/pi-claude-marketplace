@@ -1370,7 +1370,7 @@ Feature: Hook tool use
       | 2    | assistant   | tool call read {"path":"original.txt"}         |
       | 2    | tool result | read returned: replacement                     |
 
-  Scenario: An unsupported rewrite notice hides argument values
+  Scenario: A malformed Read file URL keeps the original call and hides the rejected path
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -1378,12 +1378,11 @@ Feature: Hook tool use
       | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
       | name    | event      | matcher | form   | output                                                                                                                               |
-      | rewrite | PreToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"file_path":"replacement.txt","pages":"secret-value"}}} |
+      | rewrite | PreToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"file_path":"file:///tmp/%ZZ"}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has started a new pi session
     Given the project holds the file "original.txt" with the text "original" for a tool hook
-    Given the project holds the file "replacement.txt" with the text "replacement" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments                 |
       |       | read | {"path":"original.txt"} |
@@ -1394,7 +1393,7 @@ Feature: Hook tool use
       | PreToolUse | first   | Read      | {"file_path":"{project dir}/original.txt"}       | {project dir} |                 | rewrite   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the hooks show the user these messages:
       | severity | text                                               |
-      | info     | PreToolUse:Read ignored input rewrite (field)      |
+      | info     | PreToolUse:Read ignored input rewrite (value)      |
     Then the model receives these calls:
       | call | role        | text                                           |
       | 1    | user        | read the original file                         |

@@ -241,6 +241,56 @@ describe("adaptToolCallResult", () => {
     capture.assertValid();
   });
 
+  for (const { toolName, original, candidate } of [
+    {
+      toolName: "read",
+      original: { path: "original.txt" },
+      candidate: { file_path: "file:///tmp/%ZZ" },
+    },
+    {
+      toolName: "write",
+      original: { path: "original.txt", content: "original" },
+      candidate: { file_path: "file://remotehost/tmp/secret", content: "replacement" },
+    },
+  ]) {
+    test(`keeps the original ${toolName} call and hides a malformed file URL`, async () => {
+      const capture = createJsonCapture();
+      const input = structuredClone(original);
+      const event = {
+        type: "tool_call",
+        toolCallId: `call-${toolName}`,
+        toolName,
+        input,
+      } satisfies ToolCallEvent;
+      const context: HookAdapterContext = {
+        ...adapterContext(guardEntry()),
+        ctx: { mode: "json", cwd: "/workspace" } as ExtensionContext,
+        pi: { appendEntry: capture.entrySink.appendEntry } as ExtensionAPI,
+      };
+
+      assert.strictEqual(
+        await adaptToolCallResult({ kind: "mutate", updatedInput: candidate }, event, context),
+        undefined,
+      );
+      assert.strictEqual(event.input, input);
+      assert.deepStrictEqual(input, original);
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin: { kind: "hook" },
+            kind: "hook-notice",
+            severity: "info",
+            needsReload: false,
+            text: `PreToolUse:${toolName === "read" ? "Read" : "Write"} ignored input rewrite (value)`,
+          },
+        },
+      ]);
+      capture.assertValid();
+    });
+  }
+
   function bashCall(input: Record<string, unknown>): ToolCallEvent {
     return { type: "tool_call", toolCallId: "call-bash", toolName: "bash", input };
   }
