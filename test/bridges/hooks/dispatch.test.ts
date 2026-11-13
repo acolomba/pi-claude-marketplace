@@ -1108,6 +1108,113 @@ describe("composite dispatch closure partitions", () => {
     assert.deepStrictEqual(output, expectedOutput);
   });
 
+  test("a native tool call resets a Stop-only runtime before the empty bucket exits", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    for (let index = 0; index < 8; index += 1) {
+      runtime.recordStopReentry();
+    }
+
+    const handler = compositeHandlerFor(runtime, "PreToolUse", runtime.currentGeneration());
+
+    // act
+    const output = await handler(
+      createToolCallEvent(),
+      createExtensionContext("/workspace/stop-only"),
+    );
+    const nextStop = runtime.recordStopReentry();
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(nextStop, { reenter: true, notifyCap: false });
+    assert.strictEqual(runtime.isStopHookActive(), true);
+  });
+
+  test("a stale native tool callback cannot reset the current Stop budget", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const staleHandler = compositeHandlerFor(runtime, "PreToolUse", runtime.currentGeneration());
+    runtime.advanceGeneration();
+    for (let index = 0; index < 8; index += 1) {
+      runtime.recordStopReentry();
+    }
+
+    // act
+    const output = await staleHandler(
+      createToolCallEvent(),
+      createExtensionContext("/workspace/stale-tool"),
+    );
+    const nextStop = runtime.recordStopReentry();
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(nextStop, { reenter: false, notifyCap: true });
+  });
+
+  test("a blocked native tool call resets the Stop budget before its hook decision", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    for (let index = 0; index < 8; index += 1) {
+      runtime.recordStopReentry();
+    }
+
+    runtime.setRoutingBucket("PreToolUse", [
+      createRoutingEntry({
+        pluginId: "blocker",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Bash",
+        declarationIndex: 0,
+      }),
+    ]);
+    const calls: RecordedCall[] = [];
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor({ blocker: { kind: "block", reason: "denied" } }, calls),
+    );
+
+    // act
+    const output = await handler(
+      createToolCallEvent(),
+      createExtensionContext("/workspace/blocked-tool"),
+    );
+    const nextStop = runtime.recordStopReentry();
+
+    // assert
+    assert.deepStrictEqual(output, { block: true, reason: "PreToolUse:Bash hook error: denied" });
+    assert.deepStrictEqual(calls, [{ pluginId: "blocker", event: createToolCallEvent() }]);
+    assert.deepStrictEqual(nextStop, { reenter: true, notifyCap: false });
+  });
+
+  test("a native tool call that later fails still resets the Stop budget", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    for (let index = 0; index < 8; index += 1) {
+      runtime.recordStopReentry();
+    }
+
+    const generation = runtime.currentGeneration();
+    const before = compositeHandlerFor(runtime, "PreToolUse", generation);
+    const after = toolResultCompositeHandler(runtime, generation);
+    const context = createExtensionContext("/workspace/failed-tool");
+
+    // act
+    const callOutput = await before(createToolCallEvent(), context);
+    const failedOutput = await after(createToolResultEvent(true), context);
+    const nextStop = runtime.recordStopReentry();
+
+    // assert
+    assert.strictEqual(callOutput, undefined);
+    assert.strictEqual(failedOutput, undefined);
+    assert.deepStrictEqual(nextStop, { reenter: true, notifyCap: false });
+  });
+
   test("dispatches match-all, exact MCP, and whole regex matchers in declaration order", async () => {
     // arrange
     const runtime = createHooksRuntime();
@@ -3675,6 +3782,47 @@ describe("mcp proxy calls (D-CF5-12, MHK-02)", () => {
     // assert
     assert.strictEqual(output, undefined);
     assert.deepStrictEqual(reads, []);
+  });
+
+  test("a proxy call resets the Stop budget before its PreToolUse view is skipped", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreToolUse", [
+      createRoutingEntry({
+        pluginId: "before",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "*",
+        declarationIndex: 0,
+      }),
+    ]);
+    for (let index = 0; index < 8; index += 1) {
+      runtime.recordStopReentry();
+    }
+
+    const reads: string[] = [];
+    const calls: RecordedCall[] = [];
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor({}, calls),
+      createProxyRuleView(true, reads),
+    );
+
+    // act
+    const output = await handler(
+      createToolCallEvent("mcp", { tool: "mcp__plugin_demo_stub__echo" }),
+      createExtensionContext("/workspace/proxy-reset"),
+    );
+    const nextStop = runtime.recordStopReentry();
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(reads, ["proxyRuleApplies"]);
+    assert.deepStrictEqual(calls, []);
+    assert.deepStrictEqual(nextStop, { reenter: true, notifyCap: false });
   });
 
   test("reads neither the proxy rule nor the tool for a proxy-shaped result when the bucket is empty", async () => {

@@ -113,7 +113,7 @@ Feature: Hook prompt and stop
       | Done 7 |
       | Done 8 |
       | Done 9 |
-    When the user prompts "finish up" through 9 stop settlements
+    When the user prompts "finish up" through 9 agent settlements
     Then the stop sequence has these exact replies and hook states:
       | reply  | stop hook active |
       | Done 1 | false            |
@@ -125,4 +125,43 @@ Feature: Hook prompt and stop
       | Done 7 | true             |
       | Done 8 | true             |
       | Done 9 | true             |
-    Then the stop override cap shows one notice
+    Then the stop override cap notice count is 1
+
+  Scenario: Tool calls reset a Stop-only plugin's continuation count
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event | matcher | form   | output                                     |
+      | always | Stop  |         | script | {"decision":"block","reason":"keep going"} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply   | tool | arguments                   | stop reason |
+      | Done 1  |      |                             |             |
+      |         | bash | {"command":"echo from-model"} |             |
+      | Done 2  |      |                             |             |
+      |         | bash | {"command":"echo from-model"} |             |
+      | Done 3  |      |                             |             |
+      |         | bash | {"command":"echo from-model"} |             |
+      | Done 4  |      |                             |             |
+      |         | bash | {"command":"echo from-model"} |             |
+      | Done 5  |      |                             |             |
+      |         | bash | {"command":"echo from-model"} |             |
+      | Done 6  |      |                             |             |
+      |         | bash | {"command":"echo from-model"} |             |
+      | Done 7  |      |                             |             |
+      |         | bash | {"command":"echo from-model"} |             |
+      | Done 8  |      |                             |             |
+      |         | bash | {"command":"echo from-model"} |             |
+      | Done 9  |      |                             |             |
+      |         | bash | {"command":"echo from-model"} |             |
+      | Done 10 |      |                             |             |
+      |         | bash | {"command":"echo from-model"} |             |
+      | End     |      |                             | length      |
+    When the user prompts "finish up" through 11 agent settlements
+    Then ten stop blocks separated by tool calls continue
+    Then the stop override cap notice count is 0

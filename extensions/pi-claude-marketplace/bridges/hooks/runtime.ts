@@ -98,6 +98,7 @@ export interface HooksRuntime {
   readonly isStopHookActive: () => boolean;
   readonly recordStopReentry: () => StopReentryTransition;
   readonly recordStopNonReentry: () => void;
+  readonly recordToolCall: () => void;
   readonly recordUserInput: () => void;
   /**
    * D-BG-210: records whether the run that starts is one an async rewake
@@ -285,6 +286,8 @@ export function createHooksRuntime(): HooksRuntime {
     },
 
     recordStopNonReentry: finishStopSequence,
+
+    recordToolCall: finishStopSequence,
 
     recordUserInput(): void {
       stopHookActive = false;

@@ -175,7 +175,7 @@ When(
 );
 
 When(
-  "the user prompts {string} through {int} stop settlements",
+  "the user prompts {string} through {int} agent settlements",
   { timeout: 120_000 },
   async function (this: ScenarioWorld, text: string, settlements: number) {
     const deadline = Date.now() + 110_000;
@@ -227,7 +227,7 @@ Then(
   },
 );
 
-Then("the stop override cap shows one notice", function (this: ScenarioWorld) {
+Then("the stop override cap notice count is {int}", function (this: ScenarioWorld, count: number) {
   const notices = this.requireTurn().records.flatMap((record) => {
     const entry: unknown = record.entry;
     if (record.type !== "entry_appended" || typeof entry !== "object" || entry === null) {
@@ -246,8 +246,9 @@ Then("the stop override cap shows one notice", function (this: ScenarioWorld) {
       ? [payload]
       : [];
   });
-  assert.deepStrictEqual(notices, [
-    {
+  assert.deepStrictEqual(
+    notices,
+    Array.from({ length: count }, () => ({
       schemaVersion: 1,
       origin: { kind: "hook" },
       kind: "stop-override-cap",
@@ -255,8 +256,43 @@ Then("the stop override cap shows one notice", function (this: ScenarioWorld) {
       needsReload: false,
       pluginId: "demo",
       cap: 8,
-    },
-  ]);
+    })),
+  );
+  this.markTurnCompared();
+});
+
+Then("ten stop blocks separated by tool calls continue", function (this: ScenarioWorld) {
+  const turn = this.requireTurn();
+  const runs = (turn.logs.get(HOOK_RUNS_LOG) ?? []) as readonly HookRun[];
+  const calls = modelCallsOf(turn.logs);
+
+  assert.deepStrictEqual(
+    runs.map((run) => [run.event, run.stdin.last_assistant_message, run.stdin.stop_hook_active]),
+    Array.from({ length: 10 }, (_, index) => ["Stop", `Done ${index + 1}`, index > 0]),
+  );
+  assert.deepStrictEqual(
+    calls.map((call) => [call.index + 1, call.overflow]),
+    Array.from({ length: 21 }, (_, index) => [index + 1, false]),
+  );
+  assert.strictEqual(turn.records.filter(isSettled).length, 11);
+  for (let index = 0; index < 10; index += 1) {
+    const reentryCall = calls[2 * index + 1];
+    const afterToolCall = calls[2 * index + 2];
+    assert.ok(reentryCall !== undefined);
+    assert.ok(afterToolCall !== undefined);
+    const reentry = callMessageRows([reentryCall]);
+    const afterTool = callMessageRows([afterToolCall]);
+    assert.deepStrictEqual(reentry.at(-1), [
+      String(2 * index + 2),
+      "user",
+      "Stop hook feedback:\nkeep going",
+    ]);
+    assert.deepStrictEqual(afterTool.slice(-2), [
+      [String(2 * index + 3), "assistant", 'tool call bash {"command":"echo from-model"}'],
+      [String(2 * index + 3), "tool result", "bash returned: from-model\n"],
+    ]);
+  }
+
   this.markTurnCompared();
 });
 

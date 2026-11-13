@@ -451,6 +451,37 @@ test("keeps terminal Stop callbacks bounded and notifies only once", () => {
   );
 });
 
+test("tool calls reset the Stop budget and notice without clearing active or rewake flags", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.recordRunStart(true);
+  for (let index = 0; index < 8; index += 1) {
+    runtime.recordStopReentry();
+  }
+
+  const firstCap = runtime.recordStopReentry();
+
+  // act
+  runtime.recordToolCall();
+  runtime.recordToolCall();
+  const activeAfterTool = runtime.isStopHookActive();
+  const afterTool = runtime.recordStopReentry();
+  for (let index = 1; index < 8; index += 1) {
+    runtime.recordStopReentry();
+  }
+
+  const secondCap = runtime.recordStopReentry();
+  runtime.recordUserInput();
+  const rewakeAfterInput = runtime.isStopHookActive();
+
+  // assert
+  assert.deepStrictEqual(firstCap, { reenter: false, notifyCap: true });
+  assert.strictEqual(activeAfterTool, true);
+  assert.deepStrictEqual(afterTool, { reenter: true, notifyCap: false });
+  assert.deepStrictEqual(secondCap, { reenter: false, notifyCap: true });
+  assert.strictEqual(rewakeAfterInput, true);
+});
+
 test("keeps a Stop re-entry's flag across the start of a later run", () => {
   // arrange
   const runtime = createHooksRuntime();
