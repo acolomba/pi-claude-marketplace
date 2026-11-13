@@ -36,6 +36,37 @@ Feature: Hook tool use
       | 2    | assistant   | tool call find {"pattern":"*.md"} |
       | 2    | tool result | find returned: SAFE_PATH          |
 
+  Scenario: Search output resembling a notice remains actual tool content
+    Given pi runs with the scripted model and search tools
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event       | matcher |
+      | after | PostToolUse | Grep    |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "notice.txt" with the text "[2 matches limit reached]" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                         |
+      |       | grep | {"pattern":"matches","path":"notice.txt"} |
+      | Done. |      |                                                   |
+    When the user prompts "search the notice"
+    Then the hooks record these runs:
+      | event       | session | tool name | tool input | tool response | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PostToolUse | first   | Grep      | {"pattern":"matches","path":"notice.txt","output_mode":"content","-n":true,"head_limit":100} | {"mode":"content","content":"notice.txt:1: [2 matches limit reached]","numLines":1} | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then another pi handler observes these complete file results:
+      | record |
+      | {"toolName":"grep","content":[{"type":"text","text":"notice.txt:1: [2 matches limit reached]"}],"details":null,"structuredContent":null,"isError":false} |
+    Then the model receives these calls:
+      | call | role        | text                                               |
+      | 1    | user        | search the notice                                  |
+      | 2    | user        | search the notice                                  |
+      | 2    | assistant   | tool call grep {"pattern":"matches","path":"notice.txt"} |
+      | 2    | tool result | grep returned: notice.txt:1: [2 matches limit reached] |
+
   Scenario: A shell result replacement preserves supplied images
     Given pi runs with the scripted model and a downstream file result observer
     Given the marketplace "fixtures" is published as a dir source

@@ -77,18 +77,13 @@ function globResponse(event: ToolResultEvent, cwd: string): unknown {
     record(event.details) &&
     record(event.details.truncation) &&
     event.details.truncation.truncated === true;
-  const rows = raw.split("\n");
-  if (byteTruncated) {
-    rows.pop();
-  }
-
-  if (rows.length === 0 || rows.some((row) => row === "" || row.includes("\r"))) {
+  if (byteTruncated || raw.includes("\n") || raw.includes("\r") || raw === "") {
     return response;
   }
 
   const root = typeof event.input.path === "string" ? path.resolve(cwd, event.input.path) : cwd;
-  response.filenames = rows.map((row) => path.resolve(root, row));
-  response.numFiles = rows.length;
+  response.filenames = [path.resolve(root, raw)];
+  response.numFiles = 1;
   return response;
 }
 
@@ -103,9 +98,8 @@ function grepResponse(event: ToolResultEvent): unknown {
   }
 
   const response: Record<string, unknown> = { mode: "content", content: raw };
-  const rows = raw.split("\n");
-  if (rows.every((row) => /^.+[:-]\d+[:-] /.test(row))) {
-    response.numLines = rows.length;
+  if (!raw.includes("\n") && /^.+[:-]\d+[:-] /.test(raw)) {
+    response.numLines = 1;
   }
 
   return response;

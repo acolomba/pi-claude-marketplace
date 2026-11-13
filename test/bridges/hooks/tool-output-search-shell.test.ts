@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import { renderSearchShellToolOutput } from "../../../extensions/pi-claude-marketplace/bridges/hooks/tool-output-search-shell.ts";
@@ -169,4 +172,28 @@ test("malformed and unknown search replacements keep the complete event", () => 
     ),
     undefined,
   );
+});
+
+test("a supplied output path remains metadata and never supplies replacement bytes", async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), "hook-output-path-"));
+  const secretPath = path.join(directory, "private.txt");
+  const secret = "SECRET_NOT_TO_READ_206";
+  try {
+    await writeFile(secretPath, secret);
+    const event = result("bash");
+    const patch = renderSearchShellToolOutput(
+      event,
+      {
+        stdout: "",
+        persistedOutputPath: secretPath,
+        rawOutputPath: "https://invalid.example/secret",
+      },
+      "/work",
+    );
+    assert.deepStrictEqual(patch, { content: [{ type: "text", text: "" }], details: null });
+    assert.ok(!JSON.stringify(patch).includes(secret));
+    assert.strictEqual(await readFile(secretPath, "utf8"), secret);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

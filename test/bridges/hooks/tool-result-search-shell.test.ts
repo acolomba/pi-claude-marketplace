@@ -22,7 +22,7 @@ function result(
   };
 }
 
-test("glob projects complete emitted filenames and actual truncation", () => {
+test("glob reports truncation without splitting ambiguous newline display", () => {
   assert.deepStrictEqual(
     searchShellToolResponse(
       result(
@@ -33,7 +33,7 @@ test("glob projects complete emitted filenames and actual truncation", () => {
       ),
       "/work",
     ),
-    { filenames: ["/work/a.ts", "/work/b.ts"], numFiles: 2, truncated: true },
+    { truncated: true },
   );
 });
 
@@ -111,7 +111,7 @@ test("glob excludes byte-cut partial records and preserves known empty results",
       ),
       "/work",
     ),
-    { truncated: true, filenames: ["/work/src/good.ts"], numFiles: 1 },
+    { truncated: true },
   );
   assert.deepStrictEqual(
     searchShellToolResponse(
@@ -127,11 +127,18 @@ test("glob excludes byte-cut partial records and preserves known empty results",
       }),
       "/work",
     ),
-    { truncated: true, filenames: ["/work/name"], numFiles: 1 },
+    { truncated: true },
   );
   assert.deepStrictEqual(
     searchShellToolResponse(result("find", [{ type: "text", text: "a\n\nb" }]), "/work"),
     {},
+  );
+  assert.deepStrictEqual(
+    searchShellToolResponse(
+      result("find", [{ type: "text", text: "single.ts" }], undefined, { path: "src" }),
+      "/work",
+    ),
+    { filenames: ["/work/src/single.ts"], numFiles: 1 },
   );
 });
 
@@ -189,5 +196,15 @@ test("unsupported or contentless results fall through unchanged", () => {
       "/work",
     ),
     { filenames: ["/work/name"], numFiles: 1 },
+  );
+});
+
+test("newline-bearing glob display does not invent two filenames", () => {
+  assert.deepStrictEqual(
+    searchShellToolResponse(
+      result("find", [{ type: "text", text: "one\ntwo" }], undefined, { pattern: "*" }),
+      "/work",
+    ),
+    {},
   );
 });
