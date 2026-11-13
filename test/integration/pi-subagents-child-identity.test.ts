@@ -10,7 +10,11 @@
 // agent granted a plugin MCP tool, under a pi-subagents configuration whose
 // default is the foreground, so only the agents' own launch settings detach
 // them. Each child makes a successful and, where it can, a failed tool call,
-// past a Stop hook that would send a main session back for another turn. A
+// past a Stop hook that would send a main session back for another turn. An
+// ordinary case launches an agent with an empty body, no background setting,
+// and no MCP grant, with no launch mode in the call: under pi-subagents' own
+// default it detaches, and under a configured foreground default it runs in
+// the main Pi's turn, where no hook runs for it (D-PG3-01). A
 // concurrent case builds two child sessions at once in one runner process,
 // one tagged in append mode with an empty body and one in replace mode with
 // a second tag in its body, prompts both at once twice, and starts them
@@ -59,6 +63,19 @@ const BACKGROUND_AGENT: RealChildAgent = {
   name: "runner",
   frontmatter: [["background", "true"]],
   body: "Run the tools the task names.",
+  calls: [
+    { tool: "bash", arguments: { command: "echo from-child" } },
+    { tool: "read", arguments: { path: "missing.txt" } },
+  ],
+};
+
+// An ordinary agent with an empty body: no background setting and no MCP
+// grant, so its generated file names no launch mode (D-PG3-01). Its tools
+// list keeps the plugin's stub MCP server out of its grants.
+const ORDINARY_AGENT: RealChildAgent = {
+  name: "plain",
+  frontmatter: [["tools", "Bash, Read"]],
+  body: "",
   calls: [
     { tool: "bash", arguments: { command: "echo from-child" } },
     { tool: "read", arguments: { path: "missing.txt" } },
@@ -196,6 +213,131 @@ for (const mcpProfile of ["adapter", "builtin"] as const satisfies readonly McpP
     },
   );
 }
+
+for (const mcpProfile of ["adapter", "builtin"] as const satisfies readonly McpProfile[]) {
+  test(
+    `an ordinary ${mcpProfile} agent with an empty body runs detached in pi-subagents' default mode and hooks only its tools with its own identity`,
+    { timeout: FIXTURE_TIMEOUT_MS },
+    async (t) => {
+      // arrange
+      const releases: (() => Promise<void>)[] = [];
+      t.after(() => Promise.all(releases.map((release) => release())));
+
+      // act
+      const observed = await runRealSubagentChild({
+        mcpProfile,
+        agents: [ORDINARY_AGENT],
+        compileCache,
+        register: (release) => releases.push(release),
+      });
+      t.diagnostic(
+        JSON.stringify({
+          versions: observed.versions,
+          children: observed.children,
+          mainSessionId: observed.mainSessionId,
+        }),
+      );
+      const [plain] = observed.children;
+
+      // assert
+      assert.deepStrictEqual(
+        observed.children.map(({ agent, mode, state }) => ({ agent, mode, state })),
+        [{ agent: "demo:plain", mode: "background", state: "complete" }],
+      );
+      assert.ok(plain?.sessionId !== undefined);
+      assert.strictEqual(typeof plain.pid, "number");
+      assert.notStrictEqual(plain.sessionId, observed.mainSessionId);
+      const identity = { agent_type: "demo:plain", agent_id: plain.sessionId };
+      assert.deepStrictEqual(runsOf(observed.hookRuns, plain.sessionId), [
+        { event: "PreToolUse", session: plain.sessionId, tool: "Bash", identity },
+        { event: "PostToolUse", session: plain.sessionId, tool: "Bash", identity },
+        { event: "PreToolUse", session: plain.sessionId, tool: "Read", identity },
+        { event: "PostToolUseFailure", session: plain.sessionId, tool: "Read", identity },
+      ]);
+      const main = mainRuns(observed.hookRuns, [plain.sessionId]);
+      assert.deepStrictEqual(
+        main.filter(({ identity: named }) => Object.keys(named).length > 0),
+        [],
+      );
+      assert.deepStrictEqual(
+        main.filter(({ session }) => session === observed.mainSessionId).slice(0, 6),
+        [
+          { event: "SessionStart", session: observed.mainSessionId, tool: undefined, identity: {} },
+          {
+            event: "UserPromptSubmit",
+            session: observed.mainSessionId,
+            tool: undefined,
+            identity: {},
+          },
+          { event: "PreToolUse", session: observed.mainSessionId, tool: "Bash", identity: {} },
+          { event: "PostToolUse", session: observed.mainSessionId, tool: "Bash", identity: {} },
+          { event: "Stop", session: observed.mainSessionId, tool: undefined, identity: {} },
+          { event: "Stop", session: observed.mainSessionId, tool: undefined, identity: {} },
+        ],
+      );
+      assert.deepStrictEqual(observed.providerModels, ["scripted"]);
+    },
+  );
+}
+
+test(
+  "an ordinary agent runs in the foreground when pi-subagents' configuration makes the foreground its default",
+  { timeout: FIXTURE_TIMEOUT_MS },
+  async (t) => {
+    // arrange
+    const releases: (() => Promise<void>)[] = [];
+    t.after(() => Promise.all(releases.map((release) => release())));
+
+    // act
+    const observed = await runRealSubagentChild({
+      mcpProfile: "adapter",
+      agents: [ORDINARY_AGENT],
+      asyncByDefault: false,
+      compileCache,
+      register: (release) => releases.push(release),
+    });
+    t.diagnostic(
+      JSON.stringify({
+        versions: observed.versions,
+        children: observed.children,
+        mainSessionId: observed.mainSessionId,
+      }),
+    );
+    const main = { session: observed.mainSessionId, identity: {} };
+
+    // assert
+    assert.deepStrictEqual(observed.children, [
+      {
+        agent: "demo:plain",
+        mode: "foreground",
+        state: undefined,
+        pid: undefined,
+        sessionId: undefined,
+      },
+    ]);
+    assert.deepStrictEqual(runsOf(observed.hookRuns, observed.mainSessionId), [
+      { event: "SessionStart", tool: undefined, ...main },
+      { event: "UserPromptSubmit", tool: undefined, ...main },
+      { event: "PreToolUse", tool: "Bash", ...main },
+      { event: "PostToolUse", tool: "Bash", ...main },
+      { event: "Stop", tool: undefined, ...main },
+      { event: "Stop", tool: undefined, ...main },
+      { event: "UserPromptSubmit", tool: undefined, ...main },
+      { event: "PreToolUse", tool: "subagent", ...main },
+      { event: "PostToolUse", tool: "subagent", ...main },
+      { event: "Stop", tool: undefined, ...main },
+      { event: "Stop", tool: undefined, ...main },
+    ]);
+    // The one other session is the one the install's new session ended.
+    assert.deepStrictEqual(
+      observed.hookRuns
+        .filter((run) => run.stdin.session_id !== observed.mainSessionId)
+        .map(runIdentity)
+        .map(({ event, tool, identity }) => ({ event, tool, identity })),
+      [{ event: "SessionEnd", tool: undefined, identity: {} }],
+    );
+  },
+);
 
 const GENERATION: readonly ConcurrentChildLaunch[] = [
   {

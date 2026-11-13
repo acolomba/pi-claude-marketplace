@@ -30,6 +30,48 @@ The projection omits facts Pi does not provide: Read original content, Edit `use
 
 Tool exact lists split on comma or pipe and trim surrounding ASCII spaces; an internal space is not a separator. Empty members and duplicates do not add invocations. Other whole strings compile as unanchored, case-sensitive JavaScript regex against Claude-form names. Invalid regex drops only its group. `UserPromptSubmit` and `Stop` ignore even invalid matcher text. Stop permits eight consecutive blocking continuations; the ninth is overridden once with a cap notice. Any native model tool call resets the budget, even without a matching hook, and `/reload` starts a fresh budget. Stop remains on `agent_settled`; its event migration and the cap environment variable belong to Phase 5 (D-PG2-10/11; [matcher owner](../test/domain/components/hooks/matcher.test.ts), [matcher scenarios](../features/hook/matchers.feature), [Stop runtime owner](../test/bridges/hooks/runtime.test.ts), [Stop scenarios](../features/hook/prompt-and-stop.feature)).
 
+## Hooks in pi-subagents children
+
+A pi-subagents child is a Pi session that pi-subagents starts with its child marker, `PI_SUBAGENT_CHILD=1`, in the environment. The child loads this extension and the hooks of the installed plugins. In a child, only the three tool events run hooks. The other events belong to the main session, so a child does not run them (D-PG3-04). Claude Code also runs plugin tool hooks for the tool calls of a subagent, and runs `Stop` only for the main agent.
+
+| Event                | Main session | pi-subagents child                                        |
+| -------------------- | ------------ | --------------------------------------------------------- |
+| `SessionStart`       | runs         | does not run; it stands for `SubagentStart` (unsupported) |
+| `UserPromptSubmit`   | runs         | does not run                                              |
+| `PreToolUse`         | runs         | runs, with the child identity                             |
+| `PostToolUse`        | runs         | runs, with the child identity                             |
+| `PostToolUseFailure` | runs         | runs, with the child identity                             |
+| `PreCompact`         | runs         | does not run                                              |
+| `PostCompact`        | runs         | does not run                                              |
+| `SessionEnd`         | runs         | does not run                                              |
+| `Stop`               | runs         | does not run; it stands for `SubagentStop` (unsupported)  |
+| `StopFailure`        | runs         | does not run                                              |
+
+The bridge supports no `SubagentStart` or `SubagentStop` hook yet (PG-HOOK-07b). A compaction in a child runs no hook: not `PreCompact`, not the `SessionStart` with source `compact`, and not `PostCompact`. A `Stop` hook that sends the main session back for another turn does not keep a child running ([event policy tests](../test/bridges/hooks/event-router.test.ts), [child scenarios](../features/plugin/subagent-child.feature): "A child runs tool hooks without main-session hooks", "A child ignores a Stop hook that would continue the main session", "Child compaction runs no main-session hooks").
+
+A child still does the setup that its tool hooks need. It reads the hooks of every installed plugin. It reads the hooks of a project-scope plugin only when Pi trusts the project. It ignores the outcome of a hook that an earlier load started, and it gives the model the `additionalContext` of its tool hooks. An event that does not run in a child never skips this setup (D-PG3-05).
+
+### Child identity
+
+In a child, the stdin of `PreToolUse`, `PostToolUse`, and `PostToolUseFailure` holds `agent_type` and `agent_id`, as Claude Code sends them for a subagent (D-PG3-06). The bridge reads both at the start of each agent run:
+
+- `agent_type` is the agent name that pi-subagents writes at the start of the child's system prompt, as `<active_agent name="<agent>"/>` and a blank line. pi-subagents puts this tag in front of the custom or the appended prompt section. The bridge reads the tag from Pi's structured prompt options, never from the task text. It decodes `&amp;`, `&quot;`, `&lt;`, and `&gt;` once, so `a&amp;amp;b` becomes `a&amp;b`.
+- `agent_id` is the id of the child's current Pi session.
+
+Each load of the bridge keeps its own identity, and the identity applies only to the session that read it. So a new session, a reload, or another child session in the same pi-subagents runner process never reuses it. The stdin of a main-session tool hook holds neither property, not even as an empty value.
+
+If the tag is missing or malformed, or the two prompt sections name different agents, the child's tool hooks run without `agent_type` and `agent_id`. With the debug log on (`PI_CLAUDE_MARKETPLACE_DEBUG=1`), the bridge writes `Child hook identity unavailable: companion launch metadata is missing or malformed`. It never makes up an agent name. A supported pi-subagents launch always writes the tag, so this path only guards against another extension that changes the system prompt.
+
+Evidence: the [identity tests](../test/bridges/hooks/runtime.test.ts), the [payload tests](../test/bridges/hooks/payloads/post-tool-use.test.ts), and the [child scenarios](../features/plugin/subagent-child.feature): "A child tool hook identifies its own agent and session", "A main tool hook has no child identity", "A child keeps its own identity after another session runs", and "Missing child metadata clears the previous identity". Real children of the installed pi-subagents 0.88.1 run in "A real background child runs its plugin tool hooks and completes" and "Concurrent companion children keep separate hook identities", and in the [real-child tests](../test/integration/pi-subagents-child-identity.test.ts). Those tests launch an explicit background agent, an agent granted a plugin MCP tool, an ordinary agent with an empty body under pi-subagents' default launch mode, and two child sessions at once in one runner process. The tag format was also read in the pi-subagents 0.87.0 source, the declared floor; no test runs 0.87.0.
+
+A foreground child runs inside the main Pi's turn and loads no ambient extension, this one included. So no plugin hook runs for its tool calls, where Claude Code runs them. Reason: a Pi capability gap in pi-subagents. The real-child tests show this for an ordinary agent under a foreground default.
+
+### Background hook processes of a child
+
+A child records its `async` and `asyncRewake` hook processes in a journal of its own, under `_shared/async-rewake-children/` in the data root of the scope. The journal name comes from the child's process id, its session id, and a random token. A child never writes or reaps the main session's process table, and it reaps no journal. When a child stops or reloads, it stops its own hook processes.
+
+A later load of a main session reaps a child's journal only when the child's process is gone. It then stops a recorded hook process only when that process still runs with the hook's own dispatch marker in its environment, which it reads on Linux only. Every other case keeps the row: the child's process still runs or cannot be probed, the recorded process id now belongs to another process, or the system is not Linux. A load reads at most 1024 journals ([registry tests](../test/bridges/hooks/async-rewake/registry.test.ts), [ownership tests](../test/integration/subagent-hook-ownership.test.ts), scenario "Loading and stopping a child leaves parent and sibling hooks running").
+
 ## Events
 
 | Event                                   | Claude Code | Pi  | Notes                                                                                                                                                                                             |
@@ -44,7 +86,7 @@ Tool exact lists split on comma or pipe and trim surrounding ASCII spaces; an in
 | `SessionEnd`                            | ✓           | ⚠   | `reason` is `clear`, `resume`, `prompt_input_exit`, or `other`. `logout` is admitted and never sent, as upstream. A quit in the terminal by a signal sends `prompt_input_exit` (D-CF5-02, Pi gap) |
 | `Stop`                                  | ✓           | ✓   | full decision control; see the turn-boundary timing shift below                                                                                                                                   |
 | `StopFailure`                           | ✓           | ✓   | fires on `error` / `length` endings; observation-only (output/exit code ignored)                                                                                                                  |
-| `SubagentStart`, `SubagentStop`         | ✓           | ✗   | blocked on `pi-subagents` wiring                                                                                                                                                                  |
+| `SubagentStart`, `SubagentStop`         | ✓           | ✗   | not supported yet (PG-HOOK-07b); a pi-subagents child runs only its tool hooks, see [Hooks in pi-subagents children](#hooks-in-pi-subagents-children)                                             |
 | `Notification`                          | ✓           | ✗   | Pi has no subscriber bus for user notifications                                                                                                                                                   |
 | `PermissionRequest`, `PermissionDenied` | ✓           | ✗   | Pi has no event for the permission dialog                                                                                                                                                         |
 | `MessageDisplay`                        | ✓           | ✗   | Pi has no render-time hook on assistant messages                                                                                                                                                  |
@@ -115,7 +157,7 @@ The unsupported events fall into three buckets, each with a different forward pa
 - `CwdChanged` -- Pi exposes the working directory but does not emit an event when it changes.
 - `PostToolBatch` -- Pi's per-turn boundary differs from Claude's parallel-batch boundary; a faithful translation is deferred.
 - `UserPromptExpansion` -- slash-command expansion under Pi follows a different pipeline.
-- `SubagentStart` and `SubagentStop` -- supported only when `pi-subagents` is installed; the bridge does not yet wire these through.
+- `SubagentStart` and `SubagentStop` -- a pi-subagents child runs its tool hooks, but the bridge does not yet run these two events (PG-HOOK-07b).
 - `PreModelSwitch` and `PostModelSwitch` -- Claude Code 2.1.251 added them, and the bridge does not translate them yet (HKMS-01).
 
 **Blocked on upstream Pi support** -- the bridge cannot expose these until Pi exposes the underlying primitive:
