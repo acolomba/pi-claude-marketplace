@@ -51,6 +51,48 @@ Feature: Hook tool use
       | builtin | 3    | tool result | mcp__plugin_hook_demo_stub_server__echo returned: SAFE_ALIAS |
 
   @mcp
+  Scenario: An MCP content-only replacement clears structured data when text is unchanged
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name      | version |
+      | hook-demo | 1.0.0   |
+    Given the published plugin "hook-demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event       | matcher                                 | form   | output |
+      | clear  | PostToolUse | mcp__plugin_hook-demo_stub-server__echo | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"content":[{"type":"text","text":"echo:ping"}]}}} |
+    Given the published plugin "hook-demo" of the marketplace "fixtures" has the stub mcp server "stub-server" for its hooks
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install hook-demo@fixtures --scope user", which did not fail
+    Given a stand-in registers the stub mcp server "stub-server" of the plugin "hook-demo" with pi's built-in mcp
+    Given pi runs with the scripted model, the mcp implementation and a downstream result observer
+    Given the mcp implementation has listed the tools of the stub mcp server "stub-server" of the plugin "hook-demo"
+    Given the scripted model calls the tool "echo" of the hooks' stub mcp server "stub-server" of the plugin "hook-demo" through the mcp implementation with '{"text":"ping"}', then replies "Done."
+    When the user prompts "call the stub"
+    Then the hooks record these runs in any order:
+      | event       | session | tool name                               | tool input      | tool response                                                                                                         | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                             | CLAUDE_PLUGIN_DATA                                        | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PostToolUse | first   | mcp__plugin_hook-demo_stub-server__echo | {"text":"ping"} | {"content":[{"type":"text","text":"echo:ping"}],"structuredContent":{"content":[{"type":"text","text":"echo:ping"}]}} | {project dir} |                 | clear     | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-demo | {agent dir}/pi-claude-marketplace/data/fixtures/hook-demo | first                  | first             | 1          |
+    Then another pi handler observes these complete mcp results:
+      | profile | record |
+      | adapter | {"toolName":"mcp__plugin_hook-demo_stub-server__echo","content":[{"type":"text","text":"echo:ping"}],"details":{"server":"plugin_hook-demo_stub-server_","tool":"echo"},"structuredContent":null,"isError":false} |
+      | adapter | {"toolName":"mcp","content":[{"type":"text","text":"echo:ping"}],"details":{"server":"plugin_hook-demo_stub-server_","tool":"echo"},"structuredContent":null,"isError":false} |
+      | builtin | {"toolName":"tool_search","content":[{"type":"text","text":"Loaded 1 tool. They are available from your next call:\\n- mcp__plugin_hook_demo_stub_server__echo: Echoes the text it is given."}],"details":{"loaded":["mcp__plugin_hook_demo_stub_server__echo"]},"structuredContent":null,"isError":false} |
+      | builtin | {"toolName":"mcp__plugin_hook_demo_stub_server__echo","content":[{"type":"text","text":"echo:ping"}],"details":{"server":"plugin_hook-demo_stub-server","tool":"echo"},"structuredContent":null,"isError":false} |
+    Then the model receives these complete mcp calls:
+      | profile | call | role        | text |
+      | adapter | 1    | user        | call the stub |
+      | adapter | 2    | user        | call the stub |
+      | adapter | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_hook-demo_stub-server__echo","args":{"text":"ping"}} |
+      | adapter | 2    | tool result | mcp returned: echo:ping |
+      | builtin | 1    | user        | call the stub |
+      | builtin | 2    | user        | call the stub |
+      | builtin | 2    | assistant   | tool call tool_search {"query":"mcp__plugin_hook_demo_stub_server__echo","limit":1} |
+      | builtin | 2    | tool result | tool_search returned: Loaded 1 tool. They are available from your next call:\n- mcp__plugin_hook_demo_stub_server__echo: Echoes the text it is given. |
+      | builtin | 3    | user        | call the stub |
+      | builtin | 3    | assistant   | tool call tool_search {"query":"mcp__plugin_hook_demo_stub_server__echo","limit":1} |
+      | builtin | 3    | tool result | tool_search returned: Loaded 1 tool. They are available from your next call:\n- mcp__plugin_hook_demo_stub_server__echo: Echoes the text it is given. |
+      | builtin | 3    | assistant   | tool call mcp__plugin_hook_demo_stub_server__echo {"text":"ping"} |
+      | builtin | 3    | tool result | mcp__plugin_hook_demo_stub_server__echo returned: echo:ping |
+
+  @mcp
   Scenario: An MCP redaction removes original structured data and details
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
