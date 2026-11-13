@@ -37,6 +37,7 @@ The `/claude:plugin` command manages Claude marketplaces and plugins, like Claud
 
 - [Pi Coding Agent](https://pi.dev) 1.5.0 or newer
 - [pi-subagents](https://pi.dev/packages/pi-subagents) 0.87.0 or newer (optional but recommended, `pi install npm:pi-subagents`)
+  - Ambient direct MCP tools in unrestricted and exclusion-only background agents require pi-subagents 0.88.1 or newer.
 - [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.1 or a later 7.x release (optional, `pi install npm:pi-mcp-adapter`). It supports more MCP features than Pi's built-in MCP.
 - [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) 3.15.0 or newer (optional but recommended, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
