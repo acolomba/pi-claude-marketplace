@@ -5199,6 +5199,13 @@ AGTLONGNAME-01 remains a separate explicit-grant naming defect.
 
 ## HOOKRESULT-01: investigate and implement execution wrappers for full Claude-shaped hook results
 
+**Status at 2026-11-13:** Open for the facts Phase 2 cannot observe during
+execution. Phase 2 already translates available per-tool result fields and
+accepted replacements, including MCP modern/legacy selection and downstream
+redaction. This follow-up is limited to complete execution capture through
+wrappers or an upstream Pi seam. See the [current contract](../docs/hooks-compatibility.md#current-tool-contract-phase-2-2026-11-13)
+and [Phase 2 validation](phases/02-hook-payloads-matchers-and-stop-limit/02-VALIDATION.md).
+
 Requested by the user on 2026-11-12 during parity-gaps Phase 2 discussion
 (PG-HOOK-01). Phase 2 includes per-tool result translation using the data Pi
 actually supplies, and the reverse mapping for hook result replacements. It must
