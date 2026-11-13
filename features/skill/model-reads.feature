@@ -97,7 +97,7 @@ Feature: Skill model reads
   Scenario: A read hook's replacement of a skill file reaches the model as the hook wrote it, with no variable filled
     Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
       | name    | event       | matcher | form   | output                                                                                                                                                                                                                                                                                         |
-      | replace | PostToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"content":[{"type":"text","text":"Head 1 at effort ${CLAUDE_EFFORT}.\\nHead 2.\\nHead 3.\\nHead 4.\\nHead 5.\\nHead 6 at effort ${CLAUDE_EFFORT}.\\nTail 7 at effort ${CLAUDE_EFFORT}, arguments [$ARGUMENTS]."}]}}} |
+      | replace | PostToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"type":"text","file":{"content":"Head 1 at effort ${CLAUDE_EFFORT}.\\nHead 2.\\nHead 3.\\nHead 4.\\nHead 5.\\nHead 6 at effort ${CLAUDE_EFFORT}.\\nTail 7 at effort ${CLAUDE_EFFORT}, arguments [$ARGUMENTS]."}}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has started a new pi session
