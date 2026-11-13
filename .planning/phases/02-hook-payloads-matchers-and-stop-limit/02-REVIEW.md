@@ -1,8 +1,10 @@
 ---
 phase: 02-hook-payloads-matchers-and-stop-limit
-reviewed: 2026-11-13T13:14:05Z
+reviewed: 2026-11-13T13:48:54Z
 depth: standard
-files_reviewed: 71
+iteration: 2
+reviewed_head: d8930842
+files_reviewed: 72
 files_reviewed_list:
   - docs/hooks-compatibility.md
   - docs/research/claude-hook-config-syntax.md
@@ -34,6 +36,7 @@ files_reviewed_list:
   - features/hook/prompt-and-stop.feature
   - features/hook/tool-failure.feature
   - features/hook/tool-use.feature
+  - features/lib/hook-case-tools.ts
   - features/lib/hook-files.ts
   - features/lib/hook-mcp-tool-server.ts
   - features/lib/hook-recorder.ts
@@ -76,102 +79,62 @@ files_reviewed_list:
   - test/orchestrators/plugin/info.test.ts
   - test/orchestrators/plugin/install-flow-ledger.test.ts
 findings:
-  critical: 4
-  warning: 1
+  critical: 0
+  warning: 0
   info: 0
-  total: 5
+  total: 0
   necessity: 0
-status: issues_found
+status: clean
 ---
 
 # Phase 2: Code Review Report
 
-**Reviewed:** 2026-11-13T13:14:05Z
+**Reviewed:** 2026-11-13T13:48:54Z
 **Depth:** standard
-**Files Reviewed:** 71
-**Status:** issues_found
+**Iteration:** 2
+**Files Reviewed:** 72
+**Status:** clean
 
 ## Summary
 
-Four blocking defects affect successful-result redaction, Glob path provenance, malformed rewrite fallback, and native versus custom tool identity. One warning identifies stale compatibility guidance.
+All five findings from the first review are resolved. Independent reproduction checks passed for the four runtime defects. No new defect was found in the fixes, their callers, the new fixture or the changed regression scenarios. All reviewed files meet quality standards. No issues found.
 
-Scope is the explicit 71-file union of the phase's 42 task commits in the supplied evaluation-scope record. Production modules were read in full; tests, feature scenarios, fixtures and documentation were reviewed through their phase-specific changes and necessary surrounding helper/caller context, as agreed with the orchestrator. Per-file history confirmed no unrelated interleaved commit touched these paths between their first and last task changes. The unrelated pi-subagents upgrade was excluded. CodeGraph supplied initial source/call-path orientation; direct source reads and the installed Pi runner/tool implementations supplied boundary evidence.
+This review retains the original standard-depth inspection of the 71-file task-commit scope and adds `features/lib/hook-case-tools.ts`. Unchanged files retain the first review's analysis. The rereview inspected every change in `087cc071`, `af1272c8`, `58895946`, `cf819853`, `8b5c728d` and `d8930842`, plus necessary caller and boundary context. The six commits are contiguous after `90a2f8cb`; unrelated pi-subagents work remains excluded. Production source was read through CodeGraph and exact diffs; new and changed tests/scenarios were inspected for meaningful assertions, native event identity, downstream observer ordering and full output comparisons.
 
-The review considered the phase context, plan contracts and summaries, including the accepted original-call fallback, exact projected echoes, partial available-fact results, LS exception, modern-field presence rule, native regex semantics and fixed Stop cap. It does not reopen those decisions. The necessity rubric was read; no provable necessity finding was identified.
+The phase's settled contracts remain unchanged: available-fact projections, whole-original-call fallback for rejected rewrites, exact full-result echoes, native case-sensitive identities, modern MCP field presence, LS exception, JavaScript regex behavior and eight Stop continuations. The necessity rubric remains applicable; no provable necessity defect was found.
 
-Focused executable reproductions confirmed CR-01 through CR-04. CR-01 exercised the actual installed Pi ExtensionRunner and inspected a subsequent handler's event. No full suite was rerun; the orchestrator owns the final combined-tree gate. Earlier passing checks and the security audit do not cover the counterexamples below.
+The fix report's generic “requires human verification” labels are resolved by the concrete source analysis and executable regressions below. No manual verification remains for these five findings. The orchestrator still owns the final full combined-tree `npm run check`; this review did not run that gate.
 
 ## Structural Findings (fallow)
 
-The supplied normalized substrate contains **zero** findings: unused exports 0, unused files 0, duplicate groups 0, circular dependencies 0.
+The supplied normalized substrate contains zero unused exports, unused files, duplicate groups or circular dependencies. Its raw pre-fix audit reports `warn` for complexity/estimated coverage, with maximum cyclomatic complexity 19, zero dead-code issues and zero duplication groups. Those scoped warnings were assessed in the first review and did not establish separate defects.
 
-The raw audit reports `warn`, with 59 complexity findings, maximum cyclomatic complexity 19, zero dead-code issues and zero duplication groups. Its audit scope is broader than this review's exact task-file union. Scoped warnings were inspected in context, including the input validators, result parsers and edit preflight. Complexity/estimated coverage warnings alone do not establish an additional correctness defect; no structural finding is promoted into the narrative counts.
+The substrate predates the six fixes and is not represented as a fresh audit. The fix report records clean fallow checks and passing normal commit hooks for the fixes. The small changes add no new codec abstraction or cyclic dependency: the search projector now consumes the existing path normalizer, and the new fixture has an explicit live scenario consumer.
 
 ## Narrative Findings (AI reviewer)
 
-### Critical Issues
+No open BLOCKER or WARNING findings.
 
-### CR-01: Content-only redaction is discarded when visible text stays the same
+### Previous findings verified as resolved
 
-**Classification:** BLOCKER
-**File:** `/home/acolomba/src/pi-claude-marketplace-gaps/extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:258-263`
-**Related evidence:** `/home/acolomba/src/pi-claude-marketplace-gaps/extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:266-271`; installed Pi `node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/runner.js:900-950`.
+| Previous finding | Current source evidence | Independent verification and retained regression coverage |
+| --- | --- | --- |
+| CR-01: Same-text content-only redaction retained structured data | `extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:258-270` now compares both content and structured content for equality. Omission of an existing structured value produces the sanitized patch. | Replayed the original synthetic-secret example through the installed Pi ExtensionRunner and a downstream handler. Public text stayed identical, structured content disappeared, and only safe server/tool details remained. An exact full-envelope echo still returned no patch. Reran `test/integration/hooks-result-boundary.test.ts` successfully. The new shared MCP scenario asserts complete handler/model records under both profiles; the fix report records both passing. |
+| CR-02: Glob reported the wrong absolute path for native aliases | `extensions/pi-claude-marketplace/bridges/hooks/tool-result-search-shell.ts:87-90` uses `requestedPath` before resolving the returned filename. | Replayed home, at-prefix, file-URL and Unicode-space roots; all four produced the expected native search location. Reviewed the new owner and payload cases and the live at-prefixed native-find scenario. Existing ambiguous-display and truncation omissions remain before path projection. |
+| CR-03: Malformed file-URL rewrite escaped as an exception | `extensions/pi-claude-marketplace/bridges/hooks/tool-input.ts:156-166` contains candidate normalization errors and returns the existing ignored-value outcome. | Replayed malformed percent escapes and remote file-URL hosts for both Read and Write: no exception, no input mutation, and the original call remained intact. Reran the malformed-file-URL adapter cases, which assert one complete sanitized notification and the unchanged input. The live Read scenario checks the original result and rejection notice; deny/stop precedence remains upstream of mutation. |
+| CR-04: Case folding selected native codecs for custom tools | `extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:244-250`, `tool-result-files.ts:176-178`, `tool-result-search-shell.ts:131-139`, `tool-output-files.ts:229-235` and `tool-output-search-shell.ts:197-214` use exact native IDs. | Replayed custom `Bash` and `Read` events: each retained its structured schema, accepted a generic content replacement and cleared output details. Reviewed all corrected lowercase native fixtures and custom identity cases. The new `hook-case-tools.ts` fixture and live custom-Bash scenario assert actual hook input, schema, model response and downstream redaction. |
+| WR-01: Compatibility prose promised superseded MCP prefix semantics | `docs/hooks-compatibility.md:173-175` describes unanchored regexes and anchoring/escaping; its `if` rows at lines 198-199 independently describe literal and server-prefix identity. | Compared the wording with `domain/components/hooks/matcher.ts:61-65` and `domain/components/hooks/builtin-mcp-tool-names.ts:120-153`. The contradictory string-prefix matcher claim and misleading equivalence with `if` predicates are removed. |
 
-**Issue:** The generic/MCP no-op check treats an omitted replacement `structuredContent` as equivalent to any original structured value. A hook can return the same public content while deliberately removing a secret-bearing structured result. The adapter returns `undefined`, so Pi preserves both the secret and old output-bearing details. This is a changed output envelope, not the accepted exact-echo case.
+### Verification performed during this rereview
 
-**Reproduction:** Original MCP event has `content: [{type: "text", text: "public"}]`, `structuredContent: {secret: "SYNTHETIC_SECRET"}`, and details containing the same marker. Return `updatedToolOutput: {content: [{type: "text", text: "public"}]}`. A downstream handler under the installed Pi ExtensionRunner still observes the original secret in both carriers. Pi would clear structured content if the adapter returned the content-only patch, and the adapter's normal patch already sanitizes details.
+- Independent assertion-based replay of all four original counterexamples, including the actual installed Pi runner for same-text redaction, four path aliases, malformed URLs on both file tools, and both custom case variants: passed.
+- `node --import ./test/platform/isolated-pi-home.ts --test test/integration/hooks-result-boundary.test.ts`: passed.
+- `node --import ./test/platform/isolated-pi-home.ts --test --test-name-pattern='malformed file URL' test/bridges/hooks/event-adapters.test.ts`: passed.
+- Inspected all six fix commits, their changed test regions, the new fixture and complete new/modified scenario assertions. No source or test files were changed by this review.
 
-**Fix:** Require full semantic equality of content and structured content before treating a generic replacement as an echo. In particular, omission of a previously present structured value must produce a patch with replacement content and sanitized details. Preserve the exact full-envelope echo behavior. Add an actual-runner regression where public text remains unchanged and only structured data is removed.
-
-### CR-02: Glob invents the wrong absolute filename for native path aliases
-
-**Classification:** BLOCKER
-**File:** `/home/acolomba/src/pi-claude-marketplace-gaps/extensions/pi-claude-marketplace/bridges/hooks/tool-result-search-shell.ts:84-85`
-**Related evidence:** `/home/acolomba/src/pi-claude-marketplace-gaps/extensions/pi-claude-marketplace/bridges/hooks/tool-input.ts:22-38`; installed Pi `node_modules/@earendil-works/pi-coding-agent/dist/core/tools/find.js:65`.
-
-**Issue:** Glob resolves the native request's search root with plain `path.resolve`, whereas Pi resolves it with `resolveToCwd`, including home expansion, leading `@`, file URLs and Unicode-space normalization. The emitted absolute filename can therefore name a different location from the file actually found. Hooks receive fabricated path provenance despite the available-facts contract.
-
-**Reproduction:** For cwd `/workspace`, native `find` input `{path: "~/docs", pattern: "*.txt"}` and a single returned `a.txt`, the projector emits `{filenames: ["/workspace/~/docs/a.txt"], numFiles: 1}`. Pi searches the user's home `docs` directory instead. The same mismatch applies to other supported path aliases.
-
-**Fix:** Normalize the requested search root with the same native path semantics used by the file-input translation, then resolve the returned relative filename beneath it. Pass the required home value explicitly at the pure boundary or follow the existing file-result boundary pattern. Add tests for home, at-prefix and file-URL roots and a native-find boundary case; preserve the existing ambiguous-display omissions.
-
-### CR-03: A malformed file-URL rewrite throws instead of retaining the original call
-
-**Classification:** BLOCKER
-**File:** `/home/acolomba/src/pi-claude-marketplace-gaps/extensions/pi-claude-marketplace/bridges/hooks/tool-input.ts:156`
-**Related evidence:** `/home/acolomba/src/pi-claude-marketplace-gaps/extensions/pi-claude-marketplace/bridges/hooks/tool-input.ts:34-35`; `/home/acolomba/src/pi-claude-marketplace-gaps/extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:318-332`; installed Pi `node_modules/@earendil-works/pi-coding-agent/dist/core/extensions/runner.js:954-970`.
-
-**Issue:** Read/Write rewrite validation invokes `requestedPath` without containing conversion errors. `fileURLToPath` throws for malformed percent escapes and unsupported file-URL forms. The rejection escapes the adapter and Pi's tool-call handler chain instead of yielding the required unchanged original call plus sanitized rejection notice. A valid native operation is consequently interrupted by malformed hook data.
-
-**Reproduction:** Pass a mutation with `updatedInput: {file_path: "file:///tmp/%ZZ"}` to `adaptToolCallResult` for native `read` input `{path: "original.txt"}`. The promise rejects with `URIError: URI malformed`. The `ignored` arm and notice are never reached. The same path conversion is used for Write.
-
-**Fix:** Catch path-normalization failures at the candidate-validation boundary and return `{kind: "ignored", category: "value"}`. Preserve deny/stop precedence and do not disclose the supplied URL in notices. Add Read and Write regressions for malformed percent escapes and rejected file-URL hosts/forms, including a dispatcher or live-hook test proving the original operation runs and one sanitized notice is emitted.
-
-### CR-04: Case folding routes distinct custom tools through native result codecs
-
-**Classification:** BLOCKER
-**File:** `/home/acolomba/src/pi-claude-marketplace-gaps/extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts:244-250`
-**Related evidence:** `/home/acolomba/src/pi-claude-marketplace-gaps/extensions/pi-claude-marketplace/bridges/hooks/tool-result-files.ts:176-178`; `/home/acolomba/src/pi-claude-marketplace-gaps/extensions/pi-claude-marketplace/bridges/hooks/tool-result-search-shell.ts:127-135`; `/home/acolomba/src/pi-claude-marketplace-gaps/extensions/pi-claude-marketplace/bridges/hooks/tool-output-files.ts:229-235`; `/home/acolomba/src/pi-claude-marketplace-gaps/extensions/pi-claude-marketplace/bridges/hooks/tool-output-search-shell.ts:197-214`; `/home/acolomba/src/pi-claude-marketplace-gaps/extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:47-64`.
-
-**Issue:** Native Pi tool identities are exact lowercase names; a custom tool named `Bash` or `Read` is a distinct tool. Input translation deliberately preserves that distinction, as required by plan 02-01. The new result projectors and reverse renderers call `toLowerCase()`, wrongly selecting native codecs for those custom tools. This changes their hook-visible schema and rejects otherwise valid custom result replacements, including redactions.
-
-**Reproduction:** A custom `Bash` event with input `{query: "hello"}`, public text and a custom structured object projects to `{interrupted: false, structuredContent: [the text blocks]}` instead of retaining the custom object. Returning the valid custom replacement `{content: [{type: "text", text: "redacted"}]}` yields no patch because the shell validator rejects it. The original result remains visible.
-
-**Fix:** Select native result codecs only for exact native tool names throughout forward and reverse dispatch. Keep custom case variants on the existing generic schema path. Correct tests that use capitalized Claude names to stand in for native result events, and add distinct custom `Bash`/`Read` tests for projection and successful output replacement.
-
-### Warnings
-
-### WR-01: MCP matching prose still promises the superseded prefix semantics
-
-**Classification:** WARNING
-**File:** `/home/acolomba/src/pi-claude-marketplace-gaps/docs/hooks-compatibility.md:173`
-**Related evidence:** `/home/acolomba/src/pi-claude-marketplace-gaps/docs/hooks-compatibility.md:148`; `/home/acolomba/src/pi-claude-marketplace-gaps/docs/hooks-compatibility.md:197`; `/home/acolomba/src/pi-claude-marketplace-gaps/extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts:61-65`.
-
-**Issue:** The updated matcher table correctly says `mcp__<server>__.*` is an unanchored JavaScript regex and can match a longer server containing `__`. The tool-name mapping prose still says it is a string-prefix check and that built-in MCP compares the server to the registered name. The `if` table also describes its separate prefix behavior by referring to the matcher behavior, which has now changed. A hook author following the old prose can assume a narrower selection than the actual matcher provides.
-
-**Fix:** Update the remaining prose to the current regex semantics, including anchoring/escaping implications where relevant. Describe MCP `if` predicates independently according to their unchanged identity rules, rather than equating them with regex matchers. Retain the literal-name recovery limitations.
+The fixer separately reports passing owner/direct-coverage checks, normal commit hooks, feature validation, and named Cucumber scenarios for native Glob, malformed Read, custom Bash, and same-text MCP under adapter and builtin. Those reported runs supplement the independent checks above; they are not a substitute for the orchestrator's final gate.
 
 ---
 
 _Reviewer: gsd-code-reviewer_
-_Depth: standard_
+_Depth: standard; automatic rereview iteration 2_

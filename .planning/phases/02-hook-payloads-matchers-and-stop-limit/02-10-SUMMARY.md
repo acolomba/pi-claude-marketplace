@@ -95,6 +95,13 @@ Both task commits passed normal hooks. The first Task 1 message attempt failed g
 
 4. **Task 1: Correct stale MCP matcher and invalid-regex support claims (security audit correction)**: `10750a0ef185082226f11e79d40f5a6140c27580`
 
+- **Task 2: Phase closeout review correction: Clear omitted structured MCP output**: `087cc0718b0839cb5d5c39adac29231d2c227174`
+- **Task 2: Phase closeout review correction: Prove same-text MCP redaction in both profiles**: `d893084229f11876c92b4e036a09b112c4002873`
+- **Task 2: Phase closeout review correction: Normalize native Glob search roots**: `af1272c8b0a63d4139fb6bb8fe9b405a08b54c02`
+- **Task 2: Phase closeout review correction: Preserve original calls after malformed file URL rewrites**: `58895946da7866a44a40b0305e38e3288617d4ba`
+- **Task 2: Phase closeout review correction: Keep custom tool identities out of native result codecs**: `cf819853a98b6b8aaaf02ebf48c38e125bda2959`
+- **Task 2: Phase closeout review correction: Distinguish regex matchers from MCP if predicates**: `8b5c728d4a397fc084aefe8c5437f4eb43f52099`
+
 ## Verification
 
 - **Task 1 focused gate:** `npm run test:cucumber:profile -- --profile adapter features/hook/tool-use.feature features/hook/tool-failure.feature features/hook/async.feature features/hook/matchers.feature features/hook/prompt-and-stop.feature` exited 0 at Task 1 head on Node v26.13.0: 107 scenarios, 1,610 steps, seed 413084, 1m 34.920s wall time. Log: `/tmp/pg2-p10-focused.log`. Its sandbox attempt stopped before scenarios with `spawnSync npm EPERM`; the ordinary-permission rerun supplied the passing result.
@@ -141,3 +148,7 @@ All six declared task files and this summary exist. Both exact task SHAs are anc
 ## Security audit correction
 
 T-02-26 found two stale matcher claims in the compatibility page. Commit `10750a0e` documents whole native regex matching under both MCP profiles and limits regex-related partition drops to invalid syntax. Normal hooks and Fallow audit/review passed; the independent security recheck closed all 27 threats. A fresh combined-tree gate follows code review.
+
+## Code review corrections
+
+The first review found four runtime defects and one documentation inconsistency. Six normal-hook commits fixed all five findings and added owner, installed-runner and real-Pi behavioral regressions. Independent re-review replayed all four counterexamples and returned clean across 72 files. See `02-REVIEW.md` and `02-REVIEW-FIX.md` for exact evidence. The final combined-tree gate remains pending.
