@@ -38,6 +38,11 @@ export function mcpAsyncWarning(id: McpImplementationId): string {
   return MCP_ASYNC_WARNINGS[id];
 }
 
+/** Whether a stored warning exactly names one known generation for `id`. */
+export function isMcpAsyncWarning(warning: string, id: McpImplementationId): boolean {
+  return WARNING_GENERATIONS.some((forms) => warning === forms[id]);
+}
+
 /** Rewrites a stored MCP warning for the selected implementation. */
 export function rewriteMcpAsyncWarning(warning: string, id: McpImplementationId): string {
   for (const forms of WARNING_GENERATIONS) {

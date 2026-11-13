@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  isMcpAsyncWarning,
   mcpAsyncWarning,
   rewriteMcpAsyncWarning,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/mcp-async-warning.ts";
@@ -39,6 +40,30 @@ describe("mcpAsyncWarning", () => {
     // assert
     assert.strictEqual(warning, expectedWarning);
   });
+});
+
+describe("isMcpAsyncWarning", () => {
+  for (const { generation, lead } of [
+    { generation: "historical", lead: historicalLead },
+    { generation: "corrected", lead: correctedLead },
+  ]) {
+    test(`recognizes only the complete ${generation} warning for its implementation`, () => {
+      // arrange
+      const adapter = lead + adapterTail;
+      const builtin = lead + builtinTail;
+
+      // act
+      const adapterMatch = isMcpAsyncWarning(adapter, "adapter");
+      const builtinMatch = isMcpAsyncWarning(builtin, "builtin");
+
+      // assert
+      assert.strictEqual(adapterMatch, true);
+      assert.strictEqual(builtinMatch, true);
+      assert.strictEqual(isMcpAsyncWarning(adapter, "builtin"), false);
+      assert.strictEqual(isMcpAsyncWarning(builtin, "adapter"), false);
+      assert.strictEqual(isMcpAsyncWarning(`${adapter}!`, "adapter"), false);
+    });
+  }
 });
 
 describe("rewriteMcpAsyncWarning", () => {
