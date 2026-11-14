@@ -91,7 +91,7 @@ Feature: Hook prompt and stop
       | 1    | user | finish up |
 
   Scenario: Eight consecutive Stop blocks continue before the ninth is overridden
-    Given pi runs with the scripted model
+    Given pi runs with the scripted model and counts its run starts
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -126,6 +126,9 @@ Feature: Hook prompt and stop
       | Done 8 | true             |
       | Done 9 | true             |
     Then the stop override cap notice count is 1
+    Then the stop sequence has these counts:
+      | agent settlements | run starts | model calls |
+      | 9                 | 9          | 9           |
 
   Scenario: Tool calls reset a Stop-only plugin's continuation count
     Given pi runs with the scripted model

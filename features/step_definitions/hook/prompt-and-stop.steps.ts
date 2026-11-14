@@ -10,6 +10,12 @@
  * `agent_settled` instead, and keeps every record and stand-in log line of
  * both turns as the last turn (HAR-03).
  *
+ * The run-start `Given` starts the profile Pi with a harness extension that
+ * logs each `before_agent_start`, and the counts `Then` states the turn's
+ * settlements, run starts, and model calls. Pi raises `agent_start` for each
+ * continuation of a run as well, so the step counts run starts from that log
+ * and never from `agent_start` records.
+ *
  * A steer or a follow-up is a prompt the user sends while the agent runs. Pi
  * queues it into the running agent, which reads a steer after the running
  * tool returns and a follow-up only when it would otherwise stop. So the
@@ -33,9 +39,11 @@ import {
   HOOK_RUNS_LOG,
   waitForHookLifecycle,
 } from "../../lib/hook-recorder.ts";
+import { RUN_START_PROBE_EXTENSION, RUN_STARTS_LOG } from "../../lib/run-start-probe.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
 import { callMessageRows, modelCallsOf } from "../../lib/scripted-model/script.ts";
 import { readLogLengths, readLogLinesSince } from "../../lib/turn-records.ts";
+import { PROFILE_PI_START_TIMEOUT_MS } from "../../support/world.ts";
 
 import type { HookLifecycleEvent, HookRun } from "../../lib/hook-recorder.ts";
 import type { RpcRecord } from "../../lib/pi-process.ts";
@@ -176,6 +184,14 @@ async function promptPastBackgroundHook(
 }
 
 Given(
+  "pi runs with the scripted model and counts its run starts",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    await this.usePiWithProfile({ companions: [], extraExtensions: [RUN_START_PROBE_EXTENSION] });
+  },
+);
+
+Given(
   "the user has prompted {string} and the hook {string} goes on in the background",
   async function (this: ScenarioWorld, text: string, hook: string) {
     await promptPastBackgroundHook(this, text, hook);
@@ -247,6 +263,22 @@ Then(
     this.markTurnCompared();
   },
 );
+
+Then("the stop sequence has these counts:", function (this: ScenarioWorld, table: DataTable) {
+  const turn = this.requireTurn();
+  assert.deepStrictEqual(
+    [
+      ["agent settlements", "run starts", "model calls"],
+      [
+        String(turn.records.filter(isSettled).length),
+        String((turn.logs.get(RUN_STARTS_LOG) ?? []).length),
+        String(modelCallsOf(turn.logs).length),
+      ],
+    ],
+    table.raw(),
+  );
+  this.markTurnCompared();
+});
 
 Then("the stop override cap notice count is {int}", function (this: ScenarioWorld, count: number) {
   const notices = this.requireTurn().records.flatMap((record) => {

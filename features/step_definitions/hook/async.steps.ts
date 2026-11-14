@@ -67,12 +67,13 @@ function isRewakeSummaryRecord(record: RpcRecord): boolean {
   return claudePluginPayloads([entry]).some((payload) => payload.kind === "async-rewake-summary");
 }
 
-// Waits for the first `agent_settled` record at or after `index`, and asserts
-// that its turn was not aborted.
-async function waitForSettleAt(world: ScenarioWorld, index: number): Promise<void> {
+// Waits for the first `agent_settled` record at or after `index`, asserts
+// that its turn was not aborted, and returns the index after it.
+async function waitForSettleAt(world: ScenarioWorld, index: number): Promise<number> {
   const isSettle = (record: RpcRecord): boolean => record.type === "agent_settled";
   const record = await world.pi.waitForRecord(index, isSettle, ASYNC_STEP_DEADLINE_MS);
   assert.strictEqual(record.aborted, false, JSON.stringify(record));
+  return index + world.pi.recordsSince(index).indexOf(record) + 1;
 }
 
 // Waits for the `agent_settled` record after the last rewake summary record
@@ -101,24 +102,30 @@ async function keepTurn(
   world.recordTurn({ prompt, disposition: "started", records, logs });
 }
 
-// Sends the prompt `text`, asserts that Pi started a turn, and waits for its
-// settle. Returns the prompt and the log lengths and record count from before
-// it, so a turn keeps only what the prompt added.
-async function promptToSettle(
-  world: ScenarioWorld,
-  text: string,
-): Promise<{
+// A prompt that Pi started a turn for, with the log lengths and record count
+// from before it, so a turn keeps only what the prompt added.
+interface SentPrompt {
   readonly message: string;
   readonly lengths: ReadonlyMap<string, number>;
   readonly from: number;
-}> {
+}
+
+// Sends the prompt `text` and asserts that Pi started a turn.
+async function sendPrompt(world: ScenarioWorld, text: string): Promise<SentPrompt> {
   const lengths = await readLogLengths(world.profileHarness());
   const from = world.pi.recordCount();
   const message = expandTokens(text, world.tokens);
   const answer = await world.pi.request({ type: "prompt", message });
   assert.strictEqual(promptDisposition(answer.response), "started", JSON.stringify(answer));
-  await waitForSettleAt(world, from);
   return { message, lengths, from };
+}
+
+// Sends the prompt `text`, asserts that Pi started a turn, and waits for its
+// settle.
+async function promptToSettle(world: ScenarioWorld, text: string): Promise<SentPrompt> {
+  const sent = await sendPrompt(world, text);
+  await waitForSettleAt(world, sent.from);
+  return sent;
 }
 
 When(
@@ -262,6 +269,24 @@ async function lengthsPast(
   return moved;
 }
 
+// Waits for the end line `hook` logs since `past` and for Pi to handle that
+// exit, asserts that no turn started at or after the record index
+// `settledAt`, and keeps the turn of `sent`.
+async function keepTurnWokenOnce(
+  world: ScenarioWorld,
+  hook: string,
+  past: ReadonlyMap<string, number>,
+  settledAt: number,
+  sent: SentPrompt,
+): Promise<void> {
+  const harness = world.profileHarness();
+  const second = await waitForHookLifecycle(harness, hook, "end", past, ASYNC_STEP_DEADLINE_MS);
+  await waitForHandledExit(world, second.pid);
+  const later = world.pi.recordsSince(settledAt).filter((record) => record.type === "agent_start");
+  assert.deepStrictEqual(later, [], "the hook woke the model a second time");
+  await keepTurn(world, sent.message, sent.lengths, sent.from);
+}
+
 // A Stop hook that exits 2 wakes the model, and its run after the woken turn
 // sees `stop_hook_active` and ends quietly (D-BG-203, D-BG-206). The step
 // waits for each in order and keeps the whole span as one turn.
@@ -274,12 +299,33 @@ When(
     const past = await lengthsPast(this, lengths, first);
     await this.pi.waitForRecord(from, isRewakeSummaryRecord, ASYNC_STEP_DEADLINE_MS);
     await waitForWokenTurn(this, from);
-    const settledAt = this.pi.recordCount();
-    const second = await waitForHookLifecycle(harness, hook, "end", past, ASYNC_STEP_DEADLINE_MS);
-    await waitForHandledExit(this, second.pid);
-    const later = this.pi.recordsSince(settledAt).filter((record) => record.type === "agent_start");
-    assert.deepStrictEqual(later, [], "the hook woke the model a second time");
-    await keepTurn(this, message, lengths, from);
+    await keepTurnWokenOnce(this, hook, past, this.pi.recordCount(), { message, lengths, from });
+  },
+);
+
+// A rewake sent while another Stop hook of the same ending still runs marks
+// the next Stop run with `stop_hook_active` (D-BG-210, D-PG5-06, D-PG5-07).
+// The step releases the held hook only after the rewake hook's end line and
+// its summary record, so the wake is sent while the Stop hooks run, with no
+// timed wait. It counts no settlement and no run start: it waits for the
+// settle that follows the held hook's second release.
+When(
+  "the user prompts {string} and the hook {string} wakes the model while the stop hook {string} runs",
+  async function (this: ScenarioWorld, text: string, hook: string, held: string) {
+    const harness = this.profileHarness();
+    const sent = await sendPrompt(this, text);
+    const { lengths, from } = sent;
+    const woke = await waitForHookLifecycle(harness, hook, "end", lengths, ASYNC_STEP_DEADLINE_MS);
+    await this.pi.waitForRecord(from, isRewakeSummaryRecord, ASYNC_STEP_DEADLINE_MS);
+    await releaseWaitingHook(this, held, lengths);
+    const released = await waitForHookLifecycle(harness, held, "end", lengths, 0);
+    const pastHeld = await lengthsPast(this, lengths, released);
+    await waitForHookLifecycle(harness, held, "start", pastHeld, ASYNC_STEP_DEADLINE_MS);
+    const settledFrom = this.pi.recordCount();
+    await releaseWaitingHook(this, held, pastHeld);
+    const settledAt = await waitForSettleAt(this, settledFrom);
+    const past = await lengthsPast(this, lengths, woke);
+    await keepTurnWokenOnce(this, hook, past, settledAt, sent);
   },
 );
 
