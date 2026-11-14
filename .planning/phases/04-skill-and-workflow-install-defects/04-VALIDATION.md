@@ -74,7 +74,7 @@ Normal commit hooks are mandatory. Each combined-tree gate runs the complete com
 
 | Gate | Command | Timeout | Required evidence | Status |
 |---|---|---|---|---|
-| Wave 1 combined tree | `npm run check` | 2400 seconds | Plans 04-01, 04-04, and 04-05 merged; the exact commit, Node version, exit status, and scenario counts | ⬜ pending |
+| Wave 1 combined tree | `npm run check` | 2400 seconds | Plans 04-01, 04-04, and 04-05 merged; the exact commit, Node version, exit status, and scenario counts | passed |
 | Wave 2 combined tree | `npm run check` | 2400 seconds | Plans 04-02 and 04-03 merged; the same evidence | ⬜ pending |
 | Wave 3 combined tree | `npm run check` | 2400 seconds | Plan 04-06 merged; the same evidence | ⬜ pending |
 | Phase gate | `npm run check` | 2400 seconds | The final tree after the Parent lines; reuse only when the build inputs are identical | ⬜ pending |
@@ -82,6 +82,14 @@ Normal commit hooks are mandatory. Each combined-tree gate runs the complete com
 | Final PR or release handoff | `npm run check` | 2400 seconds | The final build inputs, or a documented identical-input reuse | ⬜ pending |
 
 ---
+
+## Wave 1 Execution Evidence
+
+Plans 04-01, 04-04 and 04-05 are merged on the main tree, run one after another. Seven task commits and three summaries; every commit hook ran `check:commit` and passed. No hook was bypassed.
+
+- Combined gate: exit 0 at `2b69558d06106203caa63e1290f2d3c7e1ff1c3e`, Node v26.13.1. Adapter profile 1905 of 1905 scenarios, builtin profile 184 of 184, 361 direct coverage records.
+- 04-01 added a temporary `.fallowrc.json` `ignoreExports` entry for `isMarketplaceRootSource` (WINDOWS #116); plan 04-02 removes it when `info.ts` imports the predicate.
+- 04-05 writes the folder's base name into the restriction note, because a quoted absolute path followed by more quoted text is redacted to the end of the line (fail-closed by design in `shared/redact-absolute-paths.ts`).
 
 ## Wave 0 Requirements
 
