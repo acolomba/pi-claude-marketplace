@@ -249,3 +249,30 @@ for (const description of [
     );
   });
 }
+
+test("T-07-05: a quoted name and alias read as their text under pi-subagents' own reader", async () => {
+  // arrange
+  const peer = await findPiSubagentsPackage();
+  const fm = await loadPiSubagentsModule<PiSubagentsFrontmatterModule>(peer, "frontmatter");
+  const agentFileContent = emitGeneratedAgentFile({
+    frontmatter: {
+      name: "acme:Reviewer: code",
+      description: "Reviews files",
+      aliases: ["pi-claude-marketplace-acme-Reviewer: code"],
+      tools: ["read"],
+      skills: [],
+      inheritSkills: true,
+    },
+    provenance: EMPTY_PROVENANCE,
+    body: "Answer the task.",
+  });
+
+  // act
+  const { frontmatter } = fm.parseFrontmatter(agentFileContent);
+
+  // assert
+  assert.deepStrictEqual(
+    { name: frontmatter.name, aliases: frontmatter.aliases },
+    { name: "acme:Reviewer: code", aliases: "pi-claude-marketplace-acme-Reviewer: code" },
+  );
+});

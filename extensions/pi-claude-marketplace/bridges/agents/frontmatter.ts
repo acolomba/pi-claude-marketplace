@@ -121,6 +121,18 @@ function provenanceScalar(value: string): string {
   return readsAsPlainYamlText(oneLine) ? oneLine : emitSafeDoubleQuotedScalar(oneLine);
 }
 
+/**
+ * T-07-05: a top-level `name:` or `aliases:` value. A name holds no control
+ * character (`assertSafeName`), and one that YAML would not read as its own
+ * text, such as `demo:Reviewer: code`, is double-quoted, so the workflow
+ * engine still reads the block. pi-subagents strips one pair of quote marks
+ * and unescapes nothing, so both readers get the same text. A name that also
+ * holds `"` or `\` stays bare, because no quoted form reads the same in both.
+ */
+function nameScalar(value: string): string {
+  return readsAsPlainYamlText(value) || /["\\]/.test(value) ? value : `"${value}"`;
+}
+
 export interface ParsedFrontmatter {
   readonly raw: RawAgentFrontmatter;
   readonly body: string;
@@ -404,14 +416,14 @@ export function emitGeneratedAgentFrontmatter(input: {
   // inheritSkills is derived from the source agent's Skill tool declaration
   // (AGSK-05, D-83-01).
   const lines: string[] = [
-    `name: ${frontmatter.name}`,
+    `name: ${nameScalar(frontmatter.name)}`,
     ...descriptionLines(frontmatter.description),
   ];
   if (frontmatter.aliases !== undefined && frontmatter.aliases.length > 0) {
     // AG-1a: the file's own basename, which is the name this bridge declared
     // before the agentType split. pi-subagents resolves an alias to the same
     // agent, so a session that already addresses the flat name keeps working.
-    lines.push(`aliases: ${frontmatter.aliases.join(",")}`);
+    lines.push(`aliases: ${nameScalar(frontmatter.aliases.join(","))}`);
   }
 
   if (frontmatter.model !== undefined) {
@@ -467,8 +479,8 @@ export function emitGeneratedAgentFrontmatter(input: {
   const provenanceLines: string[] = [
     "provenance:",
     `  ${GENERATED_AGENT_MARKER}`,
-    `  sourcePlugin: ${provenance.pluginName}`,
-    `  sourceAgent: ${provenance.sourceName}`,
+    `  sourcePlugin: ${provenanceScalar(provenance.pluginName)}`,
+    `  sourceAgent: ${provenanceScalar(provenance.sourceName)}`,
     `  sourcePath: ${provenanceScalar(provenance.sourcePath)}`,
   ];
   if (provenance.originalModel !== undefined) {

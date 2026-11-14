@@ -574,6 +574,74 @@ Review files.
     });
   });
 
+  for (const { pluginName, sourceName } of [
+    { pluginName: "acme", sourceName: "Reviewer: code" },
+    { pluginName: "@acme", sourceName: "'reviewer" },
+    { pluginName: "acme", sourceName: "reviewer #2" },
+  ]) {
+    test(`T-07-05: writes the names of plugin ${JSON.stringify(pluginName)} agent ${JSON.stringify(sourceName)} so Pi's YAML reader reads them back`, () => {
+      // arrange
+      const name = `${pluginName}:${sourceName}`;
+      const alias = `pi-claude-marketplace-${pluginName}-${sourceName}`;
+      const frontmatter = emitGeneratedAgentFrontmatter({
+        frontmatter: {
+          name,
+          description: "Reviews files",
+          aliases: [alias],
+          skills: [],
+          inheritSkills: false,
+        },
+        provenance: {
+          pluginName,
+          sourceName,
+          sourcePath: "agents/reviewer.md",
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [],
+        },
+      });
+
+      // act
+      const parsed = parseFrontmatter<{
+        name: string;
+        aliases: string;
+        provenance: { sourcePlugin: string; sourceAgent: string };
+      }>(`${frontmatter}\nReview files.\n`).frontmatter;
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          name: parsed.name,
+          aliases: parsed.aliases,
+          sourcePlugin: parsed.provenance.sourcePlugin,
+          sourceAgent: parsed.provenance.sourceAgent,
+        },
+        { name, aliases: alias, sourcePlugin: pluginName, sourceAgent: sourceName },
+      );
+    });
+  }
+
+  test("T-07-05: leaves bare a name that YAML misreads but that holds a double quote", () => {
+    // arrange
+    const name = 'acme:say "hi": now';
+
+    // act
+    const frontmatter = emitGeneratedAgentFrontmatter({
+      frontmatter: { name, description: "Reviews files", skills: [], inheritSkills: false },
+      provenance: {
+        pluginName: "acme",
+        sourceName: 'say "hi": now',
+        sourcePath: "agents/reviewer.md",
+        droppedFields: [],
+        droppedTools: [],
+        warnings: [],
+      },
+    });
+
+    // assert
+    assert.strictEqual(frontmatter.split("\n")[1], `name: ${name}`);
+  });
+
   test("renders nonempty aliases before optional metadata and preserves body bytes", () => {
     // arrange
     const generatedAgent = {

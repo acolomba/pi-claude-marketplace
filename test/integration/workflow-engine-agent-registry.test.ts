@@ -31,10 +31,11 @@ interface AgentRegistryModule {
   ) => ReadonlyMap<string, AgentDefinition>;
 }
 
-/** The engine's definition of the bridged agent `demo:reader` converted from `raw`. */
+/** The engine's definition of the bridged agent `demo:<sourceName>` converted from `raw`. */
 async function engineDefinition(
   t: TestContext,
   raw: RawAgentFrontmatter,
+  sourceName = "reader",
 ): Promise<AgentDefinition | undefined> {
   const peer = await findCachedPeer("@quintinshaw/pi-dynamic-workflows");
   t.diagnostic(`@quintinshaw/pi-dynamic-workflows ${peer.version} at ${peer.root}`);
@@ -48,23 +49,26 @@ async function engineDefinition(
     pluginDataDir: "/data",
     knownSkills: [],
     discovered: {
-      sourceName: "reader",
-      generatedName: "pi-claude-marketplace-demo-reader",
+      sourceName,
+      generatedName: `pi-claude-marketplace-demo-${sourceName}`,
       sourcePath: "/abs/reader.md",
       sourceHash: "abc",
-      raw: { name: "reader", ...raw },
+      raw: { name: sourceName, ...raw },
       body: "Scan.\n",
     },
     sourceHash: "abc",
     mapModel: false,
   });
-  await writeFile(path.join(userDir, "pi-claude-marketplace-demo-reader.md"), agent.fileContent);
+  await writeFile(
+    path.join(userDir, `pi-claude-marketplace-demo-${sourceName}.md`),
+    agent.fileContent,
+  );
   const definitions = registry.loadAgentRegistry(cwd, {
     projectDir: path.join(cwd, ".pi", "agents"),
     userDir,
     legacyUserDir: path.join(root, "legacy-agents"),
   });
-  return definitions.get("demo:reader");
+  return definitions.get(`demo:${sourceName}`);
 }
 
 test("D-PG7-17: the engine reads no model for an agent whose source model is inherit", async (t) => {
@@ -128,6 +132,23 @@ for (const raw of [
   test(`T-07-05: the engine finds the agent and its tools when a provenance value of ${JSON.stringify(raw)} is not plain YAML text`, async (t) => {
     // act
     const definition = await engineDefinition(t, { description: "Reads.", ...raw });
+
+    // assert
+    assert.deepStrictEqual(
+      { description: definition?.description, tools: definition?.tools },
+      { description: "Reads.", tools: ["read"] },
+    );
+  });
+}
+
+for (const sourceName of ["'reader", "@reader", "Reviewer: code"]) {
+  test(`T-07-05: the engine finds the agent and its tools under the source name ${JSON.stringify(sourceName)}`, async (t) => {
+    // act
+    const definition = await engineDefinition(
+      t,
+      { description: "Reads.", tools: "Read" },
+      sourceName,
+    );
 
     // assert
     assert.deepStrictEqual(
