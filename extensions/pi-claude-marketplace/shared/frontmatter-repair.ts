@@ -175,10 +175,10 @@ export function colonRepairTrigger(value: string): boolean {
  * The repair is SILENT by design: no warning, no notification, no result field.
  * It restores what the author wrote, so there is nothing for the user to act on,
  * and the notification layer renders state that commands decide rather than
- * probing for it. This is deliberately MORE lenient than Claude Code, which
- * strict-parses these same bytes to empty metadata. PARSE-01 still decides the
- * degrade from the SOURCE parse, and PARSE-02 still re-parses whatever bytes the
- * repair produces.
+ * probing for it. Claude Code's retry quotes a wider set of values; the trigger
+ * decides which of them this repair quotes (D-PG7-02). PARSE-01 still decides
+ * the degrade from the SOURCE parse, and PARSE-02 still re-parses whatever bytes
+ * the repair produces.
  */
 export function repairSingleLineScalars(
   content: string,
