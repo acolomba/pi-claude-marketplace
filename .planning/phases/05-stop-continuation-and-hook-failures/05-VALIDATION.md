@@ -84,7 +84,7 @@ Normal commit hooks are mandatory. Each combined-tree gate runs the complete com
 | Wave 1 combined tree | `npm run check` | 2400 seconds | Plan 05-01 merged; the exact commit, Node version, exit status, and scenario counts | ✅ green at `26c54267`, Node 26, exit 0, 184/184 scenarios, 2492 steps |
 | Wave 2 combined tree | `npm run check` | 2400 seconds | Plans 05-02 and 05-05 merged; the same evidence | ❌ red at `881a00cb` (direct coverage of `event-router.test.ts`: the defaulted-executor case did not expect the new run-failure notice), fixed in `80ac7b78`; ✅ green at `80ac7b78`, Node 26, exit 0, 1926 + 184 scenarios |
 | Wave 3 combined tree | `npm run check` | 2400 seconds | Plans 05-03 and 05-04 merged; the same evidence | ✅ green at `58bcf803`, Node 26, exit 0, 1933 + 184 scenarios |
-| Wave 4 combined tree | `npm run check` | 2400 seconds | Plan 05-06 merged; the same evidence | ⬜ pending |
+| Wave 4 combined tree | `npm run check` | 2400 seconds | Plan 05-06 merged; the same evidence | ✅ green at `ad992ffa`, Node 26, exit 0, 1933 + 184 scenarios |
 | Phase gate | `npm run check` | 2400 seconds | The final tree after the parent lines; reuse only when the build inputs are identical | ⬜ pending |
 | Merge gate | `npm run check` | 2400 seconds | The merged tree, or a documented identical-input reuse | ⬜ pending |
 | Final PR or release handoff | `npm run check` | 2400 seconds | The final build inputs, or a documented identical-input reuse | ⬜ pending |
