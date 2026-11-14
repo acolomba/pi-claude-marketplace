@@ -38,10 +38,10 @@
 - [x] **PG-AGENT-01**: A bridged agent runs in the launch mode that pi-subagents chooses, unless the source sets `background: true` or the agent has plugin MCP tools; those two run in the background. The warning for agents with MCP tools no longer says that Claude Code runs them in the foreground. Lands with PG-HOOK-07a. (P0; decision 1 answered)
 - [x] **PG-AGENT-02**: The declared pi-subagents floor is 0.87.0 in `package.json`, the README, and `scripts/install-test-peers.mjs`, and the documentation no longer describes the two fixed pi-subagents bugs as open. Lands with PG-AGENT-07b. (P0; decision 2 answered)
 - [x] **PG-AGENT-07b**: A model ID that `--map-model` writes has no provider prefix, so the agent runs on the session's provider when that provider has the model. (P0)
-- [ ] **PG-AGENT-07a**: A source agent with `model: inherit` runs on the parent's model, with or without `--map-model`. (P1)
-- [ ] **PG-AGENT-05**: Agent frontmatter is read as YAML with the leniency that skill frontmatter has: a quoted value loses its quotes, a comment is not a value, a multi-line description keeps its lines, and an unquoted description with a colon still loads. (P1)
-- [ ] **PG-AGENT-03**: A bridged agent whose source grants `Agent` or `Task`, with or without a type list, can start subagents. So can an agent with no `tools` field, unless `disallowedTools` names `Agent` or `Task`. (P1)
-- [ ] **PG-AGENT-09**: A source agent with both `tools` and `disallowedTools` is restricted by both, and the two warnings that state limits of pi-subagents versions below the floor are gone. (P1)
+- [x] **PG-AGENT-07a**: A source agent with `model: inherit` runs on the parent's model, with or without `--map-model`. (P1)
+- [x] **PG-AGENT-05**: Agent frontmatter is read as YAML with the leniency that skill frontmatter has: a quoted value loses its quotes, a comment is not a value, a multi-line description keeps its lines, and an unquoted description with a colon still loads. (P1)
+- [x] **PG-AGENT-03**: A bridged agent whose source grants `Agent` or `Task`, with or without a type list, can start subagents. So can an agent with no `tools` field, unless `disallowedTools` names `Agent` or `Task`. (P1)
+- [x] **PG-AGENT-09**: A source agent with both `tools` and `disallowedTools` is restricted by both, and the two warnings that state limits of pi-subagents versions below the floor are gone. (P1)
 
 ### Workflows
 
@@ -186,10 +186,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PG-AGENT-01  | Phase 3  | Complete |
 | PG-AGENT-02  | Phase 1  | Complete |
 | PG-AGENT-07b | Phase 1  | Complete |
-| PG-AGENT-07a | Phase 7  | Pending |
-| PG-AGENT-05  | Phase 7  | Pending |
-| PG-AGENT-03  | Phase 7  | Pending |
-| PG-AGENT-09  | Phase 7  | Pending |
+| PG-AGENT-07a | Phase 7  | Complete |
+| PG-AGENT-05  | Phase 7  | Complete |
+| PG-AGENT-03  | Phase 7  | Complete |
+| PG-AGENT-09  | Phase 7  | Complete |
 | PG-WF-01     | Phase 4  | Complete |
 | PG-WF-02     | Phase 8  | Pending |
 | PG-WF-04     | Phase 8  | Pending |

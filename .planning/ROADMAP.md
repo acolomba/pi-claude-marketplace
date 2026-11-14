@@ -103,7 +103,7 @@ run against them. Phase 4 depends on Phase 1 alone, so it can move earlier.
 - [x] **Phase 4: Skill and Workflow Install Defects** - A root-source entry installs only its listed skills, sibling skill links resolve, a plugin starts its own workflow by name, and an install notes that a workflow does not keep an agent's tool restriction (completed 2026-11-14)
 - [ ] **Phase 5: Stop Continuation and Hook Failures** - A blocking `Stop` hook continues the same run, a missing script does not block, failures and `stopReason` are shown, context stops at 10,000 characters, and a plain `async` hook has no timeout
 - [ ] **Phase 6: Hook Inputs and Events** - Hooks receive `tool_use_id` and the other missing stdin fields, `UserPromptExpansion` hooks run before an expansion, and a continued session reports `resume`
-- [ ] **Phase 7: Agent Frontmatter and Grants** - Agent frontmatter is read as YAML, `Agent` and `Task` grants let an agent delegate, `model: inherit` is passed on, and both tool lists restrict an agent
+- [x] **Phase 7: Agent Frontmatter and Grants** - Agent frontmatter is read as YAML, `Agent` and `Task` grants let an agent delegate, `model: inherit` is passed on, and both tool lists restrict an agent (completed 2026-11-14)
 - [ ] **Phase 8: Workflow Agents and Run Paths** - A workflow runs the plugin's own agents and notes a missing one, an agent with a `Workflow` grant starts its plugin's workflow, and the uncovered run paths and the limits of a workflow subagent are proven or documented
 - [ ] **Phase 9: Adapter Entries and MCP Features** - Under the adapter a stdio server stays alive and user-written fields survive updates, the sampling and UI question is settled, and resources, prompts, and elicitation are documented and tested
 - [ ] **Phase 10: Plugin Options, Variables, and Trust** - `userConfig` defaults reach hooks, servers, and content, user-scope skills and commands get the project directory, a plugin `bin` joins `PATH` only when it exists and the project is trusted, and the trust gap is decided
@@ -372,13 +372,13 @@ Plans:
   4. `subagent get` shows `model inherit` for a source agent with `model: inherit`, with and without `--map-model` (PG-AGENT-07a).
   5. `subagent list` shows both the tools and the excluded tools of an agent whose source has `tools` and `disallowedTools`, and its install prints neither of the two warnings about limits of pi-subagents versions below the floor (PG-AGENT-09).
 
-**Plans:** 6 plans
-- [ ] 07-01-PLAN.md — Share the frontmatter repair and give it a trigger
-- [ ] 07-02-PLAN.md — Read agent frontmatter as YAML and report an unparseable agent
-- [ ] 07-03-PLAN.md — Keep description lines and prove the quoted-name rename
-- [ ] 07-04-PLAN.md — Map Agent and Task grants and keep model inherit
-- [ ] 07-05-PLAN.md — Nested delegation for an agent with no tools list
-- [ ] 07-06-PLAN.md — Restrict by both tool lists and remove the stale warnings
+**Plans:** 6/6 plans complete
+- [x] 07-01-PLAN.md — Share the frontmatter repair and give it a trigger
+- [x] 07-02-PLAN.md — Read agent frontmatter as YAML and report an unparseable agent
+- [x] 07-03-PLAN.md — Keep description lines and prove the quoted-name rename
+- [x] 07-04-PLAN.md — Map Agent and Task grants and keep model inherit
+- [x] 07-05-PLAN.md — Nested delegation for an agent with no tools list
+- [x] 07-06-PLAN.md — Restrict by both tool lists and remove the stale warnings
 
 ### Phase 8: Workflow Agents and Run Paths
 
@@ -459,7 +459,7 @@ Plans:
 | 4. Skill and Workflow Install Defects | 6/6 | Complete    | 2026-11-14 |
 | 5. Stop Continuation and Hook Failures | 0/0 | Not started | - |
 | 6. Hook Inputs and Events | 0/0 | Not started | - |
-| 7. Agent Frontmatter and Grants | 0/0 | Not started | - |
+| 7. Agent Frontmatter and Grants | 6/6 | Complete    | 2026-11-14 |
 | 8. Workflow Agents and Run Paths | 0/0 | Not started | - |
 | 9. Adapter Entries and MCP Features | 0/0 | Not started | - |
 | 10. Plugin Options, Variables, and Trust | 0/0 | Not started | - |
