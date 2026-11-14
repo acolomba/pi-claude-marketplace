@@ -272,3 +272,21 @@ test("PG-AGENT-03: the tools written for an Agent grant authorize fan-out", asyn
     { tools: ["read", "subagent"], fanoutChild: true },
   );
 });
+
+test("PG-AGENT-07a: the model written for a source inherit is pi-subagents' inherit sentinel", async (t) => {
+  // arrange
+  const { peer } = await loadLaunch(t);
+  const resolution = await importPeerModule<{ readonly INHERIT_MODEL: string }>(
+    peer,
+    "src",
+    "runs",
+    "shared",
+    "model-resolution.js",
+  );
+
+  // act
+  const model = convertedLine({ description: "d", model: "inherit", tools: "Read" }, "model");
+
+  // assert
+  assert.strictEqual(model, resolution.INHERIT_MODEL);
+});

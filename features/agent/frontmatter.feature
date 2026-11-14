@@ -431,7 +431,7 @@ Feature: Agent frontmatter
       | 1    | user        | List the agents.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
       | 2    | user        | List the agents.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
       | 2    | assistant   | tool call subagent {"action":"list","capabilities":true}                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
-      | 2    | tool result | subagent returned: agent demo:best, aliases pi-claude-marketplace-demo-best: Runs on best.; model claude-fable-5-1\nagent demo:fable, aliases pi-claude-marketplace-demo-fable: Runs on fable.; model claude-fable-5-1\nagent demo:full-id, aliases pi-claude-marketplace-demo-full-id: Runs on claude-opus-4-7.; model claude-opus-4-7\nagent demo:haiku, aliases pi-claude-marketplace-demo-haiku: Runs on haiku.; model claude-haiku-5-5\nagent demo:inherit, aliases pi-claude-marketplace-demo-inherit: Runs on inherit.\nagent demo:opus, aliases pi-claude-marketplace-demo-opus: Runs on opus.; model claude-opus-5-5\nagent demo:opusplan, aliases pi-claude-marketplace-demo-opusplan: Runs on opusplan.; model claude-sonnet-5-5\nagent demo:sonnet, aliases pi-claude-marketplace-demo-sonnet: Runs on sonnet.; model claude-sonnet-5-5\nagent demo:sonnet-1m, aliases pi-claude-marketplace-demo-sonnet-1m: Runs on sonnet[1m].; model claude-sonnet-5-5\nagent demo:unknown, aliases pi-claude-marketplace-demo-unknown: Runs on gpt-5. |
+      | 2    | tool result | subagent returned: agent demo:best, aliases pi-claude-marketplace-demo-best: Runs on best.; model claude-fable-5-1\nagent demo:fable, aliases pi-claude-marketplace-demo-fable: Runs on fable.; model claude-fable-5-1\nagent demo:full-id, aliases pi-claude-marketplace-demo-full-id: Runs on claude-opus-4-7.; model claude-opus-4-7\nagent demo:haiku, aliases pi-claude-marketplace-demo-haiku: Runs on haiku.; model claude-haiku-5-5\nagent demo:inherit, aliases pi-claude-marketplace-demo-inherit: Runs on inherit.; model inherit\nagent demo:opus, aliases pi-claude-marketplace-demo-opus: Runs on opus.; model claude-opus-5-5\nagent demo:opusplan, aliases pi-claude-marketplace-demo-opusplan: Runs on opusplan.; model claude-sonnet-5-5\nagent demo:sonnet, aliases pi-claude-marketplace-demo-sonnet: Runs on sonnet.; model claude-sonnet-5-5\nagent demo:sonnet-1m, aliases pi-claude-marketplace-demo-sonnet-1m: Runs on sonnet[1m].; model claude-sonnet-5-5\nagent demo:unknown, aliases pi-claude-marketplace-demo-unknown: Runs on gpt-5. |
 
   Scenario: Without --map-model every agent inherits the session's model
     Given pi runs with the scripted model and these companions:
@@ -1100,3 +1100,57 @@ Feature: Agent frontmatter
       | 3    | tool result | subagent returned: agent demo:agent\npath {agent dir}/agents/pi-claude-marketplace-demo-agent.md\ndescription Denies Task.\naliases pi-claude-marketplace-demo-agent\ntools read\nsystem prompt mode replace\ninherit project context true\ninherit skills false\nsystem prompt:\nAnswer the task. |
       | 3    | assistant   | tool call subagent {"action":"get","agent":"demo:task"}                                                                                                                                                                                                                                            |
       | 3    | tool result | subagent returned: agent demo:task\npath {agent dir}/agents/pi-claude-marketplace-demo-task.md\ndescription Denies Agent.\naliases pi-claude-marketplace-demo-task\ntools read\nsystem prompt mode replace\ninherit project context true\ninherit skills false\nsystem prompt:\nAnswer the task.   |
+
+  Scenario: A source model of inherit is kept without --map-model
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file       | name    | description      | model   | body             |
+      | inherit.md | inherit | Runs on inherit. | inherit | Answer the task. |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply               | tool     | arguments                               |
+      |                     | subagent | {"action":"get","agent":"demo:inherit"} |
+      | The agent is shown. |          |                                         |
+    When the user prompts "Show the agent."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                                           |
+      | 1    | user        | Show the agent.                                                                                                                                                                                                                                                                                                |
+      | 2    | user        | Show the agent.                                                                                                                                                                                                                                                                                                |
+      | 2    | assistant   | tool call subagent {"action":"get","agent":"demo:inherit"}                                                                                                                                                                                                                                                     |
+      | 2    | tool result | subagent returned: agent demo:inherit\npath {agent dir}/agents/pi-claude-marketplace-demo-inherit.md\ndescription Runs on inherit.\naliases pi-claude-marketplace-demo-inherit\nmodel inherit\nsystem prompt mode replace\ninherit project context true\ninherit skills true\nsystem prompt:\nAnswer the task. |
+
+  Scenario: A source model of inherit is kept with --map-model
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file       | name    | description      | model   | body             |
+      | inherit.md | inherit | Runs on inherit. | inherit | Answer the task. |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user --map-model"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply               | tool     | arguments                               |
+      |                     | subagent | {"action":"get","agent":"demo:inherit"} |
+      | The agent is shown. |          |                                         |
+    When the user prompts "Show the agent."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                                           |
+      | 1    | user        | Show the agent.                                                                                                                                                                                                                                                                                                |
+      | 2    | user        | Show the agent.                                                                                                                                                                                                                                                                                                |
+      | 2    | assistant   | tool call subagent {"action":"get","agent":"demo:inherit"}                                                                                                                                                                                                                                                     |
+      | 2    | tool result | subagent returned: agent demo:inherit\npath {agent dir}/agents/pi-claude-marketplace-demo-inherit.md\ndescription Runs on inherit.\naliases pi-claude-marketplace-demo-inherit\nmodel inherit\nsystem prompt mode replace\ninherit project context true\ninherit skills true\nsystem prompt:\nAnswer the task. |

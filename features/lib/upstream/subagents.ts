@@ -52,8 +52,9 @@ const EMPTY_LIST_PATTERN = /^-\s*\(?none\)?$/iu;
 const FIELD_PATTERN = /^([A-Za-z][A-Za-z -]*):\s*(.*)$/u;
 
 // A value pi-subagents prints for a field the agent leaves unset, such as
-// `default/ambient` tools or a model that `inherits current session`.
-const UNSET_PATTERN = /\b(?:default|ambient|inherits?)\b/iu;
+// `default/ambient` tools or a model that `inherits current session`. A
+// written `model: inherit` is a value, so the bare word does not match.
+const UNSET_PATTERN = /\b(?:default|ambient|inherits)\b/iu;
 
 // pi-subagents marks models absent from the session registry when listing
 // capabilities; the marker is its wording, not a value the bridge writes.

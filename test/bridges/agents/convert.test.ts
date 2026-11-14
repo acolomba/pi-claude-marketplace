@@ -526,15 +526,27 @@ Review files.
       expectedWarnings: [],
     },
     {
-      sourceModel: "inherit",
+      sourceModel: "   ",
       expectedModelLine: undefined,
+      expectedOriginalModel: undefined,
+      expectedWarnings: [],
+    },
+    {
+      sourceModel: "inherit",
+      expectedModelLine: "model: inherit",
       expectedOriginalModel: "inherit",
       expectedWarnings: [],
     },
     {
-      sourceModel: "INHERIT",
-      expectedModelLine: undefined,
-      expectedOriginalModel: "INHERIT",
+      sourceModel: "Inherit",
+      expectedModelLine: "model: inherit",
+      expectedOriginalModel: "Inherit",
+      expectedWarnings: [],
+    },
+    {
+      sourceModel: " INHERIT ",
+      expectedModelLine: "model: inherit",
+      expectedOriginalModel: " INHERIT ",
       expectedWarnings: [],
     },
     {
@@ -689,6 +701,93 @@ Review files.
       assert.deepStrictEqual(agent.droppedTools, []);
     });
   }
+
+  for (const { sourceModel, expectedModelLine, expectedOriginalModel } of [
+    { sourceModel: undefined, expectedModelLine: undefined, expectedOriginalModel: undefined },
+    { sourceModel: "", expectedModelLine: undefined, expectedOriginalModel: undefined },
+    { sourceModel: "   ", expectedModelLine: undefined, expectedOriginalModel: undefined },
+    {
+      sourceModel: "inherit",
+      expectedModelLine: "model: inherit",
+      expectedOriginalModel: "inherit",
+    },
+    {
+      sourceModel: "Inherit",
+      expectedModelLine: "model: inherit",
+      expectedOriginalModel: "Inherit",
+    },
+    {
+      sourceModel: " INHERIT ",
+      expectedModelLine: "model: inherit",
+      expectedOriginalModel: " INHERIT ",
+    },
+    { sourceModel: "sonnet", expectedModelLine: undefined, expectedOriginalModel: undefined },
+    {
+      sourceModel: "claude-opus-4-7",
+      expectedModelLine: undefined,
+      expectedOriginalModel: undefined,
+    },
+    { sourceModel: "gpt-5", expectedModelLine: undefined, expectedOriginalModel: undefined },
+  ]) {
+    test(`D-PG7-11: without --map-model source model ${JSON.stringify(sourceModel)} writes only a kept inherit`, () => {
+      // act
+      const agent = convertAgent({
+        pluginName: "acme",
+        pluginRoot: "/plugins/acme",
+        pluginDataDir: "/data/acme",
+        knownSkills: [],
+        discovered: {
+          sourceName: "reviewer",
+          generatedName: "pi-claude-marketplace-acme-reviewer",
+          sourcePath: "/plugins/acme/agents/reviewer.md",
+          sourceHash: "discovery-hash",
+          raw: {
+            description: "Reviews files",
+            ...(sourceModel !== undefined && { model: sourceModel }),
+            tools: "Read",
+          },
+          body: "Review files.\n",
+        },
+        sourceHash: "converted-hash",
+        mapModel: false,
+      });
+
+      // assert
+      assert.strictEqual(
+        agent.frontmatter.split("\n").find((line) => line.startsWith("model:")),
+        expectedModelLine,
+      );
+      assert.strictEqual(agent.originalModel, expectedOriginalModel);
+      assert.deepStrictEqual(agent.warnings, []);
+    });
+  }
+
+  test("D-PG7-11: a source model of inherit gives the same file with and without --map-model", () => {
+    // arrange
+    const input = (mapModel: boolean): ConvertAgentInput => ({
+      pluginName: "acme",
+      pluginRoot: "/plugins/acme",
+      pluginDataDir: "/data/acme",
+      knownSkills: [],
+      discovered: {
+        sourceName: "reviewer",
+        generatedName: "pi-claude-marketplace-acme-reviewer",
+        sourcePath: "/plugins/acme/agents/reviewer.md",
+        sourceHash: "discovery-hash",
+        raw: { description: "Reviews files", model: "inherit", tools: "Read" },
+        body: "Review files.\n",
+      },
+      sourceHash: "converted-hash",
+      mapModel,
+    });
+    const expected = convertAgent(input(false)).fileContent;
+
+    // act
+    const mapped = convertAgent(input(true)).fileContent;
+
+    // assert
+    assert.strictEqual(mapped, expected);
+  });
 
   for (const { sourceThinking, sourceEffort, expectedThinkingLine, expectedWarnings } of [
     {

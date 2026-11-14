@@ -309,18 +309,26 @@ interface ModelMapping {
 
 /**
  * AG-7 / D-CF4-07 as amended: the model a source `model` selects, read as
- * Claude Code reads it. The value is trimmed; `inherit`, in any case, leaves
- * the session's model; an alias maps through MODEL_MAP; a full `claude-` ID
- * passes through. `originalModel` keeps the source value.
+ * Claude Code reads it. The value is trimmed. D-PG7-11 / PG-AGENT-07a:
+ * `inherit`, in any case, writes pi-subagents' `inherit` whatever the flag
+ * is, so the agent runs on the session's model and not on
+ * `subagents.defaultModel`, as Claude Code ranks a frontmatter `inherit`
+ * above its default subagent model. Any other value maps only when
+ * `mapModelFlag` is set: an alias through MODEL_MAP, a full `claude-` ID
+ * passing through. `originalModel` keeps the source value of what is mapped.
  */
-function mapModel(raw: string | undefined): ModelMapping {
+function mapModel(raw: string | undefined, mapModelFlag: boolean): ModelMapping {
   const value = raw?.trim() ?? "";
   if (raw === undefined || value === "") {
     return { emit: undefined, originalModel: undefined, warning: undefined };
   }
 
   if (value.toLowerCase() === "inherit") {
-    return { emit: undefined, originalModel: raw, warning: undefined };
+    return { emit: "inherit", originalModel: raw, warning: undefined };
+  }
+
+  if (!mapModelFlag) {
+    return { emit: undefined, originalModel: undefined, warning: undefined };
   }
 
   const emit = aliasModel(value) ?? fullModelId(value);
@@ -850,10 +858,12 @@ export interface ConvertAgentInput {
   /**
    * AG-7 opt-in. When false (the default at the call sites), the AG-7
    * model-mapping table is NOT consulted and the generated frontmatter
-   * omits `model:` entirely (Pi picks its own default). When true (only
-   * passed when the user supplies `--map-model` on install/update), the
-   * mapping table applies. The marketplace autoupdate cascade never passes
-   * this flag, so cascade-driven re-installs always omit `model:`.
+   * omits `model:` (Pi picks its own default), except that a source
+   * `inherit` is always written as `model: inherit` (D-PG7-11,
+   * PG-AGENT-07a). When true (only passed when the user supplies
+   * `--map-model` on install/update), the mapping table applies. The
+   * marketplace autoupdate cascade never passes this flag, so
+   * cascade-driven re-installs write no other `model:`.
    */
   mapModel: boolean;
   /**
@@ -959,12 +969,11 @@ function convertAgentOrEmpty(input: ConvertAgentInput): AgentConversion {
   }
 
   // 2. Model mapping. AG-7 is opt-in: when `mapModel` is false the
-  //    generated frontmatter omits `model:` entirely (no mapping, no
-  //    originalModel provenance, no unknown-model warning -- absence is
-  //    self-documenting). When true the mapping table applies.
-  const modelResult = mapModelFlag
-    ? mapModel(raw.model)
-    : { emit: undefined, originalModel: undefined, warning: undefined };
+  //    generated frontmatter omits `model:` (no mapping, no originalModel
+  //    provenance, no unknown-model warning), except that a source
+  //    `inherit` is always written (D-PG7-11, PG-AGENT-07a). When true the
+  //    mapping table applies.
+  const modelResult = mapModel(raw.model, mapModelFlag);
   if (modelResult.warning !== undefined) {
     warnings.push(modelResult.warning);
   }
