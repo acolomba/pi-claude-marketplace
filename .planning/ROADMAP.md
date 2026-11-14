@@ -100,7 +100,7 @@ run against them. Phase 4 depends on Phase 1 alone, so it can move earlier.
 - [x] **Phase 1: Companion Floors and MCP Defaults** - The pi-subagents floor is 0.87.0 and the pi-mcp-adapter floor is 7.0.1, mapped model IDs carry no provider, long tool names work under the adapter, and a server with no `timeout` gets Claude Code's idle window (completed 2026-11-12)
 - [x] **Phase 2: Hook Payloads, Matchers, and Stop Limit** - Hooks on file tools get and return Claude-shaped tool input, matchers follow Claude Code's rules, and a `Stop` hook can block eight times in a row (completed 2026-11-13)
 - [x] **Phase 3: Background Subagents** - A bridged agent runs in the launch mode pi-subagents chooses, and a subagent child runs none of the plugin's main-session hooks (completed 2026-11-13)
-- [ ] **Phase 4: Skill and Workflow Install Defects** - A root-source entry installs only its listed skills, sibling skill links resolve, a plugin starts its own workflow by name, and an install notes that a workflow does not keep an agent's tool restriction
+- [x] **Phase 4: Skill and Workflow Install Defects** - A root-source entry installs only its listed skills, sibling skill links resolve, a plugin starts its own workflow by name, and an install notes that a workflow does not keep an agent's tool restriction (completed 2026-11-14)
 - [ ] **Phase 5: Stop Continuation and Hook Failures** - A blocking `Stop` hook continues the same run, a missing script does not block, failures and `stopReason` are shown, context stops at 10,000 characters, and a plain `async` hook has no timeout
 - [ ] **Phase 6: Hook Inputs and Events** - Hooks receive `tool_use_id` and the other missing stdin fields, `UserPromptExpansion` hooks run before an expansion, and a continued session reports `resume`
 - [ ] **Phase 7: Agent Frontmatter and Grants** - Agent frontmatter is read as YAML, `Agent` and `Task` grants let an agent delegate, `model: inherit` is passed on, and both tool lists restrict an agent
@@ -293,20 +293,20 @@ Plans:
   3. A fixture plugin has a workflow `scan` and a command whose body says `Workflow({ name: "demo:scan" })`. The scripted model runs the command, calls `workflow` with the name copied from the prompt it received, and the run completes. A reference that the source wrote with a leading slash keeps it (PG-WF-01).
   4. A plugin with an agent `reader` (`tools: Read`) and a workflow that uses `agentType: "demo:reader"` installs with a note that the workflow does not keep the restriction, and `info` shows the note. The workflow compatibility page says the same, and the request to pi-dynamic-workflows is drafted under `.planning/upstream/` for the maintainer to file (PG-SEC-01).
 
-**Plans**: 6 plans
+**Plans**: 6/6 plans complete
 
 Plans:
 **Wave 1**
-- [ ] 04-01-PLAN.md -- Wave 1: install only the skills a root-source entry lists, and prove that an update or a reinstall leaves nothing of a dropped skill
-- [ ] 04-04-PLAN.md -- Wave 1: keep a workflow reference as its author wrote it, bare in a tool call and with a slash as a command, and let the scripted model start the workflow by that name
-- [ ] 04-05-PLAN.md -- Wave 1: read the literal agent types of a workflow script, and print the restriction note at install and at update
+- [x] 04-01-PLAN.md -- Wave 1: install only the skills a root-source entry lists, and prove that an update or a reinstall leaves nothing of a dropped skill
+- [x] 04-04-PLAN.md -- Wave 1: keep a workflow reference as its author wrote it, bare in a tool call and with a slash as a command, and let the scripted model start the workflow by that name
+- [x] 04-05-PLAN.md -- Wave 1: read the literal agent types of a workflow script, and print the restriction note at install and at update
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 04-02-PLAN.md -- Wave 2: list a root-source entry's listed skills in `info`, on resolved and refused rows
-- [ ] 04-03-PLAN.md -- Wave 2: point a relative link to a sibling skill at the sibling's staged folder, in `SKILL.md` and supporting Markdown
+- [x] 04-02-PLAN.md -- Wave 2: list a root-source entry's listed skills in `info`, on resolved and refused rows
+- [x] 04-03-PLAN.md -- Wave 2: point a relative link to a sibling skill at the sibling's staged folder, in `SKILL.md` and supporting Markdown
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 04-06-PLAN.md -- Wave 3: show the restriction note in `info`, and record the compatibility row, the engine request draft, and the CHANGELOG lines
+- [x] 04-06-PLAN.md -- Wave 3: show the restriction note in `info`, and record the compatibility row, the engine request draft, and the CHANGELOG lines
 
 ### Phase 5: Stop Continuation and Hook Failures
 
@@ -435,7 +435,7 @@ Plans:
 | 1. Companion Floors and MCP Defaults | 11/11 | Complete    | 2026-11-12 |
 | 2. Hook Payloads, Matchers, and Stop Limit | 10/10 | Complete    | 2026-11-13 |
 | 3. Background Subagents | 8/8 | Complete    | 2026-11-13 |
-| 4. Skill and Workflow Install Defects | 0/0 | Not started | - |
+| 4. Skill and Workflow Install Defects | 6/6 | Complete    | 2026-11-14 |
 | 5. Stop Continuation and Hook Failures | 0/0 | Not started | - |
 | 6. Hook Inputs and Events | 0/0 | Not started | - |
 | 7. Agent Frontmatter and Grants | 0/0 | Not started | - |

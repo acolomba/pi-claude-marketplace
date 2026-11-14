@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: parity-gaps
 milestone_name: Claude Code Parity Gaps and Defects
-current_phase: 4
-current_phase_name: Skill and Workflow Install Defects
-status: ready_to_execute
-stopped_at: Phase 4 planned (6 plans, 3 waves); execution next
-last_updated: "2026-11-14T02:50:39.000Z"
-last_activity: 2026-11-13
-last_activity_desc: Phase 4 planned and checked
-state_head: a98ae4aea3af1aaea49e59643c32f579b6e3b2c8
+current_phase: 5
+current_phase_name: Stop Continuation and Hook Failures
+status: ready_to_discuss
+stopped_at: Phase 04 complete; Phase 5 discuss next
+last_updated: "2026-11-14T07:53:32.498Z"
+last_activity: 2026-11-14
+last_activity_desc: Phase 04 complete, transitioned to Phase 5
+state_head: dfbe5b21af74d9965e60427112494ab8c573d106
 progress:
   total_phases: 11
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 35
   completed_plans: 35
-  percent: 27
+  percent: 36
 ---
 
 # Project State
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-11-13 after parity-gaps Phase 2)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 4 — Skill and Workflow Install Defects
+**Current focus:** Phase 5 — Stop Continuation and Hook Failures
 
 ## Current Position
 
-Phase: 4 — Skill and Workflow Install Defects
-Plan: 6 of 6 complete (wave 3 gate passed); verification next
-Status: Ready to execute Phase 4
-Last activity: 2026-11-13 — Phase 4 planned (6 plans, 3 waves), plan check passed with one accepted warning
+Phase: 5 — Stop Continuation and Hook Failures
+Plan: not planned
+Status: Ready to discuss Phase 5
+Last activity: 2026-11-14 — Phase 04 complete, transitioned to Phase 5
 
-Progress: [███░░░░░░░] 27%
+Progress: [████░░░░░░] 36%
 
 
 ### parity-gaps Phase 3 execution
@@ -1132,7 +1132,7 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 ## Session Continuity
 
 Last session: 2026-11-13T14:18:54.541735+00:00
-Stopped at: Phase 03 complete; Phase 4 discuss next
+Stopped at: Phase 04 complete, ready to verify Phase 5
 Resume file: None
 
 ### Phase 2 completion-helper notes

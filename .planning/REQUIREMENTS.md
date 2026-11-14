@@ -45,7 +45,7 @@
 
 ### Workflows
 
-- [ ] **PG-WF-01**: A reference to a plugin workflow that the source wrote with no leading slash names the installed workflow with no leading slash, so `Workflow({ name: "plugin:wf" })` in a command body starts the workflow. A reference written with a leading slash keeps it. (P0)
+- [x] **PG-WF-01**: A reference to a plugin workflow that the source wrote with no leading slash names the installed workflow with no leading slash, so `Workflow({ name: "plugin:wf" })` in a command body starts the workflow. A reference written with a leading slash keeps it. (P0)
 - [ ] **PG-WF-02**: (a) A workflow's `agent("...", {agentType: "<plugin>:<agent>"})` runs the plugin's bridged agent, and a scenario proves it. (b) The install of a plugin whose script names an `agentType` that the plugin does not install prints one note for each such name and still installs. (c) The compatibility page no longer says an unresolved `agentType` is not an error in Claude Code. Lands with or after PG-SEC-01. (P1)
 - [ ] **PG-WF-04**: The workflow compatibility page says what a workflow subagent can reach, names the engine settings `inheritMainModel` and `providerMiddlewareExtensions`, and says that Pi's built-in MCP cannot load in a subagent and that plugin hooks do not run there. (P1; spike S5 for the adapter setting)
 - [ ] **PG-WF-05**: A bridged agent whose source grants `Workflow` or `Workflow(<name>)` can start the plugin's workflow when the plugin stages one, and such an agent runs in the background. (P1; spike S5; confidence Low)
@@ -62,7 +62,7 @@
 
 ### Plugin Container
 
-- [ ] **PG-CORE-01**: For a marketplace entry whose source is the marketplace root and which lists `skills`, only the listed skill folders are installed. No file or record of a skill that an update removes stays behind. (P0)
+- [x] **PG-CORE-01**: For a marketplace entry whose source is the marketplace root and which lists `skills`, only the listed skill folders are installed. No file or record of a skill that an update removes stays behind. (P0)
 - [ ] **PG-CORE-03**: `userConfig` defaults and export (step 1 of the PRD's CORE-03): each option resolves to its `default`; hooks receive `CLAUDE_PLUGIN_OPTION_<KEY>`; `${user_config.KEY}` is filled in exec-form hook commands and arguments, in the five MCP fields that take variables, and in skill and agent content for values that are not sensitive. A plugin whose options all have a default installs without `--partial`. A plugin with a required option that has no default stays partially available. (P1; decision 17)
 - [ ] **PG-CORE-05**: A user-scope skill or command that names `${CLAUDE_PROJECT_DIR}` gets the session directory when the user invokes it, when the model reads it, and through the `run_plugin_command` tool. Agent bodies stay as they are. (P1; decision 10)
 - [ ] **PG-CORE-06**: In a project that Pi does not trust, a project-scope plugin's `bin` directory is not on `PATH`. (P1; decision 23)
@@ -70,14 +70,14 @@
 
 ### Skills and Commands
 
-- [ ] **PG-SKILL-04**: In a staged `SKILL.md` and its supporting Markdown, a relative link to a sibling skill of the same plugin resolves to that sibling's staged folder. (P0)
+- [x] **PG-SKILL-04**: In a staged `SKILL.md` and its supporting Markdown, a relative link to a sibling skill of the same plugin resolves to that sibling's staged folder. (P0)
 - [ ] **PG-SKILL-01**: A typed bridged command or skill attaches each `@path` reference that its author wrote and that names an existing regular text file. A `@path` that arrives through an argument or through the output of an injected `!` command is not attached, and neither is one inside fenced code or a code span. Covers the PRD's CMD-01. (P1; spike S8)
 - [ ] **PG-CMD-09**: A bridged command also answers to Claude Code's own name for it, `/<plugin>:<path>:<file>`, whenever that name differs from its Pi name. (P1; decision 13)
 - [ ] **PG-SKILL-11**: Each alias suggestion shows the description of its target and, for a skill, its `argument-hint`. Covers the PRD's CMD-10. (P1)
 
 ### Security
 
-- [ ] **PG-SEC-01**: The install of a plugin whose workflow script names an agent with a `tools` or `disallowedTools` field prints a note that the workflow does not keep the restriction, `info` shows it, and the workflow compatibility page says so. The request to pi-dynamic-workflows of the PRD's section 8.4 is drafted under `.planning/upstream/` for the maintainer to file. (P0)
+- [x] **PG-SEC-01**: The install of a plugin whose workflow script names an agent with a `tools` or `disallowedTools` field prints a note that the workflow does not keep the restriction, `info` shows it, and the workflow compatibility page says so. The request to pi-dynamic-workflows of the PRD's section 8.4 is drafted under `.planning/upstream/` for the maintainer to file. (P0)
 - [ ] **PG-SEC-02**: The maintainer confirms or reopens the accepted project trust gap of D-LOC-01, and the decision is recorded with its premise and the Pi version it was checked against. (P1; decision 23)
 - [ ] **PG-SEC-03**: Under the adapter, a plugin server either gets the fields that withhold the `sampling` capability and the MCP UI extension, or the divergence is recorded as a decision. (P1; decision 20)
 
@@ -190,7 +190,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PG-AGENT-05  | Phase 7  | Pending |
 | PG-AGENT-03  | Phase 7  | Pending |
 | PG-AGENT-09  | Phase 7  | Pending |
-| PG-WF-01     | Phase 4  | Pending |
+| PG-WF-01     | Phase 4  | Complete |
 | PG-WF-02     | Phase 8  | Pending |
 | PG-WF-04     | Phase 8  | Pending |
 | PG-WF-05     | Phase 8  | Pending |
@@ -200,16 +200,16 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PG-MCP-06    | Phase 9  | Pending |
 | PG-MCP-08    | Phase 9  | Pending |
 | PG-MCP-09    | Phase 9  | Pending |
-| PG-CORE-01   | Phase 4  | Pending |
+| PG-CORE-01   | Phase 4  | Complete |
 | PG-CORE-03   | Phase 10 | Pending |
 | PG-CORE-05   | Phase 10 | Pending |
 | PG-CORE-06   | Phase 10 | Pending |
 | PG-CORE-07   | Phase 10 | Pending |
-| PG-SKILL-04  | Phase 4  | Pending |
+| PG-SKILL-04  | Phase 4  | Complete |
 | PG-SKILL-01  | Phase 11 | Pending |
 | PG-CMD-09    | Phase 11 | Pending |
 | PG-SKILL-11  | Phase 11 | Pending |
-| PG-SEC-01    | Phase 4  | Pending |
+| PG-SEC-01    | Phase 4  | Complete |
 | PG-SEC-02    | Phase 10 | Pending |
 | PG-SEC-03    | Phase 9  | Pending |
 | PG-DOC-01    | Phase 11 | Pending |
