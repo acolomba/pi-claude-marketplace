@@ -35,7 +35,12 @@ import { errorMessage } from "../../shared/errors.ts";
 import { notifyHookNotice, notifyStopHookOverrideCap } from "../../shared/notification-dispatch.ts";
 import { openNotificationRun, requireNotificationMode } from "../../shared/notification-run.ts";
 
-import { collectBucketOutcomes, failureNotices, matcherFiresOnClosedSetValue } from "./dispatch.ts";
+import {
+  collectBucketOutcomes,
+  failureNotices,
+  matcherFiresOnClosedSetValue,
+  showHookNotice,
+} from "./dispatch.ts";
 import { hookSaysText, hookStoppedText } from "./hook-labels.ts";
 import { classifyStopFailure } from "./payloads/stop-failure.ts";
 import { STOP_OVERRIDE_CAP, type HooksRuntime } from "./runtime.ts";
@@ -379,8 +384,16 @@ function stopFeedback(outcomes: readonly BucketOutcome[]): {
 // Shows one Stop notice through the run the settle handler opened; a notice
 // that fails to show is debug-logged and never fails the settle.
 function showStopNotice(ctx: ExtensionContext, run: NotificationRun, notice: string): void {
-  try {
+  showStopNoticeWith(() => {
     notifyHookNotice(ctx, run, notice);
+  });
+}
+
+// Runs `show`; a Stop notice that fails to show is debug-logged and never
+// fails the boundary.
+function showStopNoticeWith(show: () => void): void {
+  try {
+    show();
   } catch (error: unknown) {
     hookDebugLog(`settle: Stop notice failed: ${errorMessage(error)}`);
   }
@@ -405,8 +418,12 @@ function showStopNotices(
     }
   }
 
-  for (const notice of failureNotices(runtime, "Stop", "Stop", outcomes)) {
-    showStopNotice(ctx, run, notice);
+  for (const notice of failureNotices("Stop", "Stop", outcomes)) {
+    showStopNoticeWith(() => {
+      showHookNotice(runtime, notice, (text) => {
+        notifyHookNotice(ctx, run, text);
+      });
+    });
   }
 }
 

@@ -168,12 +168,13 @@ export interface HooksRuntime {
   readonly isStopHookActive: () => boolean;
   readonly recordStopReentry: () => StopReentryTransition;
   /**
-   * D-PG5-12: whether to show the notice of a hook that cannot start, keyed
-   * by its event and resolved command. True the first time for a key in a
-   * bridge load, which it records, and false after that, as Claude Code
+   * D-PG5-12: whether this bridge load already showed the notice of a hook
+   * that cannot start, keyed by its event and resolved command. Claude Code
    * shows a start failure once.
    */
-  readonly claimStartFailureNotice: (key: string) => boolean;
+  readonly startFailureNoticeShown: (key: string) => boolean;
+  /** D-PG5-12: records that the start failure notice of `key` was shown. */
+  readonly recordStartFailureNotice: (key: string) => void;
   readonly recordStopNonReentry: () => void;
   readonly recordToolCall: () => void;
   readonly recordUserInput: () => void;
@@ -406,13 +407,12 @@ export function createHooksRuntime(): HooksRuntime {
       return { reenter: true, notifyCap: false };
     },
 
-    claimStartFailureNotice(key: string): boolean {
-      if (shownStartFailures.has(key)) {
-        return false;
-      }
+    startFailureNoticeShown(key: string): boolean {
+      return shownStartFailures.has(key);
+    },
 
+    recordStartFailureNotice(key: string): void {
       shownStartFailures.add(key);
-      return true;
     },
 
     recordStopNonReentry: finishStopSequence,

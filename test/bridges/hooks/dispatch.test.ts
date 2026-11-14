@@ -4995,16 +4995,15 @@ describe("missing-script notices (D-PG5-08 / D-PG5-11)", () => {
 describe("failureNotices for the Stop event (D-PG5-10)", () => {
   test("builds a Stop hook's failure notice with the Stop label", () => {
     // arrange
-    const runtime = createHooksRuntime();
     const [entry] = routedEntries("Stop", ["failer"]);
     assert.ok(entry !== undefined);
 
     // act
-    const notices = failureNotices(runtime, "Stop", "Stop", [{ entry, result: EXIT_FAILURE }]);
+    const notices = failureNotices("Stop", "Stop", [{ entry, result: EXIT_FAILURE }]);
 
     // assert
     assert.deepStrictEqual(notices, [
-      "Stop hook error: Failed with non-blocking status code: boom",
+      { text: "Stop hook error: Failed with non-blocking status code: boom" },
     ]);
   });
 });
@@ -5059,6 +5058,41 @@ describe("start failure notices (D-PG5-12)", () => {
 
     // assert
     assert.deepStrictEqual(notices, [hookNoticeEntry(SPAWN_NOTICE)]);
+  });
+
+  test("shows a start failure at the next event when its notice failed to show", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptSubmit", promptEntries(["starter"]));
+    const host = createNoticeHost("/workspace/start-failures");
+    let appends = 0;
+    const pi = {
+      ...host.pi,
+      appendEntry: (...entry: Parameters<ExtensionAPI["appendEntry"]>): void => {
+        appends += 1;
+        if (appends === 1) {
+          throw new Error("append failed");
+        }
+
+        host.pi.appendEntry(...entry);
+      },
+    };
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      runtime.currentGeneration(),
+      pi,
+      createRecordingExecutor({ starter: SPAWN_FAILURE }, []),
+    );
+
+    // act
+    await handler(PROMPT_EVENT, host.context);
+    await handler(PROMPT_EVENT, host.context);
+    await handler(PROMPT_EVENT, host.context);
+
+    // assert
+    assert.deepStrictEqual(host.capture.entries, [hookNoticeEntry(SPAWN_NOTICE)]);
   });
 
   test("shows an exception in the runner once", async () => {

@@ -583,45 +583,48 @@ test("closes the stop boundary at a bridge load (D-PG5-06)", () => {
   assert.strictEqual(runtime.isStopHookActive(), false);
 });
 
-test("claims a start failure notice once for each key (D-PG5-12)", () => {
+test("reports a start failure notice as shown only for the key it recorded (D-PG5-12)", () => {
   // arrange
   const runtime = createHooksRuntime();
+  const before = runtime.startFailureNoticeShown("UserPromptSubmit:guard.sh");
 
   // act
-  const claims = [
-    runtime.claimStartFailureNotice("UserPromptSubmit:guard.sh"),
-    runtime.claimStartFailureNotice("UserPromptSubmit:guard.sh"),
-    runtime.claimStartFailureNotice("SessionStart:guard.sh"),
-    runtime.claimStartFailureNotice("SessionStart:guard.sh"),
-  ];
+  runtime.recordStartFailureNotice("UserPromptSubmit:guard.sh");
 
   // assert
-  assert.deepStrictEqual(claims, [true, false, true, false]);
+  assert.deepStrictEqual(
+    {
+      before,
+      recorded: runtime.startFailureNoticeShown("UserPromptSubmit:guard.sh"),
+      otherEvent: runtime.startFailureNoticeShown("SessionStart:guard.sh"),
+    },
+    { before: false, recorded: true, otherEvent: false },
+  );
 });
 
-test("empties the claimed start failure notices at a bridge load (D-PG5-12)", () => {
+test("empties the shown start failure notices at a bridge load (D-PG5-12)", () => {
   // arrange
   const runtime = createHooksRuntime();
-  runtime.claimStartFailureNotice("UserPromptSubmit:guard.sh");
+  runtime.recordStartFailureNotice("UserPromptSubmit:guard.sh");
 
   // act
   runtime.prepareSettleForRegistration();
 
   // assert
-  assert.strictEqual(runtime.claimStartFailureNotice("UserPromptSubmit:guard.sh"), true);
+  assert.strictEqual(runtime.startFailureNoticeShown("UserPromptSubmit:guard.sh"), false);
 });
 
-test("keeps the claimed start failure notices of one runtime from another (D-PG5-12)", () => {
+test("keeps the shown start failure notices of one runtime from another (D-PG5-12)", () => {
   // arrange
   const firstRuntime = createHooksRuntime();
   const secondRuntime = createHooksRuntime();
-  firstRuntime.claimStartFailureNotice("UserPromptSubmit:guard.sh");
+  firstRuntime.recordStartFailureNotice("UserPromptSubmit:guard.sh");
 
   // act
-  const claimed = secondRuntime.claimStartFailureNotice("UserPromptSubmit:guard.sh");
+  const shown = secondRuntime.startFailureNoticeShown("UserPromptSubmit:guard.sh");
 
   // assert
-  assert.strictEqual(claimed, true);
+  assert.strictEqual(shown, false);
 });
 
 test("owns child removal, PID snapshots, and shutdown per runtime", () => {

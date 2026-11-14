@@ -2140,6 +2140,39 @@ test("shows a Stop hook that cannot start on the first Stop run and not on the s
   ]);
 });
 
+test("shows a Stop hook that cannot start on the next Stop run when its notice failed to show (D-PG5-12)", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket("Stop", [stopEntry("starter")]);
+  const host = makeNoticeHost();
+  let appends = 0;
+  const pi = {
+    ...host.pi,
+    appendEntry: (...entry: Parameters<ExtensionAPI["appendEntry"]>): void => {
+      appends += 1;
+      if (appends === 1) {
+        throw new Error("append failed");
+      }
+
+      host.pi.appendEntry(...entry);
+    },
+  };
+  const executor = resultsExecutor({
+    starter: { kind: "noop", failure: { kind: "spawn", error: "spawn starter.sh ENOENT" } },
+  });
+
+  // act
+  await runStops(3, runtime, pi, host.ctx, executor);
+
+  // assert
+  assert.deepStrictEqual(host.capture.entries, [
+    hookNoticeEntry(
+      "Stop hook error: Failed with non-blocking status code: Error occurred while executing hook command: spawn starter.sh ENOENT",
+    ),
+  ]);
+});
+
 test("debug-logs a Stop failure notice and a stop line that fail to show", async (t) => {
   // arrange
   const debugLines = observeHookDebug(t);
