@@ -4,16 +4,16 @@ milestone: parity-gaps
 milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 5
 current_phase_name: Stop Continuation and Hook Failures
-status: ready_to_discuss
-stopped_at: Phase 5 context gathered
-last_updated: "2026-11-14T08:13:20.358Z"
+status: ready_to_execute
+stopped_at: Phase 5 planned (6 plans, 4 waves); execution next
+last_updated: "2026-11-14T11:20:23.169Z"
 last_activity: 2026-11-14
-last_activity_desc: Phase 04 complete, transitioned to Phase 5
-state_head: 1c41b2c1ab67adec91e0aefb9ece5dadf98ee382
+last_activity_desc: Phase 5 planned and checked
+state_head: 759373896586b9025458bad84a6c46f76c5a9bc4
 progress:
   total_phases: 11
   completed_phases: 4
-  total_plans: 35
+  total_plans: 41
   completed_plans: 35
   percent: 36
 ---
@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 5 — Stop Continuation and Hook Failures
-Plan: not planned
-Status: Ready to discuss Phase 5
-Last activity: 2026-11-14 — Phase 04 complete, transitioned to Phase 5
+Plan: 0 of 6 complete
+Status: Ready to execute Phase 5
+Last activity: 2026-11-14 — Phase 5 planned (6 plans, 4 waves), plan check passed after two revisions with two advisories
 
 Progress: [████░░░░░░] 36%
 
@@ -1132,8 +1132,8 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 ## Session Continuity
 
 Last session: 2026-11-14T08:13:18.875Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/phases/05-stop-continuation-and-hook-failures/05-CONTEXT.md
+Stopped at: Phase 5 planned (6 plans, 4 waves); execution next
+Resume file: .planning/phases/05-stop-continuation-and-hook-failures/05-01-PLAN.md
 
 ### Phase 2 completion-helper notes
 

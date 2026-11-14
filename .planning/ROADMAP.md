@@ -322,7 +322,22 @@ Plans:
   4. A hook that prints 12,000 characters of context sends at most 10,000 to the model (PG-HOOK-14).
   5. A plain `async` hook with `timeout: 1` that sleeps 3 seconds writes its end marker, and a reload still stops a plain `async` hook that is running (PG-HOOK-21).
 
-**Plans**: TBD
+**Plans**: 6 plans
+
+Plans:
+**Wave 1**
+- [ ] 05-01-PLAN.md -- Wave 1: run `Stop` on `agent_before_settle`, so a blocking `Stop` hook continues the run it ended and the run settles once
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 05-02-PLAN.md -- Wave 2: show one notice for each synchronous hook that fails without blocking
+- [ ] 05-05-PLAN.md -- Wave 2: let a plain `async` hook run until it ends, with no timeout
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 05-03-PLAN.md -- Wave 3: keep a missing hook script from blocking, show a `Stop` hook's failure, and show a hook's `stopReason`
+- [ ] 05-04-PLAN.md -- Wave 3: save a hook context string over 10,000 characters to a file and send the model its path and a preview
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 05-06-PLAN.md -- Wave 4: correct the hook compatibility page, the output catalog, the research notes, and the CHANGELOG, and remove the stale `Stop` canary
 
 ### Phase 6: Hook Inputs and Events
 
