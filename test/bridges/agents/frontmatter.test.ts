@@ -159,6 +159,16 @@ describe("readAgentFrontmatter", () => {
       expectedAgentFile: { raw: { name: "a", tools: "Grep" }, body: "Body." },
     },
     {
+      description: "D-PG7-19: the last value of a key written once quoted and once plain",
+      agentFile: '---\nname: a\ntools: Read\n"tools": Grep\n---\nBody.\n',
+      expectedAgentFile: { raw: { name: "a", tools: "Grep" }, body: "Body." },
+    },
+    {
+      description: "D-PG7-19: the last value of a key written once with a blank before its colon",
+      agentFile: "---\nname: a\ntools : Read\ntools: Grep\n---\nBody.\n",
+      expectedAgentFile: { raw: { name: "a", tools: "Grep" }, body: "Body." },
+    },
+    {
       description: "the same fields for a CRLF source as for its LF form",
       agentFile: "---\r\nname: reviewer\r\ntools:\r\n  - Read\r\n  - Bash\r\n---\r\nBody.\r\n",
       expectedAgentFile: { raw: { name: "reviewer", tools: "Read,Bash" }, body: "Body." },

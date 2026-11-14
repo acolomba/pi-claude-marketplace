@@ -440,6 +440,16 @@ describe("blankEarlierDuplicateKeys", () => {
       expectedContent: "---\n\ntools:\n- Grep\n- Bash\n---\n",
     },
     {
+      description: "takes a double-quoted, a single-quoted, and a plain key as one key",
+      sourceContent: "---\n\"tools\": Read\n'tools': Bash\ntools: Grep\n---\n",
+      expectedContent: "---\n\n\ntools: Grep\n---\n",
+    },
+    {
+      description: "takes a key with blanks before its colon as the same key",
+      sourceContent: "---\ntools : Read\ntools: Grep\n---\n",
+      expectedContent: "---\n\ntools: Grep\n---\n",
+    },
+    {
       description: "leaves an explicit key beside a plain copy unchanged",
       sourceContent: "---\n? tools\n: Read\ntools: Grep\n---\n",
       expectedContent: "---\n? tools\n: Read\ntools: Grep\n---\n",

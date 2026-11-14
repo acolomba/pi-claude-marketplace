@@ -800,6 +800,9 @@ Feature: Agent frontmatter
       | earlier key line          |
       | tools:                    |
       | tools: # the earlier list |
+      | "tools":                  |
+      | 'tools':                  |
+      | tools :                   |
 
   Scenario: Installing an agent whose frontmatter cannot be parsed reports the agent
     Given the marketplace "fixtures" is published as a dir source

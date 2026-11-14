@@ -208,18 +208,20 @@ export function repairSingleLineScalars(
 }
 
 /**
- * A column-0 key -- no whitespace, colon or `#` -- then a colon and whitespace
- * or the line end. Any whitespace matches, so the `\r` of a CRLF line does too.
+ * A column-0 key, then optional blanks, a colon, and whitespace or the line
+ * end. The key is plain, with no whitespace, colon, or `#` and no quote mark
+ * at its start, or it is double- or single-quoted with no escape inside. Any
+ * whitespace matches after the colon, so the `\r` of a CRLF line does too.
  */
-const TOP_LEVEL_KEY_NAME = /^[^\s:#]+:(?=\s|$)/;
+const TOP_LEVEL_KEY_NAME = /^("[^"\\]*"|'[^']*'|[^\s:#"'][^\s:#]*)[ \t]*:(?=\s|$)/;
 
 /** A line that continues an empty-valued key: indented, or a column-0 `- ` item of a compact list. */
 const OPEN_VALUE_LINE = /^(?:\s|-(?:\s|$))/;
 
 /**
- * The key a top-level line writes, and whether its value is empty on the key
- * line, which leaves room for a list whose items start at column 0. Returns
- * `undefined` for any other line.
+ * The key a top-level line writes, without its quote marks, and whether its
+ * value is empty on the key line, which leaves room for a list whose items
+ * start at column 0. Returns `undefined` for any other line.
  */
 function topLevelKey(
   line: string,
@@ -229,8 +231,12 @@ function topLevelKey(
     return undefined;
   }
 
+  const written = match[0].slice(0, -1).trimEnd();
   const value = line.slice(match[0].length).trim();
-  return { key: match[0].slice(0, -1), openValue: value === "" || value.startsWith("#") };
+  return {
+    key: /^["']/.test(written) ? written.slice(1, -1) : written,
+    openValue: value === "" || value.startsWith("#"),
+  };
 }
 
 /**
@@ -268,12 +274,14 @@ function duplicateKeySpanEnd(
 /**
  * D-PG7-19: keep only the last copy of a top-level key that a frontmatter
  * block writes more than once, as `Bun.YAML.parse` keeps the last value where
- * Pi's YAML reader refuses the whole block. Every line of an earlier copy,
- * its continuation lines and the column-0 items of its list included, becomes
- * an empty line, so the block keeps its line count and a later parse error
- * names the source's line. A quoted key, an explicit key (`? tools`), and a
- * key repeated inside a nested mapping are not matched. Content without an
- * opening and a closing fence, or with no repeated key, is returned unchanged.
+ * Pi's YAML reader refuses the whole block. `tools`, `"tools"`, `'tools'`,
+ * and `tools :` are one key. Every line of an earlier copy, its continuation
+ * lines and the column-0 items of its list included, becomes an empty line,
+ * so the block keeps its line count and a later parse error names the
+ * source's line. An explicit key (`? tools`), a quoted key with an escape,
+ * and a key repeated inside a nested mapping are not matched. Content
+ * without an opening and a closing fence, or with no repeated key, is
+ * returned unchanged.
  */
 export function blankEarlierDuplicateKeys(content: string): string {
   const block = fencedBlock(content);
