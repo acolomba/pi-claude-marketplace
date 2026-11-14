@@ -51,6 +51,79 @@ test("keeps every byte of an output past 1 MB", async () => {
   assert.strictEqual(output.text(), `${"x".repeat(1024 * 1024)}tail`);
 });
 
+test("keeps the first characters up to its bound and drops later chunks", async () => {
+  // arrange
+  const stream = new PassThrough();
+  let limitCalls = 0;
+  const output = collectStreamText(stream, rejectError, {
+    limit: 5,
+    onLimit: () => {
+      limitCalls += 1;
+    },
+  });
+
+  // act
+  stream.write("abc");
+  stream.write("defg");
+  stream.end("hij");
+  await once(stream, "end");
+
+  // assert
+  assert.deepStrictEqual({ text: output.text(), limitCalls }, { text: "abcde", limitCalls: 1 });
+});
+
+test("keeps a stream that ends at its bound whole and drops nothing", async () => {
+  // arrange
+  const stream = new PassThrough();
+  let limitCalls = 0;
+  const output = collectStreamText(stream, rejectError, {
+    limit: 5,
+    onLimit: () => {
+      limitCalls += 1;
+    },
+  });
+
+  // act
+  stream.end("abcde");
+  await once(stream, "end");
+
+  // assert
+  assert.deepStrictEqual({ text: output.text(), limitCalls }, { text: "abcde", limitCalls: 0 });
+});
+
+test("adds no unfinished UTF-8 tail once its bound is reached", async () => {
+  // arrange
+  const stream = new PassThrough();
+  const output = collectStreamText(stream, rejectError, { limit: 2, onLimit: () => undefined });
+
+  // act
+  stream.write(Buffer.from("abc"));
+  stream.end(Buffer.from([0xe2, 0x82]));
+  await once(stream, "end");
+
+  // assert
+  assert.strictEqual(output.text(), "ab");
+});
+
+test("bounds an unfinished UTF-8 tail that passes its bound", async () => {
+  // arrange
+  const stream = new PassThrough();
+  let limitCalls = 0;
+  const output = collectStreamText(stream, rejectError, {
+    limit: 2,
+    onLimit: () => {
+      limitCalls += 1;
+    },
+  });
+
+  // act
+  stream.end(Buffer.from([0x6f, 0x6b, 0xe2, 0x82]));
+  await once(stream, "end");
+
+  // assert
+  assert.deepStrictEqual({ text: output.text(), limitCalls }, { text: "ok", limitCalls: 1 });
+});
+
 test("adds an unfinished UTF-8 sequence at the end as a replacement character", async () => {
   // arrange
   const stream = new PassThrough();

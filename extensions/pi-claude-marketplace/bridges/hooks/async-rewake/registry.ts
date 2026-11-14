@@ -78,7 +78,7 @@ import { translateStop } from "../payloads/stop.ts";
 import { translateUserPromptSubmit } from "../payloads/user-prompt-submit.ts";
 import { asGroupLeader, type SignalGroup } from "../process-group.ts";
 import { planSpawn, serializeWithTruncation } from "../spawn-helpers.ts";
-import { collectStreamText } from "../stream-text.ts";
+import { collectStreamText, type StreamTextBound } from "../stream-text.ts";
 import { resolveTimeoutSeconds } from "../timeout.ts";
 import { buildTranslationContext, type TranslationContext } from "../translation-context.ts";
 
@@ -112,6 +112,13 @@ const MAX_CHILD_JOURNAL_BYTES = 1024 * 1024;
 const MAX_CHILD_JOURNAL_ROWS = 4096;
 const MAX_CHILD_JOURNALS_SCANNED = 1024;
 const MAX_OWNER_TEXT = 256;
+
+/**
+ * The characters a plain `async` hook keeps of each output stream. Nothing
+ * stops the hook (D-PG5-17), so its output is bounded instead; the bound is
+ * far past the 10,000-character cap that its answer then passes (D-PG5-14).
+ */
+const PLAIN_ASYNC_STREAM_LIMIT = 8 * 1024 * 1024;
 
 /**
  * HOOK-06: custom-message type for the exit-2 injection. The hooks bridge also
@@ -190,6 +197,28 @@ function laneOf(entry: RoutingEntry): BackgroundLane {
  * hook runs until it ends, as in Claude Code, so it gets no timer, and a
  * `timeout` it declares is ignored with one debug line (D-PG5-17).
  */
+// The bound of one output stream of a plain async hook; the other lanes have a
+// timer, so they keep every byte (EXEC-02).
+function streamBoundFor(
+  entry: RoutingEntry,
+  lane: BackgroundLane,
+  stream: "stdout" | "stderr",
+): StreamTextBound | undefined {
+  if (lane !== "plain") {
+    return undefined;
+  }
+
+  return {
+    limit: PLAIN_ASYNC_STREAM_LIMIT,
+    onLimit: () => {
+      hookDebugLog(
+        `async-hook: ${stream} past ${PLAIN_ASYNC_STREAM_LIMIT} characters dropped ` +
+          `(${entry.pluginId}/${entry.claudeEvent})`,
+      );
+    },
+  };
+}
+
 function ladderFor(entry: RoutingEntry, lane: BackgroundLane): (child: ChildLike) => TimerLadder {
   const label = `${entry.pluginId}/${entry.claudeEvent}`;
   if (lane === "plain") {
@@ -355,19 +384,29 @@ export async function spawnAndRegister(
     // `defaultMaxListeners = 10` applies per-instance, not across the
     // bridge, so no `setMaxListeners` adjustment is needed even for
     // large fan-ins.
-    // EXEC-02: the whole of each stream is kept, as Claude Code keeps every
-    // byte a hook prints. The collectors attach their `end` listeners before
-    // the finalize listeners below, so the decoder tail is in the text first.
-    const stderr = collectStreamText(child.stderr, (err) => {
-      hookDebugLog(
-        `async-rewake: stderr error (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
-      );
-    });
-    const stdout = collectStreamText(child.stdout, (err) => {
-      hookDebugLog(
-        `async-rewake: stdout error (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
-      );
-    });
+    // EXEC-02: an asyncRewake hook keeps the whole of each stream, as Claude
+    // Code keeps every byte a hook prints; a plain async hook keeps the first
+    // `PLAIN_ASYNC_STREAM_LIMIT` characters. The collectors attach their `end`
+    // listeners before the finalize listeners below, so the decoder tail is in
+    // the text first.
+    const stderr = collectStreamText(
+      child.stderr,
+      (err) => {
+        hookDebugLog(
+          `async-rewake: stderr error (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
+        );
+      },
+      streamBoundFor(entry, exit.lane, "stderr"),
+    );
+    const stdout = collectStreamText(
+      child.stdout,
+      (err) => {
+        hookDebugLog(
+          `async-rewake: stdout error (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
+        );
+      },
+      streamBoundFor(entry, exit.lane, "stdout"),
+    );
 
     const hookProcess = asGroupLeader(child, deps);
     const ladder = startLadder(hookProcess);

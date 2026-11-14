@@ -5736,3 +5736,97 @@ test("sends no async answer when a reload comes during its save (D-62-03)", asyn
   // assert
   assert.deepStrictEqual(pi.messages, []);
 });
+
+// The characters a plain async hook keeps of each output stream.
+const PLAIN_STREAM_LIMIT = 8 * 1024 * 1024;
+
+test("parses a plain async answer whose stdout runs past its bound and drops the rest (D-PG5-17)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  const saver = createAnswerSaver();
+  const debugBefore = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  t.after(() => {
+    if (debugBefore === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+      return;
+    }
+
+    process.env.PI_CLAUDE_MARKETPLACE_DEBUG = debugBefore;
+  });
+  const lines: string[] = [];
+  t.mock.method(console, "error", (...parts: unknown[]): void => {
+    lines.push(parts.map(String).join(" "));
+  });
+
+  // act
+  await endPlainAnswer(
+    t,
+    `${PLAIN_ANSWER}\n${"x".repeat(PLAIN_STREAM_LIMIT)}`,
+    pi.pi,
+    saver.saveHookOutput,
+  );
+  await pi.sent(2);
+
+  // assert
+  assert.deepStrictEqual(
+    { messages: pi.messages, dropped: lines.filter((line) => line.includes("characters dropped")) },
+    {
+      messages: [answerMessage("remember"), answerMessage("context")],
+      dropped: [
+        `[hooks] async-hook: stdout past ${PLAIN_STREAM_LIMIT} characters dropped (plugin-lifecycle/UserPromptSubmit)`,
+      ],
+    },
+  );
+});
+
+test("keeps every character of an async rewake hook's stderr past the plain lane's bound", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const root = await mkdtemp(path.join(tmpdir(), "async-registry-rewake-whole-"));
+  const locations = locationsFor("project", root);
+  const pi = createPi();
+  const child = createChild(24_802);
+  const stderrText = `${"x".repeat(PLAIN_STREAM_LIMIT)}tail`;
+
+  try {
+    await spawnAndRegister(
+      runtime,
+      createEntry(root, {
+        handlerDecl: {
+          type: "command",
+          command: "/opt/hooks/rewake",
+          asyncRewake: true,
+          rewakeMessage: "woken:",
+        },
+      }),
+      {},
+      createContext(root, "session-rewake-whole", true).context,
+      pi.pi,
+      locations,
+      {
+        spawnImpl: createSpawn(child.child, []),
+        dispatchId: () => "dispatch-rewake-whole",
+        pidTableWriter: () => Promise.resolve(),
+      },
+    );
+    child.stderr.end(stderrText);
+    child.stdout.end();
+    await Promise.all([once(child.stderr, "end"), once(child.stdout, "end")]);
+
+    // act
+    child.emitExit(2);
+    child.emitClose(2);
+
+    // assert
+    const sent = pi.messages.map(({ message }) => (message as { content: string }).content);
+    assert.deepStrictEqual(
+      sent.map((content) => ({ length: content.length, tail: content.slice(-4) })),
+      [{ length: "woken: ".length + stderrText.length, tail: "tail" }],
+    );
+  } finally {
+    shutdownInMemoryChildren(runtime);
+    destroyChild(child);
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
