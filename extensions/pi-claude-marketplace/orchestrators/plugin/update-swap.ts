@@ -117,6 +117,7 @@ import { createRemovalOps, type RemovalOps } from "../../shared/fs-utils.ts";
 import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../shared/markers.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { ownValue } from "../../shared/own-key.ts";
+import { discoveryWarning } from "../../shared/staging-warnings.ts";
 import {
   withStateGuard,
   type LockedStateTransactionDeps,
@@ -1699,8 +1700,12 @@ export async function swapPluginUpdate(
     preflight.record.resources.workflows,
     handles.workflows.result.stagedNames,
   );
+  // PG-SEC-01: the workflow agent restriction notes join the folder warnings
+  // here and nowhere else in this file, so an update, a reinstall, and an
+  // apply move each print a note once.
   const stagingWarnings = [
     ...shadowedFolderDiscoveryWarnings(installable.shadowedFolders),
+    ...generatedNames.workflowAgentRestrictionNotes.map(discoveryWarning),
     ...collectUpdateWarnings(handles),
   ];
   await dropPluginCompletionCache(args);

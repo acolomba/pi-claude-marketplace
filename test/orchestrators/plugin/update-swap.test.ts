@@ -1437,6 +1437,114 @@ test("D-CF1-06: a swap to a version whose declared commands path leaves commands
   });
 });
 
+/**
+ * PG-SEC-01: seeds an update to a version that leaves commands/ unread, ships
+ * two agents that share a name, an agent `reader` with the given frontmatter
+ * fields, and a workflow script that runs the agent type `hello:reader`.
+ */
+async function seedWorkflowAgentUpdate(cwd: string, readerFields: string) {
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: {
+      hello: {
+        version: "2.0.0",
+        hasSkill: false,
+        hasCommand: true,
+        agents: [
+          { sourceName: "first", frontmatterName: "helper", description: "First" },
+          { sourceName: "second", frontmatterName: "helper", description: "Second" },
+        ],
+      },
+    },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "hello", version: "2.0.0", commands: "./custom" }),
+  );
+  await mkdir(path.join(pluginRoot, "custom"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, "agents", "reader.md"),
+    `---\nname: reader\ndescription: Reads.\n${readerFields}---\n\nRead.\n`,
+  );
+  await mkdir(path.join(pluginRoot, "workflows"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, "workflows", "scan.js"),
+    'export const meta = { name: "scan", description: "d" };\nawait agent("run", { agentType: "hello:reader" });\n',
+  );
+  return { agentsDir: path.join(pluginRoot, "agents") };
+}
+
+function helperDuplicateWarning(agentsDir: string) {
+  return {
+    kind: "discovery",
+    message: `agent source "helper" at "${path.join(agentsDir, "second.md")}" duplicates generated name "pi-claude-marketplace-hello-helper" already produced by agent source "helper" at "${path.join(agentsDir, "first.md")}"; keeping first discovered source.`,
+  } as const;
+}
+
+const SHADOWED_COMMANDS_WARNING = {
+  kind: "discovery",
+  message: 'Default commands/ folder is ignored because the manifest sets "commands"',
+} as const;
+
+test("PG-SEC-01: a swap to a version whose workflow runs a tool-restricted agent adds one note between the folder and bridge warnings", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-restriction-note-");
+  const { agentsDir } = await seedWorkflowAgentUpdate(cwd, "tools: Read\n");
+  const args = directSwapArgs(cwd);
+  const preflight = await preflightOf(args);
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      partition: outcome.partition,
+      stagingWarnings: "stagingWarnings" in outcome ? outcome.stagingWarnings : undefined,
+    },
+    {
+      partition: "updated",
+      stagingWarnings: [
+        SHADOWED_COMMANDS_WARNING,
+        {
+          kind: "discovery",
+          message:
+            'workflow script "scan.js" in "workflows" runs agent type "hello:reader", which restricts its tools; the workflow engine does not keep that restriction, so the agent can use read, bash, edit, and write',
+        },
+        helperDuplicateWarning(agentsDir),
+      ],
+    },
+  );
+});
+
+test("PG-SEC-01: a swap to a version whose workflow runs an unrestricted agent adds no note", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-no-restriction-");
+  const { agentsDir } = await seedWorkflowAgentUpdate(cwd, "");
+  const args = directSwapArgs(cwd);
+  const preflight = await preflightOf(args);
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      partition: outcome.partition,
+      stagingWarnings: "stagingWarnings" in outcome ? outcome.stagingWarnings : undefined,
+    },
+    {
+      partition: "updated",
+      stagingWarnings: [SHADOWED_COMMANDS_WARNING, helperDuplicateWarning(agentsDir)],
+    },
+  );
+});
+
 test("a swap to a version whose workflow takes a command's name warns and stages no prompt for it", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "update-swap-workflow-command-");
