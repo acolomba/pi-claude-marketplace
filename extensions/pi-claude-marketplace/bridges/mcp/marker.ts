@@ -17,11 +17,10 @@
 // The marker key string is USER CONTRACT -- it must stay byte-stable so
 // existing `mcp.json` documents remain readable.
 
+import type { AdapterEntryDefaultValue } from "../../domain/mcp-server-features.ts";
+
 /** Per MC-5 user contract -- DO NOT EDIT key. */
 export const CLAUDE_MARKETPLACE_MARKER_KEY = "_piClaudeMarketplace";
-
-/** A default value the marker records: a JSON scalar (D-PG9-03). */
-export type MarkerDefaultValue = number | string | boolean;
 
 /** The marker subobject's shape. */
 export interface ClaudeMarketplaceMarker {
@@ -37,7 +36,7 @@ export interface ClaudeMarketplaceMarker {
    * D-PG1-13: default values this extension wrote, so a restage can recompute
    * them. D-PG9-03 widens them from numbers to JSON scalars.
    */
-  readonly defaultFields?: Readonly<Record<string, MarkerDefaultValue>>;
+  readonly defaultFields?: Readonly<Record<string, AdapterEntryDefaultValue>>;
   /**
    * The marker-less override this entry replaced under the same server name,
    * kept verbatim (AFILE-06). pi-mcp-adapter never reads inside the marker, so
@@ -57,11 +56,13 @@ function isStringArray(value: unknown): value is readonly string[] {
   return Array.isArray(value) && value.every((element: unknown) => typeof element === "string");
 }
 
-function isDefaultValue(value: unknown): value is MarkerDefaultValue {
+function isDefaultValue(value: unknown): value is AdapterEntryDefaultValue {
   return typeof value === "number" || typeof value === "string" || typeof value === "boolean";
 }
 
-function isDefaultRecord(value: unknown): value is Readonly<Record<string, MarkerDefaultValue>> {
+function isDefaultRecord(
+  value: unknown,
+): value is Readonly<Record<string, AdapterEntryDefaultValue>> {
   return isPlainObject(value) && Object.values(value).every(isDefaultValue);
 }
 
@@ -70,14 +71,16 @@ function isDefaultRecord(value: unknown): value is Readonly<Record<string, Marke
  * plain object. A member of another type is left out on its own, so it never
  * turns the other recorded defaults into the user's values (D-PG9-03).
  */
-function defaultRecordOf(value: unknown): Readonly<Record<string, MarkerDefaultValue>> | undefined {
+function defaultRecordOf(
+  value: unknown,
+): Readonly<Record<string, AdapterEntryDefaultValue>> | undefined {
   if (isDefaultRecord(value)) {
     return value;
   }
 
   return isPlainObject(value)
     ? Object.fromEntries(
-        Object.entries(value).filter((member): member is [string, MarkerDefaultValue] =>
+        Object.entries(value).filter((member): member is [string, AdapterEntryDefaultValue] =>
           isDefaultValue(member[1]),
         ),
       )
@@ -143,7 +146,7 @@ export function buildMarker(
   marketplace: string,
   parts: {
     readonly pluginSetFields?: readonly string[];
-    readonly defaultFields?: Readonly<Record<string, MarkerDefaultValue>>;
+    readonly defaultFields?: Readonly<Record<string, AdapterEntryDefaultValue>>;
     readonly keptOverride?: Readonly<Record<string, unknown>> | undefined;
   } = {},
 ): ClaudeMarketplaceMarker {
@@ -186,6 +189,8 @@ export function pluginSetFieldsOf(value: unknown): readonly string[] {
 }
 
 /** The default values an entry's marker records, or none (D-PG1-13). */
-export function defaultFieldsOf(value: unknown): Readonly<Record<string, MarkerDefaultValue>> {
+export function defaultFieldsOf(
+  value: unknown,
+): Readonly<Record<string, AdapterEntryDefaultValue>> {
   return readMarker(value)?.defaultFields ?? {};
 }

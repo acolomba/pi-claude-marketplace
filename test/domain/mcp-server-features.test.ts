@@ -105,6 +105,20 @@ describe("adapterEntryDefaults", () => {
     });
   }
 
+  test("D-PG9-03: a caller cannot change the defaults that later entries get", () => {
+    // arrange
+    const servers = [{}, { type: "http" }];
+
+    // act
+    const defaults = servers.map((server) => adapterEntryDefaults(server));
+
+    // assert
+    assert.deepStrictEqual(
+      defaults.map((entryDefaults) => Object.isFrozen(entryDefaults)),
+      [true, true],
+    );
+  });
+
   // pi-mcp-adapter 7.0.1 hashes `openUi: false` into its tool cache key and
   // pi-subagents 0.88.1's copy of that hash does not, so an entry holding it
   // leaves an agent granted the server's tools unable to launch (D-CF6-10).

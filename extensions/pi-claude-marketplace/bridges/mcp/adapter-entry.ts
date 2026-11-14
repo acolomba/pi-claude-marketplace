@@ -30,7 +30,6 @@ import {
   isPlainObject,
   keptOverrideOf,
   pluginSetFieldsOf,
-  type MarkerDefaultValue,
 } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 import {
@@ -42,6 +41,7 @@ import {
 } from "./substitute.ts";
 
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
+import type { AdapterEntryDefaultValue } from "../../domain/mcp-server-features.ts";
 
 // AFILE-06: the user's choices in pi-mcp-adapter's `ServerEntry` that survive
 // a re-stage. `directTools`, `toolPrefix` and `description` are owned by this
@@ -230,7 +230,7 @@ function isRecordedDefault(
   previous: Record<string, unknown>,
   source: Record<string, unknown>,
   field: string,
-  defaults: Readonly<Record<string, MarkerDefaultValue>>,
+  defaults: Readonly<Record<string, AdapterEntryDefaultValue>>,
 ): boolean {
   return source === previous && Object.hasOwn(defaults, field) && source[field] === defaults[field];
 }
@@ -415,7 +415,7 @@ function defaultFieldsFor(
   entry: unknown,
   translated: Readonly<Record<string, unknown>>,
   carried: Readonly<Record<string, unknown>>,
-): Readonly<Record<string, MarkerDefaultValue>> {
+): Readonly<Record<string, AdapterEntryDefaultValue>> {
   if (!isPlainObject(entry)) {
     return {};
   }

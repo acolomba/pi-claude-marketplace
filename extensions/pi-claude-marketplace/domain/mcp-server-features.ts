@@ -80,10 +80,14 @@ function transportKind(server: Readonly<Record<string, unknown>>): "stdio" | "re
   }
 }
 
-const ADAPTER_ENTRY_DEFAULTS = {
-  stdio: { requestTimeoutMs: STDIO_IDLE_TIMEOUT_MS, lifecycle: "lazy-keep-alive" },
-  remote: { requestTimeoutMs: REMOTE_IDLE_TIMEOUT_MS },
-} as const;
+/** A default value of an adapter entry: a JSON scalar (D-PG9-03). */
+export type AdapterEntryDefaultValue = number | string | boolean;
+
+// Frozen, so a caller cannot change the defaults of every later entry.
+const ADAPTER_ENTRY_DEFAULTS = Object.freeze({
+  stdio: Object.freeze({ requestTimeoutMs: STDIO_IDLE_TIMEOUT_MS, lifecycle: "lazy-keep-alive" }),
+  remote: Object.freeze({ requestTimeoutMs: REMOTE_IDLE_TIMEOUT_MS }),
+});
 
 /**
  * D-PG1-11: Claude Code 2.1.322 stops a call that sends no response and no
@@ -113,7 +117,7 @@ export function defaultRequestTimeoutMs(
  */
 export function adapterEntryDefaults(
   server: Readonly<Record<string, unknown>>,
-): Readonly<Record<string, number | string | boolean>> {
+): Readonly<Record<string, AdapterEntryDefaultValue>> {
   const kind = transportKind(server);
   return kind === undefined ? {} : ADAPTER_ENTRY_DEFAULTS[kind];
 }
