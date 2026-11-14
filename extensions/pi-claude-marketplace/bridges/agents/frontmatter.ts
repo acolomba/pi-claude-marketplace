@@ -20,9 +20,13 @@
 //
 // AG-6 contract: a colon in an unquoted description makes YAML refuse the
 // block, and the repair quotes that value, so the author's text survives.
-// AG-8 contract: emitYamlScalar quote-flip + sanitizeProvenanceValue newline
-// normalization so a multi-line provenance value cannot be misread as a new
-// frontmatter key by pi-subagents' line-based parser.
+// AG-8 contract: no line of a free-text value may start a key or close the
+// frontmatter under pi-subagents' line-based reader. A multi-line description
+// is written as a `|-` literal block whose lines carry a fixed two-space
+// indent, so none of them sits at column 0, where that reader looks for a
+// key and for the closing `---` (D-PG7-06). A one-line description is
+// quote-flipped by emitYamlScalar, and sanitizeProvenanceValue collapses the
+// line breaks of a provenance value.
 
 import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { stripBom } from "../../shared/bom.ts";
@@ -38,28 +42,52 @@ import { GENERATED_AGENT_MARKER } from "./marker.ts";
 
 import type { RawAgentFrontmatter } from "./types.ts";
 
+/** The values pi-subagents reads as a block header rather than as text. */
+const BLOCK_HEADERS: ReadonlySet<string> = new Set(["|", "|-", ">", ">-"]);
+
 /**
- * Emit a free-text scalar in pi-subagents' frontmatter form.
+ * Emit a one-line free-text scalar in pi-subagents' frontmatter form.
  *
- * pi-subagents' parser is line-based key:value and naively strips a single
- * surrounding pair of matching quotes (`"..."` or `'...'`). If the source
- * description happens to start AND end with the same quote char, those quotes
- * would be stripped and the round-trip would lose them; and any embedded
- * newline (theoretically impossible for our line-based source parser, but
- * cheap to guard) would be misread as a key on the next line. We normalize
- * newlines to spaces and wrap in the opposing quote char only when needed.
+ * pi-subagents' parser naively strips a single surrounding pair of matching
+ * quotes (`"..."` or `'...'`) and processes no escape. A value that starts
+ * AND ends with the same quote char is wrapped in the opposing quote char so
+ * the round-trip keeps its quotes, and a value that is exactly a block header
+ * is wrapped in double quotes so it is read as text (AG-8).
  */
 function emitYamlScalar(value: string): string {
-  const oneLine = value.replace(/\r?\n/g, " ");
-  if (oneLine.startsWith('"') && oneLine.endsWith('"')) {
-    return `'${oneLine}'`;
+  if (value.startsWith('"') && value.endsWith('"')) {
+    return `'${value}'`;
   }
 
-  if (oneLine.startsWith("'") && oneLine.endsWith("'")) {
-    return `"${oneLine}"`;
+  if ((value.startsWith("'") && value.endsWith("'")) || BLOCK_HEADERS.has(value)) {
+    return `"${value}"`;
   }
 
-  return oneLine;
+  return value;
+}
+
+/**
+ * The line breaks pi-subagents' key pattern does not match inside a one-line
+ * value: a value that holds one of them must not stay on the key line, or the
+ * key line fails to match and the key is lost.
+ */
+const DESCRIPTION_LINE_BREAK = /\r\n|[\r\n\u2028\u2029]/u;
+
+/**
+ * D-PG7-06 / AG-8: the description line or lines. A one-line value sits on
+ * the key line. A multi-line value is a `|-` literal block, the one header
+ * form pi-subagents reads besides `|`: each empty line stays empty and every
+ * other line gets two spaces in front, so no line starts at column 0, where
+ * pi-subagents looks for a key and for the closing `---`. No escape is
+ * written, because pi-subagents would show the backslashes to the model.
+ */
+function descriptionLines(value: string): string[] {
+  const parts = value.split(DESCRIPTION_LINE_BREAK);
+  if (parts.length === 1) {
+    return [`description: ${emitYamlScalar(value)}`];
+  }
+
+  return ["description: |-", ...parts.map((part) => (part === "" ? "" : `  ${part}`))];
 }
 
 /**
@@ -220,7 +248,7 @@ export type GeneratedToolsFields =
  * Structured frontmatter fields for a generated agent. Identifiers
  * (name, model, tools, thinking, skills) are drawn from validated enums or
  * assertSafeName-checked tokens; only `description` is free text and goes
- * through emitYamlScalar. The tools/excludeTools pair comes from
+ * through descriptionLines. The tools/excludeTools pair comes from
  * GeneratedToolsFields, whose union shape carries their mutual exclusion.
  */
 export type GeneratedFrontmatterFields = {
@@ -326,7 +354,7 @@ export function emitGeneratedAgentFrontmatter(input: {
   // (AGSK-05, D-83-01).
   const lines: string[] = [
     `name: ${frontmatter.name}`,
-    `description: ${emitYamlScalar(frontmatter.description)}`,
+    ...descriptionLines(frontmatter.description),
   ];
   if (frontmatter.aliases !== undefined && frontmatter.aliases.length > 0) {
     // AG-1a: the file's own basename, which is the name this bridge declared

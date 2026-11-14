@@ -741,3 +741,64 @@ Feature: Agent frontmatter
 
       Answer the task.
       """
+
+  Scenario: A description block keeps its lines
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "agents/block.md" with this text:
+      """
+      ---
+      name: block
+      description: |
+        Reviews the change.
+        Then it reports each finding.
+      tools: Read
+      ---
+
+      Answer the task.
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply               | tool     | arguments                             |
+      |                     | subagent | {"action":"get","agent":"demo:block"} |
+      | The agent is shown. |          |                                       |
+    When the user prompts "Show the agent."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                                                                     |
+      | 1    | user        | Show the agent.                                                                                                                                                                                                                                                                                                                          |
+      | 2    | user        | Show the agent.                                                                                                                                                                                                                                                                                                                          |
+      | 2    | assistant   | tool call subagent {"action":"get","agent":"demo:block"}                                                                                                                                                                                                                                                                                 |
+      | 2    | tool result | subagent returned: agent demo:block\npath {agent dir}/agents/pi-claude-marketplace-demo-block.md\ndescription Reviews the change.\nThen it reports each finding.\naliases pi-claude-marketplace-demo-block\ntools read\nsystem prompt mode replace\ninherit project context true\ninherit skills false\nsystem prompt:\nAnswer the task. |
+    Then the agents folder of the user scope holds the file "pi-claude-marketplace-demo-block.md" with this text:
+      """
+      ---
+      name: demo:block
+      description: |-
+        Reviews the change.
+        Then it reports each finding.
+      aliases: pi-claude-marketplace-demo-block
+      tools: read
+      systemPromptMode: replace
+      inheritProjectContext: true
+      inheritSkills: false
+      advertise: true
+      provenance:
+        generatedBy: pi-claude-marketplace
+        sourcePlugin: demo
+        sourceAgent: block
+        sourcePath: {home}/marketplaces/fixtures/plugins/demo/agents/block.md
+        droppedFields: []
+        droppedTools: []
+        warnings: []
+      ---
+
+      Answer the task.
+      """

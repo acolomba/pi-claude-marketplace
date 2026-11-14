@@ -277,10 +277,36 @@ describe("emitGeneratedAgentFile", () => {
       expectedScalar: "'quoted description",
     },
     {
-      description: "LF and CRLF sequences as spaces",
-      scalar: "first line\nsecond line\r\nthird line",
-      expectedScalar: "first line second line third line",
+      description: "two lines as a literal block with a two-space indent",
+      scalar: "first line\nsecond line",
+      expectedScalar: "|-\n  first line\n  second line",
     },
+    {
+      description: "a blank line as an empty line and leading spaces kept after the indent",
+      scalar: "first line\n\n   indented line",
+      expectedScalar: "|-\n  first line\n\n     indented line",
+    },
+    {
+      description: "key, comment, and fence lines indented inside the block (AG-8)",
+      scalar: "Intro.\nname: injected\ntools: bash\n# not a comment\n---\nEnd.",
+      expectedScalar:
+        "|-\n  Intro.\n  name: injected\n  tools: bash\n  # not a comment\n  ---\n  End.",
+    },
+    ...[
+      { separator: "\r\n", label: "CRLF" },
+      { separator: "\r", label: "a lone carriage return" },
+      { separator: "\u2028", label: "U+2028" },
+      { separator: "\u2029", label: "U+2029" },
+    ].map(({ separator, label }) => ({
+      description: `lines separated by ${label} as a literal block`,
+      scalar: `first line${separator}second line`,
+      expectedScalar: "|-\n  first line\n  second line",
+    })),
+    ...["|", "|-", ">", ">-"].map((header) => ({
+      description: `the block header ${header} alone inside double quotes`,
+      scalar: header,
+      expectedScalar: `"${header}"`,
+    })),
     {
       description: "the empty scalar unchanged",
       scalar: "",
@@ -472,7 +498,9 @@ Keep the final newline.
     };
     const expectedGeneratedAgentFile = `---
 name: pi-claude-marketplace-acme-reviewer
-description: '"Review source changes"'
+description: |-
+  "Review
+  source changes"
 model: anthropic/claude-sonnet-4-6
 tools: read,bash
 thinking: high
