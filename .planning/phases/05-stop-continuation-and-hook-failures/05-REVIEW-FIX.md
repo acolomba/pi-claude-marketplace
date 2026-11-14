@@ -1,12 +1,12 @@
 ---
 phase: 05-stop-continuation-and-hook-failures
-fixed_at: 2026-11-14T16:46:10Z
+fixed_at: 2026-11-14T17:54:25Z
 review_path: .planning/phases/05-stop-continuation-and-hook-failures/05-REVIEW.md
-iteration: 1
+iteration: 2
 findings_in_scope: 8
-fixed: 7
-skipped: 1
-status: partial
+fixed: 8
+skipped: 0
+status: all_fixed
 ---
 
 # Phase 5: Code Review Fix Report
@@ -131,3 +131,142 @@ Every fix has a negative control: the changed source was reverted or broken on p
 _Fixed: 2026-11-14T16:46:10Z_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 1_
+
+## Iteration 2
+
+**Fixed at:** 2026-11-14T17:54:25Z
+**Source review:** .planning/phases/05-stop-continuation-and-hook-failures/05-REVIEW.md (iteration 2, committed in f319b4e4)
+**Iteration:** 2
+
+**Summary:**
+
+- Findings in scope: 8 (WR2-01, WR2-02, WR2-03, IN2-01 to IN2-05; the orchestrator named the scope, so the necessity finding WR2-03 is in it)
+- Fixed: 8
+- Skipped: 0
+
+The run was autonomous. Every decision below is **pending maintainer review**.
+
+### Where verification ran
+
+Every check ran in the main checkout `/home/acolomba/src/pi-claude-marketplace-gaps` on `features/gaps`, with no worktree, so the results can be reproduced from that tree. Node v26.13.1. Each unit test ran under `test/platform/isolated-pi-home.ts`, each saved-output case in an `mkdtemp` root, and each scenario in the cucumber sandbox. No check read or wrote the real `~/.pi/agent`. The checks were: `tsc --noEmit`, `npx fallow dead-code` (IN2-04), direct coverage at 100% for each touched source-test pair (`settle`, `runtime`, `stream-text`, `dispatch-exec`, `async-rewake/registry`, `hook-output-files`, `event-router`), the owner tests of each fix and of its callers (`test/bridges/hooks/**` and `test/index.test.ts`, 1,809 tests, all pass at the end), every scenario under `features/hook` under the `adapter` profile (252 pass) and the `builtin` profile (13 pass), and the commit hook's `npm run check:commit` on each commit. The IN2-05 commit staged `test/e2e/_rpc.ts`, so its hook ran direct coverage for every pair. The full `npm run check` was not run, as instructed.
+
+Every fix has a negative control. For code, the changed source was reverted or broken on purpose, the new case or scenario failed, and the change was restored. The controls for IN2-01, IN2-04, and IN2-05 are described with each fix.
+
+### Fixed Issues
+
+#### WR2-01: The Stop line was decided from `event.continue`, which is not the outcome of the boundary
+
+**Files modified:** `extensions/pi-claude-marketplace/bridges/hooks/settle.ts`, `extensions/pi-claude-marketplace/bridges/hooks/runtime.ts`, `test/bridges/hooks/settle.test.ts`, `test/bridges/hooks/runtime.test.ts`, `features/hook/messages.feature`, `features/step_definitions/hook/prompt-and-stop.steps.ts`, `features/lib/boundary-refuser.ts` (new), `docs/hooks-compatibility.md`, `docs/output-catalog.md`, `.agents/skills/cucumber/rules/layout.md`, `.agents/skills/cucumber/rules/world-and-stand-ins.md`
+**Commit:** 28a0ceba
+**Status:** fixed: requires human verification (user-visible behavior and a logic change)
+**Applied fix:**
+
+- The runtime gained `holdStopReason(reason)` and `takeHeldStopReason()`. A bridge load drops a held reason.
+- At the boundary, the first stopping Stop hook's non-empty `stopReason` is held, and nothing is shown. The `runContinues` input and `StopBoundaryEnding` are gone.
+- `agent_settled`, which Pi raises only after the run loop ends, shows the held reason as `Stop hook stopped continuation: <reason>` through a new hook notification run, before the StopFailure arm.
+- `agent_end` drops a held reason with the debug line `settle: the run went on after a Stop hook stopped it; stopReason not shown`. The reviewer suggested a clear at the next `agent_before_settle` or `agent_start`. `agent_end` was chosen because Pi emits it after every `agent.continue()`, also for a failed or aborted continuation (`pi-agent-core` `agent.js:383`, `agent-loop.js`), and before the next boundary or `agent_settled`. So it needs no new `pi.on` registration. This covers the queued-input and wake cases as well, because they continue through `agent.continue()`.
+- An Escape during the Stop hook, a later handler's `continue: false`, and invalid boundary entries now all show the line, because the run stops.
+- Unit cases: the stop-line table now runs the boundary and then the settle. A new case gives the boundary `continue: true` and a stopping hook: nothing shows at the boundary, and the line shows once over two settles. Another case holds a reason, then an `agent_end`, then a settle: no notice, and the debug line. Two runtime cases cover take-once, last-write, and the reset at a bridge load. The runtime isolation case covers the new state.
+- Scenario "A stop hook's stop reason is shown when a later extension ends the run that an earlier one continued". It loads `boundary-continuer.ts` first and the new harness extension `features/lib/boundary-refuser.ts` last. The refuser returns `continue: false` at every boundary, so Pi stops the run that the continuer continued. Expected: one Stop run, one notice, one model call. The existing scenario "...not shown when another extension already continued the run" still passes.
+- Negative control: with `settle.ts` and `runtime.ts` from HEAD, the new scenario failed (no notice), and so did both new settle cases.
+- The page's sentence at the old line 431, the difference bullet at line 154, the `continue: false` row, and the output catalog say that the line shows once the run stops, and not when Pi continues it anyway.
+
+#### WR2-02: The `RangeError` path stayed open on the `asyncRewake` and blocking lanes
+
+**Files modified:** `extensions/pi-claude-marketplace/bridges/hooks/stream-text.ts`, `extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts`, `extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts`, `test/bridges/hooks/stream-text.test.ts`, `docs/hooks-compatibility.md`
+**Commit:** cf461825
+**Status:** fixed: requires human verification (a new bridge limit)
+**Applied fix:**
+
+- `collectStreamText` now requires its `bound`, so the compiler rejects a collector with no ceiling. The new `ceilingBound(stream, hook)` gives a limit of `2 ** 28` UTF-16 code units and one debug line: `hook output: <stream> past 268435456 UTF-16 code units dropped (<hook>)`.
+- `dispatch-exec.ts` passes `ceilingBound` for both streams, and `streamBoundFor` returns it on the `asyncRewake` lane. The plain lane keeps its lower bound. The ceiling lives in `stream-text.ts`, so no caller holds a closure that only 256 MB of output could cover.
+- The reviewer asked for a case "with a small injected ceiling and no bound". With the bound required, that case does not exist. The small-bound cases prove the cut. Two new cases cover the ceiling: its limit plus a 1 MiB chunk stays below `buffer.constants.MAX_STRING_LENGTH`, and its `onLimit` writes the debug line.
+- The comment "the other lanes have a timer, so they keep every byte" is replaced: the `asyncRewake` lane keeps each stream whole up to the ceiling, because its declared `timeout` can let it print for days. The `dispatch-exec.ts` header no longer says that no size limit applies.
+- Negative control: with the ceiling set to `Infinity`, both new cases failed.
+- The page's large-output row names the safety limit.
+
+#### WR2-03: A plain `async` hook kept up to 8,388,608 characters of stderr that no code reads
+
+**Files modified:** `extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts`, `test/bridges/hooks/async-rewake/registry.test.ts`, `docs/hooks-compatibility.md`
+**Commit:** f68a9828
+**Status:** fixed: requires human verification (a necessity finding; it removes kept data)
+**Applied fix:**
+
+- On the plain lane, the stderr bound is `{ limit: 0 }`. The collector still reads the pipe to its end, so the hook never blocks on a full pipe, and it keeps nothing. Its debug line reads `async-hook: stderr not kept; a plain async hook's stderr is unread (<plugin>/<event>)`.
+- New registry case: a plain hook writes two stderr chunks and its answer on stdout. Both streams end, the answer reaches the model, and exactly one stderr debug line is written. Negative control: with the stderr branch off, the case failed.
+- The page's `async` row and large-output row say that a plain hook's stderr is read to the end and not kept.
+- This commit also rewraps a comment line in `spawnAndRegister` that the WR2-02 commit left over 100 characters.
+
+#### IN2-01: `streamBoundFor` sat between `ladderFor`'s doc comment and `ladderFor`
+
+**Files modified:** `extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts`
+**Commit:** 3fc6cccb
+**Applied fix:** `streamBoundFor` and its comment now sit above the `/**` block, so the timer text documents `ladderFor`. Negative control: a TypeScript compiler API probe (`ts.getJSDocCommentsAndTags`) on HEAD attached "Chooses the timer..." to `streamBoundFor` and nothing to `ladderFor`. After the move it attaches the block to `ladderFor` only. The probe was a scratch script and is not committed.
+
+#### IN2-02: The bound counted UTF-16 code units and could split a surrogate pair
+
+**Files modified:** `extensions/pi-claude-marketplace/bridges/hooks/stream-text.ts`, `extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts`, `test/bridges/hooks/stream-text.test.ts`, `test/bridges/hooks/async-rewake/registry.test.ts`, `docs/hooks-compatibility.md`
+**Commit:** 57854c9f
+**Applied fix:**
+
+- Both options were taken. A cut keeps one unit fewer when the last kept unit would be a high surrogate (`0xD800` to `0xDBFF`), so `"ab😀c"` with `limit: 3` is `"ab"`. The page and the debug lines say "UTF-16 code units", and the page notes that an emoji counts as two.
+- The `stream-text.ts` header now says that it collects up to a bound, names every lane, including the plain `async` lane and its bound, and explains the unit count.
+- New cases: a cut that would split the pair keeps `"ab"` and calls `onLimit` once, and a pair that ends at the bound is kept whole. Negative control: with the back-off removed, the first case failed.
+
+#### IN2-03: The bound kept only the head of stdout, which dropped a last-line answer
+
+**Files modified:** `extensions/pi-claude-marketplace/bridges/hooks/stream-text.ts`, `extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts`, `test/bridges/hooks/stream-text.test.ts`, `test/bridges/hooks/async-rewake/registry.test.ts`, `docs/hooks-compatibility.md`
+**Commit:** 877e6802
+**Status:** fixed: requires human verification (a logic change)
+**Applied fix:**
+
+- Chosen: keep a small tail with the head. It was simple and bounded. `StreamTextBound` gained an optional `tail`. Past the cut, the collector keeps the last `tail` units of the stream and joins them to the head with `"\n"`, so a last-line answer still parses as one line. The tail starts one unit later when it would start on a low surrogate. A bound with no tail behaves as before, and later chunks are not even decoded.
+- The plain lane's stdout keeps a tail of 65,536 units (`PLAIN_ASYNC_STREAM_TAIL`). Its debug line reads `async-hook: stdout past 8388608 UTF-16 code units dropped; the last 65536 kept (<plugin>/<event>)`. The ceiling bound and the plain stderr bound keep no tail.
+- New cases: head and tail across chunks (`"abc\nhij"`), a stream past the cut by less than its tail, and a tail that would start inside a pair. A registry case: 8 MiB of progress lines, then the answer on the last line, reaches the model. Negative control: with the tail set to 0, three stream-text cases failed, and the registry case timed out at 15 s because no answer arrived.
+- A joined text is not the hook's exact stdout: it holds one `"\n"` that the hook did not print, and a whole-stdout JSON answer longer than the head still does not parse. Upstream reads the answer at any size.
+- The page's `async` row and large-output row name the kept tail.
+
+#### IN2-04: `sweepHookOutput` defaulted a parameter to the live file system
+
+**Files modified:** `extensions/pi-claude-marketplace/bridges/hooks/hook-output-files.ts`, `extensions/pi-claude-marketplace/bridges/hooks/event-router.ts`, `test/bridges/hooks/hook-output-files.test.ts`
+**Commit:** 1b15cb5d
+**Applied fix:**
+
+- `SweepFileOps` is exported, `FILE_SYSTEM_SWEEP_OPS` (`{ lstat, unlink }`) is the exported real adapter, and `ops: SweepFileOps` is a required parameter. The two `event-router.ts` callers, the hooks bridge's composition point, pass `FILE_SYSTEM_SWEEP_OPS`. The real-file-system sweep cases pass it too, and the fault cases pass their own ops. This follows `pairing-and-design.md` ("Do not default a parameter to a live boundary").
+- fallow is green with no marker: `npx fallow dead-code` passes.
+- Negative controls: without the argument at the callers, `tsc` fails with TS2554. With `SweepFileOps` unexported again, fallow reports two `private-type-leak` findings.
+
+#### IN2-05: Harness documents were stale after `leadingExtensions` and the new harness extension
+
+**Files modified:** `features/support/world.ts`, `test/e2e/_rpc.ts`, `.agents/skills/cucumber/rules/world-and-stand-ins.md`, `.planning/codebase/CONVENTIONS.md`, `.planning/codebase/CONCERNS.md`
+**Commit:** fad6faf6
+**Applied fix:**
+
+- The `usePiWithProfile` comment names `profile.leadingExtensions` first in the load order, and its 134-character line is rewrapped. The `piArguments` comment's 128-character line is rewrapped.
+- Chosen: refuse, not carry. `keepTerminalSessionLocal` now throws "a profile Pi without the GitHub base override cannot load leading extensions". The TUI session loads its extensions after the real one, so carrying them would mean a change to `features/lib/pi-tui.ts` that no scenario needs. The `withoutGitHubBaseOverride` comment and the cucumber rule say so. Negative control: a step temporarily set both options, and the scenario failed with that error. The step was then restored.
+- CONVENTIONS now counts 52 `fallow-ignore` markers (`rg -n "fallow-ignore" extensions features test scripts`: 6 `unused-file`, 27 `code-duplication`, 5 `private-type-leak`, 13 `unused-export`, 1 `unused-type`). It counts thirteen `unused-export` markers, twelve on loader defaults: `index.ts` and eleven harness extensions, `boundary-continuer` and `boundary-refuser` included.
+- Stale exemptions: CONVENTIONS' `fetch-chokepoint` named only `domain/github-auth.ts`. The rule pack also exempts `platform/hosted-manifest-fetch.ts`, which is now listed (D-PL5-07). The bullet also left out `child-process-chokepoint`, which is now listed with its five exemptions. CONCERNS listed `bridges/agents/stage.ts` as a `write-file-atomic` caller. The rule pack exempts only `bridges/mcp/stage.ts` and `orchestrators/plugin/prune-rollback.ts`, beside the chokepoint, so the entry now says two.
+- Not changed: `.planning/codebase/STACK.md` still says the rule pack has 11 rules and leaves out `child-process-chokepoint`. It has 12.
+
+### Decisions pending maintainer review
+
+1. WR2-01: the Stop line shows at `agent_settled`, after the boundary's other notices, and `agent_end` drops it. The reviewer named `agent_before_settle` or `agent_start` as the clear points.
+2. WR2-01: the line also shows after an Escape during the Stop hook, because the run stops.
+3. WR2-01: the harness gained `features/lib/boundary-refuser.ts`, loaded through `extraExtensions`.
+4. WR2-02: the ceiling is `2 ** 28` UTF-16 code units for the blocking and `asyncRewake` lanes, and `bound` is required, not optional.
+5. WR2-03: the plain lane keeps none of its stderr, which replaces iteration 1's decision 2.
+6. IN2-02: the cut backs off a unit, and the docs also say UTF-16 code units.
+7. IN2-03: head plus a 65,536-unit tail, joined with a line break, on the plain lane's stdout only. This replaces iteration 1's decision 1 for that lane.
+8. IN2-05: a profile without the GitHub base override refuses `leadingExtensions` instead of carrying them.
+
+### Parent lines
+
+- **D-PG5-13:** replace the iteration-1 line with: "The `Stop` line shows once the run stops, at `agent_settled`. When Pi continues the run anyway, the line is not shown."
+- **D-PG5-17:** "A plain `async` hook keeps the first 8,388,608 and the last 65,536 UTF-16 code units of its stdout and none of its stderr."
+- **NFR-2 / EXEC-02:** "Every hook output collector keeps at most 2^28 UTF-16 code units of one stream."
+
+---
+
+_Fixed: 2026-11-14T17:54:25Z_
+_Fixer: Claude (gsd-code-fixer)_
+_Iteration: 2_
