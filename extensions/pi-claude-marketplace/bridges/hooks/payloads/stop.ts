@@ -2,11 +2,11 @@
 //
 // Stop payload translator (STOP-02).
 //
-// Consumes the synthetic Stop event the settle handler builds (the empty
-// `agent_settled` event carries no payload, so the settle handler supplies
-// `last_assistant_message` from the cached `agent_end` message and
-// `stop_hook_active` from the loop-protection state) and emits the Claude
-// `Stop` stdin envelope. `background_tasks` / `session_crons` are omitted --
+// Consumes the synthetic Stop event the `agent_before_settle` boundary
+// handler builds (the boundary event names no stop reason or reply text, so
+// the handler supplies `last_assistant_message` from the cached `agent_end`
+// message and `stop_hook_active` from the loop-protection state, D-PG5-01)
+// and emits the Claude `Stop` stdin envelope. `background_tasks` / `session_crons` are omitted --
 // Pi has no task registry, and the upstream contract admits their absence.
 
 import type { TranslationContext } from "../translation-context.ts";
@@ -21,8 +21,8 @@ export interface StopStdin {
 }
 
 /**
- * Synthetic Stop event the settle handler passes into the translator slot.
- * Not a Pi event type -- the fields are assembled at settle time from the
+ * Synthetic Stop event the boundary handler passes into the translator slot.
+ * Not a Pi event type -- the fields are assembled at the boundary from the
  * cached last-assistant message and the loop-protection state.
  */
 export interface StopEvent {

@@ -123,8 +123,9 @@ export type ToolEvent = (typeof TOOL_EVENTS)[number];
  * Compatibility name for the exact admitted event union and the key domain
  * for the dispatch/rewake/translator tables (D-87-04). Both dispatch owners
  * accept the admitted union directly and index exhaustive records without a
- * runtime membership guard. `Stop` / `StopFailure` are dispatched by the
- * settle handler off `agent_settled` rather than a per-Pi-event composite.
+ * runtime membership guard. `Stop` runs on `agent_before_settle` and
+ * `StopFailure` on `agent_settled` (D-PG5-01), rather than through a
+ * per-Pi-event composite.
  */
 // D-87-04: the alias is structurally equal to `BucketAEvent` today but names a
 // different concept -- the key domain of the dispatch/rewake/translator tables.
