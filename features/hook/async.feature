@@ -258,6 +258,33 @@ Feature: Hook async
       | 2    | user      | remember the tests     |
       | 2    | user      | the tests live in test |
 
+  Scenario: A plain async hook runs past its declared timeout
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name | event            | matcher | form   | async | timeout | sleep | exit code |
+      | slow | UserPromptSubmit | *       | script | true  | 1       | 3     | 3         |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply |
+      | Done. |
+    When the user prompts "say done" and 1 background hook runs finish
+    Then the hooks record these runs:
+      | event            | session | prompt   | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | UserPromptSubmit | first   | say done | {project dir} |                 | slow      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the hook processes record these lifecycle events:
+      | hook | phase | exit code |
+      | slow | start |           |
+      | slow | end   | 3         |
+    Then the model receives these calls:
+      | call | role | text     |
+      | 1    | user | say done |
+
   Scenario: An async rewake Stop hook that exits 2 wakes the model once
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source

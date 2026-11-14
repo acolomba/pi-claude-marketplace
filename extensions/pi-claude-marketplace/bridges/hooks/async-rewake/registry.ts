@@ -8,7 +8,9 @@
 // wakes the model with Claude Code 2.1.319's rewake text through pi.sendMessage with
 // `display: false` matching Claude Code's <system-reminder> semantic: an idle
 // Pi starts a turn with it, and a running turn reads it at its next turn
-// boundary (D-BG-201, D-BG-202).
+// boundary (D-BG-201, D-BG-202). An asyncRewake child is stopped at its
+// timeout; a plain async child has no timer and runs until it ends, a reload,
+// or the next start (D-PG5-17).
 //
 // This is one of exactly FIVE sanctioned `node:child_process` import
 // sites in the extension tree (closed-set whitelist at
@@ -55,7 +57,12 @@ import { errorMessage } from "../../../shared/errors.ts";
 import { notifyAsyncRewakeSummary } from "../../../shared/notification-dispatch.ts";
 import { openNotificationRun, requireNotificationMode } from "../../../shared/notification-run.ts";
 import { assertPathInside } from "../../../shared/path-safety.ts";
-import { installTimerLadder } from "../exec-timer.ts";
+import {
+  INERT_TIMER_LADDER,
+  installTimerLadder,
+  type ChildLike,
+  type TimerLadder,
+} from "../exec-timer.ts";
 import { hookPathVars, prepareHookEnv } from "../hook-env.ts";
 import { translatePostCompact } from "../payloads/post-compact.ts";
 import { translatePostToolUseFailure } from "../payloads/post-tool-use-failure.ts";
@@ -172,6 +179,37 @@ function laneOf(entry: RoutingEntry): BackgroundLane {
   return entry.handlerDecl.asyncRewake === true ? "rewake" : "plain";
 }
 
+/**
+ * Chooses the timer of a background child before it spawns, and returns what
+ * installs it on the child. An `asyncRewake` hook keeps its declared
+ * `timeout`, or 600 s, and the SIGTERM and SIGKILL ladder. A plain `async`
+ * hook runs until it ends, as in Claude Code, so it gets no timer, and a
+ * `timeout` it declares is ignored with one debug line (D-PG5-17).
+ */
+function ladderFor(entry: RoutingEntry, lane: BackgroundLane): (child: ChildLike) => TimerLadder {
+  const label = `${entry.pluginId}/${entry.claudeEvent}`;
+  if (lane === "plain") {
+    if (entry.handlerDecl.timeout !== undefined) {
+      hookDebugLog(
+        `async-hook: timeout ${JSON.stringify(entry.handlerDecl.timeout)} ignored (${label}); ` +
+          `a plain async hook runs until it ends`,
+      );
+    }
+
+    return () => INERT_TIMER_LADDER;
+  }
+
+  const timeoutSeconds = resolveTimeoutSeconds({
+    raw: entry.handlerDecl.timeout,
+    event: entry.claudeEvent,
+    pluginId: entry.pluginId,
+    // This lane returns as soon as the child is registered, so upstream's
+    // turn-blocking reductions do not apply -- see ../timeout.ts.
+    lane: "background",
+  });
+  return (child) => installTimerLadder(child, timeoutSeconds, label);
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Production dependency contracts
 // ──────────────────────────────────────────────────────────────────────────
@@ -274,14 +312,7 @@ export async function spawnAndRegister(
     const stdinJson = serializeWithTruncation(stdinPayload);
     const env = await prepareAsyncEnv(entry, transCtx, loc, dispatchId);
     const planValue = planSpawn(entry, hookPathVars(entry, transCtx, loc));
-    const timeoutSeconds = resolveTimeoutSeconds({
-      raw: entry.handlerDecl.timeout,
-      event: entry.claudeEvent,
-      pluginId: entry.pluginId,
-      // This lane returns as soon as the child is registered, so upstream's
-      // turn-blocking reductions do not apply -- see ../timeout.ts.
-      lane: "background",
-    });
+    const startLadder = ladderFor(entry, exit.lane);
 
     let child: ChildProcess;
     try {
@@ -290,9 +321,10 @@ export async function spawnAndRegister(
         env,
         stdio: ["pipe", "pipe", "pipe"],
         shell: planValue.shell,
-        // The hook leads its own process group, which the ladder, `/reload`,
-        // and the orphan reap signal (../process-group.ts). A detached Windows
-        // process would open a console window of its own.
+        // The hook leads its own process group, which the ladder of an
+        // asyncRewake hook, `/reload`, and the orphan reap signal
+        // (../process-group.ts). A detached Windows process would open a
+        // console window of its own.
         detached: process.platform !== "win32",
       });
     } catch (err) {
@@ -328,11 +360,7 @@ export async function spawnAndRegister(
     });
 
     const hookProcess = asGroupLeader(child, deps);
-    const ladder = installTimerLadder(
-      hookProcess,
-      timeoutSeconds,
-      `${entry.pluginId}/${entry.claudeEvent}`,
-    );
+    const ladder = startLadder(hookProcess);
 
     const rewakeMessageField = entry.handlerDecl.rewakeMessage;
     const rewakeSummaryField = entry.handlerDecl.rewakeSummary;

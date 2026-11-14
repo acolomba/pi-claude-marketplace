@@ -3482,6 +3482,187 @@ test("sends SIGKILL to the group of a background hook whose shell its SIGTERM en
   assert.deepStrictEqual(child.signals, []);
 });
 
+interface LaneSpawn {
+  readonly runtime: HooksRuntime;
+  readonly child: ChildHarness;
+  readonly pi: PiHarness;
+  readonly diagnostics: readonly string[];
+  readonly timers: TimerObservation;
+}
+
+// Writes each debug line of the case to `lines`.
+function captureDebugLines(t: TestContext): string[] {
+  const lines: string[] = [];
+  const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  t.after(() => {
+    if (previousDebug === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    } else {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
+    }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  t.mock.method(console, "error", (...parts: unknown[]) => {
+    lines.push(parts.map(String).join(" "));
+  });
+  return lines;
+}
+
+// Spawns one UserPromptSubmit background child of `handlerDecl` under mocked
+// timers, with the debug lines captured, and stops it when the case ends.
+async function spawnLaneChild(
+  t: TestContext,
+  handlerDecl: RoutingEntry["handlerDecl"],
+): Promise<LaneSpawn> {
+  const timers = observeTimers(t, Date.parse("2026-11-14T09:00:00.000Z"));
+  const diagnostics = captureDebugLines(t);
+  const runtime = createHooksRuntime();
+  const root = await mkdtemp(path.join(tmpdir(), "async-registry-lane-"));
+  const locations = locationsFor("project", root);
+  const context = createContext(root, "session-lane", true);
+  const pi = createPi();
+  const child = createChild(24_720);
+  t.after(async () => {
+    shutdownInMemoryChildren(runtime);
+    destroyChild(child);
+    await reapOrphans(runtime, locations, deadOrphanProbes());
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  });
+  await spawnAndRegister(
+    runtime,
+    createEntry(root, { claudeEvent: "UserPromptSubmit", handlerDecl }),
+    { type: "input", text: "prompt", source: "interactive" },
+    context.context,
+    pi.pi,
+    locations,
+    { spawnImpl: createSpawn(child.child, []), dispatchId: () => "dispatch-lane" },
+  );
+  return { runtime, child, pi, diagnostics, timers };
+}
+
+test("a plain async hook receives no signal past its declared timeout (D-PG5-17)", async (t) => {
+  // arrange
+  const spawned = await spawnLaneChild(t, {
+    type: "command",
+    command: "/opt/hooks/note",
+    timeout: 1,
+    async: true,
+  });
+
+  // act
+  t.mock.timers.tick(6_000);
+  const entry = spawned.runtime.takeChild("dispatch-lane");
+
+  // assert
+  assert.deepStrictEqual(spawned.child.signals, []);
+  assert.deepStrictEqual(spawned.timers.handles, []);
+  assert.strictEqual(entry?.ladder.fired(), false);
+});
+
+test("a plain async hook's child error finalizes it and sends no answer (D-PG5-17)", async (t) => {
+  // arrange
+  const spawned = await spawnLaneChild(t, {
+    type: "command",
+    command: "/opt/hooks/note",
+    timeout: 1,
+    async: true,
+  });
+
+  // act
+  spawned.child.emitError(new Error("lost the hook"));
+  spawned.child.emitExit(0);
+  spawned.child.emitClose(0);
+
+  // assert
+  assert.strictEqual(spawned.runtime.takeChild("dispatch-lane"), undefined);
+  assert.deepStrictEqual(spawned.pi.messages, []);
+  assert.deepStrictEqual(spawned.child.signals, []);
+});
+
+for (const declared of [
+  {
+    name: "a declared timeout",
+    writes: "one debug line",
+    timeout: 1,
+    lines: [
+      "[hooks] async-hook: timeout 1 ignored (plugin-lifecycle/UserPromptSubmit); " +
+        "a plain async hook runs until it ends",
+    ],
+  },
+  { name: "no timeout", writes: "no debug line", timeout: undefined, lines: [] },
+  {
+    name: "an unusable timeout",
+    writes: "only the ignored-timeout line",
+    timeout: "soon",
+    lines: [
+      '[hooks] async-hook: timeout "soon" ignored (plugin-lifecycle/UserPromptSubmit); ' +
+        "a plain async hook runs until it ends",
+    ],
+  },
+] as const) {
+  test(`a plain async hook with ${declared.name} writes ${declared.writes} (D-PG5-17)`, async (t) => {
+    // arrange
+    const handlerDecl = {
+      type: "command",
+      command: "/opt/hooks/note",
+      async: true,
+      ...(declared.timeout === undefined ? {} : { timeout: declared.timeout }),
+    } satisfies RoutingEntry["handlerDecl"];
+
+    // act
+    const spawned = await spawnLaneChild(t, handlerDecl);
+
+    // assert
+    assert.deepStrictEqual(spawned.diagnostics, declared.lines);
+  });
+}
+
+for (const lane of [
+  { name: "an async rewake hook", flags: { asyncRewake: true } },
+  { name: "a hook with both flags", flags: { async: true, asyncRewake: true } },
+] as const) {
+  test(`${lane.name} receives SIGTERM at its declared timeout (D-PG5-17)`, async (t) => {
+    // arrange
+    const spawned = await spawnLaneChild(t, {
+      type: "command",
+      command: "/opt/hooks/scan",
+      timeout: 1,
+      ...lane.flags,
+    });
+
+    // act
+    t.mock.timers.tick(999);
+    const beforeTimeout = [...spawned.child.signals];
+    t.mock.timers.tick(1);
+
+    // assert
+    assert.deepStrictEqual(beforeTimeout, []);
+    assert.deepStrictEqual(spawned.child.signals, ["SIGTERM"]);
+    assert.strictEqual(spawned.runtime.takeChild("dispatch-lane")?.ladder.fired(), true);
+  });
+}
+
+test("an async rewake hook with no timeout receives SIGTERM at 600 seconds (D-PG5-17)", async (t) => {
+  // arrange
+  const spawned = await spawnLaneChild(t, {
+    type: "command",
+    command: "/opt/hooks/scan",
+    asyncRewake: true,
+  });
+
+  // act
+  t.mock.timers.tick(599_999);
+  const beforeTimeout = [...spawned.child.signals];
+  t.mock.timers.tick(1);
+
+  // assert
+  assert.deepStrictEqual(beforeTimeout, []);
+  assert.deepStrictEqual(spawned.child.signals, ["SIGTERM"]);
+  assert.deepStrictEqual(spawned.diagnostics, [
+    "[hooks] exec-timer: SIGTERM after 600s (plugin-lifecycle/UserPromptSubmit)",
+  ]);
+});
+
 function destroyChild(child: ChildHarness): void {
   child.child.removeAllListeners();
   child.stdin?.destroy();

@@ -109,11 +109,12 @@ function capSessionEndTimeout(
  *
  * `lane` decides which default applies, and it matters. Upstream lowers the
  * budget on `UserPromptSubmit` and `SessionEnd` because the handler holds up
- * the turn; a `background` handler (an `async` or `asyncRewake` hook, which
- * Claude Code 2.1.319 also runs in the background) is registered and left to
- * run while dispatch returns immediately, so those budgets have no rationale
- * there and would silently truncate long-running background work, and
- * `background` keeps the 600 s `command` default on every event.
+ * the turn; a `background` handler (an `asyncRewake` hook, which Claude Code
+ * 2.1.319 also runs in the background) is registered and left to run while
+ * dispatch returns immediately, so those budgets have no rationale there and
+ * would silently truncate long-running background work, and `background`
+ * keeps the 600 s `command` default on every event. A plain `async` hook has
+ * no timer at all and does not reach this function (D-PG5-17).
  *
  * A value that was DECLARED but cannot be used emits a `hookDebugLog` line
  * naming it. Absence is not a degrade and stays quiet -- most handlers declare
