@@ -13,9 +13,12 @@ Feature: MCP server lifecycle
   again as the extension's own (D-PG9-01, D-PG9-03, D-PG9-04). No `openUi`
   default is written, because pi-subagents 0.88.1 does not hash it as
   pi-mcp-adapter 7.0.1 does, and an entry holding it stops an agent granted
-  the server's tools from launching (D-PG9-07, D-CF6-10). A stdio stub server
-  stands in for a real one, a scripted model for a real model, and a local
-  marketplace for a published one.
+  the server's tools from launching (D-PG9-07, D-CF6-10). Beside the
+  request-timeout scenarios, the scenarios of D-PG9-03 and D-PG9-05 show that
+  a value the user wrote beats this extension's defaults and survives an
+  update and a reinstall; Pi's built-in MCP reads none of these fields from
+  mcp-adapter.json. A stdio stub server stands in for a real one, a scripted
+  model for a real model, and a local marketplace for a published one.
 
   Background:
     Given the marketplace "fixtures" is published as a dir source
@@ -642,6 +645,78 @@ Feature: MCP server lifecycle
               "marketplace": "fixtures",
               "defaultFields": {
                 "requestTimeoutMs": 300000
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @adapter-only
+  Scenario: A lifecycle and an openUi the user wrote for a plugin server survive an update (PG-MCP-06, PG-SEC-03, D-PG9-03)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers":{"kept":{"command":"pi-features-absent-mcp-server","args":["v1"]},"plain":{"command":"pi-features-absent-mcp-server","args":["v1"]}}}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has written these fields on the mcp server "plugin_demo_kept_" in the mcp-adapter.json file of the user scope:
+      """
+      {"lifecycle":"lazy","openUi":true}
+      """
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers":{"kept":{"command":"pi-features-absent-mcp-server","args":["v2"]},"plain":{"command":"pi-features-absent-mcp-server","args":["v2"]}}}
+      """
+    When the user has run "/claude:plugin update demo@fixtures --scope user", which did not fail
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_kept_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [
+              "v2"
+            ],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "lifecycle": "lazy",
+            "openUi": true,
+            "requestTimeoutMs": 1800000,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000
+              }
+            }
+          },
+          "plugin_demo_plain_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [
+              "v2"
+            ],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
               }
             }
           }
