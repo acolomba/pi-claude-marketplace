@@ -113,6 +113,24 @@ describe("buildMarker", () => {
     );
   });
 
+  test("D-PG9-03: writes string and boolean defaults after plugin-set fields and before the kept override", () => {
+    // arrange
+    const keptOverride = { disabled: true };
+
+    // act
+    const marker = buildMarker("deploy-tools", "team-marketplace", {
+      pluginSetFields: ["disabled"],
+      defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive", openUi: false },
+      keptOverride,
+    });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(marker),
+      '{"plugin":"deploy-tools","marketplace":"team-marketplace","pluginSetFields":["disabled"],"defaultFields":{"requestTimeoutMs":1800000,"lifecycle":"lazy-keep-alive","openUi":false},"keptOverride":{"disabled":true}}',
+    );
+  });
+
   test("D-PG1-13: omits default fields when the record is empty", () => {
     // act
     const marker = buildMarker("deploy-tools", "team-marketplace", { defaultFields: {} });
@@ -141,6 +159,59 @@ describe("defaultFieldsOf", () => {
     assert.strictEqual(defaults, fields);
   });
 
+  for (const { description, fields } of [
+    { description: "a string default", fields: { lifecycle: "lazy-keep-alive" } },
+    { description: "a boolean default", fields: { openUi: false } },
+    {
+      description: "number, string, and boolean defaults together",
+      fields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive", openUi: false },
+    },
+    { description: "a string where a number would be", fields: { requestTimeoutMs: "1800000" } },
+  ] satisfies ReadonlyArray<{ description: string; fields: Record<string, unknown> }>) {
+    test(`D-PG9-03: reads ${description} of a well-formed marker`, () => {
+      // arrange
+      const entry = {
+        _piClaudeMarketplace: {
+          plugin: "search-tools",
+          marketplace: "official",
+          defaultFields: fields,
+        },
+      };
+
+      // act
+      const defaults = defaultFieldsOf(entry);
+
+      // assert
+      assert.strictEqual(defaults, fields);
+    });
+  }
+
+  for (const { description, defaultFields } of [
+    { description: "a null value", defaultFields: { requestTimeoutMs: 1800000, openUi: null } },
+    {
+      description: "an object value",
+      defaultFields: { requestTimeoutMs: 1800000, lifecycle: { mode: "lazy" } },
+    },
+    { description: "an array value", defaultFields: { requestTimeoutMs: [1800000] } },
+    {
+      description: "an own __proto__ key holding an object",
+      defaultFields: JSON.parse('{"__proto__":{"requestTimeoutMs":1800000}}') as unknown,
+    },
+  ] satisfies ReadonlyArray<{ description: string; defaultFields: unknown }>) {
+    test(`D-PG9-03: returns no defaults for a member holding ${description}`, () => {
+      // arrange
+      const entry = {
+        _piClaudeMarketplace: { plugin: "search-tools", marketplace: "official", defaultFields },
+      };
+
+      // act
+      const defaults = defaultFieldsOf(entry);
+
+      // assert
+      assert.deepStrictEqual(defaults, {});
+    });
+  }
+
   for (const { description, marker } of [
     {
       description: "an absent member",
@@ -160,14 +231,6 @@ describe("defaultFieldsOf", () => {
         plugin: "search-tools",
         marketplace: "official",
         defaultFields: "requestTimeoutMs",
-      },
-    },
-    {
-      description: "a member containing a string",
-      marker: {
-        plugin: "search-tools",
-        marketplace: "official",
-        defaultFields: { requestTimeoutMs: "1800000" },
       },
     },
     {

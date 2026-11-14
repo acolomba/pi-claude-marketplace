@@ -7,8 +7,10 @@
 // to identify which entries belong to a given (marketplace, plugin) tuple.
 // The marker may also carry `pluginSetFields`, the names of the carried fields
 // the plugin's entry sets (ANAME-07), `defaultFields`: the default values this
-// extension wrote (D-PG1-13), and `keptOverride`: the user override the entry
-// replaced, which an unstage writes back (AFILE-06, AFILE-01).
+// extension wrote (D-PG1-13), each a number, a string, or a boolean, while a
+// numbers-only record an earlier release wrote still reads (D-PG9-03), and
+// `keptOverride`: the user override the entry replaced, which an unstage
+// writes back (AFILE-06, AFILE-01).
 // The load-time move reads only the owner a legacy `mcp.json` entry's marker
 // names (AMIG-01).
 //
@@ -17,6 +19,9 @@
 
 /** Per MC-5 user contract -- DO NOT EDIT key. */
 export const CLAUDE_MARKETPLACE_MARKER_KEY = "_piClaudeMarketplace";
+
+/** A default value the marker records: a JSON scalar (D-PG9-03). */
+export type MarkerDefaultValue = number | string | boolean;
 
 /** The marker subobject's shape. */
 export interface ClaudeMarketplaceMarker {
@@ -28,8 +33,11 @@ export interface ClaudeMarketplaceMarker {
    * kept override's own value for each of them (AFILE-06).
    */
   readonly pluginSetFields?: readonly string[];
-  /** D-PG1-13: default values this extension wrote, so a restage can recompute them. */
-  readonly defaultFields?: Readonly<Record<string, number>>;
+  /**
+   * D-PG1-13: default values this extension wrote, so a restage can recompute
+   * them. D-PG9-03 widens them from numbers to JSON scalars.
+   */
+  readonly defaultFields?: Readonly<Record<string, MarkerDefaultValue>>;
   /**
    * The marker-less override this entry replaced under the same server name,
    * kept verbatim (AFILE-06). pi-mcp-adapter never reads inside the marker, so
@@ -49,8 +57,12 @@ function isStringArray(value: unknown): value is readonly string[] {
   return Array.isArray(value) && value.every((element: unknown) => typeof element === "string");
 }
 
-function isNumberRecord(value: unknown): value is Readonly<Record<string, number>> {
-  return isPlainObject(value) && Object.values(value).every((member) => typeof member === "number");
+function isDefaultValue(value: unknown): value is MarkerDefaultValue {
+  return typeof value === "number" || typeof value === "string" || typeof value === "boolean";
+}
+
+function isDefaultRecord(value: unknown): value is Readonly<Record<string, MarkerDefaultValue>> {
+  return isPlainObject(value) && Object.values(value).every(isDefaultValue);
 }
 
 /**
@@ -59,7 +71,7 @@ function isNumberRecord(value: unknown): value is Readonly<Record<string, number
  * entry; otherwise null. Arrays, primitives, and partial shapes yield null; it
  * never throws. `pluginSetFields` is returned only when it is an
  * own array of strings, `defaultFields` only when it is an own plain object
- * of numbers, and `keptOverride` only when it is an own plain-object member;
+ * whose every value is a number, a string, or a boolean (D-PG9-03), and `keptOverride` only when it is an own plain-object member;
  * any other value parses as a marker without that member.
  */
 function readMarker(value: unknown): ClaudeMarketplaceMarker | null {
@@ -88,7 +100,7 @@ function readMarker(value: unknown): ClaudeMarketplaceMarker | null {
     plugin: obj.plugin,
     marketplace: obj.marketplace,
     ...(isStringArray(pluginSetFields) ? { pluginSetFields } : {}),
-    ...(isNumberRecord(defaultFields) ? { defaultFields } : {}),
+    ...(isDefaultRecord(defaultFields) ? { defaultFields } : {}),
     ...(isPlainObject(keptOverride) ? { keptOverride } : {}),
   };
 }
@@ -109,7 +121,7 @@ export function buildMarker(
   marketplace: string,
   parts: {
     readonly pluginSetFields?: readonly string[];
-    readonly defaultFields?: Readonly<Record<string, number>>;
+    readonly defaultFields?: Readonly<Record<string, MarkerDefaultValue>>;
     readonly keptOverride?: Readonly<Record<string, unknown>> | undefined;
   } = {},
 ): ClaudeMarketplaceMarker {
@@ -152,6 +164,6 @@ export function pluginSetFieldsOf(value: unknown): readonly string[] {
 }
 
 /** The default values an entry's marker records, or none (D-PG1-13). */
-export function defaultFieldsOf(value: unknown): Readonly<Record<string, number>> {
+export function defaultFieldsOf(value: unknown): Readonly<Record<string, MarkerDefaultValue>> {
   return readMarker(value)?.defaultFields ?? {};
 }

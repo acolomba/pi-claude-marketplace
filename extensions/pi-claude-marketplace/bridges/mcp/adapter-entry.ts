@@ -26,6 +26,7 @@ import {
   isPlainObject,
   keptOverrideOf,
   pluginSetFieldsOf,
+  type MarkerDefaultValue,
 } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 import {
@@ -215,7 +216,7 @@ function isRecordedDefault(
   previous: Record<string, unknown>,
   source: Record<string, unknown>,
   field: string,
-  defaults: Readonly<Record<string, number>>,
+  defaults: Readonly<Record<string, MarkerDefaultValue>>,
 ): boolean {
   return source === previous && Object.hasOwn(defaults, field) && source[field] === defaults[field];
 }
