@@ -72,6 +72,7 @@ import {
 } from "./async-rewake/registry.ts";
 import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
 import { HOOK_CONTEXT_MESSAGE_TYPE, sendDueFollowUpContext } from "./event-adapters.ts";
+import { sweepHookOutput } from "./hook-output-files.ts";
 import { compileIfPredicate, MATCH_ALL_IF } from "./if-field/index.ts";
 import { createHookToolView } from "./mcp-tool-view.ts";
 import { claudeSessionEndReason } from "./payloads/session-end.ts";
@@ -1041,7 +1042,8 @@ function sessionCompactCallback(
  *   2. Reset pending-context and settle transitions for the new generation.
  *   3. SIGKILL prior-cycle in-memory async-rewake children (HOOK-06).
  *   4. Hydrate the parsed-config cache from disk, then rebuild routing tables.
- *   5. Reap persisted orphans per scope (D-62-05).
+ *   5. Reap persisted orphans per scope (D-62-05), then remove the scope's
+ *      saved hook output older than 30 days (D-PG5-15).
  *   6. Register exactly 13 pi.on call sites -- 7 Bucket-A dispatch surfaces
  *      (DISP-01) plus `before_agent_start` (the drain point for the
  *      SessionStart `additionalContext` capture buffer) plus `turn_end` (sends
@@ -1138,6 +1140,9 @@ async function registerHooksBridgeWith(
     // against an in-flight kill probe.
     // eslint-disable-next-line no-await-in-loop -- at most two scopes, one PID-table reap each
     await reapOrphans(runtime, loc);
+    // D-PG5-15: the saved hook output of each reaped scope ages out here.
+    // eslint-disable-next-line no-await-in-loop -- at most two scopes, one sweep each
+    await sweepHookOutput(loc, Date.now());
   }
 
   // SessionStart dispatch with lazy project-scope hydrate. Pi fires
@@ -1352,16 +1357,20 @@ async function registerHooksBridgeWith(
  * D-BG-207: reaps the project scope's PID table for the session's real `cwd`
  * after the project hydrate, so the async hook processes an earlier load of
  * this project left stop on /reload and at the next start after a crash. The
- * factory's reap reads only the home directory's tables. A project Pi does
- * not trust runs no hooks (D-LOC-01), so its table is left alone. The reap
- * keeps the rows of children this runtime owns and never throws.
+ * factory's reap reads only the home directory's tables. Then it removes the
+ * scope's saved hook output older than 30 days (D-PG5-15). A project Pi does
+ * not trust runs no hooks (D-LOC-01), so its table and its saved output are
+ * left alone. The reap keeps the rows of children this runtime owns, and
+ * neither step throws.
  */
 async function reapProjectOrphans(runtime: HooksRuntime, cwd: string): Promise<void> {
   if (!runtime.isProjectTrusted(cwd)) {
     return;
   }
 
-  await reapOrphans(runtime, locationsFor("project", cwd));
+  const loc = locationsFor("project", cwd);
+  await reapOrphans(runtime, loc);
+  await sweepHookOutput(loc, Date.now());
 }
 
 /** Binds every hooks hydration path to one runtime and one required state reader. */

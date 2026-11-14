@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
 import { EventEmitter } from "node:events";
 import * as fs from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
@@ -24,6 +24,7 @@ import {
   createHooksHydration,
   createHooksRouting,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import { saveHookOutput } from "../../../extensions/pi-claude-marketplace/bridges/hooks/hook-output-files.ts";
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import { readHooksJson } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import {
@@ -4867,5 +4868,51 @@ for (const scenario of [
       runtime.pidTableEntries(loc).map((row) => row.dispatchId),
       scenario.running,
     );
+  });
+}
+
+// Saves one hook output of `loc` that is 31 days old, and returns the names
+// of its folder after `load` runs (D-PG5-15).
+async function hookOutputAfterLoad(
+  loc: ReturnType<typeof locationsFor>,
+  load: () => Promise<void>,
+): Promise<string[]> {
+  const savedPath = await saveHookOutput(loc, "old-output", "additionalContext", "saved");
+  const old = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);
+  await utimes(savedPath, old, old);
+  await load();
+  return readdir(path.dirname(savedPath));
+}
+
+test("a bridge load removes the old saved hook output of each scope it reaps (D-PG5-15)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "event-router-output-sweep-");
+  const runtime = createHooksRuntime();
+  const { pi } = makeRecordingPi();
+  const load = (): Promise<void> =>
+    createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, { cwd: root });
+
+  // act
+  const userNames = await hookOutputAfterLoad(locationsFor("user", root), load);
+  const projectNames = await hookOutputAfterLoad(locationsFor("project", root), load);
+
+  // assert
+  assert.deepStrictEqual({ userNames, projectNames }, { userNames: [], projectNames: [] });
+});
+
+for (const trusted of [true, false]) {
+  test(`a project hydrate with trust ${String(trusted)} sweeps only a trusted project's saved hook output (D-PG5-15)`, async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "event-router-project-sweep-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const runtime = createHooksRuntime();
+
+    // act
+    const names = await hookOutputAfterLoad(locationsFor("project", root), () =>
+      createHooksHydration(runtime, EMPTY_STATE_READER).hydrateProjectScopeForCwd(root, trusted),
+    );
+
+    // assert
+    assert.deepStrictEqual(names, trusted ? [] : ["hook-old-output-additionalContext.txt"]);
   });
 }
