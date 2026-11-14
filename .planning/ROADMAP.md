@@ -101,7 +101,7 @@ run against them. Phase 4 depends on Phase 1 alone, so it can move earlier.
 - [x] **Phase 2: Hook Payloads, Matchers, and Stop Limit** - Hooks on file tools get and return Claude-shaped tool input, matchers follow Claude Code's rules, and a `Stop` hook can block eight times in a row (completed 2026-11-13)
 - [x] **Phase 3: Background Subagents** - A bridged agent runs in the launch mode pi-subagents chooses, and a subagent child runs none of the plugin's main-session hooks (completed 2026-11-13)
 - [x] **Phase 4: Skill and Workflow Install Defects** - A root-source entry installs only its listed skills, sibling skill links resolve, a plugin starts its own workflow by name, and an install notes that a workflow does not keep an agent's tool restriction (completed 2026-11-14)
-- [ ] **Phase 5: Stop Continuation and Hook Failures** - A blocking `Stop` hook continues the same run, a missing script does not block, failures and `stopReason` are shown, context stops at 10,000 characters, and a plain `async` hook has no timeout
+- [x] **Phase 5: Stop Continuation and Hook Failures** - A blocking `Stop` hook continues the same run, a missing script does not block, failures and `stopReason` are shown, context stops at 10,000 characters, and a plain `async` hook has no timeout (completed 2026-11-14)
 - [ ] **Phase 6: Hook Inputs and Events** - Hooks receive `tool_use_id` and the other missing stdin fields, `UserPromptExpansion` hooks run before an expansion, and a continued session reports `resume`
 - [ ] **Phase 7: Agent Frontmatter and Grants** - Agent frontmatter is read as YAML, `Agent` and `Task` grants let an agent delegate, `model: inherit` is passed on, and both tool lists restrict an agent
 - [ ] **Phase 8: Workflow Agents and Run Paths** - A workflow runs the plugin's own agents and notes a missing one, an agent with a `Workflow` grant starts its plugin's workflow, and the uncovered run paths and the limits of a workflow subagent are proven or documented
@@ -322,22 +322,22 @@ Plans:
   4. A hook that prints 12,000 characters of context sends at most 10,000 to the model (PG-HOOK-14).
   5. A plain `async` hook with `timeout: 1` that sleeps 3 seconds writes its end marker, and a reload still stops a plain `async` hook that is running (PG-HOOK-21).
 
-**Plans**: 6 plans
+**Plans**: 6/6 plans complete
 
 Plans:
 **Wave 1**
-- [ ] 05-01-PLAN.md -- Wave 1: run `Stop` on `agent_before_settle`, so a blocking `Stop` hook continues the run it ended and the run settles once
+- [x] 05-01-PLAN.md -- Wave 1: run `Stop` on `agent_before_settle`, so a blocking `Stop` hook continues the run it ended and the run settles once
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 05-02-PLAN.md -- Wave 2: show one notice for each synchronous hook that fails without blocking
-- [ ] 05-05-PLAN.md -- Wave 2: let a plain `async` hook run until it ends, with no timeout
+- [x] 05-02-PLAN.md -- Wave 2: show one notice for each synchronous hook that fails without blocking
+- [x] 05-05-PLAN.md -- Wave 2: let a plain `async` hook run until it ends, with no timeout
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 05-03-PLAN.md -- Wave 3: keep a missing hook script from blocking, show a `Stop` hook's failure, and show a hook's `stopReason`
-- [ ] 05-04-PLAN.md -- Wave 3: save a hook context string over 10,000 characters to a file and send the model its path and a preview
+- [x] 05-03-PLAN.md -- Wave 3: keep a missing hook script from blocking, show a `Stop` hook's failure, and show a hook's `stopReason`
+- [x] 05-04-PLAN.md -- Wave 3: save a hook context string over 10,000 characters to a file and send the model its path and a preview
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 05-06-PLAN.md -- Wave 4: correct the hook compatibility page, the output catalog, the research notes, and the CHANGELOG, and remove the stale `Stop` canary
+- [x] 05-06-PLAN.md -- Wave 4: correct the hook compatibility page, the output catalog, the research notes, and the CHANGELOG, and remove the stale `Stop` canary
 
 ### Phase 6: Hook Inputs and Events
 
@@ -451,7 +451,7 @@ Plans:
 | 2. Hook Payloads, Matchers, and Stop Limit | 10/10 | Complete    | 2026-11-13 |
 | 3. Background Subagents | 8/8 | Complete    | 2026-11-13 |
 | 4. Skill and Workflow Install Defects | 6/6 | Complete    | 2026-11-14 |
-| 5. Stop Continuation and Hook Failures | 0/0 | Not started | - |
+| 5. Stop Continuation and Hook Failures | 6/6 | Complete    | 2026-11-14 |
 | 6. Hook Inputs and Events | 0/0 | Not started | - |
 | 7. Agent Frontmatter and Grants | 0/0 | Not started | - |
 | 8. Workflow Agents and Run Paths | 0/0 | Not started | - |

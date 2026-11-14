@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: parity-gaps
 milestone_name: Claude Code Parity Gaps and Defects
-current_phase: 5
-current_phase_name: Stop Continuation and Hook Failures
-status: ready_to_execute
-stopped_at: Phase 5 planned (6 plans, 4 waves); execution next
-last_updated: "2026-11-14T11:20:23.169Z"
+current_phase: 6
+current_phase_name: Hook Inputs and Events
+status: ready_to_discuss
+stopped_at: Phase 5 complete; Phase 6 discussion next
+last_updated: "2026-11-14T18:59:18.171Z"
 last_activity: 2026-11-14
-last_activity_desc: Phase 5 planned and checked
-state_head: 759373896586b9025458bad84a6c46f76c5a9bc4
+last_activity_desc: Phase 5 complete, transitioned to Phase 6
+state_head: c7370035f4712e1721e8836b07542b55c76c5d08
 progress:
   total_phases: 11
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 41
-  completed_plans: 35
-  percent: 36
+  completed_plans: 41
+  percent: 45
 ---
 
 # Project State
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-11-13 after parity-gaps Phase 2)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 5 — Stop Continuation and Hook Failures
+**Current focus:** Phase 6 — Hook Inputs and Events
 
 ## Current Position
 
-Phase: 5 — Stop Continuation and Hook Failures
-Plan: 0 of 6 complete
-Status: Ready to execute Phase 5
-Last activity: 2026-11-14 — Phase 5 planned (6 plans, 4 waves), plan check passed after two revisions with two advisories
+Phase: 6 — Hook Inputs and Events
+Plan: 0 (not planned)
+Status: Ready to discuss Phase 6
+Last activity: 2026-11-14 — Phase 5 complete: verification passed with one override, phase gate green at 59e6f5f7
 
-Progress: [████░░░░░░] 36%
+Progress: [█████░░░░░] 45%
 
 
 ### parity-gaps Phase 3 execution
@@ -1132,8 +1132,8 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 ## Session Continuity
 
 Last session: 2026-11-14T08:13:18.875Z
-Stopped at: Phase 5 planned (6 plans, 4 waves); execution next
-Resume file: .planning/phases/05-stop-continuation-and-hook-failures/05-01-PLAN.md
+Stopped at: Phase 5 complete; Phase 6 discussion next
+Resume file: None
 
 ### Phase 2 completion-helper notes
 
