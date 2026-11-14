@@ -611,9 +611,11 @@ async function addDeclaredSkillPaths(
  * gets the listed folders that survive, in place of both the `skills/` folder
  * and the `plugin.json` paths, and no folder is reported unread. When none
  * survives, a listed path refused as a traversal leaves the plugin with no
- * skill path; otherwise the D-CF1-06 rule applies. Every declared path is
- * validated once, so the notes and the returned refusal flag match the
- * D-CF1-06 rule's.
+ * skill path; otherwise the D-CF1-06 rule applies. A listed path refused as a
+ * traversal is dropped and never read: it adds no note and does not mark the
+ * plugin, so the plugin still loads, as upstream loads it. A listed value that
+ * is not a string, and a refused `plugin.json` path, keep the D-CF1-06 note and
+ * mark the plugin. Every declared path is validated once.
  */
 async function collectRootSourceSkillPaths(
   listedRaws: readonly unknown[],
@@ -622,7 +624,13 @@ async function collectRootSourceSkillPaths(
   resolution: ComponentPathResolution,
   statKind: StatKindReader,
 ): Promise<boolean> {
-  const listed = await validateComponentPaths(resolution, "skills", listedRaws, pluginRoot);
+  const listed = await Promise.all(
+    listedRaws.map((raw) => validateComponentPath("skills", raw, pluginRoot)),
+  );
+  const malformedListed = listed.flatMap((validated) =>
+    !validated.ok && validated.cause === "type" ? [validated.reason] : [],
+  );
+  resolution.notes.push(...malformedListed);
   const declared = await validateComponentPaths(
     resolution,
     "skills",
@@ -637,7 +645,7 @@ async function collectRootSourceSkillPaths(
   }
 
   markSupportedWhenCollected(resolution, "skills");
-  return [...listed, ...declared].some((validated) => !validated.ok);
+  return malformedListed.length > 0 || declared.some((validated) => !validated.ok);
 }
 
 async function collectStrictComponentKind(

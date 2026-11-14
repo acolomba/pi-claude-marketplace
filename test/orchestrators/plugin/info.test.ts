@@ -2289,6 +2289,16 @@ function unavailableRootInfo(reason: string, skillsLine: readonly string[]): rea
 
 const ROOT_SKILL_FILES = ["skills/a/SKILL.md", "skills/b/SKILL.md", "skills/c/SKILL.md"];
 
+/**
+ * A refused listed path no longer makes a root-source plugin unavailable
+ * (D-PG4-01), so the lenient listing cases make it unavailable with a
+ * malformed `hooks/hooks.json`.
+ */
+async function breakRootHooks(mpRoot: string): Promise<void> {
+  await mkdir(path.join(mpRoot, "hooks"), { recursive: true });
+  await writeFile(path.join(mpRoot, "hooks", "hooks.json"), "{ not valid json", "utf8");
+}
+
 test("D-PG4-01: the lenient listing of a root-source entry reads the listed paths inside the plugin only, in listed order and once each", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
@@ -2299,6 +2309,7 @@ test("D-PG4-01: the lenient listing of a root-source entry reads the listed path
       ["./skills/c", outsideAbs, "../outside", "skills/c/", "./skills/a"],
       ROOT_SKILL_FILES,
     );
+    await breakRootHooks(mpRoot);
 
     // act
     const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
@@ -2307,7 +2318,7 @@ test("D-PG4-01: the lenient listing of a root-source entry reads the listed path
     assert.deepStrictEqual(calls, ["agents", "commands", "skills/c", "skills/a"]);
     assert.deepStrictEqual(
       messages,
-      unavailableRootInfo("unsupported source", ["    skills: a, c"]),
+      unavailableRootInfo("unsupported hooks", ["    skills: a, c"]),
     );
   });
 });
@@ -2321,6 +2332,7 @@ test("D-PG4-01: the lenient listing of a root-source entry adds the skills folde
       [".", "./skills/c", "../outside"],
       ROOT_SKILL_FILES,
     );
+    await breakRootHooks(mpRoot);
 
     // act
     const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
@@ -2329,7 +2341,9 @@ test("D-PG4-01: the lenient listing of a root-source entry adds the skills folde
     assert.deepStrictEqual(calls, ["agents", "commands", ".", "skills/c", "skills"]);
     assert.deepStrictEqual(
       messages,
-      unavailableRootInfo("unsupported source", ["    skills: .claude-plugin, a, b, c, skills"]),
+      unavailableRootInfo("unsupported hooks", [
+        "    skills: .claude-plugin, a, b, c, hooks, skills",
+      ]),
     );
   });
 });
@@ -2343,6 +2357,7 @@ test("D-PG4-01: the lenient listing of a root-source entry reads a listed skills
       ["./skills/", ".", "../outside"],
       ROOT_SKILL_FILES,
     );
+    await breakRootHooks(mpRoot);
 
     // act
     const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
@@ -2351,7 +2366,9 @@ test("D-PG4-01: the lenient listing of a root-source entry reads a listed skills
     assert.deepStrictEqual(calls, ["agents", "commands", "skills", "."]);
     assert.deepStrictEqual(
       messages,
-      unavailableRootInfo("unsupported source", ["    skills: .claude-plugin, a, b, c, skills"]),
+      unavailableRootInfo("unsupported hooks", [
+        "    skills: .claude-plugin, a, b, c, hooks, skills",
+      ]),
     );
   });
 });
@@ -2365,13 +2382,14 @@ test("D-PG4-01: the lenient listing of a root-source entry lists no skill when e
       ["../outside", path.join(home, "outside-abs")],
       ROOT_SKILL_FILES,
     );
+    await breakRootHooks(mpRoot);
 
     // act
     const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
 
     // assert
     assert.deepStrictEqual(calls, ["agents", "commands"]);
-    assert.deepStrictEqual(messages, unavailableRootInfo("unsupported source", []));
+    assert.deepStrictEqual(messages, unavailableRootInfo("unsupported hooks", []));
   });
 });
 

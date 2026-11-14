@@ -1182,23 +1182,28 @@ describe("collectStrictComponentPaths root-source entries", () => {
       expectedPaths: ["skills/a"],
     },
     {
-      title: "D-PG4-01 no survivor and an escaping listed path collect no skill path",
+      title:
+        "D-PG4-01 no survivor and an escaping listed path collect no skill path and leave the plugin unmarked",
       source: "./",
       entry: { skills: ["../outside", "./skills/missing"] },
       manifestSkills: ["extra"],
       directories: ALL_FOLDERS,
       expectedPaths: [],
-      expectedNotes: ['component path for "skills" escapes plugin root: "../outside"'],
     },
     {
-      title: "D-PG4-01 no survivor and an absolute listed path collect no skill path",
+      title:
+        "D-PG4-01 no survivor and an absolute listed path collect no skill path and leave the plugin unmarked",
       source: "./",
       entry: { skills: ["/outside/skills"] },
       directories: ALL_FOLDERS,
       expectedPaths: [],
-      expectedNotes: [
-        'component path for "skills" must be relative (got absolute "/outside/skills")',
-      ],
+    },
+    {
+      title: "D-PG4-01 an escaping listed path beside a survivor is dropped without a note",
+      source: "./",
+      entry: { skills: ["../outside", "./skills/a", "/outside/skills"] },
+      directories: ALL_FOLDERS,
+      expectedPaths: ["skills/a"],
     },
     {
       title: "D-PG4-01 no survivor and no traversal apply the D-CF1-06 rule",
@@ -1343,13 +1348,10 @@ describe("collectStrictComponentPaths root-source entries", () => {
     assert.deepStrictEqual(
       { dirty, resolution, statted },
       {
-        dirty: true,
+        dirty: false,
         resolution: {
           supported: ["skills"],
-          notes: [
-            'component path for "skills" escapes plugin root: "../outside"',
-            'component path for "skills" must be relative (got absolute "/outside/skills")',
-          ],
+          notes: [],
           componentPaths: { skills: ["skills/a"], commands: [], agents: [], workflows: [] },
         },
         statted: [
