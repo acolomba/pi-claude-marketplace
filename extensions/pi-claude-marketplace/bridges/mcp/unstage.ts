@@ -41,9 +41,10 @@
 //     structure is none of the unstage path's business.
 //
 // Refusals (typed `McpConfigFileError`, no write to either file): invalid
-// JSONC, and a present server key whose value is not an object. When the
-// user-visible file is broken, unstage surfaces the breakage rather than mask
-// it (AFILE-02).
+// JSONC, a present server key whose value is not an object, and an entry of
+// the plugin whose marker holds a malformed member. When the user-visible
+// file is broken, unstage surfaces the breakage rather than mask it
+// (AFILE-02).
 
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import {
@@ -55,6 +56,7 @@ import {
 import {
   ADAPTER_SERVER_KEYS,
   PI_MCP_SERVER_KEYS,
+  assertOwnedMarkersReadable,
   partitionServers,
   readMcpConfigDoc,
   restoredOverrideNames,
@@ -98,6 +100,7 @@ async function readUnstageTarget(
     throw err;
   }
 
+  assertOwnedMarkersReadable(config, filePath, pluginName, marketplaceName);
   // `ours` lists the selected key's entries first, each map in file order.
   const ownedNames = Object.keys(partitionServers(config, pluginName, marketplaceName).ours);
   return ownedNames.length === 0 ? undefined : { file, filePath, config, ownedNames };

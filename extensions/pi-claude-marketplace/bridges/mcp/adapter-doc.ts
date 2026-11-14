@@ -30,6 +30,7 @@ import { ownValue } from "../../shared/own-key.ts";
 import { restoredOverride, userCarriedFields } from "./adapter-entry.ts";
 import {
   CLAUDE_MARKETPLACE_MARKER_KEY,
+  hasMalformedMarkerMember,
   isOwnedBy,
   isPlainObject,
   keptOverrideOf,
@@ -232,6 +233,27 @@ function ownedServers(
   }
 
   return ours;
+}
+
+/**
+ * Refuses a file in which an entry of the `(pluginName, marketplaceName)`
+ * pair holds a marker member of another shape than this extension writes, as
+ * an unreadable file is refused (AFILE-02): corrupt data stops the command and
+ * the file keeps its bytes. Another plugin's entries do not refuse it.
+ */
+export function assertOwnedMarkersReadable(
+  config: McpConfigDoc,
+  filePath: string,
+  pluginName: string,
+  marketplaceName: string,
+): void {
+  for (const servers of config.serverMaps.values()) {
+    for (const entry of Object.values(servers)) {
+      if (isOwnedBy(entry, pluginName, marketplaceName) && hasMalformedMarkerMember(entry)) {
+        throw new McpConfigFileError(filePath, "marker-not-valid");
+      }
+    }
+  }
 }
 
 /** The restorable override of each of the plugin's entries under the selected key. */

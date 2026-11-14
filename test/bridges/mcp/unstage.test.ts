@@ -270,6 +270,40 @@ test("rethrows an ordinary document read failure unchanged", async (t) => {
   );
 });
 
+test("D-PG9-03: rejects a file whose entry of the plugin holds a malformed marker member", async (t) => {
+  // arrange
+  const { locations } = await createScope(t, "mcp-unstage-malformed-marker-");
+  const storedBytes = `${JSON.stringify({
+    mcpServers: {
+      plugin_acme_server_: {
+        command: "plugin-command",
+        _piClaudeMarketplace: { plugin: "acme", marketplace: "official", pluginSetFields: "x" },
+      },
+    },
+  })}\n`;
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, storedBytes, "utf8");
+
+  // act & assert
+  await assert.rejects(
+    () =>
+      unstageMcpServers({
+        locations,
+        marketplaceName: "official",
+        pluginName: "acme",
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof McpConfigFileError);
+      assert.deepStrictEqual(
+        { filePath: error.filePath, defect: error.defect, cause: error.cause },
+        { filePath: locations.mcpAdapterJsonPath, defect: "marker-not-valid", cause: undefined },
+      );
+      return true;
+    },
+  );
+  assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), storedBytes);
+});
+
 test("AFILE-02: rejects invalid JSONC with a typed error and no cause", async (t) => {
   // arrange
   const { locations } = await createScope(t, "mcp-unstage-malformed-");

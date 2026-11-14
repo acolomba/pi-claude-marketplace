@@ -482,6 +482,90 @@ describe("prepareStageMcpServers", () => {
     });
   }
 
+  test("D-PG9-03: an MCP install over the plugin's entry with a malformed marker member rejects and keeps the bytes", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-marker-refusal-");
+    const storedBytes = `${JSON.stringify({
+      mcpServers: {
+        plugin_acme_server_: {
+          command: "plugin-command",
+          lifecycle: "lazy-keep-alive",
+          _piClaudeMarketplace: {
+            plugin: "acme",
+            marketplace: "catalog",
+            defaultFields: { lifecycle: ["lazy-keep-alive"] },
+          },
+        },
+      },
+    })}\n`;
+    await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+    await writeFile(locations.mcpAdapterJsonPath, storedBytes, "utf8");
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        prepareStageMcpServers({
+          locations,
+          cwd,
+          marketplaceName: "catalog",
+          pluginName: "acme",
+          pluginRoot: path.join(cwd, "plugins", "acme"),
+          pluginData: path.join(cwd, "data", "acme"),
+          env: {},
+          servers: { server: { type: "http", url: "https://mcp.example.test" } },
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof McpConfigFileError);
+        assert.deepStrictEqual(
+          { filePath: error.filePath, defect: error.defect, cause: error.cause },
+          { filePath: locations.mcpAdapterJsonPath, defect: "marker-not-valid", cause: undefined },
+        );
+        return true;
+      },
+    );
+    assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), storedBytes);
+  });
+
+  test("D-PG9-03: an empty staged set over the plugin's entry with a malformed marker member reports the file left unchanged", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-marker-noop-");
+    const storedBytes = `${JSON.stringify({
+      mcpServers: {
+        plugin_acme_server_: {
+          command: "plugin-command",
+          _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog", keptOverride: [] },
+        },
+      },
+    })}\n`;
+    await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+    await writeFile(locations.mcpAdapterJsonPath, storedBytes, "utf8");
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      env: {},
+      servers: {},
+    });
+    await commitPreparedMcp(prepared);
+
+    // assert
+    assert.deepStrictEqual(prepared, {
+      kind: "noop",
+      result: {
+        stagedNames: [],
+        recorded: [],
+        warnings: [],
+        notices: [{ kind: "left-unchanged", scope: "project", file: "mcp-adapter.json" }],
+      },
+    });
+    assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), storedBytes);
+  });
+
   test("AFILE-02: an empty staged set over an unparseable file is a noop that reports it left unchanged", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-unparseable-noop-");

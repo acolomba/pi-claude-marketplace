@@ -135,6 +135,7 @@ const MCP_CONFIG_DEFECT_TEXT: Readonly<Record<McpConfigFileError["defect"], stri
   "top-level-not-object": "does not hold a JSON object",
   "mcpServers-not-object": 'has an "mcpServers" value that is not an object',
   "mcp-servers-not-object": 'has an "mcp-servers" value that is not an object',
+  "marker-not-valid": 'has a plugin entry whose "_piClaudeMarketplace" marker is not valid',
 };
 
 /**
@@ -148,7 +149,11 @@ const MCP_CONFIG_DEFECT_TEXT: Readonly<Record<McpConfigFileError["defect"], stri
 export class McpConfigFileError extends Error {
   readonly filePath: string;
   readonly defect:
-    "invalid-jsonc" | "top-level-not-object" | "mcpServers-not-object" | "mcp-servers-not-object";
+    | "invalid-jsonc"
+    | "top-level-not-object"
+    | "mcpServers-not-object"
+    | "mcp-servers-not-object"
+    | "marker-not-valid";
 
   constructor(filePath: string, defect: McpConfigFileError["defect"]) {
     super(`MCP config ${filePath} ${MCP_CONFIG_DEFECT_TEXT[defect]}; it was left unchanged.`);

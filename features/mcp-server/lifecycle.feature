@@ -502,7 +502,7 @@ Feature: MCP server lifecycle
       """
 
   @adapter-only
-  Scenario: A recorded default list with one malformed member still lets an update to a remote server drop the stdio defaults (PG-MCP-06, D-PG9-03)
+  Scenario: An update refuses a plugin server whose recorded default list holds a malformed member and leaves the file unchanged (PG-MCP-06, D-PG9-03)
     Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
       """
       {"mcpServers":{"srv":{"command":"pi-features-absent-mcp-server"}}}
@@ -510,7 +510,7 @@ Feature: MCP server lifecycle
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the user scope:
       """
-      {"_piClaudeMarketplace":{"plugin":"demo","marketplace":"fixtures","defaultFields":{"requestTimeoutMs":1800000,"lifecycle":"lazy-keep-alive","openUi":null}}}
+      {"_piClaudeMarketplace":{"plugin":"demo","marketplace":"fixtures","defaultFields":{"requestTimeoutMs":1800000,"lifecycle":["lazy-keep-alive"]}}}
       """
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -519,21 +519,37 @@ Feature: MCP server lifecycle
       """
       {"mcpServers":{"srv":{"type":"http","url":"https://example.invalid/mcp"}}}
       """
-    When the user has run "/claude:plugin update demo@fixtures --scope user", which did not fail
+    When the user runs "/claude:plugin update demo@fixtures --scope user"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons    | scope | from  | version | cause chain | cause truncated | leaks | rollback partial |
+      | fixtures         | user              | demo@fixtures | demo | failed | unreadable manifest | user  | 1.0.0 | 1.1.0   | MCP config {agent dir}/mcp-adapter.json has a plugin entry whose "_piClaudeMarketplace" marker is not valid; it was left unchanged. | false           |       |                  |
     Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
       """
       {
         "mcpServers": {
           "plugin_demo_srv_": {
-            "url": "https://example.invalid/mcp",
+            "command": "pi-features-absent-mcp-server",
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
             "directTools": "search",
             "toolPrefix": "mcp",
-            "requestTimeoutMs": 300000,
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
             "_piClaudeMarketplace": {
               "plugin": "demo",
               "marketplace": "fixtures",
               "defaultFields": {
-                "requestTimeoutMs": 300000
+                "requestTimeoutMs": 1800000,
+                "lifecycle": [
+                  "lazy-keep-alive"
+                ]
               }
             }
           }

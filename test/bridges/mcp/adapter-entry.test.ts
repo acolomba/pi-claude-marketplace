@@ -942,36 +942,6 @@ describe("stampServers", () => {
     });
   });
 
-  test("D-PG9-03: a malformed recorded default leaves the other recorded defaults computed again", () => {
-    // arrange
-    const previous = {
-      command: "old-command",
-      ...STDIO_DEFAULT,
-      _piClaudeMarketplace: { ...MARKER, defaultFields: { ...STDIO_DEFAULT, openUi: null } },
-    };
-
-    // act
-    const stamping = stampServers({
-      servers: { server: { command: "plugin-command" } },
-      pluginName: "acme",
-      marketplaceName: "catalog",
-      substitution: PROJECT_CONTEXT,
-      previous: { server: previous },
-      keptOverrides: {},
-    });
-
-    // assert
-    assert.deepStrictEqual(stamping.stamped, {
-      server: {
-        command: "plugin-command",
-        env: INJECTED_ENV,
-        ...OWNED,
-        ...STDIO_DEFAULT,
-        _piClaudeMarketplace: STDIO_MARKER,
-      },
-    });
-  });
-
   test("D-PG9-03: a recorded default of another type than the entry value leaves the value the user's", () => {
     // arrange
     const previous = {

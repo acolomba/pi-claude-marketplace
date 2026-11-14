@@ -67,67 +67,80 @@ function isDefaultRecord(
 }
 
 /**
- * The scalar members of a `defaultFields` object, or none when it is not a
- * plain object. A member of another type is left out on its own, so it never
- * turns the other recorded defaults into the user's values (D-PG9-03).
- */
-function defaultRecordOf(
-  value: unknown,
-): Readonly<Record<string, AdapterEntryDefaultValue>> | undefined {
-  if (isDefaultRecord(value)) {
-    return value;
-  }
-
-  return isPlainObject(value)
-    ? Object.fromEntries(
-        Object.entries(value).filter((member): member is [string, AdapterEntryDefaultValue] =>
-          isDefaultValue(member[1]),
-        ),
-      )
-    : undefined;
-}
-
-/**
  * Returns the parsed marker subobject if `value` is an object with a
  * well-formed `_piClaudeMarketplace: { plugin: string; marketplace: string }`
  * entry; otherwise null. Arrays, primitives, and partial shapes yield null; it
  * never throws. `pluginSetFields` is returned only when it is an
- * own array of strings, `defaultFields` only when it is an own plain object,
- * with only its number, string, and boolean members (D-PG9-03), and
+ * own array of strings, `defaultFields` only when it is an own plain object
+ * whose every value is a number, a string, or a boolean (D-PG9-03), and
  * `keptOverride` only when it is an own plain-object member; any other value
- * parses as a marker without that member.
+ * parses as a marker without that member, and `hasMalformedMarkerMember`
+ * names such a marker.
  */
 function readMarker(value: unknown): ClaudeMarketplaceMarker | null {
-  if (!isPlainObject(value) || !Object.hasOwn(value, CLAUDE_MARKETPLACE_MARKER_KEY)) {
+  const obj = markerObjectOf(value);
+  if (obj === undefined) {
     return null;
   }
 
-  const obj = value[CLAUDE_MARKETPLACE_MARKER_KEY];
-  if (!isPlainObject(obj)) {
-    return null;
-  }
-
-  if (
-    !Object.hasOwn(obj, "plugin") ||
-    !Object.hasOwn(obj, "marketplace") ||
-    typeof obj.plugin !== "string" ||
-    typeof obj.marketplace !== "string"
-  ) {
-    return null;
-  }
-
-  const pluginSetFields = Object.hasOwn(obj, "pluginSetFields") ? obj.pluginSetFields : undefined;
-  const defaultFields = defaultRecordOf(
-    Object.hasOwn(obj, "defaultFields") ? obj.defaultFields : undefined,
-  );
-  const keptOverride = Object.hasOwn(obj, "keptOverride") ? obj.keptOverride : undefined;
+  const pluginSetFields = ownMember(obj, "pluginSetFields");
+  const defaultFields = ownMember(obj, "defaultFields");
+  const keptOverride = ownMember(obj, "keptOverride");
   return {
     plugin: obj.plugin,
     marketplace: obj.marketplace,
     ...(isStringArray(pluginSetFields) ? { pluginSetFields } : {}),
-    ...(defaultFields === undefined ? {} : { defaultFields }),
+    ...(isDefaultRecord(defaultFields) ? { defaultFields } : {}),
     ...(isPlainObject(keptOverride) ? { keptOverride } : {}),
   };
+}
+
+/** A marker object that names a string plugin and marketplace. */
+interface MarkerObject extends Readonly<Record<string, unknown>> {
+  readonly plugin: string;
+  readonly marketplace: string;
+}
+
+function isMarkerObject(value: unknown): value is MarkerObject {
+  return (
+    isPlainObject(value) &&
+    Object.hasOwn(value, "plugin") &&
+    Object.hasOwn(value, "marketplace") &&
+    typeof value.plugin === "string" &&
+    typeof value.marketplace === "string"
+  );
+}
+
+/** The marker object of `value`, when it names its owner. */
+function markerObjectOf(value: unknown): MarkerObject | undefined {
+  if (!isPlainObject(value) || !Object.hasOwn(value, CLAUDE_MARKETPLACE_MARKER_KEY)) {
+    return undefined;
+  }
+
+  const obj = value[CLAUDE_MARKETPLACE_MARKER_KEY];
+  return isMarkerObject(obj) ? obj : undefined;
+}
+
+function ownMember(obj: Readonly<Record<string, unknown>>, key: string): unknown {
+  return Object.hasOwn(obj, key) ? obj[key] : undefined;
+}
+
+/**
+ * Whether `value`'s marker names its owner but holds a `pluginSetFields`,
+ * `defaultFields`, or `keptOverride` member of another shape than this
+ * extension writes. Only a hand edit or corruption leaves one. Reading past
+ * it would take the plugin's values or the recorded defaults for the user's,
+ * or lose the user's override, for good, so a stage or an unstage refuses
+ * the file instead.
+ */
+export function hasMalformedMarkerMember(value: unknown): boolean {
+  const obj = markerObjectOf(value);
+  return (
+    obj !== undefined &&
+    ((Object.hasOwn(obj, "pluginSetFields") && !isStringArray(obj.pluginSetFields)) ||
+      (Object.hasOwn(obj, "defaultFields") && !isDefaultRecord(obj.defaultFields)) ||
+      (Object.hasOwn(obj, "keptOverride") && !isPlainObject(obj.keptOverride)))
+  );
 }
 
 /**

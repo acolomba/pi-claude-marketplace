@@ -474,6 +474,11 @@ describe("McpConfigFileError", () => {
       message:
         'MCP config /scope/mcp-adapter.json has an "mcp-servers" value that is not an object; it was left unchanged.',
     },
+    {
+      defect: "marker-not-valid",
+      message:
+        'MCP config /scope/mcp-adapter.json has a plugin entry whose "_piClaudeMarketplace" marker is not valid; it was left unchanged.',
+    },
   ] as const) {
     test(`AFILE-02: names the file and the ${defect} defect without a cause`, () => {
       // arrange

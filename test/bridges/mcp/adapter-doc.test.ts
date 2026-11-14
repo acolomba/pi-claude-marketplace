@@ -8,6 +8,7 @@ import stripJsonComments from "strip-json-comments";
 
 import {
   ADAPTER_SERVER_KEYS,
+  assertOwnedMarkersReadable,
   isFullDefinition,
   partitionServers,
   readMcpConfigDoc,
@@ -481,6 +482,54 @@ describe("partitionServers", () => {
         scalar: 5,
       },
       keptOverrides: {},
+    });
+  });
+});
+
+describe("assertOwnedMarkersReadable", () => {
+  test("D-PG9-03: refuses a file in which the plugin's entry under either server key holds a malformed marker member", () => {
+    // arrange
+    const config = configOf({
+      mcpServers: { srv: { command: "plugin-command", _piClaudeMarketplace: ACME_MARKER } },
+      "mcp-servers": {
+        old: {
+          command: "plugin-command",
+          _piClaudeMarketplace: { ...ACME_MARKER, defaultFields: { lifecycle: ["eager"] } },
+        },
+      },
+    });
+
+    // act & assert
+    assert.throws(
+      () => {
+        assertOwnedMarkersReadable(config, "/scope/mcp-adapter.json", "acme", "catalog");
+      },
+      (error: unknown) => {
+        assert.ok(error instanceof McpConfigFileError);
+        assert.deepStrictEqual(
+          { filePath: error.filePath, defect: error.defect },
+          { filePath: "/scope/mcp-adapter.json", defect: "marker-not-valid" },
+        );
+        return true;
+      },
+    );
+  });
+
+  test("D-PG9-03: accepts a file in which only another plugin's entry holds a malformed marker member", () => {
+    // arrange
+    const config = configOf({
+      mcpServers: {
+        srv: { command: "plugin-command", _piClaudeMarketplace: ACME_MARKER },
+        other: {
+          command: "other-command",
+          _piClaudeMarketplace: { ...OTHER_MARKER, keptOverride: [] },
+        },
+      },
+    });
+
+    // act & assert
+    assert.doesNotThrow(() => {
+      assertOwnedMarkersReadable(config, "/scope/mcp-adapter.json", "acme", "catalog");
     });
   });
 });

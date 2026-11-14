@@ -56,6 +56,7 @@ import { hygieneWarning } from "../../shared/staging-warnings.ts";
 
 import {
   ADAPTER_SERVER_KEYS,
+  assertOwnedMarkersReadable,
   partitionServers,
   readMcpConfigDoc,
   restoredOverrideNames,
@@ -404,14 +405,18 @@ function noopStaging(notices: readonly McpConfigNotice[]): PreparedMcpStaging {
 /**
  * Reads the target config. With nothing to stage, an unreadable file comes
  * back as its refusal so prepare can leave the file alone and report it; a
- * plugin with servers refuses (AFILE-02).
+ * plugin with servers refuses (AFILE-02). A file in which one of the plugin's
+ * entries holds a malformed marker member is unreadable too.
  */
 async function readTargetConfig(
   filePath: string,
   hasServers: boolean,
+  owner: { readonly pluginName: string; readonly marketplaceName: string },
 ): Promise<McpConfigDoc | McpConfigFileError> {
   try {
-    return await readMcpConfigDoc(filePath, ADAPTER_SERVER_KEYS);
+    const config = await readMcpConfigDoc(filePath, ADAPTER_SERVER_KEYS);
+    assertOwnedMarkersReadable(config, filePath, owner.pluginName, owner.marketplaceName);
+    return config;
   } catch (err) {
     if (err instanceof McpConfigFileError && !hasServers) {
       return err;
@@ -472,7 +477,10 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   const keyed = keyedServers(pluginName, servers);
   const newKeys = Object.keys(keyed);
 
-  const config = await readTargetConfig(locations.mcpAdapterJsonPath, newKeys.length > 0);
+  const config = await readTargetConfig(locations.mcpAdapterJsonPath, newKeys.length > 0, {
+    pluginName,
+    marketplaceName,
+  });
   if (config instanceof McpConfigFileError) {
     // AS-8 / AFILE-02: nothing is written, so the unreadable file keeps its
     // bytes, and the orchestrator tells the user it was left unchanged.

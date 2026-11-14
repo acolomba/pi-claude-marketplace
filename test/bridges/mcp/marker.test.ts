@@ -5,6 +5,7 @@ import {
   CLAUDE_MARKETPLACE_MARKER_KEY,
   buildMarker,
   defaultFieldsOf,
+  hasMalformedMarkerMember,
   isOwnedBy,
   keptOverrideOf,
   markerOwnerOf,
@@ -186,33 +187,19 @@ describe("defaultFieldsOf", () => {
     });
   }
 
-  for (const { description, defaultFields, expected } of [
-    {
-      description: "a null value",
-      defaultFields: { requestTimeoutMs: 1800000, openUi: null },
-      expected: { requestTimeoutMs: 1800000 },
-    },
+  for (const { description, defaultFields } of [
+    { description: "a null value", defaultFields: { requestTimeoutMs: 1800000, openUi: null } },
     {
       description: "an object value",
       defaultFields: { requestTimeoutMs: 1800000, lifecycle: { mode: "lazy" } },
-      expected: { requestTimeoutMs: 1800000 },
     },
-    {
-      description: "an array value",
-      defaultFields: { requestTimeoutMs: [1800000], lifecycle: "lazy-keep-alive" },
-      expected: { lifecycle: "lazy-keep-alive" },
-    },
+    { description: "an array value", defaultFields: { requestTimeoutMs: [1800000] } },
     {
       description: "an own __proto__ key holding an object",
       defaultFields: JSON.parse('{"__proto__":{"requestTimeoutMs":1800000}}') as unknown,
-      expected: {},
     },
-  ] satisfies ReadonlyArray<{
-    description: string;
-    defaultFields: unknown;
-    expected: Record<string, unknown>;
-  }>) {
-    test(`D-PG9-03: keeps only the scalar defaults beside a member holding ${description}`, () => {
+  ] satisfies ReadonlyArray<{ description: string; defaultFields: unknown }>) {
+    test(`D-PG9-03: returns no defaults for a member holding ${description}`, () => {
       // arrange
       const entry = {
         _piClaudeMarketplace: { plugin: "search-tools", marketplace: "official", defaultFields },
@@ -222,10 +209,7 @@ describe("defaultFieldsOf", () => {
       const defaults = defaultFieldsOf(entry);
 
       // assert
-      assert.deepStrictEqual(
-        { defaults, prototype: Object.getPrototypeOf(defaults) as unknown },
-        { defaults: expected, prototype: Object.prototype },
-      );
+      assert.deepStrictEqual(defaults, {});
     });
   }
 
@@ -426,6 +410,68 @@ describe("keptOverrideOf", () => {
 
       // assert
       assert.strictEqual(override, undefined);
+    });
+  }
+});
+
+describe("hasMalformedMarkerMember", () => {
+  for (const { description, members } of [
+    {
+      description: "a pluginSetFields that is not an array",
+      members: { pluginSetFields: "tasks" },
+    },
+    { description: "a pluginSetFields with a number", members: { pluginSetFields: ["tasks", 1] } },
+    { description: "a defaultFields that is an array", members: { defaultFields: [] } },
+    {
+      description: "a defaultFields member that is an array",
+      members: { defaultFields: { requestTimeoutMs: 1800000, lifecycle: ["lazy-keep-alive"] } },
+    },
+    { description: "a keptOverride that is null", members: { keptOverride: null } },
+  ] satisfies ReadonlyArray<{ description: string; members: Record<string, unknown> }>) {
+    test(`D-PG9-03: names a marker with ${description}`, () => {
+      // arrange
+      const entry = {
+        command: "plugin-command",
+        _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog", ...members },
+      };
+
+      // act
+      const malformed = hasMalformedMarkerMember(entry);
+
+      // assert
+      assert.strictEqual(malformed, true);
+    });
+  }
+
+  for (const { description, entry } of [
+    {
+      description: "a marker whose members this extension writes",
+      entry: {
+        _piClaudeMarketplace: {
+          plugin: "acme",
+          marketplace: "catalog",
+          pluginSetFields: ["requestTimeoutMs"],
+          defaultFields: { lifecycle: "lazy-keep-alive" },
+          keptOverride: { disabled: true },
+        },
+      },
+    },
+    {
+      description: "a marker with no member past its owner",
+      entry: { _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" } },
+    },
+    {
+      description: "a marker that names no owner",
+      entry: { _piClaudeMarketplace: { plugin: 1, marketplace: "catalog", defaultFields: [] } },
+    },
+    { description: "an entry with no marker", entry: { command: "plugin-command" } },
+  ] satisfies ReadonlyArray<{ description: string; entry: unknown }>) {
+    test(`D-PG9-03: does not name ${description}`, () => {
+      // act
+      const malformed = hasMalformedMarkerMember(entry);
+
+      // assert
+      assert.strictEqual(malformed, false);
     });
   }
 });
