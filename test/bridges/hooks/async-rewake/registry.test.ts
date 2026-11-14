@@ -2043,6 +2043,73 @@ test(
 );
 
 test(
+  "signals no child hook that ended before its journal write failed",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-ended-unrecorded-"));
+    const loc = locationsFor("project", root);
+    const runtime = createHooksRuntime();
+    const child = createChild(29_172);
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = "1";
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await rm(root, { recursive: true, force: true });
+    });
+    const key = createHash("sha256")
+      .update(JSON.stringify([process.pid, "ended-session", "ended-dispatch"]))
+      .digest("hex");
+    const journalPath = path.join(loc.dataRoot, "_shared", "async-rewake-children", `${key}.json`);
+    // A directory at the journal path makes the hook's journal write fail.
+    await mkdir(journalPath, { recursive: true });
+    let openQueue!: () => void;
+    const queueHeld = runtime.runPidTableOperation(
+      journalPath,
+      () =>
+        new Promise<void>((resolve) => {
+          openQueue = resolve;
+        }),
+    );
+    let reportSpawn!: () => void;
+    const spawned = new Promise<void>((resolve) => {
+      reportSpawn = resolve;
+    });
+    const baseSpawn = createSpawn(child.child, []);
+    const spawnImpl = ((command: string, args: readonly string[], options: SpawnOptions) => {
+      reportSpawn();
+      return baseSpawn(command, args, options);
+    }) as NonNullable<SpawnDeps["spawnImpl"]>;
+    const registration = spawnAndRegister(
+      runtime,
+      createEntry(root),
+      {},
+      createContext(root, "ended-session", true).context,
+      createPi().pi,
+      loc,
+      { spawnImpl, dispatchId: () => "ended-dispatch" },
+    );
+    await spawned;
+
+    // act
+    child.emitError(new Error("case-owned early end"));
+    openQueue();
+    await Promise.all([queueHeld, registration]);
+
+    // assert
+    assert.deepStrictEqual(child.signals, []);
+    assert.deepStrictEqual(runtime.pidTableEntries(loc), []);
+  },
+);
+
+test(
   "rejects a journal over one MiB without losing its previously recorded hooks",
   { concurrency: false },
   async (t) => {
@@ -2805,6 +2872,70 @@ test("spawns an async-rewake hook with Claude's path variables filled in", async
     await rm(root, { recursive: true, force: true, maxRetries: 3 });
   }
 });
+
+test(
+  "keeps a main-session hook running when its PID table write fails",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const root = await mkdtemp(path.join(tmpdir(), "async-registry-table-failure-"));
+    const child = createChild(29_171);
+    const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    t.after(async () => {
+      if (previousDebug === undefined) {
+        delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+      } else {
+        process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
+      }
+
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await rm(root, { recursive: true, force: true, maxRetries: 3 });
+    });
+    process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+    delete process.env.PI_SUBAGENT_CHILD;
+    const diagnostics: string[] = [];
+    t.mock.method(console, "error", (...parts: unknown[]) => {
+      diagnostics.push(parts.map(String).join(" "));
+    });
+    const locations = locationsFor("project", root);
+
+    // act
+    await spawnAndRegister(
+      runtime,
+      createEntry(root),
+      {},
+      createContext(root, "table-failure-session", true).context,
+      createPi().pi,
+      locations,
+      {
+        spawnImpl: createSpawn(child.child, []),
+        dispatchId: () => "table-failure-dispatch",
+        pidTableWriter: () => Promise.reject(new Error("pid table unavailable")),
+      },
+    );
+
+    // assert
+    assert.deepStrictEqual(child.signals, []);
+    assert.deepStrictEqual(
+      runtime.pidTableEntries(locations).map((row) => row.dispatchId),
+      ["table-failure-dispatch"],
+    );
+    assert.strictEqual(diagnostics.length, 1);
+    assert.match(
+      diagnostics[0] ?? "",
+      /async-rewake: pid table persistence failed \(plugin-lifecycle\/PreToolUse\): pid table unavailable/,
+    );
+  },
+);
 
 test("contains a synchronous spawn failure with semantic diagnostics", async (t) => {
   // arrange

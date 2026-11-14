@@ -415,16 +415,40 @@ export async function spawnAndRegister(
     // a recoverable record. Fire-and-forget at the body's tail -- the
     // sync spawn + register has already completed; awaiting here only
     // bounds the resolve latency on the I/O.
-    try {
-      await persistPidTableForLoc(runtime, loc, persistenceOwner, pidTableWriter);
-    } catch (error: unknown) {
-      stopUnrecordedChild(runtime, dispatchId);
-      hookDebugLog(`async-rewake: child journal persistence failed: ${errorMessage(error)}`);
-    }
+    await persistSpawnedChild(runtime, entry, loc, dispatchId, persistenceOwner, pidTableWriter);
   } catch (err) {
     hookDebugLog(
       `async-rewake: spawnAndRegister threw (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
     );
+  }
+}
+
+/**
+ * Records a spawned hook in its table. A child session stops a hook its
+ * journal could not record, so no background process of a child runs
+ * unrecorded. A main session keeps the hook running, as before child journals
+ * existed, and its next table write records the hook again.
+ */
+async function persistSpawnedChild(
+  runtime: HooksRuntime,
+  entry: RoutingEntry,
+  loc: ScopedLocations,
+  dispatchId: string,
+  persistenceOwner: ChildJournalOwner | undefined,
+  pidTableWriter: typeof writePidTable,
+): Promise<void> {
+  try {
+    await persistPidTableForLoc(runtime, loc, persistenceOwner, pidTableWriter);
+  } catch (error: unknown) {
+    if (persistenceOwner === undefined) {
+      hookDebugLog(
+        `async-rewake: pid table persistence failed (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(error)}`,
+      );
+      return;
+    }
+
+    stopUnrecordedChild(runtime, dispatchId);
+    hookDebugLog(`async-rewake: child journal persistence failed: ${errorMessage(error)}`);
   }
 }
 
