@@ -1,10 +1,10 @@
 ---
 phase: 05-stop-continuation-and-hook-failures
-fixed_at: 2026-11-14T17:54:25Z
+fixed_at: 2026-11-14T18:34:14Z
 review_path: .planning/phases/05-stop-continuation-and-hook-failures/05-REVIEW.md
-iteration: 2
-findings_in_scope: 8
-fixed: 8
+iteration: 3
+findings_in_scope: 5
+fixed: 5
 skipped: 0
 status: all_fixed
 ---
@@ -270,3 +270,90 @@ Every fix has a negative control. For code, the changed source was reverted or b
 _Fixed: 2026-11-14T17:54:25Z_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 2_
+
+## Iteration 3
+
+**Fixed at:** 2026-11-14T18:34:14Z
+**Source review:** .planning/phases/05-stop-continuation-and-hook-failures/05-REVIEW.md (iteration 3, committed in 69858bdd)
+**Iteration:** 3
+
+**Summary:**
+
+- Findings in scope: 5 (WR3-01, IN3-01 to IN3-04; the orchestrator named the scope)
+- Fixed: 5
+- Skipped: 0
+
+This is the last fix pass: the review cap is reached. The run was autonomous. Every decision below is **pending maintainer review**.
+
+### Where verification ran
+
+Every check ran in the main checkout `/home/acolomba/src/pi-claude-marketplace-gaps` on `features/gaps`, with no worktree, as the orchestrator instructed, so the results can be reproduced from that tree. Node v26.13.1. Each unit test ran under `test/platform/isolated-pi-home.ts`, and each scenario in the cucumber sandbox. No check read or wrote the real `~/.pi/agent`. The checks were: `tsc --noEmit`, ESLint on every changed `.ts` file, direct coverage at 100% for the `stream-text` pair, the owner tests of each fix and of its callers (`test/bridges/hooks/**` and `test/index.test.ts`, 1,815 tests, all pass at the end), the scenarios of `features/hook/tool-use.feature` and `features/hook/messages.feature` under the `adapter` profile (76 pass), `npm run check:features`, and the commit hook's `npm run check:commit` on each commit. The changed scenario carries no MCP tag, so the `builtin` profile was not run for it. The full `npm run check` was not run, as instructed.
+
+Every fix to code or to a scenario has a negative control: the changed source was reverted or broken on purpose, the new cases or the scenario failed, and the change was restored.
+
+### Fixed Issues
+
+#### WR3-01: The plain lane's head-and-tail join added a line break that the hook never printed
+
+**Files modified:** `extensions/pi-claude-marketplace/bridges/hooks/stream-text.ts`, `test/bridges/hooks/stream-text.test.ts`, `test/bridges/hooks/async-rewake/registry.test.ts`, `docs/hooks-compatibility.md`
+**Commit:** 6dfe148f
+**Status:** fixed: requires human verification (a logic change)
+**Applied fix:**
+
+- The collector tracks `dropped`, which is set the first time `lastUnits` really discards units. `onLimit` runs at that moment, not at the cut, so the plain lane's debug line no longer says that units were dropped when the tail held them all. A bound with no tail drops at the cut, as before.
+- While nothing is dropped, `text()` returns `head + tail`, which is the exact stream. Once units are dropped, it discards the tail up to and including its first `"\n"`, then joins the rest to the head with `"\n"`. A tail with no line break gives the head alone.
+- `lastUnits` lost its low-surrogate step. A tail start that splits a pair always lies in the tail's first line, which the text now never keeps, so the step could not change any text. Its case ("starts its kept end after a character that the tail would split in half") could no longer fail and is replaced.
+- Unit cases: the case at the old line 135 now expects `"abcdef"` and no `onLimit` call. New cases: the probe's straddling answer line (`limit: 19, tail: 1000`) comes back exactly; a tail that starts at the `{` of `x {"a":1}` loses that fragment and keeps `{"ok":1}`; a tail with no line break keeps nothing; and the head-and-tail case across chunks now has line breaks and expects `"abc\nij"`.
+- Registry cases: an answer line that the 8,388,608-unit cut splits, inside the tail window, reaches the model. A tail that starts at the `{` of a `note {"systemMessage":"wrong"}` line sends the real last-line answer, not `wrong`. The case "drops the rest" now writes past the limit plus the tail, so it still drops. The last-line progress case now passes the limit plus the tail.
+- Negative control: with `stream-text.ts` from HEAD, all five changed or new stream-text cases failed, and both new registry cases were cancelled at a 10 s test timeout, because the expected messages never arrived.
+- The page's `async` row says that the first line of the kept end is dropped once anything is dropped.
+
+#### IN3-01: The `2 ** 28` ceiling was above V8's longest string on 32-bit hosts
+
+**Files modified:** `extensions/pi-claude-marketplace/bridges/hooks/stream-text.ts`, `test/bridges/hooks/stream-text.test.ts`
+**Commit:** d21182cc
+**Applied fix:**
+
+- `ceilingBound(stream, hook, maxStringLength = constants.MAX_STRING_LENGTH)` keeps `Math.min(2 ** 28, maxStringLength - 2 ** 20)` units. On a 64-bit host this is still `2 ** 28`, so the debug line and the page keep their number. On a 32-bit host it is 1 MiB below V8's longest string, which leaves room for the next chunk. The reviewer suggested half of `MAX_STRING_LENGTH`. That gives `2 ** 28 - 12` on 64-bit hosts. The 1 MiB headroom keeps the 64-bit value and matches what the existing case checks.
+- `buffer.constants` is read-only, so a case cannot fake a 32-bit host. The runtime's limit is a defaulted last parameter, as with the hooks bridge's `tools` view, not a test-only export, which fallow would report as unused in production.
+- New cases: with `2 ** 29 - 24` the limit is `2 ** 28`, and with `2 ** 28 - 16` it is `2 ** 28 - 16 - 2 ** 20`. Negative control: with the literal ceiling put back, the 32-bit case failed.
+
+#### IN3-02: The ceiling bounded one string's length, not the heap
+
+**Files modified:** `docs/hooks-compatibility.md`
+**Commit:** 7b6c7ed9
+**Applied fix:** the large-output row now says the limit counts code units, not bytes: up to 512 MiB per stream once a string holds a character outside Latin-1, up to 1 GiB per hook with stdout and stderr, and that much for each hook of an event, because they run at the same time. It also says that the limit is a little lower on a 32-bit host, and that a plain `async` hook's stdout holds at most about 16 MiB. No code change, as instructed.
+
+#### IN3-03: Comment upkeep in the new bound code
+
+**Files modified:** `extensions/pi-claude-marketplace/bridges/hooks/stream-text.ts`, `extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts`
+**Commit:** 902506d3
+**Applied fix:** the `streamBoundFor` comment is rewrapped. The `stream-text.ts` header names `PLAIN_ASYNC_STREAM_LIMIT` and `PLAIN_ASYNC_STREAM_TAIL` and says that the registry sets them, instead of writing their values. Comment only, so there is no negative control.
+
+#### IN3-04: The scenario "...not shown when another extension already continued the run" checked that the line is shown
+
+**Files modified:** `features/hook/messages.feature`, `features/lib/hook-files.ts`, `features/lib/hook-recorder.ts`
+**Commit:** a61c7628
+**Applied fix:**
+
+- Distinct texts were chosen, as preferred. The halt hook prints `done for today` by default and `finished for today` when the last assistant message is `Finished.`, which is the second run end. The scenario expects only `Stop hook stopped continuation: finished for today`. It is renamed "A stop hook's stop reason is not shown for a run end that another extension continued".
+- **Harness change:** no column could vary a Stop hook's output between runs, because `when old string` reads only `tool_input.old_string`. The hooks table gains `when last message`, which picks `matched output` by the stdin's `last_assistant_message`. The recorder prints `matched output` when every condition the row sets holds. The `hook-files.ts` header now documents both conditional columns. The `when old string` scenarios of `tool-use.feature` still pass.
+- Negative control: with a hold that keeps the first reason (`heldStopReason ??= reason`) and no drop at `agent_end`, the scenario failed and showed `done for today`. With the old identical texts, that wrong implementation passed.
+
+### Decisions pending maintainer review
+
+1. WR3-01: once units are dropped, the tail's first line is always discarded, even when the dropped units end at a line break, so that line was whole. This is the rule the orchestrator named. Telling the two cases apart would mean checking the unit before the tail's start.
+2. WR3-01: `lastUnits` no longer steps past a low surrogate, because the line it would protect is always discarded.
+3. IN3-01: 1 MiB of headroom below `MAX_STRING_LENGTH`, not half of it.
+4. IN3-04: the new `when last message` harness column.
+
+### Parent lines
+
+- **D-PG5-17:** "A plain `async` hook keeps its stdout exactly while the first 8,388,608 and the last 65,536 UTF-16 code units hold it. Past that, it keeps the head and the whole lines of the last 65,536 units, and none of its stderr."
+- **NFR-2 / EXEC-02:** "Every hook output collector keeps at most 2^28 UTF-16 code units of one stream, or 2^20 fewer than the runtime's longest string when that is lower."
+
+---
+
+_Fixed: 2026-11-14T18:34:14Z_
+_Fixer: Claude (gsd-code-fixer)_
+_Iteration: 3_
