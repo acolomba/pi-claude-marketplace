@@ -23,6 +23,10 @@ const MCP_ASYNC_WARNING =
 const BUILTIN_MCP_ASYNC_WARNING =
   "tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before Pi's built-in MCP has listed the server's tools still fails";
 
+/** The warning items as the generated file writes them: double-quoted, because each holds `: `. */
+const MCP_ASYNC_WARNING_ITEM = `"${MCP_ASYNC_WARNING}"`;
+const BUILTIN_MCP_ASYNC_WARNING_ITEM = `"${BUILTIN_MCP_ASYNC_WARNING}"`;
+
 function mcpAgentInput(
   raw: RawAgentFrontmatter,
   mcpServerNames: readonly string[] | undefined,
@@ -65,6 +69,7 @@ function asyncLine(launchAsync: true | undefined): string {
   return launchAsync === undefined ? "" : "async: true\n";
 }
 
+/** The generated file, with each provenance list item given as the file writes it. */
 function expectedMcpAgentFile(expected: {
   readonly toolsField: string;
   readonly inheritSkills: boolean;
@@ -1712,7 +1717,7 @@ provenance:
     - mcpServers
   droppedTools: []
   warnings:
-    - \`allowed-tools\` is a slash-command field, not an agent frontmatter field -- dropped (Claude Code ignores it on agents too). Declare \`tools:\` in the source agent instead.
+    - "\`allowed-tools\` is a slash-command field, not an agent frontmatter field -- dropped (Claude Code ignores it on agents too). Declare \`tools:\` in the source agent instead."
     - agent-level \`mcpServers\` is not converted -- dropped (Claude Code ignores it for plugin agents too). To grant this agent MCP tools, set subagents.agentOverrides["acme:bot"].tools (e.g. read,bash,mcp:<server>) in Pi settings.
 ---
 
@@ -2034,7 +2039,7 @@ Body.\r
       inheritSkills: false,
       async: true,
       droppedTools: ["mcp__plugin_acme_db__"],
-      warnings: [MCP_ASYNC_WARNING],
+      warnings: [MCP_ASYNC_WARNING_ITEM],
     });
 
     // act
@@ -2057,7 +2062,7 @@ Body.\r
       inheritSkills: false,
       async: true,
       droppedTools: [],
-      warnings: [MCP_ASYNC_WARNING],
+      warnings: [MCP_ASYNC_WARNING_ITEM],
     });
 
     // act
@@ -2121,7 +2126,7 @@ Body.\r
     const expectedFileContent = expectedMcpAgentFile({
       toolsField: "tools: read",
       inheritSkills: false,
-      droppedTools: ["mcp__plugin_acme_db__q(a, b excludeTools: Bash)"],
+      droppedTools: ['"mcp__plugin_acme_db__q(a, b excludeTools: Bash)"'],
       warnings: [],
     });
 
@@ -2142,7 +2147,7 @@ Body.\r
       inheritSkills: false,
       async: true,
       droppedTools: [],
-      warnings: [MCP_ASYNC_WARNING],
+      warnings: [MCP_ASYNC_WARNING_ITEM],
     });
 
     // act
@@ -2189,7 +2194,7 @@ Body.\r
       inheritSkills: false,
       async: true,
       droppedTools: [],
-      warnings: [MCP_ASYNC_WARNING],
+      warnings: [MCP_ASYNC_WARNING_ITEM],
     });
 
     // act
@@ -2214,7 +2219,7 @@ Body.\r
       inheritSkills: false,
       async: true,
       droppedTools: [],
-      warnings: [MCP_ASYNC_WARNING],
+      warnings: [MCP_ASYNC_WARNING_ITEM],
     });
 
     // act
@@ -2306,7 +2311,7 @@ Body.\r
       droppedTools: [],
       warnings: [
         "disallowedTools entries with no Pi tool mapping (mcp__plugin_acme_db) cannot narrow the default tool set -- ignored",
-        MCP_ASYNC_WARNING,
+        MCP_ASYNC_WARNING_ITEM,
       ],
     });
 
@@ -2327,7 +2332,7 @@ Body.\r
       inheritSkills: false,
       async: true,
       droppedTools: [],
-      warnings: [MCP_ASYNC_WARNING],
+      warnings: [MCP_ASYNC_WARNING_ITEM],
     });
 
     // act
@@ -2362,7 +2367,10 @@ Body.\r
       inheritSkills: true,
       async: true,
       droppedTools: [],
-      warnings: expectedWarnings,
+      warnings: [
+        "disallowedTools entries with no Pi tool mapping (Unknown) cannot narrow the default tool set -- ignored",
+        MCP_ASYNC_WARNING_ITEM,
+      ],
     });
 
     // act
@@ -2416,7 +2424,7 @@ Body.\r
       inheritSkills: false,
       async: true,
       droppedTools: [],
-      warnings: [MCP_ASYNC_WARNING],
+      warnings: [MCP_ASYNC_WARNING_ITEM],
     });
 
     // act
@@ -2449,7 +2457,7 @@ provenance:
   droppedFields: []
   droppedTools: []
   warnings:
-    - ${MCP_ASYNC_WARNING}
+    - ${MCP_ASYNC_WARNING_ITEM}
 ---
 
 Body content.
@@ -2628,7 +2636,7 @@ Body content.
       inheritSkills: false,
       async: true,
       droppedTools: [],
-      warnings: [MCP_ASYNC_WARNING],
+      warnings: [MCP_ASYNC_WARNING_ITEM],
     });
 
     // act
@@ -2951,7 +2959,7 @@ describe("D-PG7-09 nested delegation of an agent with no tools list", () => {
       inheritSkills: true,
       async: true,
       droppedTools: [],
-      warnings: [MCP_ASYNC_WARNING],
+      warnings: [MCP_ASYNC_WARNING_ITEM],
     });
 
     // act
@@ -3192,16 +3200,61 @@ describe("D-CF4-05 plugin-ignored fields", () => {
 });
 
 describe("convertAgent tool token edge cases", () => {
-  for (const { tools, mappedLine, droppedTools } of [
-    { tools: "Read), Bash, Edit", mappedLine: "tools: bash,edit", droppedTools: ["Read)"] },
-    { tools: "Read, (Bash)", mappedLine: "tools: read", droppedTools: ["(Bash)"] },
-    { tools: "Read, Bash(x", mappedLine: "tools: read", droppedTools: ["Bash(x"] },
-    { tools: "Read, 'Read\"", mappedLine: "tools: read", droppedTools: ["'Read\""] },
-    { tools: "Read, '", mappedLine: "tools: read", droppedTools: ["'"] },
-    { tools: "Read, 'Bash'", mappedLine: "tools: read", droppedTools: ["'Bash'"] },
-    { tools: 'Read, "Bash"', mappedLine: "tools: read", droppedTools: ['"Bash"'] },
-    { tools: `["Read", 'Bash']`, mappedLine: "tools: read,bash", droppedTools: [] },
-    { tools: "Read, Bash(x) Edit", mappedLine: "tools: read,bash,edit", droppedTools: [] },
+  for (const { tools, mappedLine, droppedTools, droppedToolLines } of [
+    {
+      tools: "Read), Bash, Edit",
+      mappedLine: "tools: bash,edit",
+      droppedTools: ["Read)"],
+      droppedToolLines: ["    - Read)"],
+    },
+    {
+      tools: "Read, (Bash)",
+      mappedLine: "tools: read",
+      droppedTools: ["(Bash)"],
+      droppedToolLines: ["    - (Bash)"],
+    },
+    {
+      tools: "Read, Bash(x",
+      mappedLine: "tools: read",
+      droppedTools: ["Bash(x"],
+      droppedToolLines: ["    - Bash(x"],
+    },
+    {
+      tools: "Read, 'Read\"",
+      mappedLine: "tools: read",
+      droppedTools: ["'Read\""],
+      droppedToolLines: [String.raw`    - "'Read\""`],
+    },
+    {
+      tools: "Read, '",
+      mappedLine: "tools: read",
+      droppedTools: ["'"],
+      droppedToolLines: [`    - "'"`],
+    },
+    {
+      tools: "Read, 'Bash'",
+      mappedLine: "tools: read",
+      droppedTools: ["'Bash'"],
+      droppedToolLines: [`    - "'Bash'"`],
+    },
+    {
+      tools: 'Read, "Bash"',
+      mappedLine: "tools: read",
+      droppedTools: ['"Bash"'],
+      droppedToolLines: [String.raw`    - "\"Bash\""`],
+    },
+    {
+      tools: `["Read", 'Bash']`,
+      mappedLine: "tools: read,bash",
+      droppedTools: [],
+      droppedToolLines: [],
+    },
+    {
+      tools: "Read, Bash(x) Edit",
+      mappedLine: "tools: read,bash,edit",
+      droppedTools: [],
+      droppedToolLines: [],
+    },
   ]) {
     test(`maps tools ${JSON.stringify(tools)} to "${mappedLine}" and drops ${JSON.stringify(droppedTools)}`, () => {
       // arrange
@@ -3211,12 +3264,17 @@ describe("convertAgent tool token edge cases", () => {
       const agent = convertMcpAgent(raw, undefined);
 
       // assert
+      const lines = agent.fileContent.split("\n");
       assert.deepStrictEqual(
         {
-          toolsLines: agent.fileContent.split("\n").filter((line) => line.startsWith("tools:")),
+          toolsLines: lines.filter((line) => line.startsWith("tools:")),
           droppedTools: agent.droppedTools,
+          droppedToolLines: lines.slice(
+            lines.findIndex((line) => line.startsWith("  droppedTools:")) + 1,
+            lines.findIndex((line) => line.startsWith("  warnings:")),
+          ),
         },
-        { toolsLines: [mappedLine], droppedTools },
+        { toolsLines: [mappedLine], droppedTools, droppedToolLines },
       );
     });
   }
@@ -3241,7 +3299,7 @@ describe("MGRT-01 grant form per MCP implementation", () => {
       inheritSkills: false,
       async: true,
       droppedTools: [],
-      warnings: [BUILTIN_MCP_ASYNC_WARNING],
+      warnings: [BUILTIN_MCP_ASYNC_WARNING_ITEM],
     });
 
     // act
@@ -3262,7 +3320,7 @@ describe("MGRT-01 grant form per MCP implementation", () => {
       inheritSkills: false,
       async: true,
       droppedTools: [],
-      warnings: [MCP_ASYNC_WARNING],
+      warnings: [MCP_ASYNC_WARNING_ITEM],
     });
 
     // act
@@ -3283,7 +3341,7 @@ describe("MGRT-01 grant form per MCP implementation", () => {
       inheritSkills: false,
       async: true,
       droppedTools: [],
-      warnings: [BUILTIN_MCP_ASYNC_WARNING],
+      warnings: [BUILTIN_MCP_ASYNC_WARNING_ITEM],
     });
 
     // act
@@ -3307,7 +3365,7 @@ describe("MGRT-01 grant form per MCP implementation", () => {
       inheritSkills: true,
       async: true,
       droppedTools: [],
-      warnings: [BUILTIN_MCP_ASYNC_WARNING],
+      warnings: [BUILTIN_MCP_ASYNC_WARNING_ITEM],
     });
 
     // act
@@ -3330,7 +3388,7 @@ describe("MGRT-01 grant form per MCP implementation", () => {
       inheritSkills: true,
       async: true,
       droppedTools: [],
-      warnings: [BUILTIN_MCP_ASYNC_WARNING],
+      warnings: [BUILTIN_MCP_ASYNC_WARNING_ITEM],
     });
 
     // act
@@ -3351,7 +3409,7 @@ describe("MGRT-01 grant form per MCP implementation", () => {
       inheritSkills: true,
       async: true,
       droppedTools: [],
-      warnings: [MCP_ASYNC_WARNING],
+      warnings: [MCP_ASYNC_WARNING_ITEM],
     });
 
     // act
@@ -3374,7 +3432,7 @@ describe("MGRT-01 grant form per MCP implementation", () => {
       inheritSkills: true,
       async: true,
       droppedTools: [],
-      warnings: [MCP_ASYNC_WARNING],
+      warnings: [MCP_ASYNC_WARNING_ITEM],
     });
 
     // act
@@ -3395,7 +3453,7 @@ describe("MGRT-01 grant form per MCP implementation", () => {
       inheritSkills: false,
       async: true,
       droppedTools: [],
-      warnings: [BUILTIN_MCP_ASYNC_WARNING],
+      warnings: [BUILTIN_MCP_ASYNC_WARNING_ITEM],
     });
 
     // act
@@ -3422,7 +3480,7 @@ describe("MGRT-01 grant form per MCP implementation", () => {
       inheritSkills: false,
       async: true,
       droppedTools: [],
-      warnings: [MCP_ASYNC_WARNING],
+      warnings: [MCP_ASYNC_WARNING_ITEM],
     });
 
     // act
@@ -3493,7 +3551,7 @@ describe("MGRT-01 grant form per MCP implementation", () => {
       inheritSkills: false,
       async: true,
       droppedTools: [],
-      warnings: [BUILTIN_MCP_ASYNC_WARNING],
+      warnings: [BUILTIN_MCP_ASYNC_WARNING_ITEM],
     });
 
     // act
@@ -3514,7 +3572,7 @@ describe("MGRT-01 grant form per MCP implementation", () => {
       inheritSkills: true,
       async: true,
       droppedTools: [],
-      warnings: [BUILTIN_MCP_ASYNC_WARNING],
+      warnings: [BUILTIN_MCP_ASYNC_WARNING_ITEM],
     });
 
     // act
@@ -3534,12 +3592,12 @@ describe("MGRT-01 converted frontmatter block", () => {
     {
       mcpImplementation: "adapter",
       selector: "mcp:plugin_acme_db_/query",
-      asyncWarning: MCP_ASYNC_WARNING,
+      asyncWarning: MCP_ASYNC_WARNING_ITEM,
     },
     {
       mcpImplementation: "builtin",
       selector: "mcp:plugin_acme_db/query",
-      asyncWarning: BUILTIN_MCP_ASYNC_WARNING,
+      asyncWarning: BUILTIN_MCP_ASYNC_WARNING_ITEM,
     },
   ] as const) {
     test(`MGRT-01: the ${mcpImplementation} form's block holds its warnings and dropped tools, and the block followed by the body is the file`, () => {
@@ -3633,7 +3691,7 @@ describe("convertAgentForm", () => {
       inheritSkills: false,
       async: true,
       droppedTools: ["WebFetch"],
-      warnings: [BUILTIN_MCP_ASYNC_WARNING],
+      warnings: [BUILTIN_MCP_ASYNC_WARNING_ITEM],
     });
     const body = "\nBody content.\n";
 

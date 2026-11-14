@@ -114,3 +114,25 @@ test("T-07-05: the engine finds the agent and its tools when a provenance warnin
     { description: "Reads.", tools: ["read"] },
   );
 });
+
+for (const raw of [
+  { tools: "Read, 'Bash" },
+  { tools: "Read, @Grep" },
+  { tools: "Read, *Grep" },
+  { tools: "Read, `x" },
+  { tools: "Read, %x" },
+  { tools: "Read, [x" },
+  { tools: "Read", thinking: "x: y: z" },
+  { tools: "Read", "x: y: z": "1" },
+] satisfies RawAgentFrontmatter[]) {
+  test(`T-07-05: the engine finds the agent and its tools when a provenance value of ${JSON.stringify(raw)} is not plain YAML text`, async (t) => {
+    // act
+    const definition = await engineDefinition(t, { description: "Reads.", ...raw });
+
+    // assert
+    assert.deepStrictEqual(
+      { description: definition?.description, tools: definition?.tools },
+      { description: "Reads.", tools: ["read"] },
+    );
+  });
+}

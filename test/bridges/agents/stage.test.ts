@@ -46,11 +46,14 @@ const CURRENT_BUILTIN_ASYNC =
 
 const BOT_QUERY_SOURCE_HASH = createHash("sha256").update(BOT_QUERY_SOURCE).digest("hex");
 
-/** The frontmatter block of `BOT_QUERY_SOURCE` in one MCP implementation's grant form. */
+/**
+ * The frontmatter block of `BOT_QUERY_SOURCE` in one MCP implementation's grant
+ * form. The warning item is double-quoted, because it holds `: `.
+ */
 function botQueryFrontmatter(sourcePath: string, form: "adapter" | "builtin"): string {
   const selector = form === "builtin" ? "mcp:plugin_acme_db/query" : "mcp:plugin_acme_db_/query";
   const asyncWarning = form === "builtin" ? CURRENT_BUILTIN_ASYNC : CURRENT_ADAPTER_ASYNC;
-  return `---\nname: acme:bot\ndescription: Bot\naliases: pi-claude-marketplace-acme-bot\ntools: read,${selector}\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: true\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: bot\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings:\n    - ${asyncWarning}\n---\n`;
+  return `---\nname: acme:bot\ndescription: Bot\naliases: pi-claude-marketplace-acme-bot\ntools: read,${selector}\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: true\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: bot\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings:\n    - "${asyncWarning}"\n---\n`;
 }
 
 /** An agents-index row of another plugin that records both grant forms (MGRT-01). */

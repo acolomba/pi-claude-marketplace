@@ -6,6 +6,7 @@ import {
   emitGeneratedAgentFrontmatter,
   readAgentFrontmatter,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts";
+import { parseFrontmatter } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 import type { GeneratedToolsFields } from "../../../extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts";
 
@@ -442,17 +443,32 @@ Review files.
     {
       description: "LF and CRLF sequences as spaces",
       provenanceValue: "agents/reviewer.md\ninjected: field\r\nwarning",
-      expectedProvenanceValue: "agents/reviewer.md injected: field warning",
+      expectedProvenanceValue: '"agents/reviewer.md injected: field warning"',
     },
     {
       description: "a lone CR, U+2028, U+2029, and other control characters as spaces",
       provenanceValue: "agents/reviewer.md\rinjected: field\u2028a\u2029b\tc\u0000d",
-      expectedProvenanceValue: "agents/reviewer.md injected: field a b c d",
+      expectedProvenanceValue: '"agents/reviewer.md injected: field a b c d"',
     },
     {
-      description: "the empty provenance unchanged",
+      description: "the empty provenance as an empty quoted string",
       provenanceValue: "",
-      expectedProvenanceValue: "",
+      expectedProvenanceValue: '""',
+    },
+    {
+      description: "a value with a colon and a space double-quoted",
+      provenanceValue: 'unknown thinking value "a: b: c" -- omitted',
+      expectedProvenanceValue: String.raw`"unknown thinking value \"a: b: c\" -- omitted"`,
+    },
+    {
+      description: "a value with a backslash and a quote mark escaped",
+      provenanceValue: String.raw`'C:\x"`,
+      expectedProvenanceValue: String.raw`"'C:\\x\""`,
+    },
+    {
+      description: "a value YAML reads as a number double-quoted",
+      provenanceValue: "123",
+      expectedProvenanceValue: '"123"',
     },
   ]) {
     test(`emits source provenance with ${description}`, () => {
@@ -505,6 +521,55 @@ Review files.
       assert.strictEqual(agentFile, expectedAgentFile);
     });
   }
+
+  test("T-07-05: writes provenance values that Pi's YAML reader reads back as written", () => {
+    // arrange
+    const values = [
+      "'Bash",
+      "*",
+      "@x",
+      "`x",
+      "%x",
+      "[x",
+      "x: y: z",
+      '"Bash"',
+      String.raw`a\b`,
+      "",
+      "true",
+    ];
+    const frontmatter = emitGeneratedAgentFrontmatter({
+      frontmatter: {
+        name: "reviewer",
+        description: "Reviews files",
+        skills: [],
+        inheritSkills: false,
+      },
+      provenance: {
+        pluginName: "acme",
+        sourceName: "reviewer",
+        sourcePath: "@agents/reviewer.md",
+        originalModel: "[sonnet",
+        droppedFields: values,
+        droppedTools: values,
+        warnings: values,
+      },
+    });
+
+    // act
+    const parsed = parseFrontmatter(`${frontmatter}\nReview files.\n`).frontmatter;
+
+    // assert
+    assert.deepStrictEqual(parsed.provenance, {
+      generatedBy: "pi-claude-marketplace",
+      sourcePlugin: "acme",
+      sourceAgent: "reviewer",
+      sourcePath: "@agents/reviewer.md",
+      originalModel: "[sonnet",
+      droppedFields: values,
+      droppedTools: values,
+      warnings: values,
+    });
+  });
 
   test("renders nonempty aliases before optional metadata and preserves body bytes", () => {
     // arrange
@@ -598,15 +663,15 @@ provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
   sourceAgent: reviewer
-  sourcePath: agents/reviewer.md injectedKey: blocked
-  originalModel: sonnet originalModelInjection: blocked
+  sourcePath: "agents/reviewer.md injectedKey: blocked"
+  originalModel: "sonnet originalModelInjection: blocked"
   droppedFields:
-    - color fieldInjection: blocked
+    - "color fieldInjection: blocked"
     - permissionMode
   droppedTools:
-    - WebFetch toolInjection: blocked
+    - "WebFetch toolInjection: blocked"
   warnings:
-    - first warning warningInjection: blocked
+    - "first warning warningInjection: blocked"
     - second warning
 ---
 

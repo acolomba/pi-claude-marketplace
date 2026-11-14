@@ -5,9 +5,9 @@
 // share the same current-format signature.
 //
 // On the OUTPUT side, this module is the only place in the extension that
-// decides how generated agent files are assembled: which scalars get
-// quote-flipped, which provenance values get newline-normalized, and what
-// the deterministic field order looks like. convertAgent does the field
+// decides how generated agent files are assembled: which values become a
+// block or get quoted, which provenance values get newline-normalized, and
+// what the deterministic field order looks like. convertAgent does the field
 // mapping but delegates the final byte assembly here.
 //
 // On the INPUT side, readAgentFrontmatter reads a source agent as YAML through
@@ -28,7 +28,8 @@
 // key and for the closing `---` (D-PG7-06). The workflow engine reads the
 // same file as YAML, so a one-line description that is not plain YAML text
 // is written as the same block, which both readers take literally (D-PG7-18).
-// sanitizeProvenanceValue collapses the line breaks of a provenance value.
+// provenanceScalar collapses the line breaks of a provenance value and quotes
+// a value that YAML would not read as its own text.
 
 import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { stripBom } from "../../shared/bom.ts";
@@ -36,6 +37,7 @@ import { errorMessage } from "../../shared/errors.ts";
 import {
   blankEarlierDuplicateKeys,
   colonRepairTrigger,
+  emitSafeDoubleQuotedScalar,
   extractBodyAfterFrontmatter,
   repairSingleLineScalars,
 } from "../../shared/frontmatter-repair.ts";
@@ -55,10 +57,11 @@ import type { RawAgentFrontmatter } from "./types.ts";
 const YAML_UNSAFE_PLAIN = /(?:^[-?:,[\]{}#&*!|>'"%@`])|(?::(?:\s|$))|(?:\s#)/u;
 
 /**
- * D-PG7-18: whether YAML reads `description: <value>` as exactly `value`, as
- * pi-subagents does. Besides the unsafe forms, a value that YAML reads as a
- * number, a boolean, or null fails. The value holds no line break, and the
- * unsafe forms are the ones that make YAML throw, so the parse does not throw.
+ * D-PG7-18: whether YAML reads `description: <value>`, or any other one-line
+ * plain value, as exactly `value`. Besides the unsafe forms, a value that YAML
+ * reads as a number, a boolean, or null fails. The value holds no line break,
+ * and the unsafe forms are the ones that make YAML throw, so the parse does
+ * not throw.
  */
 function readsAsPlainYamlText(value: string): boolean {
   return (
@@ -101,14 +104,18 @@ function descriptionLines(value: string): string[] {
 const UNSAFE_KEY_CHARACTER = /[\p{Cc}\u2028\u2029]/gu;
 
 /**
- * Normalize a free-text provenance value to a single line so it cannot be
- * misread as a new frontmatter key by pi-subagents' line-based parser or by
- * the workflow engine's YAML reader. Provenance values are purely
- * informational; a CRLF pair and every other unsafe character become one
- * space each.
+ * T-07-05: a free-text provenance value as one YAML scalar. A CRLF pair and
+ * every other unsafe character become one space each, so no line of the value
+ * can start a key. A value that YAML would not read as its own text, such as
+ * `'Bash`, `@Grep`, or `a: b: c`, is double-quoted, because the workflow
+ * engine parses the whole block with Pi's YAML reader and drops every field
+ * of an agent whose block fails. pi-subagents skips the indented provenance
+ * lines, so the quotes never reach it. Provenance values are informational
+ * only.
  */
-function sanitizeProvenanceValue(value: string): string {
-  return value.replaceAll("\r\n", " ").replaceAll(UNSAFE_KEY_CHARACTER, " ");
+function provenanceScalar(value: string): string {
+  const oneLine = value.replaceAll("\r\n", " ").replaceAll(UNSAFE_KEY_CHARACTER, " ");
+  return readsAsPlainYamlText(oneLine) ? oneLine : emitSafeDoubleQuotedScalar(oneLine);
 }
 
 export interface ParsedFrontmatter {
@@ -308,7 +315,7 @@ export type GeneratedFrontmatterFields = {
  * Provenance fields rendered under a single `provenance` frontmatter
  * mapping; free-text values are newline-normalized so a multi-line value
  * cannot inject a bogus frontmatter key into pi-subagents' line-based
- * parser.
+ * parser, and quoted when YAML would not read them as their text.
  */
 export interface GeneratedProvenanceFields {
   readonly pluginName: string;
@@ -452,16 +459,17 @@ export function emitGeneratedAgentFrontmatter(input: {
   // entirely. GENERATED_AGENT_MARKER is exactly the emitted `generatedBy`
   // line's content, so isOwnedAgentFile's whole-file substring check still
   // matches. Free-text values are newline-normalized (T-d8i-02) so a
-  // multi-line value can't inject a bogus key into the line-based parser.
+  // multi-line value can't inject a bogus key into the line-based parser,
+  // and quoted when YAML would not read them as their text (T-07-05).
   const provenanceLines: string[] = [
     "provenance:",
     `  ${GENERATED_AGENT_MARKER}`,
     `  sourcePlugin: ${provenance.pluginName}`,
     `  sourceAgent: ${provenance.sourceName}`,
-    `  sourcePath: ${sanitizeProvenanceValue(provenance.sourcePath)}`,
+    `  sourcePath: ${provenanceScalar(provenance.sourcePath)}`,
   ];
   if (provenance.originalModel !== undefined) {
-    provenanceLines.push(`  originalModel: ${sanitizeProvenanceValue(provenance.originalModel)}`);
+    provenanceLines.push(`  originalModel: ${provenanceScalar(provenance.originalModel)}`);
   }
 
   pushProvenanceList(provenanceLines, "droppedFields", provenance.droppedFields);
@@ -474,8 +482,8 @@ export function emitGeneratedAgentFrontmatter(input: {
 /**
  * Append a provenance list field to the `provenance` mapping. An empty list
  * renders inline as `  <key>: []`; a non-empty list renders as a YAML block
- * list -- `  <key>:` then one `    - <item>` line per newline-normalized
- * item. The nested indentation keeps every line out of pi-subagents'
+ * list -- `  <key>:` then one `    - <item>` line per item, through
+ * provenanceScalar. The nested indentation keeps every line out of pi-subagents'
  * top-level `^([\w-]+):` key match, so none of it reaches the child prompt.
  */
 function pushProvenanceList(lines: string[], key: string, values: readonly string[]): void {
@@ -486,6 +494,6 @@ function pushProvenanceList(lines: string[], key: string, values: readonly strin
 
   lines.push(`  ${key}:`);
   for (const value of values) {
-    lines.push(`    - ${sanitizeProvenanceValue(value)}`);
+    lines.push(`    - ${provenanceScalar(value)}`);
   }
 }

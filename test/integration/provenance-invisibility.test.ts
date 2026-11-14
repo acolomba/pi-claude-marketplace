@@ -63,10 +63,11 @@ test("T-d8i-01: provenance stays invisible to pi-subagents' own frontmatter pars
       originalModel: "sonnet",
       // Exercises BOTH list forms: a non-empty block list (droppedFields,
       // warnings, each rendered `    - item`) and an empty inline `[]`
-      // (droppedTools) -- the two shapes the safety claim must survive.
-      droppedFields: ["provColorField"],
+      // (droppedTools) -- the two shapes the safety claim must survive. The
+      // second item of each block list is written double-quoted (T-07-05).
+      droppedFields: ["provColorField", "@provQuotedField"],
       droppedTools: [],
-      warnings: ["provWarningText leaked check"],
+      warnings: ["provWarningText leaked check", "provQuotedWarning: a: b"],
     },
     body: bodyText,
   });
@@ -91,7 +92,9 @@ test("T-d8i-01: provenance stays invisible to pi-subagents' own frontmatter pars
     GENERATED_AGENT_MARKER,
     // values
     "provColorField",
+    "provQuotedField",
     "provWarningText",
+    "provQuotedWarning",
     "/abs/provenance-source.md",
   ];
   for (const needle of provenanceLeaks) {

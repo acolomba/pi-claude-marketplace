@@ -12,6 +12,10 @@ const ADAPTER_ASYNC_WARNING =
 const BUILTIN_ASYNC_WARNING =
   "tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before Pi's built-in MCP has listed the server's tools still fails";
 
+/** The warning items as the generated file writes them: double-quoted, because each holds `: `. */
+const ADAPTER_ASYNC_WARNING_ITEM = `"${ADAPTER_ASYNC_WARNING}"`;
+const BUILTIN_ASYNC_WARNING_ITEM = `"${BUILTIN_ASYNC_WARNING}"`;
+
 const BODY = "\nBody content.\n";
 
 function agentInput(raw: RawAgentFrontmatter): GrantFormInput {
@@ -37,6 +41,7 @@ function yamlList(items: readonly string[]): string {
   return items.length === 0 ? " []" : items.map((item) => `\n    - ${item}`).join("");
 }
 
+/** The frontmatter block, with each provenance list item given as the file writes it. */
 function expectedFrontmatter(expected: {
   readonly toolsLine?: string;
   readonly inheritSkills: boolean;
@@ -70,7 +75,7 @@ const ADAPTER_QUERY_FRONTMATTER = expectedFrontmatter({
   inheritSkills: false,
   async: true,
   droppedTools: [],
-  warnings: [ADAPTER_ASYNC_WARNING],
+  warnings: [ADAPTER_ASYNC_WARNING_ITEM],
 });
 
 /** A stdio server that asks for elicitation, which pi-mcp-adapter cannot run, and a plain one. */
@@ -84,7 +89,7 @@ const BUILTIN_QUERY_FRONTMATTER = expectedFrontmatter({
   inheritSkills: false,
   async: true,
   droppedTools: [],
-  warnings: [BUILTIN_ASYNC_WARNING],
+  warnings: [BUILTIN_ASYNC_WARNING_ITEM],
 });
 
 test("MGRT-01: a built-in run writes the built-in form and records both forms on the row", () => {
@@ -177,14 +182,14 @@ test("D-PG7-12: a whole-server grant with a per-tool deny records each form with
     inheritSkills: false,
     async: true,
     droppedTools: [],
-    warnings: [ADAPTER_ASYNC_WARNING],
+    warnings: [ADAPTER_ASYNC_WARNING_ITEM],
   });
   const builtinFrontmatter = expectedFrontmatter({
     toolsLine: "tools: read,mcp:plugin_acme_my-db\nexcludeTools: mcp__plugin_acme_my_db__a_b",
     inheritSkills: false,
     async: true,
     droppedTools: [],
-    warnings: [BUILTIN_ASYNC_WARNING],
+    warnings: [BUILTIN_ASYNC_WARNING_ITEM],
   });
   const input = agentInput({
     description: "d",
@@ -224,14 +229,14 @@ test("D-CF6-10: an omitted tools list in a plugin with a stdio server records bo
     inheritSkills: true,
     async: true,
     droppedTools: [],
-    warnings: [ADAPTER_ASYNC_WARNING],
+    warnings: [ADAPTER_ASYNC_WARNING_ITEM],
   });
   const builtinFrontmatter = expectedFrontmatter({
     toolsLine: "allowNestedSubagents: true",
     inheritSkills: true,
     async: true,
     droppedTools: [],
-    warnings: [BUILTIN_ASYNC_WARNING],
+    warnings: [BUILTIN_ASYNC_WARNING_ITEM],
   });
   const input = agentInput({ description: "d" });
 
@@ -273,7 +278,7 @@ test("MGRT-01: an sse grant stays in the adapter form and is dropped from the bu
     inheritSkills: false,
     async: true,
     droppedTools: [],
-    warnings: [ADAPTER_ASYNC_WARNING],
+    warnings: [ADAPTER_ASYNC_WARNING_ITEM],
   });
   const input = agentInput({ description: "d", tools: "Read, mcp__plugin_acme_web__get" });
 
@@ -328,7 +333,7 @@ for (const active of ["adapter", "none"] as const) {
       inheritSkills: false,
       async: true,
       droppedTools: [],
-      warnings: [ADAPTER_ASYNC_WARNING],
+      warnings: [ADAPTER_ASYNC_WARNING_ITEM],
     });
     const input = agentInput({ description: "d", tools: "mcp__plugin_acme_web__get" });
 
@@ -360,14 +365,14 @@ test("ANAME-02 / MGRT-01: each form maps only the declared servers its implement
     inheritSkills: false,
     async: true,
     droppedTools: ["mcp__plugin_acme_asker__ask"],
-    warnings: [ADAPTER_ASYNC_WARNING],
+    warnings: [ADAPTER_ASYNC_WARNING_ITEM],
   });
   const builtinFrontmatter = expectedFrontmatter({
     toolsLine: "tools: read,mcp:plugin_acme_asker/ask,mcp:plugin_acme_db/query",
     inheritSkills: false,
     async: true,
     droppedTools: [],
-    warnings: [BUILTIN_ASYNC_WARNING],
+    warnings: [BUILTIN_ASYNC_WARNING_ITEM],
   });
   const input = agentInput({
     description: "d",
@@ -407,7 +412,7 @@ test("AG-11: a built-in run leaves out an adapter form that maps an explicit too
     inheritSkills: false,
     async: true,
     droppedTools: [],
-    warnings: [BUILTIN_ASYNC_WARNING],
+    warnings: [BUILTIN_ASYNC_WARNING_ITEM],
   });
   const input = agentInput({ description: "d", tools: "mcp__plugin_acme_asker__ask" });
 
@@ -457,7 +462,7 @@ test("MGRT-01: the built-in form maps every supported declared server, one named
     inheritSkills: false,
     async: true,
     droppedTools: ["mcp__plugin_acme_web"],
-    warnings: [BUILTIN_ASYNC_WARNING],
+    warnings: [BUILTIN_ASYNC_WARNING_ITEM],
   });
   const declaredMcpServers = {
     zed: { command: "zed" },

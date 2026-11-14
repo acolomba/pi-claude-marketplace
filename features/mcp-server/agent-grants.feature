@@ -85,7 +85,7 @@ Feature: MCP server agent grants
         droppedFields: []
         droppedTools: []
         warnings:
-          - tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before pi-mcp-adapter has cached the server's tools still fails
+          - "tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before pi-mcp-adapter has cached the server's tools still fails"
       ---
 
       Call the tools the task names.
@@ -137,7 +137,7 @@ Feature: MCP server agent grants
         droppedFields: []
         droppedTools: []
         warnings:
-          - tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before Pi's built-in MCP has listed the server's tools still fails
+          - "tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before Pi's built-in MCP has listed the server's tools still fails"
       ---
 
       Call the tools the task names.
@@ -539,7 +539,7 @@ Feature: MCP server agent grants
         droppedFields: []
         droppedTools: []
         warnings:
-          - tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before pi-mcp-adapter has cached the server's tools still fails
+          - "tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before pi-mcp-adapter has cached the server's tools still fails"
       ---
 
       Call the tools the task names.
