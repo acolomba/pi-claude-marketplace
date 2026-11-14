@@ -57,6 +57,7 @@ import { errorMessage } from "../../../shared/errors.ts";
 import { notifyAsyncRewakeSummary } from "../../../shared/notification-dispatch.ts";
 import { openNotificationRun, requireNotificationMode } from "../../../shared/notification-run.ts";
 import { assertPathInside } from "../../../shared/path-safety.ts";
+import { capHookContext } from "../context-cap.ts";
 import {
   INERT_TIMER_LADDER,
   installTimerLadder,
@@ -64,6 +65,7 @@ import {
   type TimerLadder,
 } from "../exec-timer.ts";
 import { hookPathVars, prepareHookEnv } from "../hook-env.ts";
+import { saveHookOutput } from "../hook-output-files.ts";
 import { translatePostCompact } from "../payloads/post-compact.ts";
 import { translatePostToolUseFailure } from "../payloads/post-tool-use-failure.ts";
 import { translatePostToolUse } from "../payloads/post-tool-use.ts";
@@ -93,7 +95,6 @@ import { rewakeBody, rewakeLabel, rewakeSummaryText } from "./rewake-text.ts";
 import type { DispatchableEvent } from "../../../domain/components/hook-events.ts";
 import type { ScopedLocations } from "../../../persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../../platform/pi-api.ts";
-import type { saveHookOutput } from "../hook-output-files.ts";
 import type { RoutingEntry } from "../routing-state.ts";
 import type { ChildJournalOwner, HooksRuntime, HooksRuntimeChildEntry } from "../runtime.ts";
 
@@ -158,8 +159,9 @@ export type AsyncRewakeEntry = HooksRuntimeChildEntry;
 
 /**
  * What the exit handler of one child needs from its dispatch: the event's
- * context and API, the runtime that records a sent wake (D-PG5-06), and the
- * hook's Claude label for the default rewake prefix.
+ * context and API, the runtime that records a sent wake (D-PG5-06), the
+ * hook's Claude label for the default rewake prefix, and the writer that
+ * saves an answer's text over the model's limit (D-PG5-15).
  */
 interface RewakeExit {
   readonly ctx: ExtensionContext;
@@ -167,6 +169,7 @@ interface RewakeExit {
   readonly runtime: HooksRuntime;
   readonly label: string;
   readonly lane: BackgroundLane;
+  readonly saveHookOutput: typeof saveHookOutput;
 }
 
 /**
@@ -314,6 +317,7 @@ export async function spawnAndRegister(
       runtime,
       label: rewakeLabel(entry.claudeEvent, stdinPayload),
       lane: laneOf(entry),
+      saveHookOutput: deps.saveHookOutput ?? saveHookOutput,
     };
     const stdinJson = serializeWithTruncation(stdinPayload);
     const env = await prepareAsyncEnv(entry, transCtx, loc, dispatchId);
@@ -553,7 +557,7 @@ const EXIT_HANDLERS: Record<
     wakeOnExitTwo(entry, exit);
   },
   plain: (entry, exit) => {
-    sendAsyncAnswer(entry, exit);
+    void sendAsyncAnswer(entry, exit);
   },
 };
 
@@ -634,12 +638,29 @@ async function removeCapturedChildRow(
 /**
  * D-BG-205: a plain async hook that ended, whatever its code, gives the model
  * its answer's texts on the model's next call, never waking it; the user sees
- * nothing.
+ * nothing. Each text passes the 10,000-character cap alone, and the texts keep
+ * their order, `systemMessage` first (D-PG5-14, D-PG5-16). A reload during a
+ * save drops the answer, as it drops a late exit. Never rejects.
  */
-function sendAsyncAnswer(entry: HooksRuntimeChildEntry, { pi }: RewakeExit): void {
-  const texts = asyncAnswerTexts(entry.stdout.text(), entry.claudeEvent);
-  if (texts.length === 0) {
+async function sendAsyncAnswer(
+  entry: HooksRuntimeChildEntry,
+  { pi, runtime, saveHookOutput: save }: RewakeExit,
+): Promise<void> {
+  const answer = asyncAnswerTexts(entry.stdout.text(), entry.claudeEvent);
+  if (answer.length === 0) {
     hookDebugLog(`async-hook: no answer on stdout (${entry.pluginId}/${entry.claudeEvent})`);
+  }
+
+  const texts = await Promise.all(
+    answer.map(({ source, text }) =>
+      capHookContext(text, source, (whole) => save(entry.loc, entry.dispatchId, source, whole)),
+    ),
+  );
+  if (entry.capturedGeneration !== runtime.currentGeneration()) {
+    hookDebugLog(
+      `async-hook: answer dropped after a reload (${entry.pluginId}/${entry.claudeEvent})`,
+    );
+    return;
   }
 
   for (const content of texts) {

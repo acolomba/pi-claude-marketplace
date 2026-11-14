@@ -5458,3 +5458,281 @@ test(
     }
   },
 );
+
+const BIG_TEXT = "x".repeat(12_000);
+
+// The wrapper Claude Code 2.1.323 sends for 12,000 `x` characters saved at
+// `filePath` (D-PG5-15).
+function savedBigText(filePath: string): string {
+  return (
+    "<persisted-output>\n" +
+    `Output too large (11.7KB). Full output saved to: ${filePath}\n\n` +
+    `Preview (first 2KB):\n${"x".repeat(2_000)}\n...\n</persisted-output>`
+  );
+}
+
+// A Pi double whose `sent(count)` resolves once it has received `count`
+// messages.
+function createCountingPi(): {
+  readonly pi: ExtensionAPI;
+  readonly messages: { readonly message: unknown; readonly options: unknown }[];
+  sent(count: number): Promise<void>;
+} {
+  const messages: { readonly message: unknown; readonly options: unknown }[] = [];
+  const waiters: { readonly count: number; readonly resolve: () => void }[] = [];
+  const sendMessage: ExtensionAPI["sendMessage"] = (message, options) => {
+    messages.push({ message, options });
+    for (const waiter of waiters.filter(({ count }) => count === messages.length)) {
+      waiter.resolve();
+    }
+  };
+
+  return {
+    pi: { sendMessage, getAllTools: () => [] } as unknown as ExtensionAPI,
+    messages,
+    sent: (count) =>
+      messages.length >= count
+        ? Promise.resolve()
+        : new Promise((resolve) => {
+            waiters.push({ count, resolve });
+          }),
+  };
+}
+
+// A writer double that records each save and settles as `outcome` gives for
+// its source; `called` resolves at the first save.
+function createAnswerSaver(
+  outcome: (source: string) => Promise<string> = (source) =>
+    Promise.resolve(`/saved/${source}.txt`),
+) {
+  const saves: { dataRoot: string; id: string; source: string; text: string }[] = [];
+  let announce: () => void = () => undefined;
+  const called = new Promise<void>((resolve) => {
+    announce = resolve;
+  });
+  const saveHookOutput: NonNullable<SpawnDeps["saveHookOutput"]> = (loc, id, source, text) => {
+    saves.push({ dataRoot: loc.dataRoot, id, source, text });
+    announce();
+    return outcome(source);
+  };
+
+  return { saves, called, saveHookOutput };
+}
+
+// Resolves when the hooks debug channel writes a line that holds `line`.
+function hookDebugLineWritten(t: TestContext, line: string): Promise<void> {
+  const debugBefore = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  t.after(() => {
+    if (debugBefore === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+      return;
+    }
+
+    process.env.PI_CLAUDE_MARKETPLACE_DEBUG = debugBefore;
+  });
+  return new Promise((resolve) => {
+    t.mock.method(console, "error", (...parts: unknown[]): void => {
+      if (parts.map(String).join(" ").includes(line)) {
+        resolve();
+      }
+    });
+  });
+}
+
+// Runs a plain async hook whose answer is `stdout` to its exit, with the PID
+// table writes kept off the disk.
+async function endPlainAnswer(
+  t: TestContext,
+  stdout: string,
+  pi: ExtensionAPI,
+  saveHookOutput: NonNullable<SpawnDeps["saveHookOutput"]>,
+): Promise<{ readonly runtime: HooksRuntime; readonly dataRoot: string }> {
+  const runtime = createHooksRuntime();
+  const root = await mkdtemp(path.join(tmpdir(), "async-registry-cap-"));
+  const locations = locationsFor("project", root);
+  const child = createChild(24_801);
+  t.after(async () => {
+    shutdownInMemoryChildren(runtime);
+    destroyChild(child);
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  });
+  await spawnAndRegister(
+    runtime,
+    createEntry(root, {
+      claudeEvent: "UserPromptSubmit",
+      handlerDecl: { type: "command", command: "/opt/hooks/note", async: true },
+    }),
+    { type: "input", text: "prompt", source: "interactive" },
+    createContext(root, "session-cap", true).context,
+    pi,
+    locations,
+    {
+      spawnImpl: createSpawn(child.child, []),
+      dispatchId: () => "dispatch-cap",
+      pidTableWriter: () => Promise.resolve(),
+      saveHookOutput,
+    },
+  );
+  child.stdout.end(stdout);
+  await once(child.stdout, "end");
+  child.emitExit(0);
+  child.emitClose(0);
+  return { runtime, dataRoot: locations.dataRoot };
+}
+
+function answerMessage(content: string): { readonly message: unknown; readonly options: unknown } {
+  return {
+    message: {
+      customType: "claude-hook-async-response",
+      content,
+      display: false,
+      details: { pluginId: "plugin-lifecycle", dispatchId: "dispatch-cap" },
+    },
+    options: { deliverAs: "nextTurn" },
+  };
+}
+
+function answerOf(systemMessage: string, additionalContext: string): string {
+  return JSON.stringify({ systemMessage, hookSpecificOutput: { additionalContext } });
+}
+
+test("sends a plain async answer under the limit as it is and saves nothing (D-PG5-14)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  const saver = createAnswerSaver();
+
+  // act
+  await endPlainAnswer(t, PLAIN_ANSWER, pi.pi, saver.saveHookOutput);
+  await pi.sent(2);
+
+  // assert
+  assert.deepStrictEqual(
+    { messages: pi.messages, saves: saver.saves },
+    { messages: [answerMessage("remember"), answerMessage("context")], saves: [] },
+  );
+});
+
+test("sends a 12,000-character async systemMessage as the saved wrapper (D-PG5-15)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  const saver = createAnswerSaver();
+
+  // act
+  const { dataRoot } = await endPlainAnswer(
+    t,
+    JSON.stringify({ systemMessage: BIG_TEXT }),
+    pi.pi,
+    saver.saveHookOutput,
+  );
+  await pi.sent(1);
+
+  // assert
+  assert.deepStrictEqual(
+    { messages: pi.messages, saves: saver.saves },
+    {
+      messages: [answerMessage(savedBigText("/saved/systemMessage.txt"))],
+      saves: [{ dataRoot, id: "dispatch-cap", source: "systemMessage", text: BIG_TEXT }],
+    },
+  );
+});
+
+test("saves each over-limit text of one async answer under its own source (D-PG5-15)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  const saver = createAnswerSaver();
+
+  // act
+  const { dataRoot } = await endPlainAnswer(
+    t,
+    answerOf(BIG_TEXT, BIG_TEXT),
+    pi.pi,
+    saver.saveHookOutput,
+  );
+  await pi.sent(2);
+
+  // assert
+  assert.deepStrictEqual(
+    { messages: pi.messages, saves: saver.saves },
+    {
+      messages: [
+        answerMessage(savedBigText("/saved/systemMessage.txt")),
+        answerMessage(savedBigText("/saved/additionalContext.txt")),
+      ],
+      saves: [
+        { dataRoot, id: "dispatch-cap", source: "systemMessage", text: BIG_TEXT },
+        { dataRoot, id: "dispatch-cap", source: "additionalContext", text: BIG_TEXT },
+      ],
+    },
+  );
+});
+
+test("sends the async systemMessage first while only its save is pending (D-PG5-16)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  let releaseSave: (filePath: string) => void = () => undefined;
+  const held = new Promise<string>((resolve) => {
+    releaseSave = resolve;
+  });
+  const saver = createAnswerSaver(() => held);
+
+  // act
+  await endPlainAnswer(t, answerOf(BIG_TEXT, "context"), pi.pi, saver.saveHookOutput);
+  await saver.called;
+  const sentDuringSave = pi.messages.length;
+  releaseSave("/saved/systemMessage.txt");
+  await pi.sent(2);
+
+  // assert
+  assert.deepStrictEqual(
+    { sentDuringSave, messages: pi.messages },
+    {
+      sentDuringSave: 0,
+      messages: [answerMessage(savedBigText("/saved/systemMessage.txt")), answerMessage("context")],
+    },
+  );
+});
+
+test("sends the cut async text with the failure line when the save rejects (D-PG5-15)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  const saver = createAnswerSaver(() => Promise.reject(new Error("disk full")));
+  const marker =
+    "\n\n[Hook systemMessage truncated at 10000 chars \u2014 persist-to-disk failed: disk full]";
+
+  // act
+  await endPlainAnswer(t, JSON.stringify({ systemMessage: BIG_TEXT }), pi.pi, saver.saveHookOutput);
+  await pi.sent(1);
+
+  // assert
+  assert.deepStrictEqual(pi.messages, [answerMessage("x".repeat(10_000 - marker.length) + marker)]);
+});
+
+test("sends no async answer when a reload comes during its save (D-62-03)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  const dropped = hookDebugLineWritten(
+    t,
+    "async-hook: answer dropped after a reload (plugin-lifecycle/UserPromptSubmit)",
+  );
+  let releaseSave: (filePath: string) => void = () => undefined;
+  const held = new Promise<string>((resolve) => {
+    releaseSave = resolve;
+  });
+  const saver = createAnswerSaver(() => held);
+
+  // act
+  const { runtime } = await endPlainAnswer(
+    t,
+    JSON.stringify({ systemMessage: BIG_TEXT }),
+    pi.pi,
+    saver.saveHookOutput,
+  );
+  await saver.called;
+  runtime.advanceGeneration();
+  releaseSave("/saved/systemMessage.txt");
+  await dropped;
+
+  // assert
+  assert.deepStrictEqual(pi.messages, []);
+});
