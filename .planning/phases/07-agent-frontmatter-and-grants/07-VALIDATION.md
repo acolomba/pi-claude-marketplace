@@ -64,6 +64,13 @@ All phase behaviors have automated verification.
 
 | Wave | Commit | Node | Command | Exit | Adapter scenarios | Builtin scenarios | Notes |
 |------|--------|------|---------|------|-------------------|-------------------|-------|
+| baseline | 7584d581 | v26.13.1 | `npm run check` | 0 | 1926 passed | 184 passed | before execution; `/tmp/pg7-wave0.log` |
+| 1 (07-01) | 856ab595 | v26.13.1 | `npm run check` | 0 | 1926 passed | 184 passed | 363 direct-coverage records; `/tmp/pg7-wave1.log` |
+| 2 (07-02) | f31f7361 | v26.13.1 | `npm run check` | 0 | 1930 passed | 184 passed | 363 records; `/tmp/pg7-wave2.log` |
+| 3 (07-03) | 8e188faf | v26.13.1 | `npm run check` | 0 | 1933 passed | 184 passed | 363 records; `/tmp/pg7-wave3.log` |
+| 4 (07-04) | 21ae6201 | v26.13.1 | `npm run check` | 0 | 1941 passed | 184 passed | 363 records; `/tmp/pg7-wave4.log` |
+| 5 (07-05) | 61f504e1 | v26.13.1 | `npm run check` | 0 | 1944 passed | 184 passed | 363 records; `/tmp/pg7-wave5.log` |
+| 6 (07-06) | b9921dda | v26.13.1 | `npm run check` | 0 | 1946 passed | 185 passed | 363 records; `/tmp/pg7-wave6.log` |
 
 ---
 
