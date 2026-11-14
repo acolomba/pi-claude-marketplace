@@ -5737,7 +5737,7 @@ test("sends no async answer when a reload comes during its save (D-62-03)", asyn
   assert.deepStrictEqual(pi.messages, []);
 });
 
-// The characters a plain async hook keeps of each output stream.
+// The characters a plain async hook keeps of its stdout.
 const PLAIN_STREAM_LIMIT = 8 * 1024 * 1024;
 
 test("parses a plain async answer whose stdout runs past its bound and drops the rest (D-PG5-17)", async (t) => {
@@ -5775,6 +5775,72 @@ test("parses a plain async answer whose stdout runs past its bound and drops the
       messages: [answerMessage("remember"), answerMessage("context")],
       dropped: [
         `[hooks] async-hook: stdout past ${PLAIN_STREAM_LIMIT} characters dropped (plugin-lifecycle/UserPromptSubmit)`,
+      ],
+    },
+  );
+});
+
+test("drains a plain async hook's stderr, keeps none of it, and still gives its answer (D-PG5-17)", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const root = await mkdtemp(path.join(tmpdir(), "async-registry-plain-stderr-"));
+  const locations = locationsFor("project", root);
+  const pi = createCountingPi();
+  const saver = createAnswerSaver();
+  const child = createChild(24_803);
+  t.after(async () => {
+    shutdownInMemoryChildren(runtime);
+    destroyChild(child);
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  });
+  const debugBefore = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  t.after(() => {
+    if (debugBefore === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+      return;
+    }
+
+    process.env.PI_CLAUDE_MARKETPLACE_DEBUG = debugBefore;
+  });
+  const lines: string[] = [];
+  t.mock.method(console, "error", (...parts: unknown[]): void => {
+    lines.push(parts.map(String).join(" "));
+  });
+  await spawnAndRegister(
+    runtime,
+    createEntry(root, {
+      claudeEvent: "UserPromptSubmit",
+      handlerDecl: { type: "command", command: "/opt/hooks/note", async: true },
+    }),
+    { type: "input", text: "prompt", source: "interactive" },
+    createContext(root, "session-plain-stderr", true).context,
+    pi.pi,
+    locations,
+    {
+      spawnImpl: createSpawn(child.child, []),
+      dispatchId: () => "dispatch-cap",
+      pidTableWriter: () => Promise.resolve(),
+      saveHookOutput: saver.saveHookOutput,
+    },
+  );
+
+  // act
+  child.stderr.write("first warning\n");
+  child.stderr.end("second warning\n");
+  child.stdout.end(PLAIN_ANSWER);
+  await Promise.all([once(child.stderr, "end"), once(child.stdout, "end")]);
+  child.emitExit(0);
+  child.emitClose(0);
+  await pi.sent(2);
+
+  // assert
+  assert.deepStrictEqual(
+    { messages: pi.messages, stderr: lines.filter((line) => line.includes("stderr")) },
+    {
+      messages: [answerMessage("remember"), answerMessage("context")],
+      stderr: [
+        "[hooks] async-hook: stderr not kept; a plain async hook's stderr is unread (plugin-lifecycle/UserPromptSubmit)",
       ],
     },
   );

@@ -114,9 +114,9 @@ const MAX_CHILD_JOURNALS_SCANNED = 1024;
 const MAX_OWNER_TEXT = 256;
 
 /**
- * The characters a plain `async` hook keeps of each output stream. Nothing
- * stops the hook (D-PG5-17), so its output is bounded instead; the bound is
- * far past the 10,000-character cap that its answer then passes (D-PG5-14).
+ * The characters a plain `async` hook keeps of its stdout. Nothing stops the
+ * hook (D-PG5-17), so its output is bounded instead; the bound is far past
+ * the 10,000-character cap that its answer then passes (D-PG5-14).
  */
 const PLAIN_ASYNC_STREAM_LIMIT = 8 * 1024 * 1024;
 
@@ -200,22 +200,36 @@ function laneOf(entry: RoutingEntry): BackgroundLane {
 // The bound of one output stream of a background hook. An `asyncRewake` hook
 // keeps each stream whole (EXEC-02) up to the collector's NFR-2 ceiling,
 // because its declared `timeout` can let it print for days. A plain async
-// hook has no timer, so it keeps less.
+// hook has no timer, so it keeps less: the first `PLAIN_ASYNC_STREAM_LIMIT`
+// characters of its stdout, and none of its stderr, which nothing reads. The
+// collector still reads the stderr pipe to its end, so the hook never blocks
+// on a full pipe.
 function streamBoundFor(
   entry: RoutingEntry,
   lane: BackgroundLane,
   stream: "stdout" | "stderr",
 ): StreamTextBound {
+  const label = `${entry.pluginId}/${entry.claudeEvent}`;
   if (lane !== "plain") {
-    return ceilingBound(stream, `${entry.pluginId}/${entry.claudeEvent}`);
+    return ceilingBound(stream, label);
+  }
+
+  if (stream === "stderr") {
+    return {
+      limit: 0,
+      onLimit: () => {
+        hookDebugLog(
+          `async-hook: stderr not kept; a plain async hook's stderr is unread (${label})`,
+        );
+      },
+    };
   }
 
   return {
     limit: PLAIN_ASYNC_STREAM_LIMIT,
     onLimit: () => {
       hookDebugLog(
-        `async-hook: ${stream} past ${PLAIN_ASYNC_STREAM_LIMIT} characters dropped ` +
-          `(${entry.pluginId}/${entry.claudeEvent})`,
+        `async-hook: stdout past ${PLAIN_ASYNC_STREAM_LIMIT} characters dropped (${label})`,
       );
     },
   };
@@ -388,9 +402,9 @@ export async function spawnAndRegister(
     // large fan-ins.
     // EXEC-02: an asyncRewake hook keeps the whole of each stream up to the
     // NFR-2 ceiling, as Claude Code keeps every byte a hook prints; a plain
-    // async hook keeps the first `PLAIN_ASYNC_STREAM_LIMIT` characters. The collectors attach their `end`
-    // listeners before the finalize listeners below, so the decoder tail is in
-    // the text first.
+    // async hook keeps only the first part of its stdout (`streamBoundFor`).
+    // The collectors attach their `end` listeners before the finalize
+    // listeners below, so the decoder tail is in the text first.
     const stderr = collectStreamText(
       child.stderr,
       (err) => {
