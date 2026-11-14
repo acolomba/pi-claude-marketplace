@@ -10876,8 +10876,9 @@ const WORKFLOW_RUNS_FOO_A1 =
   'return await agent("Scan the files.", { agentType: "foo:a1" });\n';
 const FOO_A1_RESTRICTION_NOTE =
   '    note: workflow script "scan.js" in "workflows" runs agent type "foo:a1", which ' +
-  "restricts its tools; outside codemode the workflow engine does not keep that restriction, " +
-  "so the agent can use bash, edit, and write";
+  "restricts its tools; unless the workflow engine's providerMiddlewareExtensions setting lists " +
+  "builtin:codemode, the engine does not keep that restriction, so the agent may use bash, edit, " +
+  "and write";
 
 async function seedPluginFile(
   mpRoot: string,

@@ -71,8 +71,10 @@ function resolvedAgentsDirs(resolved: MaterializablePlugin): readonly string[] {
 }
 
 /**
- * D-PG4-11: the Pi built-in tools the workflow engine gives a subagent outside
- * codemode, each with its Claude Code name (AG-7).
+ * D-PG4-11: the Pi built-in tools that Pi's default tool set gives a workflow
+ * engine subagent, each with its Claude Code name (AG-7). The engine filters
+ * them only when its `providerMiddlewareExtensions` setting lists
+ * `builtin:codemode`.
  */
 const ENGINE_BUILTIN_TOOLS: readonly (readonly [pi: string, claude: string])[] = [
   ["read", "Read"],
@@ -82,10 +84,9 @@ const ENGINE_BUILTIN_TOOLS: readonly (readonly [pi: string, claude: string])[] =
 ];
 
 /**
- * D-PG4-11: the engine's built-in tools that the agent's `tools` does not
- * allow or its `disallowedTools` denies, which the agent gets anyway outside
- * codemode. An absent or blank `tools`, or one that lists `*`, allows every
- * tool, as in Claude Code.
+ * D-PG4-11: the built-in tools that the agent's `tools` does not allow or its
+ * `disallowedTools` denies, which the agent may get anyway. An absent or blank
+ * `tools`, or one that lists `*`, allows every tool, as in Claude Code.
  */
 function unkeptBuiltinTools(agent: RestrictionAgent): readonly string[] {
   const allowed = listedToolNames(agent.raw.tools);
@@ -140,17 +141,21 @@ function restrictionNote(
 ): string {
   const folder = path.basename(path.dirname(scriptFile));
 
-  return `workflow script "${forMessage(fileName)}" in "${forMessage(folder)}" runs agent type "${forMessage(agentType)}", which restricts its tools; outside codemode the workflow engine does not keep that restriction, so the agent can use ${TOOL_LIST_FORMAT.format(unkept)}`;
+  return `workflow script "${forMessage(fileName)}" in "${forMessage(folder)}" runs agent type "${forMessage(agentType)}", which restricts its tools; unless the workflow engine's providerMiddlewareExtensions setting lists builtin:codemode, the engine does not keep that restriction, so the agent may use ${TOOL_LIST_FORMAT.format(unkept)}`;
 }
 
 /**
  * PG-SEC-01 / D-PG4-11: the notes for a plugin whose admitted workflow
  * scripts name, as a string literal, an agent of the same plugin that
  * restricts its tools. Claude Code keeps that restriction when a workflow
- * runs the agent; outside codemode the workflow engine passes no tool list to
- * Pi for the child session, so the agent gets read, bash, edit, and write. A
- * note names only the ones the restriction does not keep, and an agent whose
- * restriction keeps all four gets none, so a note is never false.
+ * runs the agent. The workflow engine keeps it only when its
+ * `providerMiddlewareExtensions` setting lists `builtin:codemode`, which is
+ * not Pi's own `codemode` tool. Otherwise the engine passes no tool list to Pi
+ * for the child session, and the child gets Pi's default tools. Those are
+ * read, bash, edit, and write unless the user's Pi `defaultTools` setting or
+ * the engine's `excludeSubagentTools` setting changes them. So the note says
+ * the agent may use the ones its restriction does not keep, and an agent whose
+ * restriction keeps all four gets no note.
  *
  * Matching is exact string equality, with no case folding or Unicode
  * normalization. One note for each distinct pair of script and agent type,

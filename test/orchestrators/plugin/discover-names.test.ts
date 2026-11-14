@@ -91,7 +91,7 @@ function restrictionNote(
   agentType: string,
   unkept: string,
 ): string {
-  return `workflow script "${fileName}" in "${folder}" runs agent type "${agentType}", which restricts its tools; outside codemode the workflow engine does not keep that restriction, so the agent can use ${unkept}`;
+  return `workflow script "${fileName}" in "${folder}" runs agent type "${agentType}", which restricts its tools; unless the workflow engine's providerMiddlewareExtensions setting lists builtin:codemode, the engine does not keep that restriction, so the agent may use ${unkept}`;
 }
 
 test("composes generated names from every bridge in each bridge's declared order", async (t) => {
@@ -294,7 +294,7 @@ test("PG-SEC-01: notes a workflow script that runs a tool-restricted agent of th
     skills: [],
     workflows: ["acme:scan"],
     workflowAgentRestrictionNotes: [
-      `workflow script "scan.js" in "workflows" runs agent type "acme:reader", which restricts its tools; outside codemode the workflow engine does not keep that restriction, so the agent can use bash, edit, and write`,
+      `workflow script "scan.js" in "workflows" runs agent type "acme:reader", which restricts its tools; unless the workflow engine's providerMiddlewareExtensions setting lists builtin:codemode, the engine does not keep that restriction, so the agent may use bash, edit, and write`,
     ],
   });
 });

@@ -29,7 +29,7 @@ Spike S4 ran the engine's own child-session code on 3.15.1 with Pi 1.5.2 and sto
 
 Claude Code 2.1.323 keeps the restriction. When a workflow runs an agent type, it builds the subagent's options from the agent definition, with `disallowedTools` joined from the definition's list and the call's list, and `tools` taken from the definition. A read-only plugin agent stays read-only inside a workflow there.
 
-Until the engine applies the policy in every mode, pi-claude-marketplace notes at install, update, and `info` which of `read`, `bash`, `edit`, and `write` such an agent type gets outside codemode.
+Until the engine applies the policy in every mode, pi-claude-marketplace notes at install, update, and `info` which of `read`, `bash`, `edit`, and `write` such an agent type may get when the engine's `providerMiddlewareExtensions` setting does not list `builtin:codemode`. It says "may" because the user's Pi `defaultTools` setting decides which built-ins a child session starts with.
 
 ## Draft issue
 
@@ -38,7 +38,7 @@ Until the engine applies the policy in every mode, pi-claude-marketplace notes a
 **Body:**
 
 ```markdown
-An agent type's `tools` and `disallowedTools` filter only the engine's custom tools. Pi creates its built-in tools independently, so a child session keeps them unless codemode is on.
+An agent type's `tools` and `disallowedTools` filter only the engine's custom tools. Pi creates its built-in tools independently, so a child session keeps the built-ins that Pi's default tool set gives it unless `providerMiddlewareExtensions` lists `builtin:codemode`.
 
 In 3.15.2, `src/agent.ts:1211` applies `applyToolPolicy` to `customTools`. Only the `if (childCodemode) {` branch at `src/agent.ts:1248` adds the policy-filtered names and the denied names to `excludedTools` (lines 1261 and 1263). The code is the same in 3.15.0 and 3.15.1, one line earlier.
 
