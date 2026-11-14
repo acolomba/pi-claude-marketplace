@@ -4769,11 +4769,15 @@ Deferred by component-features Phase 5 (D-CF5-11). A PostToolUse or PostToolUseF
 
 ## HOOKERRNOTE-01: Claude Code's non-blocking hook error notice
 
+Narrowed 2026-11-14 (parity-gaps, Phase 5, D-PG5-10/11) to the `SessionEnd` half below. A synchronous hook that ends as a non-blocking error now shows `<label> hook error: Failed with non-blocking status code: <line>` on `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `UserPromptSubmit`, `Stop`, `SessionStart`, and `PreCompact`.
+
 Noted by component-features Phase 5. Claude Code shows `<hook name> hook error` and `Failed with non-blocking status code: ...` for a hook that exits with a code other than 0 and 2. The bridge shows nothing. No decision covers it yet.
 
 For SessionEnd, Claude Code 2.1.319 writes `SessionEnd hook [<command>] failed: <output>` to stderr for each failed hook with output after its bounded run. The bridge shows nothing for a non-blocking SessionEnd failure, and `features/hook/session-end.feature` states no notice for one (behavioral-gaps D-BG-603, P6-DC-04).
 
-## HOOKPROMPTSTOP-01: a UserPromptSubmit `continue: false` stops silently
+## ~~HOOKPROMPTSTOP-01: a UserPromptSubmit `continue: false` stops silently~~ -- CLOSED
+
+**CLOSED 2026-11-14** by parity-gaps Phase 5 (D-PG5-13, fixed). A `UserPromptSubmit` `continue: false` now shows `Operation stopped by hook: <stopReason>`, or `Operation stopped by hook` with no reason, and the prompt still does not reach the model. The reason is shown to the user only (STOPREASONCONV-01).
 
 Noted by component-features Phase 5. Claude Code shows `Operation stopped by hook: <reason>`. The bridge stops the prompt with no notice.
 
@@ -5288,7 +5292,7 @@ resolve this item or waive the full-suite requirement.
 
 ## ASYNCRELOADTABLE-01: after a main-session `/reload`, the old load's late hook exits overwrite the new load's PID table
 
-Noted 2026-11-14 (parity-gaps, Phase 3 code review WR-03, iteration 2). Present at `cab4a540`, before Phase 3; the Phase 3 child-only shutdown drain (CR-01 fix `0b49ad9e`) restores that base behavior. Each load builds its own hooks runtime with its own write queue, but all loads share one PID-table file per scope. A main-session shutdown leaves the old runtime's registry intact; the new load's reap kills the old hooks and rewrites the table, then each old hook's `close` runs the old runtime's `finalizeChild` (`bridges/hooks/async-rewake/registry.ts`), which writes its leftover snapshot over the shared table with no ordering against the new runtime's writes. A hook the new load started in that window can lose its row and be orphaned after a crash. The window is short on Linux unless a grandchild holds the hook's stdio open; elsewhere the reap skips live processes, so old hooks run to their 600 s timeout and the window lasts minutes. Suggested fix: in a main session, detach the old runtime's entries at shutdown without signalling them (clear the map, keep each timeout armed), so late exits write nothing; add a router test asserting no table write and no signal after a `reload` followed by `close`.
+Noted 2026-11-14 (parity-gaps, Phase 3 code review WR-03, iteration 2). Present at `cab4a540`, before Phase 3; the Phase 3 child-only shutdown drain (CR-01 fix `0b49ad9e`) restores that base behavior. Each load builds its own hooks runtime with its own write queue, but all loads share one PID-table file per scope. A main-session shutdown leaves the old runtime's registry intact; the new load's reap kills the old hooks and rewrites the table, then each old hook's `close` runs the old runtime's `finalizeChild` (`bridges/hooks/async-rewake/registry.ts`), which writes its leftover snapshot over the shared table with no ordering against the new runtime's writes. A hook the new load started in that window can lose its row and be orphaned after a crash. The window is short on Linux unless a grandchild holds the hook's stdio open; elsewhere the reap skips live processes, so old hooks run to their 600 s timeout and the window lasts minutes. After D-PG5-17 (parity-gaps, Phase 5) a plain `async` hook has no timer, so outside Linux nothing stops one that never ends after a quit or a crash, and the window lasts as long as that hook runs (D-PG5-18). Suggested fix: in a main session, detach the old runtime's entries at shutdown without signalling them (clear the map, keep each timeout armed), so late exits write nothing; add a router test asserting no table write and no signal after a `reload` followed by `close`.
 
 ## CHILDSESSIONID-01: should a child tool hook's session fields name the parent session?
 
@@ -5325,3 +5329,55 @@ Noted 2026-11-14 (parity-gaps, Phase 4 verification, PG-SKILL-04 unclassified ed
 ## WFNOTETRIGGER-01: should the workflow restriction note fire for an agent whose tools keep all four built-ins?
 
 Noted 2026-11-14 (parity-gaps, Phase 4 review IN-05). After WR-05 the note names only built-ins among read, bash, edit and write that the agent's `tools` does not allow (plus `disallowedTools`). An agent whose `tools` keeps all four, or lists a scoped `Bash(spec)` read as full `Bash`, gets no note, though outside `builtin:codemode` the engine gives it unrestricted `bash`. A missing note is allowed by D-PG4-11; this narrows the trigger with no recorded decision. Maintainer question.
+
+## STOPFOLLOWUPCTX-01: a follow-up typed while a Stop hook runs may lose its UserPromptSubmit context
+
+Noted 2026-11-14 (parity-gaps, Phase 5 research, assumption A1; read from source, not run). When the `Stop` bucket does not continue, Pi reads a follow-up typed during the boundary with no `turn_end` between, so the follow-up's `UserPromptSubmit` context stays in the bridge's buffer (`bridges/hooks/event-adapters.ts`, the `turn_end` send) until the next prompt drops it. When the bucket continues, a `turn_end` fires first and the context goes out. A fix would send a queued follow-up's context from the boundary handler. First measure it: a `UserPromptSubmit` context hook, a slow `Stop` hook, and a follow-up sent while it runs. `docs/hooks-compatibility.md` states the edge as read from source.
+
+## STOPASYNCANSWER-01: a Stop continuation does not read a plain async hook's answer
+
+Noted 2026-11-14 (parity-gaps, Phase 5 research F4, A3, open question 7). A plain `async` hook's answer goes out with `deliverAs: "nextTurn"` (D-BG-205), which Pi adds only when a run starts. A `Stop` continuation is not a run start (D-PG5-07), so the answer reaches the model with the next user prompt instead of the continuation's model call (measured, M18). Before the change the re-entry run read it. Unknown whether Claude Code delivers it to the call after a `Stop` block (A3: read the query loop around `getAsyncHookResponseAttachments` in the binary, or run a sandboxed probe). A plain `sendMessage` with `triggerTurn: false` would reach the next model call of a running run; changing it amends D-BG-205.
+
+## STOPMODECHECK-01: no committed check of a Stop continuation in json and print mode
+
+Noted 2026-11-14 (parity-gaps, Phase 5). The cucumber harness drives Pi over RPC, and the terminal mode has the pty harness, so the committed `Stop` scenarios cover `rpc`. Research measured `json` and `print` mode on Pi 1.5.0 and 1.5.2 once (probes M1 to M20) and found them the same, but no committed test runs a `Stop` continuation in those modes. A Pi release that changes `agent_before_settle` in one of them would pass the suite.
+
+## PRETOOLSTOPREASON-01: the reason the model receives for a PreToolUse `continue: false`
+
+Noted 2026-11-14 (parity-gaps, Phase 5, research U5). The model receives `Operation stopped by hook` (`DEFAULT_STOP_REASON`, `bridges/hooks/event-adapters.ts`) for a `PreToolUse` stop. Claude Code 2.1.323 sends `Execution stopped by PreToolUse hook`, then `: <stopReason>` when a reason is set. Only the user notice changed in Phase 5 (D-PG5-13).
+
+## STOPREASONCONV-01: keep a `stopReason` in the conversation
+
+Noted 2026-11-14 (parity-gaps, Phase 5, deferred idea). The bridge shows a `continue: false` hook's `stopReason` to the user only (D-PG5-13) and adds nothing to the transcript, so the model never sees it. Claude Code keeps the reason in the conversation. Research the upstream message shape first (`claude-code-compat-research`).
+
+## ASYNCPRINTEXIT-01: async hooks left running when a print or json run ends
+
+Noted 2026-11-14 (parity-gaps, Phase 5, deferred idea). When a `print` or `json` mode run ends, the bridge leaves its `async` and `asyncRewake` hooks running. Claude Code stops them at `-p` teardown. After D-PG5-17 a plain `async` hook has no timer either, so outside Linux one that never ends keeps running (D-PG5-18, ASYNCRELOADTABLE-01).
+
+## HOOKCHAINLIMITS-01: Claude Code's per-entry and per-dispatch hook output limits
+
+Noted 2026-11-14 (parity-gaps, Phase 5, research U8; medium-high confidence). Claude Code 2.1.323 limits one entry to 100,000 characters and one dispatch to 200,000 characters (`BNt`), on top of the 10,000-character limit per context string that D-PG5-14 copies. Its callers are events of the hooks module chain (`tool.call`, `prompt.submit`, `prompt.mention`), a component kind this project does not bridge, so Phase 5 left them out. A hook can still write any amount to saved files (05-SECURITY AR-05-05). Revisit if the command-hook path is found to call `BNt`.
+
+## HOOKTIMEDOUTEXIT2-01: a timed-out hook that exits 2 with a missing-file stderr passes as a noop
+
+Noted 2026-11-14 (parity-gaps, Phase 5, 05-03 flagged assumption). A synchronous `Stop` or `UserPromptSubmit` hook that traps SIGTERM after its own timeout, then exits 2 with a missing-file stderr and no stdout, gets the missing-script noop from the wire protocol (D-PG5-08). `withoutTimeoutFailure` in `bridges/hooks/dispatch-exec.ts` then removes its failure, so the run passes as a plain noop and shows no notice. Before Phase 5 that run was an exit-2 block. With `onFailure: "block"` it still blocks as `timed out`. A run that a signal ended has `exitCode === null` and never reaches the rule. Decide whether this run keeps its block.
+
+## HOOKTIMEOUTNOTE-01: a notice for a timed-out hook
+
+Noted 2026-11-14 (parity-gaps, Phase 5, deferred idea). A synchronous hook that times out shows no notice (D-PG5-10). Claude Code reports a timeout as `hook_cancelled`, shown only for `UserPromptSubmit` (research U4). Research the upstream text before adding one.
+
+## REWAKEMISSINGSCRIPT-01: Claude Code's missing-script rule in the asyncRewake lane
+
+Noted 2026-11-14 (parity-gaps, Phase 5, research U2). The synchronous missing-script rule of D-PG5-08 does not apply in the `asyncRewake` lane, and the lane does not change (D-PG5-09). Claude Code 2.1.323 has a rule of its own there: an exit 2 whose output shows a script that cannot be opened still wakes the model once, with a `<hook> hook could not run: <script> cannot be opened ... This is a broken hook installation, not feedback on your work` text, and identical repeats are dropped. The bridge wakes the model on every such exit 2 with its usual rewake text (D-BG-201, D-BG-202).
+
+## HOOKNOTICEBIDI-01: hook notices keep Unicode format characters
+
+Noted 2026-11-14 (parity-gaps, Phase 5 security audit, advisory; present before Phase 5). `terminalSafeHookNotice` strips VT escapes and Cc controls but not Unicode format characters (Cf), such as the bidi overrides U+202A to U+202E and U+2066 to U+2069. A hook can change how its own notice reads after the bridge's label prefix, now also through the stderr line of a failure notice (D-PG5-11).
+
+## HOOKOUTLEAFLINK-01: no saveHookOutput owner case for a link at the file itself
+
+Noted 2026-11-14 (parity-gaps, Phase 5 security audit, residual). In the background lane the saved file's name holds the dispatch id, which the hook's environment carries as `PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH`, so a hook can predict it. The leaf lstat of `assertPathInside` refuses a link planted there (`test/shared/path-safety.test.ts`, the final-segment case), but no `test/bridges/hooks/hook-output-files.test.ts` case pins it for `saveHookOutput`. Add one.
+
+## HOOKOUTSWEEPDOC-01: the compatibility page does not state the limits of the saved-output sweep
+
+Noted 2026-11-14 (parity-gaps, Phase 5 security audit, residual). `docs/hooks-compatibility.md` says each load removes the files in `_shared/hook-output/` that are older than 30 days. The sweep removes only regular files named `hook-<id>-<source>.txt`, keeps links and sub-folders, and skips an untrusted project, whose old files stay until Pi trusts it again. Name these limits on the page.
