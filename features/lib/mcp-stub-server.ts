@@ -6,7 +6,10 @@
  * over its stdin and stdout. It answers `initialize`, lists one tool named by
  * its optional fourth argument (`echo` by default), and answers a `tools/call`
  * with `<tool>:<text>`, or `<tag>:<tool>:<text>` when its environment sets
- * `STUB_TAG`. Any other request gets an empty result,
+ * `STUB_TAG`. When its environment sets `STUB_RESOURCE` to a name, it also
+ * declares the `resources` capability and offers one static text resource,
+ * `stub://<name>` with the text `stub <name>`, through `resources/list` and
+ * `resources/read` (D-PG9-10). Any other request gets an empty result,
  * and a notification gets no reply. It appends every message
  * it receives to `<harness dir>/mcp-stub-requests.jsonl`, with the plugin and
  * server names it was started for and the name of the tool it lists, writes
@@ -33,6 +36,9 @@ const REQUESTS_FILE = "mcp-stub-requests.jsonl";
 
 // The protocol version the stub answers when a client names none.
 const FALLBACK_PROTOCOL_VERSION = "2025-06-18";
+
+/** The variable of the stub's environment that names its one text resource. */
+export const STUB_RESOURCE_VARIABLE = "STUB_RESOURCE";
 
 /**
  * One message a stub received, as it logged it: the plugin and server it was
@@ -126,6 +132,23 @@ export async function stubPidFiles(harness: string): Promise<string[]> {
   return (await readdir(harness)).filter((name) => /^mcp-stub-\d+\.pid$/u.test(name)).sort();
 }
 
+interface StubResource {
+  readonly uri: string;
+  readonly name: string;
+  readonly mimeType: string;
+  readonly text: string;
+}
+
+// The one text resource that a non-empty `STUB_RESOURCE` names, or none.
+function stubResource(): StubResource | undefined {
+  const name = process.env[STUB_RESOURCE_VARIABLE];
+  if (name === undefined || name === "") {
+    return undefined;
+  }
+
+  return { uri: `stub://${name}`, name, mimeType: "text/plain", text: `stub ${name}` };
+}
+
 function initializeResult(params: unknown): unknown {
   const version =
     isRecord(params) && typeof params.protocolVersion === "string"
@@ -133,9 +156,30 @@ function initializeResult(params: unknown): unknown {
       : FALLBACK_PROTOCOL_VERSION;
   return {
     protocolVersion: version,
-    capabilities: { tools: {} },
+    capabilities: stubResource() === undefined ? { tools: {} } : { tools: {}, resources: {} },
     serverInfo: { name: "stub", version: "1.0.0" },
   };
+}
+
+function resourcesListResult(): unknown {
+  const resource = stubResource();
+  if (resource === undefined) {
+    return {};
+  }
+
+  const { uri, name, mimeType } = resource;
+  return { resources: [{ uri, name, mimeType }] };
+}
+
+function resourcesReadResult(params: unknown): unknown {
+  const resource = stubResource();
+  if (resource === undefined) {
+    return {};
+  }
+
+  const { uri, mimeType, text } = resource;
+  const read = isRecord(params) && params.uri === uri;
+  return { contents: read ? [{ uri, mimeType, text }] : [] };
 }
 
 const ECHO_TOOL = {
@@ -166,6 +210,10 @@ function resultFor(method: unknown, params: unknown, tool: string): unknown {
       return { tools: [{ ...ECHO_TOOL, name: tool }] };
     case "tools/call":
       return callResult(params, tool);
+    case "resources/list":
+      return resourcesListResult();
+    case "resources/read":
+      return resourcesReadResult(params);
     default:
       return {};
   }
