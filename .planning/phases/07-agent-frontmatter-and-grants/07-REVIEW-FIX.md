@@ -1,12 +1,12 @@
 ---
 phase: 07-agent-frontmatter-and-grants
-fixed_at: 2026-11-14T23:30:00Z
+fixed_at: 2026-11-15T01:30:00Z
 review_path: .planning/phases/07-agent-frontmatter-and-grants/07-REVIEW.md
-iteration: 1
-findings_in_scope: 12
-fixed: 10
-skipped: 2
-status: partial
+iteration: 2
+findings_in_scope: 5
+fixed: 5
+skipped: 0
+status: all_fixed
 ---
 
 # Phase 7: Code Review Fix Report
@@ -156,3 +156,77 @@ unpaired tests, and direct coverage for the staged pairs).
 _Fixed: 2026-11-14T23:30:00Z_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 1_
+
+## Iteration 2
+
+**Fixed at:** 2026-11-15T01:30:00Z
+**Source review:** .planning/phases/07-agent-frontmatter-and-grants/07-REVIEW.md (iteration 2, commit 0fdbc054)
+**Iteration:** 2
+
+The frontmatter above counts this iteration. Iteration 1 counted 12 findings in scope, 10 fixed and 2 skipped.
+
+**Summary:**
+
+- Findings in scope: 5 (1 critical, 1 warning, 3 info; scope `all`)
+- Fixed: 5 (CR2-01, IN2-01, and WR2-01 are logic fixes: fixed, requires human verification; IN2-02 and IN2-03 are docs)
+- Skipped: 0
+
+Where verification ran: every check ran in the main checkout of the worktree `/home/acolomba/src/pi-claude-marketplace-gaps-agents` (branch `features/gaps-agents`). No review-fix worktree was created. `npm run check` was not run; the orchestrator runs it. Each commit passed the commit hook (`npm run check:commit`), except the docs-only commits, which the hook skips. Probes and Bun replays ran with a scratch `HOME` and `PI_CODING_AGENT_DIR`.
+
+### CR2-01: A repeated `tools` list in a CRLF file or written as a zero-indented list still loads the agent with every tool
+
+**Status:** fixed: requires human verification
+
+**Files modified:** `extensions/pi-claude-marketplace/shared/frontmatter-repair.ts`, `test/shared/frontmatter-repair.test.ts`, `test/bridges/agents/frontmatter.test.ts`, `features/agent/frontmatter.feature`, `docs/mcp-compatibility.md`
+**Commit:** 60c64098
+**Applied fix:** In `blankEarlierDuplicateKeys` only, so the shared `keyValueEnd` that the skills bridge uses is unchanged. The key pattern takes any whitespace after the colon (`(?=\s|$)`), so a CRLF `tools:\r` line matches. A new `topLevelKey` reports whether the key's value is empty on its line, or holds only a comment. For such a key, the new `duplicateKeySpanEnd` also spans the column-0 `- ` items and indented lines that follow, so the items of an earlier compact list are blanked with its key. A key with a value on its line keeps the `keyValueEnd` span. The comment that claimed a span holds only indented lines now names the column-0 items too. Bun 1.4.4 was replayed for every form (`crlfBlockEarlier`, `crlfBlockLast`, `zeroIndent`, `zeroIndentLast`, and a comment after the key): it keeps the last value in each, and the reader now gives the same fields. The reviewer's probe4 gives `{"name":"a","tools":"Grep"}` for all five CRLF and LF cases.
+**Tests:** 5 shared unit cases (earlier and last CRLF copy as a list, an earlier column-0 list with a blank line between items, a column-0 list after a comment on the key line, a last column-0 list that stays); 3 `readAgentFrontmatter` cases (CRLF earlier list, CRLF last list, column-0 earlier list); the new Scenario Outline "An earlier copy of a key that lists its items at column 0 gives way to the last copy", rows `tools:` and `tools: # the earlier list`. A lone CR or CRLF cannot be written in a feature-file doc string, so CRLF has unit and reader cases only.
+**Negative control:** with the previous `frontmatter-repair.ts`, 4 shared cases and 3 reader cases fail, and both Outline rows fail at install with the D-PG7-04 note (`A block sequence may not be used as an implicit map key at line 3, column 1`). The old scenario "A key written twice keeps its last value" still passes, as it should.
+
+### IN2-01: The duplicate-key blanking leaves several Bun-accepted forms unparseable, and the docs state it without limits
+
+**Status:** fixed: requires human verification
+
+**Files modified:** `extensions/pi-claude-marketplace/shared/frontmatter-repair.ts`, `test/shared/frontmatter-repair.test.ts`, `test/bridges/agents/frontmatter.test.ts`, `features/agent/frontmatter.feature`, `docs/mcp-compatibility.md`
+**Commit:** 32db7e90
+**Applied fix:** The key pattern also matches a double- or single-quoted key with no escape inside, and blanks between the key and the colon. `topLevelKey` removes the quote marks, so `tools`, `"tools"`, `'tools'`, and `tools :` are one key. A plain key no longer starts with a quote mark. The docs at `docs/mcp-compatibility.md` (the paragraph at the old line 401) now name the forms the pass handles (the key spellings, a list value, column-0 items, CRLF) and list the D-PG7-19 residuals that Bun 1.4.4 reads with the last value kept but this extension leaves unparseable: an explicit key (`? tools` / `: Read`), a key repeated inside a nested mapping such as `hooks:` or `mcpServers:`, and a quoted key with an escape (`"to\x6fls"`). They also note that an anchor defined only on an earlier copy is removed with it, so a later `*t` reads as the text `*t`, where Bun reads the anchored value. Each residual was replayed against Bun and the reader.
+**Tests:** 3 shared unit cases (a double-quoted, a single-quoted, and a plain copy as one key; blanks before the colon; an explicit key beside a plain copy stays unchanged); 2 `readAgentFrontmatter` cases (quoted and plain, blank before the colon); the Outline rows `"tools":`, `'tools':`, and `tools :`.
+**Negative control:** with the CR2-01 source (commit 60c64098), 2 shared cases, 2 reader cases, and the 3 new Outline rows fail.
+
+### WR2-01: Provenance values are written as bare YAML scalars, so a stray quote or indicator in a dropped tool makes the engine lose the agent
+
+**Status:** fixed: requires human verification
+
+**Files modified:** `extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts`, `test/bridges/agents/frontmatter.test.ts`, `test/bridges/agents/convert.test.ts`, `test/bridges/agents/grant-forms.test.ts`, `test/bridges/agents/stage.test.ts`, `test/integration/workflow-engine-agent-registry.test.ts`, `test/integration/provenance-invisibility.test.ts`, `features/workflow/agent-steps.feature`, `features/mcp-server/agent-grants.feature`
+**Commit:** f8fab792
+**Applied fix:** `sanitizeProvenanceValue` became `provenanceScalar`. It still turns a CRLF pair and every other unsafe character into a space, and then writes the value bare only when `readsAsPlainYamlText` (the D-PG7-18 check) says YAML reads it as its own text. Any other value goes through `emitSafeDoubleQuotedScalar`. This covers every provenance list item (dropped fields, dropped tools, warnings) and `sourcePath` and `originalModel`. The doc now says what the function does and why. The fix widens beyond the probes: the MCP background warning holds `` (`async: true`) ``, which YAML read as a one-key mapping (no throw), so it is now written double-quoted too. Every MCP agent file changes in that line, and the test file builders in `convert.test.ts`, `grant-forms.test.ts`, and `stage.test.ts` now take each item as the file writes it (`MCP_ASYNC_WARNING_ITEM`). An empty value is written `""`, where it was written as a YAML null before. pi-subagents 0.88.1 was traced: its line reader collects the indented lines under `provenance:` into one string and reads no key from them, so the quotes do not reach it; `provenance-invisibility.test.ts` now runs a quoted field and a quoted warning through that reader. The reviewer's probe2 and probe3 cases all parse with Pi's YAML reader now.
+**Tests:** the `convert.test.ts` tool-token table (the reviewer's `:3200` case) now also pins the written dropped-tool lines, such as `    - "'"` and `    - "\"Bash\""`; emitter cases for a two-`: ` value, a backslash with a quote mark, and a number; a round-trip case where Pi's `parseFrontmatter` reads back `'Bash`, `*`, `@x`, `` `x ``, `%x`, `[x`, `x: y: z`, `"Bash"`, a backslash, the empty string, `true`, `@agents/...`, and `[sonnet` as written; 8 engine-registry cases that find `demo:reader` with `["read"]` for `tools: Read, 'Bash`, `@Grep`, `*Grep`, `` `x ``, `%x`, `[x`, `thinking: "x: y: z"` (a two-`: ` warning), and a dropped field `x: y: z`. A bare `*` grants every tool (D-CF4-08), so it never reaches `droppedTools` through the converter: the engine case uses `*Grep`, and the round-trip case writes `*` directly. New scenario "A workflow step on a plugin agent whose tools list holds a stray quote runs on the agent's body". The three `agent-grants.feature` file expectations now show the quoted warning.
+**Negative control:** with the previous `frontmatter.ts`, all 8 new engine-registry cases fail, and the scenario fails: the engine child receives `Act as workflow subagent type: demo:reader` instead of the agent's body. The `agent-grants.feature` file expectations fail too.
+
+### IN2-02: Two texts still describe the old `inherit` output
+
+**Files modified:** `extensions/pi-claude-marketplace/bridges/agents/convert.ts`
+**Commit:** b38bd8a2
+**Applied fix:** The `ConvertAgentInput.mapModel` doc now says a source `inherit` is written as `model: ""` (D-PG7-11, D-PG7-17), as `types.ts` says. The PRD bullet in `docs/prd/pi-claude-marketplace-prd.md:461` ("`inherit` → omit + record `originalModel`") was left as it is: the PRD is a research record. It contradicts D-PG7-11 and D-PG7-17, so the maintainer may want to update it during the D-PG7-17 review.
+**Tests:** none (comment only). **Negative control:** not applicable.
+
+### IN2-03: `subagent list` shows an empty model for an `inherit` agent
+
+**Files modified:** `docs/mcp-compatibility.md`
+**Commit:** 9546095d
+**Applied fix:** No code change. The `inherit` paragraph of `docs/mcp-compatibility.md` now says that pi-subagents 0.88.1 shows the empty model as it is. The capabilities list of `subagent list` and the `/subagents` views print an empty `Model:` field, where an agent with no `model` line shows that it inherits the session's model. With `subagents.defaultProvider` set, `subagent list` prints `Model: anthropic/`. The child's model is not affected. The paragraph ties this display to the pending D-PG7-17 review. Verified in the installed peer: `src/agents/agent-management.js:785-791`, `src/slash/subagents-admin.js:175` and `:342`, and `applySubagentDefaultModel` in `src/agents/agents.js`.
+**Pending maintainer review:** carry into D-PG7-17 that ROADMAP criterion 4 (`subagent get` shows `model inherit`) is no longer met as worded, and that `subagent list` and `/subagents` show an empty `Model:` (`anthropic/` with a default provider).
+**Tests:** none (docs only). **Negative control:** not applicable.
+
+### Verification (iteration 2)
+
+- Unit: `test/{bridges,orchestrators,shared,edge,persistence,domain,platform,transaction}/**` and `test/index.test.ts`: 17432 of 17432 passed.
+- Integration: `agents-adapter-grant-conformance`, `agents-builtin-grant-conformance`, `pi-subagents-child-identity`, `pi-subagents-child-launch-conformance`, `provenance-invisibility`, `skill-path-resolution`, `workflow-engine-agent-registry`, `workflow-kind-inversion`: 50 of 50 passed (pi-subagents 0.88.1, pi-dynamic-workflows 3.15.0).
+- Cucumber over `features/agent`, `features/workflow`, `features/skill`, `features/mcp-server/agent-grants.feature`, and `features/mcp-server/verdict-markers.feature`, after the last code commit: adapter profile 257 of 257 passed, builtin profile 28 of 28 passed.
+- Every code commit passed `npm run check:commit`. `npm run check` was not run.
+
+---
+
+_Fixed: 2026-11-15T01:30:00Z_
+_Fixer: Claude (gsd-code-fixer)_
+_Iteration: 2_
