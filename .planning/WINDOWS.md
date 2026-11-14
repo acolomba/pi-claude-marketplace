@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 16
+open_count: 17
 waived_count: 52
 fixed_count: 47
-total_count: 115
-last_updated: 2026-11-13T23:19:58.582Z
+total_count: 116
+last_updated: 2026-11-14T03:05:14.930Z
 ---
 
 # Broken Windows Ledger
@@ -130,6 +130,7 @@ last_updated: 2026-11-13T23:19:58.582Z
 | 113 | 01 | deviation | features/plugin/config-migration.feature | 27 | [behavioral-gaps] CFGMIG-01 seed pins today's MIG-01 output for a deleted config: a disabled plugin is declared {} (enabled lost) and the load reports will enable; Phase 8 owns the fix in persistence/migrate-config.ts and the seed rewrite | open |  | 2026-11-08T03:04:18.774Z |  |
 | 114 | 02 | deviation | features/hook/async.feature |  | [parity-gaps] Async lifecycle scenarios intermittently report the wrong exit code, miss rewake, or leave a hook running. Cleanup failure also reproduced on pre-wave commit 309a45559e9f086d76198acae906b038a4c9e1bc, so it predates atomic edit preflight. Preserve assertions and investigate under ASYNCLIFECYCLE-01; no gate waived. | open |  | 2026-11-13T02:44:26.169Z |  |
 | 115 | 03 | deviation | docs/hooks-compatibility.md | 27 | [parity-gaps] 03-08-02 verify 'npx --no prettier --check' on the two compatibility pages cannot pass: prettier and mdformat disagree on two pre-existing lines of hooks-compatibility.md (27, 144; also failing at 1a8aa893); mdformat/markdownlint pass and mcp-compatibility.md passes prettier | open |  | 2026-11-13T23:19:58.582Z |  |
+| 116 | 4 | deviation | .fallowrc.json |  | [parity-gaps] ignoreExports exempts isMarketplaceRootSource (domain/component-paths.ts) from unused-export until orchestrators/plugin/info.ts imports it; remove the entry then | open |  | 2026-11-14T03:05:14.930Z |  |
 
 ````json
 [
@@ -1569,6 +1570,19 @@ last_updated: 2026-11-13T23:19:58.582Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-11-13T23:19:58.582Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 116,
+    "kind": "deviation",
+    "phase": "4",
+    "file": ".fallowrc.json",
+    "line": null,
+    "description": "[parity-gaps] ignoreExports exempts isMarketplaceRootSource (domain/component-paths.ts) from unused-export until orchestrators/plugin/info.ts imports it; remove the entry then",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-14T03:05:14.930Z",
     "resolved_at": null,
     "milestone": null
   }
