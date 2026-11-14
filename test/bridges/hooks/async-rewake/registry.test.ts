@@ -5737,8 +5737,10 @@ test("sends no async answer when a reload comes during its save (D-62-03)", asyn
   assert.deepStrictEqual(pi.messages, []);
 });
 
-// The UTF-16 code units a plain async hook keeps of its stdout.
+// The UTF-16 code units a plain async hook keeps of its stdout, and of its
+// stdout's end past that.
 const PLAIN_STREAM_LIMIT = 8 * 1024 * 1024;
+const PLAIN_STREAM_TAIL = 64 * 1024;
 
 test("parses a plain async answer whose stdout runs past its bound and drops the rest (D-PG5-17)", async (t) => {
   // arrange
@@ -5762,7 +5764,7 @@ test("parses a plain async answer whose stdout runs past its bound and drops the
   // act
   await endPlainAnswer(
     t,
-    `${PLAIN_ANSWER}\n${"x".repeat(PLAIN_STREAM_LIMIT)}`,
+    `${PLAIN_ANSWER}\n${"x".repeat(PLAIN_STREAM_LIMIT + PLAIN_STREAM_TAIL)}`,
     pi.pi,
     saver.saveHookOutput,
   );
@@ -5774,7 +5776,7 @@ test("parses a plain async answer whose stdout runs past its bound and drops the
     {
       messages: [answerMessage("remember"), answerMessage("context")],
       dropped: [
-        `[hooks] async-hook: stdout past ${PLAIN_STREAM_LIMIT} UTF-16 code units dropped; the last 65536 kept (plugin-lifecycle/UserPromptSubmit)`,
+        `[hooks] async-hook: stdout past ${PLAIN_STREAM_LIMIT} UTF-16 code units dropped; the last ${PLAIN_STREAM_TAIL} kept (plugin-lifecycle/UserPromptSubmit)`,
       ],
     },
   );
@@ -5784,10 +5786,47 @@ test("gives a plain async answer on the last line after more progress than its s
   // arrange
   const pi = createCountingPi();
   const saver = createAnswerSaver();
-  const progress = "progress line\n".repeat(Math.ceil(PLAIN_STREAM_LIMIT / 14) + 1);
+  const progress = "progress line\n".repeat(
+    Math.ceil((PLAIN_STREAM_LIMIT + PLAIN_STREAM_TAIL) / 14) + 1,
+  );
 
   // act
   await endPlainAnswer(t, `${progress}${PLAIN_ANSWER}\n`, pi.pi, saver.saveHookOutput);
+  await pi.sent(2);
+
+  // assert
+  assert.deepStrictEqual(pi.messages, [answerMessage("remember"), answerMessage("context")]);
+});
+
+test("gives a plain async answer whose line its stdout bound splits when the kept end holds the rest (D-BG-205)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  const saver = createAnswerSaver();
+  const progress = `${"x".repeat(PLAIN_STREAM_LIMIT - 10)}\n`;
+
+  // act
+  await endPlainAnswer(t, `${progress}${PLAIN_ANSWER}\n`, pi.pi, saver.saveHookOutput);
+  await pi.sent(2);
+
+  // assert
+  assert.deepStrictEqual(pi.messages, [answerMessage("remember"), answerMessage("context")]);
+});
+
+test("gives a plain async answer, not the line fragment that the kept end of its stdout starts with (D-BG-205)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  const saver = createAnswerSaver();
+  const fragment = '{"systemMessage":"wrong"}';
+  const padding = "p".repeat(PLAIN_STREAM_TAIL - fragment.length - PLAIN_ANSWER.length - 3);
+  const keptEnd = `${fragment}\n${padding}\n${PLAIN_ANSWER}\n`;
+
+  // act
+  await endPlainAnswer(
+    t,
+    `${"x".repeat(PLAIN_STREAM_LIMIT)}\nnote ${keptEnd}`,
+    pi.pi,
+    saver.saveHookOutput,
+  );
   await pi.sent(2);
 
   // assert

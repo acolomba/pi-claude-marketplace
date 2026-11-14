@@ -24,10 +24,12 @@
 // that would split such a pair keeps one unit fewer, so the text never ends
 // in half a character.
 //
-// A bound may also keep a tail: the last units of the stream past the cut,
-// joined to the head with a line break. A hook's answer on its last line,
-// after more progress lines than the head holds, then still parses as one
-// line (D-BG-205).
+// A bound may also keep a tail: the last units of the stream past the cut. A
+// stream that the head and the tail hold whole comes back exactly. Once units
+// are dropped, the tail loses its first line, which can start anywhere in a
+// line, and its whole lines follow the head after a line break. A hook's
+// answer on its last line, after more progress lines than the head holds, then
+// still parses as one line, and no line fragment can parse first (D-BG-205).
 
 import { StringDecoder } from "node:string_decoder";
 
@@ -75,16 +77,10 @@ function cutIndex(text: string, limit: number): number {
   return last >= 0xd800 && last <= 0xdbff ? limit - 1 : limit;
 }
 
-// The last `count` code units of `text`, one fewer when the first kept unit
-// would be the low half of a surrogate pair.
+// The last `count` code units of `text`. A start that splits a surrogate pair
+// lies in the tail's first line, which the text never keeps once units drop.
 function lastUnits(text: string, count: number): string {
-  if (text.length <= count) {
-    return text;
-  }
-
-  const start = text.length - count;
-  const first = text.charCodeAt(start);
-  return text.slice(first >= 0xdc00 && first <= 0xdfff ? start + 1 : start);
+  return text.length <= count ? text : text.slice(text.length - count);
 }
 
 /**
@@ -94,8 +90,10 @@ function lastUnits(text: string, count: number): string {
  * `null` stream collects nothing. The text keeps the first `bound.limit`
  * UTF-16 code units, or one fewer where the cut would split a surrogate pair.
  * Later chunks are read and dropped, and `bound.onLimit` runs once, at the
- * first dropped unit. With a `bound.tail`, the text past the cut keeps the
- * last `bound.tail` units of the stream after a line break.
+ * first dropped unit. With a `bound.tail`, the text keeps the last
+ * `bound.tail` units of the stream past the cut: all of them, joined exactly,
+ * while none is dropped, and after that only the whole lines among them,
+ * after a line break.
  */
 export function collectStreamText(
   stream: NodeJS.ReadableStream | null,
@@ -105,22 +103,41 @@ export function collectStreamText(
   let head = "";
   let tail = "";
   let full = false;
+  let dropped = false;
   const tailLimit = bound.tail ?? 0;
   const keepsTail = tailLimit > 0;
+  const keepTail = (units: string): string => {
+    const kept = lastUnits(units, tailLimit);
+    if (!dropped && kept.length < units.length) {
+      dropped = true;
+      bound.onLimit();
+    }
+
+    return kept;
+  };
+
   const append = (piece: string): void => {
     if (full) {
-      tail = lastUnits(tail + piece, tailLimit);
+      tail = keepTail(tail + piece);
       return;
     }
 
     head += piece;
     if (head.length > bound.limit) {
       const cut = cutIndex(head, bound.limit);
-      tail = lastUnits(head.slice(cut), tailLimit);
+      tail = keepTail(head.slice(cut));
       head = head.slice(0, cut);
       full = true;
-      bound.onLimit();
     }
+  };
+
+  const text = (): string => {
+    if (!dropped) {
+      return head + tail;
+    }
+
+    const lineEnd = tail.indexOf("\n");
+    return lineEnd === -1 ? head : `${head}\n${tail.slice(lineEnd + 1)}`;
   };
 
   if (stream !== null) {
@@ -138,5 +155,5 @@ export function collectStreamText(
     });
   }
 
-  return { text: () => (full && keepsTail ? `${head}\n${tail}` : head) };
+  return { text };
 }

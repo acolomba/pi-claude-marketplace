@@ -110,13 +110,13 @@ test("keeps a character whose two code units end at its bound", async () => {
   assert.strictEqual(output.text(), "ab\u{1F600}");
 });
 
-test("keeps the end of the stream past its cut after a line break", async () => {
+test("keeps the whole lines of the end of a stream past its cut after a line break", async () => {
   // arrange
   const stream = new PassThrough();
   let limitCalls = 0;
   const output = collectStreamText(stream, rejectError, {
     limit: 3,
-    tail: 3,
+    tail: 5,
     onLimit: () => {
       limitCalls += 1;
     },
@@ -124,21 +124,24 @@ test("keeps the end of the stream past its cut after a line break", async () => 
 
   // act
   stream.write("abcd");
-  stream.write("efg");
-  stream.end("hij");
+  stream.write("ef\ngh");
+  stream.end("\nij");
   await once(stream, "end");
 
   // assert
-  assert.deepStrictEqual({ text: output.text(), limitCalls }, { text: "abc\nhij", limitCalls: 1 });
+  assert.deepStrictEqual({ text: output.text(), limitCalls }, { text: "abc\nij", limitCalls: 1 });
 });
 
-test("keeps the whole end of a stream that passes its cut by less than its tail", async () => {
+test("returns a stream exactly when it passes its cut by less than its tail", async () => {
   // arrange
   const stream = new PassThrough();
+  let limitCalls = 0;
   const output = collectStreamText(stream, rejectError, {
     limit: 3,
     tail: 8,
-    onLimit: () => undefined,
+    onLimit: () => {
+      limitCalls += 1;
+    },
   });
 
   // act
@@ -146,10 +149,45 @@ test("keeps the whole end of a stream that passes its cut by less than its tail"
   await once(stream, "end");
 
   // assert
-  assert.strictEqual(output.text(), "abc\ndef");
+  assert.deepStrictEqual({ text: output.text(), limitCalls }, { text: "abcdef", limitCalls: 0 });
 });
 
-test("starts its kept end after a character that the tail would split in half", async () => {
+test("keeps a line that its cut splits whole when the tail holds the rest of the stream", async () => {
+  // arrange
+  const stream = new PassThrough();
+  const stdout = 'progress line\n{"systemMessage":"the real answer"}\n';
+  const output = collectStreamText(stream, rejectError, {
+    limit: 19,
+    tail: 1000,
+    onLimit: () => undefined,
+  });
+
+  // act
+  stream.end(stdout);
+  await once(stream, "end");
+
+  // assert
+  assert.strictEqual(output.text(), stdout);
+});
+
+test("drops the partial first line of its kept end once units are dropped", async () => {
+  // arrange
+  const stream = new PassThrough();
+  const output = collectStreamText(stream, rejectError, {
+    limit: 2,
+    tail: '{"a":1}\n{"ok":1}\n'.length,
+    onLimit: () => undefined,
+  });
+
+  // act
+  stream.end('abcdx {"a":1}\n{"ok":1}\n');
+  await once(stream, "end");
+
+  // assert
+  assert.strictEqual(output.text(), 'ab\n{"ok":1}\n');
+});
+
+test("keeps nothing of its kept end when that end holds no line break", async () => {
   // arrange
   const stream = new PassThrough();
   const output = collectStreamText(stream, rejectError, {
@@ -163,7 +201,7 @@ test("starts its kept end after a character that the tail would split in half", 
   await once(stream, "end");
 
   // assert
-  assert.strictEqual(output.text(), "ab\nd");
+  assert.strictEqual(output.text(), "ab");
 });
 
 test("keeps a stream that ends at its bound whole and drops nothing", async () => {
