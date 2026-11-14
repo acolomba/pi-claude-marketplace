@@ -19,7 +19,10 @@ import {
   sweepHookOutput,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/hook-output-files.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import {
+  PathContainmentError,
+  SymlinkRefusedError,
+} from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -73,6 +76,23 @@ describe("saveHookOutput", () => {
     // assert
     await assert.rejects(saving, PathContainmentError);
     assert.deepStrictEqual(await readdir(outside), []);
+  });
+
+  test("NFR-10: refuses a saved file name that links to a file outside the data root", async (t) => {
+    // arrange
+    const { root, loc } = await projectScope(t, "hook-output-leaf-link-");
+    const target = path.join(root, "outside.txt");
+    await writeFile(target, "outside");
+    const folder = path.join(loc.dataRoot, "_shared", "hook-output");
+    await mkdir(folder, { recursive: true });
+    await symlink(target, path.join(folder, `hook-${HOOK_ID}-additionalContext.txt`));
+
+    // act
+    const saving = saveHookOutput(loc, HOOK_ID, "additionalContext", "planted");
+
+    // assert
+    await assert.rejects(saving, SymlinkRefusedError);
+    assert.strictEqual(await readFile(target, "utf8"), "outside");
   });
 });
 
