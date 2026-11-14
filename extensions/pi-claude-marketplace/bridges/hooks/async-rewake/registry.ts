@@ -121,6 +121,13 @@ const MAX_OWNER_TEXT = 256;
 const PLAIN_ASYNC_STREAM_LIMIT = 8 * 1024 * 1024;
 
 /**
+ * The UTF-16 code units of the end of its stdout that a plain `async` hook
+ * keeps past `PLAIN_ASYNC_STREAM_LIMIT`, so an answer on its last line, after
+ * many progress lines, still reaches the model (D-BG-205).
+ */
+const PLAIN_ASYNC_STREAM_TAIL = 64 * 1024;
+
+/**
  * HOOK-06: custom-message type for the exit-2 injection. The hooks bridge also
  * reads it to recognize the run that a rewake wakes (D-BG-210).
  */
@@ -194,7 +201,8 @@ function laneOf(entry: RoutingEntry): BackgroundLane {
 // keeps each stream whole (EXEC-02) up to the collector's NFR-2 ceiling,
 // because its declared `timeout` can let it print for days. A plain async
 // hook has no timer, so it keeps less: the first `PLAIN_ASYNC_STREAM_LIMIT`
-// UTF-16 code units of its stdout, and none of its stderr, which nothing reads. The
+// UTF-16 code units of its stdout and the last `PLAIN_ASYNC_STREAM_TAIL`, and
+// none of its stderr, which nothing reads. The
 // collector still reads the stderr pipe to its end, so the hook never blocks
 // on a full pipe.
 function streamBoundFor(
@@ -220,9 +228,11 @@ function streamBoundFor(
 
   return {
     limit: PLAIN_ASYNC_STREAM_LIMIT,
+    tail: PLAIN_ASYNC_STREAM_TAIL,
     onLimit: () => {
       hookDebugLog(
-        `async-hook: stdout past ${PLAIN_ASYNC_STREAM_LIMIT} UTF-16 code units dropped (${label})`,
+        `async-hook: stdout past ${PLAIN_ASYNC_STREAM_LIMIT} UTF-16 code units dropped; ` +
+          `the last ${PLAIN_ASYNC_STREAM_TAIL} kept (${label})`,
       );
     },
   };
@@ -402,7 +412,7 @@ export async function spawnAndRegister(
     // large fan-ins.
     // EXEC-02: an asyncRewake hook keeps the whole of each stream up to the
     // NFR-2 ceiling, as Claude Code keeps every byte a hook prints; a plain
-    // async hook keeps only the first part of its stdout (`streamBoundFor`).
+    // async hook keeps only the start and the end of its stdout (`streamBoundFor`).
     // The collectors attach their `end` listeners before the finalize
     // listeners below, so the decoder tail is in the text first.
     const stderr = collectStreamText(

@@ -4,7 +4,7 @@
 // Every hook lane uses it: `./dispatch-exec.ts` for a blocking hook, and
 // `./async-rewake/registry.ts` for an `asyncRewake` hook and for a plain
 // `async` hook, which keeps the first 8,388,608 UTF-16 code units of its
-// stdout and none of its stderr.
+// stdout and the last 65,536, and none of its stderr.
 //
 // EXEC-02: Claude Code 2.1.316 keeps every byte a command hook prints on
 // stdout and stderr and reads all of it, so a JSON answer of any size still
@@ -23,6 +23,11 @@
 // outside the Basic Multilingual Plane, such as an emoji, counts as two. A cut
 // that would split such a pair keeps one unit fewer, so the text never ends
 // in half a character.
+//
+// A bound may also keep a tail: the last units of the stream past the cut,
+// joined to the head with a line break. A hook's answer on its last line,
+// after more progress lines than the head holds, then still parses as one
+// line (D-BG-205).
 
 import { StringDecoder } from "node:string_decoder";
 
@@ -36,6 +41,8 @@ export interface StreamText {
 /** The most UTF-16 code units a collector keeps, and what it calls once it drops some. */
 export interface StreamTextBound {
   readonly limit: number;
+  /** The most code units of the stream's end that the text keeps past a cut; none by default. */
+  readonly tail?: number;
   readonly onLimit: () => void;
 }
 
@@ -68,6 +75,18 @@ function cutIndex(text: string, limit: number): number {
   return last >= 0xd800 && last <= 0xdbff ? limit - 1 : limit;
 }
 
+// The last `count` code units of `text`, one fewer when the first kept unit
+// would be the low half of a surrogate pair.
+function lastUnits(text: string, count: number): string {
+  if (text.length <= count) {
+    return text;
+  }
+
+  const start = text.length - count;
+  const first = text.charCodeAt(start);
+  return text.slice(first >= 0xdc00 && first <= 0xdfff ? start + 1 : start);
+}
+
 /**
  * Collects every chunk of `stream` as UTF-8 text. `onError` receives a stream
  * error. It is attached before the `data` listener, so an EPIPE or ECONNRESET
@@ -75,19 +94,30 @@ function cutIndex(text: string, limit: number): number {
  * `null` stream collects nothing. The text keeps the first `bound.limit`
  * UTF-16 code units, or one fewer where the cut would split a surrogate pair.
  * Later chunks are read and dropped, and `bound.onLimit` runs once, at the
- * first dropped unit.
+ * first dropped unit. With a `bound.tail`, the text past the cut keeps the
+ * last `bound.tail` units of the stream after a line break.
  */
 export function collectStreamText(
   stream: NodeJS.ReadableStream | null,
   onError: (err: Error) => void,
   bound: StreamTextBound,
 ): StreamText {
-  let text = "";
+  let head = "";
+  let tail = "";
   let full = false;
+  const tailLimit = bound.tail ?? 0;
+  const keepsTail = tailLimit > 0;
   const append = (piece: string): void => {
-    text += piece;
-    if (text.length > bound.limit) {
-      text = text.slice(0, cutIndex(text, bound.limit));
+    if (full) {
+      tail = lastUnits(tail + piece, tailLimit);
+      return;
+    }
+
+    head += piece;
+    if (head.length > bound.limit) {
+      const cut = cutIndex(head, bound.limit);
+      tail = lastUnits(head.slice(cut), tailLimit);
+      head = head.slice(0, cut);
       full = true;
       bound.onLimit();
     }
@@ -97,16 +127,16 @@ export function collectStreamText(
     const decoder = new StringDecoder("utf8");
     stream.on("error", onError);
     stream.on("data", (chunk: Buffer | string) => {
-      if (!full) {
+      if (!full || keepsTail) {
         append(typeof chunk === "string" ? chunk : decoder.write(chunk));
       }
     });
     stream.on("end", () => {
-      if (!full) {
+      if (!full || keepsTail) {
         append(decoder.end());
       }
     });
   }
 
-  return { text: () => text };
+  return { text: () => (full && keepsTail ? `${head}\n${tail}` : head) };
 }

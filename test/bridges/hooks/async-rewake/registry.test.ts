@@ -5774,10 +5774,24 @@ test("parses a plain async answer whose stdout runs past its bound and drops the
     {
       messages: [answerMessage("remember"), answerMessage("context")],
       dropped: [
-        `[hooks] async-hook: stdout past ${PLAIN_STREAM_LIMIT} UTF-16 code units dropped (plugin-lifecycle/UserPromptSubmit)`,
+        `[hooks] async-hook: stdout past ${PLAIN_STREAM_LIMIT} UTF-16 code units dropped; the last 65536 kept (plugin-lifecycle/UserPromptSubmit)`,
       ],
     },
   );
+});
+
+test("gives a plain async answer on the last line after more progress than its stdout bound keeps (D-BG-205)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  const saver = createAnswerSaver();
+  const progress = "progress line\n".repeat(Math.ceil(PLAIN_STREAM_LIMIT / 14) + 1);
+
+  // act
+  await endPlainAnswer(t, `${progress}${PLAIN_ANSWER}\n`, pi.pi, saver.saveHookOutput);
+  await pi.sent(2);
+
+  // assert
+  assert.deepStrictEqual(pi.messages, [answerMessage("remember"), answerMessage("context")]);
 });
 
 test("drains a plain async hook's stderr, keeps none of it, and still gives its answer (D-PG5-17)", async (t) => {
