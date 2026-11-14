@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
@@ -47,6 +47,24 @@ interface ChildLaunchModule {
   };
 }
 
+interface DiscoveryModule {
+  readonly clearAgentDiscoveryCache: () => void;
+  readonly discoverAgents: (
+    cwd: string,
+    scope: "user",
+  ) => { readonly agents: readonly { readonly name: string; readonly model?: string }[] };
+}
+
+interface ModelResolutionModule {
+  readonly resolveEffectiveSubagentModel: (
+    explicitModel: string | undefined,
+    agentModel: string | undefined,
+    parentModel: { readonly provider: string; readonly id: string },
+    availableModels: readonly unknown[],
+    preferredProvider: string | undefined,
+  ) => string | undefined;
+}
+
 interface McpAllowlistModule {
   readonly computeMcpServerHash: (definition: Record<string, unknown>) => string;
 }
@@ -83,16 +101,9 @@ function runnerInput(cwd: string): ChildLaunchInput {
   };
 }
 
-/**
- * The value of the one `<key>: ` line the bridge writes for `raw`, in the
- * adapter form over the written MCP servers `mcpServerNames`.
- */
-function convertedLine(
-  raw: RawAgentFrontmatter,
-  key: string,
-  mcpServerNames?: readonly string[],
-): string {
-  const agent = convertAgent({
+/** The agent file the bridge writes for `raw`, in the adapter form over the MCP servers `mcpServerNames`. */
+function convertedFile(raw: RawAgentFrontmatter, mcpServerNames?: readonly string[]): string {
+  return convertAgent({
     pluginName: "demo",
     pluginRoot: "/root",
     pluginDataDir: "/data",
@@ -108,8 +119,21 @@ function convertedLine(
     sourceHash: "abc",
     mapModel: false,
     mcpServerNames,
-  });
-  const lines = agent.fileContent.split("\n").filter((line) => line.startsWith(`${key}: `));
+  }).fileContent;
+}
+
+/**
+ * The value of the one `<key>: ` line the bridge writes for `raw`, in the
+ * adapter form over the written MCP servers `mcpServerNames`.
+ */
+function convertedLine(
+  raw: RawAgentFrontmatter,
+  key: string,
+  mcpServerNames?: readonly string[],
+): string {
+  const lines = convertedFile(raw, mcpServerNames)
+    .split("\n")
+    .filter((line) => line.startsWith(`${key}: `));
   assert.strictEqual(lines.length, 1);
   return (lines[0] ?? "").slice(`${key}: `.length);
 }
@@ -382,20 +406,41 @@ test("PG-AGENT-03: the exclude list written for a denied Agent authorizes no fan
   assert.strictEqual(child.config.fanoutChild, false);
 });
 
-test("PG-AGENT-07a: the model written for a source inherit is pi-subagents' inherit sentinel", async (t) => {
+test("PG-AGENT-07a / D-PG7-17: the model written for a source inherit runs the child on the parent's model over subagents.defaultModel", async (t) => {
   // arrange
   const { peer } = await loadLaunch(t);
-  const resolution = await importPeerModule<{ readonly INHERIT_MODEL: string }>(
+  const agents = await importPeerModule<DiscoveryModule>(peer, "src", "agents", "agents.js");
+  const resolution = await importPeerModule<ModelResolutionModule>(
     peer,
     "src",
     "runs",
     "shared",
     "model-resolution.js",
   );
+  const { agentDir, cwd } = await createHermeticEnvironment(t, "child-launch-inherit-");
+  await writeFile(
+    path.join(agentDir, "settings.json"),
+    JSON.stringify({ subagents: { defaultModel: "anthropic/claude-haiku-5-5" } }),
+  );
+  await mkdir(path.join(agentDir, "agents"), { recursive: true });
+  await writeFile(
+    path.join(agentDir, "agents", "pi-claude-marketplace-demo-lead.md"),
+    convertedFile({ name: "lead", description: "d", model: "inherit", tools: "Read" }),
+  );
+  agents.clearAgentDiscoveryCache();
 
   // act
-  const model = convertedLine({ description: "d", model: "inherit", tools: "Read" }, "model");
+  const lead = agents
+    .discoverAgents(cwd, "user")
+    .agents.find((agent) => agent.name === "demo:lead");
+  const model = resolution.resolveEffectiveSubagentModel(
+    undefined,
+    lead?.model,
+    { provider: "anthropic", id: "claude-opus-5-5" },
+    [],
+    undefined,
+  );
 
   // assert
-  assert.strictEqual(model, resolution.INHERIT_MODEL);
+  assert.strictEqual(model, "anthropic/claude-opus-5-5");
 });

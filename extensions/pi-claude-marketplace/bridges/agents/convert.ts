@@ -72,6 +72,16 @@ const MODEL_MAP: ReadonlyMap<string, string> = new Map([
 const LONG_CONTEXT_SUFFIX = "[1m]";
 
 /**
+ * D-PG7-17: the `model:` value written for a source `inherit`, an empty quoted
+ * string. pi-subagents reads it as an empty model, which keeps
+ * `subagents.defaultModel` off the agent and runs the child on the parent's
+ * model. The workflow engine reads an empty model as no model, so an
+ * `agent({agentType})` step runs as it does for an agent with no `model:`.
+ * The engine reads `model: inherit` as a model ID and fails the step.
+ */
+const INHERIT_MODEL_VALUE = '""';
+
+/**
  * AG-7 user contract: Claude tool name -> Pi tool name. Tokens not present
  * here are dropped. A `Map`, so a token such as `constructor` cannot find an
  * `Object.prototype` member. D-PG7-08 / PG-AGENT-03: `Agent` and its alias
@@ -319,10 +329,10 @@ interface ModelMapping {
 /**
  * AG-7 / D-CF4-07 as amended: the model a source `model` selects, read as
  * Claude Code reads it. The value is trimmed. D-PG7-11 / PG-AGENT-07a:
- * `inherit`, in any case, writes pi-subagents' `inherit` whatever the flag
+ * `inherit`, in any case, writes `INHERIT_MODEL_VALUE` whatever the flag
  * is, so the agent runs on the session's model and not on
  * `subagents.defaultModel`, as Claude Code ranks a frontmatter `inherit`
- * above its default subagent model. Any other value maps only when
+ * above its default subagent model (D-PG7-17). Any other value maps only when
  * `mapModelFlag` is set: an alias through MODEL_MAP, a full `claude-` ID
  * passing through. `originalModel` keeps the source value of what is mapped.
  */
@@ -333,7 +343,7 @@ function mapModel(raw: string | undefined, mapModelFlag: boolean): ModelMapping 
   }
 
   if (value.toLowerCase() === "inherit") {
-    return { emit: "inherit", originalModel: raw, warning: undefined };
+    return { emit: INHERIT_MODEL_VALUE, originalModel: raw, warning: undefined };
   }
 
   if (!mapModelFlag) {

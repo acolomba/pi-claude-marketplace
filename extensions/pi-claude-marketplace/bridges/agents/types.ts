@@ -95,7 +95,7 @@ export interface StageAgentsInput {
    * (sonnet/opus/haiku/unknown) and emits `model:` accordingly. When false
    * (the default), the generated frontmatter omits `model:` and Pi picks
    * its own default model, except that a source `inherit` is always
-   * written as `model: inherit` (D-PG7-11, PG-AGENT-07a). Threaded only on
+   * written as `model: ""` (D-PG7-11, D-PG7-17, PG-AGENT-07a). Threaded only on
    * the install/update direct paths -- the marketplace autoupdate cascade
    * always leaves this unset, so cascade-driven re-installs write no other
    * `model:`.

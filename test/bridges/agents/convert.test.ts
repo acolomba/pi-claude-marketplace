@@ -530,19 +530,19 @@ Review files.
     },
     {
       sourceModel: "inherit",
-      expectedModelLine: "model: inherit",
+      expectedModelLine: 'model: ""',
       expectedOriginalModel: "inherit",
       expectedWarnings: [],
     },
     {
       sourceModel: "Inherit",
-      expectedModelLine: "model: inherit",
+      expectedModelLine: 'model: ""',
       expectedOriginalModel: "Inherit",
       expectedWarnings: [],
     },
     {
       sourceModel: " INHERIT ",
-      expectedModelLine: "model: inherit",
+      expectedModelLine: 'model: ""',
       expectedOriginalModel: " INHERIT ",
       expectedWarnings: [],
     },
@@ -705,17 +705,17 @@ Review files.
     { sourceModel: "   ", expectedModelLine: undefined, expectedOriginalModel: undefined },
     {
       sourceModel: "inherit",
-      expectedModelLine: "model: inherit",
+      expectedModelLine: 'model: ""',
       expectedOriginalModel: "inherit",
     },
     {
       sourceModel: "Inherit",
-      expectedModelLine: "model: inherit",
+      expectedModelLine: 'model: ""',
       expectedOriginalModel: "Inherit",
     },
     {
       sourceModel: " INHERIT ",
-      expectedModelLine: "model: inherit",
+      expectedModelLine: 'model: ""',
       expectedOriginalModel: " INHERIT ",
     },
     { sourceModel: "sonnet", expectedModelLine: undefined, expectedOriginalModel: undefined },

@@ -376,7 +376,7 @@ Update one installed plugin, every installed plugin from one marketplace, or all
 ```
 
 > [!NOTE]
-> Agent definitions in plugins can name a preferred model for the agent, for example "sonnet" or "opus". This extension discards these models by default. To map them to Pi models as a best effort, use the `--map-model` option with `install` and `update`. It maps `sonnet`, `opus`, `haiku`, `fable`, `best`, and `opusplan`, with or without `[1m]`, to the current Claude models, for example `claude-sonnet-5-5`. It keeps full `claude-` model IDs. An agent with `model: inherit` always keeps that line, with or without `--map-model`, so it runs on the session's model.
+> Agent definitions in plugins can name a preferred model for the agent, for example "sonnet" or "opus". This extension discards these models by default. To map them to Pi models as a best effort, use the `--map-model` option with `install` and `update`. It maps `sonnet`, `opus`, `haiku`, `fable`, `best`, and `opusplan`, with or without `[1m]`, to the current Claude models, for example `claude-sonnet-5-5`. It keeps full `claude-` model IDs. An agent with `model: inherit` always gets `model: ""`, with or without `--map-model`. So it runs on the session's model, also in a workflow step.
 
 Reinstall one installed plugin, every installed plugin from one marketplace, or all installed plugins.
 

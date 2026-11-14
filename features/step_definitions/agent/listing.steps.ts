@@ -178,6 +178,14 @@ Given("pi-subagents hides its builtin agents", async function (this: ScenarioWor
   await mergeUserSetting(this, ["subagents", "disableBuiltins"], true);
 });
 
+// D-PG7-17: the model pi-subagents gives an agent whose file names none.
+Given(
+  "pi-subagents runs subagents on the model {string} by default",
+  async function (this: ScenarioWorld, model: string) {
+    await mergeUserSetting(this, ["subagents", "defaultModel"], model);
+  },
+);
+
 // D-PG3-03: the text an earlier release generated for an installed agent,
 // such as the `async: false` line it once wrote for every ordinary agent. It
 // replaces the file the install wrote and keeps the agent's index row. The
