@@ -70,6 +70,40 @@ Feature: Agent frontmatter
       Answer the task.
       """
 
+  Scenario: A background value that keeps its own quote marks leaves the launch mode to pi-subagents, as Claude Code reads it
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "agents/doubled.md" with this text:
+      """
+      ---
+      name: doubled
+      description: Quotes its quote marks.
+      background: '"true"'
+      ---
+
+      Answer the task.
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply               | tool     | arguments                               |
+      |                     | subagent | {"action":"get","agent":"demo:doubled"} |
+      | The agent is shown. |          |                                         |
+    When the user prompts "Show the agent."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                                   |
+      | 1    | user        | Show the agent.                                                                                                                                                                                                                                                                                        |
+      | 2    | user        | Show the agent.                                                                                                                                                                                                                                                                                        |
+      | 2    | assistant   | tool call subagent {"action":"get","agent":"demo:doubled"}                                                                                                                                                                                                                                             |
+      | 2    | tool result | subagent returned: agent demo:doubled\npath {agent dir}/agents/pi-claude-marketplace-demo-doubled.md\ndescription Quotes its quote marks.\naliases pi-claude-marketplace-demo-doubled\nsystem prompt mode replace\ninherit project context true\ninherit skills true\nsystem prompt:\nAnswer the task. |
+
   Scenario: An installed ordinary agent adopts the delegated preference on update
     Given pi runs with the scripted model and these companions:
       | companion    |

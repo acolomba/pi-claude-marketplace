@@ -231,16 +231,16 @@ function splitToolList(value: string | undefined): string[] {
   }
 
   // The YAML reader hands a flow or block sequence over already joined with
-  // commas (D-PG7-05). The bracket form can still arrive inside a quoted
-  // string (`tools: "[Read, Bash]"`), so it is unwrapped here.
-  let raw = value.trim();
-  if (raw.startsWith("[") && raw.endsWith("]")) {
-    raw = raw.slice(1, -1);
-  }
-
-  return topLevelParts(raw)
-    .map((part) => withoutMatchingQuotes(part.trim()))
-    .filter((part) => part !== "");
+  // commas and unquoted (D-PG7-05). The bracket form can still arrive inside
+  // a quoted string (`tools: "[Read, 'Bash']"`), so it is unwrapped here with
+  // the quotes of its items. A quote mark left in any other value is part of
+  // the name, as Claude Code reads it.
+  const trimmed = value.trim();
+  const bracketed = trimmed.startsWith("[") && trimmed.endsWith("]");
+  const parts = topLevelParts(bracketed ? trimmed.slice(1, -1) : trimmed).map((part) =>
+    part.trim(),
+  );
+  return (bracketed ? parts.map(withoutMatchingQuotes) : parts).filter((part) => part !== "");
 }
 
 /** The parts of `raw` between commas and whitespace outside parentheses. */
@@ -1107,7 +1107,8 @@ function convertAgentOrEmpty(input: ConvertAgentInput): AgentConversion {
 
 /**
  * D-CF4-05: whether the source asks for a background launch, through
- * `background` set to `true` or `"true"`. Such an agent gets `async: true`.
+ * `background` set to `true` or `"true"`, which the YAML reader both hands
+ * over as the text `true` (D-PG7-05). Such an agent gets `async: true`.
  * D-PG3-01 amends D-CF4-05: any other agent gets no `async` key, so
  * pi-subagents and its user configuration choose the launch mode.
  * Residual: a pi-subagents call can still ask for either launch mode, where
@@ -1119,7 +1120,7 @@ function convertAgentOrEmpty(input: ConvertAgentInput): AgentConversion {
  * (its docs/agents.md), so a foreground launch could not reach the tools.
  */
 function isTrueBackground(rawBackground: unknown): boolean {
-  return typeof rawBackground === "string" && withoutMatchingQuotes(rawBackground) === "true";
+  return rawBackground === "true";
 }
 
 /**

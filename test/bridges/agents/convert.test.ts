@@ -2375,8 +2375,8 @@ Body.\r
 
   for (const { label, background, expectedAsync } of [
     { label: "true", background: "true", expectedAsync: true },
-    { label: "a double-quoted true", background: '"true"', expectedAsync: true },
-    { label: "a single-quoted true", background: "'true'", expectedAsync: true },
+    { label: "a true inside double quote marks", background: '"true"', expectedAsync: undefined },
+    { label: "a true inside single quote marks", background: "'true'", expectedAsync: undefined },
     { label: "false", background: "false", expectedAsync: undefined },
     { label: "yes", background: "yes", expectedAsync: undefined },
     { label: "an upper-case TRUE", background: "TRUE", expectedAsync: undefined },
@@ -3197,9 +3197,10 @@ describe("convertAgent tool token edge cases", () => {
     { tools: "Read, (Bash)", mappedLine: "tools: read", droppedTools: ["(Bash)"] },
     { tools: "Read, Bash(x", mappedLine: "tools: read", droppedTools: ["Bash(x"] },
     { tools: "Read, 'Read\"", mappedLine: "tools: read", droppedTools: ["'Read\""] },
-    { tools: "Read, '", mappedLine: "tools: read", droppedTools: [] },
-    { tools: "Read, 'Bash'", mappedLine: "tools: read,bash", droppedTools: [] },
-    { tools: 'Read, "Bash"', mappedLine: "tools: read,bash", droppedTools: [] },
+    { tools: "Read, '", mappedLine: "tools: read", droppedTools: ["'"] },
+    { tools: "Read, 'Bash'", mappedLine: "tools: read", droppedTools: ["'Bash'"] },
+    { tools: 'Read, "Bash"', mappedLine: "tools: read", droppedTools: ['"Bash"'] },
+    { tools: `["Read", 'Bash']`, mappedLine: "tools: read,bash", droppedTools: [] },
     { tools: "Read, Bash(x) Edit", mappedLine: "tools: read,bash,edit", droppedTools: [] },
   ]) {
     test(`maps tools ${JSON.stringify(tools)} to "${mappedLine}" and drops ${JSON.stringify(droppedTools)}`, () => {
