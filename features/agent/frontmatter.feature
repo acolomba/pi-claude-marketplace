@@ -585,6 +585,31 @@ Feature: Agent frontmatter
       | marketplace name | marketplace scope | id            | name | status  | reasons               | scope   | from  | to    |
       | fixtures         | project           | demo@fixtures | demo | updated | requires pi-subagents | project | 1.0.0 | 1.1.0 |
 
+  Scenario: Apply reports no staging warning for an agent that disallows a tool without a tools list
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the agent "helper" described as "Helps with the task." with this body:
+      """
+      Help with the task.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which warned
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file      | name   | description          | disallowedTools | body                |
+      | helper.md | helper | Helps with the task. | Bash            | Help with the task. |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the command reports these results:
+      | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count |
+      | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons               | scope   | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo | updated | requires pi-subagents | project | 1.0.0 | 1.1.0 |
+
   Scenario: Quoted frontmatter values are listed without their quote marks
     Given pi runs with the scripted model and these companions:
       | companion    |

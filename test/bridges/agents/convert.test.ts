@@ -23,9 +23,6 @@ const MCP_ASYNC_WARNING =
 const BUILTIN_MCP_ASYNC_WARNING =
   "tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before Pi's built-in MCP has listed the server's tools still fails";
 
-const EXCLUDE_TOOLS_FLOOR_WARNING =
-  "`excludeTools` requires pi-subagents >= 0.62.0 -- earlier versions ignore it and keep the default tool set";
-
 function mcpAgentInput(
   raw: RawAgentFrontmatter,
   mcpServerNames: readonly string[] | undefined,
@@ -1527,7 +1524,6 @@ provenance:
   droppedTools: []
   warnings:
     - disallowedTools entries with no Pi tool mapping (Unknown) cannot narrow the default tool set -- ignored
-    - \`excludeTools\` requires pi-subagents >= 0.62.0 -- earlier versions ignore it and keep the default tool set
 ---
 
 Body content.
@@ -1667,8 +1663,7 @@ provenance:
   sourcePath: /abs/path/source.md
   droppedFields: []
   droppedTools: []
-  warnings:
-    - \`excludeTools\` requires pi-subagents >= 0.62.0 -- earlier versions ignore it and keep the default tool set
+  warnings: []
 ---
 
 Body content.
@@ -2311,7 +2306,6 @@ Body.\r
       droppedTools: [],
       warnings: [
         "disallowedTools entries with no Pi tool mapping (mcp__plugin_acme_db) cannot narrow the default tool set -- ignored",
-        "`excludeTools` requires pi-subagents >= 0.62.0 -- earlier versions ignore it and keep the default tool set",
         MCP_ASYNC_WARNING,
       ],
     });
@@ -2361,7 +2355,6 @@ Body.\r
     // arrange
     const expectedWarnings = [
       "disallowedTools entries with no Pi tool mapping (Unknown) cannot narrow the default tool set -- ignored",
-      "`excludeTools` requires pi-subagents >= 0.62.0 -- earlier versions ignore it and keep the default tool set",
       MCP_ASYNC_WARNING,
     ];
     const expectedFileContent = expectedMcpAgentFile({
@@ -2679,8 +2672,7 @@ provenance:
   sourcePath: /abs/path/source.md
   droppedFields: []
   droppedTools: []
-  warnings:
-    - \`excludeTools\` requires pi-subagents >= 0.62.0 -- earlier versions ignore it and keep the default tool set
+  warnings: []
 ---
 
 Body content.
@@ -2871,8 +2863,7 @@ provenance:
   sourcePath: /abs/path/source.md
   droppedFields: []
   droppedTools: []
-  warnings:
-    - ${EXCLUDE_TOOLS_FLOOR_WARNING}
+  warnings: []
 ---
 
 Body content.
@@ -2883,7 +2874,7 @@ Body content.
 
     // assert
     assert.strictEqual(agent.fileContent, expectedFileContent);
-    assert.deepStrictEqual(agent.warnings, [EXCLUDE_TOOLS_FLOOR_WARNING]);
+    assert.deepStrictEqual(agent.warnings, []);
   });
 });
 
@@ -2915,7 +2906,7 @@ describe("D-PG7-09 nested delegation of an agent with no tools list", () => {
       toolsField: "excludeTools: bash\nallowNestedSubagents: true",
       inheritSkills: true,
       droppedTools: [],
-      warnings: [EXCLUDE_TOOLS_FLOOR_WARNING],
+      warnings: [],
     });
 
     // act
@@ -2932,7 +2923,7 @@ describe("D-PG7-09 nested delegation of an agent with no tools list", () => {
         toolsField: "excludeTools: subagent",
         inheritSkills: true,
         droppedTools: [],
-        warnings: [EXCLUDE_TOOLS_FLOOR_WARNING],
+        warnings: [],
       });
 
       // act
@@ -2968,6 +2959,40 @@ describe("D-PG7-09 nested delegation of an agent with no tools list", () => {
 
     // assert
     assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+});
+
+describe("D-PG7-13 disallowedTools without a tools list", () => {
+  test("a disallowed Bash returns no warning", () => {
+    // act
+    const agent = convertMcpAgent({ description: "d", disallowedTools: "Bash" }, undefined);
+
+    // assert
+    assert.deepStrictEqual(agent.warnings, []);
+  });
+
+  test("a per-tool MCP deny returns only the MCP background warning", () => {
+    // act
+    const agent = convertMcpAgent({ description: "d", disallowedTools: "mcp__plugin_acme_db__a" }, [
+      "db",
+    ]);
+
+    // assert
+    assert.deepStrictEqual(agent.warnings, [MCP_ASYNC_WARNING]);
+  });
+
+  test("D-PG7-14: denies with no exact Pi name keep the cannot-narrow warning", () => {
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", disallowedTools: "WebFetch, mcp__*, mcp__plugin_acme_db" },
+      ["db"],
+    );
+
+    // assert
+    assert.deepStrictEqual(agent.warnings, [
+      "disallowedTools entries with no Pi tool mapping (WebFetch, mcp__*, mcp__plugin_acme_db) cannot narrow the default tool set -- ignored",
+      MCP_ASYNC_WARNING,
+    ]);
   });
 });
 
@@ -3281,7 +3306,7 @@ describe("MGRT-01 grant form per MCP implementation", () => {
       inheritSkills: true,
       async: true,
       droppedTools: [],
-      warnings: [EXCLUDE_TOOLS_FLOOR_WARNING, BUILTIN_MCP_ASYNC_WARNING],
+      warnings: [BUILTIN_MCP_ASYNC_WARNING],
     });
 
     // act
@@ -3304,7 +3329,7 @@ describe("MGRT-01 grant form per MCP implementation", () => {
       inheritSkills: true,
       async: true,
       droppedTools: [],
-      warnings: [EXCLUDE_TOOLS_FLOOR_WARNING, BUILTIN_MCP_ASYNC_WARNING],
+      warnings: [BUILTIN_MCP_ASYNC_WARNING],
     });
 
     // act
@@ -3325,7 +3350,7 @@ describe("MGRT-01 grant form per MCP implementation", () => {
       inheritSkills: true,
       async: true,
       droppedTools: [],
-      warnings: [EXCLUDE_TOOLS_FLOOR_WARNING, MCP_ASYNC_WARNING],
+      warnings: [MCP_ASYNC_WARNING],
     });
 
     // act
@@ -3348,7 +3373,7 @@ describe("MGRT-01 grant form per MCP implementation", () => {
       inheritSkills: true,
       async: true,
       droppedTools: [],
-      warnings: [EXCLUDE_TOOLS_FLOOR_WARNING, MCP_ASYNC_WARNING],
+      warnings: [MCP_ASYNC_WARNING],
     });
 
     // act
@@ -3488,7 +3513,7 @@ describe("MGRT-01 grant form per MCP implementation", () => {
       inheritSkills: true,
       async: true,
       droppedTools: [],
-      warnings: [EXCLUDE_TOOLS_FLOOR_WARNING, BUILTIN_MCP_ASYNC_WARNING],
+      warnings: [BUILTIN_MCP_ASYNC_WARNING],
     });
 
     // act

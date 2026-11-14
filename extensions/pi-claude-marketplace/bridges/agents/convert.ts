@@ -587,12 +587,13 @@ function perToolMcpName(token: string, grants: readonly McpGrant[]): string | un
  * omitting the allowlist -- the child then gets Pi's normal builtin tools
  * (and, for background children, ambient extension tools such as
  * pi-mcp-adapter's MCP tools). disallowedTools narrows that default set via
- * excludeTools (pi-subagents 0.62.0; earlier versions store-and-ignore the
- * key). A per-tool MCP name of a written server joins excludeTools in the
- * form's spelling (ANAME-02, MGRT-01). Both degradations on that path warn:
- * a disallow token with no such mapping cannot narrow anything, and an
- * emitted excludeTools is inert below the version floor -- each is an
- * author-written restriction that must not weaken without a trace.
+ * excludeTools, which every pi-subagents version at the declared floor
+ * applies, so an emitted excludeTools warns of nothing (D-PG7-13). A per-tool
+ * MCP name of a written server joins excludeTools in the form's spelling
+ * (ANAME-02, MGRT-01). excludeTools takes exact names, so a disallow token
+ * with no such mapping, such as a pattern or a whole server, cannot narrow
+ * anything and warns: an author-written restriction must not weaken without
+ * a trace (D-PG7-14).
  *
  * D-PG7-09 / PG-AGENT-03: every tool in Claude Code includes `Agent`, so the
  * mapping grants nested delegation, which the emitter writes as
@@ -628,12 +629,6 @@ function omittedToolMapping(
   }
 
   const excludeTools = dedupePreservingOrder(excluded);
-  if (excludeTools.length > 0) {
-    warnings.push(
-      "`excludeTools` requires pi-subagents >= 0.62.0 -- earlier versions ignore it and keep the default tool set",
-    );
-  }
-
   return {
     omitted: true,
     excludeTools,
