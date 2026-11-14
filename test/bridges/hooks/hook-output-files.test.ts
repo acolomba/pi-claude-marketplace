@@ -17,6 +17,7 @@ import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
 import {
+  FILE_SYSTEM_SWEEP_OPS,
   saveHookOutput,
   sweepHookOutput,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/hook-output-files.ts";
@@ -121,7 +122,7 @@ describe("sweepHookOutput", () => {
     await savedFile(loc, "hook-new-stdout.txt", DAY_MS);
 
     // act
-    await sweepHookOutput(loc, NOW);
+    await sweepHookOutput(loc, NOW, FILE_SYSTEM_SWEEP_OPS);
 
     // assert
     assert.deepStrictEqual(await hookOutputNames(loc), [
@@ -137,7 +138,7 @@ describe("sweepHookOutput", () => {
     await Promise.all(names.map((name) => savedFile(loc, name, 90 * DAY_MS)));
 
     // act
-    await sweepHookOutput(loc, NOW);
+    await sweepHookOutput(loc, NOW, FILE_SYSTEM_SWEEP_OPS);
 
     // assert
     assert.deepStrictEqual(await hookOutputNames(loc), [...names].sort());
@@ -156,7 +157,7 @@ describe("sweepHookOutput", () => {
     await symlink(target, path.join(folder, "hook-link-stdout.txt"));
 
     // act
-    await sweepHookOutput(loc, NOW);
+    await sweepHookOutput(loc, NOW, FILE_SYSTEM_SWEEP_OPS);
 
     // assert
     assert.deepStrictEqual(
@@ -222,7 +223,7 @@ describe("sweepHookOutput", () => {
     const logged = captureDebugLog(t);
 
     // act
-    await sweepHookOutput(loc, NOW);
+    await sweepHookOutput(loc, NOW, FILE_SYSTEM_SWEEP_OPS);
 
     // assert
     assert.deepStrictEqual(logged, []);
@@ -237,7 +238,7 @@ describe("sweepHookOutput", () => {
     const logged = captureDebugLog(t);
 
     // act
-    await sweepHookOutput(loc, NOW);
+    await sweepHookOutput(loc, NOW, FILE_SYSTEM_SWEEP_OPS);
     await chmod(folder, 0o700);
 
     // assert
@@ -263,7 +264,7 @@ describe("sweepHookOutput", () => {
     const logged = captureDebugLog(t);
 
     // act
-    await sweepHookOutput(loc, NOW);
+    await sweepHookOutput(loc, NOW, FILE_SYSTEM_SWEEP_OPS);
 
     // assert
     assert.deepStrictEqual(

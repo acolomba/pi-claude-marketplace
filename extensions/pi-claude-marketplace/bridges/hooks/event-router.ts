@@ -72,7 +72,7 @@ import {
 } from "./async-rewake/registry.ts";
 import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
 import { HOOK_CONTEXT_MESSAGE_TYPE, sendDueFollowUpContext } from "./event-adapters.ts";
-import { sweepHookOutput } from "./hook-output-files.ts";
+import { FILE_SYSTEM_SWEEP_OPS, sweepHookOutput } from "./hook-output-files.ts";
 import { compileIfPredicate, MATCH_ALL_IF } from "./if-field/index.ts";
 import { createHookToolView } from "./mcp-tool-view.ts";
 import { claudeSessionEndReason } from "./payloads/session-end.ts";
@@ -1142,7 +1142,7 @@ async function registerHooksBridgeWith(
     await reapOrphans(runtime, loc);
     // D-PG5-15: the saved hook output of each reaped scope ages out here.
     // eslint-disable-next-line no-await-in-loop -- at most two scopes, one sweep each
-    await sweepHookOutput(loc, Date.now());
+    await sweepHookOutput(loc, Date.now(), FILE_SYSTEM_SWEEP_OPS);
   }
 
   // SessionStart dispatch with lazy project-scope hydrate. Pi fires
@@ -1370,7 +1370,7 @@ async function reapProjectOrphans(runtime: HooksRuntime, cwd: string): Promise<v
 
   const loc = locationsFor("project", cwd);
   await reapOrphans(runtime, loc);
-  await sweepHookOutput(loc, Date.now());
+  await sweepHookOutput(loc, Date.now(), FILE_SYSTEM_SWEEP_OPS);
 }
 
 /** Binds every hooks hydration path to one runtime and one required state reader. */

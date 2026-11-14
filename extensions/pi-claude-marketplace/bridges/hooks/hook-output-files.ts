@@ -50,13 +50,14 @@ export async function saveHookOutput(
   return filePath;
 }
 
-/** The two file operations of the sweep, which a test may replace. */
-interface SweepFileOps {
+/** The two file operations of the sweep, which its caller passes. */
+export interface SweepFileOps {
   readonly lstat: (filePath: string) => Promise<{ readonly mtimeMs: number }>;
   readonly unlink: (filePath: string) => Promise<void>;
 }
 
-const DEFAULT_SWEEP_FILE_OPS: SweepFileOps = { lstat, unlink };
+/** The sweep's file operations on the real file system. */
+export const FILE_SYSTEM_SWEEP_OPS: SweepFileOps = { lstat, unlink };
 
 // Removes one saved file older than the retention. A failure, such as a file
 // another Pi removed first, writes one debug line and leaves the other files
@@ -78,12 +79,13 @@ async function sweepFile(filePath: string, now: number, ops: SweepFileOps): Prom
  * and removed; a link or a folder stays, and no link is followed (NFR-10). A
  * missing folder is silent, and a folder that cannot be read writes one debug
  * line. A file that fails writes its own debug line, and the sweep goes on
- * with the next file. The sweep never rejects (NFR-2).
+ * with the next file. The sweep never rejects (NFR-2). `ops` reads and
+ * removes each saved file.
  */
 export async function sweepHookOutput(
   loc: ScopedLocations,
   now: number,
-  ops: typeof DEFAULT_SWEEP_FILE_OPS = DEFAULT_SWEEP_FILE_OPS,
+  ops: SweepFileOps,
 ): Promise<void> {
   const dirPath = hookOutputDir(loc);
   try {
