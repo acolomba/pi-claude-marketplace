@@ -1869,6 +1869,10 @@ describe("toolResultCompositeHandler", () => {
         },
       ],
     );
+    assert.deepStrictEqual(
+      received.map((seen) => seen.toolCallId),
+      ["dispatch-call#1", "dispatch-call#1", "dispatch-call#2", "dispatch-call#2"],
+    );
     for (const seen of received) {
       assert.strictEqual(seen.content, event.content);
       assert.strictEqual(seen.details, event.details);
@@ -5859,17 +5863,24 @@ test("native edit runs a hook for each pair before replacing one batch", async (
 
   assert.strictEqual(await handler(event, createExtensionContext("/workspace/edit")), undefined);
   assert.deepStrictEqual(received, [
-    createToolCallEvent("edit", {
-      file_path: "/workspace/edit/document.txt",
-      old_string: "first",
-      new_string: "one",
-    }),
-    createToolCallEvent("edit", {
-      file_path: "/workspace/edit/document.txt",
-      old_string: "second",
-      new_string: "two",
-    }),
+    {
+      ...createToolCallEvent("edit", {
+        file_path: "/workspace/edit/document.txt",
+        old_string: "first",
+        new_string: "one",
+      }),
+      toolCallId: "dispatch-call#1",
+    },
+    {
+      ...createToolCallEvent("edit", {
+        file_path: "/workspace/edit/document.txt",
+        old_string: "second",
+        new_string: "two",
+      }),
+      toolCallId: "dispatch-call#2",
+    },
   ]);
+  assert.strictEqual(event.toolCallId, "dispatch-call");
   assert.deepStrictEqual(event.input, {
     path: "/workspace/edit/document.txt",
     edits: [
@@ -5877,6 +5888,48 @@ test("native edit runs a hook for each pair before replacing one batch", async (
       { oldText: "second", newText: "two" },
     ],
   });
+});
+
+test("a native edit with one pair keeps the call's tool use id before and after the call", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket(
+    "PreToolUse",
+    builtinToolEntries("PreToolUse", [{ pluginId: "pre", rawMatcher: "Edit" }]),
+  );
+  runtime.setRoutingBucket(
+    "PostToolUse",
+    builtinToolEntries("PostToolUse", [{ pluginId: "post", rawMatcher: "Edit" }]),
+  );
+  const input = { path: "document.txt", edits: [{ oldText: "first", newText: "one" }] };
+  const received: string[] = [];
+  const executor: HookExecutor = (_entry, hookEvent) => {
+    received.push((hookEvent as ToolCallEvent | ToolResultEvent).toolCallId);
+    return Promise.resolve({ kind: "noop" });
+  };
+
+  const preflight = compositeHandlerFor(
+    runtime,
+    "PreToolUse",
+    runtime.currentGeneration(),
+    undefined,
+    executor,
+  );
+  const result = toolResultCompositeHandler(
+    runtime,
+    runtime.currentGeneration(),
+    undefined,
+    executor,
+  );
+  const ctx = createExtensionContext("/workspace/edit");
+
+  // act
+  await preflight(createToolCallEvent("edit", input), ctx);
+  await result({ ...createToolResultEvent(false, "edit"), input }, ctx);
+
+  // assert
+  assert.deepStrictEqual(received, ["dispatch-call", "dispatch-call"]);
 });
 
 function editPreflight(

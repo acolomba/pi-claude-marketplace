@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   decideEditBatch,
+  editPairToolUseId,
   editPairViews,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/tool-batch.ts";
 
@@ -150,3 +151,18 @@ test("any unsupported proposal discards every accepted rewrite", () => {
     );
   }
 });
+
+for (const { toolCallId, pairIndex, pairCount, expectedId } of [
+  { toolCallId: "call-1", pairIndex: 0, pairCount: 1, expectedId: "call-1" },
+  { toolCallId: "call-1", pairIndex: 0, pairCount: 2, expectedId: "call-1#1" },
+  { toolCallId: "call-1", pairIndex: 1, pairCount: 2, expectedId: "call-1#2" },
+  { toolCallId: "call-1/3", pairIndex: 1, pairCount: 3, expectedId: "call-1/3#2" },
+]) {
+  test(`gives pair ${pairIndex} of ${pairCount} of ${toolCallId} the id ${expectedId} (D-PG6-05)`, () => {
+    // act
+    const pairId = editPairToolUseId(toolCallId, pairIndex, pairCount);
+
+    // assert
+    assert.strictEqual(pairId, expectedId);
+  });
+}

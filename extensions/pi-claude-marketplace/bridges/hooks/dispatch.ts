@@ -92,7 +92,7 @@ import {
 import { ifFires } from "./if-field/index.ts";
 import { createHookToolView } from "./mcp-tool-view.ts";
 import { compactTrigger } from "./payloads/compact-trigger.ts";
-import { decideEditBatch, editPairViews } from "./tool-batch.ts";
+import { decideEditBatch, editPairToolUseId, editPairViews } from "./tool-batch.ts";
 
 import type { CompactionCancel, HookAdapterContext } from "./event-adapters.ts";
 import type { HookExecResult, HookFailure } from "./exec-result.ts";
@@ -1053,8 +1053,8 @@ async function authorizeEditPairs(
   return decisions.find((decision) => decision?.block);
 }
 
-// Every pair keeps the original tool-call identity, while hook stdin sees one
-// Claude Edit input. Pi still receives just the original native tool call.
+// Each pair carries its own tool use id, while hook stdin sees one Claude Edit
+// input (D-PG6-05). Pi still receives just the original native tool call.
 async function runEditPreflight(
   runtime: HooksRuntime,
   bucket: readonly RoutingEntry[],
@@ -1080,7 +1080,8 @@ async function runEditPreflight(
   const runs = await Promise.all(
     batch.pairs.map(async (pair) => {
       const pairEvent: ToolCallEvent = {
-        ...(view.event as ToolCallEvent),
+        ...nativeEvent,
+        toolCallId: editPairToolUseId(nativeEvent.toolCallId, pair.index, batch.pairs.length),
         input: pair.input,
       };
       const outcomes = await runHooks(runtime, hooks, (entry) =>
@@ -1292,12 +1293,16 @@ async function runEditResultPairs(
   );
   const capturedGeneration = runtime.currentGeneration();
   const runs = await Promise.all(
-    pairs.map(({ input }) => {
+    pairs.map(({ input }, index) => {
       if (capturedGeneration !== runtime.currentGeneration()) {
         return Promise.resolve(undefined);
       }
 
-      const pairEvent: ToolResultEvent = { ...event, input };
+      const pairEvent: ToolResultEvent = {
+        ...event,
+        toolCallId: editPairToolUseId(event.toolCallId, index, pairs.length),
+        input,
+      };
       return runHooks(runtime, hooks, (entry) => executor(entry, pairEvent, ctx, pi, runtime));
     }),
   );

@@ -117,6 +117,20 @@ export function editPairViews(input: unknown, cwd: string, home: string): EditBa
   return { original, target, pairs };
 }
 
+/**
+ * The `tool_use_id` of one pair of a native edit: the call's own id when the
+ * edit has one pair, else the id, a `#`, and the pair's number counted from 1,
+ * so each pair's pre and result runs share an id no other pair has
+ * (D-PG6-05).
+ */
+export function editPairToolUseId(
+  toolCallId: string,
+  pairIndex: number,
+  pairCount: number,
+): string {
+  return pairCount === 1 ? toolCallId : `${toolCallId}#${pairIndex + 1}`;
+}
+
 /** Chooses one native candidate only after every proposal has been inspected. */
 export function decideEditBatch(
   batch: EditBatch,
