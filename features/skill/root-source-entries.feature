@@ -192,3 +192,29 @@ Feature: Skill root-source entries
     Then the installation record of the project scope holds these skills of "root@fixtures":
       | skill  |
       | root-a |
+
+  Scenario: Info on a root-source entry that lists skills lists only the listed skills
+    Given the marketplace "fixtures" has the file "skills/a/references/deep.md" at its root with this text:
+      """
+      A deep reference.
+      """
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {"name":"fixtures","owner":{"name":"features"},"plugins":[{"name":"root","source":"./","version":"1.0.0","skills":["./skills/a"]}]}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin info root@fixtures"
+    Then the result has these fields:
+      | kind                           | plugin-info   |
+      | marketplace details autoupdate | false         |
+      | marketplace name               | fixtures      |
+      | marketplace scope              | project       |
+      | needs reload                   | false         |
+      | plugin components resolved     | true          |
+      | plugin components skills       | a             |
+      | plugin id                      | root@fixtures |
+      | plugin name                    | root          |
+      | plugin reasons                 |               |
+      | plugin status                  | available     |
+      | plugin version                 | 1.0.0         |
+      | severity                       | info          |

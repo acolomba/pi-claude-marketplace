@@ -324,13 +324,16 @@ async function derivePluginRootForInfo(
   return pluginRoot;
 }
 
+/** The component kinds `info` lists by name from their directories. */
+type NamedComponentKind = "skills" | "commands" | "agents";
+
 /**
  * Extracts the displayable name from a single directory entry per `kind`, or
  * `undefined` when the entry does not qualify.
  */
 function nameFromEntry(
   entry: { name: string; isDirectory(): boolean; isFile(): boolean },
-  kind: "skills" | "commands" | "agents",
+  kind: NamedComponentKind,
 ): string | undefined {
   if (kind === "skills") {
     return entry.isDirectory() ? entry.name : undefined;
@@ -338,6 +341,24 @@ function nameFromEntry(
 
   // commands + agents: `.md` files; strip the suffix for display.
   return entry.isFile() && entry.name.endsWith(".md") ? entry.name.slice(0, -3) : undefined;
+}
+
+/**
+ * D-PG4-01: the names one declared directory contributes. A skills directory
+ * whose entries hold a regular file `SKILL.md` is itself one skill, named by
+ * its folder, as the skills bridge's `isSelfSkillDir` reads it; a `SKILL.md`
+ * directory or link does not count.
+ */
+function componentNamesFromEntries(
+  abs: string,
+  entries: readonly { name: string; isDirectory(): boolean; isFile(): boolean }[],
+  kind: NamedComponentKind,
+): readonly string[] {
+  if (kind === "skills" && entries.some((entry) => entry.name === "SKILL.md" && entry.isFile())) {
+    return [path.basename(abs)];
+  }
+
+  return entries.flatMap((entry) => nameFromEntry(entry, kind) ?? []);
 }
 
 /**
@@ -368,9 +389,11 @@ async function readEntriesOrEmpty(
  * root) and accumulate the per-kind component NAMES.
  *
  * For each declared directory:
- *   - skills:   directory entries -> directory NAMES (each skill is a
- *               subdirectory; `isSkillDir` filtering is bridge-layer
- *               only -- info surfaces authoring intent).
+ *   - skills:   a directory that holds a regular `SKILL.md` is one skill
+ *               named by its folder, and its subfolders are not skills
+ *               (D-PG4-01); any other directory lists its subdirectory
+ *               NAMES (`isSkillDir` filtering is bridge-layer only -- info
+ *               surfaces authoring intent).
  *   - commands: file entries -> basename minus `.md` suffix.
  *   - agents:   file entries -> basename minus `.md` suffix.
  *
@@ -386,18 +409,15 @@ async function discoverComponentNames(
   reader: PluginInfoReader,
   pluginRoot: string,
   componentDirs: readonly string[],
-  kind: "skills" | "commands" | "agents",
+  kind: NamedComponentKind,
 ): Promise<readonly string[]> {
   const names = new Set<string>();
   for (const rel of componentDirs) {
     const abs = path.isAbsolute(rel) ? rel : path.join(pluginRoot, rel);
     // eslint-disable-next-line no-await-in-loop -- bounded by the declared component dirs, one readdir each
     const entries = await readEntriesOrEmpty(reader, abs);
-    for (const entry of entries) {
-      const name = nameFromEntry(entry, kind);
-      if (name !== undefined) {
-        names.add(name);
-      }
+    for (const name of componentNamesFromEntries(abs, entries, kind)) {
+      names.add(name);
     }
   }
 

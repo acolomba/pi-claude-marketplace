@@ -2118,6 +2118,129 @@ test("PR-5: orchestrator pre-sorts per-kind component arrays alphabetically befo
   });
 });
 
+/**
+ * D-PG4-01: seeds a marketplace whose one entry, `root`, takes the marketplace
+ * root as its source and lists `skills`; `files` lie under that root.
+ */
+function seedRootSourceEntry(
+  home: string,
+  cwd: string,
+  skills: unknown,
+  files: readonly string[],
+): Promise<string> {
+  return seedPathMarketplace({
+    scope: "user",
+    scopeRoot: path.join(home, ".pi", "agent"),
+    cwd,
+    mpName: "mp",
+    manifest: { name: "mp", plugins: [{ name: "root", source: "./", version: "1.0.0", skills }] },
+    componentFiles: { ".": files },
+  });
+}
+
+/** The `info root@mp` message of an available `root` row with `skills`. */
+function rootSourceInfo(skills: string): readonly { message: string }[] {
+  return [
+    {
+      message: [
+        "● mp [user] <no autoupdate>",
+        "  ○ root v1.0.0 (available)",
+        `    skills: ${skills}`,
+      ].join("\n"),
+    },
+  ];
+}
+
+test("D-PG4-01: info lists a listed skill folder that holds SKILL.md as one skill, not its subfolders", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedRootSourceEntry(
+      home,
+      cwd,
+      ["./skills/a"],
+      ["skills/a/SKILL.md", "skills/a/references/deep.md", "skills/b/SKILL.md"],
+    );
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "root", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, rootSourceInfo("a"));
+  });
+});
+
+test("D-PG4-01: info lists a skill reached as a listed folder and through its parent once, sorted without case", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "p", source: "./p", version: "1.0.0", skills: "./skills/Zeta" }],
+      },
+      componentFiles: { p: ["skills/Zeta/SKILL.md", "skills/alpha/SKILL.md"] },
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "p", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ○ p v1.0.0 (available)",
+          "    skills: alpha, Zeta",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("D-PG4-01: a SKILL.md directory does not make its folder one skill in info", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedRootSourceEntry(
+      home,
+      cwd,
+      ["./skills/a"],
+      ["skills/a/SKILL.md/inner.md", "skills/a/references/deep.md"],
+    );
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "root", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, rootSourceInfo("references, SKILL.md"));
+  });
+});
+
+test("D-PG4-01: a SKILL.md link does not make its folder one skill in info", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedRootSourceEntry(
+      home,
+      cwd,
+      ["./skills/a"],
+      ["target.md", "skills/a/references/deep.md"],
+    );
+    await symlink(path.join(mpRoot, "target.md"), path.join(mpRoot, "skills", "a", "SKILL.md"));
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "root", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, rootSourceInfo("references"));
+  });
+});
+
 // ---------------------------------------------------------------------------
 // (k) dependencies field surfaced as `dependencies:` line.
 // ---------------------------------------------------------------------------
