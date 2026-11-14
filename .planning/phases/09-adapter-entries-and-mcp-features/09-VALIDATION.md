@@ -60,6 +60,7 @@ The two PG-MCP-08 resource scenarios (one per profile) change no behavior. They 
 
 | Wave | Commit | Node | `npm run check` exit | Scenarios (adapter / builtin) | Notes |
 |------|--------|------|----------------------|-------------------------------|-------|
+| 1 (09-01, 09-02) | 1c58f1a8 | v26.13.1 | 0 | 1927 / 185 passed | 362 direct-coverage records; `/tmp/pg9-wave1.log` |
 
 ---
 
@@ -82,3 +83,7 @@ The two PG-MCP-08 resource scenarios (one per profile) change no behavior. They 
 - [ ] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** pending
+
+## D-PG9-07 amendment (orchestrator, 2026-11-14)
+
+The `openUi: false` default is withheld (09-03, commit 7b7bf951). Regression guards: `test/integration/pi-subagents-child-identity.test.ts` "detached adapter children of a background agent and an MCP agent hook with their own identity", and the domain owner case "D-PG9-07: no transport's defaults hold openUi". The UI half of PG-SEC-03 does not ship; see the amendment in 09-CONTEXT.md.

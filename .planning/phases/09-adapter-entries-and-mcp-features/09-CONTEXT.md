@@ -104,6 +104,7 @@ drafted request to pi-mcp-adapter, not a patch.
 
 ### Powers the adapter gives a plugin server (PG-SEC-03, decision 20)
 
+- **D-PG9-07 AMENDED during execution (orchestrator, autonomous run, pending maintainer review):** the `openUi` default is withheld. pi-subagents 0.88.1's `computeMcpServerHash` lacks `openUi`, so an entry with `openUi: false` invalidates pi-mcp-adapter's tool cache for background MCP grants (D-CF6-10), and an agent with a plugin MCP grant cannot launch. Pi-companion capability gap. BACKLOG tracks bringing the default back once the pi-subagents floor hashes `openUi`; filing the upstream request is the maintainer's call. The original decision text follows.
 - **D-PG9-07 (pending maintainer review; decision 20, the UI half):** Write
   `openUi: false` on every plugin server entry, stdio and remote, recorded as
   a default in the marker (D-PG9-03 rules). A user's `openUi` (already
