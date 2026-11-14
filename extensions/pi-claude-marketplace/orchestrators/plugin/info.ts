@@ -380,11 +380,23 @@ async function readEntriesOrEmpty(
   reader: PluginInfoReader,
   abs: string,
 ): Promise<readonly { name: string; isDirectory(): boolean; isFile(): boolean }[]> {
+  return (await readEntriesOrMissing(reader, abs)) ?? [];
+}
+
+/**
+ * Read directory entries, or `undefined` when `abs` is missing or is not a
+ * directory (ENOENT / ENOTDIR). Every other failure propagates, as in
+ * `readEntriesOrEmpty`.
+ */
+async function readEntriesOrMissing(
+  reader: PluginInfoReader,
+  abs: string,
+): Promise<readonly { name: string; isDirectory(): boolean; isFile(): boolean }[] | undefined> {
   try {
     return await reader.listDirectory(abs);
   } catch (err) {
     if (isErrnoException(err) && (err.code === "ENOENT" || err.code === "ENOTDIR")) {
-      return [];
+      return undefined;
     }
 
     throw err;
@@ -2127,7 +2139,9 @@ async function buildNotInstallablePathRowFields(
   reader: PluginInfoReader,
   env: ClaudeEnv,
   pluginName: string,
-  resolved: Parameters<typeof composeResolvedComponents>[3],
+  resolveComponents: (
+    pluginRoot: string,
+  ) => Promise<Parameters<typeof composeResolvedComponents>[3]>,
   resolverReasons: readonly ContentReason[],
   marketplaceRoot: string,
   parsedSource: PathSource,
@@ -2136,8 +2150,8 @@ async function buildNotInstallablePathRowFields(
   readonly mcpDependency: McpDependency | false;
 }> {
   const pluginRoot = await derivePluginRootForInfo(marketplaceRoot, parsedSource);
-  // NFR-7 / INFO-05: only `composeResolvedComponents` failures
-  // (component-dir EACCES, hooks-file EACCES/EIO, malformed JSON the
+  // NFR-7 / INFO-05: only `resolveComponents` and `composeResolvedComponents`
+  // failures (component-dir EACCES, hooks-file EACCES/EIO, malformed JSON the
   // lenient reader propagates) fall into the `narrowProbeError(err)`
   // arm here. `derivePluginRootForInfo`'s own throws -- the
   // `PathContainmentError` from `assertPathInside` -- propagate
@@ -2148,7 +2162,7 @@ async function buildNotInstallablePathRowFields(
       reader,
       env,
       pluginRoot,
-      resolved,
+      await resolveComponents(pluginRoot),
       pluginName,
     );
     return {
@@ -2196,9 +2210,9 @@ interface LenientComponentPaths {
  */
 function deriveLenientComponentPaths(
   entry: MarketplaceManifest["plugins"][number],
+  rootSourceSkills: string[] | undefined,
 ): LenientComponentPaths {
   const out: LenientComponentPaths = { skills: [], commands: [], agents: [], workflows: [] };
-  const rootSourceSkills = rootSourceLenientSkillPaths(entry);
   for (const kind of ["skills", "commands", "agents", "workflows"] as const) {
     if (kind === "skills" && rootSourceSkills !== undefined) {
       out.skills = rootSourceSkills;
@@ -2223,15 +2237,19 @@ function deriveLenientComponentPaths(
 /**
  * D-PG4-01, as in Claude Code 2.1.323: the lenient `skills` paths of a
  * root-source entry that lists at least one string, or `undefined` when the
- * entry does not qualify. The listed strings that are relative and stay inside
+ * D-CF1-06 rule applies. The listed strings that are relative and stay inside
  * the plugin root replace the `skills/` folder, in listed order and once each;
- * the folder follows only when the root itself is listed, and when no string
- * stays, nothing is listed. The test is lexical, so an absolute or escaping
- * string never reaches a directory read.
+ * the folder follows only when the root itself is listed. When no kept string
+ * names a directory, an absolute or escaping string leaves nothing listed, and
+ * otherwise the D-CF1-06 rule applies, as the strict rule falls back. The
+ * containment test is lexical, so an absolute or escaping string never reaches
+ * a directory read.
  */
-function rootSourceLenientSkillPaths(
+async function rootSourceLenientSkillPaths(
+  reader: PluginInfoReader,
+  pluginRoot: string,
   entry: MarketplaceManifest["plugins"][number],
-): string[] | undefined {
+): Promise<string[] | undefined> {
   const listed = asDeclaredList((entry as Record<string, unknown>).skills).filter(
     (declared) => typeof declared === "string",
   );
@@ -2239,7 +2257,18 @@ function rootSourceLenientSkillPaths(
     return undefined;
   }
 
-  const kept = [...new Set(listed.flatMap((declared) => containedRelativePath(declared) ?? []))];
+  const contained = listed.map((declared) => containedRelativePath(declared));
+  const kept = [...new Set(contained.flatMap((relative) => relative ?? []))];
+  const directories = await Promise.all(
+    kept.map(
+      async (relative) =>
+        (await readEntriesOrMissing(reader, path.join(pluginRoot, relative))) !== undefined,
+    ),
+  );
+  if (!directories.includes(true)) {
+    return contained.includes(undefined) ? [] : undefined;
+  }
+
   if (kept.includes(".") && !kept.includes("skills")) {
     kept.push("skills");
   }
@@ -2312,7 +2341,7 @@ function buildNonInstallableRowFields(
         reader,
         env,
         pluginName,
-        resolved,
+        () => Promise.resolve(resolved),
         narrowUnsupportedKinds(resolved.unsupported),
         marketplaceRoot,
         parsedSource,
@@ -2322,10 +2351,13 @@ function buildNonInstallableRowFields(
         reader,
         env,
         pluginName,
-        {
-          componentPaths: deriveLenientComponentPaths(entry),
+        async (pluginRoot) => ({
+          componentPaths: deriveLenientComponentPaths(
+            entry,
+            await rootSourceLenientSkillPaths(reader, pluginRoot, entry),
+          ),
           declaredMcpServers: {},
-        },
+        }),
         narrowResolverNotes(resolved.notes),
         marketplaceRoot,
         parsedSource,

@@ -2315,7 +2315,14 @@ test("D-PG4-01: the lenient listing of a root-source entry reads the listed path
     const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
 
     // assert
-    assert.deepStrictEqual(calls, ["agents", "commands", "skills/c", "skills/a"]);
+    assert.deepStrictEqual(calls, [
+      "skills/c",
+      "skills/a",
+      "agents",
+      "commands",
+      "skills/c",
+      "skills/a",
+    ]);
     assert.deepStrictEqual(
       messages,
       unavailableRootInfo("unsupported hooks", ["    skills: a, c"]),
@@ -2338,7 +2345,15 @@ test("D-PG4-01: the lenient listing of a root-source entry adds the skills folde
     const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
 
     // assert
-    assert.deepStrictEqual(calls, ["agents", "commands", ".", "skills/c", "skills"]);
+    assert.deepStrictEqual(calls, [
+      ".",
+      "skills/c",
+      "agents",
+      "commands",
+      ".",
+      "skills/c",
+      "skills",
+    ]);
     assert.deepStrictEqual(
       messages,
       unavailableRootInfo("unsupported hooks", [
@@ -2363,7 +2378,7 @@ test("D-PG4-01: the lenient listing of a root-source entry reads a listed skills
     const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
 
     // assert
-    assert.deepStrictEqual(calls, ["agents", "commands", "skills", "."]);
+    assert.deepStrictEqual(calls, ["skills", ".", "agents", "commands", "skills", "."]);
     assert.deepStrictEqual(
       messages,
       unavailableRootInfo("unsupported hooks", [
@@ -2408,7 +2423,7 @@ test("D-PG4-01: the lenient listing refuses a listed path that climbs back throu
     const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
 
     // assert
-    assert.deepStrictEqual(calls, ["agents", "commands", "skills/a"]);
+    assert.deepStrictEqual(calls, ["skills/a", "agents", "commands", "skills/a"]);
     assert.deepStrictEqual(messages, unavailableRootInfo("unsupported hooks", ["    skills: a"]));
   });
 });
@@ -2435,11 +2450,62 @@ test("D-PG4-01: the lenient listing refuses an escaping listed path when the wor
     }
 
     // assert
-    assert.deepStrictEqual(listing.calls, ["agents", "commands", "skills/a"]);
+    assert.deepStrictEqual(listing.calls, ["skills/a", "agents", "commands", "skills/a"]);
     assert.deepStrictEqual(
       listing.messages,
       unavailableRootInfo("unsupported hooks", ["    skills: a"]),
     );
+  });
+});
+
+test("D-PG4-01: the lenient listing of a root-source entry whose listed folders are missing or files starts from the skills folder", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedRootSourceEntry(
+      home,
+      cwd,
+      ["./skills/missing", "./skills/file.md"],
+      [...ROOT_SKILL_FILES, "skills/file.md"],
+    );
+    await breakRootHooks(mpRoot);
+
+    // act
+    const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
+
+    // assert
+    assert.deepStrictEqual(calls, [
+      "skills/missing",
+      "skills/file.md",
+      "agents",
+      "commands",
+      "skills",
+      "skills/missing",
+      "skills/file.md",
+    ]);
+    assert.deepStrictEqual(
+      messages,
+      unavailableRootInfo("unsupported hooks", ["    skills: a, b, c"]),
+    );
+  });
+});
+
+test("D-PG4-01: the lenient listing of a root-source entry lists no skill when no listed folder exists and one listed path escapes", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedRootSourceEntry(
+      home,
+      cwd,
+      ["./skills/missing", "../outside"],
+      ROOT_SKILL_FILES,
+    );
+    await breakRootHooks(mpRoot);
+
+    // act
+    const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
+
+    // assert
+    assert.deepStrictEqual(calls, ["skills/missing", "agents", "commands"]);
+    assert.deepStrictEqual(messages, unavailableRootInfo("unsupported hooks", []));
   });
 });
 
