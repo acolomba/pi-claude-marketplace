@@ -878,7 +878,7 @@ export interface ConvertAgentInput {
    * AG-7 opt-in. When false (the default at the call sites), the AG-7
    * model-mapping table is NOT consulted and the generated frontmatter
    * omits `model:` (Pi picks its own default), except that a source
-   * `inherit` is always written as `model: inherit` (D-PG7-11,
+   * `inherit` is always written as `model: ""` (D-PG7-11, D-PG7-17,
    * PG-AGENT-07a). When true (only passed when the user supplies
    * `--map-model` on install/update), the mapping table applies. The
    * marketplace autoupdate cascade never passes this flag, so
