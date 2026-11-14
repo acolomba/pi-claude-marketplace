@@ -333,8 +333,13 @@ export async function writeMcpAdapterOverride(
   return text;
 }
 
-/** Writes an installed entry as an earlier release left it, before defaults had markers. */
-export async function writeMcpAdapterEntryWithoutRequestTimeout(
+/**
+ * Writes an installed entry as release 0.23.0 left it (D-PG9-04). That release
+ * wrote no default: the `[0.23.0]` section of `CHANGELOG.md` predates the
+ * request timeout, `lifecycle`, and `openUi` defaults, so its entry holds none
+ * of them and its marker records no `defaultFields`.
+ */
+export async function writeRelease0230McpAdapterEntry(
   file: string,
   serverKey: string,
 ): Promise<string> {
@@ -346,6 +351,8 @@ export async function writeMcpAdapterEntryWithoutRequestTimeout(
 
   const entry: Record<string, unknown> = { ...servers[serverKey] };
   delete entry.requestTimeoutMs;
+  delete entry.lifecycle;
+  delete entry.openUi;
   if (isRecord(entry._piClaudeMarketplace)) {
     const marker: Record<string, unknown> = { ...entry._piClaudeMarketplace };
     delete marker.defaultFields;

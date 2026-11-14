@@ -1,7 +1,8 @@
 /**
  * @fileoverview Steps about a user's own choices for a plugin's MCP server
  * across the plugin verbs that rewrite its entry, including a request timeout
- * the user wrote (D-08-01, D-08-02, D-CF6-09, D-PG1-11).
+ * the user wrote (D-08-01, D-08-02, D-CF6-09, D-PG1-11), and an entry as
+ * release 0.23.0 wrote it, before any default (D-PG9-04).
  */
 
 import assert from "node:assert/strict";
@@ -11,8 +12,8 @@ import path from "node:path";
 import { Given } from "@cucumber/cucumber";
 
 import {
-  writeMcpAdapterEntryWithoutRequestTimeout,
   writeMcpAdapterOverride,
+  writeRelease0230McpAdapterEntry,
 } from "../../lib/mcp-server-files.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
@@ -39,10 +40,10 @@ Given(
 );
 
 Given(
-  "the mcp-adapter.json file of the {word} scope holds the entry {string} with no request timeout, as an earlier release wrote it",
+  "the mcp-adapter.json file of the {word} scope holds the entry {string} as release 0.23.0 wrote it",
   async function (this: ScenarioWorld, scope: string, key: string) {
     const file = path.join(this.scopeRoot(scope), "mcp-adapter.json");
-    const written = await writeMcpAdapterEntryWithoutRequestTimeout(file, key);
+    const written = await writeRelease0230McpAdapterEntry(file, key);
     assert.strictEqual(await readFile(file, "utf8"), written);
   },
 );

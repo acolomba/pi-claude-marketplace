@@ -531,7 +531,7 @@ Feature: MCP server lifecycle
       {"mcpServers":{"srv":{"command":"pi-features-absent-mcp-server"}}}
       """
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the mcp-adapter.json file of the user scope holds the entry "plugin_demo_srv_" with no request timeout, as an earlier release wrote it
+    Given the mcp-adapter.json file of the user scope holds the entry "plugin_demo_srv_" as release 0.23.0 wrote it
     When the user has run "/claude:plugin reinstall demo@fixtures --scope user", which did not fail
     Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
       """
