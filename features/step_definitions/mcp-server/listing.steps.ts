@@ -5,10 +5,12 @@
  * stub receives (HAR-04, HAR-07, D-CF6-05).
  *
  * When a session starts, pi-mcp-adapter connects to a server whose tools it
- * has not cached, lists them, and disconnects, in the background. A model
- * turn that started meanwhile could share or lose that connection, so a
- * scenario waits for the listing before its turn, and the messages step reads
- * the stub's whole log for the scenario, not only the lines of the turn.
+ * has not cached and lists them, in the background. It keeps the connection
+ * of a stdio server, whose entry holds `lifecycle: "lazy-keep-alive"`, for
+ * the session (D-PG9-01), and closes any other. A model turn that started
+ * meanwhile could share or lose that connection, so a scenario waits for the
+ * listing before its turn, and the messages step reads the stub's whole log
+ * for the scenario, not only the lines of the turn.
  */
 
 import assert from "node:assert/strict";

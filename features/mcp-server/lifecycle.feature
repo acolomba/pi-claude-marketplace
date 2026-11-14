@@ -7,8 +7,15 @@ Feature: MCP server lifecycle
   choice in mcp-adapter.json exist only for pi-mcp-adapter, whose file keeps
   that choice (D-08-01, D-08-02). Four request-timeout scenarios also use the
   adapter's file; Pi's built-in MCP sets its timeout at session start and reads
-  no user value from that file (D-PG1-11 to D-PG1-13). A stdio stub server stands in for a real one,
-  a scripted model for a real model, and a local marketplace for a published one.
+  no user value from that file (D-PG1-11 to D-PG1-13). They also show the
+  `lifecycle: "lazy-keep-alive"` default of a stdio server, which keeps it
+  connected for the session as Claude Code does, and which a restage writes
+  again as the extension's own (D-PG9-01, D-PG9-03, D-PG9-04). No `openUi`
+  default is written, because pi-subagents 0.88.1 does not hash it as
+  pi-mcp-adapter 7.0.1 does, and an entry holding it stops an agent granted
+  the server's tools from launching (D-PG9-07, D-CF6-10). A stdio stub server
+  stands in for a real one, a scripted model for a real model, and a local
+  marketplace for a published one.
 
   Background:
     Given the marketplace "fixtures" is published as a dir source
@@ -126,9 +133,6 @@ Feature: MCP server lifecycle
       | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"extensions":{"io.modelcontextprotocol/ui":{"mimeTypes":["text/html;profile=mcp-app"]}},"sampling":{},"roots":{},"elicitation":{"form":{}}},"clientInfo":{"name":"pi-mcp-plugin_demo_stub_","version":"1.0.0"}} |
       | notification | notifications/initialized |                                                                                                                                                                                                                                                                 |
       | request      | tools/list                |                                                                                                                                                                                                                                                                 |
-      | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"extensions":{"io.modelcontextprotocol/ui":{"mimeTypes":["text/html;profile=mcp-app"]}},"sampling":{},"roots":{},"elicitation":{"form":{}}},"clientInfo":{"name":"pi-mcp-plugin_demo_stub_","version":"1.0.0"}} |
-      | notification | notifications/initialized |                                                                                                                                                                                                                                                                 |
-      | request      | tools/list                |                                                                                                                                                                                                                                                                 |
       | request      | tools/call                | {"name":"echo","arguments":{"text":"ping"},"_meta":{"pi-mcp-adapter/toolCallId":"{tool call 1}","progressToken":2}}                                                                                                                                             |
     Then the model receives these calls:
       | call | role        | text                                                                        |
@@ -193,9 +197,6 @@ Feature: MCP server lifecycle
       | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"extensions":{"io.modelcontextprotocol/ui":{"mimeTypes":["text/html;profile=mcp-app"]}},"sampling":{},"roots":{},"elicitation":{"form":{}}},"clientInfo":{"name":"pi-mcp-plugin_demo_stub_","version":"1.0.0"}} |
       | notification | notifications/initialized |                                                                                                                                                                                                                                                                 |
       | request      | tools/list                |                                                                                                                                                                                                                                                                 |
-      | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"extensions":{"io.modelcontextprotocol/ui":{"mimeTypes":["text/html;profile=mcp-app"]}},"sampling":{},"roots":{},"elicitation":{"form":{}}},"clientInfo":{"name":"pi-mcp-plugin_demo_stub_","version":"1.0.0"}} |
-      | notification | notifications/initialized |                                                                                                                                                                                                                                                                 |
-      | request      | tools/list                |                                                                                                                                                                                                                                                                 |
       | request      | tools/call                | {"name":"echo","arguments":{"text":"ping"},"_meta":{"pi-mcp-adapter/toolCallId":"{tool call 1}","progressToken":2}}                                                                                                                                             |
     Then the model receives these calls:
       | call | role        | text                                                                        |
@@ -256,9 +257,6 @@ Feature: MCP server lifecycle
     When the user prompts "call the stub"
     Then the stub mcp server "stub" of the plugin "demo" receives these messages:
       | kind         | method                    | params                                                                                                                                                                                                                                                          |
-      | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"extensions":{"io.modelcontextprotocol/ui":{"mimeTypes":["text/html;profile=mcp-app"]}},"sampling":{},"roots":{},"elicitation":{"form":{}}},"clientInfo":{"name":"pi-mcp-plugin_demo_stub_","version":"1.0.0"}} |
-      | notification | notifications/initialized |                                                                                                                                                                                                                                                                 |
-      | request      | tools/list                |                                                                                                                                                                                                                                                                 |
       | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"extensions":{"io.modelcontextprotocol/ui":{"mimeTypes":["text/html;profile=mcp-app"]}},"sampling":{},"roots":{},"elicitation":{"form":{}}},"clientInfo":{"name":"pi-mcp-plugin_demo_stub_","version":"1.0.0"}} |
       | notification | notifications/initialized |                                                                                                                                                                                                                                                                 |
       | request      | tools/list                |                                                                                                                                                                                                                                                                 |
@@ -422,9 +420,13 @@ Feature: MCP server lifecycle
             "directTools": "search",
             "toolPrefix": "mcp",
             "requestTimeoutMs": 45000,
+            "lifecycle": "lazy-keep-alive",
             "_piClaudeMarketplace": {
               "plugin": "demo",
-              "marketplace": "fixtures"
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "lifecycle": "lazy-keep-alive"
+              }
             }
           },
           "plugin_demo_plain_": {
@@ -439,11 +441,13 @@ Feature: MCP server lifecycle
             "directTools": "search",
             "toolPrefix": "mcp",
             "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
             "_piClaudeMarketplace": {
               "plugin": "demo",
               "marketplace": "fixtures",
               "defaultFields": {
-                "requestTimeoutMs": 1800000
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
               }
             }
           }
@@ -453,7 +457,7 @@ Feature: MCP server lifecycle
       """
 
   @adapter-only
-  Scenario: A plugin server that changes from stdio to remote in an update gets the remote idle window (PG-MCP-01, D-PG1-13)
+  Scenario: A plugin server that changes from stdio to remote in an update gets the remote idle window and loses the stdio lifecycle (PG-MCP-01, PG-MCP-06, D-PG1-13, D-PG9-03)
     Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
       """
       {"mcpServers":{"srv":{"command":"pi-features-absent-mcp-server"}}}
@@ -490,7 +494,7 @@ Feature: MCP server lifecycle
       """
 
   @adapter-only
-  Scenario: A disable and an enable write the default timeout again as the extension's own (PG-MCP-01, D-PG1-13)
+  Scenario: A disable and an enable write the default timeout and lifecycle again as the extension's own (PG-MCP-01, PG-MCP-06, D-PG1-13, D-PG9-04)
     Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
       """
       {"mcpServers":{"srv":{"command":"pi-features-absent-mcp-server"}}}
@@ -511,11 +515,13 @@ Feature: MCP server lifecycle
             "directTools": "search",
             "toolPrefix": "mcp",
             "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
             "_piClaudeMarketplace": {
               "plugin": "demo",
               "marketplace": "fixtures",
               "defaultFields": {
-                "requestTimeoutMs": 1800000
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
               }
             }
           }
@@ -525,7 +531,7 @@ Feature: MCP server lifecycle
       """
 
   @adapter-only
-  Scenario: An entry that an earlier release wrote gets the default timeout at the plugin's next reinstall (PG-MCP-01, D-PG1-12)
+  Scenario: An entry that release 0.23.0 wrote gets the default timeout and lifecycle at the plugin's next reinstall (PG-MCP-01, PG-MCP-06, D-PG1-12, D-PG9-04)
     Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
       """
       {"mcpServers":{"srv":{"command":"pi-features-absent-mcp-server"}}}
@@ -546,11 +552,13 @@ Feature: MCP server lifecycle
             "directTools": "search",
             "toolPrefix": "mcp",
             "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
             "_piClaudeMarketplace": {
               "plugin": "demo",
               "marketplace": "fixtures",
               "defaultFields": {
-                "requestTimeoutMs": 1800000
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
               }
             }
           }

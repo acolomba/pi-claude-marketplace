@@ -43,11 +43,13 @@ Feature: MCP server legacy move
             "directTools": "search",
             "toolPrefix": "mcp",
             "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
             "_piClaudeMarketplace": {
               "plugin": "demo",
               "marketplace": "fixtures",
               "defaultFields": {
-                "requestTimeoutMs": 1800000
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
               }
             }
           }
@@ -168,11 +170,13 @@ Feature: MCP server legacy move
             "directTools": "search",
             "toolPrefix": "mcp",
             "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
             "_piClaudeMarketplace": {
               "plugin": "demo",
               "marketplace": "fixtures",
               "defaultFields": {
-                "requestTimeoutMs": 1800000
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
               }
             }
           }
@@ -249,11 +253,13 @@ Feature: MCP server legacy move
             "directTools": "search",
             "toolPrefix": "mcp",
             "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
             "_piClaudeMarketplace": {
               "plugin": "demo",
               "marketplace": "fixtures",
               "defaultFields": {
-                "requestTimeoutMs": 1800000
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
               }
             }
           }
