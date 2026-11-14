@@ -2393,6 +2393,56 @@ test("D-PG4-01: the lenient listing of a root-source entry lists no skill when e
   });
 });
 
+test("D-PG4-01: the lenient listing refuses a listed path that climbs back through the working directory", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedRootSourceEntry(
+      home,
+      cwd,
+      ["./skills/a", `../${path.basename(process.cwd())}/skills/b`],
+      ROOT_SKILL_FILES,
+    );
+    await breakRootHooks(mpRoot);
+
+    // act
+    const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
+
+    // assert
+    assert.deepStrictEqual(calls, ["agents", "commands", "skills/a"]);
+    assert.deepStrictEqual(messages, unavailableRootInfo("unsupported hooks", ["    skills: a"]));
+  });
+});
+
+test("D-PG4-01: the lenient listing refuses an escaping listed path when the working directory is the filesystem root", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedRootSourceEntry(
+      home,
+      cwd,
+      ["./skills/a", "../skills/b", "skills/../../skills/c"],
+      ROOT_SKILL_FILES,
+    );
+    await breakRootHooks(mpRoot);
+    const previous = process.cwd();
+    process.chdir(path.parse(previous).root);
+
+    // act
+    let listing: Awaited<ReturnType<typeof lenientRootSourceInfo>>;
+    try {
+      listing = await lenientRootSourceInfo(home, cwd, mpRoot);
+    } finally {
+      process.chdir(previous);
+    }
+
+    // assert
+    assert.deepStrictEqual(listing.calls, ["agents", "commands", "skills/a"]);
+    assert.deepStrictEqual(
+      listing.messages,
+      unavailableRootInfo("unsupported hooks", ["    skills: a"]),
+    );
+  });
+});
+
 test("D-PG4-01: the lenient listing of a root-source entry that lists no string starts from the skills folder", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange

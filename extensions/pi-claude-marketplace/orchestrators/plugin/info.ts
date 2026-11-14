@@ -2250,19 +2250,22 @@ function rootSourceLenientSkillPaths(
 /**
  * The lexically normalized form of a relative path that stays inside the
  * plugin root, `.` for the root itself, or `undefined` for an absolute or
- * escaping path. No filesystem read is made.
+ * escaping path. The normalization works on the string alone, so the
+ * process's working directory never decides the answer, and no filesystem
+ * read is made.
  */
 function containedRelativePath(declared: string): string | undefined {
   if (path.isAbsolute(declared)) {
     return undefined;
   }
 
-  const relative = path.relative(".", declared);
+  const normalized = path.normalize(declared);
+  const relative = normalized.endsWith(path.sep) ? normalized.slice(0, -1) : normalized;
   if (relative === ".." || relative.startsWith(`..${path.sep}`)) {
     return undefined;
   }
 
-  return relative === "" ? "." : relative;
+  return relative;
 }
 
 /**

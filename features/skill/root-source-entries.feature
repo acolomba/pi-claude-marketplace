@@ -280,3 +280,29 @@ Feature: Skill root-source entries
       | plugin status                  | available     |
       | plugin version                 | 1.0.0         |
       | severity                       | info          |
+
+  Scenario: Info on an unavailable root-source entry does not list a listed path that climbs back through the working directory
+    Given the marketplace "fixtures" has the file "hooks/hooks.json" at its root with this text:
+      """
+      { not valid json
+      """
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {"name":"fixtures","owner":{"name":"features"},"plugins":[{"name":"root","source":"./","version":"1.0.0","skills":["./skills/a","../project/skills/b"]}]}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin info root@fixtures"
+    Then the result has these fields:
+      | kind                           | plugin-info       |
+      | marketplace details autoupdate | false             |
+      | marketplace name               | fixtures          |
+      | marketplace scope              | project           |
+      | needs reload                   | false             |
+      | plugin components resolved     | true              |
+      | plugin components skills       | a                 |
+      | plugin id                      | root@fixtures     |
+      | plugin name                    | root              |
+      | plugin reasons                 | unsupported hooks |
+      | plugin status                  | unavailable       |
+      | plugin version                 | 1.0.0             |
+      | severity                       | info              |
