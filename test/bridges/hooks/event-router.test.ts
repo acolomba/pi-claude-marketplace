@@ -616,6 +616,7 @@ test(
       "register:before_agent_start",
       "register:turn_end",
       "register:agent_end",
+      "register:agent_before_settle",
       "register:agent_settled",
       "register:input",
     ]);
@@ -632,6 +633,7 @@ test(
         { event: "before_agent_start", handlerType: "function" },
         { event: "turn_end", handlerType: "function" },
         { event: "agent_end", handlerType: "function" },
+        { event: "agent_before_settle", handlerType: "function" },
         { event: "agent_settled", handlerType: "function" },
         { event: "input", handlerType: "function" },
       ],
@@ -1872,18 +1874,22 @@ test("registered handlers give stop_hook_active to the Stop hooks of the woken r
   ]);
   const startRun = registeredHandler(registrations, "before_agent_start");
   const endRun = registeredHandler(registrations, "agent_end");
+  const boundaryRun = registeredHandler(registrations, "agent_before_settle");
   const settleRun = registeredHandler(registrations, "agent_settled");
   const runEnding = {
     type: "agent_end",
     messages: [{ ...assistantForBookkeeping(), stopReason: "stop" }],
   } as AgentEndEvent;
+  const boundary = { type: "agent_before_settle", entries: [], continue: false };
 
   // act
   await startRun(customTurn("claude-hook-rewake"), context);
   await endRun(runEnding, context);
+  await boundaryRun(boundary, context);
   await settleRun({ type: "agent_settled" }, context);
   await startRun(customTurn("another-extension-message"), context);
   await endRun(runEnding, context);
+  await boundaryRun(boundary, context);
   await settleRun({ type: "agent_settled" }, context);
 
   // assert
@@ -2434,7 +2440,7 @@ test(
     assert.strictEqual(sessionStartUpdate, undefined);
     assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
     assert.deepStrictEqual(messages, []);
-    assert.strictEqual(registrations.length, 12);
+    assert.strictEqual(registrations.length, 13);
     assert.deepStrictEqual(diagnostics, [
       `[hooks] hydrate: loadState failed for scope=project extensionRoot=${factoryProjectLocations.extensionRoot}: factory project state refused`,
     ]);
@@ -2487,7 +2493,7 @@ test("same-runtime registration invalidates an earlier callback before lazy hydr
     locationsFor("project", projectRoot).extensionRoot,
   ]);
   assert.deepStrictEqual(messages, []);
-  assert.strictEqual(registrations.length, 24);
+  assert.strictEqual(registrations.length, 26);
 });
 
 test(
@@ -2576,7 +2582,7 @@ test(
     assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
     assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
     assert.deepStrictEqual(messages, []);
-    assert.strictEqual(registrations.length, 24);
+    assert.strictEqual(registrations.length, 26);
   },
 );
 
@@ -3232,6 +3238,7 @@ test(
         { event: "before_agent_start", handlerType: "function" },
         { event: "turn_end", handlerType: "function" },
         { event: "agent_end", handlerType: "function" },
+        { event: "agent_before_settle", handlerType: "function" },
         { event: "agent_settled", handlerType: "function" },
         { event: "input", handlerType: "function" },
       ],
@@ -3279,7 +3286,7 @@ test(
     assert.deepStrictEqual(dispatched, ["project", "user"]);
     assert.strictEqual(userSharedBytes, "regular-file-boundary");
     assert.strictEqual(projectSharedStat.isDirectory(), true);
-    assert.strictEqual(registrations.length, 12);
+    assert.strictEqual(registrations.length, 13);
   },
 );
 
@@ -3328,7 +3335,7 @@ for (const mode of ["tui", "print", "json", "rpc"] as const) {
     assert.deepStrictEqual(messages, []);
     assert.deepStrictEqual(capture.entries, []);
     capture.assertValid();
-    assert.strictEqual(registrations.length, 12);
+    assert.strictEqual(registrations.length, 13);
   });
 }
 
@@ -3882,7 +3889,7 @@ test("session_start contains a lazy project cwd failure and still delegates safe
   assert.strictEqual(sessionStartUpdate, undefined);
   assert.deepStrictEqual(dispatches, []);
   assert.deepStrictEqual(messages, []);
-  assert.strictEqual(registrations.length, 12);
+  assert.strictEqual(registrations.length, 13);
 });
 
 /** A manual compaction event whose entry carries `summary`. */
@@ -4436,6 +4443,56 @@ test("child input does not dispatch a UserPromptSubmit hook", { concurrency: fal
   assert.deepStrictEqual(dispatched, []);
 });
 
+test(
+  "a child's boundary handler runs no Stop hook and leaves the cached ending (D-PG5-01)",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const { root } = await createHermeticEnvironment(t, "hooks-router-child-boundary-");
+    const previous = process.env.PI_SUBAGENT_CHILD;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previous;
+      }
+    });
+    const runtime = createHooksRuntime();
+    const { pi, registrations, messages } = makeRecordingPi();
+    const dispatched: BucketAEvent[] = [];
+    await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+      cwd: root,
+      executor: (entry) => {
+        dispatched.push(entry.claudeEvent);
+        return Promise.resolve({ kind: "block", reason: "continue" });
+      },
+    });
+    runtime.setRoutingBucket("Stop", [
+      {
+        ...preToolUseEntry("child-stop", root),
+        claudeEvent: "Stop",
+        matcher: parseMatcher(""),
+        rawMatcher: "",
+      },
+    ]);
+    const ending: AssistantMessage = { ...assistantForBookkeeping(), stopReason: "stop" };
+    runtime.recordLastAssistant(ending);
+    process.env.PI_SUBAGENT_CHILD = "1";
+
+    // act
+    const boundaryResult = await registeredHandler(registrations, "agent_before_settle")(
+      { type: "agent_before_settle", entries: [], continue: false, outcome: "completed" },
+      makeContext(root, root),
+    );
+
+    // assert
+    assert.strictEqual(boundaryResult, undefined);
+    assert.deepStrictEqual(dispatched, []);
+    assert.strictEqual(runtime.takeLastAssistant(), ending);
+    assert.deepStrictEqual(messages, []);
+  },
+);
+
 for (const child of [false, true]) {
   for (const claudeEvent of BUCKET_A_EVENTS) {
     test(
@@ -4550,6 +4607,10 @@ for (const child of [false, true]) {
                   },
                 ],
               },
+              context,
+            );
+            await registeredHandler(registrations, "agent_before_settle")(
+              { type: "agent_before_settle", entries: [], continue: false, outcome: "completed" },
               context,
             );
             await registeredHandler(registrations, "agent_settled")(

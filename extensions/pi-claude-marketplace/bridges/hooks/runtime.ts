@@ -143,6 +143,25 @@ export interface HooksRuntime {
   readonly recordLastAssistant: (message: AssistantMessage | undefined) => void;
   readonly takeLastAssistant: () => AssistantMessage | undefined;
   /**
+   * D-PG5-03: takes the cached last assistant message only when its stop
+   * reason is `stop`, for the Stop hooks at the boundary. Any other message
+   * stays cached for `agent_settled`, which runs StopFailure on a `length`
+   * or `error` ending.
+   */
+  readonly takeStopEnding: () => AssistantMessage | undefined;
+  /** D-PG5-06: marks the Stop boundary handler as running its hooks. */
+  readonly openStopBoundary: () => void;
+  /** D-PG5-06: marks the Stop boundary handler as done with its hooks. */
+  readonly closeStopBoundary: () => void;
+  /**
+   * D-BG-210 / D-PG5-06: records that an async rewake sent its wake. A wake
+   * sent while the Stop boundary is open continues the run that is settling,
+   * so no run start records the mark; this sets it instead, and the next
+   * Stop run sees `stop_hook_active: true`. Outside the boundary it does
+   * nothing, and the run start that the wake causes records the mark.
+   */
+  readonly recordRewakeSent: () => void;
+  /**
    * The value of a Stop payload's `stop_hook_active`: true after a Stop
    * re-entry (STOP-07), or in a run that an async rewake started (D-BG-210).
    */
@@ -245,6 +264,7 @@ export function createHooksRuntime(): HooksRuntime {
   let lastAssistant: AssistantMessage | undefined;
   let stopHookActive = false;
   let runStartedByRewake = false;
+  let stopBoundaryOpen = false;
   let consecutiveBlockCount = 0;
   let capNotifiedThisSession = false;
   let childIdentity: ChildIdentity = { kind: "unavailable" };
@@ -259,6 +279,7 @@ export function createHooksRuntime(): HooksRuntime {
     lastAssistant = undefined;
     stopHookActive = false;
     runStartedByRewake = false;
+    stopBoundaryOpen = false;
     finishStopSequence();
   }
 
@@ -334,6 +355,30 @@ export function createHooksRuntime(): HooksRuntime {
       const message = lastAssistant;
       lastAssistant = undefined;
       return message;
+    },
+
+    takeStopEnding(): AssistantMessage | undefined {
+      if (lastAssistant?.stopReason !== "stop") {
+        return undefined;
+      }
+
+      const message = lastAssistant;
+      lastAssistant = undefined;
+      return message;
+    },
+
+    openStopBoundary(): void {
+      stopBoundaryOpen = true;
+    },
+
+    closeStopBoundary(): void {
+      stopBoundaryOpen = false;
+    },
+
+    recordRewakeSent(): void {
+      if (stopBoundaryOpen) {
+        runStartedByRewake = true;
+      }
     },
 
     isStopHookActive(): boolean {

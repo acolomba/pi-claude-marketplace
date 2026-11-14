@@ -3,12 +3,13 @@
  * reply: a prompt whose turn the Stop hooks continue, recorded with the turn
  * they start, and a prompt the user steers while its tool runs.
  *
- * Pi runs the extension `agent_settled` handlers, the Stop hooks among them,
- * before it reports `agent_settled`, and it starts the turn a Stop hook asks
- * for only after that report (STOP-03). So the model-turn `When` ends before
- * the re-entered turn runs. The `When` here waits for the second
- * `agent_settled` instead, and keeps every record and stand-in log line of
- * both turns as the last turn (HAR-03).
+ * The Stop hooks run in Pi's `agent_before_settle` handlers, and a Stop hook
+ * that blocks or adds context continues the same run with one more model
+ * call (D-PG5-01). So a prompt whose Stop hooks continue it settles once,
+ * after the last model call. The continuation `When` waits for that one
+ * `agent_settled` with a deadline long enough for nine model calls, and
+ * keeps every record and stand-in log line of the run as the last turn
+ * (HAR-03).
  *
  * The run-start `Given` starts the profile Pi with a harness extension that
  * logs each `before_agent_start`, and the counts `Then` states the turn's
@@ -50,10 +51,15 @@ import type { RpcRecord } from "../../lib/pi-process.ts";
 import type { ModelCall } from "../../lib/scripted-model/script.ts";
 import type { ModelTurn, ScenarioWorld } from "../../support/world.ts";
 
-// Two scripted turns settle in well under a second each; the margin covers a
-// loaded CI runner and stays below the 30-second step timeout, so a turn the
-// Stop hooks never send back fails here.
+// A scripted run with a queued prompt settles in well under a second; the
+// margin covers a loaded CI runner and stays below the 30-second step
+// timeout, so a run that never settles fails here.
 const REENTERED_TURNS_DEADLINE_MS = 20_000;
+
+// A run that the Stop hooks continue up to nine times, with a tool call
+// between some of the model calls, settles in a few seconds; the margin
+// covers a loaded CI runner and stays below the step's 120-second timeout.
+const STOP_CONTINUATION_DEADLINE_MS = 110_000;
 
 // A scripted turn settles, and an async hook's script starts, in well under a
 // second; the margin covers a loaded CI runner and stays below the 30-second
@@ -206,29 +212,13 @@ When(
 );
 
 When(
-  "the user prompts {string} and the stop hooks send the turn back",
-  async function (this: ScenarioWorld, text: string) {
-    const deadline = Date.now() + REENTERED_TURNS_DEADLINE_MS;
-    const prompt = expandTokens(text, this.tokens);
-    const { lengths, from } = await startPrompt(this, prompt);
-    await settledAfter(this, await settledAfter(this, from, deadline), deadline);
-    await recordRun(this, prompt, lengths, from);
-  },
-);
-
-When(
-  "the user prompts {string} through {int} agent settlements",
+  "the user prompts {string} and the stop hooks continue the run",
   { timeout: 120_000 },
-  async function (this: ScenarioWorld, text: string, settlements: number) {
-    const deadline = Date.now() + 110_000;
+  async function (this: ScenarioWorld, text: string) {
+    const deadline = Date.now() + STOP_CONTINUATION_DEADLINE_MS;
     const prompt = expandTokens(text, this.tokens);
     const { lengths, from } = await startPrompt(this, prompt);
-    let next = from;
-
-    for (let index = 0; index < settlements; index += 1) {
-      next = await settledAfter(this, next, deadline);
-    }
-
+    await settledAfter(this, from, deadline);
     await recordRun(this, prompt, lengths, from);
   },
 );
@@ -322,7 +312,7 @@ Then("ten stop blocks separated by tool calls continue", function (this: Scenari
     turn,
     Array.from({ length: 10 }, (_, index) => [`Done ${index + 1}`, index > 0]),
   );
-  assert.strictEqual(turn.records.filter(isSettled).length, 11);
+  assert.strictEqual(turn.records.filter(isSettled).length, 1);
   for (let index = 0; index < 10; index += 1) {
     const reentryCall = calls[2 * index + 1];
     const afterToolCall = calls[2 * index + 2];

@@ -22,7 +22,7 @@ Feature: Hook prompt and stop
       | reply  |
       | Done.  |
       | Fixed. |
-    When the user prompts "finish up" and the stop hooks send the turn back
+    When the user prompts "finish up" and the stop hooks continue the run
     Then the hooks record these runs in any order:
       | event | session | last assistant message | stop hook active | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | Stop  | first   | Done.                  | false            | {project dir} |                 | stop-a    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
@@ -35,6 +35,43 @@ Feature: Hook prompt and stop
       | 2    | user      | finish up                                                    |
       | 2    | assistant | Done.                                                        |
       | 2    | user      | Stop hook feedback:\nreason A\nStop hook feedback:\nreason B |
+
+  Scenario: A run that a stop hook blocks twice settles once after one run start
+    Given pi runs with the scripted model and counts its run starts
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event | matcher | form   | output                                     |
+      | always | Stop  |         | script | {"decision":"block","reason":"keep going"} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  | stop reason |
+      | Done 1 |             |
+      | Done 2 |             |
+      | End    | length      |
+    When the user prompts "finish up" and the stop hooks continue the run
+    Then the hooks record these runs:
+      | event | session | last assistant message | stop hook active | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | Stop  | first   | Done 1                 | false            | {project dir} |                 | always    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | Stop  | first   | Done 2                 | true             | {project dir} |                 | always    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the model receives these calls:
+      | call | role      | text                            |
+      | 1    | user      | finish up                       |
+      | 2    | user      | finish up                       |
+      | 2    | assistant | Done 1                          |
+      | 2    | user      | Stop hook feedback:\nkeep going |
+      | 3    | user      | finish up                       |
+      | 3    | assistant | Done 1                          |
+      | 3    | user      | Stop hook feedback:\nkeep going |
+      | 3    | assistant | Done 2                          |
+      | 3    | user      | Stop hook feedback:\nkeep going |
+    Then the stop sequence has these counts:
+      | agent settlements | run starts | model calls |
+      | 1                 | 1          | 3           |
 
   Scenario: A stop hook's additional context is sent back as stop hook feedback
     Given pi runs with the scripted model
@@ -52,7 +89,7 @@ Feature: Hook prompt and stop
       | reply   |
       | Done.   |
       | Tested. |
-    When the user prompts "finish up" and the stop hooks send the turn back
+    When the user prompts "finish up" and the stop hooks continue the run
     Then the hooks record these runs:
       | event | session | last assistant message | stop hook active | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | Stop  | first   | Done.                  | false            | {project dir} |                 | advise    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
@@ -113,7 +150,7 @@ Feature: Hook prompt and stop
       | Done 7 |
       | Done 8 |
       | Done 9 |
-    When the user prompts "finish up" through 9 agent settlements
+    When the user prompts "finish up" and the stop hooks continue the run
     Then the stop sequence has these exact replies and hook states:
       | reply  | stop hook active |
       | Done 1 | false            |
@@ -128,7 +165,7 @@ Feature: Hook prompt and stop
     Then the stop override cap notice count is 1
     Then the stop sequence has these counts:
       | agent settlements | run starts | model calls |
-      | 9                 | 9          | 9           |
+      | 1                 | 1          | 9           |
 
   Scenario: Tool calls reset a Stop-only plugin's continuation count
     Given pi runs with the scripted model
@@ -165,7 +202,7 @@ Feature: Hook prompt and stop
       | Done 10 |      |                             |             |
       |         | bash | {"command":"echo from-model"} |             |
       | End     |      |                             | length      |
-    When the user prompts "finish up" through 11 agent settlements
+    When the user prompts "finish up" and the stop hooks continue the run
     Then ten stop blocks separated by tool calls continue
     Then the stop override cap notice count is 0
 

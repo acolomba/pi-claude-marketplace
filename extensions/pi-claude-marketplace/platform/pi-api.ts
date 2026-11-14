@@ -53,6 +53,8 @@ export { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 export { DynamicBorder } from "@earendil-works/pi-coding-agent";
 
 export type {
+  AgentBeforeSettleEvent,
+  AgentBeforeSettleEventResult,
   AgentEndEvent,
   AgentSettledEvent,
   BeforeAgentStartEvent,

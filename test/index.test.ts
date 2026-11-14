@@ -68,6 +68,7 @@ import { createHermeticEnvironment } from "./platform/hermetic-environment.ts";
 
 import type { Notification } from "./edge/notification-boundary.ts";
 import type {
+  AgentBeforeSettleEvent,
   AgentEndEvent,
   AgentSettledEvent,
   BeforeAgentStartEvent,
@@ -455,6 +456,14 @@ async function loadExtension(
     .times(1);
   when(() => {
     pi.on("agent_end", It.willCapture<EventListener<AgentEndEvent>>("agent end"));
+  })
+    .thenReturn()
+    .times(1);
+  when(() => {
+    pi.on(
+      "agent_before_settle",
+      It.willCapture<EventListener<AgentBeforeSettleEvent>>("agent before settle"),
+    );
   })
     .thenReturn()
     .times(1);

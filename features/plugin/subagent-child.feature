@@ -323,7 +323,7 @@ Feature: Plugin subagent child
       |        | read | {"path": "missing.txt"}        |
       | Done.  |      |                                |
       | Fixed. |      |                                |
-    When the user prompts "run the tools" in pi's startup session and the stop hooks send the turn back
+    When the user prompts "run the tools" in pi's startup session
     Then the hooks record these runs:
       | event              | session | source  | prompt        | tool name | tool input                                | tool response                                                                      | error                                                                 | is interrupt | last assistant message | stop hook active | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_ENV_FILE                                                           | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | SessionStart       | first   | startup |               |           |                                           |                                                                                    |                                                                       |              |                        |                  | {project dir} |                 | start     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | {project dir}/.pi/pi-claude-marketplace/data/_shared/claude-env-first.env | first                  | first             | 1          |

@@ -184,30 +184,22 @@ async function recordStartupTurn(
   world.recordTurn({ prompt, disposition: "started", records, logs });
 }
 
-// Sends `text` to the profile Pi, waits for `settlements` settles, and keeps
+// Sends `text` to the profile Pi, waits for its run to settle, and keeps
 // every record since the prompt and every stand-in log line since the profile
 // Pi started as the last turn, after asserting that Pi reported no fault and
-// called the model no further than its script.
-async function promptInStartupSession(
-  world: ScenarioWorld,
-  text: string,
-  settlements: number,
-): Promise<void> {
+// called the model no further than its script. A run that a Stop hook
+// continues settles once, after its last model call (D-PG5-01).
+async function promptInStartupSession(world: ScenarioWorld, text: string): Promise<void> {
   const prompt = expandTokens(text, world.tokens);
   const from = world.pi.recordCount();
   const { response } = await world.pi.request({ type: "prompt", message: prompt });
   assert.strictEqual(promptDisposition(response), "started", JSON.stringify(response));
-  let next = from;
-  for (let settled = 0; settled < settlements; settled += 1) {
-    const record = await world.pi.waitForRecord(
-      next,
-      (candidate) => candidate.type === "agent_settled",
-      STAGE_TIMEOUT_MS,
-    );
-    assert.strictEqual(record.aborted, false, JSON.stringify(record));
-    next = from + world.pi.recordsSince(from).indexOf(record) + 1;
-  }
-
+  const record = await world.pi.waitForRecord(
+    from,
+    (candidate) => candidate.type === "agent_settled",
+    STAGE_TIMEOUT_MS,
+  );
+  assert.strictEqual(record.aborted, false, JSON.stringify(record));
   const records = world.pi.recordsSince(from);
   assert.deepStrictEqual(records.filter(isFault), []);
   await recordStartupTurn(world, prompt, records);
@@ -332,16 +324,7 @@ Given(
 When(
   "the user prompts {string} in pi's startup session",
   async function (this: ScenarioWorld, text: string) {
-    await promptInStartupSession(this, text, 1);
-  },
-);
-
-// STOP-03: Pi starts the turn a Stop hook asks for after it reports the first
-// `agent_settled`, so the step waits for the second one.
-When(
-  "the user prompts {string} in pi's startup session and the stop hooks send the turn back",
-  async function (this: ScenarioWorld, text: string) {
-    await promptInStartupSession(this, text, 2);
+    await promptInStartupSession(this, text);
   },
 );
 

@@ -513,6 +513,76 @@ test("clears the woken mark at a bridge load", () => {
   assert.strictEqual(runtime.isStopHookActive(), false);
 });
 
+test("takes a cached stop ending once and returns nothing without one (D-PG5-03)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const ending: AssistantMessage = { ...assistantMessage("done"), stopReason: "stop" };
+  runtime.recordLastAssistant(ending);
+
+  // act
+  const taken = runtime.takeStopEnding();
+  const takenAgain = runtime.takeStopEnding();
+
+  // assert
+  assert.strictEqual(taken, ending);
+  assert.strictEqual(takenAgain, undefined);
+  assert.strictEqual(runtime.takeLastAssistant(), undefined);
+});
+
+for (const stopReason of ["length", "error"] as const) {
+  test(`leaves a cached ${stopReason} ending for the settle (D-PG5-03)`, () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const ending: AssistantMessage = { ...assistantMessage("cut"), stopReason };
+    runtime.recordLastAssistant(ending);
+
+    // act
+    const taken = runtime.takeStopEnding();
+
+    // assert
+    assert.strictEqual(taken, undefined);
+    assert.strictEqual(runtime.takeLastAssistant(), ending);
+  });
+}
+
+test("marks a wake sent while the stop boundary is open, and no other wake (D-BG-210 / D-PG5-06)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+
+  // act
+  runtime.recordRewakeSent();
+  const activeBeforeBoundary = runtime.isStopHookActive();
+  runtime.openStopBoundary();
+  const activeAtOpen = runtime.isStopHookActive();
+  runtime.recordRewakeSent();
+  const activeAfterWake = runtime.isStopHookActive();
+  runtime.closeStopBoundary();
+  const activeAfterClose = runtime.isStopHookActive();
+  runtime.recordRunStart(false);
+  const activeAfterRunStart = runtime.isStopHookActive();
+  runtime.recordRewakeSent();
+
+  // assert
+  assert.deepStrictEqual(
+    [activeBeforeBoundary, activeAtOpen, activeAfterWake, activeAfterClose, activeAfterRunStart],
+    [false, false, true, true, false],
+  );
+  assert.strictEqual(runtime.isStopHookActive(), false);
+});
+
+test("closes the stop boundary at a bridge load (D-PG5-06)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.openStopBoundary();
+
+  // act
+  runtime.prepareSettleForRegistration();
+  runtime.recordRewakeSent();
+
+  // assert
+  assert.strictEqual(runtime.isStopHookActive(), false);
+});
+
 test("owns child removal, PID snapshots, and shutdown per runtime", () => {
   // arrange
   const firstRuntime = createHooksRuntime();

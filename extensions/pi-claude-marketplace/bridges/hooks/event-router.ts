@@ -84,6 +84,7 @@ import {
 } from "./routing-state.ts";
 import {
   agentEndCacheHandler,
+  beforeSettleHandlerFor,
   inputResetHandlerFor,
   resetSettleState,
   settleHandlerFor,
@@ -1041,24 +1042,27 @@ function sessionCompactCallback(
  *   3. SIGKILL prior-cycle in-memory async-rewake children (HOOK-06).
  *   4. Hydrate the parsed-config cache from disk, then rebuild routing tables.
  *   5. Reap persisted orphans per scope (D-62-05).
- *   6. Register exactly 12 pi.on call sites -- 7 Bucket-A dispatch surfaces
+ *   6. Register exactly 13 pi.on call sites -- 7 Bucket-A dispatch surfaces
  *      (DISP-01) plus `before_agent_start` (the drain point for the
  *      SessionStart `additionalContext` capture buffer) plus `turn_end` (sends
- *      the context of a queued follow-up, D-CF5-13) plus the two
- *      settle-time surfaces `agent_end` (caches the run's last-assistant
- *      message) and `agent_settled` (gates on stopReason to dispatch the
- *      Stop / StopFailure buckets; STOP-01) plus a SECOND `input`
+ *      the context of a queued follow-up, D-CF5-13) plus the three
+ *      turn-boundary surfaces `agent_end` (caches the run's last-assistant
+ *      message), `agent_before_settle` (runs the Stop bucket on a `stop`
+ *      ending and continues the run on a block; D-PG5-01), and
+ *      `agent_settled` (runs the StopFailure bucket on an `error` or
+ *      `length` ending; STOP-01, D-PG5-03) plus a SECOND `input`
  *      subscription (the STOP-07 loop-protection reset, distinct from the
  *      UserPromptSubmit dispatch handler on the same event). The eight
  *      per-Pi-event Claude buckets fan out from 7 Pi event surfaces because
  *      `tool_result` splits on `event.isError` between the PostToolUse and
  *      PostToolUseFailure buckets (D-59-01); the Stop / StopFailure buckets
- *      are driven off `agent_settled` rather than a per-Pi-event surface. The
- *      Pi event-name set has 11 names (`input` appears twice), so 12 calls.
+ *      are driven off the turn-boundary surfaces rather than a per-Pi-event
+ *      surface. The Pi event-name set has 12 names (`input` appears twice),
+ *      so 13 calls.
  *
  * `opts.executor` is the hook-execution injection point, forwarded verbatim
  * to every `compositeHandlerFor` / `toolResultCompositeHandler` /
- * `settleHandlerFor` closure registered in step 6. The sole production caller
+ * `beforeSettleHandlerFor` / `settleHandlerFor` closure registered in step 6. The sole production caller
  * -- the extension factory in `index.ts` -- does NOT pass it, so production
  * always runs on the `dispatchHookExec` default; it exists so a test can
  * register the real bridge against a spy and assert on routing without
@@ -1301,12 +1305,22 @@ async function registerHooksBridgeWith(
       return Promise.resolve(undefined);
     }),
   );
-  // Settle-time turn-boundary dispatch: agent_end caches the run's
-  // last-assistant message; agent_settled reads it and gates on stopReason
-  // to run the Stop / StopFailure buckets (STOP-01).
+  // Turn-boundary dispatch: agent_end caches the run's last-assistant
+  // message; agent_before_settle runs the Stop bucket on a `stop` ending and
+  // agent_settled the StopFailure bucket on an `error` or `length` ending
+  // (STOP-01, D-PG5-01, D-PG5-03). A pi-subagents child runs no Stop hook
+  // (D-PG3-04), and its boundary handler leaves the cache for agent_settled.
   pi.on(
     "agent_end",
     bindWithMode((generation) => agentEndCacheHandler(runtime, generation)),
+  );
+  pi.on(
+    "agent_before_settle",
+    bind((generation) => {
+      const handler = beforeSettleHandlerFor(runtime, generation, pi, opts.executor);
+      return (event, ctx) =>
+        dispatchesInCurrentSession("Stop") ? handler(event, ctx) : Promise.resolve(undefined);
+    }),
   );
   pi.on(
     "agent_settled",
@@ -1325,8 +1339,8 @@ async function registerHooksBridgeWith(
   // STOP-07 loop-protection reset: a dedicated second `input` subscription
   // (distinct from the UserPromptSubmit dispatch handler above) clears the
   // Stop re-entry flag and resets the consecutive-block counter + one-shot cap
-  // latch on a genuine user input. Bridge-injected `sendMessage` re-entries do
-  // NOT pass through `input`, so the flag never self-clears. The woken mark of
+  // latch on a genuine user input. A Stop continuation does NOT pass through
+  // `input`, so the flag never self-clears. The woken mark of
   // an async rewake ends at the next run start instead (D-BG-210).
   pi.on(
     "input",

@@ -1,22 +1,29 @@
 // bridges/hooks/settle.ts
 //
-// Settle-time dispatcher for the turn-boundary hook events. Pi emits
-// `agent_settled` once per logical completion carrying no payload, so this
-// runtime caches the last assistant message from the preceding
-// `agent_end.messages` and gates dispatch on its `stopReason` (STOP-01):
-// `stop` runs the Stop bucket with full decision control (STOP-03 block
-// re-entry); `error` / `length` route to StopFailure (observation-only --
-// the bucket runs but its result is discarded, SFAIL-01); `pending`,
-// `aborted`, `toolUse` and `deferred` dispatch nothing.
+// Dispatcher for the turn-boundary hook events. Neither `agent_before_settle`
+// nor `agent_settled` names the run's stop reason, so this runtime caches the
+// last assistant message from the preceding `agent_end.messages` and gates
+// dispatch on its `stopReason` (STOP-01). Pi maps both `stop` and `length` to
+// the boundary outcome `completed`, so the outcome cannot gate it.
 //
-// As Claude Code 2.1.316 does, a Stop re-entry sends every blocking reason
-// and every `additionalContext` back in one message, one
+// A `stop` ending runs the Stop bucket on `agent_before_settle` with full
+// decision control (D-PG5-01): a hook that blocks or adds context continues
+// the same run, through one hidden `custom_message` entry that the handler
+// appends to the boundary's entries, with `continue: true`. An `error` or
+// `length` ending stays cached for `agent_settled`, which runs StopFailure
+// (observation-only -- the bucket runs but its result is discarded,
+// SFAIL-01, D-PG5-03); `agent_settled` never runs Stop, so one ending runs it
+// at most once. `pending`, `aborted`, `toolUse` and `deferred` dispatch
+// nothing.
+//
+// As Claude Code 2.1.316 does, a Stop continuation sends every blocking
+// reason and every `additionalContext` back in one message, one
 // `Stop hook feedback:\n<text>` part per value in routing order (D-CF5-11 /
 // D-CF5-13 / D-CF5-25), and each Stop `systemMessage` is shown to the user as
 // `Stop says: <text>`, never to the model (D-CF5-14).
 //
-// Both handlers carry the captured-generation guard so a stale closure from a
-// prior `/reload` cannot fire against rebuilt routing tables;
+// Every handler carries the captured-generation guard so a stale closure from
+// a prior `/reload` cannot fire against rebuilt routing tables;
 // `resetSettleState` clears the cache cell in `registerHooksBridge` for the
 // same reason.
 
@@ -36,6 +43,8 @@ import type { StopFailureEvent } from "./payloads/stop-failure.ts";
 import type { StopEvent } from "./payloads/stop.ts";
 import type { StopFailureErrorType } from "../../domain/components/hook-events.ts";
 import type {
+  AgentBeforeSettleEvent,
+  AgentBeforeSettleEventResult,
   AgentEndEvent,
   AgentMessage,
   AgentSettledEvent,
@@ -47,11 +56,21 @@ import type {
 import type { NotificationRun } from "../../shared/notification-run.ts";
 
 /**
- * Custom-message type for the Stop block re-entry. Distinct from the
- * async-rewake `claude-hook-rewake` value so the two re-entry semantics stay
+ * Custom-message type of the hidden entry that carries the Stop hooks'
+ * feedback into the continued run (D-PG5-01). Distinct from the async-rewake
+ * `claude-hook-rewake` value so a Stop continuation and a rewake stay
  * separable in the transcript and in `details`-based consumers.
  */
 const STOP_BLOCK_CUSTOM_TYPE = "claude-hook-stop-block" as const;
+
+/** One entry that a boundary handler may append to the boundary's entries. */
+type BoundaryEntry = NonNullable<AgentBeforeSettleEventResult["entries"]>[number];
+
+/** The feedback a Stop run sends back, and the plugin it names. */
+interface StopContinuation {
+  readonly parts: PiTextContentBlock[];
+  readonly pluginId: string;
+}
 
 /**
  * Reset the runtime's settle state. Called from `registerHooksBridge` so a
@@ -64,9 +83,9 @@ export function resetSettleState(runtime: HooksRuntime): void {
 
 /**
  * `input`-event reset closure (STOP-07). A genuine user `input` event clears
- * the Stop re-entry flag and resets the consecutive-block counter + one-shot
- * latch; bridge-injected `sendMessage` re-entries do NOT pass through `input`,
- * so the flag survives a re-entry and clears only when the user actually
+ * the Stop continuation flag and resets the consecutive-block counter +
+ * one-shot latch; a Stop continuation does NOT pass through `input`, so the
+ * flag survives a continuation and clears only when the user actually
  * types. A run that an async rewake woke keeps `stop_hook_active` true until
  * that run settles (D-BG-210). Generation-
  * guarded like the other settle handlers so a stale closure from a prior
@@ -121,19 +140,115 @@ export function agentEndCacheHandler(
 }
 
 /**
- * `agent_settled` dispatcher: reads the cached last assistant message and
- * gates on `stopReason` (STOP-01). `stop` runs the Stop bucket and re-enters
- * the agent loop on a blocking hook (STOP-03); `error` / `length` route to the
- * StopFailure observation-only arm (SFAIL-01); `pending` / `aborted` /
- * `toolUse` / `deferred` are a defensive no-op. No-ops on a stale epoch or an
- * empty cache.
+ * `agent_before_settle` dispatcher (D-PG5-01): takes the cached last
+ * assistant message when it ended with `stop` (STOP-01, D-PG5-03) and runs
+ * the Stop bucket. When a hook blocks or adds context, it resolves to the
+ * boundary's entries followed by one hidden `custom_message` draft, with
+ * `continue: true`, so Pi calls the model again in the same run (STOP-03).
+ * Otherwise it resolves to `undefined`: it never returns `continue: false`,
+ * so it cancels no continuation another extension asked for (D-PG5-05).
+ * No-ops on a stale epoch, an unavailable mode, or a message that did not
+ * end with `stop`, which stays cached for `agent_settled`. An error is
+ * debug-logged and resolves to `undefined` (NFR-2).
+ *
+ * The stop boundary is open while the bucket runs, so a wake that an async
+ * rewake sends in that window sets the D-BG-210 mark (D-PG5-06).
  *
  * `executor` is optional and threaded down to `collectBucketOutcomes`, which
- * defaults it to `dispatchHookExec`. Production omits it -- the one
- * `settleHandlerFor` call, in `registerHooksBridge`, forwards that factory's
- * own optional `executor`, which its sole production caller never sets. It is
- * there so a test can drive the Stop / StopFailure arms against a spy instead
- * of a real child process (see `HookExecutor` in `dispatch.ts`).
+ * defaults it to `dispatchHookExec`. Production omits it: the one call, in
+ * `registerHooksBridge`, forwards that factory's own optional `executor`,
+ * which its sole production caller never sets. It is there so a test can
+ * drive the Stop arm against a spy instead of a real child process (see
+ * `HookExecutor` in `dispatch.ts`).
+ */
+export function beforeSettleHandlerFor(
+  runtime: HooksRuntime,
+  capturedGeneration: number,
+  pi: ExtensionAPI,
+  executor?: HookExecutor,
+): (
+  event: AgentBeforeSettleEvent,
+  ctx: ExtensionContext,
+) => Promise<AgentBeforeSettleEventResult | undefined> {
+  return async (event, ctx) => {
+    if (capturedGeneration !== runtime.currentGeneration()) {
+      return undefined;
+    }
+
+    try {
+      requireNotificationMode(ctx.mode);
+    } catch (error: unknown) {
+      hookDebugLog(`settle: context unavailable: ${errorMessage(error)}`);
+      return undefined;
+    }
+
+    const last = runtime.takeStopEnding();
+    if (last === undefined) {
+      return undefined;
+    }
+
+    try {
+      const continuation = await runStopBoundary(
+        runtime,
+        last,
+        capturedGeneration,
+        ctx,
+        pi,
+        executor,
+      );
+      return continuation === undefined
+        ? undefined
+        : { entries: [...event.entries, stopBlockDraft(continuation)], continue: true };
+    } catch (error: unknown) {
+      hookDebugLog(`settle: Stop boundary failed: ${errorMessage(error)}`);
+      return undefined;
+    }
+  };
+}
+
+// Runs the Stop bucket with the stop boundary open, and closes it again
+// however the bucket ends (D-PG5-06).
+async function runStopBoundary(
+  runtime: HooksRuntime,
+  last: AssistantMessage,
+  capturedGeneration: number,
+  ctx: ExtensionContext,
+  pi: ExtensionAPI,
+  executor?: HookExecutor,
+): Promise<StopContinuation | undefined> {
+  const run = openNotificationRun(pi, { kind: "hook" });
+  runtime.openStopBoundary();
+  try {
+    return await runStopBucket(runtime, last, capturedGeneration, ctx, pi, run, executor);
+  } finally {
+    runtime.closeStopBoundary();
+  }
+}
+
+// D-CF5-25 / D-PG5-01: the hidden entry that carries the Stop feedback into
+// the continued run.
+function stopBlockDraft({ parts, pluginId }: StopContinuation): BoundaryEntry {
+  return {
+    type: "custom_message",
+    customType: STOP_BLOCK_CUSTOM_TYPE,
+    content: parts,
+    display: false,
+    details: { pluginId },
+  };
+}
+
+/**
+ * `agent_settled` dispatcher: reads the cached last assistant message and
+ * gates on `stopReason` (STOP-01). `error` / `length` route to the
+ * StopFailure observation-only arm (SFAIL-01, D-PG5-03); `stop` runs nothing,
+ * because the boundary handler runs the Stop hooks of that ending, or Pi
+ * skipped the boundary after an abort; `pending` / `aborted` / `toolUse` /
+ * `deferred` are a defensive no-op. No-ops on a stale epoch or an empty
+ * cache.
+ *
+ * `executor` is optional and threaded down to `collectBucketOutcomes`, as for
+ * `beforeSettleHandlerFor`, so a test can drive the StopFailure arm against a
+ * spy instead of a real child process.
  */
 export function settleHandlerFor(
   runtime: HooksRuntime,
@@ -155,19 +270,17 @@ export function settleHandlerFor(
 
     // One-shot consumption: clear the cache so a spurious second `agent_settled`
     // without an intervening `agent_end` no-ops instead of reprocessing the same
-    // (stale) message. Each legitimate re-entry produces a fresh `agent_end`
-    // that repopulates the cache, so this does not break the block loop.
+    // (stale) message.
     const last = runtime.takeLastAssistant();
     if (last === undefined) {
       return;
     }
 
     switch (last.stopReason) {
-      case "stop": {
-        const run = openNotificationRun(pi, { kind: "hook" });
-        await runStopBucket(runtime, last, capturedGeneration, ctx, pi, run, executor);
+      // D-PG5-03: the Stop hooks of a `stop` ending run at the boundary, so
+      // one ending runs them at most once.
+      case "stop":
         return;
-      }
 
       case "error":
       case "length": {
@@ -236,7 +349,7 @@ function feedbackTexts(result: HookExecResult): string[] {
  * model, one `Stop hook feedback:\n<text>` part per value in routing order. A
  * hook that neither blocks nor adds context adds no part. The plugin is the
  * first hook that adds one, or `undefined` when none does; it names the
- * re-entry and the cap notice.
+ * continuation entry and the cap notice.
  */
 function stopFeedback(outcomes: readonly BucketOutcome[]): {
   readonly parts: PiTextContentBlock[];
@@ -281,30 +394,30 @@ function showStopNotices(
 /**
  * Run the Stop bucket and adapt the collected outcomes over the full
  * `HookExecResult` union (STOP-03..06). Because D-88-05 makes Stop precedence
- * AGGREGATE (any `continue:false` suppresses re-entry regardless of another
- * hook's block), the bucket is collected without a short-circuit, its
- * notices are shown (D-CF5-14), and then:
+ * AGGREGATE (any `continue:false` suppresses continuation regardless of
+ * another hook's block), the bucket is collected without a short-circuit,
+ * its notices are shown (D-CF5-14), and then:
  *
- *   1. any `stop` (continue:false) among the group -> no re-entry (STOP-06).
- *   2. else, when any hook blocks or adds context, re-enter once with every
+ *   1. any `stop` (continue:false) among the group -> no continuation
+ *      (STOP-06, D-PG5-05).
+ *   2. else, when any hook blocks or adds context, continue once with every
  *      reason and context as `Stop hook feedback:` parts (STOP-03 / STOP-05 /
  *      D-CF5-25; exit-2 already maps to `{kind:"block",reason:stderr}` in
  *      `parseHookStdout`, so STOP-04 rides this arm with no Stop-specific exit
  *      handling).
  *   3. else nothing (`noop`).
  *
- * Re-entry uses `sendMessage({deliverAs:"followUp", triggerTurn:true})` (the
- * agent is idle at settle, so `triggerTurn` starts the new turn),
- * display-suppressed, and passes once through the STOP-07 cap. A Stop hook
- * declaring `async` or `asyncRewake` runs in the background and returns
- * `noop`; on exit 2 an `asyncRewake` one wakes the model through the registry
+ * Returns the feedback and its plugin when the run continues, after the
+ * STOP-07 cap admitted it, and `undefined` otherwise. A Stop hook declaring
+ * `async` or `asyncRewake` runs in the background and returns `noop`; on
+ * exit 2 an `asyncRewake` one wakes the model through the registry
  * (D-BG-206).
  *
  * The generation is re-checked AFTER the bucket's hooks finish: hook subprocesses
- * can outlive a `/reload`, and the entry-time guard in `settleHandlerFor` only
- * covers the pre-await window. Without the re-check, the stale continuation
- * would mutate the freshly reset loop state and inject a re-entry turn into
- * the new session.
+ * can outlive a `/reload`, and the entry-time guard in `beforeSettleHandlerFor`
+ * only covers the pre-await window. Without the re-check, the stale
+ * continuation would mutate the freshly reset loop state and continue a run
+ * of the new session.
  */
 async function runStopBucket(
   runtime: HooksRuntime,
@@ -314,15 +427,15 @@ async function runStopBucket(
   pi: ExtensionAPI,
   run: NotificationRun,
   executor?: HookExecutor,
-): Promise<void> {
+): Promise<StopContinuation | undefined> {
   const bucket = runtime.getRoutingBucket("Stop");
   if (bucket.length === 0) {
-    return;
+    return undefined;
   }
 
   const event: StopEvent = {
     last_assistant_message: renderAssistantText(last),
-    // STOP-07: the NEXT Stop payload after a bridge re-entry carries
+    // STOP-07: the NEXT Stop payload after a bridge continuation carries
     // `stop_hook_active: true` so the hook can see it is running inside a
     // bridge-driven continuation loop.
     stop_hook_active: runtime.isStopHookActive(),
@@ -338,39 +451,39 @@ async function runStopBucket(
   );
 
   // A /reload while the bucket's hooks were running advanced the generation and reset
-  // the settle state; bail before any loop-state mutation or re-entry.
+  // the settle state; bail before any loop-state mutation or continuation.
   if (capturedGeneration !== runtime.currentGeneration()) {
-    return;
+    return undefined;
   }
 
   showStopNotices(ctx, run, outcomes);
 
-  // STOP-06 / D-88-05: any continue:false suppresses re-entry. This is a
-  // non-re-entry outcome, so it resets the consecutive re-entry counter
-  // (D-88-08).
+  // STOP-06 / D-88-05: any continue:false suppresses continuation. This is a
+  // non-continuation outcome, so it resets the consecutive continuation
+  // counter (D-88-08).
   const stop = outcomes.find((o) => o.result.kind === "stop");
   if (stop?.result.kind === "stop") {
     hookDebugLog(
-      `settle: continue:false from ${stop.entry.pluginId} suppresses Stop re-entry; ` +
+      `settle: continue:false from ${stop.entry.pluginId} suppresses Stop continuation; ` +
         `stopReason=${stop.result.stopReason ?? "<none>"}`,
     );
     runtime.recordStopNonReentry();
-    return;
+    return undefined;
   }
 
   // STOP-03 / STOP-04 / STOP-05 / D-CF5-25: every reason and context goes back
-  // in one re-entry, which funnels through the shared bounded lane once, so a
-  // block loop and a pure-additionalContext loop count toward the STOP-07 cap
-  // alike (D-88-08).
-  const feedback = stopFeedback(outcomes);
-  if (feedback.pluginId !== undefined) {
-    reenterBounded(runtime, pi, ctx, run, feedback.parts, feedback.pluginId);
-    return;
+  // in one continuation, which funnels through the shared bounded lane once,
+  // so a block loop and a pure-additionalContext loop count toward the
+  // STOP-07 cap alike (D-88-08).
+  const { parts, pluginId } = stopFeedback(outcomes);
+  if (pluginId !== undefined) {
+    return continuesBounded(runtime, ctx, run, pluginId) ? { parts, pluginId } : undefined;
   }
 
-  // noop: the agent genuinely settled with no continuing hook -- a non-re-entry
-  // outcome that resets the counter (D-88-08).
+  // noop: the agent genuinely settled with no continuing hook -- a
+  // non-continuation outcome that resets the counter (D-88-08).
   runtime.recordStopNonReentry();
+  return undefined;
 }
 
 /**
@@ -383,7 +496,7 @@ async function runStopBucket(
  * `"*"` admits every type, and a `|` list admits each type it names,
  * D-BG-302) with no short-circuit, then DISCARDS the collected
  * outcomes: StopFailure carries no decision control, so a blocking hook or an
- * exit-2 hook produces no re-entry and no loop-state mutation, and it cannot
+ * exit-2 hook produces no continuation and no loop-state mutation, and it cannot
  * suppress its peer observers. `stopHookActive`, the consecutive-block counter,
  * and `sendMessage` are never touched on this path. A StopFailure hook's
  * `systemMessage` is dropped with a debug line, as Claude Code drops it
@@ -440,27 +553,24 @@ async function runStopFailure(
 }
 
 /**
- * STOP-07 bounded re-entry bookkeeping shared by BOTH re-entry lanes -- a
- * `block` continuation and an `additionalContext`-without-block continuation
- * (D-88-08). The first `STOP_OVERRIDE_CAP` blocking outcomes re-enter;
- * the next one does not and instead fires the one-shot override-cap warning (guarded
- * by `capNotifiedThisSession` so a subsequent re-entry does not re-notify). Any
- * re-entry below the cap sets `stopHookActive` -- the continuation is
- * bridge-driven regardless of lane (D-88-08) -- and re-enters (STOP-03; exit-2
- * already maps to `{kind:"block"}` in `parseHookStdout`, so STOP-04 rides this
- * arm). The cap is the T-88-02 livelock mitigation: an always-continuing hook,
- * whether via block or additionalContext, is bounded to 8 re-entries then
- * surfaced, never spun unbounded and never suppressed without notice
- * (transparency, D-88-01).
+ * STOP-07 bounded continuation bookkeeping shared by BOTH continuation lanes
+ * -- a `block` continuation and an `additionalContext`-without-block
+ * continuation (D-88-08, D-PG5-04). The first `STOP_OVERRIDE_CAP` blocking
+ * outcomes continue; the next one does not and instead fires the one-shot
+ * override-cap warning (guarded by `capNotifiedThisSession` so a later
+ * continuation does not re-notify). Any continuation below the cap sets
+ * `stopHookActive` -- the continuation is bridge-driven regardless of lane
+ * (D-88-08). Returns whether the run continues. The cap is the T-88-02
+ * livelock mitigation: an always-continuing hook, whether via block or
+ * additionalContext, is bounded to 8 continuations then surfaced, never spun
+ * unbounded and never suppressed without notice (transparency, D-88-01).
  */
-function reenterBounded(
+function continuesBounded(
   runtime: HooksRuntime,
-  pi: ExtensionAPI,
   ctx: ExtensionContext,
   run: NotificationRun,
-  content: PiTextContentBlock[],
   pluginId: string,
-): void {
+): boolean {
   const transition = runtime.recordStopReentry();
   if (transition.notifyCap) {
     try {
@@ -470,31 +580,5 @@ function reenterBounded(
     }
   }
 
-  if (!transition.reenter) {
-    return;
-  }
-
-  reenter(pi, content, pluginId);
-}
-
-/**
- * Re-enter the idle agent loop with `content`, the feedback parts, as one
- * display-suppressed followUp message that triggers a new turn (D-CF5-25).
- * Wrapped in try/catch so a `sendMessage` throw degrades to a `hookDebugLog`
- * rather than escaping the settle handler.
- */
-function reenter(pi: ExtensionAPI, content: PiTextContentBlock[], pluginId: string): void {
-  try {
-    pi.sendMessage(
-      {
-        customType: STOP_BLOCK_CUSTOM_TYPE,
-        content,
-        display: false,
-        details: { pluginId },
-      },
-      { deliverAs: "followUp", triggerTurn: true },
-    );
-  } catch (err) {
-    hookDebugLog(`settle: sendMessage threw (${pluginId}): ${errorMessage(err)}`);
-  }
+  return transition.reenter;
 }

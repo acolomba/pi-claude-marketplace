@@ -150,11 +150,13 @@ export type AsyncRewakeEntry = HooksRuntimeChildEntry;
 
 /**
  * What the exit handler of one child needs from its dispatch: the event's
- * context and API, and the hook's Claude label for the default rewake prefix.
+ * context and API, the runtime that records a sent wake (D-PG5-06), and the
+ * hook's Claude label for the default rewake prefix.
  */
 interface RewakeExit {
   readonly ctx: ExtensionContext;
   readonly pi: ExtensionAPI;
+  readonly runtime: HooksRuntime;
   readonly label: string;
   readonly lane: BackgroundLane;
 }
@@ -265,6 +267,7 @@ export async function spawnAndRegister(
     const exit: RewakeExit = {
       ctx,
       pi,
+      runtime,
       label: rewakeLabel(entry.claudeEvent, stdinPayload),
       lane: laneOf(entry),
     };
@@ -627,13 +630,18 @@ function sendAsyncAnswer(entry: HooksRuntimeChildEntry, { pi }: RewakeExit): voi
  * wakes the model with Claude Code's rewake text. One `triggerTurn` send
  * starts a turn when Pi is idle and steers a running turn, as Claude Code's
  * `next`-priority notification does; the summary goes first, so its record
- * precedes the woken run's. Any other exit shows and sends nothing.
+ * precedes the woken run's. Any other exit shows and sends nothing. A wake
+ * sent while the Stop hooks run at the boundary continues that run, so the
+ * runtime records the sent wake for `stop_hook_active` (D-BG-210, D-PG5-06).
  *
  * IL-2 EXEMPTION (T-62-09): `rewakeSummary` is the single sanctioned runtime
  * notify call originating from `bridges/hooks/async-rewake/`, routed through
  * the canonical `shared/notification-dispatch.ts` seam.
  */
-function wakeOnExitTwo(entry: HooksRuntimeChildEntry, { ctx, pi, label }: RewakeExit): void {
+function wakeOnExitTwo(
+  entry: HooksRuntimeChildEntry,
+  { ctx, pi, runtime, label }: RewakeExit,
+): void {
   try {
     const run = openNotificationRun(pi, { kind: "hook" });
     notifyAsyncRewakeSummary(ctx, run, rewakeSummaryText(entry.rewakeSummary));
@@ -655,6 +663,7 @@ function wakeOnExitTwo(entry: HooksRuntimeChildEntry, { ctx, pi, label }: Rewake
       },
       { triggerTurn: true, deliverAs: "steer" },
     );
+    runtime.recordRewakeSent();
   } catch (err) {
     hookDebugLog(`async-rewake: sendMessage threw (${entry.pluginId}): ${errorMessage(err)}`);
   }

@@ -33,6 +33,7 @@ import type {
   SpawnDeps,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import type { RoutingEntry } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import type { HooksRuntime } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type { BucketAEvent } from "../../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import type {
   ExtensionAPI,
@@ -3758,6 +3759,71 @@ test(
     }
   },
 );
+
+for (const [index, { title, prepare, marked }] of [
+  {
+    title: "marks the next Stop run when an exit two wakes the model inside the stop boundary",
+    prepare: (runtime: HooksRuntime): void => {
+      runtime.openStopBoundary();
+    },
+    marked: true,
+  },
+  {
+    title:
+      "leaves the next Stop run unmarked when an exit two wakes the model outside the stop boundary",
+    prepare: (): void => undefined,
+    marked: false,
+  },
+  {
+    title: "leaves the next Stop run unmarked when the wake inside the stop boundary fails to send",
+    prepare: (runtime: HooksRuntime, pi: PiHarness): void => {
+      runtime.openStopBoundary();
+      pi.setSendError(new Error("send unavailable"));
+    },
+    marked: false,
+  },
+].entries()) {
+  test(`${title} (D-BG-210 / D-PG5-06)`, { concurrency: false }, async (t) => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const root = await mkdtemp(path.join(tmpdir(), "async-registry-boundary-mark-"));
+    observeTimers(t, Date.parse("2026-08-31T10:40:00.000Z"));
+    shutdownInMemoryChildren(runtime);
+    const locations = locationsFor("project", root);
+    const context = createContext(root, `session-boundary-mark-${index}`, false);
+    const pi = createPi();
+    const child = createChild(24_700 + index);
+    prepare(runtime, pi);
+
+    try {
+      await spawnAndRegister(
+        runtime,
+        createEntry(root, { claudeEvent: "Stop" }),
+        { last_assistant_message: "done", stop_hook_active: false },
+        context.context,
+        pi.pi,
+        locations,
+        {
+          spawnImpl: createSpawn(child.child, []),
+          dispatchId: () => `dispatch-boundary-mark-${index}`,
+        },
+      );
+
+      // act
+      child.emitExit(2);
+      child.emitClose();
+      await waitForPidTable(locations, []);
+
+      // assert
+      assert.strictEqual(runtime.isStopHookActive(), marked);
+    } finally {
+      shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await reapOrphans(runtime, locations, deadOrphanProbes());
+      await rm(root, { recursive: true, force: true, maxRetries: 3 });
+    }
+  });
+}
 
 test("sends ordered stdout after a declared empty message", { concurrency: false }, async (t) => {
   // arrange
