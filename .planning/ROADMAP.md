@@ -356,7 +356,37 @@ Plans:
   5. A recording `SessionStart` hook records `resume` in a session started with `--continue` or `--resume`, and `startup` in a new session (PG-HOOK-11).
   6. In a pi-subagents child, a tool hook's `session_id`, `transcript_path` and `CLAUDE_CODE_SESSION_ID` name the session the discuss step chooses for decision 26 (the parent session, as Claude Code appears to send them, or the child's own), and `docs/hooks-compatibility.md` records the answer (carried from Phase 3 verification; BACKLOG CHILDSESSIONID-01).
 
-**Plans**: TBD
+**Plans**: 13 plans
+
+Plans:
+**Wave 1**
+- [ ] 06-01-PLAN.md — Run spike S7: what Pi tells an extension at session_start under --continue, --session, and --fork
+- [ ] 06-02-PLAN.md — Send tool_use_id on the three tool events, with an id for each edit pair (tracer)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 06-03-PLAN.md — Report resume for a continued session and fork for a forked one; saved-session launch in the harness
+- [ ] 06-04-PLAN.md — Send duration_ms on PostToolUse and PostToolUseFailure
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 06-05-PLAN.md — Send mcp_server for a plugin MCP tool under both MCP implementations
+- [ ] 06-06-PLAN.md — Send custom_instructions, model, and session_title
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 06-07-PLAN.md — Prepare decision 26: state a real child's session fields in the harness and resolve the launching session
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 06-08-PLAN.md — Admit UserPromptExpansion: the event set, the name matcher, the translator, info and install
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 06-09-PLAN.md — Settle decision 26: a child's tool hook names the main session; internal keys stay on the child's own id
+- [ ] 06-10-PLAN.md — Dispatch UserPromptExpansion: the handler arms, the block and stop notices, the second input registration
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 06-11-PLAN.md — Send effort on the tool events and on Stop and StopFailure
+- [ ] 06-12-PLAN.md — Resolve a typed line and run the expansion hooks for it; the scenarios of criteria 3 and 4
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 06-13-PLAN.md — Correct the compatibility page, the output catalog prose, the CHANGELOG, and two feature descriptions
 
 ### Phase 7: Agent Frontmatter and Grants
 
