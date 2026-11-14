@@ -71,7 +71,7 @@ const OAUTH_CONFIG_KEYS = [
   "skipIssuerMetadataValidation",
 ] as const;
 
-// AFILE-06 / D-CF1-14: the user's fields a re-stage keeps, written
+// AFILE-06 / D-CF1-14 / D-PG9-05: the user's fields a re-stage keeps, written
 // independently of the production set.
 const CARRIED_KEYS: readonly string[] = [
   "disabled",
@@ -87,7 +87,20 @@ const CARRIED_KEYS: readonly string[] = [
   "trace",
   "appendStructuredContent",
   "roots",
+  "protocolVersion",
+  "tasks",
+  "exposeResources",
+  "caFile",
 ];
+
+// D-PG9-05: the four fields the closed table never writes, at values a user
+// could write.
+const USER_ADAPTER_FIELDS = {
+  protocolVersion: "auto",
+  tasks: true,
+  exposeResources: false,
+  caFile: "/etc/pki/user/ca-bundle.pem",
+};
 
 const MARKER = { plugin: "acme", marketplace: "catalog" };
 const STDIO_DEFAULT = { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" };
@@ -1073,6 +1086,10 @@ describe("stampServers", () => {
         trace: "previous-trace",
         appendStructuredContent: "previous-appendStructuredContent",
         roots: "previous-roots",
+        protocolVersion: "previous-protocolVersion",
+        tasks: "previous-tasks",
+        exposeResources: "previous-exposeResources",
+        caFile: "previous-caFile",
         _piClaudeMarketplace: MARKER,
       },
     });
@@ -1111,6 +1128,35 @@ describe("stampServers", () => {
     });
   });
 
+  test("D-PG9-05: a restage keeps the user's protocolVersion, tasks, exposeResources, and caFile after roots and records none of them", () => {
+    // arrange
+    const previous = {
+      url: "https://acme.example/v1/mcp",
+      caFile: "/etc/pki/user/ca-bundle.pem",
+      exposeResources: false,
+      tasks: true,
+      protocolVersion: "auto",
+      roots: false,
+      _piClaudeMarketplace: REMOTE_MARKER,
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { type: "http", url: "https://acme.example/v2/mcp" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous: { server: previous },
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(stamping.stamped),
+      '{"server":{"url":"https://acme.example/v2/mcp","directTools":"search","toolPrefix":"mcp","roots":false,"protocolVersion":"auto","tasks":true,"exposeResources":false,"caFile":"/etc/pki/user/ca-bundle.pem","requestTimeoutMs":300000,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","defaultFields":{"requestTimeoutMs":300000}}}}',
+    );
+  });
+
   test("AFILE-06: the marker keeps the server's override as its last member", () => {
     // arrange
     const keptOverride = { disabled: true, env: { STUB_TOKEN: "stub-secret" } };
@@ -1144,7 +1190,6 @@ describe("stampServers", () => {
       oauth: { clientId: "stub-client" },
       auth: "bearer",
       requestHeadersCommand: "stub-headers",
-      caFile: "/stub/ca.pem",
     };
 
     // act
@@ -1179,8 +1224,47 @@ describe("stampServers", () => {
             oauth: { clientId: "stub-client" },
             auth: "bearer",
             requestHeadersCommand: "stub-headers",
-            caFile: "/stub/ca.pem",
           },
+        },
+      },
+    });
+  });
+
+  test("D-PG9-05: an absorbed override's protocolVersion, tasks, exposeResources, and caFile become active while its credentials stay inside the marker", () => {
+    // arrange
+    const override = {
+      env: { STUB_TOKEN: "stub-secret" },
+      headers: { Authorization: "stub-header" },
+      bearerToken: "!echo stub",
+      bearerTokenEnv: "STUB_ENV",
+      bearerTokenStore: "stub-store",
+      oauth: { clientId: "stub-client" },
+      auth: "bearer",
+      ...USER_ADAPTER_FIELDS,
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { type: "http", url: "https://acme.example/mcp" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous: { server: override },
+      keptOverrides: { server: override },
+    });
+
+    // assert
+    assert.deepStrictEqual(stamping.stamped, {
+      server: {
+        url: "https://acme.example/mcp",
+        ...OWNED,
+        ...USER_ADAPTER_FIELDS,
+        ...REMOTE_DEFAULT,
+        _piClaudeMarketplace: {
+          plugin: "acme",
+          marketplace: "catalog",
+          defaultFields: REMOTE_DEFAULT,
+          keptOverride: override,
         },
       },
     });
@@ -1446,6 +1530,11 @@ describe("inactiveOverrideFields", () => {
       override: { toolPrefix: "user", disabled: true, directTools: true },
       fields: ["toolPrefix", "directTools"],
     },
+    {
+      description: "an override of the D-PG9-05 fields beside a credential",
+      override: { ...USER_ADAPTER_FIELDS, bearerTokenEnv: "STUB_ENV" },
+      fields: ["bearerTokenEnv"],
+    },
     { description: "an empty override", override: {}, fields: [] },
   ]) {
     test(`AFILE-06: names the inactive fields of ${description} in key order`, () => {
@@ -1602,6 +1691,27 @@ describe("restoredOverride", () => {
     assert.strictEqual(JSON.stringify(restored), '{"disabled":true}');
   });
 
+  test("D-PG9-05: each kept protocolVersion, tasks, exposeResources, and caFile takes the live value, and one the live entry lacks is left out", () => {
+    // arrange
+    const kept = { ...USER_ADAPTER_FIELDS, headers: { Authorization: "Bearer stub" } };
+    const live = {
+      url: "https://acme.example/mcp",
+      protocolVersion: "2026-07-28",
+      tasks: false,
+      exposeResources: true,
+      _piClaudeMarketplace: { ...REMOTE_MARKER, keptOverride: kept },
+    };
+
+    // act
+    const restored = restoredOverride(kept, live);
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(restored),
+      '{"protocolVersion":"2026-07-28","tasks":false,"exposeResources":true,"headers":{"Authorization":"Bearer stub"}}',
+    );
+  });
+
   test("AFILE-05: each kept carried field takes the live value and every other field comes from the kept override", () => {
     // arrange
     const kept = {
@@ -1619,7 +1729,7 @@ describe("restoredOverride", () => {
     // assert
     assert.strictEqual(
       JSON.stringify(restored),
-      '{"env":{"STUB_TOKEN":"stub-secret"},"disabled":"live-disabled","approveTools":"live-approveTools","includeTools":"live-includeTools","excludeTools":"live-excludeTools","lifecycle":"live-lifecycle","idleTimeout":"live-idleTimeout","requestTimeoutMs":"live-requestTimeoutMs","debug":"live-debug","searchKeywords":"live-searchKeywords","openUi":"live-openUi","trace":"live-trace","appendStructuredContent":"live-appendStructuredContent","roots":"live-roots"}',
+      '{"env":{"STUB_TOKEN":"stub-secret"},"disabled":"live-disabled","approveTools":"live-approveTools","includeTools":"live-includeTools","excludeTools":"live-excludeTools","lifecycle":"live-lifecycle","idleTimeout":"live-idleTimeout","requestTimeoutMs":"live-requestTimeoutMs","debug":"live-debug","searchKeywords":"live-searchKeywords","openUi":"live-openUi","trace":"live-trace","appendStructuredContent":"live-appendStructuredContent","roots":"live-roots","protocolVersion":"live-protocolVersion","tasks":"live-tasks","exposeResources":"live-exposeResources","caFile":"live-caFile"}',
     );
   });
 });
@@ -1690,6 +1800,25 @@ describe("userCarriedFields", () => {
 
     // assert
     assert.deepStrictEqual(fields, { appendStructuredContent: true, roots: false });
+  });
+
+  test("D-PG9-05: returns the user's protocolVersion, tasks, exposeResources, and caFile in carried-set order", () => {
+    // arrange
+    const entry = {
+      url: "https://acme.example/mcp",
+      caFile: "/etc/pki/user/ca-bundle.pem",
+      exposeResources: false,
+      tasks: true,
+      protocolVersion: "auto",
+      ...REMOTE_DEFAULT,
+      _piClaudeMarketplace: REMOTE_MARKER,
+    };
+
+    // act
+    const fields = userCarriedFields(entry);
+
+    // assert
+    assert.strictEqual(JSON.stringify(fields), JSON.stringify(USER_ADAPTER_FIELDS));
   });
 
   test("D-08-02: leaves out the carried fields the entry's marker lists as plugin-set", () => {

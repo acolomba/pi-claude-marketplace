@@ -50,7 +50,11 @@ import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 // credential-bearing field is in the set, so a previous entry or a user stub
 // never leaks one into the new entry. D-CF1-14: `appendStructuredContent` and
 // `roots` have no Claude field, so they are the user's choices and survive
-// update and reinstall like the other user keys.
+// update and reinstall like the other user keys. D-PG9-05: neither do
+// `protocolVersion`, `tasks`, `exposeResources`, and `caFile`, so the closed
+// table never writes one and each value is the user's. `caFile` is the path of
+// a PEM bundle that replaces the default roots for that entry, so it can only
+// narrow which servers the entry trusts, and a mismatch refuses the connection.
 const CARRIED_FIELDS = [
   "disabled",
   "approveTools",
@@ -65,6 +69,10 @@ const CARRIED_FIELDS = [
   "trace",
   "appendStructuredContent",
   "roots",
+  "protocolVersion",
+  "tasks",
+  "exposeResources",
+  "caFile",
 ] as const;
 
 const CARRIED_FIELD_SET: ReadonlySet<string> = new Set(CARRIED_FIELDS);

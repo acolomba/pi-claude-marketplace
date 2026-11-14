@@ -567,6 +567,89 @@ Feature: MCP server lifecycle
 
       """
 
+  @adapter-only
+  Scenario: A protocolVersion, tasks, exposeResources, and caFile the user wrote for a plugin server survive an update that changes its url (PG-MCP-09, D-PG9-05)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers":{"remote":{"type":"http","url":"https://example.invalid/v1/mcp"}}}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has written these fields on the mcp server "plugin_demo_remote_" in the mcp-adapter.json file of the user scope:
+      """
+      {"protocolVersion":"auto","tasks":true,"exposeResources":false,"caFile":"/etc/pki/user/ca-bundle.pem"}
+      """
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers":{"remote":{"type":"http","url":"https://example.invalid/v2/mcp"}}}
+      """
+    When the user has run "/claude:plugin update demo@fixtures --scope user", which did not fail
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_remote_": {
+            "url": "https://example.invalid/v2/mcp",
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "protocolVersion": "auto",
+            "tasks": true,
+            "exposeResources": false,
+            "caFile": "/etc/pki/user/ca-bundle.pem",
+            "requestTimeoutMs": 300000,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 300000
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @adapter-only
+  Scenario: A protocolVersion, tasks, exposeResources, and caFile the user wrote for a plugin server survive a reinstall (PG-MCP-09, D-PG9-05)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers":{"remote":{"type":"http","url":"https://example.invalid/mcp"}}}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has written these fields on the mcp server "plugin_demo_remote_" in the mcp-adapter.json file of the user scope:
+      """
+      {"protocolVersion":"auto","tasks":true,"exposeResources":false,"caFile":"/etc/pki/user/ca-bundle.pem"}
+      """
+    When the user has run "/claude:plugin reinstall demo@fixtures --scope user", which did not fail
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_remote_": {
+            "url": "https://example.invalid/mcp",
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "protocolVersion": "auto",
+            "tasks": true,
+            "exposeResources": false,
+            "caFile": "/etc/pki/user/ca-bundle.pem",
+            "requestTimeoutMs": 300000,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 300000
+              }
+            }
+          }
+        }
+      }
+
+      """
+
   @mcp
   Scenario: A new session offers the plugin's tool again (BLT-01)
     Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
