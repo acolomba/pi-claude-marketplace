@@ -886,6 +886,62 @@ describe("stampServers", () => {
     );
   });
 
+  test("D-PG9-15: a user idleTimeout on a stdio entry stands for its lifecycle, so only the timeout default is written", () => {
+    // arrange
+    const previous = { command: "old-command", idleTimeout: 5, _piClaudeMarketplace: MARKER };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { command: "plugin-command" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous: { server: previous },
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(stamping.stamped),
+      '{"server":{"command":"plugin-command","env":{"CLAUDE_PLUGIN_ROOT":"/plugin/root","CLAUDE_PLUGIN_DATA":"/plugin/data"},"directTools":"search","toolPrefix":"mcp","idleTimeout":5,"requestTimeoutMs":1800000,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","defaultFields":{"requestTimeoutMs":1800000}}}}',
+    );
+  });
+
+  test("D-PG9-15: a recorded lifecycle default goes once the user sets an idleTimeout", () => {
+    // arrange
+    const previous = {
+      command: "old-command",
+      idleTimeout: 5,
+      ...STDIO_DEFAULT,
+      _piClaudeMarketplace: STDIO_MARKER,
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { command: "plugin-command" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous: { server: previous },
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.deepStrictEqual(stamping.stamped, {
+      server: {
+        command: "plugin-command",
+        env: INJECTED_ENV,
+        ...OWNED,
+        idleTimeout: 5,
+        ...{ requestTimeoutMs: 1800000 },
+        _piClaudeMarketplace: {
+          ...MARKER,
+          defaultFields: { requestTimeoutMs: 1800000 },
+        },
+      },
+    });
+  });
+
   test("D-PG9-03: a recorded default of another type than the entry value leaves the value the user's", () => {
     // arrange
     const previous = {

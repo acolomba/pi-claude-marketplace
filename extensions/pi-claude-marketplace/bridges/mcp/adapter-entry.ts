@@ -12,7 +12,8 @@
 // the entry it replaces (AFILE-06), except a carried field the plugin's entry
 // sets, which belongs to the plugin (ANAME-07). This extension's defaults
 // (`requestTimeoutMs`, `lifecycle`) fill only what neither the plugin nor the
-// user set (D-PG1-11, D-PG9-01); the MC-5 marker goes last.
+// user set (D-PG1-11, D-PG9-01), and a user `idleTimeout` also counts as the
+// user's `lifecycle` (D-PG9-15); the MC-5 marker goes last.
 // It names the fields the plugin set and the defaults this extension wrote,
 // which a restage computes again and never carries (D-PG1-13, D-PG9-03), and
 // may keep the user override the entry replaced, verbatim and inert
@@ -393,6 +394,19 @@ function keptOverrideFor(
 }
 
 /**
+ * D-PG9-15: a user `idleTimeout` is the user's choice of the server's
+ * lifetime, so it also stands for `lifecycle`. pi-mcp-adapter 7.0.1 never
+ * stops a started `lazy-keep-alive` server for idle time, whatever
+ * `idleTimeout` says (`checkConnections` in its `lifecycle.ts`).
+ */
+function userHolds(carried: Readonly<Record<string, unknown>>, field: string): boolean {
+  return (
+    Object.hasOwn(carried, field) ||
+    (field === "lifecycle" && Object.hasOwn(carried, "idleTimeout"))
+  );
+}
+
+/**
  * D-PG1-11 / D-PG9-01: fill only a default neither the plugin's
  * translated entry nor the user's carried fields hold, in the order of the
  * defaults table.
@@ -408,7 +422,7 @@ function defaultFieldsFor(
 
   return Object.fromEntries(
     Object.entries(adapterEntryDefaults(entry)).filter(
-      ([field]) => !Object.hasOwn(translated, field) && !Object.hasOwn(carried, field),
+      ([field]) => !Object.hasOwn(translated, field) && !userHolds(carried, field),
     ),
   );
 }

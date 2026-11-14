@@ -17,7 +17,9 @@ Feature: MCP server lifecycle
   request-timeout scenarios, the scenarios of D-PG9-03 and D-PG9-05 show that
   a value the user wrote beats this extension's defaults and survives an
   update and a reinstall; Pi's built-in MCP reads none of these fields from
-  mcp-adapter.json. A caFile is kept only while the server stays an https
+  mcp-adapter.json. A user's idleTimeout stands for the lifecycle too,
+  because pi-mcp-adapter never stops a started lazy-keep-alive server for
+  idle time (D-PG9-15). A caFile is kept only while the server stays an https
   server at the same origin, because pi-mcp-adapter refuses one anywhere else
   (D-PG9-14). A stdio stub server stands in for a real one, a scripted
   model for a real model, and a local marketplace for a published one.
@@ -746,6 +748,77 @@ Feature: MCP server lifecycle
             "toolPrefix": "mcp",
             "lifecycle": "lazy",
             "openUi": true,
+            "requestTimeoutMs": 1800000,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000
+              }
+            }
+          },
+          "plugin_demo_plain_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [
+              "v2"
+            ],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @adapter-only
+  Scenario: An idleTimeout the user wrote for a stdio plugin server survives an update in place of the lifecycle default (PG-MCP-06, D-PG9-15)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers":{"kept":{"command":"pi-features-absent-mcp-server","args":["v1"]},"plain":{"command":"pi-features-absent-mcp-server","args":["v1"]}}}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has written these fields on the mcp server "plugin_demo_kept_" in the mcp-adapter.json file of the user scope:
+      """
+      {"idleTimeout":5}
+      """
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers":{"kept":{"command":"pi-features-absent-mcp-server","args":["v2"]},"plain":{"command":"pi-features-absent-mcp-server","args":["v2"]}}}
+      """
+    When the user has run "/claude:plugin update demo@fixtures --scope user", which did not fail
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_kept_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [
+              "v2"
+            ],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "idleTimeout": 5,
             "requestTimeoutMs": 1800000,
             "_piClaudeMarketplace": {
               "plugin": "demo",
