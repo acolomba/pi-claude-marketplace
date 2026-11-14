@@ -58,13 +58,16 @@ const YAML_UNSAFE_PLAIN = /(?:^[-?:,[\]{}#&*!|>'"%@`])|(?::(?:\s|$))|(?:\s#)/u;
 
 /**
  * D-PG7-18: whether YAML reads `description: <value>`, or any other one-line
- * plain value, as exactly `value`. Besides the unsafe forms, a value that YAML
- * reads as a number, a boolean, or null fails. The value holds no line break,
- * and the unsafe forms are the ones that make YAML throw, so the parse does
- * not throw.
+ * plain value, as exactly `value`. A plain value keeps no blank at either end,
+ * so a value with one fails first: YAML skips the blanks after the colon and
+ * would meet an indicator, such as the `-` of ` - x`. Besides the unsafe
+ * forms, a value that YAML reads as a number, a boolean, or null fails. The
+ * value holds no line break, and with no blank at its start the unsafe forms
+ * are the ones that make YAML throw, so the parse does not throw.
  */
 function readsAsPlainYamlText(value: string): boolean {
   return (
+    value === value.trim() &&
     !YAML_UNSAFE_PLAIN.test(value) &&
     parseFrontmatter(`---\ndescription: ${value}\n---\n`).frontmatter.description === value
   );

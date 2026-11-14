@@ -8,6 +8,7 @@ import {
   listedToolNames,
   preloadedSkillNames,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/convert.ts";
+import { parseFrontmatter } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 import type { ConvertAgentInput } from "../../../extensions/pi-claude-marketplace/bridges/agents/convert.ts";
 import type {
@@ -790,6 +791,41 @@ Review files.
     // assert
     assert.strictEqual(mapped, expected);
   });
+
+  for (const { sourceModel, expectedFileModel } of [
+    { sourceModel: " - x", expectedFileModel: " - x" },
+    { sourceModel: " ? x", expectedFileModel: " ? x" },
+    { sourceModel: "\t,x", expectedFileModel: " ,x" },
+  ]) {
+    test(`T-07-05: --map-model records the unknown source model ${JSON.stringify(sourceModel)} as an originalModel YAML reads back`, () => {
+      // act
+      const agent = convertAgent({
+        pluginName: "acme",
+        pluginRoot: "/plugins/acme",
+        pluginDataDir: "/data/acme",
+        knownSkills: [],
+        discovered: {
+          sourceName: "reviewer",
+          generatedName: "pi-claude-marketplace-acme-reviewer",
+          sourcePath: "/plugins/acme/agents/reviewer.md",
+          sourceHash: "discovery-hash",
+          raw: { description: "Reviews files", model: sourceModel, tools: "Read" },
+          body: "Review files.\n",
+        },
+        sourceHash: "converted-hash",
+        mapModel: true,
+      });
+
+      // assert
+      const { provenance } = parseFrontmatter<{ provenance: { originalModel: string } }>(
+        agent.fileContent,
+      ).frontmatter;
+      assert.deepStrictEqual(
+        { originalModel: agent.originalModel, fileModel: provenance.originalModel },
+        { originalModel: sourceModel, fileModel: expectedFileModel },
+      );
+    });
+  }
 
   for (const { sourceThinking, sourceEffort, expectedThinkingLine, expectedWarnings } of [
     {

@@ -536,6 +536,9 @@ Review files.
       String.raw`a\b`,
       "",
       "true",
+      " - x",
+      " ? x",
+      " ,x",
     ];
     const frontmatter = emitGeneratedAgentFrontmatter({
       frontmatter: {
