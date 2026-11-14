@@ -745,22 +745,22 @@ Probe P5 returned exactly this for a cached server with tools `echo` and `drop`.
 | A5 | When `subagent` joins `AGENT_NAMEABLE_TOOLS`, the parent and the child offer it in the same relative order to the other nameable tools. | R8 | The "offered the tools ... that the model call is offered" step would need an order-free comparison. |
 | A6 | `docs/output-catalog.md` wants a row for the new unparseable-agent note. D-PG7-16 says "warning rows removed or added"; no row exists for any agent conversion warning today. | R9 | A missing or unwanted catalog row; review decides. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **How wide should the agents repair trigger be?**
+1. **RESOLVED (CONTEXT amendment D-PG7-02, pending maintainer review): How wide should the agents repair trigger be?**
    - What we know: the colon rule alone breaks `tools: *`, and values that start with `@` or a backtick (probe P3). Upstream quotes a value that contains any of a wider set.
    - What is unclear: whether the maintainer wants only `*` (the pinned case), the reserved-start set, or upstream's full set.
    - Recommendation: the reserved-start set (`*`, `&`, `!`, `%`, `@`, backtick) for agents only, through a trigger parameter. It fixes every single-line failure in probe P3 except a value that starts with `[` or `{`. Keep the rest as the D-PG7-02 residual and its BACKLOG entry.
 
-2. **Where does the unparseable-agent note go besides the install diagnostic?**
+2. **RESOLVED (CONTEXT amendment D-PG7-04: discovery only): Where does the unparseable-agent note go besides the install diagnostic?**
    - What we know: a discovery warning reaches every staging verb. It is not written to the agent file's provenance, which only converter warnings reach.
    - Recommendation: discovery only. Adding the same text as a converter warning would print it twice in `apply`.
 
-3. **How is criterion 3's wording handled for an agent with no `tools`?**
+3. **RESOLVED (CONTEXT amendment D-PG7-15: override candidate): How is criterion 3's wording handled for an agent with no `tools`?**
    - What we know: `subagent get` cannot show it (Summary finding 4).
    - Recommendation: the plan states the evidence it uses (nested call, staged file line, offered-tools step) and lists the clause as an override candidate, so the verifier does not read it as a gap.
 
-4. **Does the D-PG7-04 rule fit the maintainer's "fail closed on corrupt data" preference?**
+4. **RESOLVED (CONTEXT amendment D-PG7-04: parity kept, carried in the review list): Does the D-PG7-04 rule fit the maintainer's "fail closed on corrupt data" preference?**
    - What we know: the rule is upstream parity and already pending review. An unparseable agent gets every tool and, with this phase, nested delegation.
    - Recommendation: keep the locked rule, make the note say what was lost, and carry the question in the review list. No plan task depends on the answer.
 

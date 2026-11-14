@@ -372,7 +372,13 @@ Plans:
   4. `subagent get` shows `model inherit` for a source agent with `model: inherit`, with and without `--map-model` (PG-AGENT-07a).
   5. `subagent list` shows both the tools and the excluded tools of an agent whose source has `tools` and `disallowedTools`, and its install prints neither of the two warnings about limits of pi-subagents versions below the floor (PG-AGENT-09).
 
-**Plans**: TBD
+**Plans:** 6 plans
+- [ ] 07-01-PLAN.md — Share the frontmatter repair and give it a trigger
+- [ ] 07-02-PLAN.md — Read agent frontmatter as YAML and report an unparseable agent
+- [ ] 07-03-PLAN.md — Keep description lines and prove the quoted-name rename
+- [ ] 07-04-PLAN.md — Map Agent and Task grants and keep model inherit
+- [ ] 07-05-PLAN.md — Nested delegation for an agent with no tools list
+- [ ] 07-06-PLAN.md — Restrict by both tool lists and remove the stale warnings
 
 ### Phase 8: Workflow Agents and Run Paths
 
