@@ -7,13 +7,14 @@ import { test } from "node:test";
 
 import { discoverPluginAgents } from "../../../extensions/pi-claude-marketplace/bridges/agents/discover.ts";
 
-for (const { title, firstFile, secondFile, firstBytes, raw } of [
+for (const { title, firstFile, secondFile, firstBytes, raw, body } of [
   {
     title: "same-directory frontmatter names",
     firstFile: "a-first.md",
     secondFile: "z-second.md",
     firstBytes: "---\nname: shared\ntools: Read\n---\nfirst body\n",
     raw: { name: "shared", tools: "Read" },
+    body: "first body",
   },
   {
     title: "filename fallback names",
@@ -21,6 +22,7 @@ for (const { title, firstFile, secondFile, firstBytes, raw } of [
     secondFile: "z-second.md",
     firstBytes: "first body\n",
     raw: {},
+    body: "first body\n",
   },
 ]) {
   test(`keeps the first exact source for ${title} with both complete paths`, async (t) => {
@@ -44,7 +46,7 @@ for (const { title, firstFile, secondFile, firstBytes, raw } of [
           sourcePath: firstPath,
           sourceHash: createHash("sha256").update(firstBytes).digest("hex"),
           raw,
-          body: "first body\n",
+          body,
         },
       ],
       warnings: [
@@ -92,7 +94,7 @@ test("discovers markdown agents in walk order with complete records", async (t) 
           description: "Helpful agent",
           tools: "Read, Write",
         },
-        body: "\nHelp carefully.\r\n",
+        body: "Help carefully.",
       },
       {
         sourceName: "nested",
@@ -109,7 +111,7 @@ test("discovers markdown agents in walk order with complete records", async (t) 
         sourcePath: fallbackPath,
         sourceHash: "908a44e1f16dd6260a671a79b5a1c2280db6ba2f9edb78ad004009d4e3258894",
         raw: {},
-        body: "Plain body\r\n",
+        body: "Plain body\n",
       },
     ],
     warnings: [],
@@ -145,10 +147,10 @@ test("returns a folded block scalar description without phantom frontmatter keys
         sourceHash: "fca7cd3ceee8b02918d14b216520c9ad86c572d69e21068a1308c57e2e79edd1",
         raw: {
           name: "reviewer",
-          description: "Reviews files and reports: findings across the whole change set.",
+          description: "Reviews files and reports: findings across the whole change set.\n",
           tools: "Read",
         },
-        body: "\nReview carefully.\n",
+        body: "Review carefully.",
       },
     ],
     warnings: [],
@@ -256,7 +258,7 @@ test("skips a symlinked markdown entry without following its target", async (t) 
         sourcePath,
         sourceHash: "bbe7287acdb000edf946936f859dbe1acdd8b6d7f74032fbc27b0c9050c591b9",
         raw: { name: "kept" },
-        body: "kept body\n",
+        body: "kept body",
       },
     ],
     warnings: [],
@@ -294,7 +296,7 @@ test("keeps the first generated name across agent directories and reports the du
         sourcePath: firstPath,
         sourceHash: "b3cb6f4230d18ef3de5efe1044403c789ee53585128c72ce45883660a361453d",
         raw: { name: "shared", tools: "Read" },
-        body: "first body\n",
+        body: "first body",
       },
     ],
     warnings: [
@@ -328,7 +330,7 @@ test("keeps the first generated name across agent directories and reports the du
           .update("---\nname: shared\ntools: Write\n---\nsecond body\n")
           .digest("hex"),
         raw: { name: "shared", tools: "Write" },
-        body: "second body\n",
+        body: "second body",
       },
     ],
     warnings: [
@@ -352,7 +354,7 @@ test("preserves distinct complete source names without a duplicate warning", asy
         sourcePath: firstPath,
         sourceHash: "4f1a28213ca1cd2f183a5679dd53221a9a7842eab3f713a0626cddecce6bfe65",
         raw: { name: "acme-reviewer" },
-        body: "first\n",
+        body: "first",
       },
       {
         sourceName: "reviewer",
@@ -360,7 +362,7 @@ test("preserves distinct complete source names without a duplicate warning", asy
         sourcePath: path.join(directory, "b-short.md"),
         sourceHash: "a96ad208a08c2fc9202cf2f508546375d92fa6c9fd24fc446953700012aa838c",
         raw: { name: "reviewer" },
-        body: "second\n",
+        body: "second",
       },
     ],
     warnings: [],
@@ -395,7 +397,7 @@ test("preserves a valid source ending in its plugin prefix", async (t) => {
         sourcePath,
         sourceHash: "ff73ae6922b6dba7d5df325776d0e132ac109ae7c16ede7ecf55ca02793e736b",
         raw: { name: "acme-" },
-        body: "body\n",
+        body: "body",
       },
     ],
     warnings: [],
@@ -426,7 +428,7 @@ test("resolves the frontmatter name of a source led by a byte-order mark", async
           description: "Reviews changes",
           tools: "Read",
         },
-        body: "Review carefully.\n",
+        body: "Review carefully.",
       },
     ],
     warnings: [],
@@ -473,7 +475,7 @@ test("D-CF4-01 names a nested file after its folders and keeps a frontmatter nam
         namespace: ["review", "deep"],
         sourceHash: sha256("---\nname: nested-x\n---\nReview deeply.\n"),
         raw: { name: "nested-x" },
-        body: "Review deeply.\n",
+        body: "Review deeply.",
       },
       {
         sourceName: "security",
@@ -719,3 +721,90 @@ test("AG-12 keeps a nested file over the flat file its folder name flattens onto
   // assert
   assert.deepStrictEqual(discovery, expectedDiscovery);
 });
+
+for (const { title, frontmatter, raw, sourceName } of [
+  {
+    title: "a quoted name without its quote marks",
+    frontmatter: 'name: "x"',
+    raw: { name: "x" },
+    sourceName: "x",
+  },
+  {
+    title: "a number name as its text",
+    frontmatter: "name: 123",
+    raw: { name: "123" },
+    sourceName: "123",
+  },
+  {
+    title: "a quoted name with spaces around it, trimmed",
+    frontmatter: 'name: "  x  "',
+    raw: { name: "  x  " },
+    sourceName: "x",
+  },
+  {
+    title: "the file name for an empty quoted name",
+    frontmatter: 'name: ""',
+    raw: { name: "" },
+    sourceName: "fallback",
+  },
+  {
+    title: "the file name for a name with no value",
+    frontmatter: "name:",
+    raw: { name: "" },
+    sourceName: "fallback",
+  },
+]) {
+  test(`D-PG7-05 resolves ${title}`, async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-yaml-name-"));
+    t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+    const sourcePath = path.join(directory, "fallback.md");
+    const bytes = `---\n${frontmatter}\n---\nbody\n`;
+    await writeFile(sourcePath, bytes);
+
+    // act
+    const discovery = await discoverPluginAgents({ pluginName: "acme", agentsDirs: [directory] });
+
+    // assert
+    assert.deepStrictEqual(discovery, {
+      discovered: [
+        {
+          sourceName,
+          generatedName: `pi-claude-marketplace-acme-${sourceName}`,
+          sourcePath,
+          sourceHash: createHash("sha256").update(bytes).digest("hex"),
+          raw,
+          body: "body",
+        },
+      ],
+      warnings: [],
+    });
+  });
+}
+
+for (const { title, frontmatter, reason } of [
+  {
+    title: "a double-quoted name that holds a line break",
+    frontmatter: String.raw`name: "x\ny"`,
+    reason: '"x\ny" must not contain ASCII control characters.',
+  },
+  {
+    title: "a name that holds a path separator",
+    frontmatter: "name: x/y",
+    reason: '"x/y" must not contain path separators.',
+  },
+]) {
+  test(`T-07-04 refuses ${title} with the file's path`, async (t) => {
+    // arrange
+    const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-unsafe-name-"));
+    t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+    const sourcePath = path.join(directory, "unsafe.md");
+    await writeFile(sourcePath, `---\n${frontmatter}\n---\nbody\n`);
+
+    // act
+    const discovery = discoverPluginAgents({ pluginName: "acme", agentsDirs: [directory] });
+
+    // assert
+    await assert.rejects(discovery, { message: `agent name in ${sourcePath} ${reason}` });
+  });
+}

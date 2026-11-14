@@ -10,32 +10,29 @@
 // the deterministic field order looks like. convertAgent does the field
 // mapping but delegates the final byte assembly here.
 //
-// On the INPUT side, parseFrontmatter reads a source agent with an
-// indent-aware line parser. Only a column-0 `key: value` line starts a key;
-// every blank or indented line beneath one is a continuation line and is
-// never lifted into a key of its own (#155). A value of `>` or `|`, with or
-// without a chomping indicator and an explicit indentation digit (`>-`,
-// `>+`, `>2`, `|-`, `|+`, `|2`), opens a block scalar: the `>` family folds
-// its continuation lines into one paragraph, the `|` family keeps their
-// newlines. A key with an EMPTY inline value opens an implicit block whose
-// shape the first continuation line decides -- `- item` lines fold into that
-// key's comma-joined value, for ANY key (AGSK-01, #86, D-82-01), and anything
-// else is collected as a plain multi-line value. A non-empty inline value
-// wins: dash items beneath it are ignored (D-82-03).
+// On the INPUT side, readAgentFrontmatter reads a source agent as YAML through
+// Pi's parseFrontmatter, as Claude Code reads it (D-PG7-01). A quoted value
+// loses its quote marks, a comment after a value is not part of it, and a YAML
+// list arrives as its items joined with a comma. When the first parse fails,
+// the shared single-line repair quotes the values YAML refuses and the block
+// is parsed once more; when that fails too, the agent has no fields (D-PG7-02,
+// D-PG7-04). Every value reaches the converter as a string (D-PG7-05).
 //
-// Reading block scalars does not make this a real YAML parser (D-82-02) --
-// pi-subagents is what we round-trip through, and we never EMIT a block
-// scalar. emitYamlScalar collapses a multi-line value back onto one line
-// (AG-8), so a continuation line that reads like `key: value` cannot become
-// a frontmatter key in what pi-subagents parses back.
-//
-// AG-6 contract: tolerates `:` in description values (split on the FIRST
-// `:`, value side taken verbatim, quotes included).
+// AG-6 contract: a colon in an unquoted description makes YAML refuse the
+// block, and the repair quotes that value, so the author's text survives.
 // AG-8 contract: emitYamlScalar quote-flip + sanitizeProvenanceValue newline
 // normalization so a multi-line provenance value cannot be misread as a new
 // frontmatter key by pi-subagents' line-based parser.
 
+import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { stripBom } from "../../shared/bom.ts";
+import { errorMessage } from "../../shared/errors.ts";
+import {
+  colonRepairTrigger,
+  extractBodyAfterFrontmatter,
+  repairSingleLineScalars,
+} from "../../shared/frontmatter-repair.ts";
+import { setOwn } from "../../shared/own-key.ts";
 
 import { GENERATED_AGENT_MARKER } from "./marker.ts";
 
@@ -78,323 +75,119 @@ function sanitizeProvenanceValue(value: string): string {
 export interface ParsedFrontmatter {
   readonly raw: RawAgentFrontmatter;
   readonly body: string;
+  /**
+   * D-PG7-04: the message of Pi's first parse, present only when the block
+   * did not parse after the repair either, so `raw` holds no field.
+   */
+  readonly parseError?: string;
+}
+
+/** D-PG7-02: the one-line plain values, besides a colon, that YAML refuses at their start. */
+const AGENT_REPAIR_OPENER = /^[*&!%@`]/;
+
+/**
+ * D-PG7-02 as amended: the agents trigger of `repairSingleLineScalars`. It
+ * adds the openers that make YAML refuse a plain value, so `tools: *` still
+ * reads as every tool (D-CF4-08).
+ */
+function agentRepairTrigger(value: string): boolean {
+  return colonRepairTrigger(value) || AGENT_REPAIR_OPENER.test(value);
+}
+
+type PiParsedFrontmatter = ReturnType<typeof parseFrontmatter>;
+
+/**
+ * D-PG7-01: the second parse, over the repaired text. Returns `undefined` when
+ * the repair changed nothing or the repaired text still does not parse.
+ */
+function parseRepaired(text: string): PiParsedFrontmatter | undefined {
+  const repaired = repairSingleLineScalars(text, agentRepairTrigger);
+  if (repaired === text) {
+    return undefined;
+  }
+
+  try {
+    return parseFrontmatter(repaired);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
- * AG-6: parse `key: value` frontmatter delimited by `---` lines.
- *
- * Only a column-0 line starts a key, and the value side is taken verbatim
- * after the FIRST `:`, so a `:` inside a description survives and quotes are
- * never stripped. Comma-separated lists stay raw. Nested mappings are not
- * resolved (D-82-02): an indented block stays one string value on its parent
- * key rather than becoming keys of its own (#155).
- *
- * A value of `>` or `|`, optionally carrying a `+`/`-` chomping indicator and
- * an explicit indentation digit, opens a block scalar over the lines beneath
- * it -- `>` folds them into one paragraph, `|` keeps their newlines.
- *
- * AGSK-01 (#86): a key with an empty inline value followed by `- item`
- * lines folds the items into a comma-joined value, for any key (D-82-01).
- * Items are taken verbatim, never colon-split, and a dash line under an
- * explicit block header is block text rather than an item. A non-empty inline
- * value wins -- dash items beneath it are ignored (D-82-03). Known
- * limitation: an item containing a literal comma splits into two tokens
- * downstream.
- *
- * FMBOM-01: a leading U+FEFF is stripped first. The open-fence match below is
- * anchored, so a marker at index 0 would send the whole file down the
- * no-frontmatter arm -- `raw` empty, `sourceName` falling back to the filename
- * stem, and the source `---` block left in `body`, which `convert.ts` emits
- * verbatim into the generated agent. Stripping here cleans `raw` and `body`
- * together, which is what the emit path consumes.
+ * D-PG7-01: parse first, as Claude Code does, so a comment after a value is
+ * stripped; repair and parse again only when that parse throws. Pi strips one
+ * byte-order mark itself, so the first parse gets the text as read: a second
+ * strip would turn a doubled mark into a fence (T-FMBOM-02). The repair's
+ * fence match is anchored, so it gets the text with one mark stripped.
  */
-export function parseFrontmatter(rawText: string): ParsedFrontmatter {
-  const text = stripBom(rawText);
+function parseSource(
+  text: string,
+): { readonly parsed: PiParsedFrontmatter } | { readonly parseError: string } {
+  try {
+    return { parsed: parseFrontmatter(text) };
+  } catch (error: unknown) {
+    const repaired = parseRepaired(stripBom(text));
+    // The first error names the author's defect, not the repair's.
+    return repaired === undefined ? { parseError: errorMessage(error) } : { parsed: repaired };
+  }
+}
 
-  // Frontmatter must start with `---` on its own line at the very top.
-  // Accept `---\n` or `---\r\n` and also a bare `---` followed by EOF.
-  const startMatch = /^---\r?\n/.exec(text);
-  if (startMatch === null) {
-    return { raw: {}, body: normalizeBody(text) };
+/** Control characters and line terminators, which no stored key may hold (T-07-05). */
+const UNSAFE_KEY_CHARACTER = /[\p{Cc}\u2028\u2029]/gu;
+
+/**
+ * D-PG7-05 as extended: one YAML value as the converter's string. A scalar is
+ * its text, null is the empty string (so `tools:` keeps its AG-11 refusal), a
+ * sequence is its items joined with a comma, and a mapping is the empty
+ * string.
+ */
+function fieldValue(value: unknown): string {
+  if (typeof value === "string") {
+    return value;
   }
 
-  const afterOpen = text.slice(startMatch[0].length);
-  // Find the closing `---` on its own line.
-  const closeMatch = /\n---\r?\n?/.exec(afterOpen);
-  if (closeMatch === null) {
-    // No closing delimiter -- treat whole file as body.
-    return { raw: {}, body: normalizeBody(text) };
+  if (typeof value === "boolean" || typeof value === "number" || typeof value === "bigint") {
+    return String(value);
   }
 
-  const fmText = afterOpen.slice(0, closeMatch.index);
-  const body = afterOpen.slice(closeMatch.index + closeMatch[0].length);
+  return Array.isArray(value) ? value.map((item: unknown) => fieldValue(item)).join(",") : "";
+}
 
+/**
+ * D-PG7-05: the fields of a parsed block. A document that is not a mapping
+ * gives none. Each key is copied with `setOwn`, so a `__proto__` key stays
+ * data and reparents nothing (T-07-03).
+ */
+function rawFields(frontmatter: unknown): RawAgentFrontmatter {
   const raw: Record<string, string> = {};
-  const state: ParseState = {
-    lastKey: null,
-    lastKeyFoldable: false,
-    awaitingKey: null,
-    pending: null,
-  };
-  for (const rawLine of fmText.split(/\r?\n/)) {
-    applyFrontmatterLine(raw, state, rawLine);
+  if (typeof frontmatter !== "object" || frontmatter === null || Array.isArray(frontmatter)) {
+    return raw;
   }
 
-  // A block that runs to the closing `---` has no column-0 line to terminate
-  // it, so the last one is flushed here.
-  flushPendingBlock(raw, state);
+  for (const [key, value] of Object.entries(frontmatter)) {
+    setOwn(raw, key.replaceAll(UNSAFE_KEY_CHARACTER, " "), fieldValue(value));
+  }
 
-  return { raw: raw, body: normalizeBody(body) };
-}
-
-/** A leading space or tab marks a continuation line; column 0 starts keys. */
-const INDENTED_LINE = /^[ \t]/;
-
-/**
- * A block scalar header: `>` or `|`, an optional `+`/`-` chomping indicator,
- * and an optional explicit indentation digit. Broader than the four forms
- * pi-subagents recognizes, because source agents are hand-authored real YAML
- * and Claude Code accepts all eight (#155). Anchored and free of quantified
- * alternation, so it cannot backtrack over attacker-supplied plugin text.
- */
-const BLOCK_SCALAR_HEADER = /^[>|][+-]?\d*$/;
-
-/**
- * The block value currently being collected: the key it belongs to, whether
- * its continuation lines fold into one paragraph (`>`) or keep their newlines
- * (`|`), and the raw lines gathered so far with their indentation intact.
- */
-interface PendingBlock {
-  readonly key: string;
-  readonly folded: boolean;
-  readonly lines: string[];
+  return raw;
 }
 
 /**
- * Parser state carried across frontmatter lines.
- *
- * AGSK-01 (#86) dash-list folding: lastKey is the most recently parsed key
- * and lastKeyFoldable is true only while that key's value is empty or built
- * entirely from folded dash items, so an inline value wins and dash items
- * beneath it are ignored (D-82-03). awaitingKey holds an empty-value key
- * whose continuation shape is not yet decided -- the first continuation line
- * chooses between dash folding and an implicit block. pending is the block
- * being collected, if any.
+ * PG-AGENT-05 / D-PG7-01: read a source agent's frontmatter as YAML. The body
+ * is the text after the closing fence. A block that does not parse after the
+ * repair gives no fields, the text after its closing fence as body, and the
+ * first parse's message as `parseError` (D-PG7-04).
  */
-interface ParseState {
-  lastKey: string | null;
-  lastKeyFoldable: boolean;
-  awaitingKey: string | null;
-  pending: PendingBlock | null;
-}
-
-/**
- * Parse one frontmatter line into `raw`, updating the parser state.
- *
- * A pending block claims the line first, so nothing inside a block value is
- * read as a key or a list item. Otherwise the dash test runs before the
- * indent test, which is what keeps a dash beneath a non-empty inline value
- * ignored (D-82-03) rather than turning it into an implicit block.
- */
-function applyFrontmatterLine(
-  raw: Record<string, string>,
-  state: ParseState,
-  rawLine: string,
-): void {
-  if (collectBlockLine(state, rawLine)) {
-    return;
+export function readAgentFrontmatter(rawText: string): ParsedFrontmatter {
+  const source = parseSource(rawText);
+  if ("parseError" in source) {
+    return {
+      raw: {},
+      body: extractBodyAfterFrontmatter(stripBom(rawText)),
+      parseError: source.parseError,
+    };
   }
 
-  flushPendingBlock(raw, state);
-
-  const line = rawLine.trim();
-  if (line === "") {
-    return;
-  }
-
-  if (line.startsWith("- ") || line === "-") {
-    foldDashItem(raw, state, line);
-    return;
-  }
-
-  if (INDENTED_LINE.test(rawLine)) {
-    startImplicitBlock(state, rawLine);
-    return;
-  }
-
-  applyKeyLine(raw, state, line);
-}
-
-/**
- * Add a line to the pending block, reporting whether it was consumed. Blank
- * and indented lines belong to the block; a line that reaches column 0 with
- * content terminates it and is handed back to the caller.
- */
-function collectBlockLine(state: ParseState, rawLine: string): boolean {
-  const pending = state.pending;
-  if (pending === null) {
-    return false;
-  }
-
-  if (rawLine.trim() === "" || INDENTED_LINE.test(rawLine)) {
-    pending.lines.push(rawLine);
-    return true;
-  }
-
-  return false;
-}
-
-/**
- * Assign the collected block to its key and clear the pending state. A no-op
- * when no block is open, so callers need no guard of their own.
- */
-function flushPendingBlock(raw: Record<string, string>, state: ParseState): void {
-  const pending = state.pending;
-  if (pending === null) {
-    return;
-  }
-
-  const stripped = stripCommonIndent(pending.lines);
-  raw[pending.key] = pending.folded ? foldBlock(stripped) : stripped.join("\n").trim();
-  state.pending = null;
-}
-
-/**
- * AGSK-01 (#86): fold one `- item` line into the pending foldable key.
- *
- * The fold happens BEFORE any colon split, so an item like
- * `- spec-tree:review-changes` is taken verbatim. Items are comma-joined for
- * downstream splitting; quotes stay intact (splitToolList strips per-item
- * quotes). Known limitation: an item containing a literal comma splits into
- * two tokens downstream (D-82-02 scan found none in the wild). Clearing
- * awaitingKey is how a first dash continuation line rules out an implicit
- * block for that key.
- */
-function foldDashItem(raw: Record<string, string>, state: ParseState, line: string): void {
-  const item = line === "-" ? "" : line.slice(2).trim();
-  if (state.lastKey !== null && state.lastKeyFoldable && item !== "") {
-    const current = raw[state.lastKey] ?? "";
-    raw[state.lastKey] = current === "" ? item : `${current},${item}`;
-  }
-
-  state.awaitingKey = null;
-}
-
-/**
- * Open a block on an empty-value key whose first continuation line is not a
- * dash item, so an indented mapping such as a `provenance:` group is kept as
- * one multi-line string rather than lifted into top-level keys (#155). An
- * indented line with no key awaiting continuation is ignored.
- */
-function startImplicitBlock(state: ParseState, rawLine: string): void {
-  const key = state.awaitingKey;
-  if (key === null) {
-    return;
-  }
-
-  state.pending = { key: key, folded: false, lines: [rawLine] };
-  state.lastKey = null;
-  state.lastKeyFoldable = false;
-  state.awaitingKey = null;
-}
-
-/**
- * Apply a column-0 `key: value` line. A block scalar header opens a pending
- * block; an empty value defers to the next line's shape; anything else is
- * assigned verbatim (AG-6). A quoted value such as `">"` cannot match the
- * header pattern, which is what keeps AG-6's verbatim value intact.
- */
-function applyKeyLine(raw: Record<string, string>, state: ParseState, line: string): void {
-  const colon = line.indexOf(":");
-  if (colon === -1) {
-    return;
-  }
-
-  const key = line.slice(0, colon).trim();
-  const value = line.slice(colon + 1).trim();
-  if (key === "") {
-    return;
-  }
-
-  if (BLOCK_SCALAR_HEADER.test(value)) {
-    state.pending = { key: key, folded: value.startsWith(">"), lines: [] };
-    state.lastKey = null;
-    state.lastKeyFoldable = false;
-    state.awaitingKey = null;
-    return;
-  }
-
-  // Plain assignment, so an inherited accessor on Object.prototype still
-  // governs the write and a `__proto__` key assigns a string the engine
-  // ignores rather than reshaping `raw`.
-  raw[key] = value;
-  state.lastKey = key;
-  state.lastKeyFoldable = value === "";
-  state.awaitingKey = value === "" ? key : null;
-}
-
-/**
- * Remove the block's own indentation, measured from its first line with
- * content, so the stored value carries no leading whitespace of its own.
- * Uses startsWith + slice rather than a RegExp built from file content, so
- * plugin text never reaches a regex compiler.
- */
-function stripCommonIndent(lines: readonly string[]): string[] {
-  const firstContentLine = lines.find((line) => line.trim() !== "");
-  const prefix =
-    firstContentLine === undefined
-      ? ""
-      : firstContentLine.slice(0, firstContentLine.length - firstContentLine.trimStart().length);
-
-  return lines.map((line) => (line.startsWith(prefix) ? line.slice(prefix.length) : line));
-}
-
-/**
- * Fold a `>` block into one paragraph: consecutive lines join with a space,
- * blank lines survive as newline separators, and a more-indented line keeps
- * its own line. Trailing whitespace is trimmed.
- */
-function foldBlock(lines: readonly string[]): string {
-  let folded = "";
-  let hasContent = false;
-  let previousIsMoreIndented = false;
-  let blankLines = 0;
-
-  for (const line of lines) {
-    const current = line.trimEnd();
-    if (current === "") {
-      if (hasContent) {
-        blankLines += 1;
-      }
-
-      continue;
-    }
-
-    const currentIsMoreIndented = current !== current.trimStart();
-    if (hasContent) {
-      folded += foldSeparator(blankLines, previousIsMoreIndented || currentIsMoreIndented);
-    }
-
-    folded += current;
-    hasContent = true;
-    previousIsMoreIndented = currentIsMoreIndented;
-    blankLines = 0;
-  }
-
-  return folded.trim();
-}
-
-/**
- * The separator between two folded lines: a run of newlines when blank lines
- * separate them, otherwise a newline beside a more-indented line and a space
- * between two ordinary ones.
- */
-function foldSeparator(blankLines: number, moreIndented: boolean): string {
-  if (blankLines > 0) {
-    return "\n".repeat(blankLines + (moreIndented ? 1 : 0));
-  }
-
-  return moreIndented ? "\n" : " ";
+  return { raw: rawFields(source.parsed.frontmatter), body: normalizeBody(source.parsed.body) };
 }
 
 /**

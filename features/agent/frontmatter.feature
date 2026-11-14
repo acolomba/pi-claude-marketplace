@@ -579,3 +579,83 @@ Feature: Agent frontmatter
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status  | reasons               | scope   | from  | to    |
       | fixtures         | project           | demo@fixtures | demo | updated | requires pi-subagents | project | 1.0.0 | 1.1.0 |
+
+  Scenario: Quoted frontmatter values are listed without their quote marks
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file     | name  | description             | model    | body             |
+      | colon.md | colon | "Reviews: code."        |          | Answer the task. |
+      | named.md | "x"   | Names itself in quotes. |          | Answer the task. |
+      | mixed.md | mixed | Reviews: code and tests | "sonnet" | Answer the task. |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user --map-model"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply                  | tool     | arguments                             |
+      |                        | subagent | {"action":"list","capabilities":true} |
+      | The agents are listed. |          |                                       |
+    When the user prompts "List the agents."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                     |
+      | 1    | user        | List the agents.                                                                                                                                                                                                                                                                         |
+      | 2    | user        | List the agents.                                                                                                                                                                                                                                                                         |
+      | 2    | assistant   | tool call subagent {"action":"list","capabilities":true}                                                                                                                                                                                                                                 |
+      | 2    | tool result | subagent returned: agent demo:colon, aliases pi-claude-marketplace-demo-colon: Reviews: code.\nagent demo:mixed, aliases pi-claude-marketplace-demo-mixed: Reviews: code and tests; model claude-sonnet-5-5\nagent demo:x, aliases pi-claude-marketplace-demo-x: Names itself in quotes. |
+
+  Scenario: A comment after a frontmatter value is not part of the value
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file      | name   | description                | tools       | body             |
+      | noted.md  | noted  | Notes its tool list.       | Read # note | Answer the task. |
+      | hidden.md | hidden | Hides a tool in a comment. | Read # Bash | Answer the task. |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply                  | tool     | arguments                             |
+      |                        | subagent | {"action":"list","capabilities":true} |
+      | The agents are listed. |          |                                       |
+    When the user prompts "List the agents."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                  |
+      | 1    | user        | List the agents.                                                                                                                                                                                                      |
+      | 2    | user        | List the agents.                                                                                                                                                                                                      |
+      | 2    | assistant   | tool call subagent {"action":"list","capabilities":true}                                                                                                                                                              |
+      | 2    | tool result | subagent returned: agent demo:hidden, aliases pi-claude-marketplace-demo-hidden: Hides a tool in a comment.; tools read\nagent demo:noted, aliases pi-claude-marketplace-demo-noted: Notes its tool list.; tools read |
+    Then the agents folder of the user scope holds the file "pi-claude-marketplace-demo-noted.md" with this text:
+      """
+      ---
+      name: demo:noted
+      description: Notes its tool list.
+      aliases: pi-claude-marketplace-demo-noted
+      tools: read
+      systemPromptMode: replace
+      inheritProjectContext: true
+      inheritSkills: false
+      advertise: true
+      provenance:
+        generatedBy: pi-claude-marketplace
+        sourcePlugin: demo
+        sourceAgent: noted
+        sourcePath: {home}/marketplaces/fixtures/plugins/demo/agents/noted.md
+        droppedFields: []
+        droppedTools: []
+        warnings: []
+      ---
+
+      Answer the task.
+      """

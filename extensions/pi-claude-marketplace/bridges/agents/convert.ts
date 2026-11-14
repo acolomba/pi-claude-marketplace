@@ -206,11 +206,9 @@ function splitToolList(value: string | undefined): string[] {
     return [];
   }
 
-  // Accept both the bare CSV form (`tools: Read, Bash, Edit`) and the YAML
-  // inline-array form (`tools: ["Read", "Bash", "Edit"]`). Many real agents
-  // -- including Anthropic's own claude-plugins-official -- use the array
-  // form, which our line-based frontmatter parser hands us as a single
-  // string with the brackets and surrounding quotes intact.
+  // The YAML reader hands a flow or block sequence over already joined with
+  // commas (D-PG7-05). The bracket form can still arrive inside a quoted
+  // string (`tools: "[Read, Bash]"`), so it is unwrapped here.
   let raw = value.trim();
   if (raw.startsWith("[") && raw.endsWith("]")) {
     raw = raw.slice(1, -1);

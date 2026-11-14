@@ -4,10 +4,10 @@ import { describe, test } from "node:test";
 import {
   emitGeneratedAgentFile,
   emitGeneratedAgentFrontmatter,
-  parseFrontmatter,
+  readAgentFrontmatter,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts";
 
-describe("parseFrontmatter", () => {
+describe("readAgentFrontmatter", () => {
   for (const { description, agentFile, expectedAgentFile } of [
     {
       description: "a plain body without frontmatter",
@@ -32,6 +32,99 @@ describe("parseFrontmatter", () => {
       agentFile: "\n\n\nBody.\n",
       expectedAgentFile: { raw: {}, body: "\nBody.\n" },
     },
+    {
+      description: "D-PG7-01: a double-quoted description and name without their quote marks",
+      agentFile: '---\nname: "x"\ndescription: "Reviews: code."\n---\nBody.\n',
+      expectedAgentFile: { raw: { name: "x", description: "Reviews: code." }, body: "Body." },
+    },
+    {
+      description: "D-PG7-01: a single-quoted name without its quote marks",
+      agentFile: "---\nname: 'x'\n---\nBody.\n",
+      expectedAgentFile: { raw: { name: "x" }, body: "Body." },
+    },
+    {
+      description: "D-PG7-01: a value without the comment after it",
+      agentFile: "---\ntools: Read # note\n---\nBody.\n",
+      expectedAgentFile: { raw: { tools: "Read" }, body: "Body." },
+    },
+    {
+      description: "a literal block with its lines and YAML's final line feed",
+      agentFile: "---\ndescription: |\n  First line.\n  Second line.\ntools: Read\n---\nBody.\n",
+      expectedAgentFile: {
+        raw: { description: "First line.\nSecond line.\n", tools: "Read" },
+        body: "Body.",
+      },
+    },
+    {
+      description: "a folded block on one line",
+      agentFile: "---\ndescription: >\n  First line.\n  Second line.\n---\nBody.\n",
+      expectedAgentFile: { raw: { description: "First line. Second line.\n" }, body: "Body." },
+    },
+    {
+      description: "D-PG7-05: sequences as their items joined with a comma",
+      agentFile:
+        "---\ntools: [Read, Agent(a, b)]\ndisallowedTools:\n  - Bash\n  - Edit\nskills:\n- alpha\n- beta\n---\nBody.\n",
+      expectedAgentFile: {
+        raw: { tools: "Read,Agent(a,b)", disallowedTools: "Bash,Edit", skills: "alpha,beta" },
+        body: "Body.",
+      },
+    },
+    {
+      description: "D-PG7-05: booleans and numbers as their text, and yes as a string",
+      agentFile:
+        "---\nbackground: true\nasync: True\nname: 123\neffort: 32000\nmemory: yes\n---\nBody.\n",
+      expectedAgentFile: {
+        raw: { background: "true", async: "true", name: "123", effort: "32000", memory: "yes" },
+        body: "Body.",
+      },
+    },
+    {
+      description: "D-PG7-05: an empty value and a YAML null as the empty string",
+      agentFile: "---\ntools:\ndisallowedTools: ~\n---\nBody.\n",
+      expectedAgentFile: { raw: { tools: "", disallowedTools: "" }, body: "Body." },
+    },
+    {
+      description: "D-PG7-05: a mapping value as the empty string under its own key",
+      agentFile: "---\nhooks:\n  before: read\ndescription:\n  nested: key\n---\nBody.\n",
+      expectedAgentFile: { raw: { hooks: "", description: "" }, body: "Body." },
+    },
+    {
+      description: "T-07-05: a key with a line break, stored with a space in its place",
+      agentFile: '---\n"first\\nsecond": value\n---\nBody.\n',
+      expectedAgentFile: { raw: { "first second": "value" }, body: "Body." },
+    },
+    {
+      description: "D-PG7-05: no fields for a block that is plain text",
+      agentFile: "---\njust text\n---\nBody.\n",
+      expectedAgentFile: { raw: {}, body: "Body." },
+    },
+    {
+      description: "D-PG7-05: no fields for a block that is a sequence",
+      agentFile: "---\n- Read\n- Bash\n---\nBody.\n",
+      expectedAgentFile: { raw: {}, body: "Body." },
+    },
+    {
+      description:
+        "D-PG7-02: an unquoted colon description beside a quoted model, through the repair",
+      agentFile: '---\ndescription: Reviews: code and tests\nmodel: "sonnet"\n---\nBody.\n',
+      expectedAgentFile: {
+        raw: { description: "Reviews: code and tests", model: "sonnet" },
+        body: "Body.",
+      },
+    },
+    {
+      description: "D-PG7-02 / D-CF4-08: values that open with a star, an at sign, or a backtick",
+      agentFile: "---\ntools: *\nname: @reviewer\ndescription: `review` the change\n---\nBody.\n",
+      expectedAgentFile: {
+        raw: { tools: "*", name: "@reviewer", description: "`review` the change" },
+        body: "Body.",
+      },
+    },
+    {
+      description: "the same fields for a CRLF source as for its LF form",
+      agentFile: "---\r\nname: reviewer\r\ntools:\r\n  - Read\r\n  - Bash\r\n---\r\nBody.\r\n",
+      expectedAgentFile: { raw: { name: "reviewer", tools: "Read,Bash" }, body: "Body." },
+    },
   ]) {
     test(`returns ${description}`, () => {
       // arrange
@@ -39,468 +132,55 @@ describe("parseFrontmatter", () => {
       const expectedParsedAgentFile = expectedAgentFile;
 
       // act
-      const parsedAgentFile = parseFrontmatter(sourceAgentFile);
+      const parsedAgentFile = readAgentFrontmatter(sourceAgentFile);
 
       // assert
       assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
     });
   }
 
-  test("returns complete scalar metadata and exact body bytes", () => {
+  test("T-07-03: keeps a __proto__ key as data that sets no other field", () => {
     // arrange
-    const sourceAgentFile = `---
-name: reviewer
-description: "Review: source changes"
-model: sonnet
-tools: Read,Bash
-thinking: high
-skills: plugin:review,plugin:check
-inheritSkills: false
-escaped: line\\nnot-a-newline
-empty:
----
+    const sourceAgentFile = "---\n__proto__:\n  tools: Bash\nname: reviewer\n---\nBody.\n";
 
+    // act
+    const parsedAgentFile = readAgentFrontmatter(sourceAgentFile);
 
-Review the change.
-Keep the final newline.
-`;
+    // assert
+    assert.strictEqual(Object.getPrototypeOf(parsedAgentFile.raw), Object.prototype);
+    assert.deepStrictEqual(Object.keys(parsedAgentFile.raw), ["__proto__", "name"]);
+    assert.strictEqual(parsedAgentFile.raw.tools, undefined);
+    assert.strictEqual(parsedAgentFile.body, "Body.");
+  });
+
+  test("D-PG7-04: gives no fields and the first parse's message for an unterminated quote", () => {
+    // arrange
+    const sourceAgentFile = '---\ndescription: "open\ntools: Read\n---\nBody after.\n';
     const expectedParsedAgentFile = {
-      raw: {
-        name: "reviewer",
-        description: '"Review: source changes"',
-        model: "sonnet",
-        tools: "Read,Bash",
-        thinking: "high",
-        skills: "plugin:review,plugin:check",
-        inheritSkills: "false",
-        escaped: "line\\nnot-a-newline",
-        empty: "",
-      },
-      body: "\nReview the change.\nKeep the final newline.\n",
+      raw: {},
+      body: "Body after.",
+      parseError: 'Missing closing "quote at line 2, column 12:\n\ntools: Read\n           ^\n',
     };
 
     // act
-    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
+    const parsedAgentFile = readAgentFrontmatter(sourceAgentFile);
 
     // assert
     assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
   });
 
-  test("folds dash metadata in source order without colon splitting", () => {
+  test("D-PG7-04: reports the first parse's message when the repaired block fails too", () => {
     // arrange
-    const sourceAgentFile = `---
-name: reviewer
-skills:
-  - plugin:review
-  - plugin:check
-hooks:
-  - before:read
-  - after
----
-Body.
-`;
+    const sourceAgentFile = "---\ndescription: Reviews: code\ntools: [Read\n---\nBody after.\n";
     const expectedParsedAgentFile = {
-      raw: {
-        name: "reviewer",
-        skills: "plugin:review,plugin:check",
-        hooks: "before:read,after",
-      },
-      body: "Body.\n",
+      raw: {},
+      body: "Body after.",
+      parseError:
+        "Nested mappings are not allowed in compact mappings at line 1, column 14:\n\ndescription: Reviews: code\n             ^\n",
     };
 
     // act
-    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
-
-    // assert
-    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
-  });
-
-  test("keeps an inline value and ignores its dash continuations", () => {
-    // arrange
-    const sourceAgentFile = `---
-name: reviewer
-tools: Read
-  - Edit
-  - Write:unsafe
----
-Body.
-`;
-    const expectedParsedAgentFile = {
-      raw: { name: "reviewer", tools: "Read" },
-      body: "Body.\n",
-    };
-
-    // act
-    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
-
-    // assert
-    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
-  });
-
-  test("ignores malformed lines and empty dash items", () => {
-    // arrange
-    const sourceAgentFile = `---
-  - orphan
--
-colonless
-: empty-key
-
-name: reviewer
-skills:
--
----
-Body.
-`;
-    const expectedParsedAgentFile = {
-      raw: { name: "reviewer", skills: "" },
-      body: "Body.\n",
-    };
-
-    // act
-    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
-
-    // assert
-    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
-  });
-
-  test("parses CRLF metadata and preserves CRLF body bytes", () => {
-    // arrange
-    const sourceAgentFile =
-      "---\r\n" +
-      "name: reviewer\r\n" +
-      "description: Review: source changes\r\n" +
-      "tools:\r\n" +
-      "  - Read\r\n" +
-      "  - Bash\r\n" +
-      "---\r\n" +
-      "Body.\r\n";
-    const expectedParsedAgentFile = {
-      raw: {
-        name: "reviewer",
-        description: "Review: source changes",
-        tools: "Read,Bash",
-      },
-      body: "Body.\r\n",
-    };
-
-    // act
-    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
-
-    // assert
-    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
-  });
-
-  test("treats an intercepted empty key as an empty folded list", (t) => {
-    // arrange
-    const previousInterceptedKey = Object.getOwnPropertyDescriptor(
-      Object.prototype,
-      "interceptedAgentField",
-    );
-    t.after(() => {
-      if (previousInterceptedKey === undefined) {
-        Reflect.deleteProperty(Object.prototype, "interceptedAgentField");
-      } else {
-        Object.defineProperty(Object.prototype, "interceptedAgentField", previousInterceptedKey);
-      }
-    });
-    Object.defineProperty(Object.prototype, "interceptedAgentField", {
-      configurable: true,
-      set() {
-        return;
-      },
-    });
-    const sourceAgentFile = `---
-interceptedAgentField:
-  - retained only by the inherited setter
----
-Body.
-`;
-    const expectedParsedAgentFile = { raw: {}, body: "Body.\n" };
-
-    // act
-    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
-
-    // assert
-    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
-  });
-
-  test("folds a block scalar description without lifting its colon line into a key", () => {
-    // arrange
-    const sourceAgentFile = `---
-name: reviewer
-description: >
-  Reviews files and reports: findings
-  across the whole change set.
-tools: Read
----
-Body.
-`;
-    const expectedParsedAgentFile = {
-      raw: {
-        name: "reviewer",
-        description: "Reviews files and reports: findings across the whole change set.",
-        tools: "Read",
-      },
-      body: "Body.\n",
-    };
-
-    // act
-    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
-
-    // assert
-    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
-  });
-
-  for (const { blockHeader, blockOutcome, expectedDescription } of [
-    {
-      blockHeader: ">",
-      blockOutcome: "folded onto one line",
-      expectedDescription: "first line second line",
-    },
-    {
-      blockHeader: ">-",
-      blockOutcome: "folded onto one line",
-      expectedDescription: "first line second line",
-    },
-    {
-      blockHeader: ">+",
-      blockOutcome: "folded onto one line",
-      expectedDescription: "first line second line",
-    },
-    {
-      blockHeader: ">2",
-      blockOutcome: "folded onto one line",
-      expectedDescription: "first line second line",
-    },
-    {
-      blockHeader: "|",
-      blockOutcome: "kept on separate lines",
-      expectedDescription: "first line\nsecond line",
-    },
-    {
-      blockHeader: "|-",
-      blockOutcome: "kept on separate lines",
-      expectedDescription: "first line\nsecond line",
-    },
-    {
-      blockHeader: "|+",
-      blockOutcome: "kept on separate lines",
-      expectedDescription: "first line\nsecond line",
-    },
-    {
-      blockHeader: "|2",
-      blockOutcome: "kept on separate lines",
-      expectedDescription: "first line\nsecond line",
-    },
-  ]) {
-    test(`returns a ${blockHeader} block scalar ${blockOutcome}`, () => {
-      // arrange
-      const sourceAgentFile = `---
-description: ${blockHeader}
-  first line
-  second line
-tools: Read
----
-Body.
-`;
-      const expectedParsedAgentFile = {
-        raw: { description: expectedDescription, tools: "Read" },
-        body: "Body.\n",
-      };
-
-      // act
-      const parsedAgentFile = parseFrontmatter(sourceAgentFile);
-
-      // assert
-      assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
-    });
-  }
-
-  test("returns a literal block that runs to the closing delimiter", () => {
-    // arrange
-    const sourceAgentFile = `---
-name: reviewer
-description: |
-  First line.
-  Second line: with a colon.
----
-Body.
-`;
-    const expectedParsedAgentFile = {
-      raw: {
-        name: "reviewer",
-        description: "First line.\nSecond line: with a colon.",
-      },
-      body: "Body.\n",
-    };
-
-    // act
-    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
-
-    // assert
-    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
-  });
-
-  test("keeps blank-line separators and more-indented lines while folding", () => {
-    // arrange
-    const sourceAgentFile = `---
-description: >
-
-  First paragraph line
-  continues here.
-
-  Second paragraph.
-    more indented literal
-
-    deeper after blank
-  back to base: with colon
-tools: Read
----
-Body.
-`;
-    const expectedParsedAgentFile = {
-      raw: {
-        description:
-          "First paragraph line continues here.\nSecond paragraph.\n  more indented literal\n\n  deeper after blank\nback to base: with colon",
-        tools: "Read",
-      },
-      body: "Body.\n",
-    };
-
-    // act
-    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
-
-    // assert
-    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
-  });
-
-  test("returns an empty value for a block header with no continuation lines", () => {
-    // arrange
-    const sourceAgentFile = `---
-description: >
-tools: Read
----
-Body.
-`;
-    const expectedParsedAgentFile = {
-      raw: { description: "", tools: "Read" },
-      body: "Body.\n",
-    };
-
-    // act
-    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
-
-    // assert
-    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
-  });
-
-  test("returns a quoted block indicator as a verbatim value", () => {
-    // arrange
-    const sourceAgentFile = `---
-description: ">"
----
-Body.
-`;
-    const expectedParsedAgentFile = {
-      raw: { description: '">"' },
-      body: "Body.\n",
-    };
-
-    // act
-    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
-
-    // assert
-    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
-  });
-
-  test("collects an indented mapping as one multiline value without phantom keys", () => {
-    // arrange
-    const sourceAgentFile = `---
-provenance:
-  generatedBy: pi-claude-marketplace
-
-  sourcePath: agents/reviewer.md
-name: reviewer
----
-Body.
-`;
-    const expectedParsedAgentFile = {
-      raw: {
-        provenance: "generatedBy: pi-claude-marketplace\n\nsourcePath: agents/reviewer.md",
-        name: "reviewer",
-      },
-      body: "Body.\n",
-    };
-
-    // act
-    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
-
-    // assert
-    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
-  });
-
-  test("ignores an indented key line with no key awaiting continuation", () => {
-    // arrange
-    const sourceAgentFile = `---
-  stray: value
-name: reviewer
----
-Body.
-`;
-    const expectedParsedAgentFile = {
-      raw: { name: "reviewer" },
-      body: "Body.\n",
-    };
-
-    // act
-    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
-
-    // assert
-    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
-  });
-
-  test("ignores an indented non-dash line between folded dash items", () => {
-    // arrange
-    const sourceAgentFile = `---
-skills:
-  - alpha
-  stray: value
-  - beta
----
-Body.
-`;
-    const expectedParsedAgentFile = {
-      raw: { skills: "alpha,beta" },
-      body: "Body.\n",
-    };
-
-    // act
-    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
-
-    // assert
-    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
-  });
-
-  test("keeps dash lines under a block header as block text", () => {
-    // arrange
-    const sourceAgentFile = `---
-description: |
-  - not a list item
-  - second line
-tools: Read
----
-Body.
-`;
-    const expectedParsedAgentFile = {
-      raw: {
-        description: "- not a list item\n- second line",
-        tools: "Read",
-      },
-      body: "Body.\n",
-    };
-
-    // act
-    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
+    const parsedAgentFile = readAgentFrontmatter(sourceAgentFile);
 
     // assert
     assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
@@ -508,8 +188,6 @@ Body.
 
   test("parses a source led by a byte-order mark identically to the unmarked source", () => {
     // arrange
-    // FMBOM-01: the marker defeats the anchored `^---` fence match, so without
-    // the strip `raw` comes back empty and the whole block lands in `body`.
     const sourceAgentFile = `---
 name: reviewer
 description: Reviews changes
@@ -526,21 +204,33 @@ Review the change.
         model: "sonnet",
         tools: "Read,Bash",
       },
-      body: "Review the change.\n",
+      body: "Review the change.",
     };
 
     // act
-    const parsedMarkedAgentFile = parseFrontmatter(markedSourceAgentFile);
-    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
+    const parsedMarkedAgentFile = readAgentFrontmatter(markedSourceAgentFile);
+    const parsedAgentFile = readAgentFrontmatter(sourceAgentFile);
 
     // assert
     assert.deepStrictEqual(parsedMarkedAgentFile, expectedParsedAgentFile);
     assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
   });
 
+  test("repairs a source led by a byte-order mark as the unmarked source", () => {
+    // arrange
+    const sourceAgentFile = "---\ntools: *\n---\nBody.\n";
+    const markedSourceAgentFile = `\uFEFF${sourceAgentFile}`;
+
+    // act
+    const parsedMarkedAgentFile = readAgentFrontmatter(markedSourceAgentFile);
+
+    // assert
+    assert.deepStrictEqual(parsedMarkedAgentFile, { raw: { tools: "*" }, body: "Body." });
+  });
+
   test("keeps a doubled byte-order mark on the no-frontmatter path", () => {
     // arrange
-    // T-FMBOM-02: only one marker is stripped, so a doubled marker still fails
+    // T-FMBOM-02: Pi strips only one marker, so a doubled marker still fails
     // closed rather than being cleaned into a parseable fence.
     const doublyMarkedSourceAgentFile = `\uFEFF\uFEFF---
 name: reviewer
@@ -549,34 +239,13 @@ Review the change.
 `;
 
     // act
-    const parsedAgentFile = parseFrontmatter(doublyMarkedSourceAgentFile);
+    const parsedAgentFile = readAgentFrontmatter(doublyMarkedSourceAgentFile);
 
     // assert
     assert.deepStrictEqual(parsedAgentFile, {
       raw: {},
       body: "\uFEFF---\nname: reviewer\n---\nReview the change.\n",
     });
-  });
-
-  test("folds dash items written at column zero", () => {
-    // arrange
-    const sourceAgentFile = `---
-skills:
-- alpha
-- beta
----
-Body.
-`;
-    const expectedParsedAgentFile = {
-      raw: { skills: "alpha,beta" },
-      body: "Body.\n",
-    };
-
-    // act
-    const parsedAgentFile = parseFrontmatter(sourceAgentFile);
-
-    // assert
-    assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
   });
 });
 

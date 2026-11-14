@@ -12,8 +12,9 @@
 //
 // W-04: typed fields + open index signature use `unknown` to avoid TS2411
 // (typed-string fields incompatible with `string | undefined` index).
-// The line-based parser in frontmatter.ts only emits string values for the
-// known fields; consumers narrow as needed.
+// D-PG7-05: the YAML reader in frontmatter.ts gives every value as a string
+// (a scalar as its text, a sequence joined with commas), so consumers of the
+// known fields never narrow.
 
 import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";

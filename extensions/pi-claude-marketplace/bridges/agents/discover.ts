@@ -43,7 +43,7 @@ import { assertSafeName, generatedAgentName } from "../../domain/name.ts";
 import { isErrnoException } from "../../shared/errors.ts";
 import { readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 
-import { parseFrontmatter } from "./frontmatter.ts";
+import { readAgentFrontmatter } from "./frontmatter.ts";
 
 import type { DiscoveredAgent } from "./types.ts";
 
@@ -135,10 +135,11 @@ async function collectAgentFile(
   const sourcePath = file.path;
   const bytes = await readFile(sourcePath);
   const sourceHash = createHash("sha256").update(bytes).digest("hex");
-  const { raw, body } = parseFrontmatter(bytes.toString("utf8"));
+  const { raw, body } = readAgentFrontmatter(bytes.toString("utf8"));
   const fileName = path.basename(sourcePath);
   const stem = fileName.endsWith(".md") ? fileName.slice(0, -3) : fileName;
-  const sourceName = raw.name ?? stem;
+  const declaredName = raw.name?.trim() ?? "";
+  const sourceName = declaredName === "" ? stem : declaredName;
   assertSafeName(sourceName, `agent name in ${sourcePath}`);
 
   const generatedName = generatedAgentName(pluginName, sourceName, file.namespace);
@@ -167,8 +168,9 @@ async function collectAgentFile(
  * - Walks each folder recursively in `localeCompare` order; skips symlinks
  *   and files whose name does not end in `.md` in any case (T-03-27).
  * - sourceHash over raw bytes for BOM/line-ending tolerance.
- * - sourceName = frontmatter `name:` field if present, else the file name
- *   without a lower-case `.md`; the folders become `namespace`.
+ * - D-PG7-05: sourceName = the frontmatter `name:` value, trimmed; when it is
+ *   absent or empty, the file name without a lower-case `.md`. The folders
+ *   become `namespace`.
  * - AG-12: first-discovered generated names win within and across paths;
  *   later duplicates warn with both full paths. Discovery owns this policy.
  */

@@ -8,7 +8,6 @@ import {
   listedToolNames,
   preloadedSkillNames,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/convert.ts";
-import { parseFrontmatter } from "../../../extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts";
 
 import type { ConvertAgentInput } from "../../../extensions/pi-claude-marketplace/bridges/agents/convert.ts";
 import type {
@@ -2711,13 +2710,10 @@ One.
     const agent = convertPreloadingAgent("one two", preloads);
 
     // assert
-    assert.deepStrictEqual(
-      parseFrontmatter(agent.fileContent).raw,
-      parseFrontmatter(plain.fileContent).raw,
-    );
+    assert.strictEqual(agent.frontmatter, plain.frontmatter);
     assert.strictEqual(
-      parseFrontmatter(agent.fileContent).body,
-      "\nBody content.\n\n---\nname: evil\ntools: bash,edit\n---\nOne.\n",
+      agent.fileContent,
+      `${plain.frontmatter}\nBody content.\n\n---\nname: evil\ntools: bash,edit\n---\nOne.\n`,
     );
   });
 });
