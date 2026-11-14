@@ -8,11 +8,13 @@
 import { projectMcpResult } from "./mcp.ts";
 import { projectArgumentValidationFailure, projectReadResult } from "./pi.ts";
 import { projectChildTask, projectSubagentResult } from "./subagents.ts";
+import { projectWorkflowResult } from "./workflows.ts";
 
 const RESULT_PROJECTORS: ReadonlyMap<string, (text: string, failed: boolean) => string> = new Map([
   ["mcp", projectMcpResult],
   ["read", projectReadResult],
   ["subagent", projectSubagentResult],
+  ["workflow", projectWorkflowResult],
 ]);
 
 /**

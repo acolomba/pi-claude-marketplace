@@ -63,3 +63,25 @@ Feature: Workflow references
       | demo-scanner/SKILL.md      | ---\nname: demo-scanner\ndescription: Runs the scan.\nallowed-tools: Workflow(demo:scan)\npi-claude-marketplace: {"names":["demo:scanner","scanner"],"pluginRoot":"{home}/marketplaces/fixtures/plugins/demo","pluginData":"{agent dir}/pi-claude-marketplace/data/fixtures/demo"}\n---\n\nStart demo:scan, or type /demo:scan. |
       | demo-skill/                |                                                                                                                                                                                                                                                                                                                                 |
       | demo-skill/SKILL.md        | ---\nname: demo-skill\ndescription: A skill of demo 1.0.0.\npi-claude-marketplace: {"names":["demo:demo-skill","demo-skill"],"pluginRoot":"{home}/marketplaces/fixtures/plugins/demo","pluginData":"{agent dir}/pi-claude-marketplace/data/fixtures/demo"}\n---\n\nVersion 1.0.0.\n                                             |
+
+  Scenario: The model starts a workflow by the name a command gave it
+    Given the published plugin "demo" of the marketplace "fixtures" has the workflow "scan" described as "Scans the project." that returns "Scan done."
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "start" described as "Starts the scan." with this body:
+      """
+      Call Workflow({ name: "demo:scan" }) now. Slash form: /demo:scan.
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply         | tool     | arguments            |
+      |               | workflow | {"name":"demo:scan"} |
+      | Scan started. |          |                      |
+    When the user prompts "/demo:start" and the model starts a workflow run
+    Then the model receives these calls:
+      | call | role        | text                                                              |
+      | 1    | user        | Call Workflow({ name: "demo:scan" }) now. Slash form: /demo:scan. |
+      | 2    | user        | Call Workflow({ name: "demo:scan" }) now. Slash form: /demo:scan. |
+      | 2    | assistant   | tool call workflow {"name":"demo:scan"}                           |
+      | 2    | tool result | workflow returned: started the workflow scan                      |
+    Then the workflow run ends with the status "completed" and the result "Scan done."

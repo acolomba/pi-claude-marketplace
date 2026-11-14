@@ -1,13 +1,16 @@
 /**
  * @fileoverview Steps about running the workflows of a plugin: the workflows
- * a published plugin holds, running one through its command, and the result
- * or error the run ends with (HAR-07).
+ * a published plugin holds, running one through its command or through a
+ * prompt whose model turn starts it, and the result or error the run ends
+ * with (HAR-07).
  *
  * The workflow engine runs a workflow command in the background and does not
  * answer over RPC with the run's result. It does append progress entries to
  * Pi's session, and Pi prints each one, so the run `When` waits for the entry
  * that ends the run and the run-ending `Then` steps read the entries of the
- * turn.
+ * turn. The engine's `workflow` tool also starts its run in the background,
+ * so a prompt whose model calls it keeps the run's entries with its turn in
+ * the same way (D-PG4-08).
  */
 
 import assert from "node:assert/strict";
@@ -15,7 +18,11 @@ import { readFile } from "node:fs/promises";
 
 import { Given, Then, When } from "@cucumber/cucumber";
 
+import { promptDisposition } from "../../../test/e2e/_rpc.ts";
+import { DIALOG_METHODS } from "../../lib/pi-process.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
+import { modelCallsOf } from "../../lib/scripted-model/script.ts";
+import { readLogLengths, readLogLinesSince } from "../../lib/turn-records.ts";
 import {
   progressOf,
   publishWorkflow,
@@ -36,6 +43,18 @@ const WORKFLOW_RUN_TIMEOUT_MS = 20_000;
 function endsRun(record: RpcRecord): boolean {
   const status = progressOf(record)?.status;
   return typeof status === "string" && TERMINAL_STATUSES.has(status);
+}
+
+function isSettled(record: RpcRecord): boolean {
+  return record.type === "agent_settled";
+}
+
+// An extension error or a dialog during a model turn is never expected.
+function isTurnFault(record: RpcRecord): boolean {
+  return (
+    record.type === "extension_error" ||
+    (record.type === "extension_ui_request" && DIALOG_METHODS.has(String(record.method)))
+  );
 }
 
 // The engine reports what a script threw as text that can carry the error's
@@ -130,9 +149,42 @@ When(
   },
 );
 
+// The engine's `workflow` tool answers at once and runs the script in the
+// background, so the turn can settle before or after the run ends. The step
+// waits for both, never for a fixed time, makes the checks the model-turn
+// `When` makes, and keeps every record and stand-in log line from the prompt
+// on as the last turn.
+When(
+  "the user prompts {string} and the model starts a workflow run",
+  async function (this: ScenarioWorld, text: string) {
+    const harness = this.profileHarness();
+    const start = { record: this.pi.recordCount(), logs: await readLogLengths(harness) };
+    const prompt = expandTokens(text, this.tokens);
+    const answer = await this.pi.request({ type: "prompt", message: prompt });
+    assert.strictEqual(promptDisposition(answer.response), "started", JSON.stringify(answer));
+    const [settled] = await Promise.all(
+      [isSettled, endsRun].map((until) =>
+        this.pi.waitForRecord(start.record, until, WORKFLOW_RUN_TIMEOUT_MS),
+      ),
+    );
+    assert.strictEqual(settled?.aborted, false, JSON.stringify(settled));
+    const records = this.pi.recordsSince(start.record);
+    const logs = await readLogLinesSince(harness, start.logs);
+    assert.deepStrictEqual(
+      {
+        faults: records.filter(isTurnFault),
+        callsPastScript: modelCallsOf(logs).filter((call) => call.overflow),
+      },
+      { faults: [], callsPastScript: [] },
+    );
+    this.recordTurn({ prompt, disposition: "started", records, logs });
+  },
+);
+
 // The run-ending steps read only the progress entries, so they leave the turn
-// uncompared: only `the workflow engine shows these notices:` marks it, and a
-// run scenario that leaves its notices unstated fails.
+// uncompared: `the workflow engine shows these notices:` marks a command's
+// run, `the model receives these calls:` marks a run the model starts, and a
+// run scenario that leaves them unstated fails.
 Then(
   "the workflow run ends with the status {string} and the result {string}",
   function (this: ScenarioWorld, status: string, result: string) {
