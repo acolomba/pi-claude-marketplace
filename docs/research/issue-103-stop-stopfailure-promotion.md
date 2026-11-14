@@ -1,5 +1,7 @@
 # Stop + StopFailure promotion -- feasibility and design (issue #103)
 
+> Amended 2026-11-14 by D-PG5-01. `Stop` now runs on `agent_before_settle`, and a block continues the same run. `StopFailure` stays on `agent_settled`. Pi's boundary event closes the divergence that the summary below calls irreducible. It was measured in the terminal, print, JSON, and RPC modes on Pi 1.5.0 and 1.5.2. See [`docs/hooks-compatibility.md`](../hooks-compatibility.md#stop-continuation). The rest of this record is unchanged.
+
 Verified feasibility analysis for promoting Claude Code's `Stop` and `StopFailure` hook events into the bridge's supported bucket-A set, resolving GitHub issue #103 and retiring the PAYL-V2-04 / PAYL-V2-06 deferrals recorded at v1.13. Supersedes the `Stop` and `StopFailure` rows of the naive mapping table in `claude-hooks-vs-pi-events.md` (see § Stale-doc inventory).
 
 ## Executive summary

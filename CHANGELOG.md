@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Plugin agents, MCP servers, skills, and workflows now behave more like Claude Code. Agents and MCP servers need pi-subagents 0.87.0 or later and pi-mcp-adapter 7.0.1 or later in 7.x.
+- Plugin agents, MCP servers, skills, workflows, and hooks now behave more like Claude Code. Agents and MCP servers need pi-subagents 0.87.0 or later and pi-mcp-adapter 7.0.1 or later in 7.x.
 
   - These versions fix plugin MCP grants and shorten long tool names for Pi's 64-character limit.
   - `--map-model` now writes a bare model ID, so an agent prefers the session's provider. An installed agent keeps its old ID until the next `update --map-model`.
@@ -16,6 +16,12 @@
   - A workflow name that a plugin writes without a leading slash, as in `Workflow({ name: "plugin:scan" })`, now stays without one, so the model can start the workflow.
   - An installed plugin gets the new links and workflow names when it updates to a new version, or at `/claude:plugin reinstall`.
   - Install, update, and `info` now note when a workflow runs a plugin agent whose tool restriction the workflow engine keeps only under `builtin:codemode`.
+  - A blocking `Stop` hook now continues the same run, and Pi reports the run as finished once.
+  - A `Stop` or prompt hook whose script is missing no longer blocks, and its notice tells you to reinstall the plugin.
+  - A hook that fails without blocking now shows the first line of its stderr.
+  - A hook that returns `continue: false` now shows its `stopReason`.
+  - Hook context over 10,000 characters now goes to a file in `pi-claude-marketplace/data/_shared/hook-output/`, and the model gets its path and a preview.
+  - A plain `async` hook now has no timeout.
 
 - More plugin hook events now behave as in Claude Code, and the model-facing tools return what the model asks for. (#310)
 
