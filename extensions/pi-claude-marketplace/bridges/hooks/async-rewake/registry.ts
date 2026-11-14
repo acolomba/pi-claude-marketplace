@@ -78,7 +78,7 @@ import { translateStop } from "../payloads/stop.ts";
 import { translateUserPromptSubmit } from "../payloads/user-prompt-submit.ts";
 import { asGroupLeader, type SignalGroup } from "../process-group.ts";
 import { planSpawn, serializeWithTruncation } from "../spawn-helpers.ts";
-import { collectStreamText, type StreamTextBound } from "../stream-text.ts";
+import { ceilingBound, collectStreamText, type StreamTextBound } from "../stream-text.ts";
 import { resolveTimeoutSeconds } from "../timeout.ts";
 import { buildTranslationContext, type TranslationContext } from "../translation-context.ts";
 
@@ -197,15 +197,17 @@ function laneOf(entry: RoutingEntry): BackgroundLane {
  * hook runs until it ends, as in Claude Code, so it gets no timer, and a
  * `timeout` it declares is ignored with one debug line (D-PG5-17).
  */
-// The bound of one output stream of a plain async hook; the other lanes have a
-// timer, so they keep every byte (EXEC-02).
+// The bound of one output stream of a background hook. An `asyncRewake` hook
+// keeps each stream whole (EXEC-02) up to the collector's NFR-2 ceiling,
+// because its declared `timeout` can let it print for days. A plain async
+// hook has no timer, so it keeps less.
 function streamBoundFor(
   entry: RoutingEntry,
   lane: BackgroundLane,
   stream: "stdout" | "stderr",
-): StreamTextBound | undefined {
+): StreamTextBound {
   if (lane !== "plain") {
-    return undefined;
+    return ceilingBound(stream, `${entry.pluginId}/${entry.claudeEvent}`);
   }
 
   return {
@@ -384,9 +386,9 @@ export async function spawnAndRegister(
     // `defaultMaxListeners = 10` applies per-instance, not across the
     // bridge, so no `setMaxListeners` adjustment is needed even for
     // large fan-ins.
-    // EXEC-02: an asyncRewake hook keeps the whole of each stream, as Claude
-    // Code keeps every byte a hook prints; a plain async hook keeps the first
-    // `PLAIN_ASYNC_STREAM_LIMIT` characters. The collectors attach their `end`
+    // EXEC-02: an asyncRewake hook keeps the whole of each stream up to the
+    // NFR-2 ceiling, as Claude Code keeps every byte a hook prints; a plain
+    // async hook keeps the first `PLAIN_ASYNC_STREAM_LIMIT` characters. The collectors attach their `end`
     // listeners before the finalize listeners below, so the decoder tail is in
     // the text first.
     const stderr = collectStreamText(

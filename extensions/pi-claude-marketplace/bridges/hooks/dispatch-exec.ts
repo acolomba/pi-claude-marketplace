@@ -31,8 +31,8 @@
 //      close the TOCTOU window against the timer firing on a recycled pid;
 //      the first call claims the one settle.
 //   6. Collect the whole of stdout and stderr through `./stream-text.ts`. As
-//      in Claude Code, no size limit applies, so a JSON answer of any size
-//      decides (EXEC-02).
+//      in Claude Code, a JSON answer of any size decides (EXEC-02); only the
+//      collector's NFR-2 ceiling, far past what a hook prints, bounds it.
 //   7. Stream stdin: attach `child.stdin.on("error", hookDebugLog)` BEFORE
 //      `child.stdin.end(payload)` so an EPIPE from a fast-exiting child
 //      cannot escape as an unhandled exception.
@@ -95,7 +95,7 @@ import { translateStop } from "./payloads/stop.ts";
 import { translateUserPromptSubmit } from "./payloads/user-prompt-submit.ts";
 import { asGroupLeader } from "./process-group.ts";
 import { planSpawn, serializeWithTruncation } from "./spawn-helpers.ts";
-import { collectStreamText } from "./stream-text.ts";
+import { ceilingBound, collectStreamText } from "./stream-text.ts";
 import { resolveTimeoutSeconds } from "./timeout.ts";
 import { buildTranslationContext, type TranslationContext } from "./translation-context.ts";
 import { parseHookStdout } from "./wire-protocol.ts";
@@ -424,12 +424,20 @@ async function spawnAndCollect(
       return true;
     };
 
-    const stdout = collectStreamText(child.stdout, (err) => {
-      hookDebugLog(`exec: stdout error (${ladderLabel}): ${errorMessage(err)}`);
-    });
-    const stderr = collectStreamText(child.stderr, (err) => {
-      hookDebugLog(`exec: stderr error (${ladderLabel}): ${errorMessage(err)}`);
-    });
+    const stdout = collectStreamText(
+      child.stdout,
+      (err) => {
+        hookDebugLog(`exec: stdout error (${ladderLabel}): ${errorMessage(err)}`);
+      },
+      ceilingBound("stdout", ladderLabel),
+    );
+    const stderr = collectStreamText(
+      child.stderr,
+      (err) => {
+        hookDebugLog(`exec: stderr error (${ladderLabel}): ${errorMessage(err)}`);
+      },
+      ceilingBound("stderr", ladderLabel),
+    );
 
     child.once("error", (err) => {
       hookDebugLog(
