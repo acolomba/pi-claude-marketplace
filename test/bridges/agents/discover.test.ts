@@ -808,3 +808,104 @@ for (const { title, frontmatter, reason } of [
     await assert.rejects(discovery, { message: `agent name in ${sourcePath} ${reason}` });
   });
 }
+
+const UNPARSEABLE_AGENT =
+  '---\nname: fixer\ndescription: "Fixes the code\ntools: Read\n---\n\nFix it.\n';
+
+function unparseableNote(agent: string): string {
+  return (
+    `agent "${agent}": its source frontmatter could not be parsed ` +
+    `(Missing closing "quote at line 3, column 12); the agent is loaded with no ` +
+    `frontmatter fields, so its tools, model, and description settings are not applied.`
+  );
+}
+
+test("D-PG7-04 keeps an unparseable agent under its file name with one note", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-unparseable-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const sourcePath = path.join(directory, "broken.md");
+  await writeFile(sourcePath, UNPARSEABLE_AGENT);
+
+  // act
+  const discovery = await discoverPluginAgents({ pluginName: "acme", agentsDirs: [directory] });
+
+  // assert
+  assert.deepStrictEqual(discovery, {
+    discovered: [
+      {
+        sourceName: "broken",
+        generatedName: "pi-claude-marketplace-acme-broken",
+        sourcePath,
+        sourceHash: createHash("sha256").update(UNPARSEABLE_AGENT).digest("hex"),
+        raw: {},
+        body: "Fix it.",
+      },
+    ],
+    warnings: [unparseableNote("acme:broken")],
+  });
+  assert.doesNotMatch(discovery.warnings[0] ?? "", /\n/);
+  assert.ok(!(discovery.warnings[0] ?? "").includes(directory));
+});
+
+test("D-PG7-04 names a nested unparseable agent by its folders and notes each file in walk order", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-unparseable-walk-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  await mkdir(path.join(directory, "review"));
+  await writeFile(path.join(directory, "a-broken.md"), UNPARSEABLE_AGENT);
+  await writeFile(path.join(directory, "review", "broken.md"), UNPARSEABLE_AGENT);
+
+  // act
+  const discovery = await discoverPluginAgents({ pluginName: "acme", agentsDirs: [directory] });
+
+  // assert
+  assert.deepStrictEqual(
+    discovery.discovered.map((agent) => agent.generatedName),
+    ["pi-claude-marketplace-acme-a-broken", "pi-claude-marketplace-acme-review-broken"],
+  );
+  assert.deepStrictEqual(discovery.warnings, [
+    unparseableNote("acme:a-broken"),
+    unparseableNote("acme:review:broken"),
+  ]);
+});
+
+test("D-PG7-04 adds no note for a file that parses through the repair", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-repaired-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  await writeFile(
+    path.join(directory, "reviewer.md"),
+    "---\nname: reviewer\ndescription: Reviews: code\ntools: *\n---\nReview.\n",
+  );
+
+  // act
+  const discovery = await discoverPluginAgents({ pluginName: "acme", agentsDirs: [directory] });
+
+  // assert
+  assert.deepStrictEqual(
+    discovery.discovered.map((agent) => agent.raw),
+    [{ name: "reviewer", description: "Reviews: code", tools: "*" }],
+  );
+  assert.deepStrictEqual(discovery.warnings, []);
+});
+
+test("D-PG7-04 gives a duplicate unparseable agent only its AG-12 warning", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-unparseable-duplicate-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  const firstPath = path.join(directory, "a-first.md");
+  const brokenPath = path.join(directory, "broken.md");
+  await writeFile(firstPath, "---\nname: broken\n---\nFirst.\n");
+  await writeFile(brokenPath, UNPARSEABLE_AGENT);
+
+  // act
+  const discovery = await discoverPluginAgents({ pluginName: "acme", agentsDirs: [directory] });
+
+  // assert
+  assert.deepStrictEqual(discovery.warnings, [
+    `agent source "broken" at "${brokenPath}" duplicates generated name ` +
+      `"pi-claude-marketplace-acme-broken" already produced by agent source "broken" ` +
+      `at "${firstPath}"; keeping first discovered source.`,
+  ]);
+});

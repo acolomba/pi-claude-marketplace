@@ -659,3 +659,85 @@ Feature: Agent frontmatter
 
       Answer the task.
       """
+
+  Scenario: Installing an agent whose frontmatter cannot be parsed reports the agent
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "agents/broken.md" with this text:
+      """
+      ---
+      name: fixer
+      description: "Fixes the code
+      tools: Read
+      ---
+
+      Answer the task.
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    When the user runs "/claude:plugin install demo@fixtures --scope user"
+    Then the command reports these results:
+      | kind       | severity | needs reload | summary                             | header                                                           | lines                                                                                                                                                                                                                         |
+      | cascade    | warning  | true         | A plugin operation needs attention. |                                                                  |                                                                                                                                                                                                                               |
+      | diagnostic | warning  | false        |                                     | Plugin "demo" [user] installed; 1 declared component has a note. | agent "demo:broken": its source frontmatter could not be parsed (Missing closing "quote at line 3, column 12); the agent is loaded with no frontmatter fields, so its tools, model, and description settings are not applied. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons               | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed | requires pi-subagents | user  | 1.0.0   |
+
+  Scenario: An agent whose frontmatter cannot be parsed is listed under its file name with Claude Code's fallback description
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "agents/broken.md" with this text:
+      """
+      ---
+      name: fixer
+      description: "Fixes the code
+      tools: Read
+      ---
+
+      Answer the task.
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply                  | tool     | arguments                             |
+      |                        | subagent | {"action":"list","capabilities":true} |
+      | The agents are listed. |          |                                       |
+    When the user prompts "List the agents."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                    |
+      | 1    | user        | List the agents.                                                                                        |
+      | 2    | user        | List the agents.                                                                                        |
+      | 2    | assistant   | tool call subagent {"action":"list","capabilities":true}                                                |
+      | 2    | tool result | subagent returned: agent demo:broken, aliases pi-claude-marketplace-demo-broken: Agent from demo plugin |
+    Then the agents folder of the user scope holds the file "pi-claude-marketplace-demo-broken.md" with this text:
+      """
+      ---
+      name: demo:broken
+      description: Agent from demo plugin
+      aliases: pi-claude-marketplace-demo-broken
+      systemPromptMode: replace
+      inheritProjectContext: true
+      inheritSkills: true
+      advertise: true
+      provenance:
+        generatedBy: pi-claude-marketplace
+        sourcePlugin: demo
+        sourceAgent: broken
+        sourcePath: {home}/marketplaces/fixtures/plugins/demo/agents/broken.md
+        droppedFields: []
+        droppedTools: []
+        warnings:
+          - source description was missing or empty -- using fallback
+      ---
+
+      Answer the task.
+      """
