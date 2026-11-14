@@ -110,7 +110,13 @@ describe("adapterEntryDefaults", () => {
   // leaves an agent granted the server's tools unable to launch (D-CF6-10).
   test("D-PG9-07: no transport's defaults hold openUi", () => {
     // arrange
-    const servers = [{}, { type: "stdio" }, { type: "sse" }, { type: "http" }];
+    const servers = [
+      {},
+      { type: "stdio" },
+      { type: "sse" },
+      { type: "http" },
+      { type: "streamable-http" },
+    ];
 
     // act
     const defaults = servers.map((server) => adapterEntryDefaults(server));
@@ -118,7 +124,7 @@ describe("adapterEntryDefaults", () => {
     // assert
     assert.deepStrictEqual(
       defaults.map((entryDefaults) => Object.hasOwn(entryDefaults, "openUi")),
-      [false, false, false, false],
+      [false, false, false, false, false],
     );
   });
 
