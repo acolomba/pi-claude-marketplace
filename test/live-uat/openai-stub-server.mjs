@@ -5,12 +5,11 @@
 // graph is its intended shape, not a defect.
 // fallow-ignore-file unused-file -- standalone operator-run UAT driver: an engineer invokes it from the command line and no module ever imports it, so being unreachable from the import graph is its intended shape, not a defect.
 //
-// Keyless OpenAI-compatible chat-completions stub for `stop-canary.mjs`
-// (PIFL-07) and `mcp-adapter-canary.mjs` (ADOC-02). Without a script, every
-// request gets the assistant text `ready`, streaming or not, so a Pi turn
-// needs no real provider and no key. Pi reaches it through a
-// sandbox `models.json` provider whose `baseUrl` is
-// `http://127.0.0.1:<STUB_PORT>/v1`; test/live-uat/README.md shows both
+// Keyless OpenAI-compatible chat-completions stub for `mcp-adapter-canary.mjs`
+// (ADOC-02). Without a script, every request gets the assistant text `ready`,
+// streaming or not, so a Pi turn needs no real provider and no key. Pi reaches
+// it through a sandbox `models.json` provider whose `baseUrl` is
+// `http://127.0.0.1:<STUB_PORT>/v1`; the MCP adapter canary writes its own
 // sandbox files.
 //
 // It listens on the loopback address only. Each request appends one JSON line
