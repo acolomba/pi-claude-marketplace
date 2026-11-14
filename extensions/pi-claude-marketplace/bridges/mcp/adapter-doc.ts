@@ -506,12 +506,14 @@ export function storedChoicesFor(
 /**
  * D-08-02: the user's carried fields a leaving entry stores, minus the fields
  * of the override it writes back, which keep their values there (AFILE-06).
+ * A `caFile` is bound to the origin of the entry's url (D-PG9-14), and the
+ * store records no url, so it stores no `caFile`.
  */
 function leavingChoice(entry: unknown): Record<string, unknown> {
   const writtenBack = writtenBackOverride(entry) ?? {};
   const choice: Record<string, unknown> = {};
   for (const [field, value] of Object.entries(userCarriedFields(entry))) {
-    if (!Object.hasOwn(writtenBack, field)) {
+    if (field !== "caFile" && !Object.hasOwn(writtenBack, field)) {
       choice[field] = value;
     }
   }

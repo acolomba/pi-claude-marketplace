@@ -20,9 +20,10 @@ Feature: MCP server lifecycle
   mcp-adapter.json. A user's idleTimeout stands for the lifecycle too,
   because pi-mcp-adapter never stops a started lazy-keep-alive server for
   idle time (D-PG9-15). A caFile is kept only while the server stays an https
-  server at the same origin, because pi-mcp-adapter refuses one anywhere else
-  (D-PG9-14). A stdio stub server stands in for a real one, a scripted
-  model for a real model, and a local marketplace for a published one.
+  server at the same origin, because pi-mcp-adapter refuses one anywhere else,
+  and the choices kept across an uninstall hold none (D-PG9-14). A stdio stub
+  server stands in for a real one, a scripted model for a real model, and a
+  local marketplace for a published one.
 
   Background:
     Given the marketplace "fixtures" is published as a dir source
@@ -726,6 +727,48 @@ Feature: MCP server lifecycle
             "directTools": "search",
             "toolPrefix": "mcp",
             "caFile": "/etc/pki/user/ca-bundle.pem",
+            "requestTimeoutMs": 300000,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 300000
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @adapter-only
+  Scenario: An install after an uninstall does not give a plugin server at another origin the caFile the user wrote (PG-MCP-09, D-08-02, D-PG9-14)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers":{"remote":{"type":"http","url":"https://example.invalid/mcp"}}}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has written these fields on the mcp server "plugin_demo_remote_" in the mcp-adapter.json file of the user scope:
+      """
+      {"caFile":"/etc/pki/user/ca-bundle.pem"}
+      """
+    Given the user has run "/claude:plugin uninstall demo@fixtures --scope user"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers":{"remote":{"type":"http","url":"https://other.example.invalid/mcp"}}}
+      """
+    When the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_remote_": {
+            "url": "https://other.example.invalid/mcp",
+            "directTools": "search",
+            "toolPrefix": "mcp",
             "requestTimeoutMs": 300000,
             "_piClaudeMarketplace": {
               "plugin": "demo",

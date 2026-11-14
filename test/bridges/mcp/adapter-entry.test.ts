@@ -2062,7 +2062,7 @@ describe("restoredOverride", () => {
     assert.strictEqual(JSON.stringify(restored), '{"disabled":true}');
   });
 
-  test("D-PG9-05 / D-PG9-14: each kept protocolVersion, tasks, and exposeResources takes the live value, and a caFile the live entry lacks comes back as kept", () => {
+  test("D-PG9-05: each kept protocolVersion, tasks, exposeResources, and caFile takes the live value, and one the live entry lacks is left out", () => {
     // arrange
     const kept = { ...USER_ADAPTER_FIELDS, headers: { Authorization: "Bearer stub" } };
     const live = {
@@ -2079,11 +2079,11 @@ describe("restoredOverride", () => {
     // assert
     assert.strictEqual(
       JSON.stringify(restored),
-      '{"protocolVersion":"2026-07-28","tasks":false,"exposeResources":true,"caFile":"/etc/pki/user/ca-bundle.pem","headers":{"Authorization":"Bearer stub"}}',
+      '{"protocolVersion":"2026-07-28","tasks":false,"exposeResources":true,"headers":{"Authorization":"Bearer stub"}}',
     );
   });
 
-  test("D-PG9-14: a kept caFile comes back when the plugin's stdio entry holds none", () => {
+  test("D-PG9-14: a kept caFile that a restage left out of the plugin's stdio entry is left out", () => {
     // arrange
     const kept = { caFile: "/etc/pki/user/ca-bundle.pem", disabled: true };
     const live = {
@@ -2096,10 +2096,7 @@ describe("restoredOverride", () => {
     const restored = restoredOverride(kept, live);
 
     // assert
-    assert.strictEqual(
-      JSON.stringify(restored),
-      '{"caFile":"/etc/pki/user/ca-bundle.pem","disabled":false}',
-    );
+    assert.strictEqual(JSON.stringify(restored), '{"disabled":false}');
   });
 
   test("AFILE-05: each kept carried field takes the live value and every other field comes from the kept override", () => {

@@ -1141,6 +1141,36 @@ describe("withPluginServersKeepingChoices", () => {
     );
   });
 
+  test("D-PG9-14: a leaving entry stores its user carried fields but not its caFile", () => {
+    // arrange
+    const config = configOf({
+      mcpServers: {
+        srv: {
+          url: "https://acme.example/mcp",
+          caFile: "/etc/pki/user/ca-bundle.pem",
+          tasks: true,
+          _piClaudeMarketplace: ACME_MARKER,
+        },
+      },
+    });
+
+    // act
+    const next = withPluginServersKeepingChoices(config, "acme", "catalog", {});
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(next),
+      JSON.stringify({
+        mcpServers: {},
+        _piClaudeMarketplace: {
+          serverChoices: {
+            srv: { plugin: "acme", marketplace: "catalog", fields: { tasks: true } },
+          },
+        },
+      }),
+    );
+  });
+
   test("D-08-02: a leaving entry with no user carried field writes no store", () => {
     // arrange
     const config = configOf({

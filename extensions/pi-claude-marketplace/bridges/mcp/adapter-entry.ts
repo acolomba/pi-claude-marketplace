@@ -417,10 +417,7 @@ export function inactiveOverrideFields(
  * `/mcp-adapter enable` or `disable` run while the plugin held the name wins
  * over the kept value. Such a field is left out when the live entry lacks it,
  * as a restage leaves it out, because pi-mcp-adapter's enable writer removes
- * `disabled` from the entry. A `caFile` is the exception: no pi-mcp-adapter
- * writer removes it, and a restage leaves it out of an entry it no longer
- * applies to (D-PG9-14), so the kept value comes back when the live entry
- * lacks one. A carried field the kept override lacks is never
+ * `disabled` from the entry. A carried field the kept override lacks is never
  * added, so a value the plugin's entry declares (such as `requestTimeoutMs`)
  * stays out of the user's override. Only the kept override's own fields come
  * back, so the result is still an override and never a full definition
@@ -438,8 +435,6 @@ export function restoredOverride(
       safeSet(restored, field, value);
     } else if (Object.hasOwn(liveCarried, field)) {
       restored[field] = liveCarried[field];
-    } else if (field === "caFile") {
-      restored[field] = value;
     }
   }
 
