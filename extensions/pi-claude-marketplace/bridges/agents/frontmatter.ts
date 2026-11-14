@@ -185,7 +185,7 @@ function fieldValue(value: unknown): string {
     return value;
   }
 
-  if (typeof value === "boolean" || typeof value === "number" || typeof value === "bigint") {
+  if (typeof value === "boolean" || typeof value === "number") {
     return String(value);
   }
 
