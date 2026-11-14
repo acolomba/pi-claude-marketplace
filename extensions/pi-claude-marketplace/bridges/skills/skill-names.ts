@@ -26,9 +26,10 @@ import { Compile } from "typebox/compile";
 import { generatedCommandName } from "../../domain/name.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { commandMapKeyRefusal } from "../../shared/command-map-key.ts";
+import { frontmatterBlockEnd, keyValueEnd } from "../../shared/frontmatter-repair.ts";
 import { isPlainMarkdownFile, readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 
-import { frontmatterBlockEnd, keyValueEnd, topLevelNodeIndex } from "./frontmatter-scan.ts";
+import { topLevelNodeIndex } from "./frontmatter-scan.ts";
 
 import type { CommandMapEntry } from "../../domain/resolver-types.ts";
 import type { Dirent, Stats } from "node:fs";

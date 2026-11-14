@@ -8,8 +8,9 @@
 // (SKILL-03): parse-to-verify is not evaluating.
 
 import { parseFrontmatter } from "../../platform/pi-api.ts";
+import { frontmatterBlockEnd, keyValueEnd } from "../../shared/frontmatter-repair.ts";
 
-import { frontmatterBlockEnd, keyValueEnd, topLevelNodeIndex } from "./frontmatter-scan.ts";
+import { topLevelNodeIndex } from "./frontmatter-scan.ts";
 
 /** A fresh `name`-only frontmatter block prepended ahead of `content`. */
 function freshBlock(newName: string, content: string): string {

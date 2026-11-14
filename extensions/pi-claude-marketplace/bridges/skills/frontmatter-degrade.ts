@@ -16,7 +16,9 @@
 // the ~99% happy path. `setDescriptionScalar` instead replaces exactly the
 // `description` node span and leaves every sibling key byte-identical.
 
-import { frontmatterBlockEnd, keyValueEnd, topLevelNodeIndex } from "./frontmatter-scan.ts";
+import { frontmatterBlockEnd, keyValueEnd } from "../../shared/frontmatter-repair.ts";
+
+import { topLevelNodeIndex } from "./frontmatter-scan.ts";
 
 /**
  * SKILL-01 / D-86-02 / A4: the fixed placeholder description synthesized onto an
