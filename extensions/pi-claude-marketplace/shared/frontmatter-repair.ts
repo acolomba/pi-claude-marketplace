@@ -125,6 +125,22 @@ function repairableScalar(
 }
 
 /**
+ * The lines of `content` and the index of its closing fence, or `undefined`
+ * when it has no opening fence at its start or no closing fence.
+ */
+function fencedBlock(
+  content: string,
+): { readonly lines: readonly string[]; readonly blockEnd: number } | undefined {
+  if (!OPENING_FENCE.test(content)) {
+    return undefined;
+  }
+
+  const lines = content.split("\n");
+  const blockEnd = frontmatterBlockEnd(lines);
+  return blockEnd === lines.length ? undefined : { lines, blockEnd };
+}
+
+/**
  * SKFM-01: the skills trigger of `repairSingleLineScalars`. It accepts a value
  * that holds a colon, the defect that makes YAML refuse a plain scalar.
  */
@@ -168,15 +184,12 @@ export function repairSingleLineScalars(
   content: string,
   trigger: (value: string) => boolean,
 ): string {
-  if (!OPENING_FENCE.test(content)) {
+  const block = fencedBlock(content);
+  if (block === undefined) {
     return content;
   }
 
-  const lines = content.split("\n");
-  const blockEnd = frontmatterBlockEnd(lines);
-  if (blockEnd === lines.length) {
-    return content;
-  }
+  const { lines, blockEnd } = block;
 
   const repaired = [...lines];
   let changed = false;
@@ -192,6 +205,52 @@ export function repairSingleLineScalars(
   }
 
   return changed ? repaired.join("\n") : content;
+}
+
+/** A column-0 key -- no whitespace, colon or `#` -- followed by a colon and a space, a tab, or the line end. */
+const TOP_LEVEL_KEY_NAME = /^([^\s:#]+):(?:[ \t]|$)/;
+
+/**
+ * D-PG7-19: keep only the last copy of a top-level key that a frontmatter
+ * block writes more than once, as `Bun.YAML.parse` keeps the last value where
+ * Pi's YAML reader refuses the whole block. Every line of an earlier copy,
+ * its continuation lines included (`keyValueEnd`), becomes an empty line, so
+ * the block keeps its line count and a later parse error names the source's
+ * line. Content without an opening and a closing fence, or with no repeated
+ * key, is returned unchanged.
+ */
+export function blankEarlierDuplicateKeys(content: string): string {
+  const block = fencedBlock(content);
+  if (block === undefined) {
+    return content;
+  }
+
+  const { lines, blockEnd } = block;
+
+  const lastStart = new Map<string, number>();
+  const spans: { readonly key: string; readonly start: number; readonly end: number }[] = [];
+  // A line a key's value spans is indented or is the `:` line of an explicit
+  // key, so no key pattern matches inside a span.
+  for (const [offset, line] of lines.slice(1, blockEnd).entries()) {
+    const key = TOP_LEVEL_KEY_NAME.exec(line)?.[1];
+    if (key !== undefined) {
+      const start = offset + 1;
+      spans.push({ key, start, end: keyValueEnd(lines, start, blockEnd) });
+      lastStart.set(key, start);
+    }
+  }
+
+  const earlier = spans.filter((span) => lastStart.get(span.key) !== span.start);
+  if (earlier.length === 0) {
+    return content;
+  }
+
+  const blanked = [...lines];
+  for (const span of earlier) {
+    blanked.fill("", span.start, span.end + 1);
+  }
+
+  return blanked.join("\n");
 }
 
 /**

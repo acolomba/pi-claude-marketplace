@@ -15,8 +15,9 @@
 // loses its quote marks, a comment after a value is not part of it, and a YAML
 // list arrives as its items joined with a comma. When the first parse fails,
 // the shared single-line repair quotes the values YAML refuses and the block
-// is parsed once more; when that fails too, the agent has no fields (D-PG7-02,
-// D-PG7-04). Every value reaches the converter as a string (D-PG7-05).
+// is parsed once more, with only the last copy of a repeated key (D-PG7-19);
+// when that fails too, the agent has no fields (D-PG7-02, D-PG7-04). Every
+// value reaches the converter as a string (D-PG7-05).
 //
 // AG-6 contract: a colon in an unquoted description makes YAML refuse the
 // block, and the repair quotes that value, so the author's text survives.
@@ -33,6 +34,7 @@ import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { stripBom } from "../../shared/bom.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import {
+  blankEarlierDuplicateKeys,
   colonRepairTrigger,
   extractBodyAfterFrontmatter,
   repairSingleLineScalars,
@@ -134,11 +136,13 @@ function agentRepairTrigger(value: string): boolean {
 type PiParsedFrontmatter = ReturnType<typeof parseFrontmatter>;
 
 /**
- * D-PG7-01: the second parse, over the repaired text. Returns `undefined` when
- * the repair changed nothing or the repaired text still does not parse.
+ * D-PG7-01: the second parse, over the repaired text. The repair keeps the
+ * last copy of a repeated key, as Claude Code's YAML reader does (D-PG7-19),
+ * and quotes the one-line values YAML refuses. Returns `undefined` when the
+ * repair changed nothing or the repaired text still does not parse.
  */
 function parseRepaired(text: string): PiParsedFrontmatter | undefined {
-  const repaired = repairSingleLineScalars(text, agentRepairTrigger);
+  const repaired = repairSingleLineScalars(blankEarlierDuplicateKeys(text), agentRepairTrigger);
   if (repaired === text) {
     return undefined;
   }

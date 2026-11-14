@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  blankEarlierDuplicateKeys,
   colonRepairTrigger,
   emitSafeDoubleQuotedScalar,
   extractBodyAfterFrontmatter,
@@ -384,6 +385,59 @@ describe("repairSingleLineScalars", () => {
     // assert
     assert.strictEqual(repairedContent, sourceContent);
   });
+});
+
+describe("blankEarlierDuplicateKeys", () => {
+  for (const { description, sourceContent, expectedContent } of [
+    {
+      description: "blanks the earlier copy of a repeated key",
+      sourceContent: "---\nname: a\ntools: Read\ntools: Read, Grep\n---\nBody.\n",
+      expectedContent: "---\nname: a\n\ntools: Read, Grep\n---\nBody.\n",
+    },
+    {
+      description: "blanks every line an earlier copy spans and keeps the last copy's lines",
+      sourceContent: "---\ntools:\n  - Read\n  - Bash\nname: a\ntools:\n  - Grep\n---\n",
+      expectedContent: "---\n\n\n\nname: a\ntools:\n  - Grep\n---\n",
+    },
+    {
+      description: "blanks each earlier copy of a key written three times",
+      sourceContent: "---\nmodel: a\nmodel: b\nmodel: c\n---\n",
+      expectedContent: "---\n\n\nmodel: c\n---\n",
+    },
+    {
+      description: "leaves a block with no repeated key unchanged",
+      sourceContent: "---\nname: a\ntools: Read\n# tools: Bash\n---\n",
+      expectedContent: "---\nname: a\ntools: Read\n# tools: Bash\n---\n",
+    },
+    {
+      description: "leaves an indented key inside a value unchanged",
+      sourceContent: "---\nhooks:\n  tools: a\ntools: Read\n---\n",
+      expectedContent: "---\nhooks:\n  tools: a\ntools: Read\n---\n",
+    },
+    {
+      description: "leaves a repeated key after the closing fence unchanged",
+      sourceContent: "---\ntools: Read\n---\ntools: Bash\ntools: Grep\n",
+      expectedContent: "---\ntools: Read\n---\ntools: Bash\ntools: Grep\n",
+    },
+    {
+      description: "leaves content without a closing fence unchanged",
+      sourceContent: "---\ntools: Read\ntools: Bash\n",
+      expectedContent: "---\ntools: Read\ntools: Bash\n",
+    },
+    {
+      description: "leaves content without an opening fence unchanged",
+      sourceContent: "tools: Read\ntools: Bash\n---\n",
+      expectedContent: "tools: Read\ntools: Bash\n---\n",
+    },
+  ]) {
+    test(`D-PG7-19 ${description}`, () => {
+      // act
+      const dedupedContent = blankEarlierDuplicateKeys(sourceContent);
+
+      // assert
+      assert.strictEqual(dedupedContent, expectedContent);
+    });
+  }
 });
 
 describe("colonRepairTrigger", () => {

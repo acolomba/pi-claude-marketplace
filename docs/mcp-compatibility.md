@@ -398,16 +398,15 @@ A source `model: inherit` is always written as `model: ""`, with or without `--m
 
 This extension reads the frontmatter of a plugin agent as YAML, as Claude Code does (D-PG7-01). So a quoted value loses its quote marks: `name: "x"` names the agent `<plugin>:x`. A comment after a value is not part of the value: `tools: Read # note` grants only `read`. `tools`, `disallowedTools`, and `skills` can be YAML lists. A number or a boolean is read as its text.
 
-Some values make YAML refuse the whole block. When that happens, this extension quotes each one-line value that is not quoted and that holds a colon, or that starts with `*`, `&`, `!`, `%`, `@`, or a backtick. Then it reads the block once more. So `description: Reviews: code and tests` and `tools: *` still work. On that second read, a comment on a quoted line is kept as text, as in Claude Code.
+Some values make YAML refuse the whole block. When that happens, this extension quotes each one-line value that is not quoted and that holds a colon, or that starts with `*`, `&`, `!`, `%`, `@`, or a backtick. It also keeps only the last copy of a key that the block writes twice, because Pi's YAML reader refuses a repeated key where Claude Code's keeps the last value (D-PG7-19). Then it reads the block once more. So `description: Reviews: code and tests` and `tools: *` still work, and `tools: Read` followed by `tools: Read, Grep` grants `read` and `grep`. On that second read, a comment on a quoted line is kept as text, as in Claude Code.
 
 YAML also refuses these forms, and the repair does not change them:
 
 - a value that starts with `[` or `{` and is not a valid list or mapping
 - a block indented with tabs
-- a key written twice
 - a quote that never closes
 
-We assume, but have not checked, that Claude Code also refuses a key written twice and a block indented with tabs.
+Claude Code reads frontmatter with `Bun.YAML.parse`. In Bun 1.4.4 it refuses a block indented with tabs too, and it keeps the last copy of a repeated key. The Bun inside Claude Code may be a different version.
 
 When the block still does not parse, the agent loads as Claude Code 2.1.323 loads it. Its name is its file name, its description is `Agent from <plugin> plugin`, and it gets every tool, because no `tools` line applies. Install, update, reinstall, enable, and apply add this note (D-PG7-04):
 
@@ -415,7 +414,7 @@ When the block still does not parse, the agent loads as Claude Code 2.1.323 load
 agent "demo:broken": its source frontmatter could not be parsed (Missing closing "quote at line 3, column 12); the agent is loaded with no frontmatter fields, so its tools, model, and description settings are not applied.
 ```
 
-Claude Code's retry quotes more values than this one does; see [Agents](#agents). Evidence: the scenarios "Quoted frontmatter values are listed without their quote marks", "A comment after a frontmatter value is not part of the value", "Installing an agent whose frontmatter cannot be parsed reports the agent", and "An agent whose frontmatter cannot be parsed is listed under its file name with Claude Code's fallback description" in `features/agent/frontmatter.feature`.
+Claude Code's retry quotes more values than this one does; see [Agents](#agents). Evidence: the scenarios "Quoted frontmatter values are listed without their quote marks", "A comment after a frontmatter value is not part of the value", "A key written twice keeps its last value, as Claude Code keeps it", "Installing an agent whose frontmatter cannot be parsed reports the agent", and "An agent whose frontmatter cannot be parsed is listed under its file name with Claude Code's fallback description" in `features/agent/frontmatter.feature`.
 
 A description written as a YAML block, such as `description: |`, keeps its lines. The generated file holds it as a `|-` block, with each line indented two spaces, so no line of it can become a key or end the frontmatter. `subagent get` shows each line. `subagent list` shows the lines joined into one, which is how pi-subagents lists a description (D-PG7-06, scenario "A description block keeps its lines" in `features/agent/frontmatter.feature`).
 

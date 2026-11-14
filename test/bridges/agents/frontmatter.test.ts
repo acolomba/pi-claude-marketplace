@@ -123,6 +123,16 @@ describe("readAgentFrontmatter", () => {
       },
     },
     {
+      description: "D-PG7-19: the last value of a key written twice, as Claude Code keeps it",
+      agentFile: "---\nname: a\ntools: Read\ntools: Read, Grep\n---\nBody.\n",
+      expectedAgentFile: { raw: { name: "a", tools: "Read, Grep" }, body: "Body." },
+    },
+    {
+      description: "D-PG7-19: the last value of a repeated key beside a repaired colon value",
+      agentFile: "---\ndescription: Use: x\ntools: Bash\ntools: Read\n---\nBody.\n",
+      expectedAgentFile: { raw: { description: "Use: x", tools: "Read" }, body: "Body." },
+    },
+    {
       description: "the same fields for a CRLF source as for its LF form",
       agentFile: "---\r\nname: reviewer\r\ntools:\r\n  - Read\r\n  - Bash\r\n---\r\nBody.\r\n",
       expectedAgentFile: { raw: { name: "reviewer", tools: "Read,Bash" }, body: "Body." },
