@@ -31,6 +31,7 @@
 // answer on its last line, after more progress lines than the head holds, then
 // still parses as one line, and no line fragment can parse first (D-BG-205).
 
+import { constants } from "node:buffer";
 import { StringDecoder } from "node:string_decoder";
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -48,24 +49,31 @@ export interface StreamTextBound {
   readonly onLimit: () => void;
 }
 
-/**
- * NFR-2: the most UTF-16 code units of one stream that a collector keeps
- * under `ceilingBound`. V8's longest string is almost twice as long, so the
- * text and the next chunk always fit.
- */
+/** NFR-2: the most UTF-16 code units of one stream that `ceilingBound` keeps. */
 const STREAM_TEXT_CEILING = 2 ** 28;
 
 /**
- * The bound of a lane that keeps a stream whole (EXEC-02) up to the NFR-2
- * ceiling. Past the ceiling, one debug line names `stream` and `hook`.
+ * NFR-2: the code units that `ceilingBound` leaves free below the runtime's
+ * longest string, so the kept text plus the next chunk always fits.
  */
-export function ceilingBound(stream: "stdout" | "stderr", hook: string): StreamTextBound {
+const STREAM_TEXT_HEADROOM = 2 ** 20;
+
+/**
+ * The bound of a lane that keeps a stream whole (EXEC-02) up to the NFR-2
+ * ceiling, or up to `STREAM_TEXT_HEADROOM` below the runtime's longest
+ * string, `maxStringLength`, when that is less, as on a 32-bit host. Past
+ * the bound, one debug line names `stream` and `hook`.
+ */
+export function ceilingBound(
+  stream: "stdout" | "stderr",
+  hook: string,
+  maxStringLength: number = constants.MAX_STRING_LENGTH,
+): StreamTextBound {
+  const limit = Math.min(STREAM_TEXT_CEILING, maxStringLength - STREAM_TEXT_HEADROOM);
   return {
-    limit: STREAM_TEXT_CEILING,
+    limit,
     onLimit: () => {
-      hookDebugLog(
-        `hook output: ${stream} past ${STREAM_TEXT_CEILING} UTF-16 code units dropped (${hook})`,
-      );
+      hookDebugLog(`hook output: ${stream} past ${limit} UTF-16 code units dropped (${hook})`);
     },
   };
 }

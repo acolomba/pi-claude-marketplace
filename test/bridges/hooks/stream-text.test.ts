@@ -304,6 +304,22 @@ test("keeps its ceiling below V8's longest string, with room for a 1 MiB chunk (
   assert.ok(limit + 1024 * 1024 < constants.MAX_STRING_LENGTH, `ceiling ${limit}`);
 });
 
+test("keeps its ceiling at 2 ** 28 code units where the runtime's longest string allows it (NFR-2)", () => {
+  // act
+  const { limit } = ceilingBound("stdout", "demo/Stop", 2 ** 29 - 24);
+
+  // assert
+  assert.strictEqual(limit, 2 ** 28);
+});
+
+test("lowers its ceiling to 1 MiB below a 32-bit runtime's longest string (NFR-2)", () => {
+  // act
+  const { limit } = ceilingBound("stdout", "demo/Stop", 2 ** 28 - 16);
+
+  // assert
+  assert.strictEqual(limit, 2 ** 28 - 16 - 1024 * 1024);
+});
+
 /** Collects the OBS-01 debug lines a case emits, restoring the flag after. */
 function observeHookDebug(t: TestContext): () => string[] {
   const previous = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
