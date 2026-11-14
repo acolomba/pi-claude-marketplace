@@ -218,3 +218,25 @@ Feature: Skill root-source entries
       | plugin status                  | available     |
       | plugin version                 | 1.0.0         |
       | severity                       | info          |
+
+  Scenario: Info on a root-source entry with an escaping listed path lists only the listed skills inside the plugin
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {"name":"fixtures","owner":{"name":"features"},"plugins":[{"name":"root","source":"./","version":"1.0.0","skills":["./skills/a","../outside"]}]}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin info root@fixtures"
+    Then the result has these fields:
+      | kind                           | plugin-info        |
+      | marketplace details autoupdate | false              |
+      | marketplace name               | fixtures           |
+      | marketplace scope              | project            |
+      | needs reload                   | false              |
+      | plugin components resolved     | true               |
+      | plugin components skills       | a                  |
+      | plugin id                      | root@fixtures      |
+      | plugin name                    | root               |
+      | plugin reasons                 | unsupported source |
+      | plugin status                  | unavailable        |
+      | plugin version                 | 1.0.0              |
+      | severity                       | info               |

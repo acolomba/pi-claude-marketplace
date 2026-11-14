@@ -1,12 +1,6 @@
 {
   "entry": ["extensions/pi-claude-marketplace/index.ts"],
   "rulePacks": ["rule-packs/architecture.json"],
-  "ignoreExports": [
-    {
-      "file": "extensions/pi-claude-marketplace/domain/component-paths.ts",
-      "exports": ["isMarketplaceRootSource"]
-    }
-  ],
   "ignorePatterns": [".pi/**", ".planning/**"],
   "production": {
     "deadCode": true,

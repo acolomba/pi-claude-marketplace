@@ -2241,6 +2241,212 @@ test("D-PG4-01: a SKILL.md link does not make its folder one skill in info", asy
   });
 });
 
+/**
+ * D-PG4-01 / T-04-03: runs `info root@mp` through a reader that records each
+ * directory it lists, beside a skill folder outside the plugin root and one
+ * under the absolute path `outsideAbs` names, so a read of either shows.
+ */
+async function lenientRootSourceInfo(
+  home: string,
+  cwd: string,
+  mpRoot: string,
+): Promise<{ readonly calls: readonly string[]; readonly messages: readonly string[] }> {
+  await mkdir(path.join(path.dirname(mpRoot), "outside", "x"), { recursive: true });
+  await writeFile(path.join(path.dirname(mpRoot), "outside", "x", "SKILL.md"), "", "utf8");
+  await mkdir(path.join(home, "outside-abs", "y"), { recursive: true });
+  await writeFile(path.join(home, "outside-abs", "y", "SKILL.md"), "", "utf8");
+  const calls: string[] = [];
+  const reader: PluginInfoReader = {
+    ...NODE_READER,
+    listDirectory: (directoryPath) => {
+      calls.push(path.relative(mpRoot, directoryPath) || ".");
+      return NODE_READER.listDirectory(directoryPath);
+    },
+  };
+  const { ctx, run, notifications } = makeCtx();
+  await withDefaultMcpStatus(createGetPluginInfo(reader))({
+    ctx,
+    run,
+    marketplace: "mp",
+    plugin: "root",
+    scope: "user",
+    cwd,
+  });
+  return { calls, messages: notifications.map((n) => n.message) };
+}
+
+/** The `info root@mp` message of an unavailable `root` row, with its skills line. */
+function unavailableRootInfo(reason: string, skillsLine: readonly string[]): readonly string[] {
+  return [
+    [
+      "● mp [user] <no autoupdate>",
+      `  ⊘ root v1.0.0 (unavailable) {${reason}}`,
+      ...skillsLine,
+    ].join("\n"),
+  ];
+}
+
+const ROOT_SKILL_FILES = ["skills/a/SKILL.md", "skills/b/SKILL.md", "skills/c/SKILL.md"];
+
+test("D-PG4-01: the lenient listing of a root-source entry reads the listed paths inside the plugin only, in listed order and once each", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const outsideAbs = path.join(home, "outside-abs");
+    const mpRoot = await seedRootSourceEntry(
+      home,
+      cwd,
+      ["./skills/c", outsideAbs, "../outside", "skills/c/", "./skills/a"],
+      ROOT_SKILL_FILES,
+    );
+
+    // act
+    const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
+
+    // assert
+    assert.deepStrictEqual(calls, ["agents", "commands", "skills/c", "skills/a"]);
+    assert.deepStrictEqual(
+      messages,
+      unavailableRootInfo("unsupported source", ["    skills: a, c"]),
+    );
+  });
+});
+
+test("D-PG4-01: the lenient listing of a root-source entry adds the skills folder after a listed root", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedRootSourceEntry(
+      home,
+      cwd,
+      [".", "./skills/c", "../outside"],
+      ROOT_SKILL_FILES,
+    );
+
+    // act
+    const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
+
+    // assert
+    assert.deepStrictEqual(calls, ["agents", "commands", ".", "skills/c", "skills"]);
+    assert.deepStrictEqual(
+      messages,
+      unavailableRootInfo("unsupported source", ["    skills: .claude-plugin, a, b, c, skills"]),
+    );
+  });
+});
+
+test("D-PG4-01: the lenient listing of a root-source entry reads a listed skills folder once beside a listed root", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedRootSourceEntry(
+      home,
+      cwd,
+      ["./skills/", ".", "../outside"],
+      ROOT_SKILL_FILES,
+    );
+
+    // act
+    const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
+
+    // assert
+    assert.deepStrictEqual(calls, ["agents", "commands", "skills", "."]);
+    assert.deepStrictEqual(
+      messages,
+      unavailableRootInfo("unsupported source", ["    skills: .claude-plugin, a, b, c, skills"]),
+    );
+  });
+});
+
+test("D-PG4-01: the lenient listing of a root-source entry lists no skill when every listed path is absolute or escapes", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedRootSourceEntry(
+      home,
+      cwd,
+      ["../outside", path.join(home, "outside-abs")],
+      ROOT_SKILL_FILES,
+    );
+
+    // act
+    const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
+
+    // assert
+    assert.deepStrictEqual(calls, ["agents", "commands"]);
+    assert.deepStrictEqual(messages, unavailableRootInfo("unsupported source", []));
+  });
+});
+
+test("D-PG4-01: the lenient listing of a root-source entry that lists no string starts from the skills folder", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedRootSourceEntry(home, cwd, [42], ROOT_SKILL_FILES);
+
+    // act
+    const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
+
+    // assert
+    assert.deepStrictEqual(calls, ["agents", "commands", "skills"]);
+    assert.deepStrictEqual(
+      messages,
+      unavailableRootInfo("unsupported source", ["    skills: a, b, c"]),
+    );
+  });
+});
+
+test("D-PG4-01: the lenient listing of a root-source entry that lists no skills starts from the skills folder", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedRootSourceEntry(home, cwd, undefined, [
+      ...ROOT_SKILL_FILES,
+      "hooks/hooks.json",
+    ]);
+    await writeFile(path.join(mpRoot, "hooks", "hooks.json"), "{ not valid json", "utf8");
+
+    // act
+    const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
+
+    // assert
+    assert.deepStrictEqual(calls, ["agents", "commands", "skills"]);
+    assert.deepStrictEqual(
+      messages,
+      unavailableRootInfo("unsupported hooks", ["    skills: a, b, c"]),
+    );
+  });
+});
+
+test("D-PG4-01: the lenient listing of an entry whose source is not the marketplace root starts from the skills folder", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange: the same plugin name, under a source below the marketplace root
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          { name: "root", source: "./sub", version: "1.0.0", skills: ["./skills/a", "../x"] },
+        ],
+      },
+      componentFiles: { sub: ROOT_SKILL_FILES },
+    });
+
+    // act
+    const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
+
+    // assert
+    assert.deepStrictEqual(calls, [
+      "sub/agents",
+      "sub/commands",
+      "sub/skills",
+      "sub/skills/a",
+      "x",
+    ]);
+    assert.deepStrictEqual(
+      messages,
+      unavailableRootInfo("unsupported source", ["    skills: a, b, c"]),
+    );
+  });
+});
+
 // ---------------------------------------------------------------------------
 // (k) dependencies field surfaced as `dependencies:` line.
 // ---------------------------------------------------------------------------

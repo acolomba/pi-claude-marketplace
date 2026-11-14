@@ -34,6 +34,7 @@ import {
   type ClaudeEnv,
   type ServerVariableScan,
 } from "../../domain/claude-mcp-variables.ts";
+import { isMarketplaceRootSource } from "../../domain/component-paths.ts";
 import { BUCKET_A_EVENTS } from "../../domain/components/hook-events.ts";
 import {
   hookSummaryEntriesFromPersisted,
@@ -2117,7 +2118,8 @@ interface LenientComponentPaths {
  * `componentPaths`. The info surface re-resolves independently from the
  * marketplace entry's declared component paths plus the conventional
  * `<pluginRoot>/<kind>` locations, under the strict resolver's rules:
- * `skills` always starts from `skills/` (D-CF1-06), and so does `commands`,
+ * `skills` starts from `skills/` (D-CF1-06), except for a root-source entry
+ * that lists skills (D-PG4-01, `rootSourceLenientSkillPaths`), and so does `commands`,
  * because a marketplace entry's `commands` adds to `commands/` (D-CF3-04;
  * the entry holds no `plugin.json` declaration, the one that replaces the
  * folder). `agents` and `workflows` start from their conventional folder only
@@ -2132,7 +2134,13 @@ function deriveLenientComponentPaths(
   entry: MarketplaceManifest["plugins"][number],
 ): LenientComponentPaths {
   const out: LenientComponentPaths = { skills: [], commands: [], agents: [], workflows: [] };
+  const rootSourceSkills = rootSourceLenientSkillPaths(entry);
   for (const kind of ["skills", "commands", "agents", "workflows"] as const) {
+    if (kind === "skills" && rootSourceSkills !== undefined) {
+      out.skills = rootSourceSkills;
+      continue;
+    }
+
     const declared = (entry as Record<string, unknown>)[kind];
     if (kind === "skills" || kind === "commands" || !declared) {
       out[kind].push(kind);
@@ -2146,6 +2154,51 @@ function deriveLenientComponentPaths(
   }
 
   return out;
+}
+
+/**
+ * D-PG4-01, as in Claude Code 2.1.323: the lenient `skills` paths of a
+ * root-source entry that lists at least one string, or `undefined` when the
+ * entry does not qualify. The listed strings that are relative and stay inside
+ * the plugin root replace the `skills/` folder, in listed order and once each;
+ * the folder follows only when the root itself is listed, and when no string
+ * stays, nothing is listed. The test is lexical, so an absolute or escaping
+ * string never reaches a directory read.
+ */
+function rootSourceLenientSkillPaths(
+  entry: MarketplaceManifest["plugins"][number],
+): string[] | undefined {
+  const listed = asDeclaredList((entry as Record<string, unknown>).skills).filter(
+    (declared) => typeof declared === "string",
+  );
+  if (!isMarketplaceRootSource(entry.source) || listed.length === 0) {
+    return undefined;
+  }
+
+  const kept = [...new Set(listed.flatMap((declared) => containedRelativePath(declared) ?? []))];
+  if (kept.includes(".") && !kept.includes("skills")) {
+    kept.push("skills");
+  }
+
+  return kept;
+}
+
+/**
+ * The lexically normalized form of a relative path that stays inside the
+ * plugin root, `.` for the root itself, or `undefined` for an absolute or
+ * escaping path. No filesystem read is made.
+ */
+function containedRelativePath(declared: string): string | undefined {
+  if (path.isAbsolute(declared)) {
+    return undefined;
+  }
+
+  const relative = path.relative(".", declared);
+  if (relative === ".." || relative.startsWith(`..${path.sep}`)) {
+    return undefined;
+  }
+
+  return relative === "" ? "." : relative;
 }
 
 /**
