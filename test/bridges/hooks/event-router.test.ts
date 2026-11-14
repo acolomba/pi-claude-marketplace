@@ -66,7 +66,7 @@ import type {
   ToolCallEvent,
   ToolResultEvent,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { SlashCommandInfo, ToolInfo } from "@earendil-works/pi-coding-agent";
+import type { SessionHeader, SlashCommandInfo, ToolInfo } from "@earendil-works/pi-coding-agent";
 
 /**
  * Unit tests for `bridges/hooks/event-router.ts` -- the hooks-bridge
@@ -3546,6 +3546,215 @@ for (const { reason, source } of [
     ]);
   });
 }
+
+const LAUNCH_HEADER_TIME = "2026-11-14T10:00:00.000Z";
+
+// A session Pi opened at `startup`: its header, the setting entries every
+// launch writes, and a user message when the session continued one.
+function launchSession(
+  cwd: string,
+  header: Pick<SessionHeader, "timestamp" | "parentSession">,
+  holdsMessage: boolean,
+): SessionManager {
+  const sessionManager = SessionManager.inMemory(cwd, undefined, [
+    { type: "session", version: 3, id: "router-launch-session", cwd, ...header },
+  ]);
+  sessionManager.appendModelChange("faux", "faux-1");
+  sessionManager.appendThinkingLevelChange("off");
+  if (holdsMessage) {
+    sessionManager.appendMessage({ role: "user", content: "hello", timestamp: 0 });
+  }
+
+  return sessionManager;
+}
+
+// The router context with `sessionManager` in place of its in-memory one.
+function withSessionManager(
+  context: ExtensionContext,
+  sessionManager: ExtensionContext["sessionManager"],
+): ExtensionContext {
+  return new Proxy(context, {
+    get(target, property, receiver): unknown {
+      return property === "sessionManager"
+        ? sessionManager
+        : Reflect.get(target, property, receiver);
+    },
+  });
+}
+
+// Registers the bridge with `processStartedAt` and returns its session_start
+// handler and the scope and event of each SessionStart dispatch.
+async function launchRouter(
+  t: TestContext,
+  processStartedAt: number,
+): Promise<{
+  readonly root: string;
+  readonly projectRoot: string;
+  readonly sessionStart: (...args: unknown[]) => unknown;
+  readonly dispatched: readonly unknown[];
+}> {
+  const { root, projectRoot } = await makeSessionStartFixture(t);
+  const { pi, registrations } = makeRecordingPi();
+  const dispatched: unknown[] = [];
+  await createHooksHydration(createHooksRuntime(), {
+    loadState,
+    readHooksJson,
+  }).registerHooksBridge(pi, {
+    cwd: projectRoot,
+    processStartedAt,
+    executor: (entry, event) => {
+      dispatched.push({ scope: entry.scope, event });
+      return Promise.resolve({ kind: "noop" });
+    },
+  });
+  return {
+    root,
+    projectRoot,
+    sessionStart: registeredHandler(registrations, "session_start"),
+    dispatched,
+  };
+}
+
+for (const { launch, header, holdsMessage, processStartedAt, source } of [
+  {
+    launch: "a new session that holds only its model and thinking level entries",
+    header: { timestamp: LAUNCH_HEADER_TIME },
+    holdsMessage: false,
+    processStartedAt: 0,
+    source: "startup",
+  },
+  {
+    launch: "a session that holds a message",
+    header: { timestamp: LAUNCH_HEADER_TIME },
+    holdsMessage: true,
+    processStartedAt: 0,
+    source: "resume",
+  },
+  {
+    launch: "a parent session and a header written at the process start",
+    header: { timestamp: LAUNCH_HEADER_TIME, parentSession: "/sessions/parent.jsonl" },
+    holdsMessage: true,
+    processStartedAt: Date.parse(LAUNCH_HEADER_TIME),
+    source: "fork",
+  },
+  {
+    launch: "a parent session, a header older than the process, and a message",
+    header: { timestamp: LAUNCH_HEADER_TIME, parentSession: "/sessions/parent.jsonl" },
+    holdsMessage: true,
+    processStartedAt: Date.parse(LAUNCH_HEADER_TIME) + 1,
+    source: "resume",
+  },
+  {
+    launch: "a parent session and a header timestamp that does not parse",
+    header: { timestamp: "not a time", parentSession: "/sessions/parent.jsonl" },
+    holdsMessage: false,
+    processStartedAt: 0,
+    source: "startup",
+  },
+] as const) {
+  test(`session_start at Pi startup dispatches SessionStart with source ${source} for ${launch} (D-PG6-14, D-PG6-15)`, async (t) => {
+    // arrange
+    const { root, projectRoot, sessionStart, dispatched } = await launchRouter(t, processStartedAt);
+    const context = withSessionManager(
+      makeContext(projectRoot, root),
+      launchSession(root, header, holdsMessage),
+    );
+
+    // act
+    await sessionStart({ type: "session_start", reason: "startup" }, context);
+
+    // assert
+    assert.deepStrictEqual(dispatched, [
+      { scope: "project", event: { source } },
+      { scope: "user", event: { source } },
+    ]);
+  });
+}
+
+test("session_start at Pi startup debug-logs a session read that throws and dispatches nothing (NFR-2)", async (t) => {
+  // arrange
+  const debugLines = observeRouterDebug(t);
+  const { root, projectRoot, sessionStart, dispatched } = await launchRouter(t, 0);
+  const sessionManager = new Proxy(SessionManager.inMemory(root, { id: "router-launch-throws" }), {
+    get(target, property, receiver): unknown {
+      if (property === "getEntries") {
+        return (): never => {
+          throw new Error("entries unreadable");
+        };
+      }
+
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  const context = withSessionManager(makeContext(projectRoot, root), sessionManager);
+
+  // act
+  const update = await sessionStart({ type: "session_start", reason: "startup" }, context);
+
+  // assert
+  assert.deepStrictEqual(
+    { update, dispatched, debugLines: debugLines() },
+    {
+      update: undefined,
+      dispatched: [],
+      debugLines: ["[hooks] session_start skipped: entries unreadable"],
+    },
+  );
+});
+
+test("session_start at Pi startup dispatches a continued session once when Pi repeats its start (SSDEDUP-01)", async (t) => {
+  // arrange
+  const { root, projectRoot, sessionStart, dispatched } = await launchRouter(t, 0);
+  const context = withSessionManager(
+    makeContext(projectRoot, root),
+    launchSession(root, { timestamp: LAUNCH_HEADER_TIME }, true),
+  );
+
+  // act
+  await sessionStart({ type: "session_start", reason: "startup" }, context);
+  await sessionStart({ type: "session_start", reason: "startup" }, context);
+
+  // assert
+  assert.deepStrictEqual(dispatched, [
+    { scope: "project", event: { source: "resume" } },
+    { scope: "user", event: { source: "resume" } },
+  ]);
+});
+
+test(
+  "session_start at Pi startup in a pi-subagents child reads no launch fact and runs no SessionStart (D-PG6-14)",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const previous = process.env.PI_SUBAGENT_CHILD;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previous;
+      }
+    });
+    const { root, projectRoot, sessionStart, dispatched } = await launchRouter(t, 0);
+    const reads: string[] = [];
+    const sessionManager = new Proxy(launchSession(root, { timestamp: LAUNCH_HEADER_TIME }, true), {
+      get(target, property, receiver): unknown {
+        if (property === "getEntries" || property === "getHeader") {
+          reads.push(property);
+        }
+
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const context = withSessionManager(makeContext(projectRoot, root), sessionManager);
+    process.env.PI_SUBAGENT_CHILD = "1";
+
+    // act
+    await sessionStart({ type: "session_start", reason: "startup" }, context);
+
+    // assert
+    assert.deepStrictEqual({ reads, dispatched }, { reads: [], dispatched: [] });
+  },
+);
 
 test("session_start on Pi reload prepares the shared directories and runs no SessionStart (D-CF5-03)", async (t) => {
   // arrange

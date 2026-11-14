@@ -64,7 +64,7 @@ import { PiProcess } from "../lib/pi-process.ts";
 import { REGISTRY_PROBE_EXTENSION } from "../lib/pi-registry-probe/snapshot.ts";
 import { PiTuiSession } from "../lib/pi-tui.ts";
 import { rowArrays } from "../lib/result-rows.ts";
-import { sessionsFolder } from "../lib/saved-sessions.ts";
+import { latestSessionFile, sessionsFolder } from "../lib/saved-sessions.ts";
 import { readModelCalls, readModelScript } from "../lib/scripted-model/script.ts";
 import { assertStandInsStopped, harnessDirectory } from "../lib/turn-records.ts";
 
@@ -184,10 +184,20 @@ export interface PiProfile {
  * Pi settings and keeps the companions; `no-mcp` removes pi-mcp-adapter and
  * starts Pi with `--no-mcp`; `after-crash` starts the same launch again after
  * `crashPi()` killed the profile Pi (ASYNC-04); `new-session` starts it again
- * in a new saved session (D-PG6-16).
+ * in a new saved session, `continue-session` with `--continue`, and
+ * `open-session` and `fork-session` with `--session` and `--fork` on the
+ * newest session file of the sandbox's sessions folder (D-PG6-16).
  */
 export type PiRestart =
-  "without-adapter" | "with-adapter" | "builtin-on" | "no-mcp" | "after-crash" | "new-session";
+  | "without-adapter"
+  | "with-adapter"
+  | "builtin-on"
+  | "no-mcp"
+  | "after-crash"
+  | "new-session"
+  | "continue-session"
+  | "open-session"
+  | "fork-session";
 
 /** What a one-shot Pi in the run's sandbox starts with (D-BG-09). */
 export interface OneShotPiLaunch {
@@ -195,6 +205,13 @@ export interface OneShotPiLaunch {
   readonly git: RpcGitEnvironment;
   readonly environment: RpcProfileEnvironment;
 }
+
+// The restarts whose new session holds the entries of the stopped Pi's session.
+const SESSION_KEEPING_RESTARTS: ReadonlySet<PiRestart> = new Set([
+  "continue-session",
+  "open-session",
+  "fork-session",
+]);
 
 // What a profile Pi starts with: its profile, whether it starts with
 // `--no-mcp`, and its session flags.
@@ -785,7 +802,9 @@ export class ScenarioWorld extends World {
    * skips the onboarding wait and the stand-in check: the dead Pi's hook
    * processes may outlive it until the new Pi's load stops them, and the
    * first profile Pi's release still checks its stand-ins when the scenario
-   * ends (ASYNC-04).
+   * ends (ASYNC-04). A session that a restart continues, opens, or forks
+   * still holds the payloads of the stopped Pi's session, so the report
+   * keeps only the payloads that follow them (D-PG6-16).
    */
   async restartPi(restart: PiRestart): Promise<SessionReport> {
     const launch = this.profileLaunch;
@@ -793,6 +812,9 @@ export class ScenarioWorld extends World {
       assert.fail("no profile Pi of this scenario is running");
     }
 
+    // The session file is read before the stop, while it is the newest.
+    const restarted = await restartedLaunch(launch, restart, sessionsFolder(this.tokens));
+    const earlier = SESSION_KEEPING_RESTARTS.has(restart) ? await savedPayloads(this.pi) : [];
     if (restart === "after-crash") {
       assert.strictEqual(this.profilePiCrashed, true, "no step crashed the profile Pi");
       this.profilePiCrashed = false;
@@ -800,8 +822,10 @@ export class ScenarioWorld extends World {
       await this.stopProfilePiForRestart(launch, restart);
     }
 
-    await this.startProfilePi(restartedLaunch(launch, restart));
-    return readSession(this.pi);
+    await this.startProfilePi(restarted);
+    const report = await readSession(this.pi);
+    assert.deepStrictEqual(report.payloads.slice(0, earlier.length), earlier);
+    return { ...report, payloads: report.payloads.slice(earlier.length) };
   }
 
   /** Whether a profile Pi started in this scenario, so a step that must precede it can refuse. */
@@ -1168,6 +1192,22 @@ export class ScenarioWorld extends World {
   }
 }
 
+// The payloads of the session `pi` is in, when Pi saved its file. Pi writes a
+// session's file only once it holds a prompt and a reply, so an unsaved
+// session leaves nothing that a later start continues.
+async function savedPayloads(pi: PiProcess): Promise<readonly NotificationPayload[]> {
+  const { response } = await pi.request({ type: "get_state" });
+  assert.strictEqual(response.success, true, JSON.stringify(response));
+  const { sessionFile } = response.data as { readonly sessionFile?: string };
+  const saved =
+    sessionFile !== undefined &&
+    (await lstat(sessionFile).then(
+      () => true,
+      () => false,
+    ));
+  return saved ? (await readSession(pi)).payloads : [];
+}
+
 // The run's git environment for a profile Pi, without the GitHub base
 // override when the profile asks for that (D-BG-01).
 function profileGitEnvironment(
@@ -1182,8 +1222,13 @@ function profileGitEnvironment(
   return environment;
 }
 
-// The launch of a profile Pi after `restart` changes `launch`.
-function restartedLaunch(launch: ProfileLaunch, restart: PiRestart): ProfileLaunch {
+// The launch of a profile Pi after `restart` changes `launch`. An open or a
+// fork reads the newest session file of `sessions`.
+async function restartedLaunch(
+  launch: ProfileLaunch,
+  restart: PiRestart,
+  sessions: string,
+): Promise<ProfileLaunch> {
   const withoutAdapter = launch.companions.filter((name) => name !== "pi-mcp-adapter");
   switch (restart) {
     case "without-adapter":
@@ -1197,6 +1242,12 @@ function restartedLaunch(launch: ProfileLaunch, restart: PiRestart): ProfileLaun
       return { ...launch, companions: withoutAdapter, noMcp: true };
     case "new-session":
       return { ...launch, session: { kind: "saved" } };
+    case "continue-session":
+      return { ...launch, session: { kind: "continue" } };
+    case "open-session":
+      return { ...launch, session: { kind: "open", file: await latestSessionFile(sessions) } };
+    case "fork-session":
+      return { ...launch, session: { kind: "fork", file: await latestSessionFile(sessions) } };
   }
 }
 

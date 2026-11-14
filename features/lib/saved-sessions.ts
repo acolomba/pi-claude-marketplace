@@ -8,8 +8,13 @@
  * its leading slash and with each `/`, `\`, and `:` replaced by `-`. It names
  * a session file `<header timestamp>_<session id>.jsonl`, with each `:` and
  * `.` of the timestamp replaced by `-`. Pi 1.5.0 and 1.5.2 both do so.
+ * Pi writes the file once the session holds a prompt and a reply, and
+ * `--continue` opens the file of that folder with the newest modification
+ * time, whatever its name says.
  */
 
+import assert from "node:assert/strict";
+import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 
 import type { RunTokens } from "./run-tokens.ts";
@@ -47,4 +52,20 @@ export function projectSessionFile(
     name.endsWith(suffix) &&
     FILE_TIMESTAMP.test(name.slice(0, -suffix.length));
   return named ? SESSION_FILE_TOKEN : value;
+}
+
+/**
+ * Returns the session file of `folder` with the newest modification time, the
+ * one `--continue` opens. Fails when the folder holds no session file.
+ */
+export async function latestSessionFile(folder: string): Promise<string> {
+  const files = (await readdir(folder))
+    .filter((name) => name.endsWith(".jsonl"))
+    .map((name) => path.join(folder, name));
+  const modified = await Promise.all(
+    files.map(async (file) => ({ file, mtimeMs: (await stat(file)).mtimeMs })),
+  );
+  const [latest] = modified.sort((left, right) => right.mtimeMs - left.mtimeMs);
+  assert.ok(latest !== undefined, `the sessions folder ${folder} holds no saved session`);
+  return latest.file;
 }

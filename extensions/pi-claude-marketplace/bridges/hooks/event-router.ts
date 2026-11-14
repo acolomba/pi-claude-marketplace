@@ -98,6 +98,7 @@ import type {
   HookExecutor,
 } from "./dispatch.ts";
 import type { FollowUpTurnEnd } from "./event-adapters.ts";
+import type { SessionLaunchFacts } from "./payloads/session-start.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type {
   BeforeAgentStartEvent,
@@ -155,6 +156,24 @@ const CHILD_IDENTITY_DIAGNOSTIC =
 
 function dispatchesInCurrentSession(event: BucketAEvent): boolean {
   return !isSubagentChild(process.env) || CHILD_EVENT_POLICY[event] === "dispatch";
+}
+
+const NO_LAUNCH_FACTS: SessionLaunchFacts = { holdsMessages: false, forkedByThisLaunch: false };
+
+// D-PG6-13..15: read from Pi's session manager only, never from a file or
+// the command line. A new session already holds setting entries, so only a
+// `message` entry marks a continued one. A header timestamp that does not
+// parse marks no fork.
+function readSessionLaunchFacts(
+  sessionManager: ExtensionContext["sessionManager"],
+  processStartedAt: number,
+): SessionLaunchFacts {
+  const header = sessionManager.getHeader();
+  return {
+    holdsMessages: sessionManager.getEntries().some((entry) => entry.type === "message"),
+    forkedByThisLaunch:
+      header?.parentSession !== undefined && Date.parse(header.timestamp) >= processStartedAt,
+  };
 }
 
 /**
@@ -555,6 +574,12 @@ export interface HooksHydrationDeps extends HooksFileReader {
 export interface RegisterHooksBridgeOptions {
   readonly cwd: string;
   readonly executor?: HookExecutor;
+  /**
+   * When this Pi process started, in epoch milliseconds; a fork whose header
+   * is not older was made by this launch (D-PG6-15). Defaults to
+   * `performance.timeOrigin`.
+   */
+  readonly processStartedAt?: number;
 }
 
 /** Hooks hydration operations bound to one required state reader. */
@@ -1180,6 +1205,7 @@ async function registerHooksBridgeWith(
       // Pi's raw reason, and the compaction SessionStart never passes here
       // (D-CF5-05).
       let lastSessionStart: string | undefined = undefined;
+      const processStartedAt = opts.processStartedAt ?? performance.timeOrigin;
       return async (event, ctx) => {
         try {
           requireNotificationMode(ctx.mode);
@@ -1222,7 +1248,14 @@ async function registerHooksBridgeWith(
 
           requireNotificationMode(ctx.mode);
           if (dispatchesInCurrentSession("SessionStart")) {
-            await sessionStartHandler({ source: claudeSessionStartSource(event.reason) }, ctx);
+            const launch =
+              event.reason === "startup"
+                ? readSessionLaunchFacts(ctx.sessionManager, processStartedAt)
+                : NO_LAUNCH_FACTS;
+            await sessionStartHandler(
+              { source: claudeSessionStartSource(event.reason, launch) },
+              ctx,
+            );
           }
 
           if (!generationIsCurrent()) {

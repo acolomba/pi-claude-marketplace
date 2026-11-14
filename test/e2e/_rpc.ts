@@ -107,11 +107,16 @@ export interface RpcProfile {
 
 /**
  * How a Pi with a saved session starts (D-PG6-16): `saved` passes no session
- * flag, so Pi saves a new session in its sessions folder.
+ * flag, so Pi saves a new session in its sessions folder; `continue` passes
+ * `--continue`, `open` passes `--session <file>`, which stands for
+ * `--resume` because `--resume` opens a picker, and `fork` passes
+ * `--fork <file>`.
  */
-export interface PiSessionLaunch {
-  readonly kind: "saved";
-}
+export type PiSessionLaunch =
+  | { readonly kind: "saved" }
+  | { readonly kind: "continue" }
+  | { readonly kind: "open"; readonly file: string }
+  | { readonly kind: "fork"; readonly file: string };
 
 /** Launch options of Pi beyond its extensions. */
 export interface PiArgumentOptions {
@@ -286,6 +291,21 @@ export function rpcChildEnvironment(
   return environment;
 }
 
+function sessionFlags(session: PiSessionLaunch | undefined): string[] {
+  switch (session?.kind) {
+    case undefined:
+      return ["--no-session"];
+    case "saved":
+      return [];
+    case "continue":
+      return ["--continue"];
+    case "open":
+      return ["--session", session.file];
+    case "fork":
+      return ["--fork", session.file];
+  }
+}
+
 /**
  * Returns the arguments that start the repository's Pi CLI in `mode` with
  * `options.leadingExtensions`, the real extension, and `extraExtensions`, in
@@ -304,7 +324,7 @@ export function piArguments(
     resolvePiRuntime(REPO_ROOT).cliPath,
     ...(mode === "tui" ? [] : ["--mode", mode]),
     "--offline",
-    ...(options.session === undefined ? ["--no-session"] : []),
+    ...sessionFlags(options.session),
     ...(options.noMcp === true ? ["--no-mcp"] : []),
     ...extensions.flatMap((extension) => ["--extension", extension]),
   ];

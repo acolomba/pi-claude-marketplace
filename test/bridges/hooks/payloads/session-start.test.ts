@@ -1,5 +1,5 @@
 // Unit test for the SessionStart payload translator (PAYL-01) and its one
-// mapping site (D-CF5-01, D-CF1-10..12).
+// mapping site (D-CF5-01, D-CF1-10..12, D-PG6-14, D-PG6-15).
 
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
@@ -9,26 +9,73 @@ import {
   translateSessionStart,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts";
 
+import type { SessionLaunchFacts } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts";
 import type { TranslationContext } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
 import type { SessionStartSource } from "../../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import type { SessionStartEvent } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 describe("claudeSessionStartSource", () => {
+  const launches = [
+    { holdsMessages: false, forkedByThisLaunch: false },
+    { holdsMessages: true, forkedByThisLaunch: false },
+    { holdsMessages: false, forkedByThisLaunch: true },
+    { holdsMessages: true, forkedByThisLaunch: true },
+  ] as const satisfies readonly SessionLaunchFacts[];
+
   for (const { reason, source } of [
-    { reason: "startup", source: "startup" },
     { reason: "new", source: "clear" },
     { reason: "resume", source: "resume" },
     { reason: "fork", source: "fork" },
   ] satisfies ReadonlyArray<{
-    readonly reason: Exclude<SessionStartEvent["reason"], "reload">;
+    readonly reason: Exclude<SessionStartEvent["reason"], "reload" | "startup">;
     readonly source: SessionStartSource;
   }>) {
-    test(`maps the Pi reason ${reason} to the source ${source} (D-CF5-01)`, () => {
+    for (const launch of launches) {
+      test(`maps the Pi reason ${reason} to the source ${source} whatever the launch ${JSON.stringify(launch)} shows (D-CF5-01)`, () => {
+        // arrange
+        const expectedSource = source;
+
+        // act
+        const mappedSource = claudeSessionStartSource(reason, launch);
+
+        // assert
+        assert.strictEqual(mappedSource, expectedSource);
+      });
+    }
+  }
+
+  for (const { launch, source, shows } of [
+    {
+      launch: { holdsMessages: false, forkedByThisLaunch: false },
+      source: "startup",
+      shows: "no message and no fork",
+    },
+    {
+      launch: { holdsMessages: true, forkedByThisLaunch: false },
+      source: "resume",
+      shows: "a message and no fork",
+    },
+    {
+      launch: { holdsMessages: false, forkedByThisLaunch: true },
+      source: "fork",
+      shows: "a fork and no message",
+    },
+    {
+      launch: { holdsMessages: true, forkedByThisLaunch: true },
+      source: "fork",
+      shows: "a fork and its copied messages",
+    },
+  ] satisfies ReadonlyArray<{
+    readonly launch: SessionLaunchFacts;
+    readonly source: SessionStartSource;
+    readonly shows: string;
+  }>) {
+    test(`maps the Pi reason startup to the source ${source} when the launch shows ${shows} (D-PG6-14, D-PG6-15)`, () => {
       // arrange
       const expectedSource = source;
 
       // act
-      const mappedSource = claudeSessionStartSource(reason);
+      const mappedSource = claudeSessionStartSource("startup", launch);
 
       // assert
       assert.strictEqual(mappedSource, expectedSource);
