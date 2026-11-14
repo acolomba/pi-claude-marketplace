@@ -17,10 +17,13 @@
  * already continued the run (D-PG5-05).
  *
  * The run-start `Given` starts the profile Pi with a harness extension that
- * logs each `before_agent_start`, and the counts `Then` states the turn's
- * settlements, run starts, and model calls. Pi raises `agent_start` for each
- * continuation of a run as well, so the step counts run starts from that log
- * and never from `agent_start` records.
+ * logs each `before_agent_start`, and the counts `Then` states the turn's run
+ * starts and model calls. Pi raises `agent_start` for each continuation of a
+ * run as well, so the step counts run starts from that log and never from
+ * `agent_start` records. The turn ends at its first `agent_settled`, so it
+ * holds one settlement whatever Pi does later. A run that settled after each
+ * model call instead would end the turn after the first call, and the model
+ * call count proves the single settlement (D-PG5-01).
  *
  * A steer or a follow-up is a prompt the user sends while the agent runs. Pi
  * queues it into the running agent, which reads a steer after the running
@@ -275,9 +278,8 @@ Then("the stop sequence has these counts:", function (this: ScenarioWorld, table
   const turn = this.requireTurn();
   assert.deepStrictEqual(
     [
-      ["agent settlements", "run starts", "model calls"],
+      ["run starts", "model calls"],
       [
-        String(turn.records.filter(isSettled).length),
         String((turn.logs.get(RUN_STARTS_LOG) ?? []).length),
         String(modelCallsOf(turn.logs).length),
       ],
@@ -329,7 +331,6 @@ Then("ten stop blocks separated by tool calls continue", function (this: Scenari
     turn,
     Array.from({ length: 10 }, (_, index) => [`Done ${index + 1}`, index > 0]),
   );
-  assert.strictEqual(turn.records.filter(isSettled).length, 1);
   for (let index = 0; index < 10; index += 1) {
     const reentryCall = calls[2 * index + 1];
     const afterToolCall = calls[2 * index + 2];

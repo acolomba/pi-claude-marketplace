@@ -70,8 +70,8 @@ Feature: Hook prompt and stop
       | 3    | assistant | Done 2                          |
       | 3    | user      | Stop hook feedback:\nkeep going |
     Then the stop sequence has these counts:
-      | agent settlements | run starts | model calls |
-      | 1                 | 1          | 3           |
+      | run starts | model calls |
+      | 1          | 3           |
 
   Scenario: A stop hook's additional context is sent back as stop hook feedback
     Given pi runs with the scripted model
@@ -164,8 +164,8 @@ Feature: Hook prompt and stop
       | Done 9 | true             |
     Then the stop override cap notice count is 1
     Then the stop sequence has these counts:
-      | agent settlements | run starts | model calls |
-      | 1                 | 1          | 9           |
+      | run starts | model calls |
+      | 1          | 9           |
 
   Scenario: Tool calls reset a Stop-only plugin's continuation count
     Given pi runs with the scripted model
