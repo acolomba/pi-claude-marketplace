@@ -81,7 +81,7 @@ Normal commit hooks are mandatory. Each combined-tree gate runs the complete com
 
 | Gate | Command | Timeout | Required evidence | Status |
 |---|---|---|---|---|
-| Wave 1 combined tree | `npm run check` | 2400 seconds | Plan 05-01 merged; the exact commit, Node version, exit status, and scenario counts | ⬜ pending |
+| Wave 1 combined tree | `npm run check` | 2400 seconds | Plan 05-01 merged; the exact commit, Node version, exit status, and scenario counts | ✅ green at `26c54267`, Node 26, exit 0, 184/184 scenarios, 2492 steps |
 | Wave 2 combined tree | `npm run check` | 2400 seconds | Plans 05-02 and 05-05 merged; the same evidence | ⬜ pending |
 | Wave 3 combined tree | `npm run check` | 2400 seconds | Plans 05-03 and 05-04 merged; the same evidence | ⬜ pending |
 | Wave 4 combined tree | `npm run check` | 2400 seconds | Plan 05-06 merged; the same evidence | ⬜ pending |
