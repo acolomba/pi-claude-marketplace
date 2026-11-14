@@ -645,10 +645,13 @@ function wakeOnExitTwo(entry: HooksRuntimeChildEntry, { ctx, pi, label }: Rewake
  * cancels each timer ladder, and SIGKILLs the process group of each tracked
  * child best-effort. Idempotent: repeated calls on an empty registry are
  * no-ops. The persisted PID table is NOT touched here -- the orphan
- * reap path is responsible for draining that surface.
+ * reap path is responsible for draining that surface. Each child journal of
+ * this runtime drops the rows of the hooks the walk stopped, and is removed
+ * once it holds none: a child runner may exit before the stopped hooks'
+ * `close` events would remove their rows.
  */
 export async function shutdownInMemoryChildren(runtime: HooksRuntime): Promise<void> {
-  runtime.shutdownChildren();
+  const stoppedIds = new Set(runtime.shutdownChildren().map((entry) => entry.dispatchId));
   const owners = runtime.persistenceOwners();
   try {
     await Promise.all(
@@ -656,8 +659,11 @@ export async function shutdownInMemoryChildren(runtime: HooksRuntime): Promise<v
         const filePath = childJournalPath(owner);
         await runtime.runPidTableOperation(filePath, async () => {
           const journal = await readChildJournal(filePath, owner.loc);
-          if (journal?.entries.length === 0) {
-            await writeChildJournal(owner, []);
+          if (journal !== undefined) {
+            await writeChildJournal(
+              owner,
+              journal.entries.filter((row) => !stoppedIds.has(row.dispatchId)),
+            );
           }
         });
       }),

@@ -1246,7 +1246,10 @@ test(
     const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
     const [oldName] = await readdir(journalDir);
     assert.ok(oldName);
+    const oldBytes = await readFile(path.join(journalDir, oldName));
     await shutdownInMemoryChildren(runtime);
+    // The journal still lists the old row, as when shutdown could not rewrite it.
+    await writeFile(path.join(journalDir, oldName), oldBytes);
     runtime.advanceGeneration();
     await spawnAndRegister(
       runtime,
@@ -1333,7 +1336,10 @@ test("contains a retired child journal cleanup error", { concurrency: false }, a
   const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
   const [name] = await readdir(journalDir);
   assert.ok(name);
+  const journalBytes = await readFile(path.join(journalDir, name));
   await shutdownInMemoryChildren(runtime);
+  // The journal still lists the retired row, as when shutdown could not rewrite it.
+  await writeFile(path.join(journalDir, name), journalBytes);
   const stdoutEnd = once(child.stdout, "end");
   const stderrEnd = once(child.stderr, "end");
   child.stdout.end();
@@ -1391,7 +1397,6 @@ test(
     const [name] = await readdir(journalDir);
     assert.ok(name);
     await shutdownInMemoryChildren(runtime);
-    await rm(path.join(journalDir, name));
     const stdoutEnd = once(child.stdout, "end");
     const stderrEnd = once(child.stderr, "end");
     child.stdout.end();
@@ -2133,6 +2138,84 @@ test("shutdown preserves a nonregular child journal target", async (t) => {
   // assert
   assert.strictEqual((await stat(journalPath)).isDirectory(), true);
 });
+
+for (const scenario of [
+  { name: "removes the journal of the hooks it stopped", extraRows: [], remaining: "ENOENT" },
+  {
+    name: "keeps a journal row of a hook it did not stop",
+    extraRows: [foreignRow()],
+    remaining: ["foreign-dispatch"],
+  },
+] as const) {
+  test(`child shutdown ${scenario.name} before any close event`, async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-stopped-rows-"));
+    const loc = locationsFor("project", root);
+    const runtime = createHooksRuntime();
+    const rewake = createChild(29_161);
+    const plain = createChild(29_162);
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = "1";
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      destroyChild(rewake);
+      destroyChild(plain);
+      await rm(root, { recursive: true, force: true });
+    });
+    const ctx = createContext(root, "stopped-rows-session", true).context;
+    for (const [child, dispatchId, handlerDecl] of [
+      [
+        rewake,
+        "rewake-dispatch",
+        { type: "command", command: "/opt/hooks/rewake", asyncRewake: true },
+      ],
+      [plain, "plain-dispatch", { type: "command", command: "/opt/hooks/plain", async: true }],
+    ] as const) {
+      await spawnAndRegister(
+        runtime,
+        createEntry(root, { handlerDecl }),
+        {},
+        ctx,
+        createPi().pi,
+        loc,
+        {
+          spawnImpl: createSpawn(child.child, []),
+          dispatchId: () => dispatchId,
+        },
+      );
+    }
+
+    const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+    const [journalName] = await readdir(journalDir);
+    const journalPath = path.join(journalDir, journalName ?? "");
+    const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
+      readonly entries: readonly PidTableEntry[];
+    };
+    await writeFile(
+      journalPath,
+      JSON.stringify({ ...journal, entries: [...journal.entries, ...scenario.extraRows] }),
+    );
+
+    // act
+    await shutdownInMemoryChildren(runtime);
+
+    // assert
+    assert.deepStrictEqual([rewake.signals, plain.signals], [["SIGKILL"], ["SIGKILL"]]);
+    const remaining = await readFile(journalPath, "utf8").then(
+      (text) =>
+        (JSON.parse(text) as { readonly entries: readonly PidTableEntry[] }).entries.map(
+          (row) => row.dispatchId,
+        ),
+      filesystemErrorCode,
+    );
+    assert.deepStrictEqual(remaining, scenario.remaining);
+  });
+}
 
 for (const scenario of [
   {
