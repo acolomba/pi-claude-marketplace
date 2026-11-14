@@ -76,7 +76,7 @@ Normal commit hooks are mandatory. Each combined-tree gate runs the complete com
 |---|---|---|---|---|
 | Wave 1 combined tree | `npm run check` | 2400 seconds | Plans 04-01, 04-04, and 04-05 merged; the exact commit, Node version, exit status, and scenario counts | passed |
 | Wave 2 combined tree | `npm run check` | 2400 seconds | Plans 04-02 and 04-03 merged; the same evidence | passed |
-| Wave 3 combined tree | `npm run check` | 2400 seconds | Plan 04-06 merged; the same evidence | ⬜ pending |
+| Wave 3 combined tree | `npm run check` | 2400 seconds | Plan 04-06 merged; the same evidence | passed |
 | Phase gate | `npm run check` | 2400 seconds | The final tree after the Parent lines; reuse only when the build inputs are identical | ⬜ pending |
 | Merge gate | `npm run check` | 2400 seconds | The merged tree, or a documented identical-input reuse | ⬜ pending |
 | Final PR or release handoff | `npm run check` | 2400 seconds | The final build inputs, or a documented identical-input reuse | ⬜ pending |
@@ -98,6 +98,13 @@ Plans 04-02 and 04-03 are merged on the main tree, run one after another. Four t
 - Combined gate: exit 0 at `2bc276c32fa8b4713a6a6b03a50f92d84922ed53`, Node v26.13.1. Adapter profile 1910 of 1910 scenarios, builtin profile 184 of 184, 362 direct coverage records.
 - 04-02 removed the temporary `ignoreExports` entry from `.fallowrc.json` and closed WINDOWS #116.
 - 04-03 keeps the one unclassified PG-SKILL-04 edge flagged for the verifier.
+
+## Wave 3 Execution Evidence
+
+Plan 04-06 is merged on the main tree. Two task commits and one summary; the commit hook ran `check:commit` and passed.
+
+- Combined gate: exit 0 at `852b033f`, Node v26.13.1. Adapter profile 1911 of 1911 scenarios, builtin profile 184 of 184, 362 direct coverage records.
+- The Parent lines for PROJECT.md (D-CF1-06 exception, Out of Scope bullet) and six BACKLOG entries landed afterwards in `c40ef6dc`, which changes only `.planning/`.
 
 ## Wave 0 Requirements
 
