@@ -110,21 +110,26 @@ for (const { name, stdout, hookOutcome } of [
 }
 
 for (const { name, stdout } of [
+  { name: "empty", stdout: "" },
   { name: "plain", stdout: "denied, sort of" },
-  { name: "invalid JSON", stdout: '{"decision":"block"' },
+  { name: "unterminated JSON", stdout: '{"decision":"block"' },
+  { name: "braced text that does not parse", stdout: "{not json}" },
   { name: "a JSON array", stdout: '["deny"]' },
   { name: "JSON null", stdout: "null" },
 ]) {
-  test(`defaults exit 1 with ${name} stdout to noop`, () => {
+  test(`carries the stderr of exit 1 with ${name} stdout as a failure (D-PG5-10)`, () => {
     // act
-    const hookOutcome = parseHookStdout(1, stdout, "ignored stderr", "PreToolUse");
+    const hookOutcome = parseHookStdout(1, stdout, "\nboom \n", "PreToolUse");
 
     // assert
-    assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+    assert.deepStrictEqual(hookOutcome, {
+      kind: "noop",
+      failure: { kind: "exit", stderr: "\nboom \n" },
+    });
   });
 }
 
-test("defaults another nonzero exit to noop and reports its semantic diagnostic", (t) => {
+test("carries the failure of another nonzero exit and reports its semantic diagnostic", (t) => {
   // arrange
   const debugKey = "PI_CLAUDE_MARKETPLACE_DEBUG";
   const hadDebug = Object.hasOwn(process.env, debugKey);
@@ -140,7 +145,7 @@ test("defaults another nonzero exit to noop and reports its semantic diagnostic"
   const consoleErrorSpy = t.mock.method(console, "error", () => undefined);
   const exitCode = 7;
   const stdout = "ignored plain stdout";
-  const stderr = "ignored stderr";
+  const stderr = "exit seven";
   let hookOutcome: HookExecResult | undefined;
   let thrown: unknown;
 
@@ -153,7 +158,10 @@ test("defaults another nonzero exit to noop and reports its semantic diagnostic"
 
   // assert
   assert.equal(thrown, undefined);
-  assert.deepEqual(hookOutcome, { kind: "noop" });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "exit", stderr: "exit seven" },
+  });
   const diagnostic = String(consoleErrorSpy.mock.calls[0]?.arguments[0]);
   assert.deepEqual(
     {
@@ -173,7 +181,7 @@ test("defaults another nonzero exit to noop and reports its semantic diagnostic"
   );
 });
 
-test("defaults a signal-kill exit to noop and reports its semantic diagnostic", (t) => {
+test("carries the failure of a signal-kill exit, ignoring its JSON, and reports it", (t) => {
   // arrange
   const debugKey = "PI_CLAUDE_MARKETPLACE_DEBUG";
   const hadDebug = Object.hasOwn(process.env, debugKey);
@@ -189,7 +197,7 @@ test("defaults a signal-kill exit to noop and reports its semantic diagnostic", 
   const consoleErrorSpy = t.mock.method(console, "error", () => undefined);
   const exitCode = null;
   const stdout = '{"continue":false,"stopReason":"ignored stop"}';
-  const stderr = "ignored stderr";
+  const stderr = "killed";
   let hookOutcome: HookExecResult | undefined;
   let thrown: unknown;
 
@@ -202,7 +210,10 @@ test("defaults a signal-kill exit to noop and reports its semantic diagnostic", 
 
   // assert
   assert.equal(thrown, undefined);
-  assert.deepEqual(hookOutcome, { kind: "noop" });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "exit", stderr: "killed" },
+  });
   const diagnostic = String(consoleErrorSpy.mock.calls[0]?.arguments[0]);
   assert.deepEqual(
     {

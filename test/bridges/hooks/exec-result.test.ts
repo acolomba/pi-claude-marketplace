@@ -1,4 +1,7 @@
-import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
+import type {
+  HookExecResult,
+  HookFailure,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
 
 void ({ kind: "noop" } satisfies HookExecResult);
 void ({ kind: "noop", suppressOutput: true } satisfies HookExecResult);
@@ -61,3 +64,23 @@ void ({
 void ({ kind: "stop", postCompactRun: { succeeded: true, output: "{}" } } satisfies HookExecResult);
 // @ts-expect-error whether a PostCompact hook succeeded is a boolean
 void ({ kind: "noop", postCompactRun: { succeeded: "yes", output: "" } } satisfies HookExecResult);
+
+void ({ kind: "noop", failure: { kind: "exit", stderr: "boom" } } satisfies HookExecResult);
+void ({
+  kind: "noop",
+  failure: { kind: "spawn", error: "spawn guard.sh ENOENT" },
+} satisfies HookExecResult);
+void ({ kind: "noop", failure: { kind: "run", error: "bad root" } } satisfies HookExecResult);
+void ({ kind: "exit", stderr: "" } satisfies HookFailure);
+// @ts-expect-error a block decides something, so it carries no failure
+void ({ kind: "block", failure: { kind: "exit", stderr: "boom" } } satisfies HookExecResult);
+// @ts-expect-error a mutation decides something, so it carries no failure
+void ({ kind: "mutate", failure: { kind: "exit", stderr: "boom" } } satisfies HookExecResult);
+// @ts-expect-error a stop decides something, so it carries no failure
+void ({ kind: "stop", failure: { kind: "exit", stderr: "boom" } } satisfies HookExecResult);
+// @ts-expect-error a failed exit carries its stderr, not an error
+void ({ kind: "exit", error: "boom" } satisfies HookFailure);
+// @ts-expect-error a start failure carries its error, not stderr
+void ({ kind: "spawn", stderr: "boom" } satisfies HookFailure);
+// @ts-expect-error hook failures have a closed discriminant set
+void ({ kind: "timeout", error: "boom" } satisfies HookFailure);

@@ -4744,6 +4744,175 @@ describe("hook notices (HOOK-05 / D-CF5-14)", () => {
   }
 });
 
+const EXIT_FAILURE = { kind: "noop", failure: { kind: "exit", stderr: "boom\n" } } as const;
+
+describe("failure notices (D-PG5-10 / D-PG5-12)", () => {
+  const SESSION_START = { source: "startup" } satisfies ClaudeSessionStartEvent;
+  const SESSION_END = { reason: "clear" } satisfies ClaudeSessionEndEvent;
+  const PRE_COMPACT = { reason: "manual" } as SessionBeforeCompactEvent;
+  const POST_COMPACT = { reason: "manual" } as SessionCompactEvent;
+
+  for (const { name, claudeEvent, event, results, notices } of [
+    {
+      name: "a PreToolUse hook that exited with an error",
+      claudeEvent: "PreToolUse",
+      event: createToolCallEvent(),
+      results: { failer: EXIT_FAILURE },
+      notices: ["PreToolUse:Bash hook error: Failed with non-blocking status code: boom"],
+    },
+    {
+      name: "a UserPromptSubmit hook that exited with an error",
+      claudeEvent: "UserPromptSubmit",
+      event: PROMPT_EVENT,
+      results: { failer: EXIT_FAILURE },
+      notices: ["UserPromptSubmit hook error: Failed with non-blocking status code: boom"],
+    },
+    {
+      name: "a SessionStart hook that exited with an error",
+      claudeEvent: "SessionStart",
+      event: SESSION_START,
+      results: { failer: EXIT_FAILURE },
+      notices: ["SessionStart:startup hook error: Failed with non-blocking status code: boom"],
+    },
+    {
+      name: "a PreCompact hook that exited with an error",
+      claudeEvent: "PreCompact",
+      event: PRE_COMPACT,
+      results: { failer: EXIT_FAILURE },
+      notices: ["PreCompact:manual hook error: Failed with non-blocking status code: boom"],
+    },
+    {
+      name: "no notice for a SessionEnd hook that exited with an error",
+      claudeEvent: "SessionEnd",
+      event: SESSION_END,
+      results: { failer: EXIT_FAILURE },
+      notices: [],
+    },
+    {
+      name: "no notice for a PostCompact hook that exited with an error",
+      claudeEvent: "PostCompact",
+      event: POST_COMPACT,
+      results: { failer: EXIT_FAILURE },
+      notices: [],
+    },
+    {
+      name: "the system messages, then the block notice, then the failure notices",
+      claudeEvent: "UserPromptSubmit",
+      event: PROMPT_EVENT,
+      results: {
+        failer: EXIT_FAILURE,
+        speaker: { kind: "noop", systemMessage: "said" },
+        guard: { kind: "block", reason: "no" },
+      },
+      notices: [
+        "UserPromptSubmit says: said",
+        "UserPromptSubmit operation blocked by hook:\nno",
+        "UserPromptSubmit hook error: Failed with non-blocking status code: boom",
+      ],
+    },
+    {
+      name: "two notices for two hooks that fail with the same text, in routing order",
+      claudeEvent: "SessionStart",
+      event: SESSION_START,
+      results: {
+        first: EXIT_FAILURE,
+        quiet: { kind: "noop" },
+        second: EXIT_FAILURE,
+      },
+      notices: [
+        "SessionStart:startup hook error: Failed with non-blocking status code: boom",
+        "SessionStart:startup hook error: Failed with non-blocking status code: boom",
+      ],
+    },
+    {
+      name: "the failure of a hook beside a hook that blocks",
+      claudeEvent: "PreToolUse",
+      event: createToolCallEvent(),
+      results: { failer: EXIT_FAILURE, guard: { kind: "block", reason: "no" } },
+      notices: ["PreToolUse:Bash hook error: Failed with non-blocking status code: boom"],
+    },
+    {
+      name: "the failure of a hook beside a hook that mutates",
+      claudeEvent: "PreToolUse",
+      event: createToolCallEvent(),
+      results: {
+        failer: { kind: "noop", failure: { kind: "exit", stderr: "" } },
+        allower: { kind: "mutate", permissionDecision: "allow" },
+      },
+      notices: [
+        "PreToolUse:Bash hook error: Failed with non-blocking status code: No stderr output",
+      ],
+    },
+  ] satisfies ReadonlyArray<{
+    readonly name: string;
+    readonly claudeEvent: CompositeDispatchEvent;
+    readonly event: unknown;
+    readonly results: Readonly<Record<string, HookExecResult>>;
+    readonly notices: readonly string[];
+  }>) {
+    test(`shows ${name}`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket(claudeEvent, routedEntries(claudeEvent, Object.keys(results)));
+      const host = createNoticeHost("/workspace/failure-notices");
+      const handler = compositeHandlerFor(
+        runtime,
+        claudeEvent,
+        runtime.currentGeneration(),
+        host.pi,
+        createRecordingExecutor(results, []),
+      );
+
+      // act
+      await handler(event, host.context);
+
+      // assert
+      assert.deepStrictEqual(
+        host.capture.entries,
+        notices.map((text) => hookNoticeEntry(text)),
+      );
+      host.capture.assertValid();
+    });
+  }
+
+  for (const { isError, notice } of [
+    {
+      isError: false,
+      notice: "PostToolUse:Bash hook error: Failed with non-blocking status code: boom",
+    },
+    {
+      isError: true,
+      notice: "PostToolUseFailure:Bash hook error: Failed with non-blocking status code: boom",
+    },
+  ]) {
+    test(`shows ${notice} from the tool-result composite`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const claudeEvent = isError ? "PostToolUseFailure" : "PostToolUse";
+      runtime.setRoutingBucket(claudeEvent, routedEntries(claudeEvent, ["failer", "guard"]));
+      const host = createNoticeHost("/workspace/tool-result-failures");
+      const handler = toolResultCompositeHandler(
+        runtime,
+        runtime.currentGeneration(),
+        host.pi,
+        createRecordingExecutor(
+          { failer: EXIT_FAILURE, guard: { kind: "block", reason: "check the output" } },
+          [],
+        ),
+      );
+
+      // act
+      await handler(createToolResultEvent(isError), host.context);
+
+      // assert
+      assert.deepStrictEqual(host.capture.entries, [hookNoticeEntry(notice)]);
+      host.capture.assertValid();
+    });
+  }
+});
+
 describe("PostCompact notices (D-BG-501 / D-BG-502 / D-BG-504)", () => {
   const MANUAL = { reason: "manual" } as SessionCompactEvent;
 

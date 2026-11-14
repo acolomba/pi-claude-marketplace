@@ -35,13 +35,16 @@
 //   7. Stream stdin: attach `child.stdin.on("error", hookDebugLog)` BEFORE
 //      `child.stdin.end(payload)` so an EPIPE from a fast-exiting child
 //      cannot escape as an unhandled exception.
-//   8. On `close`, route stderr through `hookDebugLog` (EXEC-03 sole sink;
-//      NO `ctx.ui.notify`) then return `parseHookStdout(code, stdout,
-//      stderr, entry.claudeEvent)`, unless the hook failed and sets `onFailure: "block"`
-//      (D-CF5-18, `./on-failure.ts`): then a start failure (`error`), an exit
-//      other than 0 and 2, a timeout, or broken JSON stdout is a block. A JSON
-//      deny still wins over that block. At every end of the process, a
-//      PostCompact result also carries how the hook ended (D-BG-503).
+//   8. On `close`, write stderr to `hookDebugLog` (EXEC-03) and return
+//      `parseHookStdout(code, stdout, stderr, entry.claudeEvent)`. A failed
+//      exit carries its stderr as a failure, which the dispatch notices show
+//      (D-PG5-10); the exec layer shows nothing itself, and a hook that its
+//      own timeout ended carries no failure. A failed hook that sets
+//      `onFailure: "block"` blocks instead (D-CF5-18, `./on-failure.ts`): a
+//      start failure (`error`), an exit other than 0 and 2, a timeout, or
+//      broken JSON stdout. A JSON deny still wins over that block. At every
+//      end of the process, a PostCompact result also carries how the hook
+//      ended (D-BG-503).
 //
 // Never-throws contract: every error path resolves to `{ kind: "noop" }` +
 // `hookDebugLog`, or to the onFailure block when the hook asks for one. The
@@ -252,6 +255,20 @@ function endedResult(
   return { ...result, postCompactRun: postCompactRunOf(facts, answer, failure !== undefined) };
 }
 
+/**
+ * D-PG5-10: a hook that its own timeout ended shows no failure notice, as
+ * Claude Code reports a timeout with a text of its own, so its result drops
+ * the failure the wire protocol read from the signal. The wire protocol's
+ * failure noop holds nothing else.
+ */
+function withoutTimeoutFailure(parsed: HookExecResult, timedOut: boolean): HookExecResult {
+  if (timedOut && parsed.kind === "noop" && parsed.failure !== undefined) {
+    return { kind: "noop" };
+  }
+
+  return parsed;
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Translator dispatch
 // ──────────────────────────────────────────────────────────────────────────
@@ -393,13 +410,17 @@ async function spawnAndCollect(
 
     child.once("close", (code) => {
       const errText = stderr.text();
-      // EXEC-03: stderr sole-sink through hookDebugLog. NO ctx.ui.notify.
+      // EXEC-03: stderr goes to hookDebugLog; a failed exit also carries it to
+      // the dispatch notices (D-PG5-10).
       if (errText.length > 0) {
         hookDebugLog(`exec: stderr (${entry.pluginId}/${entry.claudeEvent}): ${errText.trim()}`);
       }
 
       const outText = stdout.text();
-      const parsed = parseHookStdout(code, outText, errText, entry.claudeEvent);
+      const parsed = withoutTimeoutFailure(
+        parseHookStdout(code, outText, errText, entry.claudeEvent),
+        ladder.fired(),
+      );
       // D-CF5-18: a failed hook that sets onFailure "block" blocks whatever its
       // stdout says, except that a JSON deny keeps its own reason.
       const facts: HookExitFacts = {

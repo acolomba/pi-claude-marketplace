@@ -2266,7 +2266,7 @@ test("keeps a hook whose spawn throws a noop without onFailure", async (t) => {
   assert.deepStrictEqual(hookOutcome, { kind: "noop" });
 });
 
-test("keeps a failing hook without onFailure a noop", async (t) => {
+test("settles a hook that exits 1 without onFailure with its failure (D-PG5-10)", async (t) => {
   // act
   const hookOutcome = await dispatchDriven(t, { command: "guard" }, async (child) => {
     child.stderr?.write("boom\n");
@@ -2274,7 +2274,81 @@ test("keeps a failing hook without onFailure a noop", async (t) => {
   });
 
   // assert
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "exit", stderr: "boom\n" },
+  });
+});
+
+test("settles a hook that prints a JSON object before it exits 1 with no failure (D-PG5-10)", async (t) => {
+  // act
+  const hookOutcome = await dispatchDriven(t, { command: "guard" }, async (child) => {
+    child.stdout?.write('{"systemMessage":"hi"}');
+    child.stderr?.write("boom\n");
+    await child.close(1);
+  });
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "noop", systemMessage: "hi" });
+});
+
+test("settles a hook that a signal other than its timeout ended with its failure (D-PG5-10)", async (t) => {
+  // act
+  const hookOutcome = await dispatchDriven(t, { command: "guard" }, async (child) => {
+    child.stderr?.write("killed\n");
+    await child.close(null, "SIGKILL");
+  });
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "exit", stderr: "killed\n" },
+  });
+});
+
+test("settles a hook that its own timeout ended with no failure (D-PG5-10)", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+
+  // act
+  const hookOutcome = await dispatchDriven(t, { command: "guard", timeout: 1 }, async (child) => {
+    t.mock.timers.tick(1_000);
+    child.stderr?.write("late\n");
+    await child.close(null, "SIGTERM");
+  });
+
+  // assert
   assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+});
+
+test("keeps the JSON system message of a hook that its timeout ended and that exits 1", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+
+  // act
+  const hookOutcome = await dispatchDriven(t, { command: "guard", timeout: 1 }, async (child) => {
+    t.mock.timers.tick(1_000);
+    child.stdout?.write('{"systemMessage":"late"}');
+    await child.close(1);
+  });
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "noop", systemMessage: "late" });
+});
+
+test("keeps the JSON block of a hook that its timeout ended and that exits 1", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+
+  // act
+  const hookOutcome = await dispatchDriven(t, { command: "guard", timeout: 1 }, async (child) => {
+    t.mock.timers.tick(1_000);
+    child.stdout?.write('{"decision":"block","reason":"late"}');
+    await child.close(1);
+  });
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: "late" });
 });
 
 test("keeps the exit-2 block of a hook with onFailure block", async (t) => {

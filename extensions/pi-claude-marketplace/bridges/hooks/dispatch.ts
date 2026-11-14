@@ -83,6 +83,7 @@ import {
   compactionBlockedText,
   hookErrorText,
   hookEventLabel,
+  hookFailureText,
   hookMatchLabel,
   hookSaysText,
   postCompactLineText,
@@ -633,14 +634,55 @@ function blocks(outcomes: readonly BucketOutcome[]): HookBlock[] {
   );
 }
 
+// D-PG5-10: Claude Code shows a hook's non-blocking failure on these events.
+// A SessionEnd failure stays a debug line (D-BG-603), and the line after
+// `/compact` already reports a PostCompact failure (D-BG-501).
+function showsFailures(claudeEvent: NoticeEvent): boolean {
+  switch (claudeEvent) {
+    case "PreToolUse":
+    case "PostToolUse":
+    case "PostToolUseFailure":
+    case "UserPromptSubmit":
+    case "SessionStart":
+    case "PreCompact":
+      return true;
+    case "SessionEnd":
+    case "PostCompact":
+      return false;
+  }
+}
+
+/**
+ * D-PG5-10 / D-PG5-12: one `<label> hook error: ...` notice for each hook that
+ * failed without blocking, in routing order. The failures are read from each
+ * hook's own result, because the fold keeps none of them.
+ */
+function failureNotices(
+  claudeEvent: NoticeEvent,
+  label: string,
+  outcomes: readonly BucketOutcome[],
+): string[] {
+  if (!showsFailures(claudeEvent)) {
+    return [];
+  }
+
+  return outcomes.flatMap(({ result }) =>
+    result.kind === "noop" && result.failure !== undefined
+      ? [hookFailureText(label, result.failure)]
+      : [],
+  );
+}
+
 /**
  * HOOK-05: every notice a folded bucket shows the user, labeled `label`: the
- * system messages in routing order (D-CF5-09), then the block notices.
+ * system messages in routing order (D-CF5-09), then the block notices, then
+ * the failure notices (D-PG5-12).
  */
 function hookNotices(claudeEvent: NoticeEvent, label: string, folded: FoldedBucket): string[] {
   return [
     ...systemMessageNotices(claudeEvent, label, folded.outcomes),
     ...blockNotices(claudeEvent, label, folded),
+    ...failureNotices(claudeEvent, label, folded.outcomes),
   ];
 }
 

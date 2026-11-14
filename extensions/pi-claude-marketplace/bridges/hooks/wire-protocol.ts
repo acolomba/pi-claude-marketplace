@@ -7,16 +7,17 @@
 //
 // EXEC-03: every diagnostic path here routes through `hookDebugLog`. The
 // parser NEVER throws -- malformed JSON, unrecognized shapes, and
-// signal-kill exit codes all map to `{ kind: "noop" }` so the dispatch
-// fold cannot crash on bad child output.
+// signal-kill exit codes all map to a `noop` so the dispatch fold cannot
+// crash on bad child output.
 //
 // Wire-protocol branching (D-CF5-11, as Claude Code 2.1.316 reads a hook):
 //   - exit 2          -> block; the reason is the stdout JSON's block or
 //                        deny reason when it prints one, else the trimmed
 //                        stderr, marked `fromStderr`
 //   - exit non-zero   -> the stdout JSON object decides, as on exit 0, when
-//                        stdout is one; else noop (debug-log)
-//   - signal-kill     -> noop (debug-log; `exitCode === null`)
+//                        stdout is one; else a noop that carries the stderr
+//                        as an `exit` failure (debug-log; D-PG5-10)
+//   - signal-kill     -> the same failure noop (debug-log; `exitCode === null`)
 //   - exit 0 + empty  -> noop
 //   - exit 0 + plain text -> on SessionStart and UserPromptSubmit, a mutate
 //                        whose `additionalContext` is the trimmed stdout, as
@@ -64,7 +65,7 @@ export function parseHookStdout(
   }
 
   if (exitCode !== 0) {
-    return nonZeroExitResult(exitCode, stdout);
+    return nonZeroExitResult(exitCode, stdout, stderr);
   }
 
   const trimmed = stdout.trim();
@@ -102,11 +103,14 @@ function plainStdoutResult(trimmed: string, claudeEvent: BucketAEvent): HookExec
 }
 
 // The stdout JSON object a hook printed, or `undefined` when stdout is empty,
-// not JSON, or JSON that is not an object. Quiet: the callers log the outcome.
+// not JSON, or JSON that is not an object, an array included. Quiet: the
+// callers log the outcome.
 function stdoutObject(stdout: string): object | undefined {
   try {
     const parsed: unknown = JSON.parse(stdout.trim());
-    return parsed !== null && typeof parsed === "object" ? parsed : undefined;
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : undefined;
   } catch {
     // Not JSON: the caller falls back to stderr or to noop.
     return undefined;
@@ -136,14 +140,19 @@ function exitTwoBlock(stdout: string, stderr: string): HookExecResult {
 /**
  * D-CF5-11 / E15: on an exit other than 0 and 2, Claude Code ignores the exit
  * code when stdout is a JSON object, and its fields alone decide. A signal
- * kill, and plain or broken stdout, are a non-blocking error: noop.
+ * kill, and plain or broken stdout, are a non-blocking error: a noop that
+ * carries the stderr as written, for the failure notice (D-PG5-10).
  */
-function nonZeroExitResult(exitCode: number | null, stdout: string): HookExecResult {
+function nonZeroExitResult(
+  exitCode: number | null,
+  stdout: string,
+  stderr: string,
+): HookExecResult {
   const exit = exitCode === null ? "signal-kill" : String(exitCode);
   const parsed = exitCode === null ? undefined : stdoutObject(stdout);
   if (parsed === undefined) {
     hookDebugLog(`wire-protocol: non-zero exit (${exit}); defaulting to noop`);
-    return { kind: "noop" };
+    return { kind: "noop", failure: { kind: "exit", stderr } };
   }
 
   hookDebugLog(`wire-protocol: non-zero exit (${exit}); applying its JSON output`);

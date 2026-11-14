@@ -11,16 +11,29 @@
 // A session or compaction hook is named by the value its matcher selects on:
 // `SessionStart:startup`. After `/compact`, each PostCompact hook shows as
 // `PostCompact [<command>] completed successfully` or `... failed` (D-BG-501).
+// A synchronous hook that fails without blocking shows the user one line, as
+// Claude Code 2.1.323 words it (D-PG5-11): `<label> hook error: Failed with
+// non-blocking status code: <stderr>` for a failed exit, with `Error occurred
+// while executing hook command: <error>` after the prefix for a command that
+// cannot be spawned, and `<label> hook error: Failed to run: <error>` for an
+// exception in the runner.
 //
 // A leaf: no Pi and no runtime imports, so every adapter and every output
 // carrier can share one wording.
 
 import { mapPiToClaudeToolName } from "../../domain/components/hook-tool-names.ts";
 
+import type { HookFailure } from "./exec-result.ts";
+
 // Claude Code's reason for a block that names none: an exit 2 with no stderr,
 // and a block or deny decision with no reason.
 const NO_STDERR_REASON = "No stderr output";
 const NO_DECISION_REASON = "Blocked by hook";
+
+// D-PG5-11: Claude Code 2.1.323's head of a non-blocking failure, and the
+// length at which its renderer cuts the line it shows.
+const NON_BLOCKING_PREFIX = "Failed with non-blocking status code: ";
+const FAILURE_LINE_LIMIT = 200;
 
 /**
  * D-CF5-11: the label Claude Code gives a hook outcome: `<Event>`, or
@@ -134,4 +147,43 @@ export function hookErrorText(
   fromStderr: boolean,
 ): string {
   return `${label} hook error: ${blockMessage(reason, command, fromStderr)}`;
+}
+
+// D-PG5-11: the line Claude Code 2.1.323 shows for a failure text: its first
+// line that is not blank, trimmed, and cut to 200 string units and then `…`.
+// The text is trimmed first, so its first line is that line.
+function failureLine(text: string): string {
+  const trimmed = text.trim();
+  const end = trimmed.indexOf("\n");
+  const line = (end === -1 ? trimmed : trimmed.slice(0, end)).trim();
+  return line.length > FAILURE_LINE_LIMIT ? `${line.slice(0, FAILURE_LINE_LIMIT)}…` : line;
+}
+
+// D-PG5-11: the whole failure text before the cut, as Claude Code 2.1.323
+// builds it for each kind of failure.
+function failureMessage(failure: HookFailure): string {
+  switch (failure.kind) {
+    case "exit": {
+      const stderr = failure.stderr.trim();
+      return `${NON_BLOCKING_PREFIX}${stderr === "" ? NO_STDERR_REASON : stderr}`;
+    }
+
+    case "spawn":
+      return `${NON_BLOCKING_PREFIX}Error occurred while executing hook command: ${failure.error}`;
+    case "run":
+      return `Failed to run: ${failure.error}`;
+  }
+}
+
+/**
+ * D-PG5-11: the notice of a synchronous hook that failed without blocking, as
+ * Claude Code 2.1.323 shows it, on one line: `<label> hook error: ` and the
+ * first line of the failure text that is not blank, cut to 200 characters,
+ * prefix included. A failed exit reads `Failed with non-blocking status code:
+ * <stderr>`, or `No stderr output`; a command that cannot be spawned adds
+ * `Error occurred while executing hook command: <error>` after that prefix;
+ * an exception in the runner reads `Failed to run: <error>`.
+ */
+export function hookFailureText(label: string, failure: HookFailure): string {
+  return `${label} hook error: ${failureLine(failureMessage(failure))}`;
 }

@@ -39,6 +39,12 @@
 // (D-BG-503). Only the exec layer sets it, and only the PostCompact notice
 // reads it; no other event's result has it.
 //
+// A `noop` may also carry `failure`, the non-blocking error of a synchronous
+// hook (D-PG5-10): an exit other than 0 and 2 with no JSON object on stdout,
+// a command that cannot be spawned, or an exception in the runner. Only the
+// exec layer and the wire protocol set it, and only the failure notices read
+// it. A block, a mutation, and a stop decide something, so they carry none.
+//
 // The union is a pure leaf -- no imports, no module-level state. NFR-7
 // (discriminated unions + exhaustive `kind` switches with no default arm)
 // drives the shape: any future arm requires updating every `kind`-switch
@@ -55,6 +61,17 @@ export interface PostCompactRun {
 }
 
 /**
+ * D-PG5-10: why a synchronous hook failed without blocking. `exit` holds the
+ * stderr of an exit other than 0 and 2, as the hook wrote it; `spawn` and
+ * `run` hold the error text, with absolute paths redacted, of a command that
+ * cannot be spawned and of an exception in the runner.
+ */
+export type HookFailure =
+  | { readonly kind: "exit"; readonly stderr: string }
+  | { readonly kind: "spawn"; readonly error: string }
+  | { readonly kind: "run"; readonly error: string };
+
+/**
  * D-60-01: four-arm discriminated outcome type. Every wire-protocol parse
  * and every dispatch fold resolves to exactly one of these arms; the
  * `kind` discriminator drives per-event adapter dispatch downstream.
@@ -66,6 +83,7 @@ export type HookExecResult =
       additionalContext?: string;
       systemMessage?: string;
       readonly postCompactRun?: PostCompactRun;
+      readonly failure?: HookFailure;
     }
   | {
       kind: "block";

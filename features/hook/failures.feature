@@ -30,7 +30,7 @@ Feature: Hook failures
       |           |        | {not json} |         |       | UserPromptSubmit operation blocked by hook:\n[${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: failed; blocking because onFailure is "block" |
       |           |        |            | 1       | 3     | UserPromptSubmit operation blocked by hook:\n[${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: timed out; blocking because onFailure is "block" |
 
-  Scenario: A failing prompt hook without onFailure lets the prompt through
+  Scenario: A failing prompt hook without onFailure lets the prompt through and shows its error
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -52,7 +52,9 @@ Feature: Hook failures
     Then the model receives these calls:
       | call | role | text     |
       | 1    | user | say done |
-    Then the hooks show the user no messages
+    Then the hooks show the user these messages:
+      | severity | text                                                                    |
+      | info     | UserPromptSubmit hook error: Failed with non-blocking status code: boom |
 
   Scenario: A succeeding prompt hook with onFailure block lets the prompt through
     Given pi runs with the scripted model
