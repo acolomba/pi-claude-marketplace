@@ -381,6 +381,27 @@ Three conversion rules to know:
 - Agent-level `allowed-tools`, `mcpServers`, `permissionMode`, and `hooks` fields are dropped, with a warning that explains why. Claude Code ignores all four on plugin agents (`allowed-tools` is a slash-command field). The plugin's own MCP servers and its hooks.json still install.
 - A `tools:` entry that names one of the plugin's own MCP tools in Claude Code form, `mcp__plugin_<plugin>_<server>__<tool>`, becomes the pi-subagents entry `mcp:plugin_<plugin>_<server>_/<tool>`. An entry that names a whole server, `mcp__plugin_<plugin>_<server>` or `mcp__plugin_<plugin>_<server>__*`, becomes `mcp:plugin_<plugin>_<server>_`. Under Pi's built-in MCP, these entries are `mcp:plugin_<plugin>_<server>/<tool>` and `mcp:plugin_<plugin>_<server>`. The grant names the server of the MCP implementation that is active when the agent is written. A per-tool `disallowedTools` entry of an agent without `tools:` becomes, in `excludeTools`, the tool name that Pi's built-in MCP gives the tool: `mcp__plugin_<plugin>_<server>__<tool>` with each character other than a letter, a digit, or `_` replaced by `_`. Pi shortens a name longer than 64 characters and adds a hash. Under pi-mcp-adapter, `excludeTools` receives the name the adapter registers, including its 64-character shortened name or a name with `.` changed to `_` (D-PG1-10, `features/mcp-server/agent-grants.feature`). An agent installed before this release keeps its full name in `excludeTools` until you update or reinstall the plugin, or disable and enable it. A grant of a server that Pi's built-in MCP cannot run, such as an `sse` server, is dropped with a warning under built-in and kept under pi-mcp-adapter. A per-tool entry must match a tool name that the server reports exactly. If the server renamed or removed the tool, the name is misspelled, or the tool name holds a character that Claude Code replaces, such as `.` or a space, the whole agent launch fails. To avoid this, grant the whole server, `mcp:plugin_<plugin>_<server>_`, with an agent override (see below). The MCP tool names of other servers, including servers that the install leaves out, are dropped with a warning.
 
+This extension reads the frontmatter of a plugin agent as YAML, as Claude Code does (D-PG7-01). So a quoted value loses its quote marks: `name: "x"` names the agent `<plugin>:x`. A comment after a value is not part of the value: `tools: Read # note` grants only `read`. `tools`, `disallowedTools`, and `skills` can be YAML lists. A number or a boolean is read as its text.
+
+Some values make YAML refuse the whole block. When that happens, this extension quotes each one-line value that is not quoted and that holds a colon, or that starts with `*`, `&`, `!`, `%`, `@`, or a backtick. Then it reads the block once more. So `description: Reviews: code and tests` and `tools: *` still work. On that second read, a comment on a quoted line is kept as text, as in Claude Code.
+
+YAML also refuses these forms, and the repair does not change them:
+
+- a value that starts with `[` or `{` and is not a valid list or mapping
+- a block indented with tabs
+- a key written twice
+- a quote that never closes
+
+We assume, but have not checked, that Claude Code also refuses a key written twice and a block indented with tabs.
+
+When the block still does not parse, the agent loads as Claude Code 2.1.323 loads it. Its name is its file name, its description is `Agent from <plugin> plugin`, and it gets every tool, because no `tools` line applies. Install, update, reinstall, enable, and apply add this note (D-PG7-04):
+
+```text
+agent "demo:broken": its source frontmatter could not be parsed (Missing closing "quote at line 3, column 12); the agent is loaded with no frontmatter fields, so its tools, model, and description settings are not applied.
+```
+
+Claude Code's retry quotes more values than this one does; see [Agents](#agents). Evidence: the scenarios "Quoted frontmatter values are listed without their quote marks", "A comment after a frontmatter value is not part of the value", "Installing an agent whose frontmatter cannot be parsed reports the agent", and "An agent whose frontmatter cannot be parsed is listed under its file name with Claude Code's fallback description" in `features/agent/frontmatter.feature`.
+
 An ordinary generated agent names no launch mode. Its file holds no `async` key, so pi-subagents and its own configuration choose the mode (D-PG3-01). Claude Code also runs a subagent in the background unless it is told otherwise. With pi-subagents 0.88.1 and no configuration, a call that names no mode runs such an agent as a detached background child. With `asyncByDefault: false` in pi-subagents' configuration, the same call runs it in the foreground. This extension adds no setting of its own for the choice.
 
 This extension writes `async: true` in two cases (D-PG3-02):
@@ -681,6 +702,10 @@ The behaviors below differ from Claude Code. Each item names its reason: a recor
 - Under Pi's built-in MCP, the resolved values of each server, secrets included, are in the Pi session, where every extension of the same Pi process can read them. Reason: a project decision (D-MB-14, which amends D-MB-04). Pi expands variables with rules that are not the rules of Claude Code, so this extension resolves them itself (`dist/core/extensions/loader.js`, `dist/core/resolve-config-value.js`). See [Variables under Pi's built-in MCP](#variables-under-pis-built-in-mcp).
 - Under Pi's built-in MCP, a remote server with an `oauth.clientId` and no `oauth.callbackPort` signs in with the redirect address `http://127.0.0.1:<port>/callback`. Claude Code uses `localhost`. Reason: a project decision (D-MB-25). This extension writes `callbackUrl` only for a port that the plugin names (`dist/extensions/mcp/oauth.js`).
 - Under pi-mcp-adapter and Pi's built-in MCP, the withheld credentials follow the deny-lists of Claude Code 2.1.291, not 2.1.318. Reason: a project decision (D-MB-27). The lists are pinned until a later release checks them again (`test/integration/mcp-builtin-encoding-conformance.test.ts`).
+
+### Agents
+
+- When YAML refuses an agent's frontmatter, Claude Code's retry also quotes a value that holds any of the characters `{}[]*&#!|>%@` or a backtick anywhere, and it turns leading tabs into spaces. This extension quotes only the values that [Customizing generated agents](#customizing-generated-agents) names. So such a file can lose its fields here and keep them in Claude Code. Reason: a project decision (D-PG7-02). The repair is shared with skills, and the wider set would change how skills are read.
 
 ## Further reading
 

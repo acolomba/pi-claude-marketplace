@@ -5412,6 +5412,18 @@ Plugins updated: 3 plugins · Run /reload to apply
 
 Emitted once by `notifyBackgroundUpdate` after a background update that moved at least one plugin. A background update runs after the first message of a tui session, once for each extension runtime. The notice names plugins, without their marketplace. A plugin is named once even when it was updated in both scopes or from two marketplaces (D-PL8-21), and names keep the order of the update. The background update changes the project scope only when Pi trusts the project (D-LOC-01). Two names are joined with "and". Three or more names are counted instead. Severity: `info`. The notice always asks for `/reload`, because Claude Code reloads a plugin in the running session only for a plugin source kind this extension does not have (D-PL8-11). A background update that moved nothing, failed, or was skipped prints nothing, and its detail goes to the debug log (`PI_CLAUDE_MARKETPLACE_DEBUG=1`). A json or rpc session never runs the background update, so it never receives its `background-update` entry; the payload kind stays in the schema (D-PL8-20, see [`docs/json-output.md`](json-output.md)). The byte form is locked by `test/architecture/background-update-notice.test.ts`, not by the catalog-uat walk, whose parser skips this section.
 
+### Agent frontmatter not parsed (PG-AGENT-05 / D-PG7-04)
+
+<!-- catalog-state: agent-frontmatter-not-parsed -->
+
+```text
+Plugin "demo" [user] installed; 1 declared component has a note.
+
+agent "demo:broken": its source frontmatter could not be parsed (Missing closing "quote at line 3, column 12); the agent is loaded with no frontmatter fields, so its tools, model, and description settings are not applied.
+```
+
+Emitted when a plugin agent's frontmatter does not parse as YAML, even after the one-line repair. The agent still installs, under its file name, with no frontmatter fields. Every staging verb prints the note: install, update, reinstall, enable, and the apply, import, and marketplace update cascades. It comes from the discovery warnings of the agents bridge (`extensions/pi-claude-marketplace/bridges/agents/discover.ts`) and is shown as a staging diagnostic after the command's own row. The note names the agent as `subagent list` shows it and holds only the first line of the parser's message, so it is one line and holds no path. Severity: `warning`. The byte form is locked by `test/bridges/agents/discover.test.ts` and by the scenario "Installing an agent whose frontmatter cannot be parsed reports the agent" in `features/agent/frontmatter.feature`, not by the catalog-uat walk, whose parser skips this section.
+
 ### Hook notice (HOOK-05 / D-CF5-14 / D-CF5-24)
 
 <!-- catalog-state: hook-notice -->
