@@ -9,12 +9,13 @@
  * `STUB_TAG`. Any other request gets an empty result,
  * and a notification gets no reply. It appends every message
  * it receives to `<harness dir>/mcp-stub-requests.jsonl`, with the plugin and
- * server names it was started for, writes its pid to
- * `<harness dir>/mcp-stub-<pid>.pid`, and exits when its stdin closes. The
- * harness directory lies in the sandbox home, which the adapter passes on as
- * `HOME`, so each scenario's stub logs into that scenario's directory, and
- * the profile release finds a stub that outlived Pi by its pid. The module is
- * both the stub and the place the steps read its path and its log from.
+ * server names it was started for and the name of the tool it lists, writes
+ * its pid to `<harness dir>/mcp-stub-<pid>.pid`, and exits when its stdin
+ * closes. The harness directory lies in the sandbox home, which the adapter
+ * passes on as `HOME`, so each scenario's stub logs into that scenario's
+ * directory, and the profile release finds a stub that outlived Pi by its
+ * pid. The module is both the stub and the place the steps read its path and
+ * its log from.
  */
 
 import { appendFileSync, rmSync, writeFileSync } from "node:fs";
@@ -35,12 +36,13 @@ const FALLBACK_PROTOCOL_VERSION = "2025-06-18";
 
 /**
  * One message a stub received, as it logged it: the plugin and server it was
- * started for, whether the message was a notification, and the message's
- * method and params, as sent.
+ * started for, the tool it lists, whether the message was a notification,
+ * and the message's method and params, as sent.
  */
 export interface StubRequest {
   readonly plugin: string;
   readonly server: string;
+  readonly tool: string;
   readonly notification: boolean;
   readonly method: unknown;
   readonly params: unknown;
@@ -61,6 +63,7 @@ function checkRequest(record: unknown): StubRequest {
     !isRecord(record) ||
     typeof record.plugin !== "string" ||
     typeof record.server !== "string" ||
+    typeof record.tool !== "string" ||
     typeof record.notification !== "boolean"
   ) {
     throw new Error(`invalid MCP stub request record: ${JSON.stringify(record)}`);
@@ -69,6 +72,7 @@ function checkRequest(record: unknown): StubRequest {
   return {
     plugin: record.plugin,
     server: record.server,
+    tool: record.tool,
     notification: record.notification,
     method: record.method,
     params: record.params,
@@ -98,18 +102,20 @@ export async function readStubRequests(harness: string): Promise<StubRequest[]> 
 }
 
 /**
- * Returns whether the stub started for `plugin` and `server` logged a
- * `tools/list` request among `requests`.
+ * Returns the tool of each `tools/list` request among `requests` that the
+ * stub started for `plugin` and `server` logged, or none when it logged none.
  */
 export function listedTools(
   requests: readonly StubRequest[],
   plugin: string,
   server: string,
-): boolean {
-  return requests.some(
-    (request) =>
-      request.plugin === plugin && request.server === server && request.method === "tools/list",
-  );
+): string[] {
+  return requests
+    .filter(
+      (request) =>
+        request.plugin === plugin && request.server === server && request.method === "tools/list",
+    )
+    .map((request) => request.tool);
 }
 
 /**
@@ -152,9 +158,6 @@ function callResult(params: unknown, tool: string): unknown {
   return { content: [{ type: "text", text: echoed }] };
 }
 
-/** The names of the tools the stub lists. */
-export const STUB_TOOL_NAMES: readonly string[] = [ECHO_TOOL.name];
-
 function resultFor(method: unknown, params: unknown, tool: string): unknown {
   switch (method) {
     case "initialize":
@@ -188,7 +191,14 @@ function serve(plugin: string, server: string, tool: string): void {
 
     const message = JSON.parse(line) as JsonRpcMessage;
     const notification = message.id === undefined;
-    const record = { plugin, server, notification, method: message.method, params: message.params };
+    const record = {
+      plugin,
+      server,
+      tool,
+      notification,
+      method: message.method,
+      params: message.params,
+    };
     appendFileSync(log, `${JSON.stringify(record)}\n`);
     if (!notification) {
       const result = resultFor(message.method, message.params, tool);

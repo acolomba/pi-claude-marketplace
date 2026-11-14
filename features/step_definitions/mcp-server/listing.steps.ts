@@ -136,10 +136,12 @@ Given(
   },
 );
 
-// Done once the stub logged a tools/list and no stub is running, which means
-// the adapter closed the listing connection. The plugin is the argument the
-// stub logs, with run tokens expanded, so a stub started with
-// `${CLAUDE_PLUGIN_ROOT}` is named by `{home}/marketplaces/<name>/plugins/<plugin>`.
+// Done once the stub logged a tools/list for the server and either no stub is
+// running or Pi has a tool of the server, which pi-mcp-adapter registers after
+// its listing whether it closes the connection or keeps it (D-PG9-01). The
+// plugin is the argument the stub logs, with run tokens expanded, so a stub
+// started with `${CLAUDE_PLUGIN_ROOT}` is named by
+// `{home}/marketplaces/<name>/plugins/<plugin>`.
 Given(
   "pi-mcp-adapter has listed the tools of the stub mcp server {string} of the plugin {string}",
   async function (this: ScenarioWorld, server: string, pluginText: string) {

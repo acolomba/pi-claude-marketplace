@@ -7,9 +7,8 @@
  * The plugin's `.mcp.json` names one stdio server that runs the MCP
  * stub with this process's Node, given the plugin and server names, so the
  * stub logs which server it is. When a session starts, pi-mcp-adapter lists
- * the tools of a server it has not cached and then disconnects, in the
- * background, so a scenario waits until that listing is over before it
- * prompts.
+ * the tools of a server it has not cached in the background, so a scenario
+ * waits until that listing is over before it prompts.
  *
  * The call step scripts the model's call of one of the stub's tools through
  * whichever MCP implementation the profile runs: pi-mcp-adapter's `mcp` proxy,
@@ -25,7 +24,6 @@
 import assert from "node:assert/strict";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { setTimeout as pause } from "node:timers/promises";
 
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
@@ -37,8 +35,8 @@ import {
   HOOK_RESULT_OBSERVER_EXTENSION,
   HOOK_RESULT_OBSERVER_LOG,
 } from "../../lib/hook-result-observer.ts";
-import { mcpImplementationLaunch } from "../../lib/mcp-implementation.ts";
-import { MCP_STUB_SERVER, readStubRequests, stubPidFiles } from "../../lib/mcp-stub-server.ts";
+import { mcpImplementationLaunch, waitForStubListing } from "../../lib/mcp-implementation.ts";
+import { MCP_STUB_SERVER } from "../../lib/mcp-stub-server.ts";
 import { writePublishedPluginFiles } from "../../lib/published-marketplace.ts";
 import { expandTokens, projectTokens } from "../../lib/run-tokens.ts";
 import { writeScenarioFile } from "../../lib/scenario-file.ts";
@@ -52,11 +50,6 @@ import { PROFILE_PI_START_TIMEOUT_MS } from "../../support/world.ts";
 
 import type { HookRun } from "../../lib/hook-recorder.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
-
-// A Node start and one listing take well under a second; the deadline leaves
-// room for a loaded runner and stays inside the step timeout.
-const HOOK_STUB_LISTING_DEADLINE_MS = 15_000;
-const HOOK_STUB_LISTING_RECHECK_MS = 100;
 
 const MCP_FILE = ".mcp.json";
 
@@ -306,21 +299,6 @@ async function writeHookStubMcpFile(
   assert.strictEqual(await readFile(written, "utf8"), text);
 }
 
-// True once the stub logged the adapter's `tools/list` for that server and no
-// stub process is left, which means the adapter closed the listing.
-async function hookStubListingDone(
-  harness: string,
-  plugin: string,
-  server: string,
-): Promise<boolean> {
-  const requests = await readStubRequests(harness);
-  const listed = requests.some(
-    ({ method, plugin: from, server: name }) =>
-      method === "tools/list" && from === plugin && name === server,
-  );
-  return listed && (await stubPidFiles(harness)).length === 0;
-}
-
 Given(
   "the published plugin {string} of the marketplace {string} has the stub mcp server {string} for its hooks",
   async function (this: ScenarioWorld, plugin: string, name: string, server: string) {
@@ -345,15 +323,7 @@ Given(
 Given(
   "pi-mcp-adapter has listed the hooks' stub mcp server {string} of the plugin {string}",
   async function (this: ScenarioWorld, server: string, plugin: string) {
-    const harness = this.profileHarness();
-    const deadline = Date.now() + HOOK_STUB_LISTING_DEADLINE_MS;
-    while (!(await hookStubListingDone(harness, plugin, server))) {
-      assert.ok(
-        Date.now() < deadline,
-        `pi-mcp-adapter did not end its listing of ${plugin}/${server} within ${HOOK_STUB_LISTING_DEADLINE_MS} ms`,
-      );
-      await pause(HOOK_STUB_LISTING_RECHECK_MS);
-    }
+    await waitForStubListing("adapter", this.pi, this.profileHarness(), plugin, server);
   },
 );
 
