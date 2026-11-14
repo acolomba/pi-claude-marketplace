@@ -3,12 +3,15 @@ import { writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
+import { convertAgent } from "../../extensions/pi-claude-marketplace/bridges/agents/convert.ts";
 import {
   createHermeticEnvironment,
   withHermeticEnvironment,
 } from "../platform/hermetic-environment.ts";
 
 import { findCachedPeer, importPeerModule, type OptionalPeer } from "./optional-peer.ts";
+
+import type { RawAgentFrontmatter } from "../../extensions/pi-claude-marketplace/bridges/agents/types.ts";
 
 interface ChildLaunchInput {
   readonly host: "runner";
@@ -39,6 +42,7 @@ interface ChildLaunchModule {
       readonly ambientExtensions: boolean;
       readonly processEnv: { readonly MCP_DIRECT_TOOLS?: string };
     };
+    readonly config: { readonly fanoutChild: boolean };
   };
 }
 
@@ -76,6 +80,29 @@ function runnerInput(cwd: string): ChildLaunchInput {
     inheritSkills: false,
     requiredExtensions: [],
   };
+}
+
+/** The value of the one `<key>: ` line the bridge writes for `raw`. */
+function convertedLine(raw: RawAgentFrontmatter, key: string): string {
+  const agent = convertAgent({
+    pluginName: "demo",
+    pluginRoot: "/root",
+    pluginDataDir: "/data",
+    knownSkills: [],
+    discovered: {
+      sourceName: "lead",
+      generatedName: "pi-claude-marketplace-demo-lead",
+      sourcePath: "/abs/lead.md",
+      sourceHash: "abc",
+      raw,
+      body: "Body.\n",
+    },
+    sourceHash: "abc",
+    mapModel: false,
+  });
+  const lines = agent.fileContent.split("\n").filter((line) => line.startsWith(`${key}: `));
+  assert.strictEqual(lines.length, 1);
+  return (lines[0] ?? "").slice(`${key}: `.length);
 }
 
 test("unrestricted runner keeps ambient adapter tools available", async (t) => {
@@ -228,4 +255,20 @@ test("read-only capability ceiling keeps adapter tools suppressed", async (t) =>
   // assert
   assert.deepStrictEqual(child.session.tools, ["read"]);
   assert.strictEqual(child.session.processEnv.MCP_DIRECT_TOOLS, "__none__");
+});
+
+test("PG-AGENT-03: the tools written for an Agent grant authorize fan-out", async (t) => {
+  // arrange
+  const { launch } = await loadLaunch(t);
+  const { cwd } = await createHermeticEnvironment(t, "child-launch-agent-grant-");
+  const tools = convertedLine({ description: "d", tools: "Read, Agent(demo:helper)" }, "tools");
+
+  // act
+  const child = launch.buildInProcessChildLaunch({ ...runnerInput(cwd), tools: tools.split(",") });
+
+  // assert
+  assert.deepStrictEqual(
+    { tools: child.session.tools, fanoutChild: child.config.fanoutChild },
+    { tools: ["read", "subagent"], fanoutChild: true },
+  );
 });

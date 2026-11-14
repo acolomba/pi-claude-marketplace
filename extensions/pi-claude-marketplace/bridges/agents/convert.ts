@@ -74,7 +74,10 @@ const LONG_CONTEXT_SUFFIX = "[1m]";
 /**
  * AG-7 user contract: Claude tool name -> Pi tool name. Tokens not present
  * here are dropped. A `Map`, so a token such as `constructor` cannot find an
- * `Object.prototype` member.
+ * `Object.prototype` member. D-PG7-08 / PG-AGENT-03: `Agent` and its alias
+ * `Task` map to pi-subagents' nested delegation tool. The agent types an
+ * `Agent(...)` entry lists are not applied, as Claude Code does not apply
+ * them inside a subagent.
  */
 const TOOL_MAP: ReadonlyMap<string, string> = new Map([
   ["Read", "read"],
@@ -84,6 +87,8 @@ const TOOL_MAP: ReadonlyMap<string, string> = new Map([
   ["Grep", "grep"],
   ["Glob", "find"],
   ["LS", "ls"],
+  ["Agent", "subagent"],
+  ["Task", "subagent"],
 ]);
 
 /**

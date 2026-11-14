@@ -2538,6 +2538,158 @@ Body content.
   });
 });
 
+describe("D-PG7-08 Agent and Task grants", () => {
+  for (const grant of ["Agent", "Agent(demo:helper)", "Task", "Task(a, b)"]) {
+    test(`a ${grant} grant maps to subagent and writes no type list`, () => {
+      // arrange
+      const expectedFileContent = expectedMcpAgentFile({
+        toolsField: "tools: read,subagent",
+        inheritSkills: false,
+        droppedTools: [],
+        warnings: [],
+      });
+
+      // act
+      const agent = convertMcpAgent({ description: "d", tools: `Read, ${grant}` }, undefined);
+
+      // assert
+      assert.strictEqual(agent.fileContent, expectedFileContent);
+      assert.deepStrictEqual(agent.droppedTools, []);
+      assert.deepStrictEqual(agent.warnings, []);
+    });
+  }
+
+  test("an Agent grant with a type list writes neither an allowedAgents key nor the list", () => {
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", tools: "Read, Agent(demo:helper)" },
+      undefined,
+    );
+
+    // assert
+    assert.doesNotMatch(agent.fileContent, /allowedAgents|demo:helper/);
+  });
+
+  test("a type list with a comma, a space, and a line break maps to the one token subagent", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: read,subagent",
+      inheritSkills: false,
+      droppedTools: [],
+      warnings: [],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      { description: "d", tools: "Read, Agent(first, second\nthird)" },
+      undefined,
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("an Agent grant alone writes the tools line subagent", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: subagent",
+      inheritSkills: false,
+      droppedTools: [],
+      warnings: [],
+    });
+
+    // act
+    const agent = convertMcpAgent({ description: "d", tools: "Agent" }, undefined);
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("Agent and Task together write one subagent", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: subagent",
+      inheritSkills: false,
+      droppedTools: [],
+      warnings: [],
+    });
+
+    // act
+    const agent = convertMcpAgent({ description: "d", tools: "Agent, Task" }, undefined);
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  for (const { tools, disallowedTools } of [
+    { tools: "Read, Agent", disallowedTools: "Task" },
+    { tools: "Read, Task", disallowedTools: "Agent(x)" },
+  ]) {
+    test(`D-PG7-14: disallowedTools ${disallowedTools} removes the subagent that ${tools} grants`, () => {
+      // arrange
+      const expectedFileContent = expectedMcpAgentFile({
+        toolsField: "tools: read",
+        inheritSkills: false,
+        droppedTools: [],
+        warnings: [],
+      });
+
+      // act
+      const agent = convertMcpAgent({ description: "d", tools, disallowedTools }, undefined);
+
+      // assert
+      assert.strictEqual(agent.fileContent, expectedFileContent);
+    });
+  }
+
+  test("AG-11: an Agent grant that disallowedTools Task removes refuses the conversion", () => {
+    // act
+    const convert = (): ConvertedAgent =>
+      convertMcpAgent({ description: "d", tools: "Agent", disallowedTools: "Task" }, undefined);
+
+    // assert
+    assert.throws(convert, {
+      message:
+        'Cannot convert agent "bot" in plugin "acme": the mapped tool list is empty ' +
+        '(pi-subagents has no safe representation of "no tools"). ' +
+        "Source tools: Agent; disallowedTools: Task.",
+    });
+  });
+
+  test("with no tools list a disallowed Agent becomes excludeTools: subagent with no unmapped warning", () => {
+    // arrange
+    const expectedFileContent = `---
+name: acme:bot
+description: d
+aliases: pi-claude-marketplace-acme-bot
+excludeTools: subagent
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: true
+advertise: true
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: bot
+  sourcePath: /abs/path/source.md
+  droppedFields: []
+  droppedTools: []
+  warnings:
+    - ${EXCLUDE_TOOLS_FLOOR_WARNING}
+---
+
+Body content.
+`;
+
+    // act
+    const agent = convertMcpAgent({ description: "d", disallowedTools: "Agent" }, undefined);
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+    assert.deepStrictEqual(agent.warnings, [EXCLUDE_TOOLS_FLOOR_WARNING]);
+  });
+});
+
 describe("listedToolNames", () => {
   for (const { label, value, expected } of [
     { label: "an absent value", value: undefined, expected: [] },

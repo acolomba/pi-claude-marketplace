@@ -1032,3 +1032,71 @@ Feature: Agent frontmatter
     Then the installation record of the user scope holds these agents of "demo@fixtures":
       | agent                        |
       | pi-claude-marketplace-demo-x |
+
+  Scenario Outline: An agent that grants <grant> gets pi-subagents' subagent tool
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file    | name | description          | tools         | body             |
+      | lead.md | lead | Delegates the tasks. | Read, <grant> | Answer the task. |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply               | tool     | arguments                            |
+      |                     | subagent | {"action":"get","agent":"demo:lead"} |
+      | The agent is shown. |          |                                      |
+    When the user prompts "Show the agent."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                                              |
+      | 1    | user        | Show the agent.                                                                                                                                                                                                                                                                                                   |
+      | 2    | user        | Show the agent.                                                                                                                                                                                                                                                                                                   |
+      | 2    | assistant   | tool call subagent {"action":"get","agent":"demo:lead"}                                                                                                                                                                                                                                                           |
+      | 2    | tool result | subagent returned: agent demo:lead\npath {agent dir}/agents/pi-claude-marketplace-demo-lead.md\ndescription Delegates the tasks.\naliases pi-claude-marketplace-demo-lead\ntools read, subagent\nsystem prompt mode replace\ninherit project context true\ninherit skills false\nsystem prompt:\nAnswer the task. |
+
+    Examples:
+      | grant              |
+      | Agent              |
+      | Agent(demo:helper) |
+      | Task               |
+      | Task(a, b)         |
+
+  Scenario: A disallowed Agent or Task entry removes the subagent tool from a tools list
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file     | name  | description   | tools       | disallowedTools | body             |
+      | agent.md | agent | Denies Task.  | Read, Agent | Task            | Answer the task. |
+      | task.md  | task  | Denies Agent. | Read, Task  | Agent           | Answer the task. |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply                 | tool     | arguments                             |
+      |                       | subagent | {"action":"get","agent":"demo:agent"} |
+      |                       | subagent | {"action":"get","agent":"demo:task"}  |
+      | The agents are shown. |          |                                       |
+    When the user prompts "Show the agents."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                               |
+      | 1    | user        | Show the agents.                                                                                                                                                                                                                                                                                   |
+      | 2    | user        | Show the agents.                                                                                                                                                                                                                                                                                   |
+      | 2    | assistant   | tool call subagent {"action":"get","agent":"demo:agent"}                                                                                                                                                                                                                                           |
+      | 2    | tool result | subagent returned: agent demo:agent\npath {agent dir}/agents/pi-claude-marketplace-demo-agent.md\ndescription Denies Task.\naliases pi-claude-marketplace-demo-agent\ntools read\nsystem prompt mode replace\ninherit project context true\ninherit skills false\nsystem prompt:\nAnswer the task. |
+      | 3    | user        | Show the agents.                                                                                                                                                                                                                                                                                   |
+      | 3    | assistant   | tool call subagent {"action":"get","agent":"demo:agent"}                                                                                                                                                                                                                                           |
+      | 3    | tool result | subagent returned: agent demo:agent\npath {agent dir}/agents/pi-claude-marketplace-demo-agent.md\ndescription Denies Task.\naliases pi-claude-marketplace-demo-agent\ntools read\nsystem prompt mode replace\ninherit project context true\ninherit skills false\nsystem prompt:\nAnswer the task. |
+      | 3    | assistant   | tool call subagent {"action":"get","agent":"demo:task"}                                                                                                                                                                                                                                            |
+      | 3    | tool result | subagent returned: agent demo:task\npath {agent dir}/agents/pi-claude-marketplace-demo-task.md\ndescription Denies Agent.\naliases pi-claude-marketplace-demo-task\ntools read\nsystem prompt mode replace\ninherit project context true\ninherit skills false\nsystem prompt:\nAnswer the task.   |
