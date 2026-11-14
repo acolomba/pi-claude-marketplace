@@ -4,16 +4,16 @@ milestone: parity-gaps
 milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 4
 current_phase_name: Skill and Workflow Install Defects
-status: ready_to_discuss
-stopped_at: Phase 03 complete; Phase 4 discuss next
-last_updated: "2026-11-14T01:03:37.300Z"
+status: ready_to_execute
+stopped_at: Phase 4 planned (6 plans, 3 waves); execution next
+last_updated: "2026-11-14T02:50:39.000Z"
 last_activity: 2026-11-13
-last_activity_desc: Phase 03 complete, transitioned to Phase 4
+last_activity_desc: Phase 4 planned and checked
 state_head: a98ae4aea3af1aaea49e59643c32f579b6e3b2c8
 progress:
   total_phases: 11
   completed_phases: 3
-  total_plans: 29
+  total_plans: 35
   completed_plans: 29
   percent: 27
 ---
@@ -27,14 +27,14 @@ See: `.planning/PROJECT.md` (updated 2026-11-13 after parity-gaps Phase 2)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 03 — Background Subagents
+**Current focus:** Phase 4 — Skill and Workflow Install Defects
 
 ## Current Position
 
 Phase: 4 — Skill and Workflow Install Defects
-Plan: not planned
-Status: Ready to discuss Phase 4
-Last activity: 2026-11-13 — Phase 03 complete, transitioned to Phase 4
+Plan: 0 of 6 complete
+Status: Ready to execute Phase 4
+Last activity: 2026-11-13 — Phase 4 planned (6 plans, 3 waves), plan check passed with one accepted warning
 
 Progress: [███░░░░░░░] 27%
 
