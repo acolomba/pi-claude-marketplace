@@ -293,7 +293,20 @@ Plans:
   3. A fixture plugin has a workflow `scan` and a command whose body says `Workflow({ name: "demo:scan" })`. The scripted model runs the command, calls `workflow` with the name copied from the prompt it received, and the run completes. A reference that the source wrote with a leading slash keeps it (PG-WF-01).
   4. A plugin with an agent `reader` (`tools: Read`) and a workflow that uses `agentType: "demo:reader"` installs with a note that the workflow does not keep the restriction, and `info` shows the note. The workflow compatibility page says the same, and the request to pi-dynamic-workflows is drafted under `.planning/upstream/` for the maintainer to file (PG-SEC-01).
 
-**Plans**: TBD
+**Plans**: 6 plans
+
+Plans:
+**Wave 1**
+- [ ] 04-01-PLAN.md -- Wave 1: install only the skills a root-source entry lists, and prove that an update or a reinstall leaves nothing of a dropped skill
+- [ ] 04-04-PLAN.md -- Wave 1: keep a workflow reference as its author wrote it, bare in a tool call and with a slash as a command, and let the scripted model start the workflow by that name
+- [ ] 04-05-PLAN.md -- Wave 1: read the literal agent types of a workflow script, and print the restriction note at install and at update
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 04-02-PLAN.md -- Wave 2: list a root-source entry's listed skills in `info`, on resolved and refused rows
+- [ ] 04-03-PLAN.md -- Wave 2: point a relative link to a sibling skill at the sibling's staged folder, in `SKILL.md` and supporting Markdown
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 04-06-PLAN.md -- Wave 3: show the restriction note in `info`, and record the compatibility row, the engine request draft, and the CHANGELOG lines
 
 ### Phase 5: Stop Continuation and Hook Failures
 

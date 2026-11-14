@@ -702,34 +702,42 @@ Probe P4 printed the rows that `the staged skills directory of the project scope
 | A3 | [ASSUMED] The background `workflow` call settles inside the model turn in every run. It did in the one probe (P2), with an agent-less script. | PG-WF-01 scenario | A flaky scenario; the plan's step should wait on the run-ending record. |
 | A4 | [ASSUMED] The install diagnostic prints the new notes in a stable order next to other workflow notes. Existing features show file-name order; the sort rule was not traced. | PG-SEC-01 scenario | A table that pins the wrong order; the executor reads the actual output once. |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+Each question below is settled by the plan and task its RESOLVED line names. Assumptions A1 to A4 and the unclassified PG-SKILL-04 edge are not resolved by this; they stay flagged in the plans and in `04-COVERAGE.md`.
 
 1. **Does D-PG4-07 require orchestrator threading?**
    - What we know: the bridge holds every input of the map; the named `marketplace/shared.ts` path stages nothing.
    - What's unclear: whether the maintainer wants the map on the public staging input for another reason.
    - Recommendation: build it in `prepareStageSkills` and record that reading in the plan. It is a reversible, autonomously decided item.
+   - RESOLVED: no. Task 04-03-01 puts a required `siblingSkills` member on the staging context and builds it in `prepareStageSkills`; `StageSkillsInput` gains no field and no orchestrator is edited. Plan 04-03 records this reading of D-PG4-07, and the summary of 04-06 repeats it for the orchestrator.
 
 2. **A workflow that shares its name with a command of the plugin still gets a slash.**
    - What we know: `names.commands` includes a command that staging drops for the workflow (`features/workflow/collisions.feature` covers that drop), and the command arm wins.
    - What's unclear: whether to exclude workflow-named commands from the reference inventory.
    - Recommendation: keep D-PG4-08's precedence, record the residual in the compatibility page or as a BACKLOG line, and do not change the inventory in this phase (it also feeds the cross-plugin conflict guard).
+   - RESOLVED: the precedence stays and the inventory is not changed. Task 04-04-01 states the residual in the "Naming" section of `docs/workflows-compatibility.md`, and task 04-06-02 lists a BACKLOG line for the orchestrator.
 
 3. **Agent-preloaded skill bodies.**
    - What we know: `bridges/agents/skill-preload.ts:89` inlines a skill's source body into an agent under "Base directory for this skill: <target>", so a `../b/` path there is also dead. The requirement names staged `SKILL.md` and supporting Markdown only.
    - Recommendation: leave it out; note it as a residual. A pure domain function would make a later fix cheap, because `skillSources` rows already hold `sourcePath`, `targetPath`, and `generatedName`.
+   - RESOLVED: left out. Plan 04-03 builds the rewrite as a pure domain function and names the agent-preload case as a residual, and task 04-06-02 lists a BACKLOG line for the orchestrator.
 
 4. **Where each scenario lives.**
    - What we know: `features/plugin/component-directories.feature` holds the D-CF1-06 scenarios; `features/skill/model-reads.feature` shows the model reading a staged file; `features/workflow/run.feature` holds runs; `features/workflow/refusals.feature` holds install notes on scripts but is titled for refusals.
    - Recommendation: the planner reads `.agents/skills/cucumber/rules/layout.md` and `features.md`, and names the files and scenario titles in the plan. A new `features/workflow/` feature for the restriction note is likely cleaner than extending "Workflow refusals".
+   - RESOLVED: four new feature files, each named by its title under the layout rule: `features/skill/root-source-entries.feature` (plans 04-01 and 04-02), `features/skill/sibling-links.feature` (plan 04-03), `features/workflow/references.feature` (plan 04-04), and `features/workflow/agent-restrictions.feature` (plans 04-05 and 04-06). Each task names its scenarios by title. No existing feature file is edited.
 
 5. **A constant-bound `agentType` gives no note.**
    - What we know: the official `claude-security` script binds two agent types to top-level constants and passes the identifiers, so its read-only `scan-loader` agent gets no note. D-PG4-11 accepts this ("a missing note, never a false one").
    - What's unclear: whether the maintainer wants the walk to follow a `const` whose initializer is a string literal. It would cover the one official script that needs it, at the cost of a small scope rule.
    - Recommendation: implement D-PG4-11 as written (literal property values only), state the residual in the compatibility row, and leave the extension as a BACKLOG line.
+   - RESOLVED: literal property values only, in task 04-05-01. Task 04-06-02 states the residual in the compatibility row and lists a BACKLOG line for the orchestrator.
 
 6. **A file at the marketplace root.**
    - What we know: `writePublishedPluginFile` writes under `plugins/<plugin>/`. Passing `../../skills/a/SKILL.md` works (probes P3, P4), because the guard is the publication root, but it hides the fixture's meaning.
    - Recommendation: add a small `features/lib/published-marketplace.ts` writer and a step in the marketplace publishing topic module for a file at the marketplace root.
+   - RESOLVED: task 04-01-01 adds `writePublishedMarketplaceFiles` and one Given in `features/step_definitions/marketplace/publishing.steps.ts`; plan 04-03 reuses the step.
 
 ## Environment Availability
 
