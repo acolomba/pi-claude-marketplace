@@ -1,186 +1,100 @@
 ---
 phase: 03-background-subagents
-reviewed: 2026-11-13T23:51:26Z
+reviewed: 2026-11-14T00:37:04Z
 depth: standard
-iteration: 1
-reviewed_head: 09919bba
-files_reviewed: 48
+iteration: 2
+reviewed_head: b0246dfa
+files_reviewed: 6
 files_reviewed_list:
   - docs/hooks-compatibility.md
-  - docs/mcp-compatibility.md
-  - extensions/pi-claude-marketplace/bridges/agents/convert.ts
-  - extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts
-  - extensions/pi-claude-marketplace/bridges/agents/grant-rewrite.ts
-  - extensions/pi-claude-marketplace/bridges/agents/legacy-grant-form.ts
-  - extensions/pi-claude-marketplace/bridges/agents/mcp-async-warning.ts
   - extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts
-  - extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts
   - extensions/pi-claude-marketplace/bridges/hooks/event-router.ts
-  - extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts
-  - extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts
-  - extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts
-  - extensions/pi-claude-marketplace/bridges/hooks/runtime.ts
-  - extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts
-  - features/agent/frontmatter.feature
-  - features/agent/invocation.feature
-  - features/lib/agent-files.ts
   - features/lib/real-subagent-child.ts
-  - features/lib/subagent-hook-session.ts
-  - features/mcp-server/agent-grants.feature
-  - features/mcp-server/verdict-markers.feature
-  - features/plugin/subagent-child.feature
-  - features/step_definitions/agent/listing.steps.ts
-  - features/step_definitions/mcp-server/agent-grants.steps.ts
-  - features/step_definitions/plugin/subagent-hooks.steps.ts
-  - features/support/pi-process.ts
-  - test/bridges/agents/convert.test.ts
-  - test/bridges/agents/grant-forms.test.ts
-  - test/bridges/agents/grant-rewrite.test.ts
-  - test/bridges/agents/legacy-grant-form.test.ts
-  - test/bridges/agents/mcp-async-warning.test.ts
-  - test/bridges/agents/stage.test.ts
   - test/bridges/hooks/async-rewake/registry.test.ts
-  - test/bridges/hooks/dispatch-exec.test.ts
   - test/bridges/hooks/event-router.test.ts
-  - test/bridges/hooks/payloads/post-tool-use-failure.test.ts
-  - test/bridges/hooks/payloads/post-tool-use.test.ts
-  - test/bridges/hooks/payloads/pre-tool-use.test.ts
-  - test/bridges/hooks/runtime.test.ts
-  - test/bridges/hooks/translation-context.test.ts
-  - test/integration/hooks-dispatch-end-to-end.test.ts
-  - test/integration/pi-subagents-child-identity.test.ts
-  - test/integration/subagent-hook-ownership.test.ts
-  - test/orchestrators/plugin/install-flow-ledger.test.ts
-  - test/orchestrators/plugin/install-outcome.test.ts
-  - test/orchestrators/plugin/reinstall-flow.test.ts
-  - test/orchestrators/plugin/update-swap.test.ts
 findings:
-  critical: 1
-  warning: 2
-  info: 3
-  total: 6
-  necessity: 1
+  critical: 0
+  warning: 1
+  info: 0
+  total: 1
+  necessity: 0
 status: issues_found
 ---
 
 # Phase 3: Code Review Report
 
-**Reviewed:** 2026-11-13T23:51:26Z
+**Reviewed:** 2026-11-14T00:37:04Z
 **Depth:** standard
-**Iteration:** 1
-**Files Reviewed:** 48
+**Iteration:** 2
+**Files Reviewed:** 6
 **Status:** issues_found
 
 ## Summary
 
-This review covers the 48 files that the phase changed between `cab4a540` and `09919bba`. I read the production diffs in full, with their callers: the hooks runtime, the event router, the async-rewake registry, dispatch-exec, the translation context, the three tool payload translators, and the agents bridge warning and launch-mode changes. I checked both docs against the code, and I checked that every scenario title the docs cite exists. I spot-checked the new test helpers and steps for reliability. I ran no `npm run check` and no test suite.
+This re-review covers the fix commits `6804ebfe..b0246dfa` (`0b49ad9e`, `98eee7da`, `24ce8a33`, `576c6c24`, `aa2a26eb`, `489e87e6`). I read each diff and the current text of the changed functions and their callers: `sessionShutdownCallback`, `shutdownInMemoryChildren`, `persistSpawnedChild`, `finalizeChild`, `removeCapturedChildRow`, `persistPidTableForLoc`, `writeChildJournal`, `readChildJournal`, `reapOrphans`, `reapChildJournal`/`recoverChildRow`, and the runtime's `shutdownChildren`/`registerChild`/`runPidTableOperation`. I ran no `npm run check` and no tests.
 
-The child event policy, the identity capture and its session binding, the launch-mode change (`async` only for `true`), and the two-generation warning recognition match D-PG3-01..07 and the docs. The `<active_agent name="..."/>` format matches the installed companion's `child-launch.js:215` and its `escapeXmlAttr`.
+All five fixes in scope are correct and complete. Each regression test fails without its fix (traced below). IN-03 is a recorded skip and is not raised again.
 
-Key concern: the shutdown drain added for child sessions also runs in the main session. On a quit, it SIGKILLs every async hook that is still running. This includes an `async` SessionEnd hook that the same callback has just started. That is a main-session regression, and the docs do not mention it. The child-journal cleanup at shutdown never removes the stopped rows. The known test-fixture advisory from 03-SECURITY.md is confirmed.
+One new finding comes from the main-versus-child shutdown seam. The CR-01 fix correctly restores the base behavior at `cab4a540`. In doing so, it brings back a race that exists on `main`: after a main-session `/reload`, the old runtime's late child exits rewrite the PID table and erase the rows of the new load. The iteration-1 drain had hidden this race as a side effect.
 
-The necessity rubric was read. One necessity finding is recorded.
+The necessity rubric was not re-applied: no new necessity findings in the fix diff.
+
+## Iteration 1 resolution
+
+| Finding | Verdict | Fix commit | Verification |
+| --- | --- | --- | --- |
+| CR-01 main-session shutdown kills async hooks | resolved | `0b49ad9e` | `event-router.ts:953-957` now drains only when `isSubagentChild(process.env)`. This is the same predicate that `dispatchesInCurrentSession` uses, and it matches `cab4a540`, which had no drain at shutdown. The registration-time drain (`:1124`) is unchanged. Test: without the guard, the main case's `finally` runs `shutdownChildren()`, so the three fake children get `SIGKILL` and the registry empties. Both `signals` and `pidTableEntries` assertions then fail. The SessionEnd hooks are registered by the executor before the `finally`, so the async SessionEnd case is really exercised. The child case guards the other branch. |
+| WR-01 child journal keeps stopped rows | resolved | `98eee7da` | `shutdownInMemoryChildren` filters the stopped `dispatchId`s under the owner's queue. `writeChildJournal` removes the file when no rows remain. The snapshot is a subset of rows that were already validated, so the shape and capacity checks cannot newly throw. Test: the fake child does not emit `close` on kill. At the iteration-1 code, the journal held two (or three) rows, so the `length === 0` branch was skipped and the file kept every row. The `ENOENT` and `["foreign-dispatch"]` assertions both fail there. The three adjusted retired-child cases restore the journal bytes after shutdown, so they still reach the late-exit removal path. |
+| WR-02 runner kills own process group | resolved | `24ce8a33` | `real-subagent-child.ts:956-962` signals only when `runner.pid !== undefined`. It swallows the exit rejection and always throws `the concurrent runner did not end` with the cause. The rejected `exit` promise already had a handler attached through `within`, so no unhandled rejection is left behind. |
+| IN-01 recovery docs omit exited rows | resolved | `576c6c24` | `docs/hooks-compatibility.md:73` now matches `recoverChildRow` (`registry.ts:1043-1047`): ESRCH with a dead owner removes the row on every platform, before the Linux check, and sends no signal. |
+| IN-02 main-session PID-table failure kills hook | resolved | `489e87e6` | `persistSpawnedChild` (`registry.ts:432-453`) logs `pid table persistence failed (<plugin>/<event>)` and returns for a main session. A child session still calls `stopUnrecordedChild`. This matches `cab4a540` apart from the log text, which is now accurate. Test: at the iteration-1 code, the catch called `stopUnrecordedChild`, so `child.signals` was `['SIGKILL']` and the registry was empty. Both assertions fail there. |
+| IN-03 repeated child-identity checks | skipped (recorded) | — | Not re-raised. |
+| `aa2a26eb` test cleanup (outside scope) | sound | `aa2a26eb` | The test's `closed = once(child, "close")` listener is attached in `spawnImpl`, before the registry's own `close` listener. By the time `await closed` resumes, the registry's synchronous `finalizeChild` has already queued the terminal write through `runPidTableOperation`. The no-op operation on `pidTablePath(loc)` therefore waits for it. In the child role, the terminal write is an `rm` of the child journal, which creates no temporary file, so not draining that key cannot cause `ENOTEMPTY`. |
 
 ## Narrative Findings (AI reviewer)
 
-## Critical Issues
+## Warnings
 
-### CR-01: Main-session shutdown kills running async hooks, including a just-started async SessionEnd hook
+### WR-03: After a main-session `/reload`, the old runtime's late hook exits overwrite the new load's PID table
 
-**File:** `extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:929-956` (with `extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:650-668`, `extensions/pi-claude-marketplace/bridges/hooks/runtime.ts:464-477`)
+**File:** `extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:953-957` (with `extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:523-547`, `:726-744`, `:833-850`)
 
-**Issue:** `sessionShutdownCallback` now ends with an unconditional `finally { await shutdownInMemoryChildren(runtime); }`. `shutdownInMemoryChildren` calls `runtime.shutdownChildren()`, which sends SIGKILL to the process group of every registered async child. Nothing limits this to `isSubagentChild(process.env)`, so a main session runs it on every shutdown reason: quit (`prompt_input_exit`), RPC stop (`other`), clear, and resume.
+**Issue:** `index.ts:92` builds a new `HooksRuntime` for every load. Each runtime has its own `runPidTableOperation` queue, but all runtimes share one file, `pidTablePath(loc)`. Since `0b49ad9e`, a main-session shutdown with reason `reload` (and `new`/`resume`) no longer clears the old runtime's in-memory registry. This is correct for CR-01, and it matches `cab4a540`. The sequence below then runs:
 
-Two consequences in the main session:
+1. The new load's `reapOrphans` runs on the new runtime's queue (`:726`). It SIGKILLs the old load's hooks on Linux, then writes back only the new runtime's rows or unlinks the table (`:737-742`).
+2. Each old hook then reaches `close`. The old runtime's `finalizeChild` still finds its entry (`takeChild`, `:531`). It calls `persistPidTableForLoc(oldRuntime, loc)` (`:542`) before any generation check. That writes the old runtime's remaining snapshot (finally `[]`) to the shared table through `writePidTable` (`pid-table.ts:142-157`, a full overwrite) on the old queue. Nothing orders this write against the new runtime's writes.
+3. A hook that the new load started before the old exits land loses its row. If Pi then crashes, the next load's reap has no record of that hook, so its process is orphaned. That breaks D-BG-207's recovery promise.
 
-1. An `async: true` or `asyncRewake: true` SessionEnd hook is killed right after it starts. `sessionEndHandler` awaits `dispatchHookExec`, which awaits `spawnAndRegister`. That function calls `runtime.registerChild(asyncEntry)` before it returns (`registry.ts:355`). The `finally` block then kills the child. Before this phase, the detached child kept running after a quit. Today the hook gets almost no run time. `docs/hooks-compatibility.md:277` still says that "async hooks keep 600 s everywhere", SessionEnd included.
-2. Any other async hook still running at quit (a slow PostToolUse `async` hook, for example) is now killed at quit. `docs/hooks-compatibility.md:428-429` says only `/reload`, a new session, and the next start after a crash stop these processes, and that "Claude Code leaves them running". Those rows were not updated. The project rules allow a divergence from upstream only with a recorded decision or a Pi capability gap. D-PG3-05 and the research (`03-RESEARCH.md:270`) asked for unconditional cleanup only for the child runtime ("independently of suppressed SessionEnd"). They did not ask for it in the main session. The new docs section says only "When a child stops or reloads, it stops its own hook processes."
+The window is short when SIGKILL closes the old pipes at once. It grows without bound when a grandchild outside the group holds the hook's stdout or stderr open, because `close` and the stream-gated finalize then wait on it. On non-Linux, the reap soft-skips every live PID (`:753`). The old hooks then run to their 600 s timeout, and each exit rewrites the table, so the window is minutes long.
 
-No test covers this. The router test "child session shutdown cleans up on reload, quit, and rejected mode" sets the child marker, and `features/hook/async.feature` has no SessionEnd or quit case.
+The race already exists at `cab4a540`. It is not a regression against `main`. The iteration-1 unconditional drain hid it, because `shutdownChildren()` emptied the old map and later `close` events found no entry. The CR-01 fix brings it back, so this report records it now at the seam the fix touched.
 
-**Fix:** Run the drain at shutdown only in a child session. In the main session, keep the earlier behavior: the next load's reap (D-BG-207) stops what an earlier load left.
+**Fix:** In a main session, detach the old runtime's entries at shutdown without signalling them. The hooks keep running, as CR-01 requires, and a late exit no longer writes the shared table. For example, add a runtime method that removes the entries but leaves each timer ladder armed:
 
 ```ts
+// runtime.ts
+detachChildren(): void {
+  children.clear();
+}
+
+// event-router.ts, sessionShutdownCallback
 } finally {
   if (isSubagentChild(process.env)) {
     await shutdownInMemoryChildren(runtime);
+  } else {
+    runtime.detachChildren();
   }
 }
 ```
 
-The registration-time `await shutdownInMemoryChildren(runtime)` can stay. Add a main-session regression: a unit case where an async SessionEnd hook survives a `quit` shutdown, and a cucumber scenario if the behavior is visible. If killing at quit is in fact wanted in the main session, record a decision and update `docs/hooks-compatibility.md:277` and `:428-429`.
-
-## Warnings
-
-### WR-01: Child shutdown never removes the rows it stopped, and its journal pass is effectively dead
-
-**File:** `extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:650-668` (with `:875-878`, `extensions/pi-claude-marketplace/bridges/hooks/runtime.ts:464-477`)
-
-**Issue:** After `runtime.shutdownChildren()` kills the children, `shutdownInMemoryChildren` reads each owner's journal and rewrites it only when `journal?.entries.length === 0`. `writeChildJournal` never writes a journal with no rows: for an empty list it removes the file (`:875-878`). So the reader gets either `undefined` (ENOENT) or a journal that still lists the rows that were just killed. The branch therefore never runs for a file this code wrote. The rows for the stopped hooks stay on disk.
-
-Their only removal path is `finalizeChild` → `removeCapturedChildRow`, which runs on the killed child's `close` event. A pi-subagents runner whose session has ended often exits before those events arrive, so the journal outlives the runner. A main-session load later removes it, after the owner is dead and the row PIDs return ESRCH. `shutdownChildren` now returns the `stopped` list for this purpose, but `shutdownInMemoryChildren` drops it (`registry.ts:651`). No production caller reads it. The plan (`03-01-PLAN.md:125`: "signal this runtime's in-memory groups, drain queued writes, remove only its confirmed-empty journals") expected the journals to be empty at this point. They are not.
-
-**Fix:** Use the stopped entries to rewrite each owner's journal under its operation queue before the owners are forgotten:
-
-```ts
-const stopped = runtime.shutdownChildren();
-const stoppedIds = new Set(stopped.map((entry) => entry.dispatchId));
-// per owner, inside runtime.runPidTableOperation(filePath, ...):
-const journal = await readChildJournal(filePath, owner.loc);
-if (journal !== undefined) {
-  await writeChildJournal(owner, journal.entries.filter((row) => !stoppedIds.has(row.dispatchId)));
-}
-```
-
-Add a unit case: after shutdown, with no `close` event delivered, the journal file is gone.
-
-### WR-02: Concurrent-runner timeout path can SIGKILL the test runner's own process group (03-SECURITY advisory, confirmed)
-
-**File:** `features/lib/real-subagent-child.ts:956`
-
-**Issue:** `kill(-(runner.pid ?? 0))` calls `process.kill(-0, "SIGKILL")` when `runner.pid` is undefined, and that signals the caller's own process group. This path is reachable. When the spawn fails (EAGAIN, ENOMEM), Node emits `error`. `events.once(runner, "exit")` rejects on `error`, so `within(...)` throws, the catch runs, and the cucumber runner kills its own group, along with any parent shell in that group. Then `await exit` rethrows the spawn error, so the clearer "did not end" error is never thrown.
-
-**Fix:**
-
-```ts
-} catch (error: unknown) {
-  if (runner.pid !== undefined) {
-    kill(-runner.pid);
-    await exit.catch(() => undefined);
-  }
-  throw new Error(`the concurrent runner did not end: ${stderr}`, { cause: error });
-}
-```
-
-## Info
-
-### IN-01: Child-journal recovery docs say "every other case keeps the row", but exited hook processes are dropped
-
-**File:** `docs/hooks-compatibility.md:73` (code: `extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:1010-1017`)
-
-**Issue:** The docs name only two outcomes: stop a process that has the marker, or keep the row. `recoverChildRow` has a third. When the recorded process is gone (`kill(pid, 0)` throws ESRCH) and the owner is dead, it returns `true`, and the row is removed without a signal. This happens on every platform, before the Linux check.
-
-**Fix:** Add a sentence: "A row whose hook process has already exited is removed."
-
-### IN-02: A main-session PID-table write failure now kills the hook and logs a "child journal" message
-
-**File:** `extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:418-423`
-
-**Issue:** The new `try/catch` around `persistPidTableForLoc` applies to main sessions too, where `persistenceOwner` is undefined and the legacy PID table is written. Before this phase, a failed write left the hook running and logged `spawnAndRegister threw`. Now the hook is SIGKILLed, and the debug line says `child journal persistence failed`, which is wrong for a main session. Failing closed may be the right choice, but it is an undocumented main-session change, and the log text points the reader at the wrong file.
-
-**Fix:** Choose the text by owner, for example `persistenceOwner === undefined ? "pid table" : "child journal"`. State the kill-on-unrecorded rule in the async section of the docs, or limit it to children.
-
-### IN-03: Already-defended-elsewhere — repeated child-identity session checks, applied inconsistently across translators
-
-**File:** `extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts:67`, `extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts:64`, `extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts:74`
-**Category:** necessity
-
-**Issue:** `runtime.childIdentityFor(sessionId)` already returns an identity only for the session it was captured in (`runtime.ts:398-404`), and `childId` is always that session's id (`runtime.ts:392-395`). `buildTranslationContext`, the only production producer of `TranslationContext.childIdentity`, checks the session again and then sets `childIdentity.sessionId` to `ctx.sessionId` itself (`translation-context.ts:74-75`). So the third check, `ctx.childIdentity?.sessionId === ctx.sessionId`, in the two result translators cannot fail in production. `translatePreToolUse` (`pre-tool-use.ts:44`) does not repeat it, so the three translators read one invariant in two ways. The identity-to-context block is also copied in `dispatch-exec.ts:206-212` and `registry.ts:254-260`. This rests on judgment, because `TranslationContext` is an exported interface that tests build directly.
-
-**Fix:** Keep the session binding in one place, the runtime or `buildTranslationContext`. Have all three translators use the same `ctx.childIdentity === undefined` test, and move the duplicated block into one helper, for example `translationContextFor(runtime, ctx)`.
+With no entry and no `persistenceOwner`, `finalizeChild` returns at `:531-539` and writes nothing. The rows stay in the table that the old runtime last wrote, and the next load's reap handles them as it does after a crash. Add a router case: in a main session, register a fake child, shut down with `reload`, then emit its `close` with a recording `pidTableWriter`. Assert that the writer was not called and that the child was not signalled. If the intent is to keep the race as base behavior, record that and close this finding.
 
 ---
 
-_Reviewed: 2026-11-13T23:51:26Z_
+_Reviewed: 2026-11-14T00:37:04Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
+
+## Disposition
+
+WR-03 is deferred, not fixed in this phase: the race exists at the phase base `cab4a540`, and the CR-01 fix restores that base main-session behavior. It is tracked as BACKLOG ASYNCRELOADTABLE-01 with the suggested fix. IN-03 remains a recorded skip (refactor, no behavior change).
