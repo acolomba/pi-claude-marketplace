@@ -3485,6 +3485,7 @@ test("sends SIGKILL to the group of a background hook whose shell its SIGTERM en
 interface LaneSpawn {
   readonly runtime: HooksRuntime;
   readonly child: ChildHarness;
+  readonly locations: ReturnType<typeof locationsFor>;
   readonly pi: PiHarness;
   readonly diagnostics: readonly string[];
   readonly timers: TimerObservation;
@@ -3537,7 +3538,7 @@ async function spawnLaneChild(
     locations,
     { spawnImpl: createSpawn(child.child, []), dispatchId: () => "dispatch-lane" },
   );
-  return { runtime, child, pi, diagnostics, timers };
+  return { runtime, child, locations, pi, diagnostics, timers };
 }
 
 test("a plain async hook receives no signal past its declared timeout (D-PG5-17)", async (t) => {
@@ -3557,6 +3558,53 @@ test("a plain async hook receives no signal past its declared timeout (D-PG5-17)
   assert.deepStrictEqual(spawned.child.signals, []);
   assert.deepStrictEqual(spawned.timers.handles, []);
   assert.strictEqual(entry?.ladder.fired(), false);
+});
+
+test("the reload walk sends SIGKILL to a plain async hook and forgets it (D-PG5-18)", async (t) => {
+  // arrange
+  const spawned = await spawnLaneChild(t, {
+    type: "command",
+    command: "/opt/hooks/note",
+    timeout: 1,
+    async: true,
+  });
+
+  // act
+  await shutdownInMemoryChildren(spawned.runtime);
+
+  // assert
+  assert.deepStrictEqual(spawned.child.signals, ["SIGKILL"]);
+  assert.strictEqual(spawned.runtime.takeChild("dispatch-lane"), undefined);
+  assert.deepStrictEqual(spawned.runtime.pidTableEntries(spawned.locations), []);
+});
+
+test("the reap of a later load stops a recorded plain async hook (D-PG5-18)", async (t) => {
+  // arrange
+  setCasePlatform(t, "linux");
+  const spawned = await spawnLaneChild(t, {
+    type: "command",
+    command: "/opt/hooks/note",
+    timeout: 1,
+    async: true,
+  });
+  const signals: Array<readonly [number, number | NodeJS.Signals]> = [];
+
+  // act
+  await reapOrphans(createHooksRuntime(), spawned.locations, {
+    killProbe(pid, signal): void {
+      signals.push([pid, signal]);
+    },
+    environReader(): Promise<string> {
+      return Promise.resolve("PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=dispatch-lane\0");
+    },
+  });
+
+  // assert
+  assert.deepStrictEqual(signals, [
+    [24_720, 0],
+    [-24_720, "SIGKILL"],
+  ]);
+  assert.deepStrictEqual(spawned.child.signals, []);
 });
 
 test("a plain async hook's child error finalizes it and sends no answer (D-PG5-17)", async (t) => {

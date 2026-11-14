@@ -429,6 +429,25 @@ Feature: Hook async
       | UserPromptSubmit | first   | after the reload | {project dir} |                 | marker    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {agent dir}/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then no hook process is running
 
+  Scenario: Reloading Pi stops a plain async hook that is running
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event            | matcher | form   | async | waits | exit code | stderr     |
+      | wake   | SessionStart     | startup | script | true  | true  |           |            |
+      | marker | UserPromptSubmit |         | script |       |       | 2         | not needed |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started pi in the terminal and the hook "wake" goes on in the background
+    When the user reloads pi in the terminal and then prompts "after the reload" with the hooks recording
+    Then the hooks record these runs:
+      | event            | session | prompt           | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                   | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | UserPromptSubmit | first   | after the reload | {project dir} |                 | marker    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {agent dir}/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then no hook process is running
+
   Scenario: Reloading Pi stops a waiting hook process that its command's shell started
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source
