@@ -5325,3 +5325,11 @@ Noted 2026-11-14 (parity-gaps, Phase 4 verification, PG-SKILL-04 unclassified ed
 ## WFNOTETRIGGER-01: should the workflow restriction note fire for an agent whose tools keep all four built-ins?
 
 Noted 2026-11-14 (parity-gaps, Phase 4 review IN-05). After WR-05 the note names only built-ins among read, bash, edit and write that the agent's `tools` does not allow (plus `disallowedTools`). An agent whose `tools` keeps all four, or lists a scoped `Bash(spec)` read as full `Bash`, gets no note, though outside `builtin:codemode` the engine gives it unrestricted `bash`. A missing note is allowed by D-PG4-11; this narrows the trigger with no recorded decision. Maintainer question.
+
+## MCPSAMPLING-01: withhold sampling from plugin servers once pi-mcp-adapter has a per-server switch
+
+Noted 2026-11-14 (parity-gaps, Phase 9, D-PG9-08). Trigger: a published pi-mcp-adapter release with a per-server sampling switch. The request is drafted in `.planning/upstream/pi-mcp-adapter-per-server-sampling.md`, and the maintainer has not filed it yet. Under 7.0.1 every plugin server gets `sampling: {}` whenever the global `settings.sampling` allows it. The work it unlocks: raise or gate the pi-mcp-adapter floor on that release, write the switch on every plugin entry as a recorded default, as the stdio `lifecycle` default is written, and drop the sampling divergence from `docs/mcp-compatibility.md`.
+
+## MCPOPENUI-01: write the `openUi: false` default once pi-subagents hashes `openUi`
+
+Noted 2026-11-14 (parity-gaps, Phase 9, D-PG9-07 amendment). Trigger: a pi-subagents release whose `computeMcpServerHash` includes `openUi`, as pi-mcp-adapter 7.0.1's `computeServerHash` does, and a floor raised to it. pi-subagents 0.88.1 omits it, so an entry with `openUi: false` makes background MCP grants fail (`test/integration/pi-subagents-child-identity.test.ts`). The upstream request is the maintainer's to file. The work it unlocks: write `openUi: false` on every plugin entry as a recorded default and drop the UI-extension divergence from `docs/mcp-compatibility.md`.

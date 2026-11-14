@@ -62,6 +62,7 @@ The two PG-MCP-08 resource scenarios (one per profile) change no behavior. They 
 |------|--------|------|----------------------|-------------------------------|-------|
 | 1 (09-01, 09-02) | 1c58f1a8 | v26.13.1 | 0 | 1927 / 185 passed | 362 direct-coverage records; `/tmp/pg9-wave1.log` |
 | 2 (09-03) | fc264060 | v26.13.1 | 0 | 1928 / 185 passed | 362 records; `/tmp/pg9-wave2.log` |
+| 3 (09-04) | b131df8e | v26.13.1 | 0 | 1931 / 185 passed | 362 records; `/tmp/pg9-wave3.log` |
 
 ---
 
