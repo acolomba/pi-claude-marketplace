@@ -50,27 +50,48 @@ export async function saveHookOutput(
   return filePath;
 }
 
+/** The two file operations of the sweep, which a test may replace. */
+interface SweepFileOps {
+  readonly lstat: (filePath: string) => Promise<{ readonly mtimeMs: number }>;
+  readonly unlink: (filePath: string) => Promise<void>;
+}
+
+const DEFAULT_SWEEP_FILE_OPS: SweepFileOps = { lstat, unlink };
+
+// Removes one saved file older than the retention. A failure, such as a file
+// another Pi removed first, writes one debug line and leaves the other files
+// to the sweep.
+async function sweepFile(filePath: string, now: number, ops: SweepFileOps): Promise<void> {
+  try {
+    const stats = await ops.lstat(filePath);
+    if (now - stats.mtimeMs > RETENTION_MS) {
+      await ops.unlink(filePath);
+    }
+  } catch (error: unknown) {
+    hookDebugLog(`hook-output: sweep skipped ${path.basename(filePath)}: ${errorMessage(error)}`);
+  }
+}
+
 /**
  * D-PG5-15: removes the saved files of `loc` whose modification time lies more
  * than 30 days before `now`. Only regular files with a saved name are read
  * and removed; a link or a folder stays, and no link is followed (NFR-10). A
- * missing folder is silent, any other failure writes one debug line, and the
- * sweep never rejects (NFR-2).
+ * missing folder is silent, and a folder that cannot be read writes one debug
+ * line. A file that fails writes its own debug line, and the sweep goes on
+ * with the next file. The sweep never rejects (NFR-2).
  */
-export async function sweepHookOutput(loc: ScopedLocations, now: number): Promise<void> {
+export async function sweepHookOutput(
+  loc: ScopedLocations,
+  now: number,
+  ops: typeof DEFAULT_SWEEP_FILE_OPS = DEFAULT_SWEEP_FILE_OPS,
+): Promise<void> {
   const dirPath = hookOutputDir(loc);
   try {
     await assertPathInside(loc.dataRoot, dirPath, "hook output sweep");
     const dir = await opendir(dirPath);
     for await (const entry of dir) {
-      if (!entry.isFile() || !SAVED_NAME.test(entry.name)) {
-        continue;
-      }
-
-      const filePath = path.join(dirPath, entry.name);
-      const stats = await lstat(filePath);
-      if (now - stats.mtimeMs > RETENTION_MS) {
-        await unlink(filePath);
+      if (entry.isFile() && SAVED_NAME.test(entry.name)) {
+        await sweepFile(path.join(dirPath, entry.name), now, ops);
       }
     }
   } catch (error: unknown) {

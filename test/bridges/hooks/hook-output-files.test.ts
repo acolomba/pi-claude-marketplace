@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
 import {
   chmod,
+  lstat,
   mkdir,
   mkdtemp,
   readdir,
   readFile,
   rm,
   symlink,
+  unlink,
   utimes,
   writeFile,
 } from "node:fs/promises";
@@ -162,6 +164,57 @@ describe("sweepHookOutput", () => {
       { names: ["hook-dir-stdout.txt", "hook-link-stdout.txt"], target: "outside" },
     );
   });
+
+  for (const failing of [
+    {
+      name: "a file another process removed first",
+      op: "lstat",
+      error: Object.assign(new Error("ENOENT: no such file or directory"), { code: "ENOENT" }),
+    },
+    {
+      name: "a file it cannot remove",
+      op: "unlink",
+      error: Object.assign(new Error("EPERM: operation not permitted"), { code: "EPERM" }),
+    },
+  ] as const) {
+    test(`NFR-2: writes one debug line for ${failing.name} and removes the other old files`, async (t) => {
+      // arrange
+      const { loc } = await projectScope(t, "hook-output-sweep-file-error-");
+      const names = ["hook-a-stdout.txt", "hook-b-stdout.txt", "hook-c-stdout.txt"];
+      await Promise.all(names.map((name) => savedFile(loc, name, 90 * DAY_MS)));
+      const logged = captureDebugLog(t);
+      let failed: string | undefined;
+      // Rejects the first call of the failing operation, and runs the real
+      // operation otherwise.
+      const failFirst =
+        <T>(op: "lstat" | "unlink", real: (filePath: string) => Promise<T>) =>
+        (filePath: string): Promise<T> => {
+          if (op !== failing.op || failed !== undefined) {
+            return real(filePath);
+          }
+
+          failed = path.basename(filePath);
+          return Promise.reject(failing.error);
+        };
+
+      // act
+      await sweepHookOutput(loc, NOW, {
+        lstat: failFirst("lstat", (filePath) => lstat(filePath)),
+        unlink: failFirst("unlink", (filePath) => unlink(filePath)),
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        { names: await hookOutputNames(loc), logged },
+        {
+          names: [failed],
+          logged: [
+            `[hooks] hook-output: sweep skipped ${String(failed)}: ${failing.error.message}`,
+          ],
+        },
+      );
+    });
+  }
 
   test("D-PG5-15: resolves with no debug line for a scope with no saved output", async (t) => {
     // arrange
