@@ -773,6 +773,30 @@ Feature: Agent frontmatter
       | marketplace name | marketplace scope | id            | name | status    | reasons               | scope | version |
       | fixtures         | user              | demo@fixtures | demo | installed | requires pi-subagents | user  | 1.0.0   |
 
+  Scenario: Installing an agent whose frontmatter still fails after the repair reports the defect the repair left
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "agents/broken.md" with this text:
+      """
+      ---
+      description: Fixes: the code
+      tools: [Read
+      ---
+
+      Answer the task.
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    When the user runs "/claude:plugin install demo@fixtures --scope user"
+    Then the command reports these results:
+      | kind       | severity | needs reload | summary                             | header                                                           | lines                                                                                                                                                                                                                                                                                   |
+      | cascade    | warning  | true         | A plugin operation needs attention. |                                                                  |                                                                                                                                                                                                                                                                                         |
+      | diagnostic | warning  | false        |                                     | Plugin "demo" [user] installed; 1 declared component has a note. | agent "demo:broken": its source frontmatter could not be parsed (Flow sequence in block collection must be sufficiently indented and end with a ] at line 2, column 13); the agent is loaded with no frontmatter fields, so its tools, model, and description settings are not applied. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons               | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed | requires pi-subagents | user  | 1.0.0   |
+
   Scenario: An agent whose frontmatter cannot be parsed is listed under its file name with Claude Code's fallback description
     Given pi runs with the scripted model and these companions:
       | companion    |

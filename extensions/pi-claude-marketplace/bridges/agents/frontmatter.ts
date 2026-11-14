@@ -115,9 +115,9 @@ export interface ParsedFrontmatter {
   readonly raw: RawAgentFrontmatter;
   readonly body: string;
   /**
-   * D-PG7-04: why `raw` holds no field. The message of Pi's first parse when
-   * the block did not parse after the repair either, or `NOT_A_MAPPING` when
-   * the block parsed to text or to a list.
+   * D-PG7-04: why `raw` holds no field. Pi's message for the block, or for
+   * the repaired block when the repair changed it, when neither parsed, or
+   * `NOT_A_MAPPING` when the block parsed to text or to a list.
    */
   readonly parseError?: string;
 }
@@ -137,22 +137,13 @@ function agentRepairTrigger(value: string): boolean {
 type PiParsedFrontmatter = ReturnType<typeof parseFrontmatter>;
 
 /**
- * D-PG7-01: the second parse, over the repaired text. The repair keeps the
- * last copy of a repeated key, as Claude Code's YAML reader does (D-PG7-19),
- * and quotes the one-line values YAML refuses. Returns `undefined` when the
- * repair changed nothing or the repaired text still does not parse.
+ * D-PG7-01: the text of the second parse. The repair keeps the last copy of a
+ * repeated key, as Claude Code's YAML reader does (D-PG7-19), and quotes the
+ * one-line values YAML refuses. Both change lines in place, so the repaired
+ * text keeps the source's line count.
  */
-function parseRepaired(text: string): PiParsedFrontmatter | undefined {
-  const repaired = repairSingleLineScalars(blankEarlierDuplicateKeys(text), agentRepairTrigger);
-  if (repaired === text) {
-    return undefined;
-  }
-
-  try {
-    return parseFrontmatter(repaired);
-  } catch {
-    return undefined;
-  }
+function repairedText(text: string): string {
+  return repairSingleLineScalars(blankEarlierDuplicateKeys(text), agentRepairTrigger);
 }
 
 /**
@@ -160,7 +151,9 @@ function parseRepaired(text: string): PiParsedFrontmatter | undefined {
  * stripped; repair and parse again only when that parse throws. Pi strips one
  * byte-order mark itself, so the first parse gets the text as read: a second
  * strip would turn a doubled mark into a fence (T-FMBOM-02). The repair's
- * fence match is anchored, so it gets the text with one mark stripped.
+ * fence match is anchored, so it gets the text with one mark stripped. When
+ * the repaired text fails too, its message names a defect the repair left,
+ * at the same line as in the source.
  */
 function parseSource(
   text: string,
@@ -168,9 +161,17 @@ function parseSource(
   try {
     return { parsed: parseFrontmatter(text) };
   } catch (error: unknown) {
-    const repaired = parseRepaired(stripBom(text));
-    // The first error names the author's defect, not the repair's.
-    return repaired === undefined ? { parseError: errorMessage(error) } : { parsed: repaired };
+    const unmarked = stripBom(text);
+    const repaired = repairedText(unmarked);
+    if (repaired === unmarked) {
+      return { parseError: errorMessage(error) };
+    }
+
+    try {
+      return { parsed: parseFrontmatter(repaired) };
+    } catch (repairedError: unknown) {
+      return { parseError: errorMessage(repairedError) };
+    }
   }
 }
 
@@ -219,7 +220,7 @@ function rawFields(frontmatter: Readonly<Record<string, unknown>>): RawAgentFron
  * PG-AGENT-05 / D-PG7-01: read a source agent's frontmatter as YAML. The body
  * is the text after the closing fence. A block that does not parse after the
  * repair gives no fields, the text after its closing fence as body, and the
- * first parse's message as `parseError` (D-PG7-04). So does a block that
+ * parser's message as `parseError` (D-PG7-04). So does a block that
  * parses to text or to a list, with its own reason, so losing every field is
  * never silent.
  */

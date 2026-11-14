@@ -189,14 +189,14 @@ describe("readAgentFrontmatter", () => {
     assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
   });
 
-  test("D-PG7-04: reports the first parse's message when the repaired block fails too", () => {
+  test("D-PG7-04: reports the defect the repair left when the repaired block fails too", () => {
     // arrange
     const sourceAgentFile = "---\ndescription: Reviews: code\ntools: [Read\n---\nBody after.\n";
     const expectedParsedAgentFile = {
       raw: {},
       body: "Body after.",
       parseError:
-        "Nested mappings are not allowed in compact mappings at line 1, column 14:\n\ndescription: Reviews: code\n             ^\n",
+        "Flow sequence in block collection must be sufficiently indented and end with a ] at line 2, column 13:\n\ntools: [Read\n            ^\n",
     };
 
     // act
@@ -204,6 +204,17 @@ describe("readAgentFrontmatter", () => {
 
     // assert
     assert.deepStrictEqual(parsedAgentFile, expectedParsedAgentFile);
+  });
+
+  test("D-PG7-04: names the source's line of a defect after a blanked repeated key", () => {
+    // arrange
+    const sourceAgentFile = '---\ntools: Read\ntools: Bash\ndescription: "open\n---\nBody.\n';
+
+    // act
+    const parsedAgentFile = readAgentFrontmatter(sourceAgentFile);
+
+    // assert
+    assert.match(parsedAgentFile.parseError ?? "", /^Missing closing "quote at line 3, /u);
   });
 
   test("parses a source led by a byte-order mark identically to the unmarked source", () => {
