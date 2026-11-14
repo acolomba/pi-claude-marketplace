@@ -258,17 +258,55 @@ function carriedFields(previous: unknown, pluginSet: readonly string[]): Record<
   return carried;
 }
 
-// The scheme and authority of an https url, lowercased, read as text so a
-// `${VAR}` in the host still compares.
-const HTTPS_ORIGIN = /^https:\/\/[^/?#]*/i;
+// pi-mcp-adapter's scan for the references in a url that must name a set
+// variable (`getMissingEnvVars` in its `utils.ts`): each one without a default.
+const URL_REFERENCE = /\$\{(\w+)(:-[^}]*)?\}|\$env:(\w+)|\{env:(\w+)\}/g;
 
-function httpsOriginOf(entry: Readonly<Record<string, unknown>>): string | undefined {
-  const { command, socket, url } = entry;
-  if (command !== undefined || socket !== undefined || typeof url !== "string") {
+// Pi's process sets the split token's variable to the empty string.
+function adapterValue(env: ClaudeEnv, name: string): string | undefined {
+  if (name === ADAPTER_EMPTY_ENV) {
+    return "";
+  }
+
+  return Object.hasOwn(env, name) ? env[name] : undefined;
+}
+
+// Exactly one name group matches, and `join` writes the others as "".
+function namesUnsetVariable(url: string, env: ClaudeEnv): boolean {
+  return [...url.matchAll(URL_REFERENCE)].some(
+    (match) =>
+      match[2] === undefined &&
+      adapterValue(env, [match[1], match[3], match[4]].join("")) === undefined,
+  );
+}
+
+/**
+ * D-PG9-14: the url as pi-mcp-adapter 7.0.1 reads it (`resolveServerUrl` in
+ * its `utils.ts`), or none when a reference without a default names an unset
+ * variable or the result is not a url. The adapter replaces the three
+ * reference forms in three passes, each from the environment, a `${NAME:-x}`
+ * default only for an unset variable.
+ */
+function resolvedUrl(url: string, env: ClaudeEnv): URL | undefined {
+  if (namesUnsetVariable(url, env)) {
     return undefined;
   }
 
-  return HTTPS_ORIGIN.exec(url)?.[0].toLowerCase();
+  const resolved = url
+    .replace(
+      /\$\{(\w+)(?::-([^}]*))?\}/g,
+      // The scan above leaves each unset variable a default.
+      (_reference, name: string, fallback: string) => adapterValue(env, name) ?? fallback,
+    )
+    .replace(/\$env:(\w+)/g, (_reference, name: string) => adapterValue(env, name) ?? "")
+    .replace(/\{env:(\w+)\}/g, (_reference, name: string) => adapterValue(env, name) ?? "");
+  return URL.parse(resolved) ?? undefined;
+}
+
+// The url of a remote entry: no `command`, no `socket`, a string `url`.
+function remoteUrlOf(entry: Readonly<Record<string, unknown>>): string | undefined {
+  const { command, socket, url } = entry;
+  return command === undefined && socket === undefined && typeof url === "string" ? url : undefined;
 }
 
 function definesServer(entry: Readonly<Record<string, unknown>>): boolean {
@@ -279,16 +317,42 @@ function definesServer(entry: Readonly<Record<string, unknown>>): boolean {
  * D-PG9-14: whether a carried `caFile` still applies to the new entry.
  * pi-mcp-adapter 7.0.1 refuses to connect an entry whose `caFile` sits beside
  * `command` or `socket` or a url that is not https (`validateCaFile` in its
- * `http-ca.ts`), and it uses the bundle for the entry's origin only. So the
- * new entry must be an https server, and, when the entry it replaces defines
- * a server, at that entry's origin. An override stub defines none.
+ * `http-ca.ts`), and it uses the bundle only for the url's `URL.origin`. So
+ * the new entry must be an https server, and, when the entry it replaces
+ * defines a server, at that entry's origin. An override stub defines none.
+ * A url read with the stage's environment as the adapter reads it gives the
+ * origin and the scheme. A url that names an unset variable, or that does not
+ * parse, gives neither: the adapter decides at connect time, and against a
+ * previous url the `caFile` stays only while the url text is unchanged.
  */
 function caFileApplies(
   previous: Readonly<Record<string, unknown>>,
   translated: Readonly<Record<string, unknown>>,
+  env: ClaudeEnv,
 ): boolean {
-  const origin = httpsOriginOf(translated);
-  return origin !== undefined && (!definesServer(previous) || httpsOriginOf(previous) === origin);
+  const url = remoteUrlOf(translated);
+  if (url === undefined) {
+    return false;
+  }
+
+  const resolved = resolvedUrl(url, env);
+  if (resolved !== undefined && resolved.protocol !== "https:") {
+    return false;
+  }
+
+  if (!definesServer(previous)) {
+    return true;
+  }
+
+  const previousUrl = remoteUrlOf(previous);
+  if (previousUrl === undefined) {
+    return false;
+  }
+
+  const previousResolved = resolvedUrl(previousUrl, env);
+  return resolved === undefined || previousResolved === undefined
+    ? url === previousUrl
+    : resolved.origin === previousResolved.origin;
 }
 
 /**
@@ -300,13 +364,14 @@ function appliedCarriedFields(
   previous: unknown,
   translated: Readonly<Record<string, unknown>>,
   pluginSet: readonly string[],
+  env: ClaudeEnv,
 ): { readonly carried: Record<string, unknown>; readonly caFileRemoved: boolean } {
   const carried = carriedFields(previous, pluginSet);
   if (!isPlainObject(previous) || !Object.hasOwn(carried, "caFile")) {
     return { carried, caFileRemoved: false };
   }
 
-  if (caFileApplies(previous, translated)) {
+  if (caFileApplies(previous, translated, env)) {
     return { carried, caFileRemoved: false };
   }
 
@@ -467,6 +532,7 @@ export function stampServers(input: StampServersInput): {
       input.previous[name],
       translated,
       pluginSetFields,
+      input.substitution.env,
     );
     if (removed) {
       caFileRemoved.push(name);

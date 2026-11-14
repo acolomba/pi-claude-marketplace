@@ -1311,6 +1311,155 @@ describe("stampServers", () => {
     );
   });
 
+  // D-PG9-14: url pairs at one `URL.origin` once each url is read as
+  // pi-mcp-adapter 7.0.1 reads it, and pairs whose url text is unchanged.
+  for (const [pair, previousUrl, url, env] of [
+    ["an explicit default port", "https://acme.example/mcp", "https://acme.example:443/mcp", {}],
+    ["userinfo", "https://acme.example/mcp", "https://user@acme.example/mcp", {}],
+    ["a punycode host", "https://bücher.example/mcp", "https://xn--bcher-kva.example/mcp", {}],
+    ["a leading space", "https://acme.example/mcp", " https://acme.example/mcp", {}],
+    [
+      "a variable scheme and host",
+      "${ACME_BASE}/v1/mcp",
+      "${ACME_BASE}/v2/mcp",
+      { ACME_BASE: "https://acme.example" },
+    ],
+    [
+      "a default for an unset variable",
+      "${ACME_BASE:-https://acme.example}/v1/mcp",
+      "https://acme.example/v2/mcp",
+      {},
+    ],
+    [
+      "the split token",
+      "https://acme.example/v1/mcp",
+      "https://acme.example/{env:PI_CLAUDE_MARKETPLACE_EMPTY}v2/mcp",
+      {},
+    ],
+    ["an unchanged url that names an unset variable", "${ACME_BASE}/mcp", "${ACME_BASE}/mcp", {}],
+    [
+      "an unchanged url that does not parse",
+      "https://acme example/mcp",
+      "https://acme example/mcp",
+      {},
+    ],
+  ] as const) {
+    test(`D-PG9-14: a caFile survives an update across ${pair}`, () => {
+      // arrange
+      const previous = {
+        url: previousUrl,
+        caFile: "/etc/pki/user/ca-bundle.pem",
+        _piClaudeMarketplace: REMOTE_MARKER,
+      };
+
+      // act
+      const stamping = stampServers({
+        servers: { server: { type: "http", url } },
+        pluginName: "acme",
+        marketplaceName: "catalog",
+        substitution: { ...PROJECT_CONTEXT, env },
+        previous: { server: previous },
+        keptOverrides: {},
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          caFile: (stamping.stamped.server as Record<string, unknown>).caFile,
+          caFileRemoved: stamping.caFileRemoved,
+        },
+        { caFile: "/etc/pki/user/ca-bundle.pem", caFileRemoved: [] },
+      );
+    });
+  }
+
+  // D-PG9-14: url pairs pi-mcp-adapter 7.0.1 reads at two origins, or whose
+  // changed url it cannot read yet.
+  for (const [pair, previousUrl, url, env] of [
+    [
+      "variable names that differ only in case",
+      "https://${ACME_HOST}/mcp",
+      "https://${acme_host}/mcp",
+      { ACME_HOST: "acme.example", acme_host: "other.example" },
+    ],
+    [
+      "a changed url that names an unset variable",
+      "https://${ACME_HOST}/v1/mcp",
+      "https://${ACME_HOST}/v2/mcp",
+      {},
+    ],
+    [
+      "a variable whose value names an unset variable",
+      "https://acme.example/mcp",
+      "${ACME_BASE}/mcp",
+      { ACME_BASE: "https://$env:ACME_UNSET{env:ACME_UNSET}other.example" },
+    ],
+    [
+      "a changed url that does not parse",
+      "https://acme.example/mcp",
+      "https://acme example/mcp",
+      {},
+    ],
+    [
+      "a variable that resolves to plain http",
+      "${ACME_BASE}/mcp",
+      "${ACME_BASE}/mcp",
+      { ACME_BASE: "http://acme.example" },
+    ],
+  ] as const) {
+    test(`D-PG9-14: an update across ${pair} leaves the user's caFile out and reports it`, () => {
+      // arrange
+      const previous = {
+        url: previousUrl,
+        caFile: "/etc/pki/user/ca-bundle.pem",
+        _piClaudeMarketplace: REMOTE_MARKER,
+      };
+
+      // act
+      const stamping = stampServers({
+        servers: { server: { type: "http", url } },
+        pluginName: "acme",
+        marketplaceName: "catalog",
+        substitution: { ...PROJECT_CONTEXT, env },
+        previous: { server: previous },
+        keptOverrides: {},
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          caFile: Object.hasOwn(stamping.stamped.server as object, "caFile"),
+          caFileRemoved: stamping.caFileRemoved,
+        },
+        { caFile: false, caFileRemoved: ["server"] },
+      );
+    });
+  }
+
+  test("D-PG9-14: an override stub's caFile applies to an entry whose url names an unset variable", () => {
+    // arrange
+    const override = { caFile: "/etc/pki/user/ca-bundle.pem" };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { type: "http", url: "${ACME_BASE}/mcp" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous: { server: override },
+      keptOverrides: { server: override },
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        caFile: (stamping.stamped.server as Record<string, unknown>).caFile,
+        caFileRemoved: stamping.caFileRemoved,
+      },
+      { caFile: "/etc/pki/user/ca-bundle.pem", caFileRemoved: [] },
+    );
+  });
+
   // D-PG9-14: a previous entry that defines a server pi-mcp-adapter gives no
   // https origin.
   for (const [shape, previous] of [

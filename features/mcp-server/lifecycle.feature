@@ -699,6 +699,48 @@ Feature: MCP server lifecycle
       """
 
   @adapter-only
+  Scenario: A caFile the user wrote for a plugin server whose url starts with a variable survives a reinstall (PG-MCP-09, D-PG9-14)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers":{"remote":{"type":"http","url":"${PI_CM_BASE}/mcp"}}}
+      """
+    Given pi runs with the scripted model, pi-mcp-adapter, and the environment variable "PI_CM_BASE" set to "https://example.invalid"
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has written these fields on the mcp server "plugin_demo_remote_" in the mcp-adapter.json file of the user scope:
+      """
+      {"caFile":"/etc/pki/user/ca-bundle.pem"}
+      """
+    When the user runs "/claude:plugin reinstall demo@fixtures --scope user"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | reinstalled |         | user  | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_remote_": {
+            "url": "${PI_CM_BASE}/mcp",
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "caFile": "/etc/pki/user/ca-bundle.pem",
+            "requestTimeoutMs": 300000,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 300000
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @adapter-only
   Scenario: An update that makes a plugin server a stdio server removes the caFile the user wrote and says so (PG-MCP-09, D-PG9-14)
     Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
       """
