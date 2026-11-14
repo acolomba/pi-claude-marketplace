@@ -678,8 +678,11 @@ async function removeCapturedChildRow(
  * D-BG-205: a plain async hook that ended, whatever its code, gives the model
  * its answer's texts on the model's next call, never waking it; the user sees
  * nothing. Each text passes the 10,000-character cap alone, and the texts keep
- * their order, `systemMessage` first (D-PG5-14, D-PG5-16). A reload during a
- * save drops the answer, as it drops a late exit. Never rejects.
+ * their order, `systemMessage` first (D-PG5-14, D-PG5-16). In production a
+ * reload during a save makes the old `pi` stale, so its `sendMessage` throws
+ * and the answer is dropped; the generation check after the save covers a
+ * runtime that is registered twice. A file the save wrote stays until the
+ * 30-day sweep. Never rejects.
  */
 async function sendAsyncAnswer(
   entry: HooksRuntimeChildEntry,
