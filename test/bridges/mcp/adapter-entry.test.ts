@@ -1216,10 +1216,14 @@ describe("stampServers", () => {
   });
 
   // D-PG9-14: each plugin entry a previous https entry's caFile cannot apply to.
-  for (const [change, server] of [
-    ["a stdio server", { command: "plugin-command" }],
-    ["a plain http server", { type: "http", url: "http://acme.example/mcp" }],
-    ["an https server at another origin", { type: "http", url: "https://other.example/mcp" }],
+  for (const [change, server, reason] of [
+    ["a stdio server", { command: "plugin-command" }, "not-https"],
+    ["a plain http server", { type: "http", url: "http://acme.example/mcp" }, "not-https"],
+    [
+      "an https server at another origin",
+      { type: "http", url: "https://other.example/mcp" },
+      "origin-changed",
+    ],
   ] as const) {
     test(`D-PG9-14: an update that makes the server ${change} leaves the user's caFile out and reports it`, () => {
       // arrange
@@ -1247,7 +1251,7 @@ describe("stampServers", () => {
           tasks: (stamping.stamped.server as Record<string, unknown>).tasks,
           caFileRemoved: stamping.caFileRemoved,
         },
-        { caFile: false, tasks: true, caFileRemoved: ["server"] },
+        { caFile: false, tasks: true, caFileRemoved: [{ server: "server", reason }] },
       );
     });
   }
@@ -1345,36 +1349,41 @@ describe("stampServers", () => {
 
   // D-PG9-14: url pairs pi-mcp-adapter 7.0.1 reads at two origins, or whose
   // changed url it cannot read yet.
-  for (const [pair, previousUrl, url, env] of [
+  for (const [pair, previousUrl, url, env, reason] of [
     [
       "variable names that differ only in case",
       "https://${ACME_HOST}/mcp",
       "https://${acme_host}/mcp",
       { ACME_HOST: "acme.example", acme_host: "other.example" },
+      "origin-changed",
     ],
     [
       "a changed url that names an unset variable",
       "https://${ACME_HOST}/v1/mcp",
       "https://${ACME_HOST}/v2/mcp",
       {},
+      "url-unresolved",
     ],
     [
       "a variable whose value names an unset variable",
       "https://acme.example/mcp",
       "${ACME_BASE}/mcp",
       { ACME_BASE: "https://$env:ACME_UNSET{env:ACME_UNSET}other.example" },
+      "origin-changed",
     ],
     [
       "a changed url that does not parse",
       "https://acme.example/mcp",
       "https://acme example/mcp",
       {},
+      "url-unresolved",
     ],
     [
       "a variable that resolves to plain http",
       "${ACME_BASE}/mcp",
       "${ACME_BASE}/mcp",
       { ACME_BASE: "http://acme.example" },
+      "not-https",
     ],
   ] as const) {
     test(`D-PG9-14: an update across ${pair} leaves the user's caFile out and reports it`, () => {
@@ -1401,7 +1410,7 @@ describe("stampServers", () => {
           caFile: Object.hasOwn(stamping.stamped.server as object, "caFile"),
           caFileRemoved: stamping.caFileRemoved,
         },
-        { caFile: false, caFileRemoved: ["server"] },
+        { caFile: false, caFileRemoved: [{ server: "server", reason }] },
       );
     });
   }
@@ -1460,7 +1469,7 @@ describe("stampServers", () => {
           caFile: Object.hasOwn(stamping.stamped.server as object, "caFile"),
           caFileRemoved: stamping.caFileRemoved,
         },
-        { caFile: false, caFileRemoved: ["server"] },
+        { caFile: false, caFileRemoved: [{ server: "server", reason: "origin-changed" }] },
       );
     });
   }
@@ -1493,7 +1502,7 @@ describe("stampServers", () => {
             _piClaudeMarketplace: { ...STDIO_MARKER, keptOverride: override },
           },
         },
-        caFileRemoved: ["server"],
+        caFileRemoved: [{ server: "server", reason: "not-https" }],
       },
     );
   });

@@ -2104,6 +2104,7 @@ describe("resolveRawSurface", () => {
         file: "mcp-adapter.json",
         plugin: "hello",
         server: "plugin_hello_srv_",
+        reason: "not-https",
       },
     },
   ] as const) {
@@ -2398,6 +2399,7 @@ describe("resolveRawSurface", () => {
         file: "mcp-adapter.json",
         plugin: "acme",
         server: "plugin_acme_srv_",
+        reason: "not-https",
       },
       severity: "warning",
     },
@@ -3219,6 +3221,7 @@ describe("mcpConfigNoticeSurfaces", () => {
       file: "mcp-adapter.json",
       plugin: "acme",
       server: "plugin_acme_srv_",
+      reason: "not-https",
     } as const;
     const leftover = {
       kind: "leftover-removed",

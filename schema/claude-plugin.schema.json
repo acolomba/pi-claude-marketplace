@@ -2472,13 +2472,20 @@
               },
               {
                 "type": "object",
-                "required": ["kind", "scope", "file", "plugin", "server"],
+                "required": ["kind", "scope", "file", "plugin", "server", "reason"],
                 "properties": {
                   "kind": { "type": "string", "const": "ca-file-removed" },
                   "scope": { "enum": ["user", "project"] },
                   "file": { "type": "string", "const": "mcp-adapter.json" },
                   "plugin": { "type": "string" },
-                  "server": { "type": "string" }
+                  "server": { "type": "string" },
+                  "reason": {
+                    "anyOf": [
+                      { "type": "string", "const": "not-https" },
+                      { "type": "string", "const": "origin-changed" },
+                      { "type": "string", "const": "url-unresolved" }
+                    ]
+                  }
                 },
                 "additionalProperties": false
               }
@@ -2708,13 +2715,20 @@
               },
               {
                 "type": "object",
-                "required": ["kind", "scope", "file", "plugin", "server"],
+                "required": ["kind", "scope", "file", "plugin", "server", "reason"],
                 "properties": {
                   "kind": { "type": "string", "const": "ca-file-removed" },
                   "scope": { "enum": ["user", "project"] },
                   "file": { "type": "string", "const": "mcp-adapter.json" },
                   "plugin": { "type": "string" },
-                  "server": { "type": "string" }
+                  "server": { "type": "string" },
+                  "reason": {
+                    "anyOf": [
+                      { "type": "string", "const": "not-https" },
+                      { "type": "string", "const": "origin-changed" },
+                      { "type": "string", "const": "url-unresolved" }
+                    ]
+                  }
                 },
                 "additionalProperties": false
               }

@@ -102,8 +102,18 @@ function mcpLeftoverRemovedLine(notice: McpLeftoverRemovedNotice): string {
   return `Removed "${printable(notice.server)}" from the ${notice.scope}-scope ${notice.file}: pi-mcp-adapter had written it under the old name of a server from ${printable(notice.plugin)}, for example for /mcp-adapter disable, and it no longer applies.`;
 }
 
+// D-PG9-14: what the line says about the server for each reason.
+const CA_FILE_REMOVED_CAUSES = {
+  "not-https":
+    "is not an https server, so its entry no longer holds your caFile: pi-mcp-adapter accepts a caFile only on an https server.",
+  "origin-changed":
+    "is now an https server at another origin than your caFile was set for, so its entry no longer holds it: pi-mcp-adapter uses a caFile only for one origin. Set it on the entry again if the server at the new origin needs it.",
+  "url-unresolved":
+    "has a new url, and its old or new url names a variable that is not set or is not a valid url, so the two origins could not be compared and its entry no longer holds your caFile. Set it on the entry again if the server needs it.",
+} as const satisfies Record<McpCaFileRemovedNotice["reason"], string>;
+
 function mcpCaFileRemovedLine(notice: McpCaFileRemovedNotice): string {
-  return `Server "${printable(notice.server)}" from ${printable(notice.plugin)} in the ${notice.scope}-scope ${notice.file} is now a stdio server, a plain http server, or an https server at another origin, so its entry no longer holds your caFile: pi-mcp-adapter uses a caFile only for the https origin it was set for. Set it on the entry again if the new server needs it.`;
+  return `Server "${printable(notice.server)}" from ${printable(notice.plugin)} in the ${notice.scope}-scope ${notice.file} ${CA_FILE_REMOVED_CAUSES[notice.reason]}`;
 }
 
 /**

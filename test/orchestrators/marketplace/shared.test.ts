@@ -1179,6 +1179,7 @@ test("AVAR-04 / ANAME-07 / D-PG9-14: foldUnstageNotices drops the variable, tool
       file: "mcp-adapter.json",
       plugin: "hello",
       server: "plugin_hello_api_",
+      reason: "not-https",
     },
     {
       kind: "override-kept",
@@ -1218,6 +1219,7 @@ test("AVAR-04 / ANAME-07 / D-PG9-14: foldUnstageNotices drops the variable, tool
       file: "mcp-adapter.json",
       plugin: "hello",
       server: "plugin_hello_docs_",
+      reason: "not-https",
     },
   ];
 
@@ -1277,6 +1279,7 @@ test("AVAR-04 / ANAME-07 / D-PG9-14: foldUnstageNotices drops the variable, tool
       file: "mcp-adapter.json",
       plugin: "hello",
       server: "plugin_hello_docs_",
+      reason: "not-https",
     },
     {
       kind: "override-restored",

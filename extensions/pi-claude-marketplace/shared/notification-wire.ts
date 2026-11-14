@@ -765,7 +765,15 @@ const MCP_CONFIG_NOTICE = Type.Union([
     { additionalProperties: false },
   ),
   Type.Object(
-    { kind: Type.Literal("ca-file-removed"), ...MCP_NOTICE_SUBJECT_FIELDS },
+    {
+      kind: Type.Literal("ca-file-removed"),
+      ...MCP_NOTICE_SUBJECT_FIELDS,
+      reason: Type.Union([
+        Type.Literal("not-https"),
+        Type.Literal("origin-changed"),
+        Type.Literal("url-unresolved"),
+      ]),
+    },
     { additionalProperties: false },
   ),
 ]);

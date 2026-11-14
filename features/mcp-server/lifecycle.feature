@@ -819,9 +819,9 @@ Feature: MCP server lifecycle
       """
     When the user runs "/claude:plugin update demo@fixtures --scope user"
     Then the command reports these results:
-      | kind               | severity | needs reload | notices                                                                                                               |
-      | cascade            | info     | true         |                                                                                                                       |
-      | mcp-config-notices | warning  | false        | [{"kind":"ca-file-removed","scope":"user","file":"mcp-adapter.json","plugin":"demo","server":"plugin_demo_remote_"}] |
+      | kind               | severity | needs reload | notices                                                                                                                                    |
+      | cascade            | info     | true         |                                                                                                                                            |
+      | mcp-config-notices | warning  | false        | [{"kind":"ca-file-removed","scope":"user","file":"mcp-adapter.json","plugin":"demo","server":"plugin_demo_remote_","reason":"not-https"}] |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status  | reasons | scope | from  | to    |
       | fixtures         | user              | demo@fixtures | demo | updated |         | user  | 1.0.0 | 1.1.0 |

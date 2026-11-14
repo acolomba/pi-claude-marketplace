@@ -798,6 +798,7 @@ The plain branch has `event` and an optional `matcher`. The lenient branch adds 
 | `server`   | string   | conditional | Required where `plugin` is. Server key in `file`.                                                      |
 | `fields`   | string[] | conditional | Required for `override-kept` and `tool-rules-unenforced`. Field names, in their file order.            |
 | `names`    | string[] | conditional | Required for `variables-missing` and `credentials-blanked`. Variable names, in first-seen order.       |
+| `reason`   | string   | conditional | Required for `ca-file-removed`. McpCaFileRemovedReason: why the entry no longer holds the `caFile`.    |
 
 <!-- /fields -->
 
@@ -955,6 +956,8 @@ The `McpServerStatus` tokens depend on the MCP implementation that Pi runs. pi-m
 `Companion`: `pi-dynamic-workflows`, `pi-mcp-adapter`, `pi-subagents`, `mcp`, `builtin mcp`.
 
 `McpConfigNoticeKind`: `comments-dropped`, `left-unchanged`, `override-kept`, `variables-missing`, `credentials-blanked`, `tool-rules-unenforced`, `leftover-removed`, `ca-file-removed`.
+
+`McpCaFileRemovedReason`: `not-https`, `origin-changed`, `url-unresolved`.
 
 `McpMigrationRowKind`: `moved`, `removed`, `stopped`, `unowned`, `not-listed`, `source-unreadable`, `source-outdated`, `marketplace-unreadable`, `collision`, `file-unreadable`, `unfinished`.
 

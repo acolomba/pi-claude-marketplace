@@ -191,24 +191,43 @@ describe("composeMcpConfigNoticesText", () => {
     );
   });
 
-  test("D-PG9-14: a ca-file-removed section names each server and its plugin, with control characters escaped", () => {
-    // act
-    const text = composeMcpConfigNoticesText("ca-file-removed", [
-      {
-        kind: "ca-file-removed",
-        scope: "project",
-        file: "mcp-adapter.json",
-        plugin: "he\u202ello",
-        server: "s\u001br",
-      },
-    ]);
+  for (const { reason, cause } of [
+    {
+      reason: "not-https",
+      cause:
+        "is not an https server, so its entry no longer holds your caFile: pi-mcp-adapter accepts a caFile only on an https server.",
+    },
+    {
+      reason: "origin-changed",
+      cause:
+        "is now an https server at another origin than your caFile was set for, so its entry no longer holds it: pi-mcp-adapter uses a caFile only for one origin. Set it on the entry again if the server at the new origin needs it.",
+    },
+    {
+      reason: "url-unresolved",
+      cause:
+        "has a new url, and its old or new url names a variable that is not set or is not a valid url, so the two origins could not be compared and its entry no longer holds your caFile. Set it on the entry again if the server needs it.",
+    },
+  ] as const) {
+    test(`D-PG9-14: a ${reason} ca-file-removed line names the server, its plugin, and only that cause, with control characters escaped`, () => {
+      // act
+      const text = composeMcpConfigNoticesText("ca-file-removed", [
+        {
+          kind: "ca-file-removed",
+          scope: "project",
+          file: "mcp-adapter.json",
+          plugin: "he\u202ello",
+          server: "s\u001br",
+          reason,
+        },
+      ]);
 
-    // assert
-    assert.strictEqual(
-      text,
-      'MCP server caFile removed.\n\nServer "s\\u001br" from he\\u202ello in the project-scope mcp-adapter.json is now a stdio server, a plain http server, or an https server at another origin, so its entry no longer holds your caFile: pi-mcp-adapter uses a caFile only for the https origin it was set for. Set it on the entry again if the new server needs it.',
-    );
-  });
+      // assert
+      assert.strictEqual(
+        text,
+        `MCP server caFile removed.\n\nServer "s\\u001br" from he\\u202ello in the project-scope mcp-adapter.json ${cause}`,
+      );
+    });
+  }
 
   test("AMIG-01: control characters in a leftover's old name render as \\u escapes", () => {
     // act

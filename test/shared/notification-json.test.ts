@@ -2799,7 +2799,7 @@ test("AFILE-04: converts every MCP config notice kind field by field", () => {
     { kind: "credentials-blanked", ...subject, names: ["B"] },
     { kind: "tool-rules-unenforced", ...subject, fields: ["toolPermissions"] },
     { kind: "leftover-removed", ...subject },
-    { kind: "ca-file-removed", ...subject },
+    { kind: "ca-file-removed", ...subject, reason: "origin-changed" },
   ] as const;
 
   // act
@@ -2823,7 +2823,7 @@ test("AFILE-04: converts every MCP config notice kind field by field", () => {
       { kind: "credentials-blanked", ...subject, names: ["B"] },
       { kind: "tool-rules-unenforced", ...subject, fields: ["toolPermissions"] },
       { kind: "leftover-removed", ...subject },
-      { kind: "ca-file-removed", ...subject },
+      { kind: "ca-file-removed", ...subject, reason: "origin-changed" },
     ],
   });
 });

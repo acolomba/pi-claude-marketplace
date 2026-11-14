@@ -6,8 +6,8 @@
 // walk and the notify-grammar invariant never drive it. This dedicated lock
 // reads the `mcp-comments-dropped`, `mcp-config-left-unchanged`,
 // `mcp-override-kept`, `mcp-variables-missing`, `mcp-credentials-blanked`,
-// `mcp-tool-rules-unenforced`, `mcp-leftover-removed` and `mcp-ca-file-removed`
-// blocks from docs/output-catalog.md and asserts that the tui text strategy
+// `mcp-tool-rules-unenforced`, `mcp-leftover-removed` and the three
+// `mcp-ca-file-removed` blocks from docs/output-catalog.md and asserts that the tui text strategy
 // emits each one byte for byte, in one warning-severity call, with a non-empty
 // summary line followed by a blank line (AFILE-06, AVAR-04, AVAR-05, ANAME-07,
 // AMIG-01, D-PG9-14). In
@@ -102,6 +102,29 @@ const CATALOG_NOTICE_ROWS: readonly CatalogNoticeRow[] = [
       file: "mcp-adapter.json",
       plugin: "hello",
       server: "plugin_hello_srv_",
+      reason: "not-https",
+    },
+  },
+  {
+    state: "mcp-ca-file-removed-origin-changed",
+    notice: {
+      kind: "ca-file-removed",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      reason: "origin-changed",
+    },
+  },
+  {
+    state: "mcp-ca-file-removed-url-unresolved",
+    notice: {
+      kind: "ca-file-removed",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      reason: "url-unresolved",
     },
   },
 ];
@@ -116,7 +139,7 @@ function emit(t: TestContext, notice: McpConfigNotice): readonly NotifyArguments
 }
 
 for (const { state, notice } of CATALOG_NOTICE_ROWS) {
-  test(`AFILE-04: a ${notice.kind} notice is one warning-severity call`, (t) => {
+  test(`AFILE-04: the ${state} notice is one warning-severity call`, (t) => {
     // act
     const calls = emit(t, notice);
 
@@ -127,7 +150,7 @@ for (const { state, notice } of CATALOG_NOTICE_ROWS) {
     );
   });
 
-  test(`AFILE-04: a ${notice.kind} notice opens with a summary line and a blank line`, (t) => {
+  test(`AFILE-04: the ${state} notice opens with a summary line and a blank line`, (t) => {
     // act
     const [message] = emit(t, notice)[0] ?? [""];
 
@@ -135,7 +158,7 @@ for (const { state, notice } of CATALOG_NOTICE_ROWS) {
     assert.match(message, /^[^\n]+\n\n[^\n]/);
   });
 
-  test(`AFILE-04: a ${notice.kind} notice is byte-equal to the catalog's ${state} block`, async (t) => {
+  test(`AFILE-04: the ${state} notice is byte-equal to its catalog block`, async (t) => {
     // arrange
     const expectedMessage = await readCatalogBlock(state);
 
@@ -146,7 +169,7 @@ for (const { state, notice } of CATALOG_NOTICE_ROWS) {
     assert.strictEqual(message, expectedMessage);
   });
 
-  test(`JOUT-01: a ${notice.kind} notice is one schema-valid entry in json mode`, () => {
+  test(`JOUT-01: the ${state} notice is one schema-valid entry in json mode`, () => {
     // arrange
     const capture = createJsonCapture();
     const ctx = {

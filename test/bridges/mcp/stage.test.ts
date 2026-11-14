@@ -2655,6 +2655,7 @@ describe("prepareStageMcpServers", () => {
         file: "mcp-adapter.json",
         plugin: "hello",
         server: "plugin_hello_local_",
+        reason: "not-https",
       },
     ]);
   });

@@ -42,6 +42,7 @@ import {
 
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { AdapterEntryDefaultValue } from "../../domain/mcp-server-features.ts";
+import type { McpCaFileRemovedReason } from "../../shared/notification-types.ts";
 
 // AFILE-06: the user's choices in pi-mcp-adapter's `ServerEntry` that survive
 // a re-stage. `directTools`, `toolPrefix` and `description` are owned by this
@@ -314,71 +315,78 @@ function definesServer(entry: Readonly<Record<string, unknown>>): boolean {
 }
 
 /**
- * D-PG9-14: whether a carried `caFile` still applies to the new entry.
- * pi-mcp-adapter 7.0.1 refuses to connect an entry whose `caFile` sits beside
- * `command` or `socket` or a url that is not https (`validateCaFile` in its
- * `http-ca.ts`), and it uses the bundle only for the url's `URL.origin`. So
- * the new entry must be an https server, and, when the entry it replaces
- * defines a server, at that entry's origin. An override stub defines none.
- * A url read with the stage's environment as the adapter reads it gives the
- * origin and the scheme. A url that names an unset variable, or that does not
- * parse, gives neither: the adapter decides at connect time, and against a
- * previous url the `caFile` stays only while the url text is unchanged.
+ * D-PG9-14: why a carried `caFile` no longer applies to the new entry, or
+ * none when it still does. pi-mcp-adapter 7.0.1 refuses to connect an entry
+ * whose `caFile` sits beside `command` or `socket` or a url that is not https
+ * (`validateCaFile` in its `http-ca.ts`), and it uses the bundle only for the
+ * url's `URL.origin`. So the new entry must be an https server, and, when the
+ * entry it replaces defines a server, at that entry's origin. An override stub
+ * defines none. A url read with the stage's environment as the adapter reads
+ * it gives the origin and the scheme. A url that names an unset variable, or
+ * that does not parse, gives neither: the adapter decides at connect time,
+ * and against a previous url the `caFile` stays only while the url text is
+ * unchanged.
  */
-function caFileApplies(
+function caFileRemovalReason(
   previous: Readonly<Record<string, unknown>>,
   translated: Readonly<Record<string, unknown>>,
   env: ClaudeEnv,
-): boolean {
+): McpCaFileRemovedReason | undefined {
   const url = remoteUrlOf(translated);
   if (url === undefined) {
-    return false;
+    return "not-https";
   }
 
   const resolved = resolvedUrl(url, env);
   if (resolved !== undefined && resolved.protocol !== "https:") {
-    return false;
+    return "not-https";
   }
 
   if (!definesServer(previous)) {
-    return true;
+    return undefined;
   }
 
   const previousUrl = remoteUrlOf(previous);
   if (previousUrl === undefined) {
-    return false;
+    return "origin-changed";
   }
 
   const previousResolved = resolvedUrl(previousUrl, env);
-  return resolved === undefined || previousResolved === undefined
-    ? url === previousUrl
-    : resolved.origin === previousResolved.origin;
+  if (resolved === undefined || previousResolved === undefined) {
+    return url === previousUrl ? undefined : "url-unresolved";
+  }
+
+  return resolved.origin === previousResolved.origin ? undefined : "origin-changed";
 }
 
 /**
  * The carried fields the new entry writes: all of them, minus a `caFile` that
- * no longer applies (D-PG9-14). `caFileRemoved` says the user's value was
- * left out.
+ * no longer applies (D-PG9-14). `caFileRemoved` says why the user's value was
+ * left out, when it was.
  */
 function appliedCarriedFields(
   previous: unknown,
   translated: Readonly<Record<string, unknown>>,
   pluginSet: readonly string[],
   env: ClaudeEnv,
-): { readonly carried: Record<string, unknown>; readonly caFileRemoved: boolean } {
+): {
+  readonly carried: Record<string, unknown>;
+  readonly caFileRemoved?: McpCaFileRemovedReason;
+} {
   const carried = carriedFields(previous, pluginSet);
   if (!isPlainObject(previous) || !Object.hasOwn(carried, "caFile")) {
-    return { carried, caFileRemoved: false };
+    return { carried };
   }
 
-  if (caFileApplies(previous, translated, env)) {
-    return { carried, caFileRemoved: false };
+  const reason = caFileRemovalReason(previous, translated, env);
+  if (reason === undefined) {
+    return { carried };
   }
 
   const applied = Object.fromEntries(
     Object.entries(carried).filter(([field]) => field !== "caFile"),
   );
-  return { carried: applied, caFileRemoved: true };
+  return { carried: applied, caFileRemoved: reason };
 }
 
 /**
@@ -500,19 +508,22 @@ function defaultFieldsFor(
  * keeps, so a credential-bearing field of an override stays inside the marker
  * (AFILE-06). `variableReports` holds each server's variable report,
  * keyed by server key in declared order (AVAR-02). `caFileRemoved` names, in
- * declared order, each server whose entry leaves out the user's `caFile`
- * because it no longer applies (D-PG9-14).
+ * declared order, each server whose entry leaves out the user's `caFile`, and
+ * why it no longer applies (D-PG9-14).
  */
 export function stampServers(input: StampServersInput): {
   readonly stamped: Record<string, unknown>;
   readonly warnings: string[];
   readonly variableReports: ReadonlyMap<string, VariableReport>;
-  readonly caFileRemoved: readonly string[];
+  readonly caFileRemoved: ReadonlyArray<{
+    readonly server: string;
+    readonly reason: McpCaFileRemovedReason;
+  }>;
 } {
   const stamped: Record<string, unknown> = {};
   const warnings: string[] = [];
   const variableReports = new Map<string, VariableReport>();
-  const caFileRemoved: string[] = [];
+  const caFileRemoved: Array<{ server: string; reason: McpCaFileRemovedReason }> = [];
   for (const [name, entry] of Object.entries(input.servers)) {
     const { entry: translated, report } = translatedEntry(
       name,
@@ -529,8 +540,8 @@ export function stampServers(input: StampServersInput): {
       pluginSetFields,
       input.substitution.env,
     );
-    if (removed) {
-      caFileRemoved.push(name);
+    if (removed !== undefined) {
+      caFileRemoved.push({ server: name, reason: removed });
     }
 
     const defaultFields = defaultFieldsFor(entry, translated, carried);

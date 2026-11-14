@@ -246,18 +246,19 @@ function leftoverNotices(
   }));
 }
 
-/** D-PG9-14: one notice per server whose entry leaves out the user's `caFile`. */
+/** D-PG9-14: one notice per server whose entry leaves out the user's `caFile`, with why. */
 function caFileRemovedNotices(
-  servers: readonly string[],
+  removals: ReadonlyArray<Pick<McpCaFileRemovedNotice, "server" | "reason">>,
   scope: Scope,
   pluginName: string,
 ): McpCaFileRemovedNotice[] {
-  return servers.map((server) => ({
+  return removals.map(({ server, reason }) => ({
     kind: "ca-file-removed",
     scope,
     file: "mcp-adapter.json",
     plugin: pluginName,
     server,
+    reason,
   }));
 }
 
