@@ -5293,3 +5293,27 @@ Noted 2026-11-14 (parity-gaps, Phase 3 code review WR-03, iteration 2). Present 
 ## CHILDSESSIONID-01: should a child tool hook's session fields name the parent session?
 
 Noted 2026-11-14 (parity-gaps, Phase 3 verification, PG-HOOK-07a unclassified row). In a pi-subagents child, a tool hook's `session_id`, `transcript_path` and `CLAUDE_CODE_SESSION_ID` name the child's own Pi session, so `session_id` equals `agent_id`. Claude Code appears to keep the main session in those fields: its 2.1.323 `SubagentStop` schema carries `agent_transcript_path` beside the base `transcript_path`; not confirmed for `PreToolUse`/`PostToolUse`. pi-subagents 0.88.1 sets `PI_SUBAGENT_PARENT_SESSION` in the runner environment of background children (`src/runs/background/async-execution.js:553-555`), so the parent id is reachable there; the parent's transcript path is not known to be. Carried to Phase 6 as decision 26 and success criterion 6; research the upstream contract first (`claude-code-compat-research`).
+
+## WFCMDCOLLIDE-01: a bare workflow reference that shares its name with a plugin command still gets a slash
+
+Noted 2026-11-14 (parity-gaps, Phase 4). A bare `plugin:wf` reference to a workflow whose installed name equals a command of the plugin still becomes `/plugin:wf`, because `names.commands` lists the command that staging later drops for the workflow (D-PG4-08 precedence; see `docs/workflows-compatibility.md` Naming).
+
+## WFAGENTCONST-01: a workflow that passes an agent type through a constant gets no restriction note
+
+Noted 2026-11-14 (parity-gaps, Phase 4). The PG-SEC-01 note reads only string-literal `agentType` values. claude-security's `scan.js` passes `claude-security:scan-loader` (`tools: Read`) and `claude-security:scan-researcher` through the minified constants `Ut` and `zt`, so those two agents get no note. An option is to follow a `const` whose initializer is a string literal.
+
+## PRELOADSIBLING-01: a skill body an agent preloads keeps a dead sibling path
+
+Noted 2026-11-14 (parity-gaps, Phase 4). `bridges/agents/skill-preload.ts` puts a skill's source body inside an agent without the D-PG4-07 sibling path rewrite, so a `../<sibling>/` path there stays dead. `domain/skill-sibling-paths.ts` is pure, so a fix can reuse it.
+
+## STAGEDUPMARKER-01: check whether the second code-duplication marker in the skills and commands stage modules is inert
+
+Noted 2026-11-14 (parity-gaps, Phase 4). The second `fallow-ignore-next-line code-duplication` marker in `bridges/skills/stage.ts` (above the staged `return`), and its pair in `bridges/commands/stage.ts`, appear to hide no clone group, both before and after the sibling rewrite. Delete both, run `npx fallow dupes`, and restore only if a group reappears.
+
+## WFRESTRICTGATE-01: version-gate the workflow agent restriction note once the engine keeps the restriction
+
+Noted 2026-11-14 (parity-gaps, Phase 4). When a pi-dynamic-workflows release applies the agent type's tool policy to Pi's built-in tools (draft request: `.planning/upstream/pi-dynamic-workflows-agent-tool-restriction.md`, not yet filed by the maintainer), version-gate or remove the PG-SEC-01 note.
+
+## INFOAGENTESCAPE-01: `info` on a refused plugin lists agent file names from a folder outside the plugin root
+
+Noted 2026-11-14 (parity-gaps, Phase 4). Found while adding the PG-SEC-01 note to `info`. For a refused plugin whose agents path escapes the plugin root, the lenient `agents:` line of `info` still lists file names from that outside folder (the escape case shows `agents: spy`). The new note's read is contained; the existing directory listing is not. Present before Phase 4. Apply `resolveContainedComponentPath` to the lenient listing of every component kind.
