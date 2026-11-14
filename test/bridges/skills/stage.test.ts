@@ -126,21 +126,20 @@ async function stageSingleSkill(
   return { stagedBytes, pluginRoot, pluginDataDir };
 }
 
-/**
- * Writes `files` (path under the plugin's `skills` folder to text) into the
- * plugin `acme`, stages its skills, and returns the staged handle with the
- * case's paths.
- */
-async function stageSkillFiles(
+/** The paths of one case's plugin `acme`, whose skills sit in `skillsDirectory`. */
+interface SkillCasePaths {
+  readonly scopeRoot: string;
+  readonly skillsDirectory: string;
+  readonly pluginRoot: string;
+  readonly pluginDataDir: string;
+  readonly locations: ReturnType<typeof locationsFor>;
+}
+
+/** Writes `files` (path under the plugin's `skills` folder to text) into the plugin `acme`. */
+async function writeSkillFiles(
   t: TestContext,
   files: Readonly<Record<string, string>>,
-): Promise<{
-  prepared: Extract<PreparedSkillsStaging, { kind: "staged" }>;
-  skillsDirectory: string;
-  pluginRoot: string;
-  pluginDataDir: string;
-  locations: ReturnType<typeof locationsFor>;
-}> {
+): Promise<SkillCasePaths> {
   const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
     t,
     "skills-stage-files-",
@@ -151,18 +150,36 @@ async function stageSkillFiles(
     await writeFile(path.join(skillsDirectory, file), text);
   }
 
-  const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
+  return { scopeRoot, skillsDirectory, pluginRoot, pluginDataDir, locations };
+}
+
+/** Stages the skills of the plugin `acme` that `writeSkillFiles` wrote. */
+async function stageWrittenSkills(
+  paths: SkillCasePaths,
+): Promise<Extract<PreparedSkillsStaging, { kind: "staged" }>> {
   const prepared = await prepareStageSkills(createRemovalOps(), {
-    locations,
-    cwd: scopeRoot,
+    locations: paths.locations,
+    cwd: paths.scopeRoot,
     knownWorkflowNames: [],
     pluginName: "acme",
-    pluginRoot,
-    pluginDataDir,
-    resolved,
+    pluginRoot: paths.pluginRoot,
+    pluginDataDir: paths.pluginDataDir,
+    resolved: installableSkillsPlugin(paths.pluginRoot, [paths.skillsDirectory]),
   });
   assert.strictEqual(prepared.kind, "staged");
-  return { prepared, skillsDirectory, pluginRoot, pluginDataDir, locations };
+  return prepared;
+}
+
+/**
+ * Writes `files` into the plugin `acme`, stages its skills, and returns the
+ * staged handle with the case's paths.
+ */
+async function stageSkillFiles(
+  t: TestContext,
+  files: Readonly<Record<string, string>>,
+): Promise<SkillCasePaths & { prepared: Extract<PreparedSkillsStaging, { kind: "staged" }> }> {
+  const paths = await writeSkillFiles(t, files);
+  return { ...paths, prepared: await stageWrittenSkills(paths) };
 }
 
 /**
@@ -472,6 +489,119 @@ describe("prepareStageSkills", () => {
           "---\nSee ../tool/x.md.\n",
       ),
     );
+  });
+
+  test("PG-SKILL-04: rewrites a sibling path in supporting Markdown from the folder of the file", async (t) => {
+    // arrange
+    const files = {
+      "alpha/SKILL.md": "---\nname: alpha\ndescription: Alpha\n---\n",
+      "alpha/references/deep.md": "Deep link ../../beta/ref.md here.\n",
+      "beta/SKILL.md": "---\nname: beta\ndescription: Beta\n---\n",
+    };
+
+    // act
+    const { prepared } = await stageSkillFiles(t, files);
+    const deepBytes = await readFile(
+      path.join(prepared.stagingRoot, "acme-alpha", "references", "deep.md"),
+    );
+
+    // assert
+    assert.deepStrictEqual(deepBytes, Buffer.from("Deep link ../../acme-beta/ref.md here.\n"));
+  });
+
+  test("PG-SKILL-04: climbs three folders from supporting Markdown two folders deep", async (t) => {
+    // arrange
+    const files = {
+      "alpha/SKILL.md": "---\nname: alpha\ndescription: Alpha\n---\n",
+      "alpha/references/deep/notes.md": "See `../../../beta/`.\n",
+      "beta/SKILL.md": "---\nname: beta\ndescription: Beta\n---\n",
+    };
+
+    // act
+    const { prepared } = await stageSkillFiles(t, files);
+    const notesBytes = await readFile(
+      path.join(prepared.stagingRoot, "acme-alpha", "references", "deep", "notes.md"),
+    );
+
+    // assert
+    assert.deepStrictEqual(notesBytes, Buffer.from("See `../../../acme-beta/`.\n"));
+  });
+
+  test("PG-SKILL-04: leaves a link from supporting Markdown to its own SKILL.md as written", async (t) => {
+    // arrange
+    const files = {
+      "alpha/SKILL.md": "---\nname: alpha\ndescription: Alpha\n---\n",
+      "alpha/references/deep.md": "Back to ../SKILL.md and ../../alpha/x.md.\n",
+      "beta/SKILL.md": "---\nname: beta\ndescription: Beta\n---\n",
+    };
+
+    // act
+    const { prepared } = await stageSkillFiles(t, files);
+    const deepBytes = await readFile(
+      path.join(prepared.stagingRoot, "acme-alpha", "references", "deep.md"),
+    );
+
+    // assert
+    assert.deepStrictEqual(deepBytes, Buffer.from("Back to ../SKILL.md and ../../alpha/x.md.\n"));
+  });
+
+  test("PG-SKILL-04: leaves a sibling path in a non-Markdown file and behind a symbolic link as written", async (t) => {
+    // arrange
+    const paths = await writeSkillFiles(t, {
+      "alpha/SKILL.md": "---\nname: alpha\ndescription: Alpha\n---\n",
+      "alpha/run.txt": "cat ../beta/ref.md\n",
+      "beta/SKILL.md": "---\nname: beta\ndescription: Beta\n---\n",
+    });
+    const outsideFile = path.join(paths.pluginRoot, "outside.md");
+    await writeFile(outsideFile, "See ../beta/ref.md\n");
+    await symlink(outsideFile, path.join(paths.skillsDirectory, "alpha", "linked.md"));
+
+    // act
+    const prepared = await stageWrittenSkills(paths);
+    const runBytes = await readFile(path.join(prepared.stagingRoot, "acme-alpha", "run.txt"));
+
+    // assert
+    assert.deepStrictEqual(runBytes, Buffer.from("cat ../beta/ref.md\n"));
+    assert.strictEqual(await readFile(outsideFile, "utf8"), "See ../beta/ref.md\n");
+  });
+
+  test("PG-SKILL-04: writes each SKILL.md once and a supporting file only when its text changed", async (t) => {
+    // arrange
+    const paths = await writeSkillFiles(t, {
+      "alpha/SKILL.md": "---\nname: alpha\ndescription: Alpha\n---\n",
+      "alpha/references/deep.md": "Deep link ../../beta/ref.md here.\n",
+      "alpha/references/plain.md": "No link here.\n",
+      "beta/SKILL.md": "---\nname: beta\ndescription: Beta\n---\n",
+    });
+    const originalWriteFile = filesystemPromises.writeFile.bind(filesystemPromises);
+    const writtenFiles: Parameters<typeof originalWriteFile>[0][] = [];
+    const writes = t.mock.method(
+      filesystemPromises,
+      "writeFile",
+      async (
+        file: Parameters<typeof originalWriteFile>[0],
+        data: Parameters<typeof originalWriteFile>[1],
+        options?: Parameters<typeof originalWriteFile>[2],
+      ) => {
+        writtenFiles.push(file);
+        await originalWriteFile(file, data, options);
+      },
+    );
+    t.after(() => {
+      writes.mock.restore();
+      syncBuiltinESMExports();
+    });
+    syncBuiltinESMExports();
+
+    // act
+    const prepared = await stageWrittenSkills(paths);
+
+    // assert
+    assert.deepStrictEqual(writtenFiles, [
+      path.join(prepared.stagingRoot, "acme-alpha", "SKILL.md"),
+      path.join(prepared.stagingRoot, "acme-alpha", "references", "deep.md"),
+      path.join(prepared.stagingRoot, "acme-beta", "SKILL.md"),
+    ]);
   });
 
   test("leaves a non-Markdown supporting file byte for byte, though it holds a skill reference", async (t) => {

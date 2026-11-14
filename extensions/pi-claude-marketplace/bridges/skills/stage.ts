@@ -157,6 +157,9 @@ function augmentSkillDescription(
   return setDescriptionScalar(content, effective);
 }
 
+/** Rewrites the text of one staged Markdown file in the staged folder `stagedFileDir`. */
+type SkillMarkdownRewrite = (content: string, stagedFileDir: string) => string;
+
 /**
  * Rewrites copied supporting Markdown without following plugin symlinks.
  * D-CF2-02: it leaves the skill's own `SKILL.md`, `skillFile`, alone. The
@@ -165,9 +168,8 @@ function augmentSkillDescription(
  */
 async function rewriteSupportingMarkdown(
   directory: string,
-  pluginName: string,
-  names: InstalledReferenceNames,
   skillFile: string,
+  rewrite: SkillMarkdownRewrite,
 ): Promise<void> {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const file = path.join(directory, entry.name);
@@ -183,11 +185,11 @@ async function rewriteSupportingMarkdown(
 
     if (fileStat.isDirectory()) {
       // eslint-disable-next-line no-await-in-loop -- the caller's staging cleanup needs no write in flight
-      await rewriteSupportingMarkdown(file, pluginName, names, skillFile);
+      await rewriteSupportingMarkdown(file, skillFile, rewrite);
     } else if (fileStat.isFile() && entry.name.endsWith(".md")) {
       // eslint-disable-next-line no-await-in-loop -- the caller's staging cleanup needs no write in flight
       const content = await readFile(file, "utf8");
-      const rewritten = rewriteMarkdownReferences(content, pluginName, names);
+      const rewritten = rewrite(content, directory);
       if (rewritten !== content) {
         // eslint-disable-next-line no-await-in-loop -- the caller's staging cleanup needs no write in flight
         await writeFile(file, rewritten, "utf8");
@@ -251,6 +253,29 @@ function parseSkillSource(content: string, generatedName: string): ParsedSkillSo
       degraded: { generatedName, parseError: errorMessage(parseErr) },
     };
   }
+}
+
+/**
+ * SKTK-01 references, then D-PG4-05 sibling paths, for a Markdown file of
+ * `skill` staged under `stagedDir`. The copy keeps the source tree, so a
+ * staged file's source folder is the same relative path under the skill's
+ * source folder.
+ */
+function skillMarkdownRewrite(
+  context: SkillStagingContext,
+  skill: DiscoveredSkill,
+  stagedDir: string,
+): SkillMarkdownRewrite {
+  const skillSourceDir = path.resolve(skill.skillDir);
+  return (content, stagedFileDir) =>
+    rewriteSiblingSkillPaths(
+      rewriteMarkdownReferences(content, context.pluginName, context.referenceNames),
+      {
+        fileSourceDir: path.join(skillSourceDir, path.relative(stagedDir, stagedFileDir)),
+        skillSourceDir,
+        siblingSkills: context.siblingSkills,
+      },
+    );
 }
 
 /** What every skill of one `prepareStageSkills` call is staged with. */
@@ -363,16 +388,11 @@ async function stageSkill(
   // SKTK-01: retarget same-plugin `<plugin>:<skill>`, `<plugin>:<command>`
   // and `<plugin>:<workflow>` references (both arms -- a degraded skill's
   // body is prose too). Runs before SK-4 substitution so the PARSE-02
-  // backstop validates the final bytes.
-  content = rewriteMarkdownReferences(content, pluginName, context.referenceNames);
-  // D-PG4-05: sibling paths are rewritten before SK-4 substitution, so a
-  // `${CLAUDE_SKILL_DIR}/../<sibling>/` path still reads as a token.
-  const skillSourceDir = path.resolve(skill.skillDir);
-  content = rewriteSiblingSkillPaths(content, {
-    fileSourceDir: skillSourceDir,
-    skillSourceDir,
-    siblingSkills: context.siblingSkills,
-  });
+  // backstop validates the final bytes. D-PG4-05: the sibling paths are
+  // rewritten before it too, so a `${CLAUDE_SKILL_DIR}/../<sibling>/` path
+  // still reads as a token.
+  const rewriteMarkdown = skillMarkdownRewrite(context, skill, stagedDir);
+  content = rewriteMarkdown(content, stagedDir);
   content = substituteClaudeVars(content, skillVars);
   // D-CF2-02 / D-CF2-06 / T-02-02: the record goes in last, after every
   // rewrite, so no reference rewrite reads its names. Its `pluginRoot` and
@@ -383,7 +403,7 @@ async function stageSkill(
     pluginData: context.pluginDataDir,
   });
   await writeFile(skillMdPath, content, "utf8");
-  await rewriteSupportingMarkdown(stagedDir, pluginName, context.referenceNames, skillMdPath);
+  await rewriteSupportingMarkdown(stagedDir, skillMdPath, rewriteMarkdown);
 
   // PARSE-02 / D-86-04: re-parse the STAGED bytes as a Pi-acceptability
   // backstop. A THROW here means our OWN rewrite/substitution produced
