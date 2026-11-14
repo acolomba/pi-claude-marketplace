@@ -870,6 +870,32 @@ test("D-PG7-04 names a nested unparseable agent by its folders and notes each fi
   ]);
 });
 
+test("D-PG7-04 notes an agent whose frontmatter parses to text, under its file name", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-not-mapping-"));
+  t.after(() => rm(directory, { recursive: true, force: true, maxRetries: 3 }));
+  await writeFile(path.join(directory, "keyless.md"), "---\ntools Read\n---\nAnswer.\n");
+
+  // act
+  const discovery = await discoverPluginAgents({ pluginName: "acme", agentsDirs: [directory] });
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      agents: discovery.discovered.map((agent) => [agent.generatedName, agent.raw]),
+      warnings: discovery.warnings,
+    },
+    {
+      agents: [["pi-claude-marketplace-acme-keyless", {}]],
+      warnings: [
+        'agent "acme:keyless": its source frontmatter could not be parsed (the frontmatter ' +
+          "is not a mapping of keys); the agent is loaded with no frontmatter fields, so its " +
+          "tools, model, and description settings are not applied.",
+      ],
+    },
+  );
+});
+
 test("D-PG7-04 adds no note for a file that parses through the repair", async (t) => {
   // arrange
   const directory = await mkdtemp(path.join(tmpdir(), "agent-discover-repaired-"));

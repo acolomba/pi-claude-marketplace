@@ -96,14 +96,22 @@ describe("readAgentFrontmatter", () => {
       expectedAgentFile: { raw: { "first second": "value" }, body: "Body." },
     },
     {
-      description: "D-PG7-05: no fields for a block that is plain text",
+      description: "D-PG7-04: no fields and a reason for a block that is plain text",
       agentFile: "---\njust text\n---\nBody.\n",
-      expectedAgentFile: { raw: {}, body: "Body." },
+      expectedAgentFile: {
+        raw: {},
+        body: "Body.",
+        parseError: "the frontmatter is not a mapping of keys",
+      },
     },
     {
-      description: "D-PG7-05: no fields for a block that is a sequence",
+      description: "D-PG7-04: no fields and a reason for a block that is a sequence",
       agentFile: "---\n- Read\n- Bash\n---\nBody.\n",
-      expectedAgentFile: { raw: {}, body: "Body." },
+      expectedAgentFile: {
+        raw: {},
+        body: "Body.",
+        parseError: "the frontmatter is not a mapping of keys",
+      },
     },
     {
       description:

@@ -115,8 +115,9 @@ export interface ParsedFrontmatter {
   readonly raw: RawAgentFrontmatter;
   readonly body: string;
   /**
-   * D-PG7-04: the message of Pi's first parse, present only when the block
-   * did not parse after the repair either, so `raw` holds no field.
+   * D-PG7-04: why `raw` holds no field. The message of Pi's first parse when
+   * the block did not parse after the repair either, or `NOT_A_MAPPING` when
+   * the block parsed to text or to a list.
    */
   readonly parseError?: string;
 }
@@ -192,16 +193,21 @@ function fieldValue(value: unknown): string {
 }
 
 /**
- * D-PG7-05: the fields of a parsed block. A document that is not a mapping
- * gives none. Each key is copied with `setOwn`, so a `__proto__` key stays
- * data and reparents nothing (T-07-03).
+ * D-PG7-04: the reason the note gives for a block that parses to text or to a
+ * list, which holds no keys, so the agent loads with no fields.
  */
-function rawFields(frontmatter: unknown): RawAgentFrontmatter {
-  const raw: Record<string, string> = {};
-  if (typeof frontmatter !== "object" || frontmatter === null || Array.isArray(frontmatter)) {
-    return raw;
-  }
+const NOT_A_MAPPING = "the frontmatter is not a mapping of keys";
 
+function isMapping(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/**
+ * D-PG7-05: the fields of a parsed mapping. Each key is copied with `setOwn`,
+ * so a `__proto__` key stays data and reparents nothing (T-07-03).
+ */
+function rawFields(frontmatter: Readonly<Record<string, unknown>>): RawAgentFrontmatter {
+  const raw: Record<string, string> = {};
   for (const [key, value] of Object.entries(frontmatter)) {
     setOwn(raw, key.replaceAll(UNSAFE_KEY_CHARACTER, " "), fieldValue(value));
   }
@@ -213,7 +219,9 @@ function rawFields(frontmatter: unknown): RawAgentFrontmatter {
  * PG-AGENT-05 / D-PG7-01: read a source agent's frontmatter as YAML. The body
  * is the text after the closing fence. A block that does not parse after the
  * repair gives no fields, the text after its closing fence as body, and the
- * first parse's message as `parseError` (D-PG7-04).
+ * first parse's message as `parseError` (D-PG7-04). So does a block that
+ * parses to text or to a list, with its own reason, so losing every field is
+ * never silent.
  */
 export function readAgentFrontmatter(rawText: string): ParsedFrontmatter {
   const source = parseSource(rawText);
@@ -225,7 +233,11 @@ export function readAgentFrontmatter(rawText: string): ParsedFrontmatter {
     };
   }
 
-  return { raw: rawFields(source.parsed.frontmatter), body: normalizeBody(source.parsed.body) };
+  const { frontmatter } = source.parsed;
+  const body = normalizeBody(source.parsed.body);
+  return isMapping(frontmatter)
+    ? { raw: rawFields(frontmatter), body }
+    : { raw: {}, body, parseError: NOT_A_MAPPING };
 }
 
 /**

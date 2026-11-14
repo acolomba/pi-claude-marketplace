@@ -750,6 +750,29 @@ Feature: Agent frontmatter
       | marketplace name | marketplace scope | id            | name | status    | reasons               | scope | version |
       | fixtures         | user              | demo@fixtures | demo | installed | requires pi-subagents | user  | 1.0.0   |
 
+  Scenario: Installing an agent whose frontmatter holds no keys reports the agent
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "agents/keyless.md" with this text:
+      """
+      ---
+      tools Read
+      ---
+
+      Answer the task.
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    When the user runs "/claude:plugin install demo@fixtures --scope user"
+    Then the command reports these results:
+      | kind       | severity | needs reload | summary                             | header                                                           | lines                                                                                                                                                                                                                       |
+      | cascade    | warning  | true         | A plugin operation needs attention. |                                                                  |                                                                                                                                                                                                                             |
+      | diagnostic | warning  | false        |                                     | Plugin "demo" [user] installed; 1 declared component has a note. | agent "demo:keyless": its source frontmatter could not be parsed (the frontmatter is not a mapping of keys); the agent is loaded with no frontmatter fields, so its tools, model, and description settings are not applied. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons               | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed | requires pi-subagents | user  | 1.0.0   |
+
   Scenario: An agent whose frontmatter cannot be parsed is listed under its file name with Claude Code's fallback description
     Given pi runs with the scripted model and these companions:
       | companion    |
