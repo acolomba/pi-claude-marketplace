@@ -1109,6 +1109,40 @@ Feature: Agent frontmatter
       | 3    | assistant   | tool call subagent {"action":"get","agent":"demo:task"}                                                                                                                                                                                                                                            |
       | 3    | tool result | subagent returned: agent demo:task\npath {agent dir}/agents/pi-claude-marketplace-demo-task.md\ndescription Denies Agent.\naliases pi-claude-marketplace-demo-task\ntools read\nsystem prompt mode replace\ninherit project context true\ninherit skills false\nsystem prompt:\nAnswer the task.   |
 
+  Scenario: An agent without a tools list that disallows Agent or Task shows the subagent tool as excluded
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file     | name  | description   | disallowedTools | body             |
+      | agent.md | agent | Denies Agent. | Agent           | Answer the task. |
+      | task.md  | task  | Denies Task.  | Task(helper)    | Answer the task. |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply                 | tool     | arguments                             |
+      |                       | subagent | {"action":"get","agent":"demo:agent"} |
+      |                       | subagent | {"action":"get","agent":"demo:task"}  |
+      | The agents are shown. |          |                                       |
+    When the user prompts "Show the agents."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                                            |
+      | 1    | user        | Show the agents.                                                                                                                                                                                                                                                                                                |
+      | 2    | user        | Show the agents.                                                                                                                                                                                                                                                                                                |
+      | 2    | assistant   | tool call subagent {"action":"get","agent":"demo:agent"}                                                                                                                                                                                                                                                        |
+      | 2    | tool result | subagent returned: agent demo:agent\npath {agent dir}/agents/pi-claude-marketplace-demo-agent.md\ndescription Denies Agent.\naliases pi-claude-marketplace-demo-agent\nexcluded tools subagent\nsystem prompt mode replace\ninherit project context true\ninherit skills true\nsystem prompt:\nAnswer the task. |
+      | 3    | user        | Show the agents.                                                                                                                                                                                                                                                                                                |
+      | 3    | assistant   | tool call subagent {"action":"get","agent":"demo:agent"}                                                                                                                                                                                                                                                        |
+      | 3    | tool result | subagent returned: agent demo:agent\npath {agent dir}/agents/pi-claude-marketplace-demo-agent.md\ndescription Denies Agent.\naliases pi-claude-marketplace-demo-agent\nexcluded tools subagent\nsystem prompt mode replace\ninherit project context true\ninherit skills true\nsystem prompt:\nAnswer the task. |
+      | 3    | assistant   | tool call subagent {"action":"get","agent":"demo:task"}                                                                                                                                                                                                                                                         |
+      | 3    | tool result | subagent returned: agent demo:task\npath {agent dir}/agents/pi-claude-marketplace-demo-task.md\ndescription Denies Task.\naliases pi-claude-marketplace-demo-task\nexcluded tools subagent\nsystem prompt mode replace\ninherit project context true\ninherit skills true\nsystem prompt:\nAnswer the task.     |
+
   Scenario: A source model of inherit is kept without --map-model
     Given pi runs with the scripted model and these companions:
       | companion    |

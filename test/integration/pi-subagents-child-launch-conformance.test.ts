@@ -25,6 +25,7 @@ interface ChildLaunchInput {
   readonly requiredExtensions: [];
   readonly tools?: string[];
   readonly excludeTools?: string[];
+  readonly allowNestedSubagents?: boolean;
   readonly mcpDirectTools?: string[];
   readonly capabilityCeiling?: {
     readonly version: 1;
@@ -271,6 +272,49 @@ test("PG-AGENT-03: the tools written for an Agent grant authorize fan-out", asyn
     { tools: child.session.tools, fanoutChild: child.config.fanoutChild },
     { tools: ["read", "subagent"], fanoutChild: true },
   );
+});
+
+test("PG-AGENT-03: the key written for an agent with no tools list authorizes fan-out and keeps ambient MCP tools", async (t) => {
+  // arrange
+  const { launch } = await loadLaunch(t);
+  const { cwd } = await createHermeticEnvironment(t, "child-launch-nested-");
+  const value = convertedLine({ description: "d" }, "allowNestedSubagents");
+
+  // act
+  const child = launch.buildInProcessChildLaunch({
+    ...runnerInput(cwd),
+    allowNestedSubagents: value === "true",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      tools: child.session.tools,
+      fanoutChild: child.config.fanoutChild,
+      ownsMcpDirectTools: Object.hasOwn(child.session.processEnv, "MCP_DIRECT_TOOLS"),
+      mcpDirectTools: child.session.processEnv.MCP_DIRECT_TOOLS,
+    },
+    { tools: undefined, fanoutChild: true, ownsMcpDirectTools: true, mcpDirectTools: undefined },
+  );
+});
+
+test("PG-AGENT-03: the exclude list written for a denied Agent authorizes no fan-out", async (t) => {
+  // arrange
+  const { launch } = await loadLaunch(t);
+  const { cwd } = await createHermeticEnvironment(t, "child-launch-nested-denied-");
+  const excludeTools = convertedLine(
+    { description: "d", disallowedTools: "Agent" },
+    "excludeTools",
+  );
+
+  // act
+  const child = launch.buildInProcessChildLaunch({
+    ...runnerInput(cwd),
+    excludeTools: excludeTools.split(","),
+  });
+
+  // assert
+  assert.strictEqual(child.config.fanoutChild, false);
 });
 
 test("PG-AGENT-07a: the model written for a source inherit is pi-subagents' inherit sentinel", async (t) => {
