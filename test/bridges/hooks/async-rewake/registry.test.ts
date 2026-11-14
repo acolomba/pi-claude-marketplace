@@ -5737,7 +5737,7 @@ test("sends no async answer when a reload comes during its save (D-62-03)", asyn
   assert.deepStrictEqual(pi.messages, []);
 });
 
-// The characters a plain async hook keeps of its stdout.
+// The UTF-16 code units a plain async hook keeps of its stdout.
 const PLAIN_STREAM_LIMIT = 8 * 1024 * 1024;
 
 test("parses a plain async answer whose stdout runs past its bound and drops the rest (D-PG5-17)", async (t) => {
@@ -5770,11 +5770,11 @@ test("parses a plain async answer whose stdout runs past its bound and drops the
 
   // assert
   assert.deepStrictEqual(
-    { messages: pi.messages, dropped: lines.filter((line) => line.includes("characters dropped")) },
+    { messages: pi.messages, dropped: lines.filter((line) => line.includes("code units dropped")) },
     {
       messages: [answerMessage("remember"), answerMessage("context")],
       dropped: [
-        `[hooks] async-hook: stdout past ${PLAIN_STREAM_LIMIT} characters dropped (plugin-lifecycle/UserPromptSubmit)`,
+        `[hooks] async-hook: stdout past ${PLAIN_STREAM_LIMIT} UTF-16 code units dropped (plugin-lifecycle/UserPromptSubmit)`,
       ],
     },
   );

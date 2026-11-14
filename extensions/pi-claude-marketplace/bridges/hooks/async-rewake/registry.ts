@@ -114,7 +114,7 @@ const MAX_CHILD_JOURNALS_SCANNED = 1024;
 const MAX_OWNER_TEXT = 256;
 
 /**
- * The characters a plain `async` hook keeps of its stdout. Nothing stops the
+ * The UTF-16 code units a plain `async` hook keeps of its stdout. Nothing stops the
  * hook (D-PG5-17), so its output is bounded instead; the bound is far past
  * the 10,000-character cap that its answer then passes (D-PG5-14).
  */
@@ -194,7 +194,7 @@ function laneOf(entry: RoutingEntry): BackgroundLane {
 // keeps each stream whole (EXEC-02) up to the collector's NFR-2 ceiling,
 // because its declared `timeout` can let it print for days. A plain async
 // hook has no timer, so it keeps less: the first `PLAIN_ASYNC_STREAM_LIMIT`
-// characters of its stdout, and none of its stderr, which nothing reads. The
+// UTF-16 code units of its stdout, and none of its stderr, which nothing reads. The
 // collector still reads the stderr pipe to its end, so the hook never blocks
 // on a full pipe.
 function streamBoundFor(
@@ -222,7 +222,7 @@ function streamBoundFor(
     limit: PLAIN_ASYNC_STREAM_LIMIT,
     onLimit: () => {
       hookDebugLog(
-        `async-hook: stdout past ${PLAIN_ASYNC_STREAM_LIMIT} characters dropped (${label})`,
+        `async-hook: stdout past ${PLAIN_ASYNC_STREAM_LIMIT} UTF-16 code units dropped (${label})`,
       );
     },
   };

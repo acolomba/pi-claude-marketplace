@@ -1,8 +1,10 @@
 // bridges/hooks/stream-text.ts
 //
-// Collects the whole text of one output stream of a hook child. Both hook
-// lanes use it: `./dispatch-exec.ts` for a blocking hook and
-// `./async-rewake/registry.ts` for an `asyncRewake` hook.
+// Collects the text of one output stream of a hook child, up to a bound.
+// Every hook lane uses it: `./dispatch-exec.ts` for a blocking hook, and
+// `./async-rewake/registry.ts` for an `asyncRewake` hook and for a plain
+// `async` hook, which keeps the first 8,388,608 UTF-16 code units of its
+// stdout and none of its stderr.
 //
 // EXEC-02: Claude Code 2.1.316 keeps every byte a command hook prints on
 // stdout and stderr and reads all of it, so a JSON answer of any size still
@@ -16,6 +18,11 @@
 // sequence that a chunk boundary splits is joined again, not turned into
 // U+FFFD characters. The decoder's tail is added on `end`, so a final partial
 // sequence is not dropped.
+//
+// A bound counts UTF-16 code units, as `String.length` does, so a character
+// outside the Basic Multilingual Plane, such as an emoji, counts as two. A cut
+// that would split such a pair keeps one unit fewer, so the text never ends
+// in half a character.
 
 import { StringDecoder } from "node:string_decoder";
 
@@ -26,7 +33,7 @@ export interface StreamText {
   readonly text: () => string;
 }
 
-/** The most characters a collector keeps, and what it calls once it drops some. */
+/** The most UTF-16 code units a collector keeps, and what it calls once it drops some. */
 export interface StreamTextBound {
   readonly limit: number;
   readonly onLimit: () => void;
@@ -48,10 +55,17 @@ export function ceilingBound(stream: "stdout" | "stderr", hook: string): StreamT
     limit: STREAM_TEXT_CEILING,
     onLimit: () => {
       hookDebugLog(
-        `hook output: ${stream} past ${STREAM_TEXT_CEILING} characters dropped (${hook})`,
+        `hook output: ${stream} past ${STREAM_TEXT_CEILING} UTF-16 code units dropped (${hook})`,
       );
     },
   };
+}
+
+// Where to cut `text` to keep at most `limit` code units: one unit earlier
+// when the last kept unit would be the high half of a surrogate pair.
+function cutIndex(text: string, limit: number): number {
+  const last = text.charCodeAt(limit - 1);
+  return last >= 0xd800 && last <= 0xdbff ? limit - 1 : limit;
 }
 
 /**
@@ -59,8 +73,9 @@ export function ceilingBound(stream: "stdout" | "stderr", hook: string): StreamT
  * error. It is attached before the `data` listener, so an EPIPE or ECONNRESET
  * while a timeout stops the child cannot surface as an unhandled exception. A
  * `null` stream collects nothing. The text keeps the first `bound.limit`
- * characters, later chunks are read and dropped, and `bound.onLimit` runs
- * once, at the first dropped character.
+ * UTF-16 code units, or one fewer where the cut would split a surrogate pair.
+ * Later chunks are read and dropped, and `bound.onLimit` runs once, at the
+ * first dropped unit.
  */
 export function collectStreamText(
   stream: NodeJS.ReadableStream | null,
@@ -72,7 +87,7 @@ export function collectStreamText(
   const append = (piece: string): void => {
     text += piece;
     if (text.length > bound.limit) {
-      text = text.slice(0, bound.limit);
+      text = text.slice(0, cutIndex(text, bound.limit));
       full = true;
       bound.onLimit();
     }

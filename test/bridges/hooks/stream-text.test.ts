@@ -57,7 +57,7 @@ test("keeps every byte of an output past 1 MB", async () => {
   assert.strictEqual(output.text(), `${"x".repeat(1024 * 1024)}tail`);
 });
 
-test("keeps the first characters up to its bound and drops later chunks", async () => {
+test("keeps the first code units up to its bound and drops later chunks", async () => {
   // arrange
   const stream = new PassThrough();
   let limitCalls = 0;
@@ -76,6 +76,38 @@ test("keeps the first characters up to its bound and drops later chunks", async 
 
   // assert
   assert.deepStrictEqual({ text: output.text(), limitCalls }, { text: "abcde", limitCalls: 1 });
+});
+
+test("cuts before a character that its bound would split in half", async () => {
+  // arrange
+  const stream = new PassThrough();
+  let limitCalls = 0;
+  const output = collectStreamText(stream, rejectError, {
+    limit: 3,
+    onLimit: () => {
+      limitCalls += 1;
+    },
+  });
+
+  // act
+  stream.end("ab\u{1F600}c");
+  await once(stream, "end");
+
+  // assert
+  assert.deepStrictEqual({ text: output.text(), limitCalls }, { text: "ab", limitCalls: 1 });
+});
+
+test("keeps a character whose two code units end at its bound", async () => {
+  // arrange
+  const stream = new PassThrough();
+  const output = collectStreamText(stream, rejectError, { limit: 4, onLimit: () => undefined });
+
+  // act
+  stream.end("ab\u{1F600}c");
+  await once(stream, "end");
+
+  // assert
+  assert.strictEqual(output.text(), "ab\u{1F600}");
 });
 
 test("keeps a stream that ends at its bound whole and drops nothing", async () => {
@@ -206,6 +238,6 @@ test("names the stream and the hook in its debug line once a stream passes the c
 
   // assert
   assert.deepStrictEqual(debugLines(), [
-    "[hooks] hook output: stderr past 268435456 characters dropped (demo/Stop)",
+    "[hooks] hook output: stderr past 268435456 UTF-16 code units dropped (demo/Stop)",
   ]);
 });
