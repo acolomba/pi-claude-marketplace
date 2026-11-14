@@ -202,9 +202,8 @@ function laneOf(entry: RoutingEntry): BackgroundLane {
 // because its declared `timeout` can let it print for days. A plain async
 // hook has no timer, so it keeps less: the first `PLAIN_ASYNC_STREAM_LIMIT`
 // UTF-16 code units of its stdout and the last `PLAIN_ASYNC_STREAM_TAIL`, and
-// none of its stderr, which nothing reads. The
-// collector still reads the stderr pipe to its end, so the hook never blocks
-// on a full pipe.
+// none of its stderr, which nothing reads. The collector still reads the
+// stderr pipe to its end, so the hook never blocks on a full pipe.
 function streamBoundFor(
   entry: RoutingEntry,
   lane: BackgroundLane,

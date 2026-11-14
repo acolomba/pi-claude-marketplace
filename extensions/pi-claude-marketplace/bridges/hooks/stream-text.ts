@@ -3,8 +3,9 @@
 // Collects the text of one output stream of a hook child, up to a bound.
 // Every hook lane uses it: `./dispatch-exec.ts` for a blocking hook, and
 // `./async-rewake/registry.ts` for an `asyncRewake` hook and for a plain
-// `async` hook, which keeps the first 8,388,608 UTF-16 code units of its
-// stdout and the last 65,536, and none of its stderr.
+// `async` hook. The registry sets the plain hook's lower bound for stdout,
+// `PLAIN_ASYNC_STREAM_LIMIT` with a kept tail of `PLAIN_ASYNC_STREAM_TAIL`,
+// and keeps none of its stderr.
 //
 // EXEC-02: Claude Code 2.1.316 keeps every byte a command hook prints on
 // stdout and stderr and reads all of it, so a JSON answer of any size still
