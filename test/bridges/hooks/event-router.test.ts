@@ -811,11 +811,16 @@ async function makeProjectHookFixture(
   };
 }
 
-function makeContext(cwd: string, sessionRoot: string, projectTrusted = true): ExtensionContext {
+function makeContext(
+  cwd: string,
+  sessionRoot: string,
+  projectTrusted = true,
+  notices: string[] = [],
+): ExtensionContext {
   return {
     ui: {
       notify(message: string, severity?: "info" | "warning" | "error"): void {
-        void message;
+        notices.push(message);
         void severity;
       },
     } as ExtensionContext["ui"],
@@ -4332,11 +4337,14 @@ test(
       makeContext(suppliedCwd, root),
     );
     const afterSupplied = readDiagnostics().slice(registrationDiagnostics);
+    const notices: string[] = [];
     const defaultedOutput = await registeredHandler(defaultedPi.registrations, "tool_call")(
       refusingToolCall(),
-      makeContext(defaultedCwd, root),
+      makeContext(defaultedCwd, root, true, notices),
     );
-    const afterDefaulted = readDiagnostics().slice(registrationDiagnostics + afterSupplied.length);
+    const afterDefaulted = readDiagnostics()
+      .slice(registrationDiagnostics + afterSupplied.length)
+      .filter((diagnostic) => diagnostic.startsWith("[hooks]"));
 
     // assert
     assert.deepStrictEqual([suppliedOutput, defaultedOutput], [undefined, undefined]);
@@ -4345,6 +4353,8 @@ test(
     assert.deepStrictEqual(afterDefaulted, [
       "[hooks] exec: caught (defaulted-executor-plugin/PreToolUse): executor seam input refused",
     ]);
+    assert.equal(notices.length, 1);
+    assert.match(notices[0] ?? "", /executor seam input refused/);
     assert.deepStrictEqual(suppliedPi.messages, []);
     assert.deepStrictEqual(defaultedPi.messages, []);
   },
