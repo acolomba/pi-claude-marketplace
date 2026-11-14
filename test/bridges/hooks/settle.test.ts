@@ -1984,3 +1984,178 @@ test("drops a StopFailure system message with a debug line (D-CF5-14)", async (t
     "[hooks] settle: 2 systemMessage(s) dropped on StopFailure",
   ]);
 });
+
+const BOOM_FAILURE = { kind: "noop", failure: { kind: "exit", stderr: "boom" } } as const;
+const MISSING_SCRIPT_STDERR =
+  "python3: can't open file '/x/gone.py': [Errno 2] No such file or directory";
+// The em dash (U+2014) of the missing-script notice, escaped because the
+// fix-unicode-dashes hook rewrites a literal one.
+const MISSING_SCRIPT_NOTICE = `Stop hook error: Hook script appears to be missing \u2014 "echo gone" exited 2 with: ${MISSING_SCRIPT_STDERR}. Treating as non-blocking. Run /claude:plugin reinstall gone@catalog --scope user to reinstall it.`;
+
+// An executor that answers each Stop hook with its plugin's result.
+function resultsExecutor(results: Readonly<Record<string, HookExecResult>>): HookExecutor {
+  return (entry) => Promise.resolve(results[entry.pluginId] ?? { kind: "noop" });
+}
+
+for (const { name, results, notices, continued } of [
+  {
+    name: "shows a Stop hook's failed exit as a Stop hook error (D-PG5-10)",
+    results: { failer: BOOM_FAILURE },
+    notices: ["Stop hook error: Failed with non-blocking status code: boom"],
+    continued: undefined,
+  },
+  {
+    name: "shows a missing Stop script and asks for no continuation (D-PG5-08)",
+    results: {
+      gone: { kind: "noop", failure: { kind: "missing-script", stderr: MISSING_SCRIPT_STDERR } },
+    },
+    notices: [MISSING_SCRIPT_NOTICE],
+    continued: undefined,
+  },
+  {
+    name: "continues the run beside a missing Stop script that shows its notice (D-PG5-09)",
+    results: {
+      gone: { kind: "noop", failure: { kind: "missing-script", stderr: MISSING_SCRIPT_STDERR } },
+      guard: { kind: "block", reason: "keep going" },
+    },
+    notices: [MISSING_SCRIPT_NOTICE],
+    continued: continuation("guard", "keep going"),
+  },
+  {
+    name: "shows the system messages, then the failure notices, then the stop line",
+    results: {
+      halt: { kind: "stop", stopReason: "done for today" },
+      failer: BOOM_FAILURE,
+      speaker: { kind: "noop", systemMessage: "said" },
+    },
+    notices: [
+      "Stop says: said",
+      "Stop hook error: Failed with non-blocking status code: boom",
+      "Stop hook stopped continuation: done for today",
+    ],
+    continued: undefined,
+  },
+  {
+    name: "shows the stop reason of the first stopping hook in routing order (D-PG5-13)",
+    results: {
+      first: { kind: "stop", stopReason: "done for today" },
+      second: { kind: "stop", stopReason: "later" },
+    },
+    notices: ["Stop hook stopped continuation: done for today"],
+    continued: undefined,
+  },
+  {
+    name: "shows no stop line for a stop with no reason",
+    results: { halt: { kind: "stop" } },
+    notices: [],
+    continued: undefined,
+  },
+  {
+    name: "shows no stop line for a stop with an empty reason",
+    results: { halt: { kind: "stop", stopReason: "" } },
+    notices: [],
+    continued: undefined,
+  },
+] satisfies ReadonlyArray<{
+  readonly name: string;
+  readonly results: Readonly<Record<string, HookExecResult>>;
+  readonly notices: readonly string[];
+  readonly continued: unknown;
+}>) {
+  test(name, async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket(
+      "Stop",
+      Object.keys(results).map((pluginId) => stopEntry(pluginId)),
+    );
+    const host = makeNoticeHost();
+
+    // act
+    const boundaryResult = await runStop(runtime, host.pi, host.ctx, resultsExecutor(results));
+
+    // assert
+    assert.deepStrictEqual(
+      host.capture.entries,
+      notices.map((text) => hookNoticeEntry(text)),
+    );
+    assert.deepStrictEqual(boundaryResult, continued);
+    assert.deepStrictEqual(host.sent, []);
+    host.capture.assertValid();
+  });
+}
+
+test("shows a Stop hook that cannot start on the first Stop run and not on the second (D-PG5-12)", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket("Stop", [stopEntry("starter")]);
+  const host = makeNoticeHost();
+  const executor = resultsExecutor({
+    starter: { kind: "noop", failure: { kind: "spawn", error: "spawn starter.sh ENOENT" } },
+  });
+
+  // act
+  await runStops(2, runtime, host.pi, host.ctx, executor);
+
+  // assert
+  assert.deepStrictEqual(host.capture.entries, [
+    hookNoticeEntry(
+      "Stop hook error: Failed with non-blocking status code: Error occurred while executing hook command: spawn starter.sh ENOENT",
+    ),
+  ]);
+});
+
+test("debug-logs a Stop failure notice and a stop line that fail to show", async (t) => {
+  // arrange
+  const debugLines = observeHookDebug(t);
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket("Stop", [stopEntry("failer"), stopEntry("halt")]);
+  const { pi, sent } = makePi();
+  const ctx = {
+    mode: "print",
+    get ui(): never {
+      throw new Error("no ui");
+    },
+  } as unknown as ExtensionContext;
+  const executor = resultsExecutor({
+    failer: BOOM_FAILURE,
+    halt: { kind: "stop", stopReason: "done" },
+  });
+
+  // act
+  const boundaryResult = await runStop(runtime, pi, ctx, executor);
+
+  // assert
+  assert.deepStrictEqual(debugLines(), [
+    "[hooks] settle: Stop notice failed: no ui",
+    "[hooks] settle: continue:false from halt suppresses Stop continuation; stopReason=done",
+    "[hooks] settle: Stop notice failed: no ui",
+  ]);
+  assert.strictEqual(boundaryResult, undefined);
+  assert.deepStrictEqual(sent, []);
+});
+
+test("shows no notice for a StopFailure hook that failed (D-PG5-10)", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket("StopFailure", [failureEntry("failer")]);
+  const host = makeNoticeHost();
+  const epoch = runtime.currentGeneration();
+
+  // act
+  agentEndCacheHandler(runtime, epoch)(failureEnd("error", "rate limit exceeded"));
+  await settleHandlerFor(
+    runtime,
+    epoch,
+    host.pi,
+    resultsExecutor({ failer: BOOM_FAILURE }),
+  )(settledEvent, host.ctx);
+
+  // assert
+  assert.deepStrictEqual(host.capture.entries, []);
+  assert.deepStrictEqual(host.sent, []);
+});

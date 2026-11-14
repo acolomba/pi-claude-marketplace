@@ -6,6 +6,7 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 import {
   collectBucketOutcomes,
   compositeHandlerFor,
+  failureNotices,
   matcherFiresOnClosedSetValue,
   toolResultCompositeHandler,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
@@ -4987,6 +4988,23 @@ describe("missing-script notices (D-PG5-08 / D-PG5-11)", () => {
     assert.deepStrictEqual(entries, [
       hookNoticeEntry(MISSING_SCRIPT_NOTICE),
       hookNoticeEntry(MISSING_SCRIPT_NOTICE),
+    ]);
+  });
+});
+
+describe("failureNotices for the Stop event (D-PG5-10)", () => {
+  test("builds a Stop hook's failure notice with the Stop label", () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const [entry] = routedEntries("Stop", ["failer"]);
+    assert.ok(entry !== undefined);
+
+    // act
+    const notices = failureNotices(runtime, "Stop", "Stop", [{ entry, result: EXIT_FAILURE }]);
+
+    // assert
+    assert.deepStrictEqual(notices, [
+      "Stop hook error: Failed with non-blocking status code: boom",
     ]);
   });
 });

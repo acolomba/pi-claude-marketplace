@@ -18,7 +18,9 @@
 // cannot be spawned, and `<label> hook error: Failed to run: <error>` for an
 // exception in the runner. The exit 2 of a missing script shows its whole
 // text, `<label> hook error: Hook script appears to be missing` and the
-// reinstall command of the hook's plugin (D-PG5-08, D-PG5-11).
+// reinstall command of the hook's plugin (D-PG5-08, D-PG5-11). A hook's
+// `continue: false` shows `<label> hook stopped continuation: <reason>`
+// (D-PG5-13).
 //
 // A leaf: no Pi and no runtime imports, so every adapter and every output
 // carrier can share one wording.
@@ -37,6 +39,10 @@ const NO_DECISION_REASON = "Blocked by hook";
 // length at which its renderer cuts the line it shows.
 const NON_BLOCKING_PREFIX = "Failed with non-blocking status code: ";
 const FAILURE_LINE_LIMIT = 200;
+
+// D-PG5-13: Claude Code 2.1.323's reason in the stop notice of a hook whose
+// `continue: false` gives none.
+const NO_STOP_REASON = "Execution stopped by hook";
 
 // D-PG5-11: the em dash of Claude Code 2.1.323's missing-script notice. It
 // stays escaped because the fix-unicode-dashes hook rewrites a literal one.
@@ -217,4 +223,13 @@ export function hookFailureText(label: string, failure: HookFailure, hook: Faile
   }
 
   return `${label} hook error: ${failureLine(failureMessage(failure))}`;
+}
+
+/**
+ * D-PG5-13: the notice of a hook's `continue: false`, as Claude Code 2.1.323
+ * shows it: `<label> hook stopped continuation: <reason>`, with `Execution
+ * stopped by hook` for an undefined or empty reason.
+ */
+export function hookStoppedText(label: string, reason: string | undefined): string {
+  return `${label} hook stopped continuation: ${reason === undefined || reason === "" ? NO_STOP_REASON : reason}`;
 }

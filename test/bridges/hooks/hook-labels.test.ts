@@ -9,6 +9,7 @@ import {
   hookFailureText,
   hookMatchLabel,
   hookSaysText,
+  hookStoppedText,
   postCompactLineText,
   promptBlockedText,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/hook-labels.ts";
@@ -386,6 +387,34 @@ describe("hookFailureText", () => {
     test(`writes the missing-script notice with ${name} (D-PG5-08, D-PG5-11)`, () => {
       // act
       const notice = hookFailureText("Stop", { kind: "missing-script", stderr }, hook);
+
+      // assert
+      assert.strictEqual(notice, text);
+    });
+  }
+});
+
+describe("hookStoppedText", () => {
+  for (const { name, reason, text } of [
+    {
+      name: "the stop reason",
+      reason: "halt",
+      text: "PreToolUse:Bash hook stopped continuation: halt",
+    },
+    {
+      name: "Claude Code's default for no reason",
+      reason: undefined,
+      text: "PreToolUse:Bash hook stopped continuation: Execution stopped by hook",
+    },
+    {
+      name: "Claude Code's default for an empty reason",
+      reason: "",
+      text: "PreToolUse:Bash hook stopped continuation: Execution stopped by hook",
+    },
+  ]) {
+    test(`writes ${name} (D-PG5-13)`, () => {
+      // act
+      const notice = hookStoppedText("PreToolUse:Bash", reason);
 
       // assert
       assert.strictEqual(notice, text);

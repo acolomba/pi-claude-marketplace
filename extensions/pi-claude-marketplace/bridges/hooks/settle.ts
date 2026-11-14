@@ -20,7 +20,10 @@
 // reason and every `additionalContext` back in one message, one
 // `Stop hook feedback:\n<text>` part per value in routing order (D-CF5-11 /
 // D-CF5-13 / D-CF5-25), and each Stop `systemMessage` is shown to the user as
-// `Stop says: <text>`, never to the model (D-CF5-14).
+// `Stop says: <text>`, never to the model (D-CF5-14). A Stop hook that fails
+// without blocking shows its failure notice, and the first `continue: false`
+// shows its `stopReason` as `Stop hook stopped continuation: <reason>`
+// (D-PG5-10, D-PG5-13). A StopFailure hook shows neither.
 //
 // Every handler carries the captured-generation guard so a stale closure from
 // a prior `/reload` cannot fire against rebuilt routing tables;
@@ -32,8 +35,8 @@ import { errorMessage } from "../../shared/errors.ts";
 import { notifyHookNotice, notifyStopHookOverrideCap } from "../../shared/notification-dispatch.ts";
 import { openNotificationRun, requireNotificationMode } from "../../shared/notification-run.ts";
 
-import { collectBucketOutcomes, matcherFiresOnClosedSetValue } from "./dispatch.ts";
-import { hookSaysText } from "./hook-labels.ts";
+import { collectBucketOutcomes, failureNotices, matcherFiresOnClosedSetValue } from "./dispatch.ts";
+import { hookSaysText, hookStoppedText } from "./hook-labels.ts";
 import { classifyStopFailure } from "./payloads/stop-failure.ts";
 import { STOP_OVERRIDE_CAP, type HooksRuntime } from "./runtime.ts";
 
@@ -366,28 +369,51 @@ function stopFeedback(outcomes: readonly BucketOutcome[]): {
   };
 }
 
+// Shows one Stop notice through the run the settle handler opened; a notice
+// that fails to show is debug-logged and never fails the settle.
+function showStopNotice(ctx: ExtensionContext, run: NotificationRun, notice: string): void {
+  try {
+    notifyHookNotice(ctx, run, notice);
+  } catch (error: unknown) {
+    hookDebugLog(`settle: Stop notice failed: ${errorMessage(error)}`);
+  }
+}
+
 /**
- * HOOK-05 / D-CF5-14: show the user each Stop hook's non-empty
- * `systemMessage` as `Stop says: <text>`, in routing order, through the run
- * the settle handler opened. A notice never reaches the model, and a notice
- * that fails to show is debug-logged and never fails the settle.
+ * HOOK-05 / D-CF5-14 / D-PG5-10: show the user each Stop hook's non-empty
+ * `systemMessage` as `Stop says: <text>`, in routing order, then the failure
+ * notices of the Stop hooks that failed without blocking, through the run the
+ * settle handler opened. A notice never reaches the model.
  */
 function showStopNotices(
+  runtime: HooksRuntime,
   ctx: ExtensionContext,
   run: NotificationRun,
   outcomes: readonly BucketOutcome[],
 ): void {
   for (const { result } of outcomes) {
     const message = nonEmpty(result.systemMessage);
-    if (message === undefined) {
-      continue;
+    if (message !== undefined) {
+      showStopNotice(ctx, run, hookSaysText("Stop", message));
     }
+  }
 
-    try {
-      notifyHookNotice(ctx, run, hookSaysText("Stop", message));
-    } catch (error: unknown) {
-      hookDebugLog(`settle: Stop notice failed: ${errorMessage(error)}`);
-    }
+  for (const notice of failureNotices(runtime, "Stop", "Stop", outcomes)) {
+    showStopNotice(ctx, run, notice);
+  }
+}
+
+// D-PG5-13: the `stopReason` of the first stopping Stop hook, shown to the
+// user and never to the model. Claude Code 2.1.323 shows no line for a
+// missing or empty reason.
+function showStopReason(
+  ctx: ExtensionContext,
+  run: NotificationRun,
+  stopReason: string | undefined,
+): void {
+  const reason = nonEmpty(stopReason);
+  if (reason !== undefined) {
+    showStopNotice(ctx, run, hookStoppedText("Stop", reason));
   }
 }
 
@@ -456,7 +482,7 @@ async function runStopBucket(
     return undefined;
   }
 
-  showStopNotices(ctx, run, outcomes);
+  showStopNotices(runtime, ctx, run, outcomes);
 
   // STOP-06 / D-88-05: any continue:false suppresses continuation. This is a
   // non-continuation outcome, so it resets the consecutive continuation
@@ -467,6 +493,7 @@ async function runStopBucket(
       `settle: continue:false from ${stop.entry.pluginId} suppresses Stop continuation; ` +
         `stopReason=${stop.result.stopReason ?? "<none>"}`,
     );
+    showStopReason(ctx, run, stop.result.stopReason);
     runtime.recordStopNonReentry();
     return undefined;
   }

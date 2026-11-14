@@ -484,6 +484,10 @@ async function runAndFold(
 /** The events whose hooks a composite handler runs and whose notices it shows. */
 type NoticeEvent = CompositeDispatchEvent | "PostToolUse" | "PostToolUseFailure";
 
+/** The events whose failure notices `failureNotices` builds: Stop's too. */
+export type FailureNoticeEvent =
+  CompositeDispatchEvent | "PostToolUse" | "PostToolUseFailure" | "Stop";
+
 // D-CF5-14: every hook's non-empty `systemMessage`, in routing order.
 function systemMessages(outcomes: readonly BucketOutcome[]): string[] {
   return outcomes.flatMap(({ result }) =>
@@ -637,8 +641,9 @@ function blocks(outcomes: readonly BucketOutcome[]): HookBlock[] {
 // D-PG5-10: Claude Code shows a hook's non-blocking failure on these events.
 // A SessionEnd failure stays a debug line (D-BG-603), and the line after
 // `/compact` already reports a PostCompact failure (D-BG-501).
-function showsFailures(claudeEvent: NoticeEvent): boolean {
+function showsFailures(claudeEvent: FailureNoticeEvent): boolean {
   switch (claudeEvent) {
+    case "Stop":
     case "PreToolUse":
     case "PostToolUse":
     case "PostToolUseFailure":
@@ -655,7 +660,7 @@ function showsFailures(claudeEvent: NoticeEvent): boolean {
 // D-PG5-12: the key of a start failure's once-only notice, as Claude Code
 // 2.1.323 keys it: the event, a colon, and the declared command with the
 // plugin root filled in.
-function startFailureKey(claudeEvent: NoticeEvent, entry: RoutingEntry): string {
+function startFailureKey(claudeEvent: FailureNoticeEvent, entry: RoutingEntry): string {
   const command = (entry.handlerDecl.command ?? "").replaceAll(
     /\$\{CLAUDE_PLUGIN_ROOT\}|\$CLAUDE_PLUGIN_ROOT\b/g,
     () => entry.resolvedSource,
@@ -668,7 +673,7 @@ function startFailureKey(claudeEvent: NoticeEvent, entry: RoutingEntry): string 
 // bridge load.
 function claimsFailureNotice(
   runtime: HooksRuntime,
-  claudeEvent: NoticeEvent,
+  claudeEvent: FailureNoticeEvent,
   entry: RoutingEntry,
   failure: HookFailure,
 ): boolean {
@@ -683,11 +688,12 @@ function claimsFailureNotice(
  * D-PG5-10 / D-PG5-12: one `<label> hook error: ...` notice for each hook that
  * failed without blocking, in routing order. The failures are read from each
  * hook's own result, because the fold keeps none of them. A hook that runs
- * once for each pair of an edit shows an equal notice once.
+ * once for each pair of an edit shows an equal notice once. The Stop
+ * dispatcher in `./settle.ts` builds its failure notices here too.
  */
-function failureNotices(
+export function failureNotices(
   runtime: HooksRuntime,
-  claudeEvent: NoticeEvent,
+  claudeEvent: FailureNoticeEvent,
   label: string,
   outcomes: readonly BucketOutcome[],
 ): string[] {
