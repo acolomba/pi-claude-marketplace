@@ -1000,12 +1000,15 @@ describe("stampServers", () => {
   test("AFILE-06: of every ServerEntry key, only the carried keys take their previous values and the plugin's adapter-only values are dropped", () => {
     // arrange
     // ANAME-07: the plugin's string `args` is not an array, so the closed
-    // table keeps only its `command` and object `env`.
+    // table keeps only its `command` and object `env`. D-PG9-14: a stdio
+    // entry holds no caFile.
     const expectedEntry = {
       command: "plugin-command",
       env: { ...INJECTED_ENV, PLUGIN_ENV: "plugin-env" },
       ...OWNED,
-      ...Object.fromEntries(CARRIED_KEYS.map((key) => [key, `previous-${key}`])),
+      ...Object.fromEntries(
+        CARRIED_KEYS.filter((key) => key !== "caFile").map((key) => [key, `previous-${key}`]),
+      ),
       _piClaudeMarketplace: MARKER,
     };
 
@@ -1089,7 +1092,6 @@ describe("stampServers", () => {
         protocolVersion: "previous-protocolVersion",
         tasks: "previous-tasks",
         exposeResources: "previous-exposeResources",
-        caFile: "previous-caFile",
         _piClaudeMarketplace: MARKER,
       },
     });
@@ -1154,6 +1156,140 @@ describe("stampServers", () => {
     assert.strictEqual(
       JSON.stringify(stamping.stamped),
       '{"server":{"url":"https://acme.example/v2/mcp","directTools":"search","toolPrefix":"mcp","roots":false,"protocolVersion":"auto","tasks":true,"exposeResources":false,"caFile":"/etc/pki/user/ca-bundle.pem","requestTimeoutMs":300000,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","defaultFields":{"requestTimeoutMs":300000}}}}',
+    );
+  });
+
+  // D-PG9-14: each plugin entry a previous https entry's caFile cannot apply to.
+  for (const [change, server] of [
+    ["a stdio server", { command: "plugin-command" }],
+    ["a plain http server", { type: "http", url: "http://acme.example/mcp" }],
+    ["an https server at another origin", { type: "http", url: "https://other.example/mcp" }],
+  ] as const) {
+    test(`D-PG9-14: an update that makes the server ${change} leaves the user's caFile out and reports it`, () => {
+      // arrange
+      const previous = {
+        url: "https://acme.example/v1/mcp",
+        caFile: "/etc/pki/user/ca-bundle.pem",
+        tasks: true,
+        _piClaudeMarketplace: REMOTE_MARKER,
+      };
+
+      // act
+      const stamping = stampServers({
+        servers: { server },
+        pluginName: "acme",
+        marketplaceName: "catalog",
+        substitution: PROJECT_CONTEXT,
+        previous: { server: previous },
+        keptOverrides: {},
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          caFile: Object.hasOwn(stamping.stamped.server as object, "caFile"),
+          tasks: (stamping.stamped.server as Record<string, unknown>).tasks,
+          caFileRemoved: stamping.caFileRemoved,
+        },
+        { caFile: false, tasks: true, caFileRemoved: ["server"] },
+      );
+    });
+  }
+
+  test("D-PG9-14: a caFile survives a url change at the same https origin, whatever the case of the origin", () => {
+    // arrange
+    const previous = {
+      url: "HTTPS://Acme.Example/v1/mcp",
+      caFile: "/etc/pki/user/ca-bundle.pem",
+      _piClaudeMarketplace: REMOTE_MARKER,
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { type: "http", url: "https://acme.example/v2/mcp" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous: { server: previous },
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      { stamped: JSON.stringify(stamping.stamped), caFileRemoved: stamping.caFileRemoved },
+      {
+        stamped:
+          '{"server":{"url":"https://acme.example/v2/mcp","directTools":"search","toolPrefix":"mcp","caFile":"/etc/pki/user/ca-bundle.pem","requestTimeoutMs":300000,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","defaultFields":{"requestTimeoutMs":300000}}}}',
+        caFileRemoved: [],
+      },
+    );
+  });
+
+  // D-PG9-14: a previous entry that defines a server pi-mcp-adapter gives no
+  // https origin.
+  for (const [shape, previous] of [
+    ["a socket", { socket: "/run/acme.sock" }],
+    ["a url that is not a string", { url: 42 }],
+  ] as const) {
+    test(`D-PG9-14: a caFile beside ${shape} is left out of an https entry`, () => {
+      // arrange
+      const entry = {
+        ...previous,
+        caFile: "/etc/pki/user/ca-bundle.pem",
+        _piClaudeMarketplace: MARKER,
+      };
+
+      // act
+      const stamping = stampServers({
+        servers: { server: { type: "http", url: "https://acme.example/mcp" } },
+        pluginName: "acme",
+        marketplaceName: "catalog",
+        substitution: PROJECT_CONTEXT,
+        previous: { server: entry },
+        keptOverrides: {},
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          caFile: Object.hasOwn(stamping.stamped.server as object, "caFile"),
+          caFileRemoved: stamping.caFileRemoved,
+        },
+        { caFile: false, caFileRemoved: ["server"] },
+      );
+    });
+  }
+
+  test("D-PG9-14: an absorbed override's caFile stays out of a stdio entry and inside the kept override", () => {
+    // arrange
+    const override = { caFile: "/etc/pki/user/ca-bundle.pem", disabled: true };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { command: "plugin-command" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous: { server: override },
+      keptOverrides: { server: override },
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      { stamped: stamping.stamped, caFileRemoved: stamping.caFileRemoved },
+      {
+        stamped: {
+          server: {
+            command: "plugin-command",
+            env: INJECTED_ENV,
+            ...OWNED,
+            disabled: true,
+            ...STDIO_DEFAULT,
+            _piClaudeMarketplace: { ...STDIO_MARKER, keptOverride: override },
+          },
+        },
+        caFileRemoved: ["server"],
+      },
     );
   });
 
@@ -1691,7 +1827,7 @@ describe("restoredOverride", () => {
     assert.strictEqual(JSON.stringify(restored), '{"disabled":true}');
   });
 
-  test("D-PG9-05: each kept protocolVersion, tasks, exposeResources, and caFile takes the live value, and one the live entry lacks is left out", () => {
+  test("D-PG9-05 / D-PG9-14: each kept protocolVersion, tasks, and exposeResources takes the live value, and a caFile the live entry lacks comes back as kept", () => {
     // arrange
     const kept = { ...USER_ADAPTER_FIELDS, headers: { Authorization: "Bearer stub" } };
     const live = {
@@ -1708,7 +1844,26 @@ describe("restoredOverride", () => {
     // assert
     assert.strictEqual(
       JSON.stringify(restored),
-      '{"protocolVersion":"2026-07-28","tasks":false,"exposeResources":true,"headers":{"Authorization":"Bearer stub"}}',
+      '{"protocolVersion":"2026-07-28","tasks":false,"exposeResources":true,"caFile":"/etc/pki/user/ca-bundle.pem","headers":{"Authorization":"Bearer stub"}}',
+    );
+  });
+
+  test("D-PG9-14: a kept caFile comes back when the plugin's stdio entry holds none", () => {
+    // arrange
+    const kept = { caFile: "/etc/pki/user/ca-bundle.pem", disabled: true };
+    const live = {
+      command: "plugin-command",
+      disabled: false,
+      _piClaudeMarketplace: { ...STDIO_MARKER, keptOverride: kept },
+    };
+
+    // act
+    const restored = restoredOverride(kept, live);
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(restored),
+      '{"caFile":"/etc/pki/user/ca-bundle.pem","disabled":false}',
     );
   });
 

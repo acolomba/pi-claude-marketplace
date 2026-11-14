@@ -1400,8 +1400,20 @@ export interface McpLeftoverRemovedNotice {
 }
 
 /**
- * AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01: one MCP config fact a
- * command routes to `notifyMcpConfigNotices`.
+ * D-PG9-14: a stage left the user's `caFile` out of a plugin server's entry,
+ * because the entry is no longer an https server at the origin it had.
+ */
+export interface McpCaFileRemovedNotice {
+  readonly kind: "ca-file-removed";
+  readonly scope: Scope;
+  readonly file: "mcp-adapter.json";
+  readonly plugin: string;
+  readonly server: string;
+}
+
+/**
+ * AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01 / D-PG9-14: one MCP config
+ * fact a command routes to `notifyMcpConfigNotices`.
  */
 export type McpConfigNotice =
   | McpConfigFileNotice
@@ -1410,7 +1422,8 @@ export type McpConfigNotice =
   | McpVariablesMissingNotice
   | McpCredentialsBlankedNotice
   | McpToolRulesUnenforcedNotice
-  | McpLeftoverRemovedNotice;
+  | McpLeftoverRemovedNotice
+  | McpCaFileRemovedNotice;
 
 /** AMIG-01 / AMIG-03: a server the reload moved from `mcp.json` to `mcp-adapter.json`. */
 export interface McpMigrationMovedRow {

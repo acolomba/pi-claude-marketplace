@@ -1145,7 +1145,7 @@ test("cascadeUnstagePlugin raises a typed workflows failure naming every unremov
   await assert.rejects(() => stat(removablePath), { code: "ENOENT" });
 });
 
-test("AVAR-04 / ANAME-07: foldUnstageNotices drops the variable and tool-rule notices of the removed servers and appends the unstage's notices", () => {
+test("AVAR-04 / ANAME-07 / D-PG9-14: foldUnstageNotices drops the variable, tool-rule and caFile notices of the removed servers and appends the unstage's notices", () => {
   // arrange
   const notices: McpConfigNotice[] = [
     { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
@@ -1172,6 +1172,13 @@ test("AVAR-04 / ANAME-07: foldUnstageNotices drops the variable and tool-rule no
       plugin: "hello",
       server: "plugin_hello_api_",
       fields: ["toolPermissions"],
+    },
+    {
+      kind: "ca-file-removed",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_api_",
     },
     {
       kind: "override-kept",
@@ -1204,6 +1211,13 @@ test("AVAR-04 / ANAME-07: foldUnstageNotices drops the variable and tool-rule no
       plugin: "hello",
       server: "plugin_hello_docs_",
       fields: ["tools[].permission_policy"],
+    },
+    {
+      kind: "ca-file-removed",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_docs_",
     },
   ];
 
@@ -1256,6 +1270,13 @@ test("AVAR-04 / ANAME-07: foldUnstageNotices drops the variable and tool-rule no
       plugin: "hello",
       server: "plugin_hello_docs_",
       fields: ["tools[].permission_policy"],
+    },
+    {
+      kind: "ca-file-removed",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_docs_",
     },
     {
       kind: "override-restored",

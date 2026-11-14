@@ -383,12 +383,13 @@ export function notifyDeviceFlowPrompt(
 }
 
 /**
- * AFILE-04 / AFILE-02 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01: the one
- * surface for MCP config notices. Bridges report the facts and orchestrators
- * call this after their own row. It emits one `mcp-config-notices` kind per
- * non-empty section, in section order (comments-dropped, left-unchanged,
- * override-kept, variables-missing, credentials-blanked,
- * tool-rules-unenforced, leftover-removed), at `"warning"` severity. An empty
+ * AFILE-04 / AFILE-02 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01 / D-PG9-14:
+ * the one surface for MCP config notices. Bridges report the facts and
+ * orchestrators call this after their own row. It emits one
+ * `mcp-config-notices` kind per non-empty section, in section order
+ * (comments-dropped, left-unchanged, override-kept, variables-missing,
+ * credentials-blanked, tool-rules-unenforced, leftover-removed,
+ * ca-file-removed), at `"warning"` severity. An empty
  * list emits nothing. The origin is the caller's run: a command, or the load
  * pass.
  */

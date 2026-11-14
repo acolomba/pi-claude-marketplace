@@ -1,4 +1,5 @@
 import type {
+  McpCaFileRemovedNotice,
   McpConfigFileNotice,
   McpConfigNoticeSection,
   McpCredentialsBlankedNotice,
@@ -38,6 +39,7 @@ const MCP_CONFIG_NOTICE_SUMMARIES = {
   "credentials-blanked": "MCP server credentials withheld.",
   "tool-rules-unenforced": "MCP server tool rules not enforced.",
   "leftover-removed": "Old MCP server settings removed.",
+  "ca-file-removed": "MCP server caFile removed.",
 } as const satisfies Record<McpConfigNoticeSection, string>;
 
 const MCP_MIGRATION_MOVED_SUMMARY = "Plugin MCP servers moved from mcp.json to mcp-adapter.json.";
@@ -100,8 +102,12 @@ function mcpLeftoverRemovedLine(notice: McpLeftoverRemovedNotice): string {
   return `Removed "${printable(notice.server)}" from the ${notice.scope}-scope ${notice.file}: pi-mcp-adapter had written it under the old name of a server from ${printable(notice.plugin)}, for example for /mcp-adapter disable, and it no longer applies.`;
 }
 
+function mcpCaFileRemovedLine(notice: McpCaFileRemovedNotice): string {
+  return `Server "${printable(notice.server)}" from ${printable(notice.plugin)} in the ${notice.scope}-scope ${notice.file} is now a stdio server, a plain http server, or an https server at another origin, so its entry no longer holds your caFile: pi-mcp-adapter uses a caFile only for the https origin it was set for. Set it on the entry again if the new server needs it.`;
+}
+
 /**
- * AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01: the one line a notice
+ * AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01 / D-PG9-14: the one line a notice
  * renders. Resolve also keys duplicate removal on it, so two notices that
  * read the same render once.
  */
@@ -120,6 +126,8 @@ export function mcpConfigNoticeLine(notice: RenderedMcpConfigNotice): string {
       return mcpToolRulesUnenforcedLine(notice);
     case "leftover-removed":
       return mcpLeftoverRemovedLine(notice);
+    case "ca-file-removed":
+      return mcpCaFileRemovedLine(notice);
   }
 }
 

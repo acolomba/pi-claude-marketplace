@@ -534,7 +534,7 @@ A load pass could not refresh one scope's plugin PATH.
 
 #### mcp-config-notices
 
-One section of facts about the MCP config files that a command or the load pass rewrote or left unchanged. Severity is always `warning`, and `needsReload` is always `false`. One operation emits one entry for each section that has a notice, in this order: `comments-dropped`, `left-unchanged`, `override-kept`, `variables-missing`, `credentials-blanked`, `tool-rules-unenforced`, `leftover-removed`.
+One section of facts about the MCP config files that a command or the load pass rewrote or left unchanged. Severity is always `warning`, and `needsReload` is always `false`. One operation emits one entry for each section that has a notice, in this order: `comments-dropped`, `left-unchanged`, `override-kept`, `variables-missing`, `credentials-blanked`, `tool-rules-unenforced`, `leftover-removed`, `ca-file-removed`.
 
 <!-- fields: kind:mcp-config-notices -->
 
@@ -954,7 +954,7 @@ The `McpServerStatus` tokens depend on the MCP implementation that Pi runs. pi-m
 
 `Companion`: `pi-dynamic-workflows`, `pi-mcp-adapter`, `pi-subagents`, `mcp`, `builtin mcp`.
 
-`McpConfigNoticeKind`: `comments-dropped`, `left-unchanged`, `override-kept`, `variables-missing`, `credentials-blanked`, `tool-rules-unenforced`, `leftover-removed`.
+`McpConfigNoticeKind`: `comments-dropped`, `left-unchanged`, `override-kept`, `variables-missing`, `credentials-blanked`, `tool-rules-unenforced`, `leftover-removed`, `ca-file-removed`.
 
 `McpMigrationRowKind`: `moved`, `removed`, `stopped`, `unowned`, `not-listed`, `source-unreadable`, `source-outdated`, `marketplace-unreadable`, `collision`, `file-unreadable`, `unfinished`.
 

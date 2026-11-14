@@ -2469,6 +2469,18 @@
                   "server": { "type": "string" }
                 },
                 "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "scope", "file", "plugin", "server"],
+                "properties": {
+                  "kind": { "type": "string", "const": "ca-file-removed" },
+                  "scope": { "enum": ["user", "project"] },
+                  "file": { "type": "string", "const": "mcp-adapter.json" },
+                  "plugin": { "type": "string" },
+                  "server": { "type": "string" }
+                },
+                "additionalProperties": false
               }
             ]
           },
@@ -2687,6 +2699,18 @@
                 "required": ["kind", "scope", "file", "plugin", "server"],
                 "properties": {
                   "kind": { "type": "string", "const": "leftover-removed" },
+                  "scope": { "enum": ["user", "project"] },
+                  "file": { "type": "string", "const": "mcp-adapter.json" },
+                  "plugin": { "type": "string" },
+                  "server": { "type": "string" }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "scope", "file", "plugin", "server"],
+                "properties": {
+                  "kind": { "type": "string", "const": "ca-file-removed" },
                   "scope": { "enum": ["user", "project"] },
                   "file": { "type": "string", "const": "mcp-adapter.json" },
                   "plugin": { "type": "string" },

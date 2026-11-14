@@ -87,6 +87,7 @@ import type {
   StagedMcpRecord,
 } from "./types.ts";
 import type {
+  McpCaFileRemovedNotice,
   McpConfigFileNotice,
   McpConfigNotice,
   McpCredentialsBlankedNotice,
@@ -237,6 +238,21 @@ function leftoverNotices(
 ): McpLeftoverRemovedNotice[] {
   return names.map((server) => ({
     kind: "leftover-removed",
+    scope,
+    file: "mcp-adapter.json",
+    plugin: pluginName,
+    server,
+  }));
+}
+
+/** D-PG9-14: one notice per server whose entry leaves out the user's `caFile`. */
+function caFileRemovedNotices(
+  servers: readonly string[],
+  scope: Scope,
+  pluginName: string,
+): McpCaFileRemovedNotice[] {
+  return servers.map((server) => ({
+    kind: "ca-file-removed",
     scope,
     file: "mcp-adapter.json",
     plugin: pluginName,
@@ -436,7 +452,9 @@ function overStoredChoices(
  * `variables-missing` notice for unset variables with no default, then its
  * `credentials-blanked` notice for set credentials blanked in `url` or
  * `headers` (AVAR-04, AVAR-05), then one `tool-rules-unenforced` notice per
- * server that declares tool permission rules (ANAME-07). AS-8 noop
+ * server that declares tool permission rules (ANAME-07), then one
+ * `ca-file-removed` notice per server whose entry leaves out the user's
+ * `caFile` (D-PG9-14). AS-8 noop
  * short-circuits when there is nothing new, nothing previously-ours and no
  * marked entry in the legacy `mcp.json` (AMIG-01) -- in that case
  * `commitPreparedMcp` writes no file (PRD success criterion: AS-8 noop
@@ -535,6 +553,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
     stamped,
     warnings: stampWarnings,
     variableReports,
+    caFileRemoved,
   } = stampServers({
     servers: keyed,
     pluginName,
@@ -576,7 +595,8 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   // does not carry is reported after them, then each override a dropped entry
   // writes back. AVAR-04 / AVAR-05: each server's missing-variable and
   // withheld-credential notices follow, then ANAME-07: each server's
-  // unenforced tool-rule notice. AMIG-01: each dropped leftover comes last.
+  // unenforced tool-rule notice. AMIG-01: each dropped leftover follows.
+  // D-PG9-14: each server whose entry left out the user's caFile comes last.
   const notices = Object.freeze<McpConfigNotice[]>([
     ...commentsDroppedNotices(rewritesTarget && config.hadComments, locations.scope),
     ...overrideKeptNotices(stamped, overlays, locations.scope, pluginName),
@@ -588,6 +608,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
     ...variableNotices(variableReports, locations.scope, pluginName),
     ...toolRuleNotices(keyed, locations.scope, pluginName),
     ...leftoverNotices(leftovers, locations.scope, pluginName),
+    ...caFileRemovedNotices(caFileRemoved, locations.scope, pluginName),
   ]);
   const result: StageMcpCommitResult = {
     stagedNames: Object.freeze([...declaredNames]),

@@ -479,10 +479,11 @@ export function mcpConfigNoticesMember(notices: readonly McpConfigNotice[]): {
 }
 
 /**
- * AVAR-04 / ANAME-07: appends an unstage's MCP config notices to a command's
- * notices, in place. It first drops the `variables-missing`,
- * `credentials-blanked` and `tool-rules-unenforced` notices of the servers the
- * unstage removed, because they describe entries that the scope's
+ * AVAR-04 / ANAME-07 / D-PG9-14: appends an unstage's MCP config notices to a
+ * command's notices, in place. It first drops the `variables-missing`,
+ * `credentials-blanked`, `tool-rules-unenforced` and `ca-file-removed` notices
+ * of the servers the unstage removed, because they describe entries that the
+ * scope's
  * mcp-adapter.json no longer holds. `droppedServers` holds
  * declared names, as `UnstageOutcome.dropped.mcpServers` does. File notices
  * stay, because the files were still rewritten.
@@ -504,7 +505,8 @@ export function foldUnstageNotices(
       !(
         (notice.kind === "variables-missing" ||
           notice.kind === "credentials-blanked" ||
-          notice.kind === "tool-rules-unenforced") &&
+          notice.kind === "tool-rules-unenforced" ||
+          notice.kind === "ca-file-removed") &&
         notice.scope === unstaged.scope &&
         removed.has(notice.server)
       ),

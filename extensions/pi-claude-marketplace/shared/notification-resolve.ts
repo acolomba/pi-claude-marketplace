@@ -752,8 +752,9 @@ export function resolveRawSurface(surface: RawSurface): ResolvedRawSurface {
   }
 }
 
-// AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01: the section order of the
-// config notices, in a standalone notice and inside the migration notice.
+// AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01 / D-PG9-14: the section
+// order of the config notices, in a standalone notice and inside the migration
+// notice.
 const MCP_CONFIG_NOTICE_SECTIONS: readonly McpConfigNoticeSection[] = [
   "comments-dropped",
   "left-unchanged",
@@ -762,6 +763,7 @@ const MCP_CONFIG_NOTICE_SECTIONS: readonly McpConfigNoticeSection[] = [
   "credentials-blanked",
   "tool-rules-unenforced",
   "leftover-removed",
+  "ca-file-removed",
 ];
 
 function overrideKey(notice: McpOverrideKeptNotice | McpOverrideRestoredNotice): string {
@@ -846,6 +848,7 @@ function redactNotice(notice: RenderedMcpConfigNotice): RenderedMcpConfigNotice 
         names: notice.names.map((name) => redactCredentials(name)),
       };
     case "leftover-removed":
+    case "ca-file-removed":
       return {
         ...notice,
         plugin: redactCredentials(notice.plugin),
@@ -989,13 +992,14 @@ function isWarningRemoval(row: McpMigrationRemovedRow): boolean {
 
 /**
  * Whether a notice makes the migration notice a warning: a leftover removed,
- * or a moved server with an unset variable, a withheld credential or tool
- * rules not enforced. A standalone section of these kinds is a warning too
- * (ANAME-07, AVAR-04).
+ * or a moved server with an unset variable, a withheld credential, tool rules
+ * not enforced, or a removed caFile. A standalone section of these kinds is a
+ * warning too (ANAME-07, AVAR-04, D-PG9-14).
  */
 function isWarningNotice(notice: RenderedMcpConfigNotice): boolean {
   return (
     notice.kind === "leftover-removed" ||
+    notice.kind === "ca-file-removed" ||
     notice.kind === "variables-missing" ||
     notice.kind === "credentials-blanked" ||
     notice.kind === "tool-rules-unenforced"

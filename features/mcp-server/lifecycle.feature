@@ -17,7 +17,9 @@ Feature: MCP server lifecycle
   request-timeout scenarios, the scenarios of D-PG9-03 and D-PG9-05 show that
   a value the user wrote beats this extension's defaults and survives an
   update and a reinstall; Pi's built-in MCP reads none of these fields from
-  mcp-adapter.json. A stdio stub server stands in for a real one, a scripted
+  mcp-adapter.json. A caFile is kept only while the server stays an https
+  server at the same origin, because pi-mcp-adapter refuses one anywhere else
+  (D-PG9-14). A stdio stub server stands in for a real one, a scripted
   model for a real model, and a local marketplace for a published one.
 
   Background:
@@ -645,6 +647,61 @@ Feature: MCP server lifecycle
               "marketplace": "fixtures",
               "defaultFields": {
                 "requestTimeoutMs": 300000
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @adapter-only
+  Scenario: An update that makes a plugin server a stdio server removes the caFile the user wrote and says so (PG-MCP-09, D-PG9-14)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers":{"remote":{"type":"http","url":"https://example.invalid/mcp"}}}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has written these fields on the mcp server "plugin_demo_remote_" in the mcp-adapter.json file of the user scope:
+      """
+      {"tasks":true,"caFile":"/etc/pki/user/ca-bundle.pem"}
+      """
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers":{"remote":{"command":"pi-features-absent-mcp-server"}}}
+      """
+    When the user runs "/claude:plugin update demo@fixtures --scope user"
+    Then the command reports these results:
+      | kind               | severity | needs reload | notices                                                                                                               |
+      | cascade            | info     | true         |                                                                                                                       |
+      | mcp-config-notices | warning  | false        | [{"kind":"ca-file-removed","scope":"user","file":"mcp-adapter.json","plugin":"demo","server":"plugin_demo_remote_"}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons | scope | from  | to    |
+      | fixtures         | user              | demo@fixtures | demo | updated |         | user  | 1.0.0 | 1.1.0 |
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_remote_": {
+            "command": "pi-features-absent-mcp-server",
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "tasks": true,
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
               }
             }
           }

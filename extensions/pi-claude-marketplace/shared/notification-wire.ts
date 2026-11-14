@@ -764,6 +764,10 @@ const MCP_CONFIG_NOTICE = Type.Union([
     { kind: Type.Literal("leftover-removed"), ...MCP_NOTICE_SUBJECT_FIELDS },
     { additionalProperties: false },
   ),
+  Type.Object(
+    { kind: Type.Literal("ca-file-removed"), ...MCP_NOTICE_SUBJECT_FIELDS },
+    { additionalProperties: false },
+  ),
 ]);
 
 const MCP_ROW_OWNER_FIELDS = {

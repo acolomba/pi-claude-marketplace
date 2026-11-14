@@ -46,15 +46,17 @@ import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 // a re-stage. `directTools`, `toolPrefix` and `description` are owned by this
 // extension, and every other field comes from the plugin's translated entry.
 // The closed table can set `requestTimeoutMs` from the plugin's `timeout`
-// (ANAME-07); a carried field the plugin sets is the plugin's. No
-// credential-bearing field is in the set, so a previous entry or a user stub
-// never leaks one into the new entry. D-CF1-14: `appendStructuredContent` and
-// `roots` have no Claude field, so they are the user's choices and survive
-// update and reinstall like the other user keys. D-PG9-05: neither do
-// `protocolVersion`, `tasks`, `exposeResources`, and `caFile`, so the closed
-// table never writes one and each value is the user's. `caFile` is the path of
-// a PEM bundle that replaces the default roots for that entry, so it can only
-// narrow which servers the entry trusts, and a mismatch refuses the connection.
+// (ANAME-07); a carried field the plugin sets is the plugin's. The set holds
+// no secret, so a previous entry or a user stub never leaks one into the new
+// entry. D-CF1-14: `appendStructuredContent` and `roots` have no Claude field,
+// so they are the user's choices and survive update and reinstall like the
+// other user keys. D-PG9-05: neither do `protocolVersion`, `tasks`,
+// `exposeResources`, and `caFile`, so the closed table never writes one and
+// each value is the user's. `caFile` is the path of a PEM bundle that replaces
+// the default roots for the entry's origin, so the entry trusts exactly that
+// bundle there. pi-mcp-adapter binds it to the server's url like a credential
+// (`URL_BOUND_AUTH_FIELDS` in its `config.ts`), so it is carried only while the
+// entry stays an https server at the same origin (D-PG9-14).
 const CARRIED_FIELDS = [
   "disabled",
   "approveTools",
@@ -255,6 +257,64 @@ function carriedFields(previous: unknown, pluginSet: readonly string[]): Record<
   return carried;
 }
 
+// The scheme and authority of an https url, lowercased, read as text so a
+// `${VAR}` in the host still compares.
+const HTTPS_ORIGIN = /^https:\/\/[^/?#]*/i;
+
+function httpsOriginOf(entry: Readonly<Record<string, unknown>>): string | undefined {
+  const { command, socket, url } = entry;
+  if (command !== undefined || socket !== undefined || typeof url !== "string") {
+    return undefined;
+  }
+
+  return HTTPS_ORIGIN.exec(url)?.[0].toLowerCase();
+}
+
+function definesServer(entry: Readonly<Record<string, unknown>>): boolean {
+  return ["command", "url", "socket"].some((field) => Object.hasOwn(entry, field));
+}
+
+/**
+ * D-PG9-14: whether a carried `caFile` still applies to the new entry.
+ * pi-mcp-adapter 7.0.1 refuses to connect an entry whose `caFile` sits beside
+ * `command` or `socket` or a url that is not https (`validateCaFile` in its
+ * `http-ca.ts`), and it uses the bundle for the entry's origin only. So the
+ * new entry must be an https server, and, when the entry it replaces defines
+ * a server, at that entry's origin. An override stub defines none.
+ */
+function caFileApplies(
+  previous: Readonly<Record<string, unknown>>,
+  translated: Readonly<Record<string, unknown>>,
+): boolean {
+  const origin = httpsOriginOf(translated);
+  return origin !== undefined && (!definesServer(previous) || httpsOriginOf(previous) === origin);
+}
+
+/**
+ * The carried fields the new entry writes: all of them, minus a `caFile` that
+ * no longer applies (D-PG9-14). `caFileRemoved` says the user's value was
+ * left out.
+ */
+function appliedCarriedFields(
+  previous: unknown,
+  translated: Readonly<Record<string, unknown>>,
+  pluginSet: readonly string[],
+): { readonly carried: Record<string, unknown>; readonly caFileRemoved: boolean } {
+  const carried = carriedFields(previous, pluginSet);
+  if (!isPlainObject(previous) || !Object.hasOwn(carried, "caFile")) {
+    return { carried, caFileRemoved: false };
+  }
+
+  if (caFileApplies(previous, translated)) {
+    return { carried, caFileRemoved: false };
+  }
+
+  const applied = Object.fromEntries(
+    Object.entries(carried).filter(([field]) => field !== "caFile"),
+  );
+  return { carried: applied, caFileRemoved: true };
+}
+
 /**
  * D-08-02 / AFILE-06: the user's carried fields on an entry, in carried-set
  * order: each carried field it holds as an own property, minus the fields its
@@ -291,7 +351,10 @@ export function inactiveOverrideFields(
  * `/mcp-adapter enable` or `disable` run while the plugin held the name wins
  * over the kept value. Such a field is left out when the live entry lacks it,
  * as a restage leaves it out, because pi-mcp-adapter's enable writer removes
- * `disabled` from the entry. A carried field the kept override lacks is never
+ * `disabled` from the entry. A `caFile` is the exception: no pi-mcp-adapter
+ * writer removes it, and a restage leaves it out of an entry it no longer
+ * applies to (D-PG9-14), so the kept value comes back when the live entry
+ * lacks one. A carried field the kept override lacks is never
  * added, so a value the plugin's entry declares (such as `requestTimeoutMs`)
  * stays out of the user's override. Only the kept override's own fields come
  * back, so the result is still an override and never a full definition
@@ -309,6 +372,8 @@ export function restoredOverride(
       safeSet(restored, field, value);
     } else if (Object.hasOwn(liveCarried, field)) {
       restored[field] = liveCarried[field];
+    } else if (field === "caFile") {
+      restored[field] = value;
     }
   }
 
@@ -360,16 +425,20 @@ function defaultFieldsFor(
  * (ANAME-07). Carried fields come from `previous` and the override its marker
  * keeps, so a credential-bearing field of an override stays inside the marker
  * (AFILE-06). `variableReports` holds each server's variable report,
- * keyed by server key in declared order (AVAR-02).
+ * keyed by server key in declared order (AVAR-02). `caFileRemoved` names, in
+ * declared order, each server whose entry leaves out the user's `caFile`
+ * because it no longer applies (D-PG9-14).
  */
 export function stampServers(input: StampServersInput): {
   readonly stamped: Record<string, unknown>;
   readonly warnings: string[];
   readonly variableReports: ReadonlyMap<string, VariableReport>;
+  readonly caFileRemoved: readonly string[];
 } {
   const stamped: Record<string, unknown> = {};
   const warnings: string[] = [];
   const variableReports = new Map<string, VariableReport>();
+  const caFileRemoved: string[] = [];
   for (const [name, entry] of Object.entries(input.servers)) {
     const { entry: translated, report } = translatedEntry(
       name,
@@ -380,7 +449,15 @@ export function stampServers(input: StampServersInput): {
     );
     variableReports.set(name, report);
     const pluginSetFields = pluginSetFieldsIn(translated);
-    const carried = carriedFields(input.previous[name], pluginSetFields);
+    const { carried, caFileRemoved: removed } = appliedCarriedFields(
+      input.previous[name],
+      translated,
+      pluginSetFields,
+    );
+    if (removed) {
+      caFileRemoved.push(name);
+    }
+
     const defaultFields = defaultFieldsFor(entry, translated, carried);
     // safeSet copies a server literally named `__proto__` as an own key, so
     // it is stamped and written rather than dropped through the inherited
@@ -397,5 +474,5 @@ export function stampServers(input: StampServersInput): {
     });
   }
 
-  return { stamped, warnings, variableReports };
+  return { stamped, warnings, variableReports, caFileRemoved };
 }

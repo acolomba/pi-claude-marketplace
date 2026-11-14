@@ -191,6 +191,25 @@ describe("composeMcpConfigNoticesText", () => {
     );
   });
 
+  test("D-PG9-14: a ca-file-removed section names each server and its plugin, with control characters escaped", () => {
+    // act
+    const text = composeMcpConfigNoticesText("ca-file-removed", [
+      {
+        kind: "ca-file-removed",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "he\u202ello",
+        server: "s\u001br",
+      },
+    ]);
+
+    // assert
+    assert.strictEqual(
+      text,
+      'MCP server caFile removed.\n\nServer "s\\u001br" from he\\u202ello in the project-scope mcp-adapter.json is now a stdio server, a plain http server, or an https server at another origin, so its entry no longer holds your caFile: pi-mcp-adapter uses a caFile only for the https origin it was set for. Set it on the entry again if the new server needs it.',
+    );
+  });
+
   test("AMIG-01: control characters in a leftover's old name render as \\u escapes", () => {
     // act
     const text = composeMcpConfigNoticesText("leftover-removed", [

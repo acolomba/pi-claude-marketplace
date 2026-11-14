@@ -278,6 +278,7 @@ function wireNotice(notice: RenderedMcpConfigNotice) {
     case "credentials-blanked":
       return { kind: notice.kind, ...wireNoticeSubject(notice), names: [...notice.names] };
     case "leftover-removed":
+    case "ca-file-removed":
       return { kind: notice.kind, ...wireNoticeSubject(notice) };
   }
 }

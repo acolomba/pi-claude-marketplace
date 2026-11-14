@@ -2096,6 +2096,16 @@ describe("resolveRawSurface", () => {
         server: "srv",
       },
     },
+    {
+      requirement: "D-PG9-14",
+      notice: {
+        kind: "ca-file-removed",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_srv_",
+      },
+    },
   ] as const) {
     test(`${requirement}: a repeated ${notice.kind} notice resolves once`, () => {
       // arrange
@@ -2378,6 +2388,16 @@ describe("resolveRawSurface", () => {
         plugin: "acme",
         server: "plugin_acme_srv_",
         fields: ["toolPermissions"],
+      },
+      severity: "warning",
+    },
+    {
+      notice: {
+        kind: "ca-file-removed",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "acme",
+        server: "plugin_acme_srv_",
       },
       severity: "warning",
     },
@@ -3188,6 +3208,33 @@ describe("mcpConfigNoticeSurfaces", () => {
         section: "leftover-removed",
         notices: [acmeLeftover, helloLeftover],
       },
+    ]);
+  });
+
+  test("D-PG9-14: ca-file-removed notices group after the leftover-removed section", () => {
+    // arrange
+    const caFile = {
+      kind: "ca-file-removed",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "acme",
+      server: "plugin_acme_srv_",
+    } as const;
+    const leftover = {
+      kind: "leftover-removed",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "acme",
+      server: "srv",
+    } as const;
+
+    // act
+    const surfaces = mcpConfigNoticeSurfaces([caFile, leftover]);
+
+    // assert
+    assert.deepStrictEqual(surfaces, [
+      { kind: "mcp-config-notices", section: "leftover-removed", notices: [leftover] },
+      { kind: "mcp-config-notices", section: "ca-file-removed", notices: [caFile] },
     ]);
   });
 });
