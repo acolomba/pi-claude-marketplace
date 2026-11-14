@@ -229,6 +229,7 @@ Frequency counts are from `MKT/` (40 skills, 33 commands), by `grep` over frontm
 - **Frequency**: 2 of 40 skills, in two official plugins (`plugins/mcp-server-dev/skills/build-mcp-app/SKILL.md:59`, six lines in `plugins/plugin-dev/skills/skill-development/SKILL.md:609-614`).
 - **Confidence**: high.
 - **Open question**: paths that climb to the plugin root (`../../docs/x.md`) also break; rewriting those to the recorded plugin root would cover them, at more risk.
+- **Residual** (after the D-PG4-04 rewrite): a path from a skill into its own folder through the parent stays as written, because D-PG4-04 leaves out the file's own skill. In `skills/a/SKILL.md`, `../a/references/x.md` resolves in Claude Code. The staged folder is `<plugin>-a`, so here the path names a missing folder. Rewriting it to `../<plugin>-a/references/x.md` would be as safe as the sibling rewrite. It is a maintainer question.
 
 ### SKILL-05: symlinked skill folders are refused
 
