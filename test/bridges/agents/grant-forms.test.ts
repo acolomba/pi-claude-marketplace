@@ -173,12 +173,14 @@ test("MGRT-01: an agent that renders the same in both forms records neither fiel
 test("D-CF6-10: an omitted tools list in a plugin with a stdio server records both forms for their async warnings", () => {
   // arrange
   const adapterFrontmatter = expectedFrontmatter({
+    toolsLine: "allowNestedSubagents: true",
     inheritSkills: true,
     async: true,
     droppedTools: [],
     warnings: [ADAPTER_ASYNC_WARNING],
   });
   const builtinFrontmatter = expectedFrontmatter({
+    toolsLine: "allowNestedSubagents: true",
     inheritSkills: true,
     async: true,
     droppedTools: [],

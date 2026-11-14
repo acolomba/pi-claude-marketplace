@@ -20,8 +20,9 @@ import type { ScenarioWorld } from "../../support/world.ts";
 
 // AG-7: the Pi tools that the agents bridge maps a Claude tool name to. An
 // agent's tools list grants or denies only these, so a step compares only
-// these. pi-subagents' own tools, such as `contact_supervisor`, are its
-// choice and stay out of the comparison.
+// these. They include pi-subagents' `subagent` tool, which `Agent` and `Task`
+// name (D-PG7-08). pi-subagents' other tools, such as `contact_supervisor`,
+// are its choice and stay out of the comparison.
 const AGENT_NAMEABLE_TOOLS: ReadonlySet<string> = new Set([
   "read",
   "bash",
@@ -30,6 +31,7 @@ const AGENT_NAMEABLE_TOOLS: ReadonlySet<string> = new Set([
   "grep",
   "find",
   "ls",
+  "subagent",
 ]);
 
 // The frontmatter block at the start of a staged agent file.

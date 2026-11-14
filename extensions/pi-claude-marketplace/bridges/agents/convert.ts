@@ -188,6 +188,8 @@ interface OmittedToolMapping extends ToolMappingBase {
    * included), so the flag follows the disallow check alone (#179).
    */
   readonly inheritSkills: boolean;
+  /** D-PG7-09: every tool includes `Agent`, unless a deny of Agent or Task removed it. */
+  readonly allowNestedSubagents: boolean;
 }
 
 /**
@@ -585,6 +587,11 @@ function perToolMcpName(token: string, grants: readonly McpGrant[]): string | un
  * a disallow token with no such mapping cannot narrow anything, and an
  * emitted excludeTools is inert below the version floor -- each is an
  * author-written restriction that must not weaken without a trace.
+ *
+ * D-PG7-09 / PG-AGENT-03: every tool in Claude Code includes `Agent`, so the
+ * mapping grants nested delegation, which the emitter writes as
+ * `allowNestedSubagents: true`. A denied `Agent` or `Task` puts `subagent`
+ * into excludeTools and withholds the grant.
  */
 function omittedToolMapping(
   disallowedTokens: readonly string[],
@@ -627,6 +634,7 @@ function omittedToolMapping(
     dropped: [],
     warnings,
     inheritSkills: !disallowedTokens.some(isSkillToken),
+    allowNestedSubagents: !excludeTools.includes("subagent"),
   };
 }
 
@@ -1171,7 +1179,10 @@ function emptyToolListError(
 function toolsFields(result: ValidatedToolMapping): GeneratedToolsFields {
   if (result.omitted) {
     const [first, ...rest] = result.excludeTools;
-    return first === undefined ? {} : { excludeTools: [first, ...rest] };
+    return {
+      ...(first !== undefined && { excludeTools: [first, ...rest] }),
+      ...(result.allowNestedSubagents && { allowNestedSubagents: true }),
+    };
   }
 
   return { tools: result.mapped };

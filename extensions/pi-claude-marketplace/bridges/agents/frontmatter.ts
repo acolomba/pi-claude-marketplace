@@ -239,10 +239,23 @@ function normalizeBody(body: string): string {
  * also non-empty when present) narrow that default set. The `?: never`
  * arms are what enforce "never both": a value carrying both keys matches
  * neither arm.
+ *
+ * D-PG7-09: `allowNestedSubagents: true` lets the child of an agent with no
+ * allowlist start subagents, as an agent with every tool has `Agent` in
+ * Claude Code. Only the omitted arm takes it: beside an explicit list it
+ * would grant nesting to a list that has no `Agent`.
  */
 export type GeneratedToolsFields =
-  | { readonly tools: readonly [string, ...string[]]; readonly excludeTools?: never }
-  | { readonly tools?: never; readonly excludeTools?: readonly [string, ...string[]] };
+  | {
+      readonly tools: readonly [string, ...string[]];
+      readonly excludeTools?: never;
+      readonly allowNestedSubagents?: never;
+    }
+  | {
+      readonly tools?: never;
+      readonly excludeTools?: readonly [string, ...string[]];
+      readonly allowNestedSubagents?: true;
+    };
 
 /**
  * Structured frontmatter fields for a generated agent. Identifiers
@@ -302,7 +315,9 @@ export interface GeneratedProvenanceFields {
  * AG-8 / D-84-04 / T-d8i-01 deterministic field order: name, description,
  * aliases (only when non-empty), model, tools (only when an explicit
  * allowlist exists), excludeTools
- * (only when tools is absent and disallowed names mapped, #179), thinking,
+ * (only when tools is absent and disallowed names mapped, #179),
+ * allowNestedSubagents (only when tools is absent and no deny of Agent or
+ * Task, D-PG7-09), thinking,
  * skills, skillPath (only when skills is
  * non-empty), systemPromptMode, inheritProjectContext, inheritSkills,
  * advertise, async (only when set; the converter sets only `true`, D-PG3-01,
@@ -373,6 +388,10 @@ export function emitGeneratedAgentFrontmatter(input: {
 
   if (frontmatter.excludeTools !== undefined) {
     lines.push(`excludeTools: ${frontmatter.excludeTools.join(",")}`);
+  }
+
+  if (frontmatter.allowNestedSubagents !== undefined) {
+    lines.push("allowNestedSubagents: true");
   }
 
   if (frontmatter.thinking !== undefined) {

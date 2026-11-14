@@ -52,6 +52,7 @@ Feature: Agent frontmatter
       name: demo:plain
       description: Runs when it is asked.
       aliases: pi-claude-marketplace-demo-plain
+      allowNestedSubagents: true
       systemPromptMode: replace
       inheritProjectContext: true
       inheritSkills: true
@@ -154,6 +155,7 @@ Feature: Agent frontmatter
       name: demo:plain
       description: Runs when it is asked.
       aliases: pi-claude-marketplace-demo-plain
+      allowNestedSubagents: true
       systemPromptMode: replace
       inheritProjectContext: true
       inheritSkills: true
@@ -187,6 +189,7 @@ Feature: Agent frontmatter
       name: demo:plain
       description: Runs when it is asked.
       aliases: pi-claude-marketplace-demo-plain
+      allowNestedSubagents: true
       systemPromptMode: replace
       inheritProjectContext: true
       inheritSkills: true
@@ -279,6 +282,7 @@ Feature: Agent frontmatter
       name: demo:plain
       description: Runs when it is asked.
       aliases: pi-claude-marketplace-demo-plain
+      allowNestedSubagents: true
       systemPromptMode: replace
       inheritProjectContext: true
       inheritSkills: true
@@ -312,6 +316,7 @@ Feature: Agent frontmatter
       name: demo:plain
       description: Runs when it is asked.
       aliases: pi-claude-marketplace-demo-plain
+      allowNestedSubagents: true
       systemPromptMode: replace
       inheritProjectContext: true
       inheritSkills: true
@@ -724,6 +729,7 @@ Feature: Agent frontmatter
       name: demo:broken
       description: Agent from demo plugin
       aliases: pi-claude-marketplace-demo-broken
+      allowNestedSubagents: true
       systemPromptMode: replace
       inheritProjectContext: true
       inheritSkills: true
@@ -900,6 +906,7 @@ Feature: Agent frontmatter
       name: demo:x
       description: Names itself in quotes.
       aliases: pi-claude-marketplace-demo-x
+      allowNestedSubagents: true
       systemPromptMode: replace
       inheritProjectContext: true
       inheritSkills: true
@@ -1010,6 +1017,7 @@ Feature: Agent frontmatter
       name: demo:x
       description: Names itself in quotes.
       aliases: pi-claude-marketplace-demo-x
+      allowNestedSubagents: true
       systemPromptMode: replace
       inheritProjectContext: true
       inheritSkills: true

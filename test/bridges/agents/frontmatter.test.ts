@@ -7,6 +7,8 @@ import {
   readAgentFrontmatter,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts";
 
+import type { GeneratedToolsFields } from "../../../extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts";
+
 describe("readAgentFrontmatter", () => {
   for (const { description, agentFile, expectedAgentFile } of [
     {
@@ -632,6 +634,127 @@ Scout body.
 
     // assert
     assert.strictEqual(generatedAgentFile, expectedGeneratedAgentFile);
+  });
+
+  test("D-PG7-09: writes allowNestedSubagents after excludeTools and before thinking", () => {
+    // arrange
+    const generatedAgent = {
+      frontmatter: {
+        name: "pi-claude-marketplace-acme-scout",
+        description: "Scout source changes",
+        excludeTools: ["bash"] as const,
+        allowNestedSubagents: true as const,
+        thinking: "high",
+        skills: [],
+        inheritSkills: true,
+      },
+      provenance: {
+        pluginName: "acme",
+        sourceName: "scout",
+        sourcePath: "agents/scout.md",
+        droppedFields: [],
+        droppedTools: [],
+        warnings: [],
+      },
+      body: "\nScout body.\n",
+    };
+    const expectedGeneratedAgentFile = `---
+name: pi-claude-marketplace-acme-scout
+description: Scout source changes
+excludeTools: bash
+allowNestedSubagents: true
+thinking: high
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: true
+advertise: true
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: scout
+  sourcePath: agents/scout.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Scout body.
+`;
+
+    // act
+    const generatedAgentFile = emitGeneratedAgentFile(generatedAgent);
+
+    // assert
+    assert.strictEqual(generatedAgentFile, expectedGeneratedAgentFile);
+  });
+
+  test("D-PG7-09: writes allowNestedSubagents after aliases and model when nothing is excluded", () => {
+    // arrange
+    const generatedAgent = {
+      frontmatter: {
+        name: "acme:scout",
+        description: "Scout source changes",
+        aliases: ["pi-claude-marketplace-acme-scout"],
+        model: "inherit",
+        allowNestedSubagents: true as const,
+        thinking: "high",
+        skills: [],
+        inheritSkills: true,
+      },
+      provenance: {
+        pluginName: "acme",
+        sourceName: "scout",
+        sourcePath: "agents/scout.md",
+        droppedFields: [],
+        droppedTools: [],
+        warnings: [],
+      },
+      body: "\nScout body.\n",
+    };
+    const expectedGeneratedAgentFile = `---
+name: acme:scout
+description: Scout source changes
+aliases: pi-claude-marketplace-acme-scout
+model: inherit
+allowNestedSubagents: true
+thinking: high
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: true
+advertise: true
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: scout
+  sourcePath: agents/scout.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Scout body.
+`;
+
+    // act
+    const generatedAgentFile = emitGeneratedAgentFile(generatedAgent);
+
+    // assert
+    assert.strictEqual(generatedAgentFile, expectedGeneratedAgentFile);
+  });
+
+  test("D-PG7-09: refuses allowNestedSubagents beside an explicit tools list", () => {
+    // arrange
+    const fields = {
+      tools: ["read"],
+      allowNestedSubagents: true,
+    } as const;
+
+    // act
+    // @ts-expect-error -- D-PG7-09: the key would grant nesting to a list that has no Agent.
+    const refused: GeneratedToolsFields = fields;
+
+    // assert
+    assert.deepStrictEqual(refused, { tools: ["read"], allowNestedSubagents: true });
   });
 
   test("adds the missing trailing newline", () => {

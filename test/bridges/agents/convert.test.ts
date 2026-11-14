@@ -1466,6 +1466,7 @@ Body content.
 name: acme:bot
 description: d
 aliases: pi-claude-marketplace-acme-bot
+allowNestedSubagents: true
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
@@ -1512,6 +1513,7 @@ name: acme:bot
 description: d
 aliases: pi-claude-marketplace-acme-bot
 excludeTools: edit
+allowNestedSubagents: true
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
@@ -1559,6 +1561,7 @@ Body content.
 name: acme:bot
 description: d
 aliases: pi-claude-marketplace-acme-bot
+allowNestedSubagents: true
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
@@ -1604,6 +1607,7 @@ Body content.
 name: acme:bot
 description: d
 aliases: pi-claude-marketplace-acme-bot
+allowNestedSubagents: true
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
@@ -1651,6 +1655,7 @@ name: acme:bot
 description: d
 aliases: pi-claude-marketplace-acme-bot
 excludeTools: edit,write
+allowNestedSubagents: true
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
@@ -1697,6 +1702,7 @@ Body content.
 name: acme:bot
 description: d
 aliases: pi-claude-marketplace-acme-bot
+allowNestedSubagents: true
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
@@ -2211,7 +2217,7 @@ Body.\r
   test("ANAME-02: with no tools: list a per-tool disallow becomes excludeTools and a whole-server disallow warns", () => {
     // arrange
     const expectedFileContent = expectedMcpAgentFile({
-      toolsField: "excludeTools: mcp__plugin_acme_db__a",
+      toolsField: "excludeTools: mcp__plugin_acme_db__a\nallowNestedSubagents: true",
       inheritSkills: true,
       async: true,
       droppedTools: [],
@@ -2271,7 +2277,7 @@ Body.\r
       MCP_ASYNC_WARNING,
     ];
     const expectedFileContent = expectedMcpAgentFile({
-      toolsField: "excludeTools: edit",
+      toolsField: "excludeTools: edit\nallowNestedSubagents: true",
       inheritSkills: true,
       async: true,
       droppedTools: [],
@@ -2348,6 +2354,7 @@ Body.\r
 name: acme:bot
 description: d
 aliases: pi-claude-marketplace-acme-bot
+allowNestedSubagents: true
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
@@ -2380,6 +2387,7 @@ Body content.
 name: acme:bot
 description: d
 aliases: pi-claude-marketplace-acme-bot
+allowNestedSubagents: true
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
@@ -2503,6 +2511,7 @@ describe("D-CF4-08 tool lists", () => {
 name: acme:bot
 description: d
 aliases: pi-claude-marketplace-acme-bot
+allowNestedSubagents: true
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
@@ -2570,6 +2579,7 @@ name: acme:bot
 description: d
 aliases: pi-claude-marketplace-acme-bot
 excludeTools: bash,edit
+allowNestedSubagents: true
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: true
@@ -2786,6 +2796,90 @@ Body content.
     // assert
     assert.strictEqual(agent.fileContent, expectedFileContent);
     assert.deepStrictEqual(agent.warnings, [EXCLUDE_TOOLS_FLOOR_WARNING]);
+  });
+});
+
+describe("D-PG7-09 nested delegation of an agent with no tools list", () => {
+  for (const { label, raw } of [
+    { label: "no tools field", raw: { description: "d" } },
+    { label: "tools: *", raw: { description: "d", tools: "*" } },
+  ]) {
+    test(`${label} writes allowNestedSubagents and no tools line`, () => {
+      // arrange
+      const expectedFileContent = expectedMcpAgentFile({
+        toolsField: "allowNestedSubagents: true",
+        inheritSkills: true,
+        droppedTools: [],
+        warnings: [],
+      });
+
+      // act
+      const agent = convertMcpAgent(raw, undefined);
+
+      // assert
+      assert.strictEqual(agent.fileContent, expectedFileContent);
+    });
+  }
+
+  test("a disallowed Bash writes excludeTools, then allowNestedSubagents", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "excludeTools: bash\nallowNestedSubagents: true",
+      inheritSkills: true,
+      droppedTools: [],
+      warnings: [EXCLUDE_TOOLS_FLOOR_WARNING],
+    });
+
+    // act
+    const agent = convertMcpAgent({ description: "d", disallowedTools: "Bash" }, undefined);
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  for (const deny of ["Agent", "Task", "Agent(x)", "Task(a, b)"]) {
+    test(`a disallowed ${deny} writes excludeTools: subagent and no allowNestedSubagents`, () => {
+      // arrange
+      const expectedFileContent = expectedMcpAgentFile({
+        toolsField: "excludeTools: subagent",
+        inheritSkills: true,
+        droppedTools: [],
+        warnings: [EXCLUDE_TOOLS_FLOOR_WARNING],
+      });
+
+      // act
+      const agent = convertMcpAgent({ description: "d", disallowedTools: deny }, undefined);
+
+      // assert
+      assert.strictEqual(agent.fileContent, expectedFileContent);
+    });
+  }
+
+  for (const tools of ["Read", "Read, Agent"]) {
+    test(`the explicit list ${tools} writes no allowNestedSubagents`, () => {
+      // act
+      const agent = convertMcpAgent({ description: "d", tools }, undefined);
+
+      // assert
+      assert.doesNotMatch(agent.fileContent, /allowNestedSubagents/);
+    });
+  }
+
+  test("no tools field in a plugin that writes an MCP server writes allowNestedSubagents and async: true", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "allowNestedSubagents: true",
+      inheritSkills: true,
+      async: true,
+      droppedTools: [],
+      warnings: [MCP_ASYNC_WARNING],
+    });
+
+    // act
+    const agent = convertMcpAgent({ description: "d" }, ["db"]);
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
   });
 });
 
@@ -3095,7 +3189,7 @@ describe("MGRT-01 grant form per MCP implementation", () => {
   test("MGRT-01: a built-in per-tool exclude on an omitted list is Pi's built-in tool name", () => {
     // arrange
     const expectedFileContent = expectedMcpAgentFile({
-      toolsField: "excludeTools: mcp__plugin_acme_my_db__query",
+      toolsField: "excludeTools: mcp__plugin_acme_my_db__query\nallowNestedSubagents: true",
       inheritSkills: true,
       async: true,
       droppedTools: [],
@@ -3117,7 +3211,8 @@ describe("MGRT-01 grant form per MCP implementation", () => {
     // arrange
     const tool = "list_every_table_in_the_warehouse_with_its_row_counts";
     const expectedFileContent = expectedMcpAgentFile({
-      toolsField: "excludeTools: mcp__plugin_acme_db__list_every_table_in_the_warehouse__36d788b4",
+      toolsField:
+        "excludeTools: mcp__plugin_acme_db__list_every_table_in_the_warehouse__36d788b4\nallowNestedSubagents: true",
       inheritSkills: true,
       async: true,
       droppedTools: [],
@@ -3138,7 +3233,7 @@ describe("MGRT-01 grant form per MCP implementation", () => {
   test("D-PG1-10: an adapter per-tool exclude takes pi-mcp-adapter's tool name, with each dot an underscore", () => {
     // arrange
     const expectedFileContent = expectedMcpAgentFile({
-      toolsField: "excludeTools: mcp__plugin_acme_db__a_b",
+      toolsField: "excludeTools: mcp__plugin_acme_db__a_b\nallowNestedSubagents: true",
       inheritSkills: true,
       async: true,
       droppedTools: [],
@@ -3160,7 +3255,8 @@ describe("MGRT-01 grant form per MCP implementation", () => {
     // arrange
     const tool = "list_every_table_in_the_warehouse_with_its_row_counts";
     const expectedFileContent = expectedMcpAgentFile({
-      toolsField: "excludeTools: mcp__plugin_acme_db__list_every_table_in_the_warehouse__05ea19f1",
+      toolsField:
+        "excludeTools: mcp__plugin_acme_db__list_every_table_in_the_warehouse__05ea19f1\nallowNestedSubagents: true",
       inheritSkills: true,
       async: true,
       droppedTools: [],
@@ -3272,7 +3368,7 @@ describe("MGRT-01 grant form per MCP implementation", () => {
   test("MGRT-01: a server name holding a newline and a comma yields one sanitized built-in exclude name", () => {
     // arrange
     const expectedFileContent = expectedMcpAgentFile({
-      toolsField: "excludeTools: mcp__plugin_acme_a_b_c__query",
+      toolsField: "excludeTools: mcp__plugin_acme_a_b_c__query\nallowNestedSubagents: true",
       inheritSkills: true,
       async: true,
       droppedTools: [],
