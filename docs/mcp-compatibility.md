@@ -408,6 +408,10 @@ YAML also refuses these forms, and the repair does not change them:
 
 Claude Code reads frontmatter with `Bun.YAML.parse`. In Bun 1.4.4 it refuses a block indented with tabs too, and it keeps the last copy of a repeated key. The Bun inside Claude Code may be a different version.
 
+The repair also skips a file whose lines end in a lone carriage return, as the skills bridge's repair does, so such a file with a colon in a value loads with no fields and the note below. The repair keeps the bytes of every other line, and the skills bridge stages those bytes, so changing it there is a separate decision (D-PG7-02).
+
+Pi's YAML reader reports a tag it does not know, such as `tools: !Read`, as a Node warning on standard error, and the skills bridge has the same exposure. Pi's `parseFrontmatter` takes no option to turn the warning off. This is a Pi capability gap.
+
 When the block still does not parse, the agent loads as Claude Code 2.1.323 loads it. Its name is its file name, its description is `Agent from <plugin> plugin`, and it gets every tool, because no `tools` line applies. Install, update, reinstall, enable, and apply add this note (D-PG7-04):
 
 ```text
