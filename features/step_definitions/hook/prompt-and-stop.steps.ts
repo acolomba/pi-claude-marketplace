@@ -11,6 +11,11 @@
  * keeps every record and stand-in log line of the run as the last turn
  * (HAR-03).
  *
+ * The other-extension `Given` starts the profile Pi with a harness extension
+ * loaded before the real one, which continues the first run end with a hidden
+ * `go on` message, so the Stop hooks of that end run after a handler that
+ * already continued the run (D-PG5-05).
+ *
  * The run-start `Given` starts the profile Pi with a harness extension that
  * logs each `before_agent_start`, and the counts `Then` states the turn's
  * settlements, run starts, and model calls. Pi raises `agent_start` for each
@@ -35,6 +40,7 @@ import assert from "node:assert/strict";
 import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
 import { promptDisposition } from "../../../test/e2e/_rpc.ts";
+import { BOUNDARY_CONTINUER_EXTENSION } from "../../lib/boundary-continuer.ts";
 import {
   HOOK_LIFECYCLE_LOG,
   HOOK_RUNS_LOG,
@@ -194,6 +200,17 @@ Given(
   { timeout: PROFILE_PI_START_TIMEOUT_MS },
   async function (this: ScenarioWorld) {
     await this.usePiWithProfile({ companions: [], extraExtensions: [RUN_START_PROBE_EXTENSION] });
+  },
+);
+
+Given(
+  "pi runs with the scripted model and another extension, loaded first, that continues the run once",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    await this.usePiWithProfile({
+      companions: [],
+      leadingExtensions: [BOUNDARY_CONTINUER_EXTENSION],
+    });
   },
 );
 

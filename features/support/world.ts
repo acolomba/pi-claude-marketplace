@@ -132,15 +132,22 @@ export interface ScopeBytes {
 }
 
 /**
- * What a scenario's profile Pi loads and trusts (D-CF1-15). It always loads
- * the real extension, the scripted model, and the registry probe, then
- * `companions` in the fixed order pi-subagents, pi-mcp-adapter, pi-dynamic-workflows (HAR-01), then
+ * What a scenario's profile Pi loads and trusts (D-CF1-15). It loads
+ * `leadingExtensions` in order, then always the real extension, the scripted
+ * model, and the registry probe, then `companions` in the fixed order
+ * pi-subagents, pi-mcp-adapter, pi-dynamic-workflows (HAR-01), then
  * `extraExtensions` in order. It trusts the sandbox project unless `trust` is
  * `untrusted` (D-CF1-07).
  */
 export interface PiProfile {
   readonly companions: readonly CompanionName[];
   readonly extraExtensions?: readonly string[];
+  /**
+   * Extensions the profile Pi loads before the real extension, so Pi runs
+   * their handlers of an event before the extension's. Such an extension
+   * stands in for another Pi extension that a user loads first.
+   */
+  readonly leadingExtensions?: readonly string[];
   readonly trust?: "trusted" | "untrusted";
   /**
    * The profile Pi's spawn environment carries `PI_SUBAGENT_CHILD=1`, as
@@ -1096,6 +1103,9 @@ export class ScenarioWorld extends World {
         ...companions.map((companion) => companion.entry),
         ...(launch.extraExtensions ?? []),
       ],
+      ...(launch.leadingExtensions === undefined
+        ? {}
+        : { leadingExtensions: launch.leadingExtensions }),
       environment: {
         TMPDIR: path.join(sandbox.home, "tmp"),
         ...(launch.subagentChild === true ? { PI_SUBAGENT_CHILD: "1" } : {}),

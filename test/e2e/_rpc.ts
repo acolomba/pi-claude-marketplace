@@ -93,6 +93,11 @@ export interface RpcProfileEnvironment {
 export interface RpcProfile {
   /** Absolute paths of the extensions loaded after the real one, in this order. */
   readonly extensions: readonly string[];
+  /**
+   * Absolute paths of the extensions loaded before the real one, in this
+   * order, so Pi runs their handlers of an event first.
+   */
+  readonly leadingExtensions?: readonly string[];
   readonly environment: RpcProfileEnvironment;
   /** Starts Pi with `--no-mcp`, which turns its built-in MCP off for this run. */
   readonly noMcp?: true;
@@ -102,6 +107,8 @@ export interface RpcProfile {
 export interface PiArgumentOptions {
   /** Adds `--no-mcp`, which turns Pi's built-in MCP off and keeps every other extension. */
   readonly noMcp?: boolean;
+  /** Extensions loaded before the real one, in this order. */
+  readonly leadingExtensions?: readonly string[];
 }
 
 /** What one RPC session runs: the sandbox, the steps in order, and extra extensions. */
@@ -268,9 +275,9 @@ export function rpcChildEnvironment(
 }
 
 /**
- * Returns the arguments that start the repository's Pi CLI in `mode` with the
- * real extension and `extraExtensions`, and with `--no-mcp` when `options`
- * asks for it. In `json` mode Pi prints each session event as one JSON line
+ * Returns the arguments that start the repository's Pi CLI in `mode` with
+ * `options.leadingExtensions`, the real extension, and `extraExtensions`, in
+ * that load order, and with `--no-mcp` when `options` asks for it. In `json` mode Pi prints each session event as one JSON line
  * on stdout (D-BG-09). It never passes `--no-extensions`, which also removes
  * `builtin:mcp`.
  */
@@ -279,7 +286,7 @@ export function piArguments(
   extraExtensions: readonly string[] = [],
   options: PiArgumentOptions = {},
 ): string[] {
-  const extensions = [EXTENSION_ENTRY, ...extraExtensions];
+  const extensions = [...(options.leadingExtensions ?? []), EXTENSION_ENTRY, ...extraExtensions];
   return [
     resolvePiRuntime(REPO_ROOT).cliPath,
     ...(mode === "tui" ? [] : ["--mode", mode]),
@@ -517,7 +524,12 @@ export async function startRpcPi(
     profile?.extensions ?? [],
     git,
     profile?.environment,
-    { noMcp: profile?.noMcp === true },
+    {
+      noMcp: profile?.noMcp === true,
+      ...(profile?.leadingExtensions === undefined
+        ? {}
+        : { leadingExtensions: profile.leadingExtensions }),
+    },
   );
 }
 

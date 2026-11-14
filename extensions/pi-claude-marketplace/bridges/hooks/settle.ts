@@ -193,7 +193,7 @@ export function beforeSettleHandlerFor(
     try {
       const continuation = await runStopBoundary(
         runtime,
-        last,
+        { last, runContinues: event.continue },
         capturedGeneration,
         ctx,
         pi,
@@ -209,11 +209,18 @@ export function beforeSettleHandlerFor(
   };
 }
 
+// The ending the Stop hooks run for, and whether a handler that ran earlier
+// at the same boundary already continued the run (D-PG5-05).
+interface StopBoundaryEnding {
+  readonly last: AssistantMessage;
+  readonly runContinues: boolean;
+}
+
 // Runs the Stop bucket with the stop boundary open, and closes it again
 // however the bucket ends (D-PG5-06).
 async function runStopBoundary(
   runtime: HooksRuntime,
-  last: AssistantMessage,
+  ending: StopBoundaryEnding,
   capturedGeneration: number,
   ctx: ExtensionContext,
   pi: ExtensionAPI,
@@ -222,7 +229,7 @@ async function runStopBoundary(
   const run = openNotificationRun(pi, { kind: "hook" });
   runtime.openStopBoundary();
   try {
-    return await runStopBucket(runtime, last, capturedGeneration, ctx, pi, run, executor);
+    return await runStopBucket(runtime, ending, capturedGeneration, ctx, pi, run, executor);
   } finally {
     runtime.closeStopBoundary();
   }
@@ -447,7 +454,7 @@ function showStopReason(
  */
 async function runStopBucket(
   runtime: HooksRuntime,
-  last: AssistantMessage,
+  ending: StopBoundaryEnding,
   capturedGeneration: number,
   ctx: ExtensionContext,
   pi: ExtensionAPI,
@@ -460,7 +467,7 @@ async function runStopBucket(
   }
 
   const event: StopEvent = {
-    last_assistant_message: renderAssistantText(last),
+    last_assistant_message: renderAssistantText(ending.last),
     // STOP-07: the NEXT Stop payload after a bridge continuation carries
     // `stop_hook_active: true` so the hook can see it is running inside a
     // bridge-driven continuation loop.
@@ -493,7 +500,14 @@ async function runStopBucket(
       `settle: continue:false from ${stop.entry.pluginId} suppresses Stop continuation; ` +
         `stopReason=${stop.result.stopReason ?? "<none>"}`,
     );
-    showStopReason(ctx, run, stop.result.stopReason);
+    // D-PG5-13: the line claims a stop, so it is left out when an earlier
+    // handler at the boundary already continued the run.
+    if (ending.runContinues) {
+      hookDebugLog("settle: an earlier boundary handler continued the run; stopReason not shown");
+    } else {
+      showStopReason(ctx, run, stop.result.stopReason);
+    }
+
     runtime.recordStopNonReentry();
     return undefined;
   }

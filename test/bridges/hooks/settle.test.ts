@@ -2086,6 +2086,39 @@ for (const { name, results, notices, continued } of [
   });
 }
 
+test("shows no stop line when an earlier boundary handler already continued the run (D-PG5-13)", async (t) => {
+  // arrange
+  const debugLines = observeHookDebug(t);
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket("Stop", [stopEntry("halt")]);
+  const host = makeNoticeHost();
+  const generation = runtime.currentGeneration();
+  agentEndCacheHandler(runtime, generation)(agentEnd("stop"));
+  const continuedEvent = { ...boundaryEvent, continue: true } as AgentBeforeSettleEvent;
+
+  // act
+  const boundaryResult = await beforeSettleHandlerFor(
+    runtime,
+    generation,
+    host.pi,
+    resultsExecutor({ halt: { kind: "stop", stopReason: "done for today" } }),
+  )(continuedEvent, host.ctx);
+
+  // assert
+  assert.deepStrictEqual(
+    { notices: host.capture.entries, boundaryResult, debug: debugLines() },
+    {
+      notices: [],
+      boundaryResult: undefined,
+      debug: [
+        "[hooks] settle: continue:false from halt suppresses Stop continuation; stopReason=done for today",
+        "[hooks] settle: an earlier boundary handler continued the run; stopReason not shown",
+      ],
+    },
+  );
+});
+
 test("shows a Stop hook that cannot start on the first Stop run and not on the second (D-PG5-12)", async () => {
   // arrange
   const runtime = createHooksRuntime();
