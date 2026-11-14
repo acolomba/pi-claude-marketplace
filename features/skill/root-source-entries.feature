@@ -245,6 +245,7 @@ Feature: Skill root-source entries
     Examples:
       | listed path      | warning                                                                                                     |
       | ../outside       | skills path escapes plugin directory: ../outside                                                            |
+      | ../outside/skills | skills path escapes plugin directory: ../outside/skills                                                    |
       | ./skills/missing | skills path not found: skills/missing                                                                       |
       | ./notes.md       | Failed to load skills from notes.md: path is a file; skills entries must be directories containing SKILL.md |
 

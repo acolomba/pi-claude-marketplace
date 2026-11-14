@@ -533,6 +533,21 @@ describe("redactAbsolutePaths", () => {
       expected: "invalid https://github.com/org/repo.git detail",
     },
     {
+      name: "preserves a relative path that climbs two segments",
+      input: "skills path escapes plugin directory: ../outside/x",
+      expected: "skills path escapes plugin directory: ../outside/x",
+    },
+    {
+      name: "preserves a dot-relative path with two segments",
+      input: "skills path not found: ./skills/missing",
+      expected: "skills path not found: ./skills/missing",
+    },
+    {
+      name: "preserves a relative path that climbs from inside a folder",
+      input: "skills path escapes plugin directory: skills/../../x/y",
+      expected: "skills path escapes plugin directory: skills/../../x/y",
+    },
+    {
       name: "redacts multiple paths deterministically",
       input: String.raw`from /srv/private/a.json to C:\Users\alice\b.json`,
       expected: "from a.json to b.json",
