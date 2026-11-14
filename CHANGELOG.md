@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Plugin agents and MCP servers now behave more like Claude Code with pi-subagents 0.87.0 or later and pi-mcp-adapter 7.0.1 or later in 7.x.
+- Plugin agents, MCP servers, skills, and workflows now behave more like Claude Code. Agents and MCP servers need pi-subagents 0.87.0 or later and pi-mcp-adapter 7.0.1 or later in 7.x.
 
   - These versions fix plugin MCP grants and shorten long tool names for Pi's 64-character limit.
   - `--map-model` now writes a bare model ID, so an agent prefers the session's provider. An installed agent keeps its old ID until the next `update --map-model`.
@@ -10,6 +10,11 @@
   - An installed plugin gets the default at its next update or reinstall under pi-mcp-adapter, or at the next session start under Pi's built-in MCP.
   - Under pi-mcp-adapter, hooks now match plugin MCP tool names over 64 characters, and agents can exclude them with `disallowedTools`. Update or reinstall the plugin to refresh its agents.
   - pi-mcp-adapter asks for project server approval again when the new timeout changes an approved server's stored definition.
+  - A marketplace entry whose source is the marketplace root and that lists `skills` now installs only those skills, as in Claude Code. If you installed a plugin from `anthropics/skills` or a marketplace like it, run `/claude:plugin reinstall` once to remove the extra skills.
+  - A skill's relative link to a sibling skill of the same plugin now points at the sibling's installed folder.
+  - A workflow name that a plugin writes without a leading slash, as in `Workflow({ name: "plugin:scan" })`, now stays without one, so the model can start the workflow.
+  - An installed plugin gets the new links and workflow names at its next update or reinstall.
+  - Install, update, and `info` now note when a workflow runs a plugin agent that restricts its tools, because the workflow engine does not keep the restriction.
 
 - More plugin hook events now behave as in Claude Code, and the model-facing tools return what the model asks for. (#310)
 
