@@ -66,10 +66,11 @@ function helloEntry(pluginRoot: string, locations: ScopedLocations): Record<stri
     directTools: "search",
     toolPrefix: "mcp",
     requestTimeoutMs: 1800000,
+    lifecycle: "lazy-keep-alive",
     _piClaudeMarketplace: {
       plugin: "hello",
       marketplace: "mp",
-      defaultFields: { requestTimeoutMs: 1800000 },
+      defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
     },
   };
 }

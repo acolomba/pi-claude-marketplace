@@ -437,10 +437,11 @@ function freshAdapterText(
       directTools: "search",
       toolPrefix: "mcp",
       requestTimeoutMs: 1800000,
+      lifecycle: "lazy-keep-alive",
       _piClaudeMarketplace: {
         plugin,
         marketplace: "mp",
-        defaultFields: { requestTimeoutMs: 1800000 },
+        defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
       },
     };
   }

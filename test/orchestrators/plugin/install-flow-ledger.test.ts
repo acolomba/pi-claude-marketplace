@@ -202,10 +202,11 @@ for (const orchestrated of [false, true]) {
                 CLAUDE_PLUGIN_ROOT: path.join(marketplaceRoot, "plugins", "zzz"),
               },
               requestTimeoutMs: 1800000,
+              lifecycle: "lazy-keep-alive",
               _piClaudeMarketplace: {
                 marketplace: "mp",
                 plugin: "zzz",
-                defaultFields: { requestTimeoutMs: 1800000 },
+                defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
               },
             },
           },
@@ -3393,11 +3394,13 @@ test("AFILE-01: install writes the plugin's marked entries into project mcp-adap
       "directTools": "search",
       "toolPrefix": "mcp",
       "requestTimeoutMs": 1800000,
+      "lifecycle": "lazy-keep-alive",
       "_piClaudeMarketplace": {
         "plugin": "hello",
         "marketplace": "mp",
         "defaultFields": {
-          "requestTimeoutMs": 1800000
+          "requestTimeoutMs": 1800000,
+          "lifecycle": "lazy-keep-alive"
         }
       }
     }
@@ -3466,11 +3469,13 @@ test("ANAME-01: install writes Claude Code server keys that the global toolPrefi
       "directTools": "search",
       "toolPrefix": "mcp",
       "requestTimeoutMs": 1800000,
+      "lifecycle": "lazy-keep-alive",
       "_piClaudeMarketplace": {
         "plugin": "my.plugin",
         "marketplace": "mp",
         "defaultFields": {
-          "requestTimeoutMs": 1800000
+          "requestTimeoutMs": 1800000,
+          "lifecycle": "lazy-keep-alive"
         }
       }
     },
@@ -3483,11 +3488,13 @@ test("ANAME-01: install writes Claude Code server keys that the global toolPrefi
       "directTools": true,
       "toolPrefix": "mcp",
       "requestTimeoutMs": 1800000,
+      "lifecycle": "lazy-keep-alive",
       "_piClaudeMarketplace": {
         "plugin": "my.plugin",
         "marketplace": "mp",
         "defaultFields": {
-          "requestTimeoutMs": 1800000
+          "requestTimeoutMs": 1800000,
+          "lifecycle": "lazy-keep-alive"
         }
       }
     }
@@ -3597,11 +3604,13 @@ test("ANAME-07 / D-08-04: install writes Claude servers through the closed adapt
       "directTools": "search",
       "toolPrefix": "mcp",
       "requestTimeoutMs": 1800000,
+      "lifecycle": "lazy-keep-alive",
       "_piClaudeMarketplace": {
         "plugin": "hello",
         "marketplace": "mp",
         "defaultFields": {
-          "requestTimeoutMs": 1800000
+          "requestTimeoutMs": 1800000,
+          "lifecycle": "lazy-keep-alive"
         }
       }
     }
@@ -3718,11 +3727,13 @@ test("ANAME-07: --partial installs every server except the blocked one", async (
       "directTools": "search",
       "toolPrefix": "mcp",
       "requestTimeoutMs": 1800000,
+      "lifecycle": "lazy-keep-alive",
       "_piClaudeMarketplace": {
         "plugin": "hello",
         "marketplace": "mp",
         "defaultFields": {
-          "requestTimeoutMs": 1800000
+          "requestTimeoutMs": 1800000,
+          "lifecycle": "lazy-keep-alive"
         }
       }
     }

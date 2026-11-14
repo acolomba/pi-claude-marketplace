@@ -96,10 +96,11 @@ test("AVAR-02: a project install writes Claude's variable rule for the adapter a
             directTools: "search",
             toolPrefix: "mcp",
             requestTimeoutMs: 1800000,
+            lifecycle: "lazy-keep-alive",
             _piClaudeMarketplace: {
               plugin: "hello",
               marketplace: "mp",
-              defaultFields: { requestTimeoutMs: 1800000 },
+              defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
             },
           },
         },

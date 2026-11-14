@@ -13766,10 +13766,11 @@ test("AFILE-06: a disabled plugin MCP server stays disabled through update", asy
             toolPrefix: "mcp",
             disabled: true,
             requestTimeoutMs: 1800000,
+            lifecycle: "lazy-keep-alive",
             _piClaudeMarketplace: {
               plugin: "hello",
               marketplace: "mp",
-              defaultFields: { requestTimeoutMs: 1800000 },
+              defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
             },
           },
         },

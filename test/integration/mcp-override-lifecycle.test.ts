@@ -98,10 +98,11 @@ test("AFILE-06: a project install keeps the user's override in its entry and uni
           toolPrefix: "mcp",
           disabled: true,
           requestTimeoutMs: 1800000,
+          lifecycle: "lazy-keep-alive",
           _piClaudeMarketplace: {
             plugin: "hello",
             marketplace: "mp",
-            defaultFields: { requestTimeoutMs: 1800000 },
+            defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
             keptOverride: { disabled: true, env: { STUB_TOKEN: "stub-secret" } },
           },
         },
@@ -205,7 +206,7 @@ test("AFILE-06: a user-scope plugin disabled in the project keeps that disable t
     const keptMarker = {
       plugin: "hello",
       marketplace: "mp",
-      defaultFields: { requestTimeoutMs: 1800000 },
+      defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
       keptOverride: { disabled: true, env: { STUB_TOKEN: "stub-secret" } },
     };
     const installedRow = (scope: Scope, version: string): NotifyRecord => ({
@@ -265,6 +266,7 @@ test("AFILE-06: a user-scope plugin disabled in the project keeps that disable t
           toolPrefix: "mcp",
           disabled: true,
           requestTimeoutMs: 1800000,
+          lifecycle: "lazy-keep-alive",
           _piClaudeMarketplace: keptMarker,
         },
       },
@@ -279,6 +281,7 @@ test("AFILE-06: a user-scope plugin disabled in the project keeps that disable t
           toolPrefix: "mcp",
           disabled: true,
           requestTimeoutMs: 1800000,
+          lifecycle: "lazy-keep-alive",
           _piClaudeMarketplace: keptMarker,
         },
       },
@@ -310,10 +313,11 @@ test("AFILE-06: a user-scope plugin disabled in the project keeps that disable t
           directTools: "search",
           toolPrefix: "mcp",
           requestTimeoutMs: 1800000,
+          lifecycle: "lazy-keep-alive",
           _piClaudeMarketplace: {
             plugin: "hello",
             marketplace: "mp",
-            defaultFields: { requestTimeoutMs: 1800000 },
+            defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
           },
         },
       },
@@ -389,10 +393,11 @@ test("AFILE-06: a /mcp-adapter enable made while the plugin is installed survive
               directTools: "search",
               toolPrefix: "mcp",
               requestTimeoutMs: 1800000,
+              lifecycle: "lazy-keep-alive",
               _piClaudeMarketplace: {
                 plugin: "hello",
                 marketplace: "mp",
-                defaultFields: { requestTimeoutMs: 1800000 },
+                defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
                 keptOverride: { env: { STUB_TOKEN: "stub-secret" } },
               },
             },
@@ -601,10 +606,11 @@ test("D-08-02: a project user's disabled and openUi choices survive uninstall th
               disabled: true,
               openUi: true,
               requestTimeoutMs: 1800000,
+              lifecycle: "lazy-keep-alive",
               _piClaudeMarketplace: {
                 plugin: "hello",
                 marketplace: "mp",
-                defaultFields: { requestTimeoutMs: 1800000 },
+                defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
               },
             },
           },
@@ -653,10 +659,11 @@ function helloEntry(
     toolPrefix: "mcp",
     ...carried,
     requestTimeoutMs: 1800000,
+    lifecycle: "lazy-keep-alive",
     _piClaudeMarketplace: {
       plugin: "hello",
       marketplace: "mp",
-      defaultFields: { requestTimeoutMs: 1800000 },
+      defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
     },
   };
 }

@@ -2457,10 +2457,11 @@ test("AMIG-02: a legacy removal that fails records an mcp phase failure and keep
             directTools: "search",
             toolPrefix: "mcp",
             requestTimeoutMs: 1800000,
+            lifecycle: "lazy-keep-alive",
             _piClaudeMarketplace: {
               plugin: "hello",
               marketplace: "mp",
-              defaultFields: { requestTimeoutMs: 1800000 },
+              defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
             },
           },
         },

@@ -304,10 +304,11 @@ describe("prepareStageMcpServers", () => {
           directTools: "search",
           toolPrefix: "mcp",
           requestTimeoutMs: 1800000,
+          lifecycle: "lazy-keep-alive",
           _piClaudeMarketplace: {
             plugin: "acme",
             marketplace: "catalog",
-            defaultFields: { requestTimeoutMs: 1800000 },
+            defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
           },
         },
       },
@@ -1223,11 +1224,13 @@ describe("prepareStageMcpServers", () => {
       "toolPrefix": "mcp",
       "disabled": true,
       "requestTimeoutMs": 1800000,
+      "lifecycle": "lazy-keep-alive",
       "_piClaudeMarketplace": {
         "plugin": "acme",
         "marketplace": "catalog",
         "defaultFields": {
-          "requestTimeoutMs": 1800000
+          "requestTimeoutMs": 1800000,
+          "lifecycle": "lazy-keep-alive"
         },
         "keptOverride": {
           "disabled": true,
@@ -2004,10 +2007,11 @@ describe("prepareStageMcpServers", () => {
           directTools: "search",
           toolPrefix: "mcp",
           requestTimeoutMs: 1800000,
+          lifecycle: "lazy-keep-alive",
           _piClaudeMarketplace: {
             plugin: "acme",
             marketplace: "catalog",
-            defaultFields: { requestTimeoutMs: 1800000 },
+            defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
           },
         },
       },
@@ -2072,10 +2076,11 @@ describe("prepareStageMcpServers", () => {
           directTools: "search",
           toolPrefix: "mcp",
           requestTimeoutMs: 1800000,
+          lifecycle: "lazy-keep-alive",
           _piClaudeMarketplace: {
             plugin: "hello",
             marketplace: "catalog",
-            defaultFields: { requestTimeoutMs: 1800000 },
+            defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
           },
         },
       },
@@ -3274,11 +3279,13 @@ describe("commitPreparedMcp", () => {
       "directTools": "search",
       "toolPrefix": "mcp",
       "requestTimeoutMs": 1800000,
+      "lifecycle": "lazy-keep-alive",
       "_piClaudeMarketplace": {
         "plugin": "acme",
         "marketplace": "catalog",
         "defaultFields": {
-          "requestTimeoutMs": 1800000
+          "requestTimeoutMs": 1800000,
+          "lifecycle": "lazy-keep-alive"
         }
       }
     }
@@ -3456,11 +3463,13 @@ describe("replacePreparedMcp", () => {
       "directTools": "search",
       "toolPrefix": "mcp",
       "requestTimeoutMs": 1800000,
+      "lifecycle": "lazy-keep-alive",
       "_piClaudeMarketplace": {
         "plugin": "acme",
         "marketplace": "catalog",
         "defaultFields": {
-          "requestTimeoutMs": 1800000
+          "requestTimeoutMs": 1800000,
+          "lifecycle": "lazy-keep-alive"
         }
       }
     }
