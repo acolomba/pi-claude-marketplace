@@ -12,6 +12,7 @@ import {
   hookStoppedText,
   postCompactLineText,
   promptBlockedText,
+  promptStoppedText,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/hook-labels.ts";
 
 import type { HookFailure } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
@@ -415,6 +416,26 @@ describe("hookStoppedText", () => {
     test(`writes ${name} (D-PG5-13)`, () => {
       // act
       const notice = hookStoppedText("PreToolUse:Bash", reason);
+
+      // assert
+      assert.strictEqual(notice, text);
+    });
+  }
+});
+
+describe("promptStoppedText", () => {
+  for (const { name, stopReason, text } of [
+    { name: "the stop reason", stopReason: "not now", text: "Operation stopped by hook: not now" },
+    {
+      name: "no reason as the bare text",
+      stopReason: undefined,
+      text: "Operation stopped by hook",
+    },
+    { name: "an empty reason as the bare text", stopReason: "", text: "Operation stopped by hook" },
+  ]) {
+    test(`writes ${name} (D-PG5-13)`, () => {
+      // act
+      const notice = promptStoppedText(stopReason);
 
       // assert
       assert.strictEqual(notice, text);

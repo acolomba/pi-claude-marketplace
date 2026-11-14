@@ -9,7 +9,8 @@
 //   - adaptToolCallResult        -> Pi `tool_call` (PreToolUse).
 //     `block` -> `{ block: true, reason }`, the reason reading
 //     `PreToolUse:<Tool> hook error: <message>`; `stop` -> a block with
-//     `terminate: true`, which ends the turn; a mutation that asks blocks with
+//     `terminate: true`, which ends the turn, and a stop notice to the user
+//     (D-PG5-13); a mutation that asks blocks with
 //     its reason when Pi has no terminal (`print`, `json`, `rpc`) and asks
 //     through `ctx.ui.confirm` in `tui`; an allowed mutation's `updatedInput`
 //     replaces the tool's whole input; `noop` returns `undefined`.
@@ -30,7 +31,8 @@
 //
 //   - adaptInputResult           -> Pi `input` (UserPromptSubmit).
 //     `block` -> `{ action: "handled" }`; `stop` -> `{ action: "handled" }`,
-//     so the prompt stops; `mutate.additionalContext` is buffered in the
+//     so the prompt stops, and a stop notice to the user (D-PG5-13);
+//     `mutate.additionalContext` is buffered in the
 //     runtime's prompt-context buffer and the prompt continues unchanged
 //     (`undefined`); the `before_agent_start` handler sends the context as a
 //     message after the prompt (D-CF5-13); `noop` returns `undefined`.
@@ -68,7 +70,13 @@ import { errorMessage } from "../../shared/errors.ts";
 import { notifyHookNotice } from "../../shared/notification-dispatch.ts";
 import { openNotificationRun } from "../../shared/notification-run.ts";
 
-import { hookBlockingErrorText, hookErrorText, hookEventLabel } from "./hook-labels.ts";
+import {
+  hookBlockingErrorText,
+  hookErrorText,
+  hookEventLabel,
+  hookStoppedText,
+  promptStoppedText,
+} from "./hook-labels.ts";
 import { decodeHookToolInput } from "./tool-input.ts";
 import { renderFileToolOutput } from "./tool-output-files.ts";
 import { renderSearchShellToolOutput } from "./tool-output-search-shell.ts";
@@ -334,26 +342,33 @@ async function adaptToolCallMutation(
   return undefined;
 }
 
-/** Reports a discarded rewrite without exposing its input values. */
-export function notifyIgnoredToolInputRewrite(
-  event: ToolCallEvent,
-  context: HookAdapterContext,
-  category: "shape" | "field" | "value",
-): void {
+// Shows one hook notice from an adapter. With no Pi API there is no run to
+// open, so it shows nothing; a notice that fails to show is debug-logged
+// after `failed` and never fails the event.
+function showAdapterNotice(context: HookAdapterContext, notice: string, failed: string): void {
   if (context.pi === undefined) {
     return;
   }
 
   try {
     const run = openNotificationRun(context.pi, { kind: "hook" });
-    notifyHookNotice(
-      context.ctx,
-      run,
-      `PreToolUse:${mapPiToClaudeToolName(event.toolName)} ignored input rewrite (${category})`,
-    );
+    notifyHookNotice(context.ctx, run, notice);
   } catch (error: unknown) {
-    hookDebugLog(`adaptToolCall: ignored rewrite notice failed: ${errorMessage(error)}`);
+    hookDebugLog(`${failed}: ${errorMessage(error)}`);
   }
+}
+
+/** Reports a discarded rewrite without exposing its input values. */
+export function notifyIgnoredToolInputRewrite(
+  event: ToolCallEvent,
+  context: HookAdapterContext,
+  category: "shape" | "field" | "value",
+): void {
+  showAdapterNotice(
+    context,
+    `PreToolUse:${mapPiToClaudeToolName(event.toolName)} ignored input rewrite (${category})`,
+    "adaptToolCall: ignored rewrite notice failed",
+  );
 }
 
 /**
@@ -363,7 +378,9 @@ export function notifyIgnoredToolInputRewrite(
  * A block reaches the model as Claude Code sends it (D-CF5-11):
  * `PreToolUse:<Tool> hook error: <reason>`, with an exit-2 stderr reason
  * after the attributed hook's bracketed command. A `continue: false` blocks
- * the call and sets `terminate`, so Pi ends the turn after the batch.
+ * the call and sets `terminate`, so Pi ends the turn after the batch, and
+ * shows the user `PreToolUse:<Tool> hook stopped continuation: <stopReason>`
+ * (D-PG5-13).
  */
 export async function adaptToolCallResult(
   result: HookExecResult,
@@ -386,6 +403,11 @@ export async function adaptToolCallResult(
       return adaptToolCallMutation(result, event, context);
 
     case "stop":
+      showAdapterNotice(
+        context,
+        hookStoppedText(hookEventLabel("PreToolUse", event.toolName), result.stopReason),
+        "adaptToolCall: stop notice failed",
+      );
       return { block: true, reason: result.stopReason ?? DEFAULT_STOP_REASON, terminate: true };
 
     case "noop":
@@ -663,7 +685,13 @@ export function adaptInputResult(
       return undefined;
 
     case "stop":
-      // D-CF5-11: a UserPromptSubmit `continue: false` stops the prompt.
+      // D-CF5-11 / D-PG5-13: a UserPromptSubmit `continue: false` stops the
+      // prompt and shows the user why.
+      showAdapterNotice(
+        context,
+        promptStoppedText(result.stopReason),
+        "adaptInput: stop notice failed",
+      );
       return { action: "handled" };
 
     case "noop":

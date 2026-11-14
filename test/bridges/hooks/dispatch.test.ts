@@ -4549,14 +4549,14 @@ describe("hook notices (HOOK-05 / D-CF5-14)", () => {
       ],
     },
     {
-      name: "no blocked-prompt notice for a prompt a hook stops",
+      name: "the stop notice and no blocked-prompt notice for a prompt a hook stops (D-PG5-13)",
       claudeEvent: "UserPromptSubmit",
       event: PROMPT_EVENT,
       results: {
         stopper: { kind: "stop", stopReason: "enough" },
         guard: { kind: "block", reason: "no" },
       },
-      notices: [],
+      notices: ["Operation stopped by hook: enough"],
     },
     {
       name: "a hook error for each SessionStart block in routing order",

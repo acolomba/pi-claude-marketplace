@@ -14,6 +14,7 @@ import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/br
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
+import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 
 import type {
   FollowUpTurnEnd,
@@ -2126,4 +2127,179 @@ describe("adaptPreCompactResult", () => {
       );
     });
   }
+});
+
+describe("stop notices (D-PG5-13)", () => {
+  const PROMPT = { type: "input", text: "hello", source: "interactive" } satisfies InputEvent;
+  const BASH_CALL = {
+    type: "tool_call",
+    toolCallId: "call-bash",
+    toolName: "bash",
+    input: { command: "echo from-model" },
+  } satisfies ToolCallEvent;
+
+  // A JSON-mode adapter context whose notices land in `capture`.
+  function noticeContext(capture: ReturnType<typeof createJsonCapture>): HookAdapterContext {
+    return {
+      ...adapterContext(guardEntry()),
+      ctx: Object.defineProperties({ mode: "json", cwd: "/workspace" } as ExtensionContext, {
+        ui: { get: () => capture.ui },
+      }),
+      pi: { appendEntry: capture.entrySink.appendEntry } as ExtensionAPI,
+    };
+  }
+
+  // The `claude-plugin` entry of one hook notice.
+  function noticeEntry(text: string): unknown {
+    return {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin: { kind: "hook" },
+        kind: "hook-notice",
+        severity: "info",
+        needsReload: false,
+        text,
+      },
+    };
+  }
+
+  // A JSON-mode adapter context whose notice transport throws.
+  function failingNoticeContext(): HookAdapterContext {
+    return {
+      ...adapterContext(guardEntry()),
+      ctx: { mode: "json", cwd: "/workspace" } as ExtensionContext,
+      pi: {
+        getAllTools: () => [],
+        getCommands: () => [],
+        appendEntry(): never {
+          throw new Error("notice transport failed");
+        },
+      } as unknown as ExtensionAPI,
+    };
+  }
+
+  for (const { name, stopReason, notice } of [
+    { name: "its reason", stopReason: "not now", notice: "Operation stopped by hook: not now" },
+    { name: "no reason", stopReason: undefined, notice: "Operation stopped by hook" },
+    { name: "an empty reason", stopReason: "", notice: "Operation stopped by hook" },
+  ]) {
+    test(`shows a stopped prompt with ${name} and stops it`, () => {
+      // arrange
+      const capture = createJsonCapture();
+      const stopOutcome: HookExecResult =
+        stopReason === undefined ? { kind: "stop" } : { kind: "stop", stopReason };
+
+      // act
+      const adaptation = adaptInputResult(stopOutcome, { ...PROMPT }, noticeContext(capture));
+
+      // assert
+      assert.deepStrictEqual(adaptation, { action: "handled" });
+      assert.deepStrictEqual(capture.entries, [noticeEntry(notice)]);
+      capture.assertValid();
+    });
+  }
+
+  for (const { name, stopOutcome, notice, reason } of [
+    {
+      name: "its reason",
+      stopOutcome: { kind: "stop", stopReason: "halt" } as const,
+      notice: "PreToolUse:Bash hook stopped continuation: halt",
+      reason: "halt",
+    },
+    {
+      name: "no reason",
+      stopOutcome: { kind: "stop" } as const,
+      notice: "PreToolUse:Bash hook stopped continuation: Execution stopped by hook",
+      reason: "Operation stopped by hook",
+    },
+  ]) {
+    test(`shows a stopped tool call with ${name} and keeps the block the model receives`, async () => {
+      // arrange
+      const capture = createJsonCapture();
+
+      // act
+      const adaptation = await adaptToolCallResult(
+        stopOutcome,
+        { ...BASH_CALL },
+        noticeContext(capture),
+      );
+
+      // assert
+      assert.deepStrictEqual(adaptation, { block: true, reason, terminate: true });
+      assert.deepStrictEqual(capture.entries, [noticeEntry(notice)]);
+      capture.assertValid();
+    });
+  }
+
+  test("debug-logs a prompt stop notice that fails to show and still stops the prompt", (t) => {
+    // arrange
+    const lines = captureDebugLog(t);
+
+    // act
+    const adaptation = adaptInputResult(
+      { kind: "stop", stopReason: "not now" },
+      { ...PROMPT },
+      failingNoticeContext(),
+    );
+
+    // assert
+    assert.deepStrictEqual(adaptation, { action: "handled" });
+    assert.deepStrictEqual(lines, [
+      "[hooks] adaptInput: stop notice failed: notice transport failed",
+    ]);
+  });
+
+  test("debug-logs a tool stop notice that fails to show and still ends the turn", async (t) => {
+    // arrange
+    const lines = captureDebugLog(t);
+
+    // act
+    const adaptation = await adaptToolCallResult(
+      { kind: "stop", stopReason: "halt" },
+      { ...BASH_CALL },
+      failingNoticeContext(),
+    );
+
+    // assert
+    assert.deepStrictEqual(adaptation, { block: true, reason: "halt", terminate: true });
+    assert.deepStrictEqual(lines, [
+      "[hooks] adaptToolCall: stop notice failed: notice transport failed",
+    ]);
+  });
+
+  for (const isError of [false, true]) {
+    test(`shows no stop notice for a stopped ${isError ? "PostToolUseFailure" : "PostToolUse"} result`, () => {
+      // arrange
+      const capture = createJsonCapture();
+      const event = {
+        type: "tool_result",
+        toolCallId: "result-stop",
+        toolName: "bash",
+        input: { command: "inspect" },
+        content: [{ type: "text" as const, text: "original output" }],
+        isError,
+        details: undefined,
+      } satisfies ToolResultEvent;
+
+      // act
+      const adaptation = adaptToolResultResult(
+        { kind: "stop", stopReason: "halt" },
+        event,
+        noticeContext(capture),
+      );
+
+      // assert
+      assert.strictEqual(adaptation, undefined);
+      assert.deepStrictEqual(capture.entries, []);
+    });
+  }
+
+  test("shows no stop notice for a stopped PreCompact bucket, which has no notice context", () => {
+    // act
+    const adaptation = adaptPreCompactResult([{ kind: "stop", stopReason: "halt" }]);
+
+    // assert
+    assert.strictEqual(adaptation, undefined);
+  });
 });
