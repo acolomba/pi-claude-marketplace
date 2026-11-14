@@ -29,6 +29,8 @@ Spike S4 ran the engine's own child-session code on 3.15.1 with Pi 1.5.2 and sto
 
 Claude Code 2.1.323 keeps the restriction. When a workflow runs an agent type, it builds the subagent's options from the agent definition, with `disallowedTools` joined from the definition's list and the call's list, and `tools` taken from the definition. A read-only plugin agent stays read-only inside a workflow there.
 
+Until the engine applies the policy in every mode, pi-claude-marketplace notes at install, update, and `info` which of `read`, `bash`, `edit`, and `write` such an agent type gets outside codemode.
+
 ## Draft issue
 
 **Title:** Apply an agent type's tool policy to Pi's built-in tools in every mode

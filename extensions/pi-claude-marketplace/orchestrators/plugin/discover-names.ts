@@ -22,7 +22,7 @@
 
 import path from "node:path";
 
-import { discoverPluginAgents } from "../../bridges/agents/index.ts";
+import { discoverPluginAgents, listedToolNames } from "../../bridges/agents/index.ts";
 import { discoverPluginCommands } from "../../bridges/commands/index.ts";
 import { discoverPluginSkills } from "../../bridges/skills/index.ts";
 import { discoverPluginWorkflows } from "../../bridges/workflows/index.ts";
@@ -71,34 +71,56 @@ function resolvedAgentsDirs(resolved: MaterializablePlugin): readonly string[] {
 }
 
 /**
- * D-PG4-11: a `tools` or `disallowedTools` value that is not blank restricts
- * the agent's tools. A YAML list arrives folded into one comma-joined string.
+ * D-PG4-11: the Pi built-in tools the workflow engine gives a subagent outside
+ * codemode, each with its Claude Code name (AG-7).
  */
-function restrictsTools(agent: RestrictionAgent): boolean {
-  return [agent.raw.tools, agent.raw.disallowedTools].some(
-    (field) => field !== undefined && field.trim() !== "",
-  );
+const ENGINE_BUILTIN_TOOLS: readonly (readonly [pi: string, claude: string])[] = [
+  ["read", "Read"],
+  ["bash", "Bash"],
+  ["edit", "Edit"],
+  ["write", "Write"],
+];
+
+/**
+ * D-PG4-11: the engine's built-in tools that the agent's `tools` does not
+ * allow or its `disallowedTools` denies, which the agent gets anyway outside
+ * codemode. An absent or blank `tools`, or one that lists `*`, allows every
+ * tool, as in Claude Code.
+ */
+function unkeptBuiltinTools(agent: RestrictionAgent): readonly string[] {
+  const allowed = listedToolNames(agent.raw.tools);
+  const denied = new Set(listedToolNames(agent.raw.disallowedTools));
+  const allowsAll = allowed.length === 0 || allowed.includes("*");
+  return ENGINE_BUILTIN_TOOLS.filter(
+    ([, claude]) => denied.has(claude) || (!allowsAll && !allowed.includes(claude)),
+  ).map(([pi]) => pi);
 }
 
 /**
- * D-PG4-11: the names a script may use for a restricted agent of the plugin:
- * the upstream `<plugin>:<agent>`, which the engine's registry resolves, and
- * the generated name. Discovery already checked every part of both names, so
- * `declaredAgentName` cannot throw here.
+ * D-PG4-11: the built-ins each restricted agent of the plugin gets anyway,
+ * under each name a script may use for it: the upstream `<plugin>:<agent>`,
+ * which the engine's registry resolves, and the generated name. An agent
+ * whose restriction keeps every built-in is left out. Discovery already
+ * checked every part of both names, so `declaredAgentName` cannot throw here.
  */
-function restrictedAgentNames(
+function restrictedAgentTools(
   pluginName: string,
   agents: readonly RestrictionAgent[],
-): ReadonlySet<string> {
-  return new Set(
-    agents
-      .filter(restrictsTools)
-      .flatMap((agent) => [
-        declaredAgentName(pluginName, agent.sourceName, agent.namespace),
-        agent.generatedName,
-      ]),
+): ReadonlyMap<string, readonly string[]> {
+  return new Map(
+    agents.flatMap((agent) => {
+      const unkept = unkeptBuiltinTools(agent);
+      return unkept.length === 0
+        ? []
+        : [
+            [declaredAgentName(pluginName, agent.sourceName, agent.namespace), unkept] as const,
+            [agent.generatedName, unkept] as const,
+          ];
+    }),
   );
 }
+
+const TOOL_LIST_FORMAT = new Intl.ListFormat("en", { type: "conjunction" });
 
 /**
  * D-PG4-12: one note in the shape of the workflows bridge's notes. Each span
@@ -110,18 +132,25 @@ function restrictedAgentNames(
  * quotes follow is redacted to the end of the line, and the agent type is
  * quoted after the folder.
  */
-function restrictionNote(fileName: string, scriptFile: string, agentType: string): string {
+function restrictionNote(
+  fileName: string,
+  scriptFile: string,
+  agentType: string,
+  unkept: readonly string[],
+): string {
   const folder = path.basename(path.dirname(scriptFile));
 
-  return `workflow script "${forMessage(fileName)}" in "${forMessage(folder)}" runs agent type "${forMessage(agentType)}", which restricts its tools; the workflow engine does not keep that restriction, so the agent can use read, bash, edit, and write`;
+  return `workflow script "${forMessage(fileName)}" in "${forMessage(folder)}" runs agent type "${forMessage(agentType)}", which restricts its tools; outside codemode the workflow engine does not keep that restriction, so the agent can use ${TOOL_LIST_FORMAT.format(unkept)}`;
 }
 
 /**
  * PG-SEC-01 / D-PG4-11: the notes for a plugin whose admitted workflow
  * scripts name, as a string literal, an agent of the same plugin that
  * restricts its tools. Claude Code keeps that restriction when a workflow
- * runs the agent; the workflow engine passes no tool list to Pi for the
- * child session, so the agent gets read, bash, edit, and write.
+ * runs the agent; outside codemode the workflow engine passes no tool list to
+ * Pi for the child session, so the agent gets read, bash, edit, and write. A
+ * note names only the ones the restriction does not keep, and an agent whose
+ * restriction keeps all four gets none, so a note is never false.
  *
  * Matching is exact string equality, with no case folding or Unicode
  * normalization. One note for each distinct pair of script and agent type,
@@ -136,13 +165,16 @@ export function workflowAgentRestrictionNotes(
   agents: readonly RestrictionAgent[],
   workflows: readonly RestrictionWorkflow[],
 ): readonly string[] {
-  const restricted = restrictedAgentNames(pluginName, agents);
+  const restricted = restrictedAgentTools(pluginName, agents);
 
   return workflows.flatMap(({ verdict, scriptFile }) =>
     verdict.outcome === "named"
-      ? (verdict.agentTypes ?? [])
-          .filter((agentType) => restricted.has(agentType))
-          .map((agentType) => restrictionNote(verdict.fileName, scriptFile, agentType))
+      ? (verdict.agentTypes ?? []).flatMap((agentType) => {
+          const unkept = restricted.get(agentType);
+          return unkept === undefined
+            ? []
+            : [restrictionNote(verdict.fileName, scriptFile, agentType, unkept)];
+        })
       : [],
   );
 }

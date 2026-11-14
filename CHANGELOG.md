@@ -14,7 +14,7 @@
   - A skill's relative link to a sibling skill of the same plugin now points at the sibling's installed folder.
   - A workflow name that a plugin writes without a leading slash, as in `Workflow({ name: "plugin:scan" })`, now stays without one, so the model can start the workflow.
   - An installed plugin gets the new links and workflow names when it updates to a new version, or at `/claude:plugin reinstall`.
-  - Install, update, and `info` now note when a workflow runs a plugin agent that restricts its tools, because the workflow engine does not keep the restriction.
+  - Install, update, and `info` now note when a workflow runs a plugin agent that restricts its tools, because the workflow engine does not keep the restriction outside codemode.
 
 - More plugin hook events now behave as in Claude Code, and the model-facing tools return what the model asks for. (#310)
 

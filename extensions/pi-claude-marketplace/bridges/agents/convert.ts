@@ -257,6 +257,15 @@ function toolNameOf(token: string): string {
 }
 
 /**
+ * D-CF4-08 as amended: the tool names a `tools` or `disallowedTools` value
+ * lists, split as Claude Code splits it, with a `Tool(spec)` entry read as
+ * its tool. An absent or blank value lists none.
+ */
+export function listedToolNames(value: string | undefined): readonly string[] {
+  return splitToolList(value).map(toolNameOf);
+}
+
+/**
  * AGSK-03 / D-CF4-08 as amended: whether `token` names the Skill tool,
  * bare or as `Skill(spec)`. Exact match on the tool name, like TOOL_MAP.
  */

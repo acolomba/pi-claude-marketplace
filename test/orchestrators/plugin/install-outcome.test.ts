@@ -2710,7 +2710,7 @@ const SHADOWED_COMMANDS_WARNING = {
 const SCAN_RESTRICTION_NOTE = {
   kind: "discovery",
   message:
-    'workflow script "scan.js" in "workflows" runs agent type "empty:reader", which restricts its tools; the workflow engine does not keep that restriction, so the agent can use read, bash, edit, and write',
+    'workflow script "scan.js" in "workflows" runs agent type "empty:reader", which restricts its tools; outside codemode the workflow engine does not keep that restriction, so the agent can use bash, edit, and write',
 } as const;
 
 for (const { companions, run } of [

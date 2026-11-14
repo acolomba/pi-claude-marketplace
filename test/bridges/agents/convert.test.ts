@@ -5,6 +5,7 @@ import {
   convertAgent,
   convertAgentForm,
   GUIDED_DROPPED_FIELDS,
+  listedToolNames,
   preloadedSkillNames,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/convert.ts";
 import { parseFrontmatter } from "../../../extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts";
@@ -2536,6 +2537,36 @@ Body content.
     assert.match(agent.fileContent, /^skills: acme-one,acme-two$/m);
     assert.deepStrictEqual(agent.warnings, []);
   });
+});
+
+describe("listedToolNames", () => {
+  for (const { label, value, expected } of [
+    { label: "an absent value", value: undefined, expected: [] },
+    { label: "a blank value", value: "  ", expected: [] },
+    {
+      label: "spaces, commas, and an inline array",
+      value: '["Read", "Grep"] ',
+      expected: ["Read", "Grep"],
+    },
+    {
+      label: "a patterned entry with a comma inside parentheses",
+      value: "Bash(a, b) Write",
+      expected: ["Bash", "Write"],
+    },
+    { label: "a wildcard", value: "*", expected: ["*"] },
+  ] satisfies readonly {
+    label: string;
+    value: string | undefined;
+    expected: readonly string[];
+  }[]) {
+    test(`D-CF4-08 lists the tool names of ${label}`, () => {
+      // act
+      const names = listedToolNames(value);
+
+      // assert
+      assert.deepStrictEqual(names, expected);
+    });
+  }
 });
 
 describe("preloadedSkillNames", () => {

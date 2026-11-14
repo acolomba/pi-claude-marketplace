@@ -85,8 +85,13 @@ function agentCall(agentType: string): string {
   return `await agent("run", { agentType: ${JSON.stringify(agentType)} });\n`;
 }
 
-function restrictionNote(fileName: string, folder: string, agentType: string): string {
-  return `workflow script "${fileName}" in "${folder}" runs agent type "${agentType}", which restricts its tools; the workflow engine does not keep that restriction, so the agent can use read, bash, edit, and write`;
+function restrictionNote(
+  fileName: string,
+  folder: string,
+  agentType: string,
+  unkept: string,
+): string {
+  return `workflow script "${fileName}" in "${folder}" runs agent type "${agentType}", which restricts its tools; outside codemode the workflow engine does not keep that restriction, so the agent can use ${unkept}`;
 }
 
 test("composes generated names from every bridge in each bridge's declared order", async (t) => {
@@ -289,37 +294,62 @@ test("PG-SEC-01: notes a workflow script that runs a tool-restricted agent of th
     skills: [],
     workflows: ["acme:scan"],
     workflowAgentRestrictionNotes: [
-      `workflow script "scan.js" in "workflows" runs agent type "acme:reader", which restricts its tools; the workflow engine does not keep that restriction, so the agent can use read, bash, edit, and write`,
+      `workflow script "scan.js" in "workflows" runs agent type "acme:reader", which restricts its tools; outside codemode the workflow engine does not keep that restriction, so the agent can use bash, edit, and write`,
     ],
   });
 });
 
-for (const { shape, agentFile, frontmatter, agentType } of [
+for (const { shape, agentFile, frontmatter, agentType, unkept } of [
   {
     shape: "the generated agent name",
     agentFile: "reader.md",
     frontmatter: { tools: "Read" },
     agentType: "pi-claude-marketplace-acme-reader",
+    unkept: "bash, edit, and write",
   },
   {
     shape: "an agent that sets disallowedTools",
     agentFile: "reader.md",
     frontmatter: { disallowedTools: "Bash" },
     agentType: "acme:reader",
+    unkept: "bash",
   },
   {
     shape: "the namespaced upstream name of an agent in a subfolder",
     agentFile: path.join("review", "security.md"),
     frontmatter: { tools: "Read" },
     agentType: "acme:review:security",
+    unkept: "bash, edit, and write",
+  },
+  {
+    shape: "an agent whose tools allows no built-in",
+    agentFile: "reader.md",
+    frontmatter: { tools: "Grep" },
+    agentType: "acme:reader",
+    unkept: "read, bash, edit, and write",
+  },
+  {
+    shape: "an agent whose tools allows a built-in through a spec and a list form",
+    agentFile: "reader.md",
+    frontmatter: { tools: '["Read", "Bash(git log *)"]' },
+    agentType: "acme:reader",
+    unkept: "edit and write",
+  },
+  {
+    shape: "an agent whose disallowedTools denies a built-in its tools allows",
+    agentFile: "reader.md",
+    frontmatter: { tools: "Read, Bash, Edit, Write", disallowedTools: "Write" },
+    agentType: "acme:reader",
+    unkept: "write",
   },
 ] satisfies readonly {
   shape: string;
   agentFile: string;
   frontmatter: Readonly<Record<string, string>>;
   agentType: string;
+  unkept: string;
 }[]) {
-  test(`PG-SEC-01: notes a restricted agent named by ${shape}`, async (t) => {
+  test(`PG-SEC-01: notes a restricted agent named by ${shape}, with the built-ins it gets anyway`, async (t) => {
     // arrange
     const pluginRoot = await createPluginRoot(t, "plugin-discover-names-restricted-match-");
     const agentsDirectory = path.join(pluginRoot, "agents");
@@ -342,7 +372,7 @@ for (const { shape, agentFile, frontmatter, agentType } of [
 
     // assert
     assert.deepStrictEqual(discovered.workflowAgentRestrictionNotes, [
-      restrictionNote("scan.js", "workflows", agentType),
+      restrictionNote("scan.js", "workflows", agentType, unkept),
     ]);
   });
 }
@@ -356,6 +386,21 @@ for (const { shape, frontmatter, script } of [
   {
     shape: "an agent whose tools value is blank",
     frontmatter: { tools: "" },
+    script: `export const meta = { name: "scan", description: "d" };\n${agentCall("acme:reader")}`,
+  },
+  {
+    shape: "an agent whose tools allows every built-in",
+    frontmatter: { tools: "Read, Bash, Edit, Write" },
+    script: `export const meta = { name: "scan", description: "d" };\n${agentCall("acme:reader")}`,
+  },
+  {
+    shape: "an agent whose tools lists the wildcard",
+    frontmatter: { tools: "*" },
+    script: `export const meta = { name: "scan", description: "d" };\n${agentCall("acme:reader")}`,
+  },
+  {
+    shape: "an agent that denies only a tool that is not a built-in",
+    frontmatter: { disallowedTools: "Grep" },
     script: `export const meta = { name: "scan", description: "d" };\n${agentCall("acme:reader")}`,
   },
   {
@@ -442,9 +487,9 @@ test("PG-SEC-01: gives one note per distinct script and agent type pair, in scri
 
   // assert
   assert.deepStrictEqual(discovered.workflowAgentRestrictionNotes, [
-    restrictionNote("a.js", "workflows", "acme:reader"),
-    restrictionNote("b.js", "workflows", "acme:writer"),
-    restrictionNote("b.js", "workflows", "acme:reader"),
+    restrictionNote("a.js", "workflows", "acme:reader", "bash, edit, and write"),
+    restrictionNote("b.js", "workflows", "acme:writer", "bash"),
+    restrictionNote("b.js", "workflows", "acme:reader", "bash, edit, and write"),
   ]);
 });
 
@@ -467,6 +512,11 @@ test("PG-SEC-01: escapes format characters in the file name and the agent type o
 
   // assert
   assert.deepStrictEqual(discovered.workflowAgentRestrictionNotes, [
-    restrictionNote(String.raw`sc\u{202e}an.js`, "workflows", String.raw`acme:rea\u{200b}der`),
+    restrictionNote(
+      String.raw`sc\u{202e}an.js`,
+      "workflows",
+      String.raw`acme:rea\u{200b}der`,
+      "bash, edit, and write",
+    ),
   ]);
 });

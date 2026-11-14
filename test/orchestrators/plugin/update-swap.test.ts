@@ -1514,7 +1514,7 @@ test("PG-SEC-01: a swap to a version whose workflow runs a tool-restricted agent
         {
           kind: "discovery",
           message:
-            'workflow script "scan.js" in "workflows" runs agent type "hello:reader", which restricts its tools; the workflow engine does not keep that restriction, so the agent can use read, bash, edit, and write',
+            'workflow script "scan.js" in "workflows" runs agent type "hello:reader", which restricts its tools; outside codemode the workflow engine does not keep that restriction, so the agent can use bash, edit, and write',
         },
         helperDuplicateWarning(agentsDir),
       ],
