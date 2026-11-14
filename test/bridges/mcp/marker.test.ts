@@ -186,19 +186,33 @@ describe("defaultFieldsOf", () => {
     });
   }
 
-  for (const { description, defaultFields } of [
-    { description: "a null value", defaultFields: { requestTimeoutMs: 1800000, openUi: null } },
+  for (const { description, defaultFields, expected } of [
+    {
+      description: "a null value",
+      defaultFields: { requestTimeoutMs: 1800000, openUi: null },
+      expected: { requestTimeoutMs: 1800000 },
+    },
     {
       description: "an object value",
       defaultFields: { requestTimeoutMs: 1800000, lifecycle: { mode: "lazy" } },
+      expected: { requestTimeoutMs: 1800000 },
     },
-    { description: "an array value", defaultFields: { requestTimeoutMs: [1800000] } },
+    {
+      description: "an array value",
+      defaultFields: { requestTimeoutMs: [1800000], lifecycle: "lazy-keep-alive" },
+      expected: { lifecycle: "lazy-keep-alive" },
+    },
     {
       description: "an own __proto__ key holding an object",
       defaultFields: JSON.parse('{"__proto__":{"requestTimeoutMs":1800000}}') as unknown,
+      expected: {},
     },
-  ] satisfies ReadonlyArray<{ description: string; defaultFields: unknown }>) {
-    test(`D-PG9-03: returns no defaults for a member holding ${description}`, () => {
+  ] satisfies ReadonlyArray<{
+    description: string;
+    defaultFields: unknown;
+    expected: Record<string, unknown>;
+  }>) {
+    test(`D-PG9-03: keeps only the scalar defaults beside a member holding ${description}`, () => {
       // arrange
       const entry = {
         _piClaudeMarketplace: { plugin: "search-tools", marketplace: "official", defaultFields },
@@ -208,7 +222,10 @@ describe("defaultFieldsOf", () => {
       const defaults = defaultFieldsOf(entry);
 
       // assert
-      assert.deepStrictEqual(defaults, {});
+      assert.deepStrictEqual(
+        { defaults, prototype: Object.getPrototypeOf(defaults) as unknown },
+        { defaults: expected, prototype: Object.prototype },
+      );
     });
   }
 

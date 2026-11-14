@@ -66,13 +66,33 @@ function isDefaultRecord(value: unknown): value is Readonly<Record<string, Marke
 }
 
 /**
+ * The scalar members of a `defaultFields` object, or none when it is not a
+ * plain object. A member of another type is left out on its own, so it never
+ * turns the other recorded defaults into the user's values (D-PG9-03).
+ */
+function defaultRecordOf(value: unknown): Readonly<Record<string, MarkerDefaultValue>> | undefined {
+  if (isDefaultRecord(value)) {
+    return value;
+  }
+
+  return isPlainObject(value)
+    ? Object.fromEntries(
+        Object.entries(value).filter((member): member is [string, MarkerDefaultValue] =>
+          isDefaultValue(member[1]),
+        ),
+      )
+    : undefined;
+}
+
+/**
  * Returns the parsed marker subobject if `value` is an object with a
  * well-formed `_piClaudeMarketplace: { plugin: string; marketplace: string }`
  * entry; otherwise null. Arrays, primitives, and partial shapes yield null; it
  * never throws. `pluginSetFields` is returned only when it is an
- * own array of strings, `defaultFields` only when it is an own plain object
- * whose every value is a number, a string, or a boolean (D-PG9-03), and `keptOverride` only when it is an own plain-object member;
- * any other value parses as a marker without that member.
+ * own array of strings, `defaultFields` only when it is an own plain object,
+ * with only its number, string, and boolean members (D-PG9-03), and
+ * `keptOverride` only when it is an own plain-object member; any other value
+ * parses as a marker without that member.
  */
 function readMarker(value: unknown): ClaudeMarketplaceMarker | null {
   if (!isPlainObject(value) || !Object.hasOwn(value, CLAUDE_MARKETPLACE_MARKER_KEY)) {
@@ -94,13 +114,15 @@ function readMarker(value: unknown): ClaudeMarketplaceMarker | null {
   }
 
   const pluginSetFields = Object.hasOwn(obj, "pluginSetFields") ? obj.pluginSetFields : undefined;
-  const defaultFields = Object.hasOwn(obj, "defaultFields") ? obj.defaultFields : undefined;
+  const defaultFields = defaultRecordOf(
+    Object.hasOwn(obj, "defaultFields") ? obj.defaultFields : undefined,
+  );
   const keptOverride = Object.hasOwn(obj, "keptOverride") ? obj.keptOverride : undefined;
   return {
     plugin: obj.plugin,
     marketplace: obj.marketplace,
     ...(isStringArray(pluginSetFields) ? { pluginSetFields } : {}),
-    ...(isDefaultRecord(defaultFields) ? { defaultFields } : {}),
+    ...(defaultFields === undefined ? {} : { defaultFields }),
     ...(isPlainObject(keptOverride) ? { keptOverride } : {}),
   };
 }

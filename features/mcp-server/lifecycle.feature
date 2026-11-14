@@ -501,6 +501,47 @@ Feature: MCP server lifecycle
       """
 
   @adapter-only
+  Scenario: A recorded default list with one malformed member still lets an update to a remote server drop the stdio defaults (PG-MCP-06, D-PG9-03)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers":{"srv":{"command":"pi-features-absent-mcp-server"}}}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the user scope:
+      """
+      {"_piClaudeMarketplace":{"plugin":"demo","marketplace":"fixtures","defaultFields":{"requestTimeoutMs":1800000,"lifecycle":"lazy-keep-alive","openUi":null}}}
+      """
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers":{"srv":{"type":"http","url":"https://example.invalid/mcp"}}}
+      """
+    When the user has run "/claude:plugin update demo@fixtures --scope user", which did not fail
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "url": "https://example.invalid/mcp",
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 300000,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 300000
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @adapter-only
   Scenario: A disable and an enable write the default timeout and lifecycle again as the extension's own (PG-MCP-01, PG-MCP-06, D-PG1-13, D-PG9-04)
     Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
       """
