@@ -953,8 +953,12 @@ async function runConcurrentRunner(
   try {
     ended = await within(exit, CHILD_TIMEOUT_MS, "the concurrent runner");
   } catch (error: unknown) {
-    kill(-(runner.pid ?? 0));
-    await exit;
+    // Without a pid the spawn failed, and a negative zero would signal this process's own group.
+    if (runner.pid !== undefined) {
+      kill(-runner.pid);
+      await exit.catch(() => undefined);
+    }
+
     throw new Error(`the concurrent runner did not end: ${stderr}`, { cause: error });
   }
 
