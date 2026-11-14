@@ -38,6 +38,9 @@
  *   `"stop_hook_active":true`, so a Stop hook blocks once and lets the
  *   re-entered turn end.
  * - `stderr` and `output`: text it prints, as written, to stderr and stdout.
+ * - `when old string` or `when last message`, with `matched output`: it
+ *   prints `matched output` instead of `output` when the stdin's
+ *   `tool_input.old_string`, or its `last_assistant_message`, is the cell.
  * - `output bytes`: a number of `x` bytes it prints to stdout after `output`,
  *   such as more than 1 MB of output.
  * - `trailing output`: text it prints, as written, to stdout after
@@ -103,6 +106,7 @@ export interface RecordingHook {
   readonly arguments?: readonly string[];
   readonly output?: string;
   readonly whenOldString?: string;
+  readonly whenLastMessage?: string;
   readonly matchedOutput?: string;
   readonly outputBytes?: number;
   readonly trailingOutput?: string;
@@ -136,6 +140,7 @@ const SCRIPT_FORMS: ReadonlySet<RecordingHookForm | undefined> = new Set<Recordi
 const BEHAVIOR_FIELDS = {
   output: "output",
   "when old string": "whenOldString",
+  "when last message": "whenLastMessage",
   "matched output": "matchedOutput",
   "output bytes": "outputBytes",
   "trailing output": "trailingOutput",
@@ -219,6 +224,7 @@ const COLUMN_PARSERS: Readonly<Record<string, (cell: string) => Partial<Recordin
   arguments: (cell) => ({ arguments: parseArguments(cell) }),
   output: (cell) => ({ output: cell }),
   "when old string": (cell) => ({ whenOldString: cell }),
+  "when last message": (cell) => ({ whenLastMessage: cell }),
   "matched output": (cell) => ({ matchedOutput: cell }),
   "output bytes": (cell) => ({ outputBytes: parseByteCount(cell) }),
   "trailing output": (cell) => ({ trailingOutput: cell }),
@@ -402,6 +408,19 @@ function releaseLines(name: string): string[] {
   ];
 }
 
+// The variables that make the recorder choose between `matched output` and
+// `output`, one for each condition the row sets.
+function conditions(hook: RecordingHook): string[] {
+  return [
+    ...(hook.whenOldString === undefined
+      ? []
+      : [`HOOK_WHEN_OLD_STRING=${shellQuoted(hook.whenOldString)}`]),
+    ...(hook.whenLastMessage === undefined
+      ? []
+      : [`HOOK_WHEN_LAST_MESSAGE=${shellQuoted(hook.whenLastMessage)}`]),
+  ];
+}
+
 // The lines a script runs after it records.
 function afterRecording(hook: RecordingHook): string[] {
   return [
@@ -409,7 +428,7 @@ function afterRecording(hook: RecordingHook): string[] {
       ? [`case "$stdin" in *'"stop_hook_active":true'*) exit 0 ;; esac`]
       : []),
     ...(hook.stderr === undefined ? [] : [`printf '%s' ${shellQuoted(hook.stderr)} >&2`]),
-    ...(hook.output === undefined || hook.whenOldString !== undefined
+    ...(hook.output === undefined || conditions(hook).length > 0
       ? []
       : [`printf '%s' ${shellQuoted(hook.output)}`]),
     ...(hook.outputBytes === undefined
@@ -429,10 +448,11 @@ function afterRecording(hook: RecordingHook): string[] {
 function scriptText(hook: RecordingHook): string {
   const meeting = hook.meets === undefined ? [] : meetingLines(hook.name, hook.meets);
   const marker = hook.meets === undefined ? "" : ' "$meeting"';
+  const set = conditions(hook);
   const conditional =
-    hook.whenOldString === undefined
+    set.length === 0
       ? ""
-      : `HOOK_WHEN_OLD_STRING=${shellQuoted(hook.whenOldString)} HOOK_MATCHED_OUTPUT=${shellQuoted(hook.matchedOutput ?? "")} HOOK_DEFAULT_OUTPUT=${shellQuoted(hook.output ?? "")} `;
+      : `${set.join(" ")} HOOK_MATCHED_OUTPUT=${shellQuoted(hook.matchedOutput ?? "")} HOOK_DEFAULT_OUTPUT=${shellQuoted(hook.output ?? "")} `;
   const recorder = `${conditional}"${process.execPath}" "${HOOK_RECORDER_PATH}" ${hook.name}${marker} "$@"`;
   return `${[
     "#!/bin/sh",

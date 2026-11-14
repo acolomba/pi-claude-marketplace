@@ -185,15 +185,15 @@ Feature: Hook messages
       | call | role | text      |
       | 1    | user | finish up |
 
-  Scenario: A stop hook's stop reason is not shown when another extension already continued the run
+  Scenario: A stop hook's stop reason is not shown for a run end that another extension continued
     Given pi runs with the scripted model and another extension, loaded first, that continues the run once
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
     Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
-      | name | event | matcher | form   | output                                           |
-      | halt | Stop  |         | script | {"continue":false,"stopReason":"done for today"} |
+      | name | event | matcher | form   | output                                           | when last message | matched output                                       |
+      | halt | Stop  |         | script | {"continue":false,"stopReason":"done for today"} | Finished.         | {"continue":false,"stopReason":"finished for today"} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has started a new pi session
@@ -207,8 +207,8 @@ Feature: Hook messages
       | Stop  | first   | Done.                  | false            | {project dir} |                 | halt      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
       | Stop  | first   | Finished.              | false            | {project dir} |                 | halt      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the hooks show the user these messages:
-      | severity | text                                           |
-      | info     | Stop hook stopped continuation: done for today |
+      | severity | text                                               |
+      | info     | Stop hook stopped continuation: finished for today |
     Then the model receives these calls:
       | call | role      | text      |
       | 1    | user      | finish up |
