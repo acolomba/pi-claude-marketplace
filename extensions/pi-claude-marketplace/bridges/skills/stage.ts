@@ -22,6 +22,7 @@ import path from "node:path";
 import { descriptionFallback } from "../../domain/description-fallback.ts";
 import { droppedInvocationFieldsWarning } from "../../domain/invocation-frontmatter.ts";
 import { assertSafeName } from "../../domain/name.ts";
+import { rewriteSiblingSkillPaths } from "../../domain/skill-sibling-paths.ts";
 import { rewriteMarkdownReferences } from "../../domain/skill-tokens.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { stripBom } from "../../shared/bom.ts";
@@ -262,6 +263,11 @@ interface SkillStagingContext {
   readonly locations: StageSkillsInput["locations"];
   readonly stagingRoot: string;
   readonly referenceNames: InstalledReferenceNames;
+  /**
+   * D-PG4-07: the resolved source folder of each skill that stages, to its
+   * generated name. Built from discovery, so a skipped sibling is absent.
+   */
+  readonly siblingSkills: ReadonlyMap<string, string>;
   readonly claims: SkillNameClaims;
 }
 
@@ -276,9 +282,9 @@ interface StagedSkill {
 
 /**
  * Copies one discovered skill into the staging root and writes its staged
- * `SKILL.md`: SK-3 name, description augment, SKTK-01 references, SK-4
- * variables, and last the D-CF2-02 / D-CF2-06 record of its names and
- * install-time values.
+ * `SKILL.md`: SK-3 name, description augment, SKTK-01 references,
+ * PG-SKILL-04 sibling paths, SK-4 variables, and last the D-CF2-02 / D-CF2-06
+ * record of its names and install-time values.
  */
 async function stageSkill(
   context: SkillStagingContext,
@@ -359,6 +365,14 @@ async function stageSkill(
   // body is prose too). Runs before SK-4 substitution so the PARSE-02
   // backstop validates the final bytes.
   content = rewriteMarkdownReferences(content, pluginName, context.referenceNames);
+  // D-PG4-05: sibling paths are rewritten before SK-4 substitution, so a
+  // `${CLAUDE_SKILL_DIR}/../<sibling>/` path still reads as a token.
+  const skillSourceDir = path.resolve(skill.skillDir);
+  content = rewriteSiblingSkillPaths(content, {
+    fileSourceDir: skillSourceDir,
+    skillSourceDir,
+    siblingSkills: context.siblingSkills,
+  });
   content = substituteClaudeVars(content, skillVars);
   // D-CF2-02 / D-CF2-06 / T-02-02: the record goes in last, after every
   // rewrite, so no reference rewrite reads its names. Its `pluginRoot` and
@@ -478,6 +492,9 @@ export async function prepareStageSkills(
       input.referenceNames,
       discovered.map((skill) => skill.generatedName),
       input.knownWorkflowNames,
+    ),
+    siblingSkills: new Map(
+      discovered.map((skill) => [path.resolve(skill.skillDir), skill.generatedName]),
     ),
     // D-CF2-02: every skill's identity is claimed before any
     // frontmatter alias, and the loop below claims aliases in discovery order.

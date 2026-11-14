@@ -17,7 +17,10 @@ import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/s
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { createRemovalOpsFake } from "../../platform/removal-ops-fake.ts";
 
-import type { StageSkillsCommitResult } from "../../../extensions/pi-claude-marketplace/bridges/skills/types.ts";
+import type {
+  PreparedSkillsStaging,
+  StageSkillsCommitResult,
+} from "../../../extensions/pi-claude-marketplace/bridges/skills/types.ts";
 import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
 // Builtin-module patching that remains in this file, and why. The removal port
@@ -124,22 +127,28 @@ async function stageSingleSkill(
 }
 
 /**
- * Stages every skill directory of `sources` (directory name to `SKILL.md`
- * text) of the plugin `acme` and returns the warnings of the staged result
- * with the plugin's skills directory.
+ * Writes `files` (path under the plugin's `skills` folder to text) into the
+ * plugin `acme`, stages its skills, and returns the staged handle with the
+ * case's paths.
  */
-async function stagedSkillWarnings(
+async function stageSkillFiles(
   t: TestContext,
-  sources: Readonly<Record<string, string>>,
-): Promise<{ warnings: StageSkillsCommitResult["warnings"]; skillsDirectory: string }> {
+  files: Readonly<Record<string, string>>,
+): Promise<{
+  prepared: Extract<PreparedSkillsStaging, { kind: "staged" }>;
+  skillsDirectory: string;
+  pluginRoot: string;
+  pluginDataDir: string;
+  locations: ReturnType<typeof locationsFor>;
+}> {
   const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
     t,
-    "skills-stage-warnings-",
+    "skills-stage-files-",
   );
   const skillsDirectory = path.join(pluginRoot, "skills");
-  for (const [directory, source] of Object.entries(sources)) {
-    await mkdir(path.join(skillsDirectory, directory), { recursive: true });
-    await writeFile(path.join(skillsDirectory, directory, "SKILL.md"), source);
+  for (const [file, text] of Object.entries(files)) {
+    await mkdir(path.dirname(path.join(skillsDirectory, file)), { recursive: true });
+    await writeFile(path.join(skillsDirectory, file), text);
   }
 
   const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
@@ -153,6 +162,24 @@ async function stagedSkillWarnings(
     resolved,
   });
   assert.strictEqual(prepared.kind, "staged");
+  return { prepared, skillsDirectory, pluginRoot, pluginDataDir, locations };
+}
+
+/**
+ * Stages every skill directory of `sources` (directory name to `SKILL.md`
+ * text) of the plugin `acme` and returns the warnings of the staged result
+ * with the plugin's skills directory.
+ */
+async function stagedSkillWarnings(
+  t: TestContext,
+  sources: Readonly<Record<string, string>>,
+): Promise<{ warnings: StageSkillsCommitResult["warnings"]; skillsDirectory: string }> {
+  const { prepared, skillsDirectory } = await stageSkillFiles(
+    t,
+    Object.fromEntries(
+      Object.entries(sources).map(([directory, source]) => [`${directory}/SKILL.md`, source]),
+    ),
+  );
   return { warnings: prepared.result.warnings, skillsDirectory };
 }
 
@@ -371,6 +398,78 @@ describe("prepareStageSkills", () => {
           recordLine(["acme:alpha", "alpha"], pluginRoot, pluginDataDir) +
           "---\n\n" +
           "Run /skill:acme-tool before acme:ghost.\n\n```text\n/skill:acme-tool stays verbatim\n```\n",
+      ),
+    );
+  });
+
+  test("PG-SKILL-04: points a SKILL.md link to a sibling skill at the staged folder of the sibling", async (t) => {
+    // arrange
+    const files = {
+      "alpha/SKILL.md": "---\nname: alpha\ndescription: Alpha\n---\nSee ../beta/ref.md.\n",
+      "beta/SKILL.md": "---\nname: beta\ndescription: Beta\n---\n",
+      "beta/ref.md": "Beta reference.\n",
+    };
+
+    // act
+    const { prepared, pluginRoot, pluginDataDir } = await stageSkillFiles(t, files);
+    const alphaBytes = await readFile(path.join(prepared.stagingRoot, "acme-alpha", "SKILL.md"));
+
+    // assert
+    assert.deepStrictEqual(
+      alphaBytes,
+      Buffer.from(
+        "---\nname: acme-alpha\ndescription: Alpha\n" +
+          recordLine(["acme:alpha", "alpha"], pluginRoot, pluginDataDir) +
+          "---\nSee ../acme-beta/ref.md.\n",
+      ),
+    );
+  });
+
+  test("PG-SKILL-04: rewrites a skill directory variable path before substitution, so it ends in the sibling's target folder", async (t) => {
+    // arrange
+    const files = {
+      "alpha/SKILL.md":
+        "---\nname: alpha\ndescription: Alpha\n---\nLoad ${CLAUDE_SKILL_DIR}/../beta/x.md.\n",
+      "beta/SKILL.md": "---\nname: beta\ndescription: Beta\n---\n",
+    };
+
+    // act
+    const { prepared, pluginRoot, pluginDataDir, locations } = await stageSkillFiles(t, files);
+    const alphaBytes = await readFile(path.join(prepared.stagingRoot, "acme-alpha", "SKILL.md"));
+
+    // assert
+    assert.deepStrictEqual(
+      alphaBytes,
+      Buffer.from(
+        "---\nname: acme-alpha\ndescription: Alpha\n" +
+          recordLine(["acme:alpha", "alpha"], pluginRoot, pluginDataDir) +
+          "---\nLoad " +
+          path.join(locations.skillsTargetDir, "acme-alpha") +
+          "/../acme-beta/x.md.\n",
+      ),
+    );
+  });
+
+  test("PG-SKILL-04: leaves a SKILL.md link to a skill that discovery dropped as written", async (t) => {
+    // arrange
+    const files = {
+      "acme-tool/SKILL.md": "---\nname: acme-tool\ndescription: Winning skill\n---\n",
+      "alpha/SKILL.md": "---\nname: alpha\ndescription: Alpha\n---\nSee ../tool/x.md.\n",
+      "tool/SKILL.md": "---\nname: tool\ndescription: Losing skill\n---\n",
+    };
+
+    // act
+    const { prepared, pluginRoot, pluginDataDir } = await stageSkillFiles(t, files);
+    const alphaBytes = await readFile(path.join(prepared.stagingRoot, "acme-alpha", "SKILL.md"));
+
+    // assert
+    assert.deepStrictEqual(prepared.result.stagedNames, ["acme-tool", "acme-alpha"]);
+    assert.deepStrictEqual(
+      alphaBytes,
+      Buffer.from(
+        "---\nname: acme-alpha\ndescription: Alpha\n" +
+          recordLine(["acme:alpha", "alpha"], pluginRoot, pluginDataDir) +
+          "---\nSee ../tool/x.md.\n",
       ),
     );
   });
