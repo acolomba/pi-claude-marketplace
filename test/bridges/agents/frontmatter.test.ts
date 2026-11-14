@@ -742,6 +742,56 @@ Scout body.
     assert.strictEqual(generatedAgentFile, expectedGeneratedAgentFile);
   });
 
+  test("D-PG7-12: writes the tools line, then the excludeTools line", () => {
+    // arrange
+    const generatedAgent = {
+      frontmatter: {
+        name: "acme:scout",
+        description: "Scout source changes",
+        tools: ["read", "mcp:plugin_acme_db_"] as const,
+        excludeTools: ["mcp__plugin_acme_db__drop"] as const,
+        skills: [],
+        inheritSkills: false,
+      },
+      provenance: {
+        pluginName: "acme",
+        sourceName: "scout",
+        sourcePath: "agents/scout.md",
+        droppedFields: [],
+        droppedTools: [],
+        warnings: [],
+      },
+      body: "\nScout body.\n",
+    };
+    const expectedGeneratedAgentFile = `---
+name: acme:scout
+description: Scout source changes
+tools: read,mcp:plugin_acme_db_
+excludeTools: mcp__plugin_acme_db__drop
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+advertise: true
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: scout
+  sourcePath: agents/scout.md
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Scout body.
+`;
+
+    // act
+    const generatedAgentFile = emitGeneratedAgentFile(generatedAgent);
+
+    // assert
+    assert.strictEqual(generatedAgentFile, expectedGeneratedAgentFile);
+  });
+
   test("D-PG7-09: refuses allowNestedSubagents beside an explicit tools list", () => {
     // arrange
     const fields = {

@@ -135,12 +135,13 @@ function excludeNameFor(
  * `tools:` list. `exact` holds the Pi names and `mcp:` entries to remove;
  * `servers` holds the `mcp:` selector of each disallowed whole server, whose
  * per-tool entries are removed too. `perTool` keeps each per-tool disallow
- * with its source token for the cannot-narrow warning.
+ * with the selector of its server and the name the form's MCP implementation
+ * registers for the tool, its `excludeTools` name (D-PG7-12, D-PG1-10).
  */
 interface ExplicitDisallow {
   readonly exact: ReadonlySet<string>;
   readonly servers: ReadonlySet<string>;
-  readonly perTool: readonly { readonly token: string; readonly server: string }[];
+  readonly perTool: readonly { readonly server: string; readonly excludeName: string }[];
 }
 
 /**
@@ -170,6 +171,12 @@ interface ExplicitToolMapping extends ToolMappingBase {
    * AG-11 gates it non-empty.
    */
   readonly mapped: string[];
+  /**
+   * D-PG7-12 / PG-AGENT-09: the registered names of the per-tool MCP
+   * disallows whose whole-server grant `mapped` keeps, for `excludeTools:`
+   * beside `tools:`. pi-subagents removes them from the resolved server.
+   */
+  readonly excludeTools: string[];
   /** AGSK-05 / D-83-01: Skill declared in tools: AND not disallowed. */
   readonly inheritSkills: boolean;
 }
@@ -492,7 +499,9 @@ function mapTools(
   // see it.
   const inheritSkills = tokens.some(isSkillToken) && !disallowedTokens.some(isSkillToken);
 
-  // Apply disallowedTools after mapping.
+  // D-PG7-12: the deny applies first, as in Claude Code. Exact names leave
+  // the allowlist; a per-tool deny under a kept whole-server grant is
+  // written to excludeTools.
   const { mapped, dropped } = mapToolTokens(tokens, grants);
   const disallow = explicitDisallow(disallowedTokens, grants);
   const kept = dedupePreservingOrder(mapped.filter((name) => !isDisallowed(name, disallow)));
@@ -500,8 +509,9 @@ function mapTools(
   return {
     omitted: false,
     mapped: kept,
+    excludeTools: explicitExcludeTools(kept, disallow),
     dropped,
-    warnings: explicitMcpWarnings(kept, disallow),
+    warnings: [],
     inheritSkills,
   };
 }
@@ -517,7 +527,7 @@ function explicitDisallow(
 ): ExplicitDisallow {
   const exact = new Set<string>();
   const servers = new Set<string>();
-  const perTool: { token: string; server: string }[] = [];
+  const perTool: { server: string; excludeName: string }[] = [];
   for (const token of disallowedTokens) {
     const name = mapToolName(token, grants);
     if (name !== undefined) {
@@ -532,7 +542,7 @@ function explicitDisallow(
     if (match.tool === undefined) {
       servers.add(match.server);
     } else {
-      perTool.push({ token, server: match.server });
+      perTool.push({ server: match.server, excludeName: match.excludeName(match.tool) });
     }
   }
 
@@ -546,22 +556,18 @@ function isDisallowed(entry: string, disallow: ExplicitDisallow): boolean {
 }
 
 /**
- * ANAME-02: a per-tool disallow cannot narrow a whole-server grant that
- * survives the filter, so it warns. pi-subagents 0.62 and later do apply
- * `excludeTools` beside an explicit `tools:` list (D-CF4-08); the per-tool
- * warning text still says otherwise and stays unchanged, because it belongs
- * to the MCP-07 warning surface.
+ * D-PG7-12 / PG-AGENT-09: the `excludeTools` names of the per-tool disallows
+ * whose whole-server grant survives the filter, once each, in deny order.
+ * pi-subagents applies `excludeTools` after it resolves an explicit list, so
+ * the tool leaves the server's grant.
  */
-function explicitMcpWarnings(kept: readonly string[], disallow: ExplicitDisallow): string[] {
+function explicitExcludeTools(kept: readonly string[], disallow: ExplicitDisallow): string[] {
   const keptSet = new Set(kept);
-  const warnings = disallow.perTool
-    .filter(({ server }) => keptSet.has(server))
-    .map(
-      ({ token, server }) =>
-        `disallowedTools entry ${token} cannot narrow the whole-server grant ${server} -- ` +
-        "pi-subagents takes no excludeTools beside an explicit tools: list, so the agent keeps every tool of that server",
-    );
-  return dedupePreservingOrder(warnings);
+  return dedupePreservingOrder(
+    disallow.perTool
+      .filter(({ server }) => keptSet.has(server))
+      .map(({ excludeName }) => excludeName),
+  );
 }
 
 /**
@@ -1170,22 +1176,29 @@ function emptyToolListError(
 /**
  * AG-11 / #179: an explicit source `tools:` declaration emits a non-empty
  * allowlist; an omitted one emits no `tools:` at all, so pi-subagents
- * grants its default builtin tools, with disallowedTools narrowing that
- * set via excludeTools. The GeneratedToolsFields return type is what keeps
- * the two lines from ever rendering together. The validated mapping carries
- * the nonempty explicit list proved by hasMappedTools, so the
- * emitter does not need a second runtime check.
+ * grants its default builtin tools. The validated mapping carries the
+ * nonempty explicit list proved by hasMappedTools, so the emitter does not
+ * need a second runtime check. Either arm may carry `excludeTools`: beside
+ * `tools:` it removes one tool of a granted MCP server (D-PG7-12,
+ * PG-AGENT-09), and without it the mapped disallowedTools narrow the
+ * default set.
  */
 function toolsFields(result: ValidatedToolMapping): GeneratedToolsFields {
   if (result.omitted) {
-    const [first, ...rest] = result.excludeTools;
     return {
-      ...(first !== undefined && { excludeTools: [first, ...rest] }),
+      ...excludeToolsField(result.excludeTools),
       ...(result.allowNestedSubagents && { allowNestedSubagents: true }),
     };
   }
 
-  return { tools: result.mapped };
+  return { tools: result.mapped, ...excludeToolsField(result.excludeTools) };
+}
+
+function excludeToolsField(names: readonly string[]): {
+  readonly excludeTools?: readonly [string, ...string[]];
+} {
+  const [first, ...rest] = names;
+  return first === undefined ? {} : { excludeTools: [first, ...rest] };
 }
 
 /**

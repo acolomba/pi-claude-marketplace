@@ -227,18 +227,19 @@ function normalizeBody(body: string): string {
 }
 
 /**
- * #179: the tool grant of a generated agent -- exactly one shape renders.
+ * #179: the tool grant of a generated agent -- an allowlist, an exclude
+ * list, or both.
  *
  * `tools` present is an explicit, non-empty allowlist: pi-subagents reads
  * an empty `tools:` as "no tools", which has no safe representation, and
  * the non-empty tuple encodes that invariant (AG-11 -- convertAgent throws
  * before reaching here on an empty explicit list). `tools` absent means
  * the source agent omitted `tools:` -- the generated frontmatter omits the
- * allowlist so pi-subagents grants its default builtin tools -- and only
- * then can `excludeTools` (the Pi mapping of source `disallowedTools:`,
- * also non-empty when present) narrow that default set. The `?: never`
- * arms are what enforce "never both": a value carrying both keys matches
- * neither arm.
+ * allowlist so pi-subagents grants its default builtin tools.
+ * `excludeTools` (the Pi mapping of source `disallowedTools:`, non-empty
+ * when present) narrows either one: pi-subagents applies it after it
+ * resolves an explicit list, so beside `tools` it removes one tool of a
+ * granted MCP server (D-PG7-12, PG-AGENT-09).
  *
  * D-PG7-09: `allowNestedSubagents: true` lets the child of an agent with no
  * allowlist start subagents, as an agent with every tool has `Agent` in
@@ -248,7 +249,7 @@ function normalizeBody(body: string): string {
 export type GeneratedToolsFields =
   | {
       readonly tools: readonly [string, ...string[]];
-      readonly excludeTools?: never;
+      readonly excludeTools?: readonly [string, ...string[]];
       readonly allowNestedSubagents?: never;
     }
   | {
@@ -262,7 +263,8 @@ export type GeneratedToolsFields =
  * (name, model, tools, thinking, skills) are drawn from validated enums or
  * assertSafeName-checked tokens; only `description` is free text and goes
  * through descriptionLines. The tools/excludeTools pair comes from
- * GeneratedToolsFields, whose union shape carries their mutual exclusion.
+ * GeneratedToolsFields: `tools` only when the source lists tools, and
+ * `excludeTools` with or without it (D-PG7-12).
  */
 export type GeneratedFrontmatterFields = {
   readonly name: string;
@@ -315,7 +317,8 @@ export interface GeneratedProvenanceFields {
  * AG-8 / D-84-04 / T-d8i-01 deterministic field order: name, description,
  * aliases (only when non-empty), model, tools (only when an explicit
  * allowlist exists), excludeTools
- * (only when tools is absent and disallowed names mapped, #179),
+ * (only when disallowed names mapped: without tools #179, or beside tools
+ * for a per-tool MCP deny, D-PG7-12, PG-AGENT-09),
  * allowNestedSubagents (only when tools is absent and no deny of Agent or
  * Task, D-PG7-09), thinking,
  * skills, skillPath (only when skills is

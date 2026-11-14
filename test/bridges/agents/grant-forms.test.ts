@@ -170,6 +170,53 @@ test("MGRT-01: an agent that renders the same in both forms records neither fiel
   assert.deepStrictEqual(recorded, {});
 });
 
+test("D-PG7-12: a whole-server grant with a per-tool deny records each form with its own selector and exclude name", () => {
+  // arrange
+  const adapterFrontmatter = expectedFrontmatter({
+    toolsLine: "tools: read,mcp:plugin_acme_my-db_\nexcludeTools: mcp__plugin_acme_my-db__a_b",
+    inheritSkills: false,
+    async: true,
+    droppedTools: [],
+    warnings: [ADAPTER_ASYNC_WARNING],
+  });
+  const builtinFrontmatter = expectedFrontmatter({
+    toolsLine: "tools: read,mcp:plugin_acme_my-db\nexcludeTools: mcp__plugin_acme_my_db__a_b",
+    inheritSkills: false,
+    async: true,
+    droppedTools: [],
+    warnings: [BUILTIN_ASYNC_WARNING],
+  });
+  const input = agentInput({
+    description: "d",
+    tools: "Read, mcp__plugin_acme_my-db",
+    disallowedTools: "mcp__plugin_acme_my-db__a.b",
+  });
+
+  // act
+  const { agent, recorded } = convertAgentGrantForms(input, {
+    active: "adapter",
+    declaredMcpServers: { "my-db": { command: "node" } },
+  });
+
+  // assert
+  assert.strictEqual(agent.fileContent, adapterFrontmatter + BODY);
+  assert.deepStrictEqual(recorded, {
+    mcpImplementation: "adapter",
+    mcpForms: {
+      adapter: {
+        frontmatter: adapterFrontmatter,
+        warnings: [ADAPTER_ASYNC_WARNING],
+        droppedTools: [],
+      },
+      builtin: {
+        frontmatter: builtinFrontmatter,
+        warnings: [BUILTIN_ASYNC_WARNING],
+        droppedTools: [],
+      },
+    },
+  });
+});
+
 test("D-CF6-10: an omitted tools list in a plugin with a stdio server records both forms for their async warnings", () => {
   // arrange
   const adapterFrontmatter = expectedFrontmatter({

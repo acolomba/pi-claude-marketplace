@@ -2187,17 +2187,39 @@ Body.\r
     assert.strictEqual(agent.fileContent, expectedFileContent);
   });
 
-  test("ANAME-02: a per-tool disallow cannot narrow a whole-server grant and warns", () => {
+  test("D-PG7-12: a per-tool disallow under a whole-server grant writes the adapter's tool name to excludeTools beside tools", () => {
     // arrange
     const expectedFileContent = expectedMcpAgentFile({
-      toolsField: "tools: mcp:plugin_acme_db_",
+      toolsField: "tools: read,mcp:plugin_acme_db_\nexcludeTools: mcp__plugin_acme_db__a",
       inheritSkills: false,
       async: true,
       droppedTools: [],
-      warnings: [
-        "disallowedTools entry mcp__plugin_acme_db__a cannot narrow the whole-server grant mcp:plugin_acme_db_ -- pi-subagents takes no excludeTools beside an explicit tools: list, so the agent keeps every tool of that server",
-        MCP_ASYNC_WARNING,
-      ],
+      warnings: [MCP_ASYNC_WARNING],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      {
+        description: "d",
+        tools: "Read, mcp__plugin_acme_db",
+        disallowedTools: "mcp__plugin_acme_db__a",
+      },
+      ["db"],
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("D-PG7-12: two per-tool disallows of one granted server are each excluded once, in deny order", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField:
+        "tools: mcp:plugin_acme_db_\nexcludeTools: mcp__plugin_acme_db__b,mcp__plugin_acme_db__a",
+      inheritSkills: false,
+      async: true,
+      droppedTools: [],
+      warnings: [MCP_ASYNC_WARNING],
     });
 
     // act
@@ -2205,7 +2227,73 @@ Body.\r
       {
         description: "d",
         tools: "mcp__plugin_acme_db",
-        disallowedTools: "mcp__plugin_acme_db__a, mcp__plugin_acme_db__a",
+        disallowedTools: "mcp__plugin_acme_db__b, mcp__plugin_acme_db__a, mcp__plugin_acme_db__b",
+      },
+      ["db"],
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("D-PG7-12: a per-tool disallow of a per-tool grant removes the grant and excludes nothing", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: read",
+      inheritSkills: false,
+      droppedTools: [],
+      warnings: [],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      {
+        description: "d",
+        tools: "Read, mcp__plugin_acme_db__a",
+        disallowedTools: "mcp__plugin_acme_db__a",
+      },
+      ["db"],
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  for (const disallowedTools of ["Bash", "Bash(rm:*)"]) {
+    test(`D-PG7-12 / D-PG7-14: disallowedTools ${disallowedTools} leaves bash out of tools and excludes nothing`, () => {
+      // arrange
+      const expectedFileContent = expectedMcpAgentFile({
+        toolsField: "tools: read",
+        inheritSkills: false,
+        droppedTools: [],
+        warnings: [],
+      });
+
+      // act
+      const agent = convertMcpAgent({ description: "d", tools: "Read, Bash", disallowedTools }, [
+        "db",
+      ]);
+
+      // assert
+      assert.strictEqual(agent.fileContent, expectedFileContent);
+    });
+  }
+
+  test("D-PG7-12: a per-tool disallow of a server whose whole-server grant a whole-server disallow removed excludes nothing", () => {
+    // arrange
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField: "tools: read",
+      inheritSkills: false,
+      droppedTools: [],
+      warnings: [],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      {
+        description: "d",
+        tools: "Read, mcp__plugin_acme_db",
+        disallowedTools: "mcp__plugin_acme_db__a, mcp__plugin_acme_db",
       },
       ["db"],
     );
@@ -3274,24 +3362,52 @@ describe("MGRT-01 grant form per MCP implementation", () => {
     assert.strictEqual(agent.fileContent, expectedFileContent);
   });
 
-  test("MGRT-01: the cannot-narrow warning of a built-in whole-server grant names the built-in selector", () => {
+  test("D-PG7-12: a per-tool disallow under a built-in whole-server grant writes Pi's built-in tool name to excludeTools beside tools", () => {
     // arrange
     const expectedFileContent = expectedMcpAgentFile({
-      toolsField: "tools: mcp:plugin_acme_db",
+      toolsField: "tools: read,mcp:plugin_acme_my-db\nexcludeTools: mcp__plugin_acme_my_db__query",
       inheritSkills: false,
       async: true,
       droppedTools: [],
-      warnings: [
-        "disallowedTools entry mcp__plugin_acme_db__a cannot narrow the whole-server grant mcp:plugin_acme_db -- pi-subagents takes no excludeTools beside an explicit tools: list, so the agent keeps every tool of that server",
-        BUILTIN_MCP_ASYNC_WARNING,
-      ],
+      warnings: [BUILTIN_MCP_ASYNC_WARNING],
     });
 
     // act
     const agent = convertMcpAgent(
-      { description: "d", tools: "mcp__plugin_acme_db", disallowedTools: "mcp__plugin_acme_db__a" },
-      ["db"],
+      {
+        description: "d",
+        tools: "Read, mcp__plugin_acme_my-db",
+        disallowedTools: "mcp__plugin_acme_my-db__query",
+      },
+      ["my-db"],
       "builtin",
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent, expectedFileContent);
+  });
+
+  test("D-PG1-10: an adapter per-tool exclude beside tools longer than 64 characters is cut and hashed as pi-mcp-adapter 7.0.1 does", () => {
+    // arrange
+    const tool = "list_every_table_in_the_warehouse_with_its_row_counts";
+    const expectedFileContent = expectedMcpAgentFile({
+      toolsField:
+        "tools: mcp:plugin_acme_db_\nexcludeTools: mcp__plugin_acme_db__list_every_table_in_the_warehouse__05ea19f1",
+      inheritSkills: false,
+      async: true,
+      droppedTools: [],
+      warnings: [MCP_ASYNC_WARNING],
+    });
+
+    // act
+    const agent = convertMcpAgent(
+      {
+        description: "d",
+        tools: "mcp__plugin_acme_db",
+        disallowedTools: `mcp__plugin_acme_db__${tool}`,
+      },
+      ["db"],
+      "adapter",
     );
 
     // assert
