@@ -17,8 +17,9 @@
   - An installed plugin gets the new links and workflow names when it updates to a new version, or at `/claude:plugin reinstall`.
   - Install, update, and `info` now note when a workflow runs a plugin agent whose tool restriction the workflow engine keeps only under `builtin:codemode`.
   - Under pi-mcp-adapter, a plugin's stdio MCP server now stays running for the session once it starts, and updates keep your `protocolVersion`, `tasks`, `exposeResources`, and `caFile`. Run `/claude:plugin reinstall` once to apply this to an installed plugin.
+  - pi-mcp-adapter then starts such a server again in the background when it exits, and asks for project server approval again after the reinstall.
   - pi-mcp-adapter's global `settings.idleTimeout` no longer stops such a server. To let one stop when idle, set `idleTimeout` on its entry.
-  - An update keeps your `caFile` only while the server stays https at the same origin. Otherwise it removes the `caFile` and says so, because pi-mcp-adapter refuses it there.
+  - An update keeps your `caFile` only while the server stays https at the same origin, and otherwise removes it with a warning.
 
 - More plugin hook events now behave as in Claude Code, and the model-facing tools return what the model asks for. (#310)
 
