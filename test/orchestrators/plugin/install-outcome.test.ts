@@ -47,7 +47,11 @@ import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { createRemovalOpsFake } from "../../platform/removal-ops-fake.ts";
-import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
+import {
+  runWithAllLoaded,
+  runWithNothingLoaded,
+  runWithSoftDeps,
+} from "../../shared/notification-run-seeds.ts";
 
 import type { ActiveMcpImplementation } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
@@ -2673,6 +2677,102 @@ test("D-CF1-06: a commands folder the manifest's declared path leaves unread joi
       stagedCommandNames: [],
     },
   );
+});
+
+/**
+ * PG-SEC-01: seeds a plugin whose `commands` declaration leaves the commands
+ * folder unread, an agent `reader` with the given frontmatter fields, and a
+ * workflow script that runs the agent type `empty:reader`.
+ */
+async function seedWorkflowAgentPlugin(cwd: string, agentFields: string) {
+  const seeded = await seedPlugin(cwd, { pluginJson: { commands: "./custom" } });
+  await mkdir(path.join(seeded.pluginRoot, "custom"), { recursive: true });
+  await mkdir(path.join(seeded.pluginRoot, "commands"), { recursive: true });
+  await writeFile(path.join(seeded.pluginRoot, "commands", "old.md"), "Do the old thing.\n");
+  await mkdir(path.join(seeded.pluginRoot, "agents"), { recursive: true });
+  await writeFile(
+    path.join(seeded.pluginRoot, "agents", "reader.md"),
+    `---\nname: reader\ndescription: Reads.\n${agentFields}---\n\nRead.\n`,
+  );
+  await mkdir(path.join(seeded.pluginRoot, "workflows"), { recursive: true });
+  await writeFile(
+    path.join(seeded.pluginRoot, "workflows", "scan.js"),
+    `export const meta = { name: "scan", description: "d" };\nawait agent("run", { agentType: "empty:reader" });\n`,
+  );
+  return seeded;
+}
+
+const SHADOWED_COMMANDS_WARNING = {
+  kind: "discovery",
+  message: 'Default commands/ folder is ignored because the manifest sets "commands"',
+} as const;
+
+const SCAN_RESTRICTION_NOTE = {
+  kind: "discovery",
+  message:
+    'workflow script "scan.js" in "workflows" runs agent type "empty:reader", which restricts its tools; the workflow engine does not keep that restriction, so the agent can use read, bash, edit, and write',
+} as const;
+
+for (const { companions, run } of [
+  { companions: "every companion loaded", run: runWithAllLoaded },
+  { companions: "no companion loaded", run: runWithNothingLoaded },
+] satisfies readonly { companions: string; run: () => NotificationRun }[]) {
+  test(`PG-SEC-01: a workflow that runs a tool-restricted agent adds one note after the folder warnings, with ${companions}`, async (t) => {
+    // arrange
+    const environment = await createHermeticEnvironment(t, "install-outcome-restriction-note-");
+    const seeded = await seedWorkflowAgentPlugin(environment.cwd, "tools: Read\n");
+    const locations = locationsFor("project", environment.cwd);
+
+    // act
+    const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+      ctx: notificationContext(),
+      run: run(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      consentView: "none",
+      removalOps: createRemovalOps(),
+      env: {},
+    });
+
+    // assert
+    assert.ok(ledgerOutcome.kind === "installed");
+    assert.deepStrictEqual(
+      {
+        discoveryWarnings: ledgerOutcome.summary.discoveryWarnings,
+        stagedWorkflowNames: ledgerOutcome.summary.stagedWorkflowNames,
+      },
+      {
+        discoveryWarnings: [SHADOWED_COMMANDS_WARNING, SCAN_RESTRICTION_NOTE],
+        stagedWorkflowNames: ["empty:scan"],
+      },
+    );
+  });
+}
+
+test("PG-SEC-01: a workflow that runs an unrestricted agent keeps the folder warnings alone", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-no-restriction-");
+  const seeded = await seedWorkflowAgentPlugin(environment.cwd, "");
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    consentView: "none",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(ledgerOutcome.summary.discoveryWarnings, [SHADOWED_COMMANDS_WARNING]);
 });
 
 test("stages the workflow and skips a command of the same name with a discovery warning", async (t) => {

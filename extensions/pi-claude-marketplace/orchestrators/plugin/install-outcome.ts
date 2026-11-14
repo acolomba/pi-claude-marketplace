@@ -136,7 +136,11 @@ import { type DegradeKind } from "../../shared/notify-reasons.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
-import { hygieneWarning, partitionStagingWarnings } from "../../shared/staging-warnings.ts";
+import {
+  discoveryWarning,
+  hygieneWarning,
+  partitionStagingWarnings,
+} from "../../shared/staging-warnings.ts";
 import {
   runPhases,
   type Phase,
@@ -1237,7 +1241,12 @@ async function runInstallLedgerBody(
     bridgeWarnings: [],
     // D-CF1-06: every conventional folder a declaration leaves unread, so
     // each verb that runs this ledger names it, and a failed install keeps it.
-    discoveryWarnings: [...shadowedFolderDiscoveryWarnings(installable.shadowedFolders)],
+    // PG-SEC-01: the workflow agent restriction notes join them here and
+    // nowhere else in this file, so an install prints each note once.
+    discoveryWarnings: [
+      ...shadowedFolderDiscoveryWarnings(installable.shadowedFolders),
+      ...generatedNames.workflowAgentRestrictionNotes.map(discoveryWarning),
+    ],
     agentForeignFailures: [],
     mcpConfigNotices: [],
     frontmatterDegradations: [],

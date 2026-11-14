@@ -45,8 +45,7 @@ export interface DiscoveredGeneratedNames {
   readonly workflows: readonly string[];
   /**
    * PG-SEC-01: one note for each distinct pair of an admitted script and an
-   * agent type it names that restricts its tools. The folder in each note is
-   * absolute; the sites that surface it reduce it.
+   * agent type it names that restricts its tools.
    */
   readonly workflowAgentRestrictionNotes: readonly string[];
 }
@@ -104,9 +103,17 @@ function restrictedAgentNames(
 /**
  * D-PG4-12: one note in the shape of the workflows bridge's notes. Each span
  * of plugin text goes through `forMessage` where it enters the string.
+ *
+ * The folder is the script folder's base name, which is what the bridge's
+ * notes show once `redactAbsolutePaths` reduces their absolute folder. This
+ * note cannot leave that to the redaction: a quoted absolute path that more
+ * quotes follow is redacted to the end of the line, and the agent type is
+ * quoted after the folder.
  */
-function restrictionNote(fileName: string, workflowsDir: string, agentType: string): string {
-  return `workflow script "${forMessage(fileName)}" in "${forMessage(workflowsDir)}" runs agent type "${forMessage(agentType)}", which restricts its tools; the workflow engine does not keep that restriction, so the agent can use read, bash, edit, and write`;
+function restrictionNote(fileName: string, scriptFile: string, agentType: string): string {
+  const folder = path.basename(path.dirname(scriptFile));
+
+  return `workflow script "${forMessage(fileName)}" in "${forMessage(folder)}" runs agent type "${forMessage(agentType)}", which restricts its tools; the workflow engine does not keep that restriction, so the agent can use read, bash, edit, and write`;
 }
 
 /**
@@ -132,9 +139,7 @@ function workflowAgentRestrictionNotes(
     verdict.outcome === "named"
       ? (verdict.agentTypes ?? [])
           .filter((agentType) => restricted.has(agentType))
-          .map((agentType) =>
-            restrictionNote(verdict.fileName, path.dirname(scriptFile), agentType),
-          )
+          .map((agentType) => restrictionNote(verdict.fileName, scriptFile, agentType))
       : [],
   );
 }

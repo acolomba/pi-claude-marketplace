@@ -85,8 +85,8 @@ function agentCall(agentType: string): string {
   return `await agent("run", { agentType: ${JSON.stringify(agentType)} });\n`;
 }
 
-function restrictionNote(fileName: string, workflowsDirectory: string, agentType: string): string {
-  return `workflow script "${fileName}" in "${workflowsDirectory}" runs agent type "${agentType}", which restricts its tools; the workflow engine does not keep that restriction, so the agent can use read, bash, edit, and write`;
+function restrictionNote(fileName: string, folder: string, agentType: string): string {
+  return `workflow script "${fileName}" in "${folder}" runs agent type "${agentType}", which restricts its tools; the workflow engine does not keep that restriction, so the agent can use read, bash, edit, and write`;
 }
 
 test("composes generated names from every bridge in each bridge's declared order", async (t) => {
@@ -289,7 +289,7 @@ test("PG-SEC-01: notes a workflow script that runs a tool-restricted agent of th
     skills: [],
     workflows: ["acme:scan"],
     workflowAgentRestrictionNotes: [
-      `workflow script "scan.js" in "${workflowsDirectory}" runs agent type "acme:reader", which restricts its tools; the workflow engine does not keep that restriction, so the agent can use read, bash, edit, and write`,
+      `workflow script "scan.js" in "workflows" runs agent type "acme:reader", which restricts its tools; the workflow engine does not keep that restriction, so the agent can use read, bash, edit, and write`,
     ],
   });
 });
@@ -342,7 +342,7 @@ for (const { shape, agentFile, frontmatter, agentType } of [
 
     // assert
     assert.deepStrictEqual(discovered.workflowAgentRestrictionNotes, [
-      restrictionNote("scan.js", workflowsDirectory, agentType),
+      restrictionNote("scan.js", "workflows", agentType),
     ]);
   });
 }
@@ -442,9 +442,9 @@ test("PG-SEC-01: gives one note per distinct script and agent type pair, in scri
 
   // assert
   assert.deepStrictEqual(discovered.workflowAgentRestrictionNotes, [
-    restrictionNote("a.js", workflowsDirectory, "acme:reader"),
-    restrictionNote("b.js", workflowsDirectory, "acme:writer"),
-    restrictionNote("b.js", workflowsDirectory, "acme:reader"),
+    restrictionNote("a.js", "workflows", "acme:reader"),
+    restrictionNote("b.js", "workflows", "acme:writer"),
+    restrictionNote("b.js", "workflows", "acme:reader"),
   ]);
 });
 
@@ -467,10 +467,6 @@ test("PG-SEC-01: escapes format characters in the file name and the agent type o
 
   // assert
   assert.deepStrictEqual(discovered.workflowAgentRestrictionNotes, [
-    restrictionNote(
-      String.raw`sc\u{202e}an.js`,
-      workflowsDirectory,
-      String.raw`acme:rea\u{200b}der`,
-    ),
+    restrictionNote(String.raw`sc\u{202e}an.js`, "workflows", String.raw`acme:rea\u{200b}der`),
   ]);
 });
