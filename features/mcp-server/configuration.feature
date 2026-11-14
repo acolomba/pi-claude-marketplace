@@ -33,14 +33,12 @@ Feature: MCP server configuration
             "toolPrefix": "mcp",
             "requestTimeoutMs": 1800000,
             "lifecycle": "lazy-keep-alive",
-            "openUi": false,
             "_piClaudeMarketplace": {
               "plugin": "demo",
               "marketplace": "fixtures",
               "defaultFields": {
                 "requestTimeoutMs": 1800000,
-                "lifecycle": "lazy-keep-alive",
-                "openUi": false
+                "lifecycle": "lazy-keep-alive"
               }
             }
           },
@@ -49,13 +47,11 @@ Feature: MCP server configuration
             "directTools": "search",
             "toolPrefix": "mcp",
             "requestTimeoutMs": 300000,
-            "openUi": false,
             "_piClaudeMarketplace": {
               "plugin": "demo",
               "marketplace": "fixtures",
               "defaultFields": {
-                "requestTimeoutMs": 300000,
-                "openUi": false
+                "requestTimeoutMs": 300000
               }
             }
           }
@@ -65,7 +61,7 @@ Feature: MCP server configuration
       """
 
   @adapter-only
-  Scenario: An install writes the lifecycle that keeps a stdio plugin server for the session, no lifecycle for a remote server, and openUi false for both (PG-MCP-06, PG-SEC-03, D-PG9-01, D-PG9-02, D-PG9-07)
+  Scenario: An install writes the lifecycle that keeps a stdio plugin server for the session, and no lifecycle for a remote server (PG-MCP-06, D-PG9-01, D-PG9-02)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -90,14 +86,12 @@ Feature: MCP server configuration
             "toolPrefix": "mcp",
             "requestTimeoutMs": 1800000,
             "lifecycle": "lazy-keep-alive",
-            "openUi": false,
             "_piClaudeMarketplace": {
               "plugin": "demo",
               "marketplace": "fixtures",
               "defaultFields": {
                 "requestTimeoutMs": 1800000,
-                "lifecycle": "lazy-keep-alive",
-                "openUi": false
+                "lifecycle": "lazy-keep-alive"
               }
             }
           },
@@ -111,14 +105,12 @@ Feature: MCP server configuration
             "toolPrefix": "mcp",
             "requestTimeoutMs": 1800000,
             "lifecycle": "lazy-keep-alive",
-            "openUi": false,
             "_piClaudeMarketplace": {
               "plugin": "demo",
               "marketplace": "fixtures",
               "defaultFields": {
                 "requestTimeoutMs": 1800000,
-                "lifecycle": "lazy-keep-alive",
-                "openUi": false
+                "lifecycle": "lazy-keep-alive"
               }
             }
           },
@@ -128,13 +120,11 @@ Feature: MCP server configuration
             "directTools": "search",
             "toolPrefix": "mcp",
             "requestTimeoutMs": 300000,
-            "openUi": false,
             "_piClaudeMarketplace": {
               "plugin": "demo",
               "marketplace": "fixtures",
               "defaultFields": {
-                "requestTimeoutMs": 300000,
-                "openUi": false
+                "requestTimeoutMs": 300000
               }
             }
           },
@@ -143,13 +133,11 @@ Feature: MCP server configuration
             "directTools": "search",
             "toolPrefix": "mcp",
             "requestTimeoutMs": 300000,
-            "openUi": false,
             "_piClaudeMarketplace": {
               "plugin": "demo",
               "marketplace": "fixtures",
               "defaultFields": {
-                "requestTimeoutMs": 300000,
-                "openUi": false
+                "requestTimeoutMs": 300000
               }
             }
           }

@@ -81,8 +81,8 @@ function transportKind(server: Readonly<Record<string, unknown>>): "stdio" | "re
 }
 
 const ADAPTER_ENTRY_DEFAULTS = {
-  stdio: { requestTimeoutMs: STDIO_IDLE_TIMEOUT_MS, lifecycle: "lazy-keep-alive", openUi: false },
-  remote: { requestTimeoutMs: REMOTE_IDLE_TIMEOUT_MS, openUi: false },
+  stdio: { requestTimeoutMs: STDIO_IDLE_TIMEOUT_MS, lifecycle: "lazy-keep-alive" },
+  remote: { requestTimeoutMs: REMOTE_IDLE_TIMEOUT_MS },
 } as const;
 
 /**
@@ -104,10 +104,12 @@ export function defaultRequestTimeoutMs(
  * `lifecycle: "lazy-keep-alive"`, because Claude Code connects a stdio plugin
  * server at session start and keeps it, and pi-mcp-adapter 7.0.1 keeps a
  * started `lazy-keep-alive` server for the session (D-PG9-01); a remote server
- * keeps the adapter's `lazy` (D-PG9-02); and `openUi: false`, because Claude
- * Code 2.1.323 declares the MCP Apps UI extension only when a host application
- * sets `CLAUDE_CODE_MCP_APPS_HOST`, and pi-mcp-adapter 7.0.1 declares it unless
- * `openUi` is `false` (D-PG9-07). Any other type gets none.
+ * keeps the adapter's `lazy` (D-PG9-02). Any other type gets none. No
+ * `openUi: false` is written, although Claude Code 2.1.323 declares no MCP Apps
+ * UI extension in a CLI session (D-PG9-07): pi-mcp-adapter 7.0.1 hashes
+ * `openUi: false` into its tool cache key, and pi-subagents 0.88.1's copy of
+ * that hash does not, so such an entry leaves every agent granted one of the
+ * server's tools unable to launch (D-CF6-10).
  */
 export function adapterEntryDefaults(
   server: Readonly<Record<string, unknown>>,

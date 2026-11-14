@@ -62,36 +62,31 @@ describe("adapterEntryDefaults", () => {
   const stdioDefaults = [
     ["requestTimeoutMs", 1_800_000],
     ["lifecycle", "lazy-keep-alive"],
-    ["openUi", false],
   ];
-  const remoteDefaults = [
-    ["requestTimeoutMs", 300_000],
-    ["openUi", false],
-  ];
+  const remoteDefaults = [["requestTimeoutMs", 300_000]];
   for (const { title, server, defaults } of [
     {
-      title: "D-PG9-01 / D-PG9-07: a server without a type stays for the session and gets no UI",
+      title: "D-PG9-01: a server without a type stays for the session",
       server: {},
       defaults: stdioDefaults,
     },
     {
-      title: "D-PG9-01 / D-PG9-07: a stdio server stays for the session and gets no UI",
+      title: "D-PG9-01: a stdio server stays for the session",
       server: { type: "stdio" },
       defaults: stdioDefaults,
     },
     {
-      title: "D-PG9-02 / D-PG9-07: an sse server keeps the adapter's lifecycle and gets no UI",
+      title: "D-PG9-02: an sse server keeps the adapter's lifecycle",
       server: { type: "sse" },
       defaults: remoteDefaults,
     },
     {
-      title: "D-PG9-02 / D-PG9-07: an http server keeps the adapter's lifecycle and gets no UI",
+      title: "D-PG9-02: an http server keeps the adapter's lifecycle",
       server: { type: "http" },
       defaults: remoteDefaults,
     },
     {
-      title:
-        "D-PG9-02 / D-PG9-07: a streamable-http server keeps the adapter's lifecycle and gets no UI",
+      title: "D-PG9-02: a streamable-http server keeps the adapter's lifecycle",
       server: { type: "streamable-http" },
       defaults: remoteDefaults,
     },
@@ -110,7 +105,24 @@ describe("adapterEntryDefaults", () => {
     });
   }
 
-  test("D-PG9-01 / D-PG9-07: the closed table writes no lifecycle and no openUi, even when the plugin declares them", () => {
+  // pi-mcp-adapter 7.0.1 hashes `openUi: false` into its tool cache key and
+  // pi-subagents 0.88.1's copy of that hash does not, so an entry holding it
+  // leaves an agent granted the server's tools unable to launch (D-CF6-10).
+  test("D-PG9-07: no transport's defaults hold openUi", () => {
+    // arrange
+    const servers = [{}, { type: "stdio" }, { type: "sse" }, { type: "http" }];
+
+    // act
+    const defaults = servers.map((server) => adapterEntryDefaults(server));
+
+    // assert
+    assert.deepStrictEqual(
+      defaults.map((entryDefaults) => Object.hasOwn(entryDefaults, "openUi")),
+      [false, false, false, false],
+    );
+  });
+
+  test("ANAME-07 / D-PG9-01: the closed table writes no lifecycle and no openUi, even when the plugin declares them", () => {
     // arrange
     const servers = [
       { command: "plugin-command", lifecycle: "eager", openUi: true },

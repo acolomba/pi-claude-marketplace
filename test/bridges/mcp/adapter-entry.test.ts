@@ -90,8 +90,8 @@ const CARRIED_KEYS: readonly string[] = [
 ];
 
 const MARKER = { plugin: "acme", marketplace: "catalog" };
-const STDIO_DEFAULT = { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive", openUi: false };
-const REMOTE_DEFAULT = { requestTimeoutMs: 300000, openUi: false };
+const STDIO_DEFAULT = { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" };
+const REMOTE_DEFAULT = { requestTimeoutMs: 300000 };
 const STDIO_MARKER = { ...MARKER, defaultFields: STDIO_DEFAULT };
 const REMOTE_MARKER = { ...MARKER, defaultFields: REMOTE_DEFAULT };
 
@@ -478,12 +478,7 @@ describe("stampServers", () => {
           disabled: true,
           lifecycle: "eager",
           searchKeywords: ["old"],
-          openUi: false,
-          _piClaudeMarketplace: {
-            ...MARKER,
-            pluginSetFields: ["requestTimeoutMs"],
-            defaultFields: { openUi: false },
-          },
+          _piClaudeMarketplace: { ...MARKER, pluginSetFields: ["requestTimeoutMs"] },
         },
       }),
     );
@@ -514,12 +509,7 @@ describe("stampServers", () => {
           requestTimeoutMs: 120000,
           ...OWNED,
           disabled: true,
-          openUi: false,
-          _piClaudeMarketplace: {
-            ...MARKER,
-            pluginSetFields: ["requestTimeoutMs"],
-            defaultFields: { openUi: false },
-          },
+          _piClaudeMarketplace: { ...MARKER, pluginSetFields: ["requestTimeoutMs"] },
         },
       }),
     );
@@ -596,8 +586,7 @@ describe("stampServers", () => {
           ...OWNED,
           disabled: true,
           requestTimeoutMs: 5000,
-          openUi: false,
-          _piClaudeMarketplace: { ...MARKER, defaultFields: { openUi: false }, keptOverride },
+          _piClaudeMarketplace: { ...MARKER, keptOverride },
         },
       }),
     );
@@ -631,8 +620,7 @@ describe("stampServers", () => {
           url: "https://new.example/mcp",
           ...OWNED,
           requestTimeoutMs: 5000,
-          openUi: false,
-          _piClaudeMarketplace: { ...MARKER, defaultFields: { openUi: false } },
+          _piClaudeMarketplace: MARKER,
         },
       }),
     );
@@ -695,8 +683,7 @@ describe("stampServers", () => {
         url: "https://new.example/mcp",
         ...OWNED,
         requestTimeoutMs: 7000,
-        openUi: false,
-        _piClaudeMarketplace: { ...MARKER, defaultFields: { openUi: false } },
+        _piClaudeMarketplace: MARKER,
       },
     });
   });
@@ -753,11 +740,10 @@ describe("stampServers", () => {
         requestTimeoutMs: 2500,
         ...OWNED,
         lifecycle: "lazy-keep-alive",
-        openUi: false,
         _piClaudeMarketplace: {
           ...MARKER,
           pluginSetFields: ["requestTimeoutMs"],
-          defaultFields: { lifecycle: "lazy-keep-alive", openUi: false },
+          defaultFields: { lifecycle: "lazy-keep-alive" },
         },
       },
     });
@@ -802,7 +788,7 @@ describe("stampServers", () => {
     assert.strictEqual(JSON.stringify(second.stamped), JSON.stringify(first.stamped));
   });
 
-  test("D-PG9-02 / D-PG9-07: a fresh http entry ends with the timeout, openUi false, and a marker recording both", () => {
+  test("D-PG9-02 / D-PG9-07: a fresh http entry ends with the timeout and a marker recording it, with no lifecycle and no openUi", () => {
     // arrange
     const servers = { server: { type: "http", url: "https://acme.example/mcp" } };
 
@@ -819,7 +805,7 @@ describe("stampServers", () => {
     // assert
     assert.strictEqual(
       JSON.stringify(stamping.stamped),
-      '{"server":{"url":"https://acme.example/mcp","directTools":"search","toolPrefix":"mcp","requestTimeoutMs":300000,"openUi":false,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","defaultFields":{"requestTimeoutMs":300000,"openUi":false}}}}',
+      '{"server":{"url":"https://acme.example/mcp","directTools":"search","toolPrefix":"mcp","requestTimeoutMs":300000,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","defaultFields":{"requestTimeoutMs":300000}}}}',
     );
   });
 
@@ -917,11 +903,7 @@ describe("stampServers", () => {
           ...OWNED,
           requestTimeoutMs: 1800000,
           lifecycle: "lazy-keep-alive",
-          openUi: false,
-          _piClaudeMarketplace: {
-            ...MARKER,
-            defaultFields: { lifecycle: "lazy-keep-alive", openUi: false },
-          },
+          _piClaudeMarketplace: { ...MARKER, defaultFields: { lifecycle: "lazy-keep-alive" } },
         },
       }),
     );
@@ -1146,7 +1128,7 @@ describe("stampServers", () => {
     // assert
     assert.strictEqual(
       JSON.stringify(stamping.stamped),
-      '{"server":{"url":"https://acme.example/mcp","directTools":"search","toolPrefix":"mcp","requestTimeoutMs":300000,"openUi":false,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","defaultFields":{"requestTimeoutMs":300000,"openUi":false},"keptOverride":{"disabled":true,"env":{"STUB_TOKEN":"stub-secret"}}}}}',
+      '{"server":{"url":"https://acme.example/mcp","directTools":"search","toolPrefix":"mcp","requestTimeoutMs":300000,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","defaultFields":{"requestTimeoutMs":300000},"keptOverride":{"disabled":true,"env":{"STUB_TOKEN":"stub-secret"}}}}}',
     );
   });
 
@@ -1229,7 +1211,7 @@ describe("stampServers", () => {
     // assert
     assert.strictEqual(
       JSON.stringify(stamping.stamped),
-      '{"__proto__":{"command":"plugin-command","env":{"CLAUDE_PLUGIN_ROOT":"/plugin/root","CLAUDE_PLUGIN_DATA":"/plugin/data"},"directTools":"search","toolPrefix":"mcp","requestTimeoutMs":1800000,"lifecycle":"lazy-keep-alive","openUi":false,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","defaultFields":{"requestTimeoutMs":1800000,"lifecycle":"lazy-keep-alive","openUi":false}}}}',
+      '{"__proto__":{"command":"plugin-command","env":{"CLAUDE_PLUGIN_ROOT":"/plugin/root","CLAUDE_PLUGIN_DATA":"/plugin/data"},"directTools":"search","toolPrefix":"mcp","requestTimeoutMs":1800000,"lifecycle":"lazy-keep-alive","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","defaultFields":{"requestTimeoutMs":1800000,"lifecycle":"lazy-keep-alive"}}}}',
     );
   });
 
@@ -1514,9 +1496,9 @@ describe("restoredOverride", () => {
     assert.deepStrictEqual(restored, {});
   });
 
-  test("D-PG9-03: the recorded lifecycle and openUi defaults never reach the restored override", () => {
+  test("D-PG9-03: the recorded lifecycle default never reaches the restored override", () => {
     // arrange
-    const kept = { lifecycle: "eager", openUi: true, disabled: true };
+    const kept = { lifecycle: "eager", disabled: true };
     const live = {
       command: "plugin-command",
       disabled: false,

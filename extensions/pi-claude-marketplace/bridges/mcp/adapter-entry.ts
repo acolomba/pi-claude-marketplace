@@ -11,8 +11,8 @@
 // `settings.toolPrefix` says (ANAME-01). The user's own fields carry over from
 // the entry it replaces (AFILE-06), except a carried field the plugin's entry
 // sets, which belongs to the plugin (ANAME-07). This extension's defaults
-// (`requestTimeoutMs`, `lifecycle`, `openUi`) fill only what neither the plugin
-// nor the user set (D-PG1-11, D-PG9-01, D-PG9-07); the MC-5 marker goes last.
+// (`requestTimeoutMs`, `lifecycle`) fill only what neither the plugin nor the
+// user set (D-PG1-11, D-PG9-01); the MC-5 marker goes last.
 // It names the fields the plugin set and the defaults this extension wrote,
 // which a restage computes again and never carries (D-PG1-13, D-PG9-03), and
 // may keep the user override the entry replaced, verbatim and inert
@@ -320,7 +320,7 @@ function keptOverrideFor(
 }
 
 /**
- * D-PG1-11 / D-PG9-01 / D-PG9-07: fill only a default neither the plugin's
+ * D-PG1-11 / D-PG9-01: fill only a default neither the plugin's
  * translated entry nor the user's carried fields hold, in the order of the
  * defaults table.
  */
@@ -344,7 +344,7 @@ function defaultFieldsFor(
  * Builds the entry for each plugin server: the translated and expanded plugin
  * entry with its owned fields (ANAME-04, ANAME-06, ANAME-07), then the fields
  * carried from the entry it replaces in carried-set order, then the defaults
- * the extension owns (D-PG1-11, D-PG9-01, D-PG9-07), then the MC-5 marker. The
+ * the extension owns (D-PG1-11, D-PG9-01), then the MC-5 marker. The
  * marker names the fields the plugin sets and the defaults to recompute, never
  * carry (D-PG1-13, D-PG9-03), and keeps the
  * server's user override when there is one. A carried field the plugin sets
