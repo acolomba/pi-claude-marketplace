@@ -77,7 +77,7 @@ Normal commit hooks are mandatory. Each combined-tree gate runs the complete com
 | Wave 1 combined tree | `npm run check` | 2400 seconds | Plans 04-01, 04-04, and 04-05 merged; the exact commit, Node version, exit status, and scenario counts | passed |
 | Wave 2 combined tree | `npm run check` | 2400 seconds | Plans 04-02 and 04-03 merged; the same evidence | passed |
 | Wave 3 combined tree | `npm run check` | 2400 seconds | Plan 04-06 merged; the same evidence | passed |
-| Phase gate | `npm run check` | 2400 seconds | The final tree after the Parent lines; reuse only when the build inputs are identical | ⬜ pending |
+| Phase gate | `npm run check` | 2400 seconds | The final tree after the Parent lines; reuse only when the build inputs are identical | passed at `66200dd7`, Node v26.13.1: 1920/1920 adapter, 184/184 builtin scenarios, 362 direct records; later commits change only `.planning/` |
 | Merge gate | `npm run check` | 2400 seconds | The merged tree, or a documented identical-input reuse | ⬜ pending |
 | Final PR or release handoff | `npm run check` | 2400 seconds | The final build inputs, or a documented identical-input reuse | ⬜ pending |
 
@@ -149,7 +149,7 @@ Filing the request to pi-dynamic-workflows is the maintainer's step (D-PG4-15). 
 - [x] No watch-mode flags
 - [x] Feedback latency under 30 seconds for owner tests and about 60 seconds for one feature file
 - [x] Each scenario was seen red before its change and green after it
-- [ ] All three wave gates and the phase gate pass with `npm run check`
+- [x] All three wave gates and the phase gate pass with `npm run check`
 - [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** approved 2026-11-14 (Nyquist audit: 13 of 13 rows green at 0e8c750a; 1210 owner tests and 27 adapter scenarios pass; the docs pre-commit run passes; the phase gate stays with the orchestrator)

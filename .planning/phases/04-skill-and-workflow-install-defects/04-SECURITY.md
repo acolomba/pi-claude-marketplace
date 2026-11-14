@@ -80,3 +80,7 @@ No unregistered threat flags: all six SUMMARY Threat Flags sections say None.
 - [x] `status: verified`; `threats_open: 0`.
 
 **Approval:** verified 2026-11-14 at c40ef6dc. No test suite was rerun by the auditor; the parent owns the combined-tree gate.
+
+## Post-Audit Delta (orchestrator)
+
+The review fixes `b5c7dc4a`..`66200dd7` landed after this audit. The orchestrator checked the one security-relevant change: `shared/redact-absolute-paths.ts` (WR-06 `71df5c78`, narrowed in `66200dd7`). Relative forms (`../outside/x`, `./skills/missing`, `skills/../../x/y`) print as written, and absolute paths, including one directly after a sentence period (`Failed./srv/private/a.json` becomes `Failed.a.json`), are still cut to their basename (NFR-9). The WR-02 drop and WR-04 warning keep T-04-01: a refused listed path is never stat'ed (third review iteration). No threat reopens.

@@ -5317,3 +5317,11 @@ Noted 2026-11-14 (parity-gaps, Phase 4). When a pi-dynamic-workflows release app
 ## INFOAGENTESCAPE-01: `info` on a refused plugin lists agent file names from a folder outside the plugin root
 
 Noted 2026-11-14 (parity-gaps, Phase 4). Found while adding the PG-SEC-01 note to `info`. For a refused plugin whose agents path escapes the plugin root, the lenient `agents:` line of `info` still lists file names from that outside folder (the escape case shows `agents: spy`). The new note's read is contained; the existing directory listing is not. Present before Phase 4. Apply `resolveContainedComponentPath` to the lenient listing of every component kind.
+
+## SIBLINGPREFIX-01: a sibling skill link rewrite matches a folder-name prefix
+
+Noted 2026-11-14 (parity-gaps, Phase 4 verification, PG-SKILL-04 unclassified edge). `domain/skill-sibling-paths.ts` rewrites `../b` when the next character is outside its token grammar, so `../b%20x/ref.md` becomes `../demo-b%20x/ref.md` (also `+`, `~`, `@`, non-ASCII letters). The path was dead before staging and stays dead, so no working link breaks, but the text changes where D-PG4-06 says it stays as written. Fix option: a next-character boundary check that still ends a path at a space, so prose like "see ../b for details" keeps working.
+
+## WFNOTETRIGGER-01: should the workflow restriction note fire for an agent whose tools keep all four built-ins?
+
+Noted 2026-11-14 (parity-gaps, Phase 4 review IN-05). After WR-05 the note names only built-ins among read, bash, edit and write that the agent's `tools` does not allow (plus `disallowedTools`). An agent whose `tools` keeps all four, or lists a scoped `Bash(spec)` read as full `Bash`, gets no note, though outside `builtin:codemode` the engine gives it unrestricted `bash`. A missing note is allowed by D-PG4-11; this narrows the trigger with no recorded decision. Maintainer question.
