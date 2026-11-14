@@ -281,7 +281,70 @@ describe("rewriteMarkdownReferences", () => {
     });
 
     // assert
-    assert.strictEqual(rewritten, "Run /acme:audit on every branch.\n");
+    assert.strictEqual(rewritten, "Run acme:audit on every branch.\n");
+  });
+
+  test("keeps the slash of a workflow reference its source wrote with one", () => {
+    // arrange
+    const content = "Type /acme:acme-audit on every branch.\n";
+
+    // act
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: [],
+      commands: [],
+      workflows: ["acme:audit"],
+    });
+
+    // assert
+    assert.strictEqual(rewritten, "Type /acme:audit on every branch.\n");
+  });
+
+  test("keeps the installed workflow name without a slash inside a tool call", () => {
+    // arrange
+    const content = 'Call Workflow({ name: "acme:acme-audit" }) or Workflow(acme:audit).\n';
+
+    // act
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: [],
+      commands: [],
+      workflows: ["acme:audit"],
+    });
+
+    // assert
+    assert.strictEqual(
+      rewritten,
+      'Call Workflow({ name: "acme:audit" }) or Workflow(acme:audit).\n',
+    );
+  });
+
+  test("leaves a workflow reference already in the installed spelling byte-identical", () => {
+    // arrange
+    const content = "Run acme:audit, or type /acme:audit.\n";
+
+    // act
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: [],
+      commands: [],
+      workflows: ["acme:audit"],
+    });
+
+    // assert
+    assert.strictEqual(rewritten, content);
+  });
+
+  test("reads only an ASCII slash before a workflow reference as its slash", () => {
+    // arrange -- U+FF0F FULLWIDTH SOLIDUS is prose, not the command prefix.
+    const content = "Run \uFF0Facme:acme-audit now.\n";
+
+    // act
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: [],
+      commands: [],
+      workflows: ["acme:audit"],
+    });
+
+    // assert
+    assert.strictEqual(rewritten, "Run \uFF0Facme:audit now.\n");
   });
 
   test("keeps the colon workflow name on win32, where command names use dots", (t) => {
@@ -297,7 +360,7 @@ describe("rewriteMarkdownReferences", () => {
     });
 
     // assert
-    assert.strictEqual(rewritten, "Run /acme:audit daily.\n");
+    assert.strictEqual(rewritten, "Run acme:audit daily.\n");
   });
 
   test("prefers the skill a token resolves to over a workflow of the same source name", () => {
@@ -324,6 +387,36 @@ describe("rewriteMarkdownReferences", () => {
       skills: [],
       commands: [],
       workflows: ["acme:review"],
+    });
+
+    // assert
+    assert.strictEqual(rewritten, content);
+  });
+
+  test("leaves a workflow reference verbatim when the plugin stages no workflow", () => {
+    // arrange
+    const content = "Run acme:acme-audit, or type /acme:acme-audit.\n";
+
+    // act
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: [],
+      commands: [],
+      workflows: [],
+    });
+
+    // assert
+    assert.strictEqual(rewritten, content);
+  });
+
+  test("returns empty content unchanged", () => {
+    // arrange
+    const content = "";
+
+    // act
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: [],
+      commands: [],
+      workflows: ["acme:audit"],
     });
 
     // assert
