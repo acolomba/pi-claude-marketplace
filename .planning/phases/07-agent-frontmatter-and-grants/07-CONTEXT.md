@@ -301,3 +301,36 @@ CHANGELOG.md.
 3. CHANGELOG (under the milestone entry): agent frontmatter is read as YAML;
    agents can start subagents; `model: inherit` is kept; both tool lists
    restrict an agent. Run `reinstall` once to apply this to installed plugins.
+
+## Amendments after research (2026-11-14)
+
+Research (`07-RESEARCH.md`) refined four decisions. These amendments win over
+the text above.
+
+- **D-PG7-02 amended (pending maintainer review):** the moved repair takes a
+  trigger parameter. Skills keep the colon rule byte-identically. Agents also
+  quote a single-line plain value that starts with `*`, `&`, `!`, `%`, `@`, or
+  a backtick, so `tools: *` (D-CF4-08) keeps loading. Upstream's full set stays
+  the deferred residual.
+- **D-PG7-03 amended:** the helpers import nothing from `platform/`; their
+  home is `shared/frontmatter-repair.ts`, and their test cases move with them.
+- **D-PG7-04 amended:** the unparseable note is a discovery warning from
+  `discoverPluginAgents`, not a converter warning, and is not repeated in the
+  agent file's provenance. It stays pending maintainer review, now also
+  against the maintainer's "fail closed on corrupt data" preference: parity
+  loads such an agent with every tool.
+- **D-PG7-05 extended:** a non-mapping YAML document counts as no fields;
+  YAML null becomes `""` (so `tools:` keeps its AG-11 meaning); own keys such
+  as `__proto__` are copied safely; the BOM is stripped before the repair.
+- **D-PG7-06 resolved:** pi-subagents 0.88.1 reads frontmatter line by line
+  and processes no escapes, so a multi-line description is emitted as a
+  `|-` block with every line indented two spaces; the injection probe passed.
+- **D-PG7-15 resolved:** the cucumber harness runs the nested
+  `subagent({agent:"demo:helper"})` call with a scripted foreground child.
+  For an agent with no `tools`, `subagent get` prints no nested-delegation
+  line; the proof is the nested call plus the staged file text, and the
+  criterion's `subagent get` wording for that clause is an override candidate.
+- **D-PG7-13 refined:** a standalone `install` never printed the two warnings
+  (hygiene class); the scenario that fails without the change uses `apply` or
+  the staged file's `warnings:`. Only `legacy-grant-form.ts` recognizes old
+  text, through its own constant.
