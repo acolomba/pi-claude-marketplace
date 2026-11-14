@@ -406,7 +406,24 @@ Plans:
   4. `docs/mcp-compatibility.md` states, for each implementation, whether a plugin server can use resources, prompts, elicitation, sampling, roots, and output limits, and says that `@server:uri` mentions do not exist on Pi (PG-MCP-08).
   5. Under the adapter, a plugin server's entry holds the fields that withhold `sampling` and the MCP UI extension, or the compatibility page cites the recorded decision that accepts the divergence (PG-SEC-03).
 
-**Plans**: TBD
+**Plans**: 6 plans
+
+Plans:
+**Wave 1**
+- [ ] 09-01-PLAN.md -- Wave 1: end the adapter listing wait on Pi's registry so a stub the adapter keeps connected no longer stalls it, and guard a plugin server's resource read under each implementation
+- [ ] 09-02-PLAN.md -- Wave 1: let the entry marker record a string or boolean default, and model an adapter entry as release 0.23.0 wrote it
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 09-03-PLAN.md -- Wave 2: write `lifecycle: "lazy-keep-alive"` for stdio plugin servers and `openUi: false` for every plugin server, recorded in the marker, and bring every pinned entry, stub message table, and status row to what the adapter now does
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 09-04-PLAN.md -- Wave 3: keep a user's `protocolVersion`, `tasks`, `exposeResources`, and `caFile` across an update and a reinstall, and pin a user's lifecycle and openUi across an update
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 09-06-PLAN.md -- Wave 4: record D-PG9-01, D-PG9-07, and D-PG9-08, draft the per-server sampling request with BACKLOG MCPSAMPLING-01, and add the CHANGELOG line
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 09-05-PLAN.md -- Wave 5: correct the MCP compatibility page and the output catalog, and add the features-beyond-tools section, citing the D-PG9 records
 
 ### Phase 10: Plugin Options, Variables, and Trust
 

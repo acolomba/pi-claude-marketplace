@@ -591,11 +591,14 @@ Phase 1 reference for size: plan 01-06 hit 63 unit and 16 integration expectatio
 | A4 | The adapter's startup `MCP: N servers connected` ui.notify (init.ts:533-540, shown when a resident server connects at startup) does not enter `resultsOf("session")`, which holds this extension's payloads | Pitfall 4 | "the session reports no results" steps fail. Probe A passed its steps, but it had no such step. |
 | A5 | Each re-expected agent-grants table (pi-subagents children load the adapter too) follows the same pattern | Pitfall 4 | More table edits. Re-measure. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Where does "Amended by D-PG9-01" go?** `PROJECT.md` has no ANAME-05 row. ANAME-05 lives only in the archived `.planning/milestones/mcp-4-REQUIREMENTS.md:97-98` and the "Validated" bullet `PROJECT.md:1428-1434` (ANAME-01..07). Recommendation: follow the D-PG1-11 precedent (PROJECT.md:2387). Put "amends ANAME-05" in the D-PG9-01 row title, and note it in the `_Last updated…_` footer (PROJECT.md:2690). Do not edit the archived file. Optionally add "(ANAME-05 amended by D-PG9-01)" to the Validated bullet.
+   **RESOLVED:** 09-06 puts "amends ANAME-05" in the D-PG9-01 row title and the footer.
 2. **The harness listing rule, registry or cache file?** Recommend the registry rule with a measurement task over `listing.feature`, `invocation.feature`, and `features/hook/tool-use.feature` under the adapter profile.
+   **RESOLVED:** 09-01 adopts the registry rule (plus the stub's logged tool name) and measures it with resident stubs.
 3. **Do the defaults live in domain or the bridge?** Recommend a domain function beside `defaultRequestTimeoutMs`, so there is one type switch, unit-tested in `test/domain/mcp-server-features.test.ts`, with filtering in `defaultFieldsFor`. Either way satisfies CONTEXT.
+   **RESOLVED:** 09-03 adds the domain function beside `defaultRequestTimeoutMs`.
 
 ## Environment Availability
 
