@@ -583,6 +583,47 @@ test("closes the stop boundary at a bridge load (D-PG5-06)", () => {
   assert.strictEqual(runtime.isStopHookActive(), false);
 });
 
+test("claims a start failure notice once for each key (D-PG5-12)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+
+  // act
+  const claims = [
+    runtime.claimStartFailureNotice("UserPromptSubmit:guard.sh"),
+    runtime.claimStartFailureNotice("UserPromptSubmit:guard.sh"),
+    runtime.claimStartFailureNotice("SessionStart:guard.sh"),
+    runtime.claimStartFailureNotice("SessionStart:guard.sh"),
+  ];
+
+  // assert
+  assert.deepStrictEqual(claims, [true, false, true, false]);
+});
+
+test("empties the claimed start failure notices at a bridge load (D-PG5-12)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.claimStartFailureNotice("UserPromptSubmit:guard.sh");
+
+  // act
+  runtime.prepareSettleForRegistration();
+
+  // assert
+  assert.strictEqual(runtime.claimStartFailureNotice("UserPromptSubmit:guard.sh"), true);
+});
+
+test("keeps the claimed start failure notices of one runtime from another (D-PG5-12)", () => {
+  // arrange
+  const firstRuntime = createHooksRuntime();
+  const secondRuntime = createHooksRuntime();
+  firstRuntime.claimStartFailureNotice("UserPromptSubmit:guard.sh");
+
+  // act
+  const claimed = secondRuntime.claimStartFailureNotice("UserPromptSubmit:guard.sh");
+
+  // assert
+  assert.strictEqual(claimed, true);
+});
+
 test("owns child removal, PID snapshots, and shutdown per runtime", () => {
   // arrange
   const firstRuntime = createHooksRuntime();

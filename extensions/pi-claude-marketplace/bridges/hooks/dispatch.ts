@@ -95,7 +95,7 @@ import { compactTrigger } from "./payloads/compact-trigger.ts";
 import { decideEditBatch, editPairViews } from "./tool-batch.ts";
 
 import type { CompactionCancel, HookAdapterContext } from "./event-adapters.ts";
-import type { HookExecResult } from "./exec-result.ts";
+import type { HookExecResult, HookFailure } from "./exec-result.ts";
 import type { HookBlock } from "./hook-labels.ts";
 import type { HookToolView } from "./mcp-tool-view.ts";
 import type { ClaudeSessionEndEvent } from "./payloads/session-end.ts";
@@ -652,12 +652,38 @@ function showsFailures(claudeEvent: NoticeEvent): boolean {
   }
 }
 
+// D-PG5-12: the key of a start failure's once-only notice, as Claude Code
+// 2.1.323 keys it: the event, a colon, and the declared command with the
+// plugin root filled in.
+function startFailureKey(claudeEvent: NoticeEvent, entry: RoutingEntry): string {
+  const command = (entry.handlerDecl.command ?? "").replaceAll(
+    /\$\{CLAUDE_PLUGIN_ROOT\}|\$CLAUDE_PLUGIN_ROOT\b/g,
+    () => entry.resolvedSource,
+  );
+  return `${claudeEvent}:${command}`;
+}
+
+// D-PG5-12: a failed exit shows on every event, and a hook that cannot start
+// shows once for each event and resolved command in a bridge load.
+function claimsFailureNotice(
+  runtime: HooksRuntime,
+  claudeEvent: NoticeEvent,
+  entry: RoutingEntry,
+  failure: HookFailure,
+): boolean {
+  return (
+    failure.kind === "exit" || runtime.claimStartFailureNotice(startFailureKey(claudeEvent, entry))
+  );
+}
+
 /**
  * D-PG5-10 / D-PG5-12: one `<label> hook error: ...` notice for each hook that
  * failed without blocking, in routing order. The failures are read from each
- * hook's own result, because the fold keeps none of them.
+ * hook's own result, because the fold keeps none of them. A hook that runs
+ * once for each pair of an edit shows an equal notice once.
  */
 function failureNotices(
+  runtime: HooksRuntime,
   claudeEvent: NoticeEvent,
   label: string,
   outcomes: readonly BucketOutcome[],
@@ -666,23 +692,46 @@ function failureNotices(
     return [];
   }
 
-  return outcomes.flatMap(({ result }) =>
-    result.kind === "noop" && result.failure !== undefined
-      ? [hookFailureText(label, result.failure)]
-      : [],
-  );
+  const shown: { readonly entry: RoutingEntry; readonly text: string }[] = [];
+  for (const { entry, result } of outcomes) {
+    if (result.kind !== "noop" || result.failure === undefined) {
+      continue;
+    }
+
+    const text = hookFailureText(label, result.failure);
+    const repeated = shown.some((notice) => notice.entry === entry && notice.text === text);
+    if (!repeated && claimsFailureNotice(runtime, claudeEvent, entry, result.failure)) {
+      shown.push({ entry, text });
+    }
+  }
+
+  return shown.map(({ text }) => text);
+}
+
+/**
+ * HOOK-05: the notices of a folded bucket's decisions, labeled `label`: the
+ * system messages in routing order (D-CF5-09), then the block notices.
+ */
+function decisionNotices(claudeEvent: NoticeEvent, label: string, folded: FoldedBucket): string[] {
+  return [
+    ...systemMessageNotices(claudeEvent, label, folded.outcomes),
+    ...blockNotices(claudeEvent, label, folded),
+  ];
 }
 
 /**
  * HOOK-05: every notice a folded bucket shows the user, labeled `label`: the
- * system messages in routing order (D-CF5-09), then the block notices, then
- * the failure notices (D-PG5-12).
+ * decision notices, then the failure notices (D-PG5-12).
  */
-function hookNotices(claudeEvent: NoticeEvent, label: string, folded: FoldedBucket): string[] {
+function hookNotices(
+  runtime: HooksRuntime,
+  claudeEvent: NoticeEvent,
+  label: string,
+  folded: FoldedBucket,
+): string[] {
   return [
-    ...systemMessageNotices(claudeEvent, label, folded.outcomes),
-    ...blockNotices(claudeEvent, label, folded),
-    ...failureNotices(claudeEvent, label, folded.outcomes),
+    ...decisionNotices(claudeEvent, label, folded),
+    ...failureNotices(runtime, claudeEvent, label, folded.outcomes),
   ];
 }
 
@@ -919,7 +968,7 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
       entryFires(claudeEvent, entry, view),
     );
     const label = noticeLabel(claudeEvent, view.event);
-    showHookNotices(ctx, pi, hookNotices(claudeEvent, label, folded));
+    showHookNotices(ctx, pi, hookNotices(runtime, claudeEvent, label, folded));
     if (claudeEvent === "PreToolUse") {
       sendToolContext(pi, label, folded.result);
     }
@@ -1006,11 +1055,15 @@ async function runEditPreflight(
     return undefined;
   }
 
-  for (const { event, folded } of pairRuns) {
-    const label = noticeLabel("PreToolUse", event);
-    showHookNotices(ctx, pi, hookNotices("PreToolUse", label, folded));
+  const label = noticeLabel("PreToolUse", nativeEvent);
+  for (const { folded } of pairRuns) {
+    showHookNotices(ctx, pi, decisionNotices("PreToolUse", label, folded));
     sendToolContext(pi, label, folded.result);
   }
+
+  // D-PG5-12: an equal failure of one hook across the pairs shows once.
+  const outcomes = pairRuns.flatMap(({ folded }) => folded.outcomes);
+  showHookNotices(ctx, pi, failureNotices(runtime, "PreToolUse", label, outcomes));
 
   const contextFor = (folded: FoldedBucket): HookAdapterContext => ({
     runtime,
@@ -1156,7 +1209,7 @@ export function toolResultCompositeHandler(
           )
         : await runEditResultPairs(runtime, bucket, view, batch.pairs, ctx, pi, executor);
     const label = hookEventLabel(claudeEvent, view.event.toolName);
-    showHookNotices(ctx, pi, hookNotices(claudeEvent, label, folded));
+    showHookNotices(ctx, pi, hookNotices(runtime, claudeEvent, label, folded));
     sendToolContext(pi, label, folded.result);
 
     const adapterContext = {

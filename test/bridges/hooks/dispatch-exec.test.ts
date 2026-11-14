@@ -1103,7 +1103,7 @@ for (const translatorCase of TRANSLATOR_CASES) {
   );
 }
 
-test("contains a null unknown payload with diagnostics and no child", async (t) => {
+test("contains a null unknown payload as a runner failure with diagnostics and no child", async (t) => {
   // arrange
   const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-null-payload-");
@@ -1124,9 +1124,14 @@ test("contains a null unknown payload with diagnostics and no child", async (t) 
     },
   );
   const lines = debugLines(errorSpy);
+  const caughtHead = "[hooks] exec: caught (dispatch-plugin/UserPromptSubmit): ";
+  const caughtError = lines.find((line) => line.startsWith(caughtHead))?.slice(caughtHead.length);
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "run", error: caughtError },
+  });
   assert.deepStrictEqual(processBoundary.calls, []);
   assert.deepStrictEqual(
     {
@@ -1184,7 +1189,7 @@ test("diagnoses a non-object unknown payload while containing its partial child 
   );
 });
 
-test("contains a wrong-shape payload whose required property throws", async (t) => {
+test("contains a wrong-shape payload whose required property throws as a runner failure", async (t) => {
   // arrange
   const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-wrong-shape-");
@@ -1213,7 +1218,10 @@ test("contains a wrong-shape payload whose required property throws", async (t) 
   const lines = debugLines(errorSpy);
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "run", error: "wrong-shape toolName getter" },
+  });
   assert.deepStrictEqual(processBoundary.calls, []);
   assert.strictEqual(
     lines.some(
@@ -1587,7 +1595,7 @@ test("flushes an incomplete decoder tail before parsing the entry's plain stdout
   assert.deepStrictEqual(processChild.killSignals, []);
 });
 
-test("cancels timers and returns noop when the child emits a spawn error", async (t) => {
+test("cancels timers and settles with the spawn failure when the child emits a spawn error", async (t) => {
   // arrange
   const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-spawn-error-");
@@ -1613,7 +1621,10 @@ test("cancels timers and returns noop when the child emits a spawn error", async
   const lines = debugLines(errorSpy);
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "spawn", error: "spawn ENOENT" },
+  });
   assert.deepStrictEqual(processChild.killSignals, []);
   assert.strictEqual(processChild.child.listenerCount("error"), 0);
   assert.strictEqual(
@@ -2105,7 +2116,11 @@ describe("PostCompact runs (D-BG-503)", () => {
         child.emitError(new Error("refusing /home/alice/.pi/agent/data/acme"));
         return Promise.resolve();
       },
-      outcome: { kind: "noop", postCompactRun: { succeeded: false, output: "refusing acme" } },
+      outcome: {
+        kind: "noop",
+        failure: { kind: "spawn", error: "refusing acme" },
+        postCompactRun: { succeeded: false, output: "refusing acme" },
+      },
     },
     {
       name: "the onFailure block of a hook that cannot start",
@@ -2248,7 +2263,7 @@ test("redacts absolute paths from the cause of a hook that cannot start", async 
   });
 });
 
-test("keeps a hook whose spawn throws a noop without onFailure", async (t) => {
+test("settles a hook whose spawn throws without onFailure with the runner failure (D-PG5-10)", async (t) => {
   // arrange
   const caseRoot = await makeCaseRoot(t, "dispatch-start-throw-");
 
@@ -2259,11 +2274,31 @@ test("keeps a hook whose spawn throws a noop without onFailure", async (t) => {
     makeContext(caseRoot),
     undefined,
     createHooksRuntime(),
-    { spawnImpl: throwingSpawn(t) },
+    { spawnImpl: throwingSpawn(t, "refusing /home/alice/.pi/agent/data/acme") },
   );
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "run", error: "refusing acme" },
+  });
+});
+
+test("settles a hook whose child cannot be spawned with the redacted spawn failure (D-PG5-10)", async (t) => {
+  // arrange
+  const spawnError = new Error("spawn /home/alice/plugins/demo/hooks/guard.sh ENOENT");
+
+  // act
+  const hookOutcome = await dispatchDriven(t, { command: "guard" }, (child) => {
+    child.emitError(spawnError);
+    return Promise.resolve();
+  });
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "spawn", error: "spawn guard.sh ENOENT" },
+  });
 });
 
 test("settles a hook that exits 1 without onFailure with its failure (D-PG5-10)", async (t) => {
@@ -2611,7 +2646,10 @@ test("contains a synchronous stdin end failure and cancels on child error", asyn
   const lines = debugLines(errorSpy);
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "run", error: "synchronous stdin end failure" },
+  });
   assert.deepStrictEqual(processChild.stdinOrder, ["error-listener"]);
   assert.deepStrictEqual(processChild.killSignals, []);
   assert.strictEqual(

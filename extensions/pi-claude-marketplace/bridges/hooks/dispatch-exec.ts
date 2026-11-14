@@ -46,11 +46,14 @@
 //      end of the process, a PostCompact result also carries how the hook
 //      ended (D-BG-503).
 //
-// Never-throws contract: every error path resolves to `{ kind: "noop" }` +
+// Never-throws contract: every error path resolves to a noop +
 // `hookDebugLog`, or to the onFailure block when the hook asks for one. The
 // outer `try/catch` wraps setup and spawn-time errors (ENOENT, containment
 // violation, etc.) so the composite handler never crashes against malformed
-// configs; a hook that cannot start blocks under `onFailure: "block"`.
+// configs; a hook that cannot start blocks under `onFailure: "block"`, and
+// otherwise its noop carries a `spawn` failure (a child `error` event) or a
+// `run` failure (an exception in the runner), with absolute paths redacted
+// from the error text (D-PG5-10).
 //
 // Whitelist note: this is one of exactly FIVE sanctioned
 // `node:child_process` import sites in the extension tree (the others are
@@ -144,10 +147,11 @@ const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationCont
 /**
  * EXEC-01..04 + PAYL-01 + HOOK-05 + D-60-01 + D-60-06 execution layer.
  *
- * NEVER throws. Every error / timeout / parse failure path resolves to
- * `{ kind: "noop" }` + `hookDebugLog`, except that a hook with
- * `onFailure: "block"` turns a start failure, an unexpected exit, a timeout,
- * or broken JSON stdout into a block (D-CF5-18). The composite handler
+ * NEVER throws. Every error / timeout / parse failure path resolves to a
+ * noop + `hookDebugLog`, which carries the failure of a failed exit or start
+ * (D-PG5-10), except that a hook with `onFailure: "block"` turns a start
+ * failure, an unexpected exit, a timeout, or broken JSON stdout into a block
+ * (D-CF5-18). The composite handler
  * runs the bucket in parallel, folds the returned arms in
  * routing order (D-CF5-09), and dispatches to the per-Pi-event adapter
  * (D-60-03).
@@ -222,14 +226,16 @@ export async function dispatchHookExec(
   } catch (err) {
     hookDebugLog(`exec: caught (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`);
     // D-CF5-18: a hook that cannot start blocks when it sets onFailure "block".
-    // The cause goes in as stderr, so the block reason ends with it.
-    const noop: HookExecResult = { kind: "noop" };
+    // The cause goes in as stderr, so the block reason ends with it; without
+    // the block, the noop carries the cause as a runner failure (D-PG5-10).
+    const error = redactAbsolutePaths(errorMessage(err));
+    const noop: HookExecResult = { kind: "noop", failure: { kind: "run", error } };
     const facts: HookExitFacts = {
       startFailed: true,
       timedOut: false,
       exitCode: null,
       stdout: "",
-      stderr: redactAbsolutePaths(errorMessage(err)),
+      stderr: error,
     };
     return endedResult(entry, facts, noop, onFailureBlock(entry, facts, noop));
   }
@@ -393,8 +399,10 @@ async function spawnAndCollect(
       hookDebugLog(
         `exec: spawn error (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
       );
-      // D-CF5-18: a hook that cannot start blocks when it sets onFailure "block".
-      const noop: HookExecResult = { kind: "noop" };
+      // D-CF5-18: a hook that cannot start blocks when it sets onFailure "block";
+      // without the block, the noop carries the spawn failure (D-PG5-10).
+      const error = redactAbsolutePaths(errorMessage(err));
+      const noop: HookExecResult = { kind: "noop", failure: { kind: "spawn", error } };
       const facts: HookExitFacts = {
         startFailed: true,
         timedOut: false,
@@ -404,7 +412,7 @@ async function spawnAndCollect(
       };
       const failure = onFailureBlock(entry, facts, noop);
       // A PostCompact run reads the start error, redacted as the outer catch does.
-      const started = { ...facts, stderr: redactAbsolutePaths(errorMessage(err)) };
+      const started = { ...facts, stderr: error };
       settle(endedResult(entry, started, noop, failure));
     });
 

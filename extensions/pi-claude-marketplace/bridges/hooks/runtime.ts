@@ -167,6 +167,13 @@ export interface HooksRuntime {
    */
   readonly isStopHookActive: () => boolean;
   readonly recordStopReentry: () => StopReentryTransition;
+  /**
+   * D-PG5-12: whether to show the notice of a hook that cannot start, keyed
+   * by its event and resolved command. True the first time for a key in a
+   * bridge load, which it records, and false after that, as Claude Code
+   * shows a start failure once.
+   */
+  readonly claimStartFailureNotice: (key: string) => boolean;
   readonly recordStopNonReentry: () => void;
   readonly recordToolCall: () => void;
   readonly recordUserInput: () => void;
@@ -267,6 +274,7 @@ export function createHooksRuntime(): HooksRuntime {
   let stopBoundaryOpen = false;
   let consecutiveBlockCount = 0;
   let capNotifiedThisSession = false;
+  const shownStartFailures = new Set<string>();
   let childIdentity: ChildIdentity = { kind: "unavailable" };
   let childIdentitySessionId: string | undefined;
 
@@ -280,6 +288,7 @@ export function createHooksRuntime(): HooksRuntime {
     stopHookActive = false;
     runStartedByRewake = false;
     stopBoundaryOpen = false;
+    shownStartFailures.clear();
     finishStopSequence();
   }
 
@@ -395,6 +404,15 @@ export function createHooksRuntime(): HooksRuntime {
       consecutiveBlockCount += 1;
       stopHookActive = true;
       return { reenter: true, notifyCap: false };
+    },
+
+    claimStartFailureNotice(key: string): boolean {
+      if (shownStartFailures.has(key)) {
+        return false;
+      }
+
+      shownStartFailures.add(key);
+      return true;
     },
 
     recordStopNonReentry: finishStopSequence,

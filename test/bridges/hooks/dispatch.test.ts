@@ -4913,6 +4913,353 @@ describe("failure notices (D-PG5-10 / D-PG5-12)", () => {
   }
 });
 
+const SPAWN_FAILURE = {
+  kind: "noop",
+  failure: { kind: "spawn", error: "spawn guard.sh ENOENT" },
+} as const;
+const SPAWN_NOTICE =
+  "UserPromptSubmit hook error: Failed with non-blocking status code: Error occurred while executing hook command: spawn guard.sh ENOENT";
+
+// Prompt entries of `pluginIds` in routing order that all declare `command`.
+function promptEntriesWithCommand(pluginIds: readonly string[], command: string): RoutingEntry[] {
+  return promptEntries(pluginIds).map((entry) => ({
+    ...entry,
+    handlerDecl: { ...entry.handlerDecl, command },
+  }));
+}
+
+// Runs the prompt handler of `runtime` once for each of `prompts` and returns
+// the entries of every notice the runs show.
+async function promptNotices(
+  runtime: HooksRuntime,
+  results: Readonly<Record<string, HookExecResult>>,
+  prompts: number,
+): Promise<readonly unknown[]> {
+  const host = createNoticeHost("/workspace/start-failures");
+  const handler = compositeHandlerFor(
+    runtime,
+    "UserPromptSubmit",
+    runtime.currentGeneration(),
+    host.pi,
+    createRecordingExecutor(results, []),
+  );
+  for (let prompt = 0; prompt < prompts; prompt += 1) {
+    await handler(PROMPT_EVENT, host.context);
+  }
+
+  host.capture.assertValid();
+  return host.capture.entries;
+}
+
+describe("start failure notices (D-PG5-12)", () => {
+  test("shows a hook that cannot start on the first event and not on the second", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptSubmit", promptEntries(["starter"]));
+
+    // act
+    const notices = await promptNotices(runtime, { starter: SPAWN_FAILURE }, 2);
+
+    // assert
+    assert.deepStrictEqual(notices, [hookNoticeEntry(SPAWN_NOTICE)]);
+  });
+
+  test("shows an exception in the runner once", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptSubmit", promptEntries(["starter"]));
+
+    // act
+    const notices = await promptNotices(
+      runtime,
+      { starter: { kind: "noop", failure: { kind: "run", error: "bad root" } } },
+      2,
+    );
+
+    // assert
+    assert.deepStrictEqual(notices, [
+      hookNoticeEntry("UserPromptSubmit hook error: Failed to run: bad root"),
+    ]);
+  });
+
+  test("shows a hook that exits with an error on every event", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptSubmit", promptEntries(["failer"]));
+
+    // act
+    const notices = await promptNotices(runtime, { failer: EXIT_FAILURE }, 2);
+
+    // assert
+    assert.deepStrictEqual(notices, [
+      hookNoticeEntry("UserPromptSubmit hook error: Failed with non-blocking status code: boom"),
+      hookNoticeEntry("UserPromptSubmit hook error: Failed with non-blocking status code: boom"),
+    ]);
+  });
+
+  test("shows the same command once more on another event", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptSubmit", promptEntries(["starter"]));
+    runtime.setRoutingBucket("SessionStart", routedEntries("SessionStart", ["starter"]));
+    const host = createNoticeHost("/workspace/start-failures");
+    const executor = createRecordingExecutor({ starter: SPAWN_FAILURE }, []);
+    const generation = runtime.currentGeneration();
+    const promptHandler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      generation,
+      host.pi,
+      executor,
+    );
+    const sessionHandler = compositeHandlerFor(
+      runtime,
+      "SessionStart",
+      generation,
+      host.pi,
+      executor,
+    );
+
+    // act
+    await promptHandler(PROMPT_EVENT, host.context);
+    await sessionHandler({ source: "startup" } satisfies ClaudeSessionStartEvent, host.context);
+    await sessionHandler({ source: "startup" } satisfies ClaudeSessionStartEvent, host.context);
+
+    // assert
+    assert.deepStrictEqual(host.capture.entries, [
+      hookNoticeEntry(SPAWN_NOTICE),
+      hookNoticeEntry(
+        "SessionStart:startup hook error: Failed with non-blocking status code: Error occurred while executing hook command: spawn guard.sh ENOENT",
+      ),
+    ]);
+    host.capture.assertValid();
+  });
+
+  test("shows a hook that declares no command and cannot start once", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket(
+      "UserPromptSubmit",
+      promptEntries(["bare"]).map((entry) => ({
+        ...entry,
+        handlerDecl: { type: "command", timeout: 1 },
+      })),
+    );
+
+    // act
+    const notices = await promptNotices(runtime, { bare: SPAWN_FAILURE }, 2);
+
+    // assert
+    assert.deepStrictEqual(notices, [hookNoticeEntry(SPAWN_NOTICE)]);
+  });
+
+  test("shows a new runtime's start failure again", async () => {
+    // arrange
+    const firstRuntime = createHooksRuntime();
+    const secondRuntime = createHooksRuntime();
+    for (const runtime of [firstRuntime, secondRuntime]) {
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket("UserPromptSubmit", promptEntries(["starter"]));
+    }
+
+    // act
+    const firstNotices = await promptNotices(firstRuntime, { starter: SPAWN_FAILURE }, 1);
+    const secondNotices = await promptNotices(secondRuntime, { starter: SPAWN_FAILURE }, 1);
+
+    // assert
+    assert.deepStrictEqual(
+      [firstNotices, secondNotices],
+      [[hookNoticeEntry(SPAWN_NOTICE)], [hookNoticeEntry(SPAWN_NOTICE)]],
+    );
+  });
+
+  for (const { name, command, notices } of [
+    {
+      name: "one notice for two hooks of one event with the same command",
+      command: "guard.sh",
+      notices: [SPAWN_NOTICE],
+    },
+    {
+      name: "a notice for each plugin root a braced plugin root command names",
+      command: "$" + "{CLAUDE_PLUGIN_ROOT}/hooks/guard.sh",
+      notices: [SPAWN_NOTICE, SPAWN_NOTICE],
+    },
+    {
+      name: "a notice for each plugin root a bare plugin root command names",
+      command: "$CLAUDE_PLUGIN_ROOT/hooks/guard.sh",
+      notices: [SPAWN_NOTICE, SPAWN_NOTICE],
+    },
+    {
+      name: "one notice for a command whose variable only starts with the plugin root name",
+      command: "$CLAUDE_PLUGIN_ROOTS/hooks/guard.sh",
+      notices: [SPAWN_NOTICE],
+    },
+  ]) {
+    test(`shows ${name}`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket(
+        "UserPromptSubmit",
+        promptEntriesWithCommand(["first", "second"], command),
+      );
+
+      // act
+      const shown = await promptNotices(
+        runtime,
+        { first: SPAWN_FAILURE, second: SPAWN_FAILURE },
+        1,
+      );
+
+      // assert
+      assert.deepStrictEqual(
+        shown,
+        notices.map((text) => hookNoticeEntry(text)),
+      );
+    });
+  }
+});
+
+const EDIT_INPUT = {
+  path: "document.txt",
+  edits: [
+    { oldText: "first", newText: "one" },
+    { oldText: "second", newText: "two" },
+  ],
+};
+
+// An executor whose result for a pair is the one `resultFor` gives the pair's
+// old string.
+function pairExecutor(resultFor: (oldString: unknown) => HookExecResult): HookExecutor {
+  return (_entry, event) => {
+    const input = (event as { readonly input: Record<string, unknown> }).input;
+    return Promise.resolve(resultFor(input.old_string));
+  };
+}
+
+describe("failure notices of a multi-pair edit (D-PG5-12)", () => {
+  for (const { name, resultFor, notices } of [
+    {
+      name: "one notice for a hook that exits with the same error for both pairs",
+      resultFor: (): HookExecResult => EXIT_FAILURE,
+      notices: ["PreToolUse:Edit hook error: Failed with non-blocking status code: boom"],
+    },
+    {
+      name: "a notice for each first line of a hook that fails differently for each pair",
+      resultFor: (oldString: unknown): HookExecResult => ({
+        kind: "noop",
+        failure: { kind: "exit", stderr: `bad ${String(oldString)}\ntrace` },
+      }),
+      notices: [
+        "PreToolUse:Edit hook error: Failed with non-blocking status code: bad first",
+        "PreToolUse:Edit hook error: Failed with non-blocking status code: bad second",
+      ],
+    },
+    {
+      name: "one notice for a hook that cannot start for both pairs",
+      resultFor: (): HookExecResult => SPAWN_FAILURE,
+      notices: [
+        "PreToolUse:Edit hook error: Failed with non-blocking status code: Error occurred while executing hook command: spawn guard.sh ENOENT",
+      ],
+    },
+  ]) {
+    test(`shows ${name} before the edit`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket("PreToolUse", routedEntries("PreToolUse", ["guard"]));
+      const host = createNoticeHost("/workspace/edit-failures");
+      const handler = compositeHandlerFor(
+        runtime,
+        "PreToolUse",
+        runtime.currentGeneration(),
+        host.pi,
+        pairExecutor(resultFor),
+      );
+
+      // act
+      const output = await handler(createToolCallEvent("edit", EDIT_INPUT), host.context);
+
+      // assert
+      assert.strictEqual(output, undefined);
+      assert.deepStrictEqual(
+        host.capture.entries,
+        notices.map((text) => hookNoticeEntry(text)),
+      );
+      host.capture.assertValid();
+    });
+  }
+
+  test("shows the system messages of each pair before the failure notice", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreToolUse", routedEntries("PreToolUse", ["failer", "speaker"]));
+    const host = createNoticeHost("/workspace/edit-failures");
+    const executor: HookExecutor = (entry, event) => {
+      const input = (event as { readonly input: Record<string, unknown> }).input;
+      return Promise.resolve(
+        entry.pluginId === "failer"
+          ? EXIT_FAILURE
+          : { kind: "noop", systemMessage: `saw ${String(input.old_string)}` },
+      );
+    };
+
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      host.pi,
+      executor,
+    );
+
+    // act
+    await handler(createToolCallEvent("edit", EDIT_INPUT), host.context);
+
+    // assert
+    assert.deepStrictEqual(host.capture.entries, [
+      hookNoticeEntry("PreToolUse:Edit says: saw first"),
+      hookNoticeEntry("PreToolUse:Edit says: saw second"),
+      hookNoticeEntry("PreToolUse:Edit hook error: Failed with non-blocking status code: boom"),
+    ]);
+    host.capture.assertValid();
+  });
+
+  test("shows one notice for a hook that fails for both pairs after the edit", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUse", routedEntries("PostToolUse", ["guard"]));
+    const host = createNoticeHost("/workspace/edit-failures");
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      host.pi,
+      pairExecutor(() => EXIT_FAILURE),
+    );
+    const event: ToolResultEvent = {
+      ...createToolResultEvent(false, "edit"),
+      input: EDIT_INPUT,
+      content: [{ type: "text", text: "Successfully replaced 2 blocks" }],
+      details: { path: "document.txt", replacements: 2 },
+    };
+
+    // act
+    await handler(event, host.context);
+
+    // assert
+    assert.deepStrictEqual(host.capture.entries, [
+      hookNoticeEntry("PostToolUse:Edit hook error: Failed with non-blocking status code: boom"),
+    ]);
+    host.capture.assertValid();
+  });
+});
+
 describe("PostCompact notices (D-BG-501 / D-BG-502 / D-BG-504)", () => {
   const MANUAL = { reason: "manual" } as SessionCompactEvent;
 
