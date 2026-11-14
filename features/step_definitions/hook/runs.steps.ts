@@ -12,7 +12,10 @@
  * order it first appears in, and a session id inside a cell, such as the one
  * `CLAUDE_ENV_FILE` names, reads as that ordinal too (D-CF5-26). A tool use
  * id reads as its `{tool use <n>}` token from `features/lib/hook-run-tokens.ts`
- * (D-PG6-12). A turn that ran no hook is stated by the no-runs step.
+ * (D-PG6-12). A `transcript_path` that names the saved session file of the
+ * run's own session reads as `{session file}` from
+ * `features/lib/saved-sessions.ts` (D-PG6-16). A turn that ran no hook is
+ * stated by the no-runs step.
  *
  * A hook script that outlives its event also appends a start line and an end
  * line to the harness log `hook-lifecycle.jsonl` (D-BG-12). The lifecycle
@@ -39,6 +42,7 @@ import {
 import { HOOK_LIFECYCLE_LOG, HOOK_RUNS_LOG } from "../../lib/hook-recorder.ts";
 import { hookRunTokens } from "../../lib/hook-run-tokens.ts";
 import { projectTokens } from "../../lib/run-tokens.ts";
+import { projectSessionFile } from "../../lib/saved-sessions.ts";
 import { isRunning } from "../../lib/turn-records.ts";
 
 import type { HookLifecycleEvent, HookRun } from "../../lib/hook-recorder.ts";
@@ -104,13 +108,14 @@ function runRecord(
 ): Map<string, string> {
   assert.strictEqual(run.event, run.stdin.hook_event_name, "the recorded event is the stdin's");
   return fieldRecord([
-    ...Object.entries(run.stdin).map(
-      ([key, value]) =>
-        [
-          STDIN_COLUMNS[key] ?? key.replaceAll("_", " "),
-          tokenOf(key, value) ?? cell(value, tokens, ordinals),
-        ] as const,
-    ),
+    ...Object.entries(run.stdin).map(([key, value]) => {
+      const stated =
+        key === "transcript_path" ? projectSessionFile(value, run.stdin.session_id, tokens) : value;
+      return [
+        STDIN_COLUMNS[key] ?? key.replaceAll("_", " "),
+        tokenOf(key, stated) ?? cell(stated, tokens, ordinals),
+      ] as const;
+    }),
     ["arguments", projectTokens("text", run.arguments.join(" "), tokens)],
     ...Object.entries(run.environment).map(
       ([name, value]) => [name, cell(value, tokens, ordinals)] as const,

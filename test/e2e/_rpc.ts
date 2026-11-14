@@ -101,6 +101,16 @@ export interface RpcProfile {
   readonly environment: RpcProfileEnvironment;
   /** Starts Pi with `--no-mcp`, which turns its built-in MCP off for this run. */
   readonly noMcp?: true;
+  /** Starts Pi with a saved session instead of `--no-session` (D-PG6-16). */
+  readonly session?: PiSessionLaunch;
+}
+
+/**
+ * How a Pi with a saved session starts (D-PG6-16): `saved` passes no session
+ * flag, so Pi saves a new session in its sessions folder.
+ */
+export interface PiSessionLaunch {
+  readonly kind: "saved";
 }
 
 /** Launch options of Pi beyond its extensions. */
@@ -109,6 +119,8 @@ export interface PiArgumentOptions {
   readonly noMcp?: boolean;
   /** Extensions loaded before the real one, in this order. */
   readonly leadingExtensions?: readonly string[];
+  /** Replaces `--no-session` with the flags of a saved session (D-PG6-16). */
+  readonly session?: PiSessionLaunch;
 }
 
 /** What one RPC session runs: the sandbox, the steps in order, and extra extensions. */
@@ -279,7 +291,8 @@ export function rpcChildEnvironment(
  * `options.leadingExtensions`, the real extension, and `extraExtensions`, in
  * that load order, and with `--no-mcp` when `options` asks for it. In `json`
  * mode Pi prints each session event as one JSON line on stdout (D-BG-09). It
- * never passes `--no-extensions`, which also removes `builtin:mcp`.
+ * never passes `--no-extensions`, which also removes `builtin:mcp`. Pi runs
+ * with `--no-session` unless `options.session` names a saved session.
  */
 export function piArguments(
   mode: "rpc" | "tui" | "json",
@@ -291,7 +304,7 @@ export function piArguments(
     resolvePiRuntime(REPO_ROOT).cliPath,
     ...(mode === "tui" ? [] : ["--mode", mode]),
     "--offline",
-    "--no-session",
+    ...(options.session === undefined ? ["--no-session"] : []),
     ...(options.noMcp === true ? ["--no-mcp"] : []),
     ...extensions.flatMap((extension) => ["--extension", extension]),
   ];
@@ -510,7 +523,8 @@ export async function runRpcSession(options: RpcSessionOptions): Promise<RpcSess
  * Starts the repository's own Pi CLI in RPC mode in `sandbox` and returns the
  * child, which stays up until its stdin closes. The child also gets `git` on
  * top of the allowlist, and a profile Pi gets the extensions and `TMPDIR` of
- * `profile`, and `--no-mcp` when `profile.noMcp` is set. The caller owns the
+ * `profile`, `--no-mcp` when `profile.noMcp` is set, and the flags of
+ * `profile.session` in place of `--no-session`. The caller owns the
  * JSONL exchange and the stop. Rejects as `runRpcSession` does for a sandbox
  * location outside the temp directory or inside the repository.
  */
@@ -529,6 +543,7 @@ export async function startRpcPi(
       ...(profile?.leadingExtensions === undefined
         ? {}
         : { leadingExtensions: profile.leadingExtensions }),
+      ...(profile?.session === undefined ? {} : { session: profile.session }),
     },
   );
 }

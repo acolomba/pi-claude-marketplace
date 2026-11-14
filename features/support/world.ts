@@ -64,12 +64,13 @@ import { PiProcess } from "../lib/pi-process.ts";
 import { REGISTRY_PROBE_EXTENSION } from "../lib/pi-registry-probe/snapshot.ts";
 import { PiTuiSession } from "../lib/pi-tui.ts";
 import { rowArrays } from "../lib/result-rows.ts";
+import { sessionsFolder } from "../lib/saved-sessions.ts";
 import { readModelCalls, readModelScript } from "../lib/scripted-model/script.ts";
 import { assertStandInsStopped, harnessDirectory } from "../lib/turn-records.ts";
 
 import { currentRun } from "./pi-process.ts";
 
-import type { RpcProfileEnvironment } from "../../test/e2e/_rpc.ts";
+import type { PiSessionLaunch, RpcProfileEnvironment } from "../../test/e2e/_rpc.ts";
 import type { CompanionName } from "../lib/companions.ts";
 import type { GitPluginRepository } from "../lib/git-plugin.ts";
 import type { GitHostTraffic, HttpsGitHost, RequestWindow } from "../lib/https-git-host/server.ts";
@@ -167,6 +168,13 @@ export interface PiProfile {
    * cannot load ahead of the real extension.
    */
   readonly withoutGitHubBaseOverride?: true;
+  /**
+   * The profile Pi saves its session in the sandbox's sessions folder instead
+   * of starting with `--no-session`, so a restart can start a new session or
+   * continue, open, or fork a saved one (D-PG6-16). The scenario's release
+   * removes that folder.
+   */
+  readonly session?: "saved";
 }
 
 /**
@@ -175,10 +183,11 @@ export interface PiProfile {
  * `with-adapter` adds it; `builtin-on` removes `-builtin:mcp` from the user's
  * Pi settings and keeps the companions; `no-mcp` removes pi-mcp-adapter and
  * starts Pi with `--no-mcp`; `after-crash` starts the same launch again after
- * `crashPi()` killed the profile Pi (ASYNC-04).
+ * `crashPi()` killed the profile Pi (ASYNC-04); `new-session` starts it again
+ * in a new saved session (D-PG6-16).
  */
 export type PiRestart =
-  "without-adapter" | "with-adapter" | "builtin-on" | "no-mcp" | "after-crash";
+  "without-adapter" | "with-adapter" | "builtin-on" | "no-mcp" | "after-crash" | "new-session";
 
 /** What a one-shot Pi in the run's sandbox starts with (D-BG-09). */
 export interface OneShotPiLaunch {
@@ -187,9 +196,11 @@ export interface OneShotPiLaunch {
   readonly environment: RpcProfileEnvironment;
 }
 
-// What a profile Pi starts with: its profile and whether it starts with `--no-mcp`.
-interface ProfileLaunch extends PiProfile {
+// What a profile Pi starts with: its profile, whether it starts with
+// `--no-mcp`, and its session flags.
+interface ProfileLaunch extends Omit<PiProfile, "session"> {
   readonly noMcp?: true;
+  readonly session?: PiSessionLaunch;
 }
 
 /**
@@ -703,7 +714,15 @@ export class ScenarioWorld extends World {
     }
 
     this.profileHarnessDirectory = harness;
-    await this.startProfilePi(profile);
+    const { session, ...launch } = profile;
+    if (session === undefined) {
+      await this.startProfilePi(launch);
+      return;
+    }
+
+    const folder = sessionsFolder(this.tokens);
+    this.onRelease(() => rm(folder, { recursive: true, force: true }));
+    await this.startProfilePi({ ...launch, session: { kind: session } });
   }
 
   /**
@@ -1123,6 +1142,7 @@ export class ScenarioWorld extends World {
         ...(launch.subagentChild === true ? { PI_SUBAGENT_CHILD: "1" } : {}),
       },
       ...(launch.noMcp === true ? { noMcp: true } : {}),
+      ...(launch.session === undefined ? {} : { session: launch.session }),
     });
     // HAR-05: the profile Pi stops first, so a stand-in that exits when its
     // stdin closes has exited before its pid file is checked. Pi starts each
@@ -1150,7 +1170,9 @@ export class ScenarioWorld extends World {
 
 // The run's git environment for a profile Pi, without the GitHub base
 // override when the profile asks for that (D-BG-01).
-function profileGitEnvironment(profile: PiProfile): RpcGitEnvironment {
+function profileGitEnvironment(
+  profile: Pick<PiProfile, "withoutGitHubBaseOverride">,
+): RpcGitEnvironment {
   const { piEnvironment } = currentRun();
   if (profile.withoutGitHubBaseOverride !== true) {
     return piEnvironment;
@@ -1173,6 +1195,8 @@ function restartedLaunch(launch: ProfileLaunch, restart: PiRestart): ProfileLaun
       return launch;
     case "no-mcp":
       return { ...launch, companions: withoutAdapter, noMcp: true };
+    case "new-session":
+      return { ...launch, session: { kind: "saved" } };
   }
 }
 
