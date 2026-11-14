@@ -5,11 +5,11 @@ milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 5
 current_phase_name: Stop Continuation and Hook Failures
 status: ready_to_discuss
-stopped_at: Phase 04 complete; Phase 5 discuss next
-last_updated: "2026-11-14T07:53:32.498Z"
+stopped_at: Phase 5 context gathered
+last_updated: "2026-11-14T08:13:20.358Z"
 last_activity: 2026-11-14
 last_activity_desc: Phase 04 complete, transitioned to Phase 5
-state_head: dfbe5b21af74d9965e60427112494ab8c573d106
+state_head: 1c41b2c1ab67adec91e0aefb9ece5dadf98ee382
 progress:
   total_phases: 11
   completed_phases: 4
@@ -1131,9 +1131,9 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-13T14:18:54.541735+00:00
-Stopped at: Phase 04 complete, ready to verify Phase 5
-Resume file: None
+Last session: 2026-11-14T08:13:18.875Z
+Stopped at: Phase 5 context gathered
+Resume file: .planning/phases/05-stop-continuation-and-hook-failures/05-CONTEXT.md
 
 ### Phase 2 completion-helper notes
 
