@@ -190,13 +190,6 @@ function laneOf(entry: RoutingEntry): BackgroundLane {
   return entry.handlerDecl.asyncRewake === true ? "rewake" : "plain";
 }
 
-/**
- * Chooses the timer of a background child before it spawns, and returns what
- * installs it on the child. An `asyncRewake` hook keeps its declared
- * `timeout`, or 600 s, and the SIGTERM and SIGKILL ladder. A plain `async`
- * hook runs until it ends, as in Claude Code, so it gets no timer, and a
- * `timeout` it declares is ignored with one debug line (D-PG5-17).
- */
 // The bound of one output stream of a background hook. An `asyncRewake` hook
 // keeps each stream whole (EXEC-02) up to the collector's NFR-2 ceiling,
 // because its declared `timeout` can let it print for days. A plain async
@@ -235,6 +228,13 @@ function streamBoundFor(
   };
 }
 
+/**
+ * Chooses the timer of a background child before it spawns, and returns what
+ * installs it on the child. An `asyncRewake` hook keeps its declared
+ * `timeout`, or 600 s, and the SIGTERM and SIGKILL ladder. A plain `async`
+ * hook runs until it ends, as in Claude Code, so it gets no timer, and a
+ * `timeout` it declares is ignored with one debug line (D-PG5-17).
+ */
 function ladderFor(entry: RoutingEntry, lane: BackgroundLane): (child: ChildLike) => TimerLadder {
   const label = `${entry.pluginId}/${entry.claudeEvent}`;
   if (lane === "plain") {
