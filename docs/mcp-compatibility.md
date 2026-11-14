@@ -405,6 +405,7 @@ Bun 1.4.4 keeps the last value in these forms too, but this extension does not f
 - an explicit key, `? tools` with `: Read` on the next line
 - a key written twice inside a nested mapping, such as `hooks:` or `mcpServers:`
 - a quoted key that holds an escape, such as `"to\x6fls"` for `tools`
+- an earlier copy whose value is only an anchor or a tag, such as `tools: &t` or `tools: !!seq`, with its list items at column 0
 
 An anchor that only an earlier copy defines, as in `tools: &t Read`, is removed with that copy, so a later `*t` is read as the text `*t`. Bun reads it as the anchored value.
 
