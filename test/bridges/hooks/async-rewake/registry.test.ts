@@ -1604,6 +1604,9 @@ for (const {
           await closed;
         }
 
+        // The hook's exit queues a PID table write that must land before the removal.
+        await runtime.runPidTableOperation(pidTablePath(loc), () => Promise.resolve());
+
         if (previousMarker === undefined) {
           delete process.env.PI_SUBAGENT_CHILD;
         } else {
