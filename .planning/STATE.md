@@ -4,8 +4,8 @@ milestone: parity-gaps
 milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 6
 current_phase_name: Hook Inputs and Events
-status: ready_to_discuss
-stopped_at: Phase 5 complete; Phase 6 discussion next
+status: ready_to_execute
+stopped_at: Phase 6 planned (13 plans, 8 waves); execution next
 last_updated: "2026-11-14T18:59:18.171Z"
 last_activity: 2026-11-14
 last_activity_desc: Phase 5 complete, transitioned to Phase 6
@@ -32,8 +32,8 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 6 — Hook Inputs and Events
-Plan: 0 (not planned)
-Status: Ready to discuss Phase 6
+Plan: 0 of 13 complete
+Status: Ready to execute Phase 6
 Last activity: 2026-11-14 — Phase 5 complete: verification passed with one override, phase gate green at 59e6f5f7
 
 Progress: [█████░░░░░] 45%
@@ -1132,7 +1132,7 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 ## Session Continuity
 
 Last session: 2026-11-14T08:13:18.875Z
-Stopped at: Phase 5 complete; Phase 6 discussion next
+Stopped at: Phase 6 planned (13 plans, 8 waves); execution next
 Resume file: None
 
 ### Phase 2 completion-helper notes
