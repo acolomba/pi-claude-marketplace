@@ -1,75 +1,37 @@
 ---
 phase: 05-stop-continuation-and-hook-failures
-reviewed: 2026-11-14T15:47:11Z
+reviewed: 2026-11-14T16:54:35Z
 depth: deep
-iteration: 1
-reviewed_range: 434c7da4^..0313bb61
-files_reviewed: 60
+iteration: 2
+reviewed_range: 69643d4f..c5e56134
+files_reviewed: 22
 files_reviewed_list:
+  - .agents/skills/cucumber/rules/layout.md
+  - .agents/skills/cucumber/rules/world-and-stand-ins.md
   - docs/hooks-compatibility.md
   - docs/output-catalog.md
-  - docs/research/claude-hooks-vs-pi-events.md
-  - docs/research/issue-103-stop-stopfailure-promotion.md
-  - extensions/pi-claude-marketplace/bridges/hooks/async-rewake/async-answer.ts
   - extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts
-  - extensions/pi-claude-marketplace/bridges/hooks/context-cap.ts
-  - extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts
   - extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts
-  - extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts
-  - extensions/pi-claude-marketplace/bridges/hooks/event-router.ts
-  - extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts
-  - extensions/pi-claude-marketplace/bridges/hooks/exec-timer.ts
-  - extensions/pi-claude-marketplace/bridges/hooks/hook-labels.ts
   - extensions/pi-claude-marketplace/bridges/hooks/hook-output-files.ts
-  - extensions/pi-claude-marketplace/bridges/hooks/on-failure.ts
-  - extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts
   - extensions/pi-claude-marketplace/bridges/hooks/runtime.ts
   - extensions/pi-claude-marketplace/bridges/hooks/settle.ts
-  - extensions/pi-claude-marketplace/bridges/hooks/timeout.ts
-  - extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts
-  - extensions/pi-claude-marketplace/domain/components/hook-events.ts
-  - extensions/pi-claude-marketplace/platform/pi-api.ts
-  - extensions/pi-claude-marketplace/shared/atomic-json.ts
-  - features/hook/additional-context.feature
-  - features/hook/async.feature
-  - features/hook/failures.feature
+  - extensions/pi-claude-marketplace/bridges/hooks/stream-text.ts
   - features/hook/messages.feature
   - features/hook/prompt-and-stop.feature
-  - features/lib/run-start-probe.ts
-  - features/plugin/subagent-child.feature
-  - features/step_definitions/hook/additional-context.steps.ts
-  - features/step_definitions/hook/async.steps.ts
-  - features/step_definitions/hook/messages.steps.ts
+  - features/lib/boundary-continuer.ts
   - features/step_definitions/hook/prompt-and-stop.steps.ts
-  - features/step_definitions/plugin/subagent-hooks.steps.ts
-  - test/architecture/closed-set-enrollment.test.ts
-  - test/architecture/hooks-lifecycle.test.ts
-  - test/bridges/hooks/async-rewake/async-answer.test.ts
+  - features/support/world.ts
   - test/bridges/hooks/async-rewake/registry.test.ts
-  - test/bridges/hooks/context-cap.test.ts
-  - test/bridges/hooks/dispatch-exec.test.ts
   - test/bridges/hooks/dispatch.test.ts
-  - test/bridges/hooks/event-adapters.test.ts
-  - test/bridges/hooks/event-router.test.ts
-  - test/bridges/hooks/exec-result.test.ts
-  - test/bridges/hooks/exec-timer.test.ts
-  - test/bridges/hooks/hook-labels.test.ts
   - test/bridges/hooks/hook-output-files.test.ts
-  - test/bridges/hooks/on-failure.test.ts
   - test/bridges/hooks/runtime.test.ts
   - test/bridges/hooks/settle.test.ts
-  - test/bridges/hooks/wire-protocol.test.ts
-  - test/index.test.ts
-  - test/live-uat/README.md
-  - test/live-uat/manifest-absence-canary.mjs
-  - test/live-uat/openai-stub-server.mjs
-  - test/pi-runtime.ts
-  - test/platform/pi-api.test.ts
-  - test/shared/atomic-json.test.ts
+  - test/bridges/hooks/stream-text.test.ts
+  - test/e2e/_rpc.ts
 findings:
   critical: 0
-  warning: 1
-  info: 7
+  warning: 3
+  info: 5
   total: 8
   necessity: 1
 status: issues_found
@@ -77,140 +39,123 @@ status: issues_found
 
 # Phase 5: Code Review Report
 
-## Iteration 1
+## Iteration 2
 
-**Reviewed:** 2026-11-14T15:47:11Z
+**Reviewed:** 2026-11-14T16:54:35Z
 **Depth:** deep
-**Iteration:** 1
-**Range:** `434c7da4^..0313bb61`. The code commits start at `434c7da4`. The commits after `a3fb0669` change only `.planning/` and skill documents, so they add no file to the scope.
-**Files Reviewed:** 60. The deleted `test/live-uat/stop-canary.mjs` is not listed.
-**Findings:** critical 0, warning 1, info 7, total 8, necessity 1
+**Iteration:** 2
+**Range:** `69643d4f..c5e56134`, the iteration-1 review-fix commits. `05-REVIEW-FIX.md` is a planning artifact and is not in the list.
+**Files Reviewed:** 22
+**Findings:** critical 0, warning 3, info 5, total 8, necessity 1
 **Status:** issues_found
 
 ### Summary
 
-I read every changed production module in full or across its whole diff: `settle.ts`, `runtime.ts`, `dispatch.ts` (failure notices, once-only claim, edit preflight), `dispatch-exec.ts` (claim, cap, timeout strip), `wire-protocol.ts`, `on-failure.ts`, `hook-labels.ts`, `exec-result.ts`, `context-cap.ts`, `hook-output-files.ts`, `atomic-json.ts`, `event-adapters.ts`, `event-router.ts`, `async-rewake/registry.ts`, `async-rewake/async-answer.ts`, `exec-timer.ts`, and `timeout.ts`. I also read the callees and the Pi contract they depend on:
+I read the whole diff of every changed file. I also read these callees and contracts in full: `async-answer.ts`, `timeout.ts`, `notification-run.ts`, `notifyHookNotice`, the `finalizeChild` lane table in `registry.ts`, and in Pi 1.5.0 `emitBoundary` (`runner.js:759-806`), `_runBeforeSettleBoundary` (`agent-session.js:1584-1605`), and the run loop and `_emitAgentSettled` (`agent-session.js:1467-1490`, `:695-703`).
 
-- `shared/path-containment.ts`, the lstat walk with its leaf check.
-- `stream-text.ts`, the unbounded collector.
-- `process-group.ts`.
-- `notification-run.ts`.
-- In Pi 1.5.0: `_startRun`, `_handlePostAgentRun`, `_runBeforeSettleBoundary`, `_buildBoundaryContext`, `abort()`, and `emitBoundary` (`dist/core/extensions/runner.js:759-806`).
-- `createContext` and its stale guards (`runner.js:613-690`).
-- The `agent_before_settle` handler of pi-subagents 0.88.1 (`src/runs/background/notify.js:841-871`).
+I ran these checks. None touched the real `~/.pi/agent`.
 
-I checked the BACKLOG items that this phase already opened (HOOKTIMEDOUTEXIT2-01, HOOKOUTLEAFLINK-01, HOOKOUTSWEEPDOC-01, STOPFOLLOWUPCTX-01, STOPASYNCANSWER-01, ASYNCRELOADTABLE-01) so that I do not report a known item as new.
+- The owner tests of `stream-text`, `settle`, `hook-output-files`, `runtime`, `dispatch`, and `async-rewake/registry`, under `test/platform/isolated-pi-home.ts`: 561 tests, 561 pass.
+- The new scenario "A stop hook's stop reason is not shown when another extension already continued the run", under the `adapter` profile, in the cucumber sandbox: it passes.
+- A `node` probe of `collectStreamText` with `limit: 3` on `"ab😀c"`. It returns `"ab\ud83d"`, a lone high surrogate, and `onLimit` runs once.
 
-I ran these checks in a sandbox. None of them touched the real `~/.pi/agent`.
+How each iteration-1 finding was resolved:
 
-- The owner tests of `settle`, `context-cap`, `hook-output-files`, `wire-protocol`, and `hook-labels`, under `test/platform/isolated-pi-home.ts`: 253 tests, 253 pass.
-- A `node` probe of `capHookContext`. 700 wrapper tags give one opener and one closer. A 20,000-character error text gives exactly 10,000 characters. A preview of astral characters splits no surrogate pair.
-- A `node` probe of `saveHookOutput` with a link planted at the leaf in an `mkdtemp` root. It throws `SymlinkRefusedError`, and the link target is unchanged.
-- A `node` probe of Node's event order for a spawn `ENOENT`: `error` comes first, then `close -2`.
+| Finding | Verdict |
+| --- | --- |
+| WR-01 (plain async output unbounded) | Fixed for the plain lane. The boundary is correct: a stream that ends at exactly `limit` drops nothing, and `onLimit` runs once per stream, because `full` gates both the `data` and the `end` arm. Later chunks are still read, so the pipe drains and `end` fires. A cut can split a surrogate pair (IN2-02). The same crash path is still open on the other lanes (WR2-02), and the plain lane keeps stderr that nothing reads (WR2-03). |
+| IN-01 | Skipped as instructed (BACKLOG HOOKTIMEDOUTEXIT2-01). Not raised again. |
+| IN-02 (stop line when another extension continued) | Fixed for the case it names. But `event.continue` is only the value of the handlers that ran before the bridge, not the outcome of the boundary, so one path now loses a needed notice (WR2-01). |
+| IN-03 (settlements column) | Fixed. The column and the `strictEqual(..., 1)` are gone, and the header's argument holds. A run that settled after each model call would end the turn at its first settle, and the run-start and model-call counts would then differ from the table. |
+| IN-04 (start failure claimed before shown) | Fixed, with no race. `showHookNotice` checks the key, calls `show`, and records the key in one synchronous span. `notifyHookNotice` returns `void` and does not await. So two events that fail at the same time cannot interleave between the check and the record, because JavaScript runs one task at a time. Two hooks with the same key in one list still show once. A notice whose `show` throws is not recorded, in both `showHookNotices` and `showStopNotices`. |
+| IN-05 (leaf link case) | Fixed. The case plants the link, expects `SymlinkRefusedError`, and checks that the target is unchanged. |
+| IN-06 (sweep limits and per-file errors) | Fixed. `sweepFile` catches its own `lstat` and `unlink` errors, and the folder-level arm stays as before. `path.basename` in the log line can only be a `SAVED_NAME` match, so no control text reaches the log. The page lists the limits. The defaulted `ops` parameter has a style issue (IN2-04). |
+| IN-07 (comment) | Fixed. The new comment matches the code: the `try` around `sendMessage` catches the throw from the stale `pi`. |
 
-I did not run `npm run check`, did not edit source, and did not commit. I read the necessity rubric.
-
-I found no Critical defect. Containment, the boundary merge, the missing-script rule, and the claim ordering hold. The one Warning (WR-01) is a robustness loss that D-PG5-17 causes: the plain `async` lane still collects all of a hook's output, but the hook now has no time limit.
-
-Answers to the focus questions:
-
-1. **The `agent_before_settle` Stop handler and other extensions: correct.** Pi gives each handler the accumulated `entries` and `continue` (`runner.js:767-778`). The handler returns `[...event.entries, draft]` with `continue: true`, or it returns `undefined` (`settle.ts:202-204`). So it never drops an entry, and it never cancels a continuation that another handler asked for (D-PG5-05). pi-subagents 0.88.1 returns early when `event.continue` is already true and appends to `event.entries`, so the two handlers work together in either order. If a later handler returns `continue: false`, the bridge's draft is still committed and its re-entry is still counted. The compatibility page states this case (`docs/hooks-compatibility.md:154`). The handler reads its last message from the `agent_end` cache. `takeStopEnding` takes only a `stop` ending (`runtime.ts:369-377`). The `length` and `error` endings stay for `agent_settled`, which returns on `stop` (`settle.ts:285-286`), so one ending runs `Stop` at most once. In a pi-subagents child, the boundary handler does not take the cache (`event-router.ts:1325-1327`), and `agent_settled` empties it.
-2. **Stale generations: holds in production. The check after the await mostly matters in tests.** `index.ts:92` builds a new `HooksRuntime` for each factory call, so an old load's closure keeps its own runtime. Pi then marks the old `pi` and `ctx` as stale. Every `ctx` getter calls `assertActive()`, which throws (`runner.js:613-690`). So a late result from an old load cannot reach the new session. The checks after the await in `runStopBucket` (`settle.ts:481`) and `sendAsyncAnswer` (`registry.ts:659`) trip only when one runtime is registered twice, which happens in tests. IN-07 covers the one comment that claims more than this.
-3. **The once-only failure notices: correct for the stated scope.** An `exit` failure and a `missing-script` failure show on every run, and a `spawn` failure or a `run` failure shows once for each event and resolved command in a load (`dispatch.ts:663-685`). The set empties at each bridge load (`runtime.ts:291`). The claim happens while the notices are built, before they are shown. IN-04 covers that ordering.
-4. **The missing-script exit-2 rule: correct.** The rule needs `Stop` or `UserPromptSubmit`, a blank stdout, and stderr that matches `/no such file|can't open/i` (`wire-protocol.ts:57-66`). These are Claude Code 2.1.323's `wvr` conditions for plugin hooks. `isFailure` reads the marker for `onFailure` (`on-failure.ts:81-83`), and `Stop` ignores `onFailure` (`on-failure.ts:94`). **The timed-out SIGTERM-trap edge (HOOKTIMEDOUTEXIT2-01) should not keep its block.** Upstream reports a timed-out hook as `hook_cancelled` and never as a block (05-RESEARCH U4), so the new noop is closer to upstream than the old block was. The divergence that remains is older than this phase: a hook that traps SIGTERM at its own timeout and exits 2 with any other stderr still blocks on every event. See IN-01.
-5. **Context cap, saved files, and the sweep: contained.**
-   - The file name is `hook-<uuid|dispatchId>-<closed source>.txt` (`hook-output-files.ts:47`). `assertPathInside` lstats every segment, the leaf included. This matters because `write-file-atomic` resolves the target with `realpath` before it writes, so a link at the leaf would be followed. I measured that the leaf link is refused.
-   - The sweep follows no link. It removes only regular files with a saved name and never enters a sub-folder (`hook-output-files.ts:63-73`).
-   - The cap keeps the whole replacement text within 10,000 characters in every arm (`context-cap.ts:66-73`, measured).
-   - The two advisories from the security audit stand as IN-05 and IN-06.
-6. **The claim ordering in `dispatch-exec`, when `close` follows `error`: correct.** For a spawn `ENOENT`, Node emits `error` and then `close -2` (measured). The `error` arm builds its result and then claims (`dispatch-exec.ts:453-455`). The `close` arm reads `ladder.fired()` before it claims, so the ladder is cancelled only after its fired state has been read (`dispatch-exec.ts:467-483`). A `close` after a claimed `error` returns before the cap. The cap never rejects, so the deferred `resolve` always runs.
-7. **The inert timer ladder for plain `async` hooks: correct. A side effect follows from it (WR-01).** `ladderFor` (`registry.ts:193-215`) gives a plain hook `INERT_TIMER_LADDER`, logs a declared timeout once per spawn, and keeps the rewake ladder unchanged. A hook with both flags uses the rewake lane (`laneOf`). Reload and the reap still stop a plain hook through the process group, because neither depends on the ladder. The stale-load path does not get wider. An old load's `finalizeChild` throws at `exit.ctx.mode` on the stale `ctx` and returns before `sendAsyncAnswer`, so a late exit writes no saved file. Only a reload during an in-flight save leaves a file, which the 30-day sweep removes.
+On `leadingExtensions` and scenario isolation: the option is set only by the new `Given`. It is per launch, and `restartedLaunch` carries it through `{ ...launch }`. `piArguments` adds nothing when it is absent. So no other scenario's load order changes. Each profile Pi is its own process, so the continuer's `continued` flag cannot leak to another scenario. Two small gaps are left: a stale doc comment, and a TUI session that would not get the option (IN2-05).
 
 ### Narrative Findings (AI reviewer)
 
 ### Warnings
 
-#### WR-01: A plain `async` hook now runs with no time limit, but its stdout and stderr are still collected with no size limit
+#### WR2-01: The Stop line is now left out whenever an earlier handler set `continue`, even when the boundary still ends the run
 
-**File:** `extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:193-204` (the inert ladder) and `:361-370` (the collectors); root cause `extensions/pi-claude-marketplace/bridges/hooks/stream-text.ts:33-45`
+**File:** `extensions/pi-claude-marketplace/bridges/hooks/settle.ts:201` (`runContinues: event.continue`) and `:519-525`; `docs/hooks-compatibility.md:431`
+**Issue:** `event.continue` is the value that the handlers before the bridge's left (`runner.js:767-778`). It is not the outcome of the boundary. Pi decides that later:
+
+- A later handler can return `continue: false`, and Pi takes the last value (`runner.js:777-778`).
+- A later handler can return invalid entries. Then `emitBoundary` returns `continue: false` (`runner.js:803-805`).
+- An Escape during the Stop hook sets `_abortDuringBeforeSettle`, and `_runBeforeSettleBoundary` returns `false` (`agent-session.js:1594-1595`). The page already says that Escape "drops the continuation" there.
+- `!finalContext.canContinue` also returns `false` (`agent-session.js:1597-1600`).
+
+In each of these cases an earlier handler, such as pi-subagents, set `continue: true`. The bridge's `Stop` hook then returned `continue: false` with a reason, the bridge left out the line, and the run still stopped. So the user never sees `Stop hook stopped continuation: <reason>` for a stop that did happen. Claude Code always shows that line for a Stop `continue: false`. The page says the line is left out "because the run does not stop" (`hooks-compatibility.md:431`). That is not true on these paths.
+
+The opposite case is still open too: Pi also continues when `agent.hasQueuedMessages()` is true (`agent-session.js:1596`). Examples are input that the user typed during the Stop hook, and an `asyncRewake` wake sent while the Stop hooks run (D-BG-210). In both cases `event.continue` is `false`, so the bridge shows "stopped continuation" and the run goes on. This case is older than the fix, but it has the same root cause. At its own turn, the bridge cannot know whether the boundary will continue.
+
+**Fix:** Decide the line from the outcome, not from the input. At the boundary, keep the stop reason in the runtime (for example `runtime.setPendingStopReason(reason)`) and show nothing. In `settleHandlerFor` (`agent_settled`), which Pi emits only when the run loop has ended (`agent-session.js:1489`), show the pending reason and clear it. Clear it also at the next `agent_before_settle` or `agent_start`, because the run then continued. This shows the line exactly when the run stopped, whatever the load order, and it also covers the queued-message case. If the maintainer keeps the current design, at least reword `hooks-compatibility.md:431` so that it names the later-handler, invalid-entry, and Escape cases, in which the run stops with no line. Add a settle case: the event has `continue: true`, a later handler refuses, and the line shows once at `agent_settled`.
+
+#### WR2-02: The `RangeError` path that WR-01 closed for the plain lane is still open on the `asyncRewake` and blocking lanes, whose "timer" is the hook's own declared `timeout`
+
+**File:** `extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:200-201` (the comment "the other lanes have a timer, so they keep every byte"), `:387-409`; `extensions/pi-claude-marketplace/bridges/hooks/stream-text.ts:46-53`; `extensions/pi-claude-marketplace/bridges/hooks/timeout.ts:126-139`
 **Issue:**
 
-- `collectStreamText` appends every `data` chunk to one string (`text += …`) for the whole life of the child. It has no limit.
-- Before D-PG5-17, the 600-second ladder also bounded how much a plain `async` hook could print. Now `ladderFor` gives the hook `INERT_TIMER_LADDER`, so a hook that keeps printing is limited only by its own end, a reload, or the next start. On macOS and Windows, a reload does not stop such a hook either (D-PG5-18).
-- Examples are a watcher that tails a log, or a hook that prints progress lines. A hook like this keeps growing a string in Pi's process for as long as Pi runs.
-- When the string reaches V8's maximum length (about 2^29 UTF-16 units on 64-bit), `text += chunk` throws `RangeError: Invalid string length` inside a stream `data` listener. Nothing catches the throw there, so it becomes an uncaught exception in Pi. This breaks NFR-2, which says that a hook must never throw past a Pi event.
-- At 1 MB/s, the old timer stopped such a hook before about 600 MB. Now it reaches the limit in roughly nine minutes and continues.
-- The plain lane needs only the first JSON object on stdout (`asyncAnswerTexts`). Stderr is read only by the rewake lane (`rewakeBody`, `registry.ts:707`).
+- `resolveTimeoutSeconds` returns any positive finite declared value as it is (`timeout.ts:137-139`).
+- The only general ceiling is `installTimerLadder`'s clamp to what `setTimeout` can hold, about 24.8 days (`timeout.ts:126-127`).
+- So an `asyncRewake` hook that declares `timeout: 86400` runs in the background for a day, with an unbounded collector on both streams (`streamBoundFor` returns `undefined` for every lane except `plain`).
+- At 1 MB/s it reaches V8's maximum string length in about nine minutes. Then `text += piece` throws `RangeError: Invalid string length` inside the `data` listener, which nothing catches. That is an uncaught exception in Pi, which NFR-2 forbids. It is the WR-01 root cause.
+- A blocking hook with a long declared timeout can reach it the same way, though the user sees its event wait.
 
-**Fix:** Bound the collector for the plain lane. Keep the first N bytes, for example 8 MiB, which is enough for any answer that the 10,000-character cap and its saved file then handle. After that, drop the rest and write one debug line. Do not grow the string. For example, give `collectStreamText` a `limit` parameter:
+So the new comment's claim that the timer bounds these lanes holds only for the 600-second default. This path is older than the phase, but the fix's comment now states that these lanes are safe.
 
-```ts
-export function collectStreamText(stream, onError, limit = Number.POSITIVE_INFINITY): StreamText {
-  let text = "";
-  let truncated = false;
-  // ...
-  stream.on("data", (chunk: Buffer | string) => {
-    if (truncated) return;
-    text += typeof chunk === "string" ? chunk : decoder.write(chunk);
-    if (text.length > limit) { text = text.slice(0, limit); truncated = true; }
-  });
-```
+**Fix:** Give every collector a safety ceiling well below V8's limit, for example `2 ** 28` characters, with one debug line. Keep `PLAIN_ASYNC_STREAM_LIMIT` as the lower bound of the plain lane. This keeps EXEC-02's "every byte" for any output that a real hook prints, and removes the crash. A smaller alternative is to catch the `RangeError` in `append`, stop collecting, and debug-log it. Reword the comment at `registry.ts:200-201` either way. Add a `stream-text` case with a small injected ceiling and no `bound`, so the test proves the ceiling without 256 MB of input.
 
-Pass the limit from `spawnAndRegister` only when `exit.lane === "plain"`. Add a registry owner case in which a child prints past the limit and its answer is still parsed. Record the bound on the compatibility page next to D-PG5-18, because it is a bridge limit that upstream does not document.
+#### WR2-03: Phantom requirement: a plain `async` hook keeps up to 8,388,608 characters of stderr that no code reads
+
+**File:** `extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:392-400` (stderr collector with the plain bound); readers at `:749` and `:598-600`
+**Category:** necessity
+**Issue:** `entry.stderr.text()` has one reader, `wakeOnExitTwo` (`registry.ts:749`). The lane table calls it only for the `rewake` lane (`:587-597`). The `plain` arm calls only `sendAsyncAnswer` (`:598-600`), which reads `entry.stdout.text()`. `rg "\.stderr\.text\(\)" extensions` finds only `:749`. So on the plain lane, the collector must drain stderr so that the child does not block on a full pipe, but it has no reason to keep any of the text. Today each plain hook keeps up to 8,388,608 UTF-16 units (16 MB) of stderr for as long as it runs. A watcher hook that runs all session is exactly the hook that WR-01 described. The only reason given is "so the two streams behave alike" (05-REVIEW-FIX, decision 2), which no requirement asks for.
+**Fix:** For the plain lane's stderr, pass `{ limit: 0, onLimit }`. `append` then cuts to `""` at the first character and drops the rest, and the stream still drains and ends. Or attach only the error listener and a no-op `data` listener. Change the debug line to say that a plain hook's stderr is not kept, and update the compatibility page's `async` row and large-output row (`hooks-compatibility.md:293`, `:344`).
 
 ### Info
 
-#### IN-01: Only the missing-file case of HOOKTIMEDOUTEXIT2-01 moved toward upstream. A timed-out hook that exits 2 still blocks on every other path
+#### IN2-01: The new `streamBoundFor` sits between `ladderFor`'s doc comment and `ladderFor`
 
-**File:** `extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts:303-309` (`withoutTimeoutFailure`) and `:467-472`; `extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts:80-82`
-**Issue:** 05-03-SUMMARY asks whether the timed-out SIGTERM-trap run should keep its block. It should not. Claude Code 2.1.323 cancels a hook at its timeout and reports `hook_cancelled` (05-RESEARCH U4). It does not read a later exit code as a decision. So the phase's noop for that one case matches upstream. But `withoutTimeoutFailure` strips only a noop's failure. A hook that traps SIGTERM after its timeout and then exits 2 with any other stderr still goes through `exitTwoResult` and blocks. On `Stop`, it even continues the run with its stderr as feedback. This divergence is older than Phase 5. The phase only made it visible: the same timed-out exit 2 now blocks or passes depending on what its stderr says.
-**Fix:** Close HOOKTIMEDOUTEXIT2-01 as "keeps no block", and reword it, or add a new item, so that it covers the general case: when `ladder.fired()` is true, map any parsed result except an `onFailure` block to a plain noop. Check this against upstream first, with the `claude-code-compat-research` skill.
+**File:** `extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:193-221`
+**Issue:** The JSDoc block "Chooses the timer of a background child before it spawns..." (`:193-199`) is now followed by the `//` comment and the body of `streamBoundFor` (`:200-220`). `ladderFor` starts at `:222`. TypeScript and editors attach a JSDoc block to the next declaration, so the timer text now documents `streamBoundFor`, and `ladderFor` has no doc comment.
+**Fix:** Move `streamBoundFor` and its comment above the `/**` block at `:193`, or below `ladderFor`.
 
-#### IN-02: A `Stop` hook's `continue: false` shows "stopped continuation" even when another extension has already continued the run
+#### IN2-02: The bound counts UTF-16 code units, and the cut can split a surrogate pair. The page and the debug line say "characters"
 
-**File:** `extensions/pi-claude-marketplace/bridges/hooks/settle.ts:490-498` and `:409-418`
-**Issue:** D-PG5-13 shows a `stopReason` "where the bridge honors the stop", and it leaves out `PostToolUse` because "a notice would claim a stop that did not happen". At the boundary, the handler gets `event.continue`. When an earlier handler set it to `true`, for example pi-subagents reminding about an unanswered result, the bridge does not veto (D-PG5-05). The run continues, but the user still sees `Stop hook stopped continuation: <reason>`.
-**Fix:** Pass `event.continue` into `runStopBucket`. When it is already `true`, debug-log the reason and do not show it. A later handler can still continue the run, and that case stays on the compatibility page.
+**File:** `extensions/pi-claude-marketplace/bridges/hooks/stream-text.ts:46-53`; `registry.ts:216`; `docs/hooks-compatibility.md:293`, `:344`
+**Issue:** `text.slice(0, bound.limit)` counts UTF-16 code units. I measured `"ab😀c"` with `limit: 3` as `"ab\ud83d"`. The lone surrogate ends the last, cut line, which `asyncAnswerTexts` can never parse as an answer, so no answer changes. But the page and the debug line promise "8,388,608 characters", and an astral character counts as two. The file header still says that it "Collects the whole text of one output stream", and it names only two lanes (`stream-text.ts:3-5`).
+**Fix:** Back off one unit when the cut lands after a high surrogate (`0xD800-0xDBFF` at `limit - 1`). Or say "UTF-16 code units" on the page. Update the header to name the plain lane and its bound.
 
-#### IN-03: The "agent settlements" column of the new counts step cannot read anything but 1
+#### IN2-03: The bound keeps the head of stdout, which drops the answer that a progress-printing hook writes last
 
-**File:** `features/step_definitions/hook/prompt-and-stop.steps.ts:214-224` and `:257-271`; also `:315`
-**Issue:** The `When` step waits for the first `agent_settled` after the prompt and then records the turn. So `turn.records.filter(isSettled).length` counts at most the one settlement that ended the wait, unless a second settlement arrives in the few milliseconds before `recordRun`. The scenarios still fail without D-PG5-01, through the model-call count and the hook runs. But the column that is meant to prove "one `agent_settled`" (D-PG5-20, item 1) proves nothing by itself. The same is true of the `strictEqual(..., 1)` in "ten stop blocks separated by tool calls continue".
-**Fix:** After the settlement, wait a short quiet period, or wait for a later record such as the next prompt's `agent_start`, before the step counts settlements. Or drop the column and say in the step comment that the model-call and run-start counts carry the proof.
+**File:** `extensions/pi-claude-marketplace/bridges/hooks/stream-text.ts:46-53`; `async-rewake/async-answer.ts:30-36`
+**Issue:** `answerCandidates` tries the whole stdout and then every line, so a hook can print progress lines and put its JSON answer on the last line. Upstream reads that answer at any size. WR-01 named this kind of hook (one that "prints progress lines") as the reason for the bound. Once its progress passes 8,388,608 units, the bound drops exactly that last line, and the model gets no answer, with only a debug line. This is the maintainer's open decision 1 in 05-REVIEW-FIX. It is listed here because head-only is not the only bounded choice.
+**Fix:** Keep the head and also a small tail ring, for example the last 64 KiB. Join them with `"\n"` at the cut, so a last-line answer still parses. Or record on the page that an answer after the first 8,388,608 characters is lost.
 
-#### IN-04: A start-failure notice is claimed before it is shown, so a notice that fails to show is lost for the rest of the load
+#### IN2-04: `sweepHookOutput` defaults a parameter to the live file system, and `typeof DEFAULT_SWEEP_FILE_OPS` hides a private type from fallow
 
-**File:** `extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts:674-685` and `:694-720` (claim while building) and `:759-781` (`showHookNotices`)
-**Issue:** `failureNotices` calls `runtime.claimStartFailureNotice` while it builds the list. `showHookNotices` shows the list in one `try`, so a throw on an earlier notice, or `pi === undefined`, skips the rest. The key is already recorded, so the once-only start failure never shows again in that load. The notice path rarely throws, so the effect is small.
-**Fix:** Claim the key after `notifyHookNotice` returns, for example by returning `{ text, claimKey }` and claiming in the show loop. Or record in a comment that the notice is "claimed when built" on purpose.
+**File:** `extensions/pi-claude-marketplace/bridges/hooks/hook-output-files.ts:53-60`, `:83-87`
+**Issue:** `.agents/skills/typescript-unit-tests/rules/pairing-and-design.md` says: "Do not default a parameter to a live boundary." `ops = DEFAULT_SWEEP_FILE_OPS` defaults to the real `lstat` and `unlink`. The hooks bridge has a precedent that CONVENTIONS endorses (`tools: HookToolView = createHookToolView(pi)`, P5-DC-19), so this is a judgment call. Separately, `typeof DEFAULT_SWEEP_FILE_OPS` resolves to the unexported `SweepFileOps`. So the exported signature still exposes a private type, and fallow's `private-type-leak` misses it only because the name is not written there. 05-REVIEW-FIX says that this spelling was chosen after the hook failed on that rule.
+**Fix:** Export `SweepFileOps` and write `ops: SweepFileOps = DEFAULT_SWEEP_FILE_OPS`, which states the port openly. Or pass the ops from the two `event-router.ts` callers (`:1145`, `:1373`) so that no default is needed.
 
-#### IN-05: `saveHookOutput` has no owner case for a link at the file itself (security audit advisory, HOOKOUTLEAFLINK-01)
+#### IN2-05: Harness documents are stale after `leadingExtensions` and the new harness extension
 
-**File:** `test/bridges/hooks/hook-output-files.test.ts:62-76`; production `extensions/pi-claude-marketplace/bridges/hooks/hook-output-files.ts:136-146`
-**Issue:** In the background lane, the hook can predict the file name, because its id is the dispatch id in `PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH`. The leaf lstat in `assertPathInside` is the only thing between a planted link and the write. `write-file-atomic` resolves the target with `realpath`, so it would write through the link. The guard works (I measured `SymlinkRefusedError` and an unchanged target), but only the generic `path-safety` final-segment case proves it.
-**Fix:** Add the case: plant `hook-<id>-additionalContext.txt` as a link to a file outside the root, call `saveHookOutput`, and assert that it rejects with `SymlinkRefusedError` and that the target still holds its old bytes.
-
-#### IN-06: The compatibility page does not state the limits of the sweep (security audit advisory, HOOKOUTSWEEPDOC-01)
-
-**File:** `docs/hooks-compatibility.md:400`; behavior at `extensions/pi-claude-marketplace/bridges/hooks/hook-output-files.ts:155-176` and `extensions/pi-claude-marketplace/bridges/hooks/event-router.ts:1366-1374`
+**File:** `features/support/world.ts:668-684`, `:1015-1025`; `test/e2e/_rpc.ts:277-283`; `.planning/codebase/CONVENTIONS.md` (Suppressions bullet)
 **Issue:**
 
-- The page says, "Each bridge load removes the files in the folder that are older than 30 days."
-- The sweep removes only regular files named `hook-<id>-<source>.txt`. It keeps links and sub-folders.
-- It skips a project that Pi does not trust.
-- It also stops at the first `lstat` or `unlink` error. One file that a parallel Pi process removed while this sweep ran (`ENOENT`) leaves the remaining files in place until the next load, with no debug line, because `ENOENT` is silent.
+- The `usePiWithProfile` doc comment still lists the load order as "the real extension, the scripted model, the registry probe ... and then `profile.extraExtensions`" and does not name `leadingExtensions`. The `PiProfile` comment was updated.
+- `keepTerminalSessionLocal` copies only `extraExtensions` into `tuiExtensions`, so a later TUI session of a profile that has both `withoutGitHubBaseOverride` and `leadingExtensions` would drop the leading extensions. No scenario combines them today.
+- The `piArguments` comment has a 128-character line (`_rpc.ts:279`).
+- CONVENTIONS.md still counts "exactly 50" `fallow-ignore` markers and "nine harness Pi extensions". `features/lib/boundary-continuer.ts:15` makes it 51 and ten (`rg -c fallow-ignore extensions features test scripts` sums to 51).
 
-**Fix:** Name the three limits on the page. In code, catch each file's error inside the loop: skip an `ENOENT` and debug-log other errors. Then one bad entry does not end the sweep.
-
-#### IN-07: Already defended elsewhere: the generation check after the save in `sendAsyncAnswer`, and its "a reload during a save drops the answer" comment
-
-**File:** `extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts:638-666`
-**Category:** necessity
-**Issue:** The comment says that a reload during the save drops the answer through the generation check. In production that check cannot trip. `index.ts:92` builds a new `HooksRuntime` for each factory call, and the comment at `event-router.ts:1126-1128` says that Pi builds a new runtime for every load. So an old load's `entry.capturedGeneration` always equals its own runtime's generation. The answer is in fact dropped because Pi made the old `pi` stale. `sendMessage` then throws through `assertActive()` (`runner.js:488-492`), and the `try` at `:670-681` catches it. The check is a test seam: tests register one runtime twice. It follows the codebase's zombie-defense pattern, so this finding rests on judgment.
-**Fix:** Keep the check, but reword the comment: "In production a reload makes the old `pi` stale, so its `sendMessage` throws and the answer is dropped; the generation check covers a runtime that is registered twice." A saved file of such an answer stays until the 30-day sweep removes it.
+**Fix:** Add `leadingExtensions` to the `usePiWithProfile` comment. Carry it in `keepTerminalSessionLocal`, or refuse a profile that sets both. Rewrap the `_rpc.ts` comment. Update the CONVENTIONS inventory in the planning-doc pass.
 
 ---
 
-_Reviewed: 2026-11-14T15:47:11Z_
+_Reviewed: 2026-11-14T16:54:35Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: deep_
