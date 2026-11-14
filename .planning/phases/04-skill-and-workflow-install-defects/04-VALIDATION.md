@@ -3,9 +3,9 @@ phase: "04"
 slug: "skill-and-workflow-install-defects"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
 # audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-11-14"
 ---
 
@@ -48,19 +48,19 @@ Every task has explicit automated commands, each followed by its failing directi
 
 | Task ID | Plan | Wave | Requirements | Threat Ref | Contract | Test Type | Representative Automated Command | File Exists | Status |
 |---------|------|------|--------------|------------|----------|-----------|----------------------------------|-------------|--------|
-| 04-01-01 | 01 | 1 | PG-CORE-01 | T-04-01 | Install only the listed skills of a root-source entry, with every selection arm of D-PG4-01 | owner/behavior | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/domain/component-paths.test.ts` | Owner test exists, extend; the feature, the fixture writer, and the step are created here | ⬜ pending |
-| 04-01-02 | 01 | 1 | PG-CORE-01 | T-04-02 | Remove the folder, record, offer, and alias of a dropped skill on update and reinstall; pin the hash route | behavior/owner | `npm run test:cucumber:profile -- --profile adapter features/skill/root-source-entries.feature` | Feature from 04-01-01; the record-skills Then is created here | ⬜ pending |
-| 04-02-01 | 02 | 2 | PG-CORE-01 | T-04-03 | List a listed skill folder as one skill in `info` | owner/behavior | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/orchestrators/plugin/info.test.ts` | Exists, extend | ⬜ pending |
-| 04-02-02 | 02 | 2 | PG-CORE-01 | T-04-03 | Mirror the rule in the lenient listing and read no escaping path | owner/behavior | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/orchestrators/plugin/info.test.ts` | Exists, extend | ⬜ pending |
-| 04-03-01 | 03 | 2 | PG-SKILL-04 | T-04-04, T-04-05 | Rewrite a sibling link in `SKILL.md`; the pure rule with every arm of D-PG4-04 to D-PG4-06 | owner/behavior | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/domain/skill-sibling-paths.test.ts test/bridges/skills/stage.test.ts` | The new module, its owner test, and the feature are created here | ⬜ pending |
-| 04-03-02 | 03 | 2 | PG-SKILL-04 | T-04-04 | Rewrite in supporting Markdown at depth; leave an unlisted sibling as written | owner/behavior | `npm run test:cucumber:profile -- --profile adapter features/skill/sibling-links.feature` | Feature from 04-03-01 | ⬜ pending |
-| 04-04-01 | 04 | 1 | PG-WF-01 | T-04-06, T-04-07 | Keep a bare workflow name bare, keep a slash where the source wrote one, and correct the page | owner/behavior | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/domain/skill-tokens.test.ts test/bridges/skills/stage.test.ts test/bridges/commands/staged-command.test.ts test/bridges/agents/convert.test.ts test/bridges/agents/skill-preload.test.ts` | Exists, two cases change; the feature is created here | ⬜ pending |
-| 04-04-02 | 04 | 1 | PG-WF-01 | T-04-06 | The scripted model starts the workflow by the copied name and the run completes | behavior | `npm run test:cucumber:profile -- --profile adapter features/workflow/references.feature features/workflow/run.feature features/workflow/listing.feature` | The projection and the When are created here | ⬜ pending |
-| 04-05-01 | 05 | 1 | PG-SEC-01 | T-04-08, T-04-09, T-04-10 | Literal agent types on the verdict, and the join on a real plugin tree | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/domain/workflow-script.test.ts test/orchestrators/plugin/discover-names.test.ts test/architecture/workflows-single-parse.test.ts` | Exist, extend | ⬜ pending |
-| 04-05-02 | 05 | 1 | PG-SEC-01 | T-04-09, T-04-11 | The note at install, once, with or without pi-subagents | owner/behavior | `npm run test:cucumber:profile -- --profile adapter features/workflow/agent-restrictions.feature` | The feature is created here | ⬜ pending |
-| 04-05-03 | 05 | 1 | PG-SEC-01 | T-04-11 | The note at update, once, through the shared runner | owner/behavior | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/orchestrators/plugin/update-swap.test.ts` | Exists, extend | ⬜ pending |
-| 04-06-01 | 06 | 3 | PG-SEC-01 | T-04-12, T-04-13 | The note in `info`, with a contained agent read | owner/behavior | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/orchestrators/plugin/info.test.ts test/orchestrators/plugin/discover-names.test.ts` | Exist, extend | ⬜ pending |
-| 04-06-02 | 06 | 3 | PG-SEC-01, PG-CORE-01 | T-04-14 | The compatibility row, the root-source clause, the engine request draft, and the CHANGELOG | docs | `SKIP=npm-check${SKIP:+,$SKIP} pre-commit run --files docs/workflows-compatibility.md CHANGELOG.md .planning/upstream/pi-dynamic-workflows-agent-tool-restriction.md` | The draft is created here | ⬜ pending |
+| 04-01-01 | 01 | 1 | PG-CORE-01 | T-04-01 | Install only the listed skills of a root-source entry, with every selection arm of D-PG4-01 | owner/behavior | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/domain/component-paths.test.ts` | Owner test exists, extend; the feature, the fixture writer, and the step are created here | ✅ green |
+| 04-01-02 | 01 | 1 | PG-CORE-01 | T-04-02 | Remove the folder, record, offer, and alias of a dropped skill on update and reinstall; pin the hash route | behavior/owner | `npm run test:cucumber:profile -- --profile adapter features/skill/root-source-entries.feature` | Feature from 04-01-01; the record-skills Then is created here | ✅ green |
+| 04-02-01 | 02 | 2 | PG-CORE-01 | T-04-03 | List a listed skill folder as one skill in `info` | owner/behavior | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/orchestrators/plugin/info.test.ts` | Exists, extend | ✅ green |
+| 04-02-02 | 02 | 2 | PG-CORE-01 | T-04-03 | Mirror the rule in the lenient listing and read no escaping path | owner/behavior | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/orchestrators/plugin/info.test.ts` | Exists, extend | ✅ green |
+| 04-03-01 | 03 | 2 | PG-SKILL-04 | T-04-04, T-04-05 | Rewrite a sibling link in `SKILL.md`; the pure rule with every arm of D-PG4-04 to D-PG4-06 | owner/behavior | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/domain/skill-sibling-paths.test.ts test/bridges/skills/stage.test.ts` | The new module, its owner test, and the feature are created here | ✅ green |
+| 04-03-02 | 03 | 2 | PG-SKILL-04 | T-04-04 | Rewrite in supporting Markdown at depth; leave an unlisted sibling as written | owner/behavior | `npm run test:cucumber:profile -- --profile adapter features/skill/sibling-links.feature` | Feature from 04-03-01 | ✅ green |
+| 04-04-01 | 04 | 1 | PG-WF-01 | T-04-06, T-04-07 | Keep a bare workflow name bare, keep a slash where the source wrote one, and correct the page | owner/behavior | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/domain/skill-tokens.test.ts test/bridges/skills/stage.test.ts test/bridges/commands/staged-command.test.ts test/bridges/agents/convert.test.ts test/bridges/agents/skill-preload.test.ts` | Exists, two cases change; the feature is created here | ✅ green |
+| 04-04-02 | 04 | 1 | PG-WF-01 | T-04-06 | The scripted model starts the workflow by the copied name and the run completes | behavior | `npm run test:cucumber:profile -- --profile adapter features/workflow/references.feature features/workflow/run.feature features/workflow/listing.feature` | The projection and the When are created here | ✅ green |
+| 04-05-01 | 05 | 1 | PG-SEC-01 | T-04-08, T-04-09, T-04-10 | Literal agent types on the verdict, and the join on a real plugin tree | owner | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/domain/workflow-script.test.ts test/orchestrators/plugin/discover-names.test.ts test/architecture/workflows-single-parse.test.ts` | Exist, extend | ✅ green |
+| 04-05-02 | 05 | 1 | PG-SEC-01 | T-04-09, T-04-11 | The note at install, once, with or without pi-subagents | owner/behavior | `npm run test:cucumber:profile -- --profile adapter features/workflow/agent-restrictions.feature` | The feature is created here | ✅ green |
+| 04-05-03 | 05 | 1 | PG-SEC-01 | T-04-11 | The note at update, once, through the shared runner | owner/behavior | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/orchestrators/plugin/update-swap.test.ts` | Exists, extend | ✅ green |
+| 04-06-01 | 06 | 3 | PG-SEC-01 | T-04-12, T-04-13 | The note in `info`, with a contained agent read | owner/behavior | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/orchestrators/plugin/info.test.ts test/orchestrators/plugin/discover-names.test.ts` | Exist, extend | ✅ green |
+| 04-06-02 | 06 | 3 | PG-SEC-01, PG-CORE-01 | T-04-14 | The compatibility row, the root-source clause, the engine request draft, and the CHANGELOG | docs | `SKIP=npm-check${SKIP:+,$SKIP} pre-commit run --files docs/workflows-compatibility.md CHANGELOG.md .planning/upstream/pi-dynamic-workflows-agent-tool-restriction.md` | The draft is created here | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -110,14 +110,14 @@ Plan 04-06 is merged on the main tree. Two task commits and one summary; the com
 
 There is no standalone Wave 0 and no test-only scaffold commit. Each task that creates a test, fixture, or step file also creates its first consumer and verifies it. No framework is installed.
 
-- [ ] 04-01-01 creates `writePublishedMarketplaceFiles` in `features/lib/published-marketplace.ts`, the marketplace-root file step in `features/step_definitions/marketplace/publishing.steps.ts`, and `features/skill/root-source-entries.feature`, which uses both.
-- [ ] 04-01-02 creates the record-skills Then in `features/step_definitions/plugin/installation.steps.ts` with the update and reinstall scenarios that use it.
-- [ ] 04-03-01 creates `extensions/pi-claude-marketplace/domain/skill-sibling-paths.ts` with its paired owner test `test/domain/skill-sibling-paths.test.ts`, its consumer in the skills bridge, and `features/skill/sibling-links.feature`.
-- [ ] 04-04-01 creates `features/workflow/references.feature` from existing steps.
-- [ ] 04-04-02 creates `features/lib/upstream/workflows.ts`, registers it in `features/lib/upstream/index.ts`, and creates the model-started-run When in `features/step_definitions/workflow/runs.steps.ts`, with the scenario that uses both.
-- [ ] 04-05-02 creates `features/workflow/agent-restrictions.feature` from existing steps.
-- [ ] 04-06-02 creates `.planning/upstream/pi-dynamic-workflows-agent-tool-restriction.md`.
-- [ ] Every other source in the phase is an existing owner with an existing paired test, which the task extends. No unconsumed export is planned: the join of 04-05-01 stays module-private until 04-06-01 gives it a second consumer.
+- [x] 04-01-01 creates `writePublishedMarketplaceFiles` in `features/lib/published-marketplace.ts`, the marketplace-root file step in `features/step_definitions/marketplace/publishing.steps.ts`, and `features/skill/root-source-entries.feature`, which uses both.
+- [x] 04-01-02 creates the record-skills Then in `features/step_definitions/plugin/installation.steps.ts` with the update and reinstall scenarios that use it.
+- [x] 04-03-01 creates `extensions/pi-claude-marketplace/domain/skill-sibling-paths.ts` with its paired owner test `test/domain/skill-sibling-paths.test.ts`, its consumer in the skills bridge, and `features/skill/sibling-links.feature`.
+- [x] 04-04-01 creates `features/workflow/references.feature` from existing steps.
+- [x] 04-04-02 creates `features/lib/upstream/workflows.ts`, registers it in `features/lib/upstream/index.ts`, and creates the model-started-run When in `features/step_definitions/workflow/runs.steps.ts`, with the scenario that uses both.
+- [x] 04-05-02 creates `features/workflow/agent-restrictions.feature` from existing steps.
+- [x] 04-06-02 creates `.planning/upstream/pi-dynamic-workflows-agent-tool-restriction.md`.
+- [x] Every other source in the phase is an existing owner with an existing paired test, which the task extends. No unconsumed export is planned: the join of 04-05-01 stays module-private until 04-06-01 gives it a second consumer.
 
 ---
 
@@ -143,13 +143,13 @@ Filing the request to pi-dynamic-workflows is the maintainer's step (D-PG4-15). 
 
 ## Validation Sign-Off
 
-- [ ] All 13 tasks have concrete automated verification with a stated failing direction (47 commands, 47 statements)
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Every new path has a consuming creation task before any later reference
-- [ ] No watch-mode flags
-- [ ] Feedback latency under 30 seconds for owner tests and about 60 seconds for one feature file
-- [ ] Each scenario was seen red before its change and green after it
+- [x] All 13 tasks have concrete automated verification with a stated failing direction (47 commands, 47 statements)
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Every new path has a consuming creation task before any later reference
+- [x] No watch-mode flags
+- [x] Feedback latency under 30 seconds for owner tests and about 60 seconds for one feature file
+- [x] Each scenario was seen red before its change and green after it
 - [ ] All three wave gates and the phase gate pass with `npm run check`
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-11-14 (Nyquist audit: 13 of 13 rows green at 0e8c750a; 1210 owner tests and 27 adapter scenarios pass; the docs pre-commit run passes; the phase gate stays with the orchestrator)
