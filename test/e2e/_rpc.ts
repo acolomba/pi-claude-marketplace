@@ -277,9 +277,9 @@ export function rpcChildEnvironment(
 /**
  * Returns the arguments that start the repository's Pi CLI in `mode` with
  * `options.leadingExtensions`, the real extension, and `extraExtensions`, in
- * that load order, and with `--no-mcp` when `options` asks for it. In `json` mode Pi prints each session event as one JSON line
- * on stdout (D-BG-09). It never passes `--no-extensions`, which also removes
- * `builtin:mcp`.
+ * that load order, and with `--no-mcp` when `options` asks for it. In `json`
+ * mode Pi prints each session event as one JSON line on stdout (D-BG-09). It
+ * never passes `--no-extensions`, which also removes `builtin:mcp`.
  */
 export function piArguments(
   mode: "rpc" | "tui" | "json",

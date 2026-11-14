@@ -163,6 +163,8 @@ export interface PiProfile {
    * `extraExtensions` (D-BG-01). `usePiWithProfile()` refuses it when
    * `extraExtensions` lacks the GitHub redirect, because such a Pi would reach
    * GitHub's real address with nothing to keep its requests on this machine.
+   * It also refuses it with `leadingExtensions`, which the terminal session
+   * cannot load ahead of the real extension.
    */
   readonly withoutGitHubBaseOverride?: true;
 }
@@ -669,11 +671,13 @@ export class ScenarioWorld extends World {
    * steps talk to until the scenario's release stops it with its process
    * group. A scenario that needs a model must not change the run's shared Pi,
    * which every other scenario reuses, so it gets a Pi of its own in the
-   * run's sandbox, with the run's git environment. The profile Pi loads the
-   * real extension, the scripted model, the registry probe (HAR-01), the
-   * companions the profile names, each from its `pi.extensions` entry in the
-   * optional peer cache, and then `profile.extraExtensions`. Its `TMPDIR` and its harness directory lie inside the sandbox home, which
-   * the next scenario's `Before()` empties (HAR-05). It trusts the sandbox
+   * run's sandbox, with the run's git environment. The profile Pi loads
+   * `profile.leadingExtensions`, the real extension, the scripted model, the
+   * registry probe (HAR-01), the companions the profile names, each from its
+   * `pi.extensions` entry in the optional peer cache, and then
+   * `profile.extraExtensions`. Its `TMPDIR` and its harness directory lie
+   * inside the sandbox home, which the next scenario's `Before()` empties
+   * (HAR-05). It trusts the sandbox
    * project through a `trust.json` entry, as Pi records a user's answer to
    * its trust prompt, unless the profile is untrusted (D-CF1-07). It runs the
    * scripted model, with auto retry off, so a call past the script fails at
@@ -1017,6 +1021,14 @@ export class ScenarioWorld extends World {
     if (!extensions.includes(GITHUB_REDIRECT_EXTENSION)) {
       throw new Error(
         "a profile Pi without the GitHub base override must load the GitHub redirect",
+      );
+    }
+
+    // The terminal session loads its extensions after the real one, so it
+    // could not load a leading extension where the profile Pi does.
+    if (profile.leadingExtensions !== undefined) {
+      throw new Error(
+        "a profile Pi without the GitHub base override cannot load leading extensions",
       );
     }
 
