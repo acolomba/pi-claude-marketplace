@@ -1,10 +1,10 @@
 ---
 phase: 07-agent-frontmatter-and-grants
-fixed_at: 2026-11-15T01:30:00Z
+fixed_at: 2026-11-15T03:30:00Z
 review_path: .planning/phases/07-agent-frontmatter-and-grants/07-REVIEW.md
-iteration: 2
-findings_in_scope: 5
-fixed: 5
+iteration: 3
+findings_in_scope: 6
+fixed: 6
 skipped: 0
 status: all_fixed
 ---
@@ -225,8 +225,67 @@ Where verification ran: every check ran in the main checkout of the worktree `/h
 - Cucumber over `features/agent`, `features/workflow`, `features/skill`, `features/mcp-server/agent-grants.feature`, and `features/mcp-server/verdict-markers.feature`, after the last code commit: adapter profile 257 of 257 passed, builtin profile 28 of 28 passed.
 - Every code commit passed `npm run check:commit`. `npm run check` was not run.
 
+## Iteration 3
+
+**Source review:** `07-REVIEW.md` iteration 3 (082e9be5). Scope `all`: 3 warnings, 3 info. All 6 fixed. This was the last fix pass: the review cap of 3 is reached.
+
+### WR3-01: `provenanceScalar` throws a raw YAMLParseError for a value with leading whitespace before an indicator
+
+**Files modified:** `extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts`, `test/bridges/agents/frontmatter.test.ts`, `test/bridges/agents/convert.test.ts`
+**Commit:** 005244aa
+**Applied fix:** `readsAsPlainYamlText` returns false when `value !== value.trim()`, before the regex and the parse, so such a value is quoted and never parsed. The doc comment says why. No try/catch was added: a fuzz of 1,750,627 values of up to three characters (ASCII, NEL, NBSP, BOM, ZWSP, ideographic space, a lone surrogate) that pass the trim check and the unsafe-form regex found no value that makes the parse throw. So a catch could not run, and it would fail the 100% direct-coverage gate. Ordinary bytes do not change: a value with a blank at an end already failed the read-back comparison and was quoted.
+**Tests:** ` - x`, ` ? x`, and ` ,x` join the T-07-05 round-trip case. Three `convertAgent` cases with `mapModel: true` and source models `" - x"`, `" ? x"`, and `"\t,x"` expect the file and an `originalModel` that Pi's reader reads back as `" - x"`, `" ? x"`, and `" ,x"` (the tab becomes a space, T-07-05).
+**Negative control:** without the trim check, the 3 `convertAgent` cases and the round-trip case fail.
+
+### WR3-02: `sourceAgent` and `sourcePlugin` are still written bare
+
+**Files modified:** `extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts`, `test/bridges/agents/frontmatter.test.ts`, `test/integration/workflow-engine-agent-registry.test.ts`, `test/integration/provenance-invisibility.test.ts`
+**Commit:** ad7eb28c
+**Applied fix:** `sourcePlugin` and `sourceAgent` go through `provenanceScalar`. A new `nameScalar` writes the top-level `name:` and `aliases:` values double-quoted when YAML would not read them as their text and they hold no `"` and no `\`. pi-subagents strips one pair of quote marks and unescapes nothing, so both readers get the same name. A name that YAML misreads and that also holds `"` or `\` stays bare (residual: no quoted form reads the same in both readers). Ordinary names keep their bytes, so no decision was recorded.
+**Tests:** emitter cases where Pi's reader reads back the name, alias, `sourcePlugin`, and `sourceAgent` for plugin `acme` agent `Reviewer: code`, plugin `@acme` agent `'reviewer`, and plugin `acme` agent `reviewer #2`. A case pins a bare `name:` line for `acme:say "hi": now`. 3 engine-registry cases find `demo:'reader`, `demo:@reader`, and `demo:Reviewer: code` with `["read"]` and the description; the helper now takes the source name. A pi-subagents reader case reads the quoted name and alias as their text.
+**Negative control:** with the four lines written bare again, the 3 emitter round-trip cases and the 3 engine-registry cases fail. The pi-subagents case passes in both trees: it proves only that the quotes do not reach pi-subagents.
+
+### WR3-03: A column-0 comment line inside the earlier copy of a list still leaves the agent with every tool
+
+**Files modified:** `extensions/pi-claude-marketplace/shared/frontmatter-repair.ts`, `test/shared/frontmatter-repair.test.ts`, `test/bridges/agents/frontmatter.test.ts`, `features/agent/frontmatter.feature`, `docs/mcp-compatibility.md`
+**Commit:** c0b5828b
+**Applied fix:** `duplicateKeySpanEnd`'s open-value loop skips a column-0 `#` line as it skips a blank line. `end` moves only on value lines, so a comment after the last item stays. `keyValueEnd` is unchanged. The docs sentence on removed earlier copies now names a column-0 comment between the items.
+**Tests:** shared cases for column-0 items and indented items across a comment, and one that keeps a comment after the last item; reader cases for both reviewer probes (`raw: { name: "a", tools: "Grep" }`). The Outline "An earlier copy of a key that lists its items at column 0 gives way to the last copy" gets a `middle line` column: the existing rows add a third item `- Edit`, and a new row puts `# a column-0 remark` between the items.
+**Negative control:** without the skip, the 2 shared cross-comment cases, the 2 reader cases, and the new Outline row fail. The keep-after-last case passes in both trees: it guards against a span that runs too far.
+
+### IN3-01: The legacy translation does not recognize the newly quoted warning item
+
+**Files modified:** `extensions/pi-claude-marketplace/bridges/agents/legacy-grant-form.ts`, `extensions/pi-claude-marketplace/bridges/agents/mcp-async-warning.ts`, `test/bridges/agents/legacy-grant-form.test.ts`
+**Commit:** 3ce79768
+**Applied fix:** A new `translateItem` in `translateLine`'s list-item branch matches a quoted item byte for byte: the inner text must be a known async warning of either generation, and `emitSafeDoubleQuotedScalar(inner)` must equal the item. Then it writes the built-in text quoted the same way. Every other item goes through `translateWarning` as before, so a quoted cannot-narrow item still gets the built-in selector. The header comment and the `mcp-async-warning.ts` comment now name the quoted file form.
+**Tests:** for the first and the corrected generation, a block with quoted async and cannot-narrow items translates to the quoted built-in items, and the row warnings to the bare built-in texts. An item with a mismatched closing quote stays byte identical.
+**Negative control:** with the list-item branch back on `translateWarning`, both generation cases fail.
+
+### IN3-02: Other repeated-key forms that Bun accepts are still unparseable, and the docs do not list them
+
+**Files modified:** `docs/mcp-compatibility.md`
+**Commit:** 6a1a7f5f
+**Applied fix:** No code change. The D-PG7-19 residual list now names an earlier copy whose value is only an anchor or a tag, such as `tools: &t` or `tools: !!seq`, with its list items at column 0.
+**Tests:** none (docs only). **Negative control:** not applicable.
+
+### IN3-03: The PRD still contradicts D-PG7-11/D-PG7-17
+
+**Files modified:** `docs/prd/pi-claude-marketplace-prd.md`
+**Commit:** 6a1a7f5f
+**Applied fix:** The AG-7 `model:` bullet now says that without the flag every source model except `inherit` is omitted, and that a source `inherit`, in any case, is always written as `model: ""` and records `originalModel`, with or without `--map-model` (D-PG7-11, D-PG7-17). The `--map-model` clause says the same.
+**Tests:** none (docs only). **Negative control:** not applicable.
+
+### Verification (iteration 3)
+
+All runs used a scratch `HOME` and `PI_CODING_AGENT_DIR` in the `features/gaps-agents` checkout `/home/acolomba/src/pi-claude-marketplace-gaps-agents`, not in an isolated worktree, after the last code commit.
+
+- Unit: `test/bridges/agents/*.test.ts`, `test/shared/frontmatter-repair.test.ts`, `test/orchestrators/plugin/{update-swap,install-outcome,reinstall-flow}.test.ts`, `test/orchestrators/mcp/agent-grants-step.test.ts`, `test/persistence/agents-index-io.test.ts`: 1260 of 1260 passed.
+- Integration: `agents-adapter-grant-conformance`, `agents-builtin-grant-conformance`, `pi-subagents-child-identity`, `pi-subagents-child-launch-conformance`, `provenance-invisibility`, `subagent-hook-ownership`, `workflow-engine-agent-registry`, `workflow-kind-inversion`: 55 of 55 passed.
+- Cucumber over `features/agent`, `features/workflow`, and `features/mcp-server/agent-grants.feature`: adapter profile 145 of 145 passed, builtin profile 16 of 16 passed.
+- Every code commit passed `npm run check:commit`. `npm run check` was not run.
+
 ---
 
-_Fixed: 2026-11-15T01:30:00Z_
+_Fixed: 2026-11-15T03:30:00Z_
 _Fixer: Claude (gsd-code-fixer)_
-_Iteration: 2_
+_Iteration: 3_
