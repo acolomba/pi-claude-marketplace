@@ -2679,6 +2679,54 @@ test("D-CF1-06: a commands folder the manifest's declared path leaves unread joi
   );
 });
 
+test("D-PG4-01: an escaping listed skills path of a root-source entry joins the discovery warnings and the plugin installs", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-refused-listed-");
+  const seeded = await seedPlugin(environment.cwd);
+  const marketplaceRoot = path.join(environment.cwd, "marketplace");
+  await writeFile(
+    path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: "marketplace",
+      plugins: [{ name: "empty", source: "./", skills: ["./skills/a", "../outside"] }],
+    }),
+  );
+  await mkdir(path.join(marketplaceRoot, "skills", "a"), { recursive: true });
+  await writeFile(
+    path.join(marketplaceRoot, "skills", "a", "SKILL.md"),
+    "---\nname: a\ndescription: Skill a.\n---\n\nSkill a body.\n",
+  );
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    consentView: "none",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(
+    {
+      discoveryWarnings: ledgerOutcome.summary.discoveryWarnings,
+      stagedSkillNames: ledgerOutcome.summary.stagedSkillNames,
+    },
+    {
+      discoveryWarnings: [
+        { kind: "discovery", message: "skills path escapes plugin directory: ../outside" },
+      ],
+      stagedSkillNames: ["empty-a"],
+    },
+  );
+});
+
 /**
  * PG-SEC-01: seeds a plugin whose `commands` declaration leaves the commands
  * folder unread, an agent `reader` with the given frontmatter fields, and a

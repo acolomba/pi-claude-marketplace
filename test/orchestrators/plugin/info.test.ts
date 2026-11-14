@@ -2171,6 +2171,36 @@ test("D-PG4-01: info lists a listed skill folder that holds SKILL.md as one skil
   });
 });
 
+test("D-PG4-01: info notes each listed path of a root-source entry that does not load, with absolute paths reduced", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedRootSourceEntry(
+      home,
+      cwd,
+      ["./skills/a", "../outside", path.join(home, "outside", "skills"), "./skills/missing"],
+      ["skills/a/SKILL.md"],
+    );
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "root", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ○ root v1.0.0 (available)",
+          "    skills: a",
+          "    note: skills path escapes plugin directory: ../outside",
+          "    note: skills path escapes plugin directory: skills",
+          "    note: skills path not found: skills/missing",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
 test("D-PG4-01: info lists a skill reached as a listed folder and through its parent once, sorted without case", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange

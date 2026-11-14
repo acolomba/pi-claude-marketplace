@@ -2531,6 +2531,35 @@ describe("resolveStrict", () => {
     );
   });
 
+  test("D-PG4-01 a root-source entry carries its refused listed skills paths and stays installable", async () => {
+    // arrange
+    const context = resolveContext(marketplaceRoot, {
+      [marketplaceRoot]: "dir",
+      [path.join(marketplaceRoot, "skills", "a")]: "dir",
+    });
+
+    // act
+    const resolvedPlugin = await resolveStrict(
+      pluginEntry({ source: "./", skills: ["./skills/a", "../outside"] }),
+      context,
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        state: resolvedPlugin.state,
+        refusedListedSkillPaths:
+          resolvedPlugin.state === "installable"
+            ? resolvedPlugin.refusedListedSkillPaths
+            : undefined,
+      },
+      {
+        state: "installable",
+        refusedListedSkillPaths: [{ path: "../outside", cause: "traversal" }],
+      },
+    );
+  });
+
   // RESV-01: a dependencies declaration is resolved, never noted
 
   test("RESV-01 strict: a valid dependencies declaration leaves the entry installable with no note", async () => {

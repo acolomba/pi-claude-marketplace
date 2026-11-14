@@ -92,7 +92,10 @@ import {
   commitPreparedWorkflows,
   prepareStageWorkflows,
 } from "../../bridges/workflows/index.ts";
-import { shadowedFolderDiscoveryWarnings } from "../../domain/component-paths.ts";
+import {
+  refusedListedSkillPathMessages,
+  shadowedFolderDiscoveryWarnings,
+} from "../../domain/component-paths.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import {
   UPDATE_IN_PROGRESS_NOTE,
@@ -1702,9 +1705,11 @@ export async function swapPluginUpdate(
   );
   // PG-SEC-01: the workflow agent restriction notes join the folder warnings
   // here and nowhere else in this file, so an update, a reinstall, and an
-  // apply move each print a note once.
+  // apply move each print a note once, and so do the D-PG4-01 refused listed
+  // skills paths.
   const stagingWarnings = [
     ...shadowedFolderDiscoveryWarnings(installable.shadowedFolders),
+    ...refusedListedSkillPathMessages(installable.refusedListedSkillPaths).map(discoveryWarning),
     ...generatedNames.workflowAgentRestrictionNotes.map(discoveryWarning),
     ...collectUpdateWarnings(handles),
   ];

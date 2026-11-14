@@ -1437,6 +1437,45 @@ test("D-CF1-06: a swap to a version whose declared commands path leaves commands
   });
 });
 
+test("D-PG4-01: a swap to a root-source version that lists an escaping skills path warns about it and updates", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-refused-listed-");
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "2.0.0", hasSkill: false } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  await writeFile(
+    path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: "mp",
+      plugins: [
+        { name: "hello", source: "./", version: "2.0.0", skills: ["./skills/a", "../outside"] },
+      ],
+    }),
+  );
+  await mkdir(path.join(marketplaceRoot, "skills", "a"), { recursive: true });
+  await writeFile(
+    path.join(marketplaceRoot, "skills", "a", "SKILL.md"),
+    "---\nname: a\ndescription: Skill a.\n---\n\nSkill a body.\n",
+  );
+  const args = directSwapArgs(cwd);
+  const preflight = await preflightOf(args);
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  assert.ok(outcome.partition === "updated");
+  assert.deepStrictEqual(outcome.stagingWarnings, [
+    { kind: "discovery", message: "skills path escapes plugin directory: ../outside" },
+  ]);
+});
+
 /**
  * PG-SEC-01: seeds an update to a version that leaves commands/ unread, ships
  * two agents that share a name, an agent `reader` with the given frontmatter

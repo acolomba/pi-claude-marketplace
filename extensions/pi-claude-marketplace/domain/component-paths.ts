@@ -3,8 +3,10 @@ import path from "node:path";
 import { PathContainmentError, assertPathInside } from "../shared/path-safety.ts";
 import { discoveryWarning } from "../shared/staging-warnings.ts";
 
+import { forMessage } from "./workflow-script.ts";
+
 import type { PluginEntry } from "./components/plugin.ts";
-import type { CommandMapEntry, StatKindReader } from "./resolver-types.ts";
+import type { CommandMapEntry, RefusedListedSkillPath, StatKindReader } from "./resolver-types.ts";
 import type { DiscoveryWarning } from "../shared/staging-warnings.ts";
 
 const COMPONENT_PATH_KINDS = ["skills", "commands", "agents", "workflows"] as const;
@@ -52,6 +54,8 @@ export interface ComponentPathResolution {
   };
   /** D-CF1-06: kinds whose existing conventional folder a declaration leaves unread. */
   shadowedFolders?: ComponentPathKind[];
+  /** D-PG4-01: the listed skills paths of a root-source entry that do not load. */
+  refusedListedSkillPaths?: RefusedListedSkillPath[];
 }
 
 /**
@@ -70,6 +74,45 @@ export function shadowedFolderDiscoveryWarnings(
   shadowedFolders: readonly ComponentPathKind[] | undefined,
 ): readonly DiscoveryWarning[] {
   return (shadowedFolders ?? []).map((kind) => discoveryWarning(shadowedFolderWarning(kind)));
+}
+
+/**
+ * D-PG4-01: the hint Claude Code 2.1.323 adds when a listed skills path names
+ * a `SKILL.md` file, pointing at the folder that holds it.
+ */
+function skillFileHint(listed: string): string {
+  if (path.basename(listed).toLowerCase() !== "skill.md") {
+    return "";
+  }
+
+  const parent = path.dirname(listed);
+  return parent === "."
+    ? " \u2014 point to the plugin root '.' instead"
+    : ` \u2014 point to the parent directory '${parent}' instead`;
+}
+
+/** D-PG4-01: one refused listed path in Claude Code 2.1.323's `/plugin` errors wording. */
+function refusedListedSkillPathMessage(refused: RefusedListedSkillPath): string {
+  const listed = forMessage(refused.path);
+  switch (refused.cause) {
+    case "traversal":
+      return `skills path escapes plugin directory: ${listed}`;
+    case "missing":
+      return `skills path not found: ${listed}`;
+    case "file":
+      return `Failed to load skills from ${listed}: path is a file; skills entries must be directories containing SKILL.md${skillFileHint(listed)}`;
+  }
+}
+
+/**
+ * D-PG4-01: one message for each listed skills path of a root-source entry
+ * that does not load. The plugin still installs, as in Claude Code 2.1.323,
+ * so install and update print these as warnings and `info` as notes.
+ */
+export function refusedListedSkillPathMessages(
+  refused: readonly RefusedListedSkillPath[] | undefined,
+): readonly string[] {
+  return (refused ?? []).map(refusedListedSkillPathMessage);
 }
 
 // An empty string declares nothing, as `null` does: Claude Code 2.1.316 loads
@@ -548,19 +591,42 @@ async function validateComponentPaths(
 
 /**
  * D-PG4-01: the listed paths that survive, as in Claude Code 2.1.323: the
- * path is contained and names an existing directory. Only a contained path
- * is statted.
+ * path is contained and names an existing directory. Each other listed string
+ * is refused with its cause: a traversal as written, and a missing or file
+ * path relative to the plugin root, a form the diagnostic redaction keeps
+ * intact. Only a contained path is statted, and a value that is not a string
+ * is neither refused nor statted (it keeps its D-CF1-06 note).
  */
-async function survivingListedPaths(
+async function classifyListedPaths(
+  listedRaws: readonly unknown[],
   listed: readonly ComponentPathValidation[],
   pluginRoot: string,
   statKind: StatKindReader,
-): Promise<readonly string[]> {
-  const accepted = listed.flatMap((validated) => (validated.ok ? [validated.relative] : []));
+): Promise<{
+  readonly survivors: readonly string[];
+  readonly refused: readonly RefusedListedSkillPath[];
+}> {
   const kinds = await Promise.all(
-    accepted.map((relative) => statKind(path.join(pluginRoot, relative))),
+    listed.map(async (validated) =>
+      validated.ok ? await statKind(path.join(pluginRoot, validated.relative)) : undefined,
+    ),
   );
-  return accepted.filter((_relative, index) => kinds[index] === "dir");
+  const survivors: string[] = [];
+  const refused: RefusedListedSkillPath[] = [];
+  for (const [index, validated] of listed.entries()) {
+    if (validated.ok && kinds[index] === "dir") {
+      survivors.push(validated.relative);
+    } else if (validated.ok) {
+      refused.push({
+        path: validated.relative,
+        cause: kinds[index] === "file" ? "file" : "missing",
+      });
+    } else if (validated.cause === "traversal") {
+      refused.push({ path: String(listedRaws[index]), cause: "traversal" });
+    }
+  }
+
+  return { survivors, refused };
 }
 
 /**
@@ -612,8 +678,10 @@ async function addDeclaredSkillPaths(
  * and the `plugin.json` paths, and no folder is reported unread. When none
  * survives, a listed path refused as a traversal leaves the plugin with no
  * skill path; otherwise the D-CF1-06 rule applies. A listed path refused as a
- * traversal is dropped and never read: it adds no note and does not mark the
- * plugin, so the plugin still loads, as upstream loads it. A listed value that
+ * traversal is dropped and never read. It adds no note and does not mark the
+ * plugin, so the plugin still loads, as upstream loads it. It is recorded in
+ * `refusedListedSkillPaths`, as a missing or file listed path is, so the user
+ * is told, as upstream's `/plugin` errors view tells them. A listed value that
  * is not a string, and a refused `plugin.json` path, keep the D-CF1-06 note and
  * mark the plugin. Every declared path is validated once.
  */
@@ -637,7 +705,16 @@ async function collectRootSourceSkillPaths(
     readPathOrArray(manifest?.skills),
     pluginRoot,
   );
-  const survivors = await survivingListedPaths(listed, pluginRoot, statKind);
+  const { survivors, refused } = await classifyListedPaths(
+    listedRaws,
+    listed,
+    pluginRoot,
+    statKind,
+  );
+  if (refused.length > 0) {
+    resolution.refusedListedSkillPaths = [...refused];
+  }
+
   if (survivors.length > 0) {
     await addListedSkillPaths(resolution, survivors, pluginRoot, statKind);
   } else if (!listed.some((validated) => !validated.ok && validated.cause === "traversal")) {

@@ -171,6 +171,9 @@ function materializableFields(
     componentPaths: partial.componentPaths,
     // D-CF1-06: component-path collection creates the list only to add a kind.
     ...(partial.shadowedFolders !== undefined && { shadowedFolders: partial.shadowedFolders }),
+    ...(partial.refusedListedSkillPaths !== undefined && {
+      refusedListedSkillPaths: partial.refusedListedSkillPaths,
+    }),
     mcpServers: partial.mcpServers,
     // MREC-01: every non-malformed declared server, for the install record.
     declaredMcpServers: partial.declaredMcpServers,

@@ -102,7 +102,10 @@ import {
   prepareStageWorkflows,
   unstagePluginWorkflows,
 } from "../../bridges/workflows/index.ts";
-import { shadowedFolderDiscoveryWarnings } from "../../domain/component-paths.ts";
+import {
+  refusedListedSkillPathMessages,
+  shadowedFolderDiscoveryWarnings,
+} from "../../domain/component-paths.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import {
   MAX_DIRECTORY_PIN_FIELD_CHARS,
@@ -1243,8 +1246,11 @@ async function runInstallLedgerBody(
     // each verb that runs this ledger names it, and a failed install keeps it.
     // PG-SEC-01: the workflow agent restriction notes join them here and
     // nowhere else in this file, so an install prints each note once.
+    // D-PG4-01: so does each listed skills path of a root-source entry that
+    // does not load.
     discoveryWarnings: [
       ...shadowedFolderDiscoveryWarnings(installable.shadowedFolders),
+      ...refusedListedSkillPathMessages(installable.refusedListedSkillPaths).map(discoveryWarning),
       ...generatedNames.workflowAgentRestrictionNotes.map(discoveryWarning),
     ],
     agentForeignFailures: [],

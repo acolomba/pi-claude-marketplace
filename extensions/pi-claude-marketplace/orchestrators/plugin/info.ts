@@ -37,6 +37,7 @@ import {
 } from "../../domain/claude-mcp-variables.ts";
 import {
   isMarketplaceRootSource,
+  refusedListedSkillPathMessages,
   resolveContainedComponentPath,
 } from "../../domain/component-paths.ts";
 import { BUCKET_A_EVENTS } from "../../domain/components/hook-events.ts";
@@ -139,6 +140,7 @@ import { resolveDeclaredPluginVersion } from "./shared.ts";
 import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type {
   GitPluginRootResult,
+  RefusedListedSkillPath,
   ResolveContext,
   ResolvedPluginInstallable,
   ResolvedPluginUnavailable,
@@ -1051,6 +1053,9 @@ function parseLenientHooksJson(raw: string): unknown {
  * is free text, already reduced and already ordered, and the caller spreads it
  * onto the row only when non-empty.
  *
+ * D-PG4-01: the listed skills paths of a root-source entry that do not load
+ * come first, with their absolute paths reduced as install reduces them.
+ *
  * PG-SEC-01 / D-PG4-12 / D-PG4-13: the workflow agent restriction notes follow
  * the workflow advisories. They are added here, the one function every row
  * builder calls, so each row carries them once. They are recomputed at every
@@ -1080,6 +1085,8 @@ async function composeResolvedComponents(
     readonly declaredMcpServers: Record<string, unknown>;
     readonly droppedMcpServers?: readonly DroppedMcpServer[];
     readonly hooksConfigPath?: string;
+    /** D-PG4-01: carried by the materializable arms only. */
+    readonly refusedListedSkillPaths?: readonly RefusedListedSkillPath[];
   },
   pluginName: string,
 ): Promise<{
@@ -1160,7 +1167,13 @@ async function composeResolvedComponents(
       ...(skills.length > 0 && { skills }),
       ...(workflows.names.length > 0 && { workflows: workflows.names }),
     },
-    notes: [...workflows.warnings, ...restrictionNotes],
+    notes: [
+      ...refusedListedSkillPathMessages(resolved.refusedListedSkillPaths).map((message) =>
+        redactAbsolutePaths(message),
+      ),
+      ...workflows.warnings,
+      ...restrictionNotes,
+    ],
     mcpDependency: mcpDependencyOf(Object.values(resolved.declaredMcpServers)),
   };
 }

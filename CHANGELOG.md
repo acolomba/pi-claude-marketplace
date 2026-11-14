@@ -11,6 +11,7 @@
   - Under pi-mcp-adapter, hooks now match plugin MCP tool names over 64 characters, and agents can exclude them with `disallowedTools`. Update or reinstall the plugin to refresh its agents.
   - pi-mcp-adapter asks for project server approval again when the new timeout changes an approved server's stored definition.
   - A marketplace entry whose source is the marketplace root and that lists `skills` now installs only those skills, as in Claude Code. If you installed a plugin from `anthropics/skills` or a marketplace like it, run `/claude:plugin reinstall` once to remove the extra skills.
+  - Install, update, and `info` now warn about each listed skills path of such an entry that escapes the plugin, does not exist, or names a file.
   - A skill's relative link to a sibling skill of the same plugin now points at the sibling's installed folder.
   - A workflow name that a plugin writes without a leading slash, as in `Workflow({ name: "plugin:scan" })`, now stays without one, so the model can start the workflow.
   - An installed plugin gets the new links and workflow names when it updates to a new version, or at `/claude:plugin reinstall`.
