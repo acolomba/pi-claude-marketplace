@@ -1,59 +1,112 @@
 ---
 phase: 04-skill-and-workflow-install-defects
-reviewed: 2026-11-14T12:00:00Z
+reviewed: 2026-11-14T13:30:00Z
 depth: standard
-iteration: 1
-reviewed_range: e739fcfa..852b033f
-files_reviewed: 33
+iteration: 2
+reviewed_range: 03f6b319..1729cfc9
+iteration_1_range: e739fcfa..852b033f
+files_reviewed: 17
 files_reviewed_list:
-  - extensions/pi-claude-marketplace/bridges/skills/stage.ts
+  - extensions/pi-claude-marketplace/bridges/agents/convert.ts
+  - extensions/pi-claude-marketplace/bridges/agents/index.ts
   - extensions/pi-claude-marketplace/domain/component-paths.ts
-  - extensions/pi-claude-marketplace/domain/skill-sibling-paths.ts
-  - extensions/pi-claude-marketplace/domain/skill-tokens.ts
-  - extensions/pi-claude-marketplace/domain/workflow-script.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/discover-names.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts
-  - extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts
-  - features/lib/published-marketplace.ts
-  - features/lib/upstream/index.ts
-  - features/lib/upstream/workflows.ts
   - features/skill/root-source-entries.feature
-  - features/skill/sibling-links.feature
-  - features/step_definitions/marketplace/publishing.steps.ts
-  - features/step_definitions/plugin/installation.steps.ts
-  - features/step_definitions/workflow/runs.steps.ts
   - features/workflow/agent-restrictions.feature
-  - features/workflow/references.feature
-  - test/bridges/skills/stage.test.ts
+  - test/bridges/agents/convert.test.ts
+  - test/bridges/agents/index.test.ts
   - test/domain/component-paths.test.ts
-  - test/domain/skill-sibling-paths.test.ts
-  - test/domain/skill-tokens.test.ts
-  - test/domain/version.test.ts
-  - test/domain/workflow-script.test.ts
   - test/orchestrators/plugin/discover-names.test.ts
   - test/orchestrators/plugin/info.test.ts
   - test/orchestrators/plugin/install-outcome.test.ts
   - test/orchestrators/plugin/update-swap.test.ts
   - CHANGELOG.md
   - docs/workflows-compatibility.md
-  - .agents/skills/cucumber/rules/world-and-stand-ins.md
-  - .fallowrc.json
+  - docs/research/parity-gaps/skills-commands.md
 findings:
   critical: 0
-  warning: 3
-  info: 4
-  total: 7
+  warning: 2
+  info: 1
+  total: 3
   necessity: 0
 status: issues_found
 ---
 
 # Phase 4: Code Review Report
 
+## Iteration 2
+
+**Reviewed:** 2026-11-14T13:30:00Z
+**Depth:** standard
+**Iteration:** 2
+**Range:** `03f6b319..1729cfc9` (b5c7dc4a WR-02, 17bd223c WR-03, 0e914540 IN-01, 246e0e06 IN-02, f104b67e IN-03, 84c69fe5 IN-04)
+**Files Reviewed:** 17
+**Status:** issues_found
+
+### Summary
+
+This iteration reviews the fix commits only. I read every changed production function in full, and the callers and callees that decide what each fix does: `validateComponentPath`, `survivingListedPaths`, `addListedSkillPaths`, `addDeclaredSkillPaths`, and `markSupportedWhenCollected` (`component-paths.ts`); `buildNotInstallablePathRowFields`, `deriveLenientComponentPaths`, `rootSourceLenientSkillPaths`, and `containedRelativePath` (`info.ts`); and `discoverPluginSkills`, `skillsFolderFirst`, `collectSkillSubdirs`, and `isSelfSkillDir` (`bridges/skills/discover.ts`). I read the test and scenario diffs, not every test file in full. I checked each upstream claim against the Claude Code 2.1.323 binary (`/home/linuxbrew/.linuxbrew/Caskroom/claude-code@latest/2.1.323/claude`, through `strings`). I checked each engine claim against `@quintinshaw/pi-dynamic-workflows` 3.15.0 in `node_modules/.cache/optional-peers` and Pi 1.5.0 in `node_modules/@earendil-works/pi-coding-agent`. I ran no `npm run check` and no tests, as instructed. I read the necessity rubric. No finding meets its evidence rule.
+
+Answers to the four questions:
+
+1. **WR-01 skip: confirmed.** In 2.1.323, `QAo` (the marketplace-entry loader) first runs the root-source block, which sets `skillsPaths` to the listed survivors minus the root and `skills/`. Then, in both loading arms, it calls `_Ao`. The arms are no `plugin.json` (`mode:"assign"`) and `plugin.json` present (`mode:"append"`). `_Ao` runs `entry.skills` through `sD` again and filters out only `qp(ff(r,"skills"))`: `ne=(await sD(q,…)).filter((Ee)=>qp(Ee)!==X)`. In assign mode, `e.skillsPaths=ne`. In append mode, the code appends the members of `ne` that are not already present. Either way a listed root is a skills path again, next to the kept `skillsPath` (`skills/`). Pi's `[".", "skills"]` is the same set, and `skillsFolderFirst` (`bridges/skills/discover.ts:202-207`) reads `skills/` first, as upstream reads `skillsPath` before `skillsPaths`. WR-01 from iteration 1 is withdrawn. No code change is needed.
+2. **WR-02: upstream does tell the user.** The root-source block's sink `it` is local, but `_Ao`'s second `sD` pass pushes `{type:"path-traversal",component:"skills",path:"../outside"}` into the plugin's error list. `QAo` then runs `s.push(...Ee)`. The `/plugin` errors view renders it as "skills path escapes plugin directory: ../outside" and adds a remediation hint. The plugin still loads. The fix now drops the path with no output, so this is a parity gap. See WR-04.
+3. **IN-04 note: true in every engine mode, but not in every Pi configuration.** Under `builtin:codemode` the note's "outside codemode" qualifier holds. Outside codemode the note also holds when the engine's registry does not resolve the agent type, when pi-subagents is absent, and when an embedder injects a resource loader. But the child's active built-ins come from the user's Pi `defaultTools` setting, and `DEFAULT_TOOL_NAMES` applies only when that setting is unset. So the note can name a tool the agent does not have. See WR-05.
+4. **Regression, coverage, and fallow: no blocking risk found.** WR-03's `path.normalize` form is lexical. It refuses `..`, `../x`, and `a/../..`, and trims one trailing separator. IN-01's probe errors stay inside the row builder's `try`. An escaping string still never reaches a read (T-04-03). Every new branch I traced has a unit case: `malformedListed`, the `[]` and `undefined` returns of the lenient fallback, `allowsAll` through an empty or `*` value, the `denied` arm, and the `unkept.length === 0` arm. `listedToolNames` has a consumer (`discover-names.ts`), its owner test, and a barrel test, so `fallow dead-code` stays clean. The `readEntriesOrEmpty` → `readEntriesOrMissing` delegation removes a would-be clone. One narrowing of D-PG4-11 is recorded as IN-05.
+
+### Narrative Findings (AI reviewer)
+
+### Warnings
+
+#### WR-04: A refused listed skills path of a root-source entry is dropped without a word, while Claude Code 2.1.323 reports it as a plugin load error
+
+**File:** `extensions/pi-claude-marketplace/domain/component-paths.ts:620-649` (pinned by `features/skill/root-source-entries.feature:222` and the new "only listed path escapes" scenario; owner cases in `test/domain/component-paths.test.ts:1184-1207` and `:1348-1356`)
+**Issue:** After b5c7dc4a, `collectRootSourceSkillPaths` keeps only the `cause === "type"` refusals as notes. An absolute or escaping listed path produces nothing. Install prints `severity: info` with no reason, and `info` prints `available` with no advisory. In 2.1.323, the same entry gets one `path-traversal` error. `_Ao` calls `sD(q,r,n.name,s,"skills","Skill","from marketplace entry",y,…)`, and `sD` runs `v.push({type:"path-traversal",source:s,plugin:r,path:ve,component:h,…})` into the plugin's error list `Ee`. `QAo` then runs `if(r){await SPt(Ae,Ee),s.push(...Ee)…}`, and the `/plugin` errors view renders the entry as `` `${component} path escapes plugin directory: ${path}` `` with the hint "This path was skipped because it could not be confirmed inside the plugin…". The plugin still loads, so the fix got the outcome right but dropped the report. Neither license covers the silent drop: no decision ID records it, and Pi has no capability gap here. Pi has a warning channel, and `shadowedFolders` already carries a typed resolver warning to install, update, and `info`. D-PG4-01 also says, for the fallback arm, "The existing refusal notes still print." The fixer recorded this as a residual question. Under AGENTS.md "Upstream parity", the default is the upstream behavior, so this is a finding and not only a question.
+
+The same `_Ao` pass also reports a listed path that is missing (`path-not-found`) or that names a file ("path is a file; skills entries must be directories containing SKILL.md — point to the parent directory …"). `survivingListedPaths` drops those without a word too. That was already true before this range, but a warning field added for traversals should carry these two causes as well.
+**Fix:** Add a typed field next to `shadowedFolders`, for example `refusedListedSkillPaths: readonly { path: string; cause: "traversal" | "missing" | "file" }[]`. Fill it in `collectRootSourceSkillPaths`, and do not set the dirty flag. Spread it into the install and update warnings at the two `shadowedFolders` spread sites, and render it in `info` as an advisory. Then change the `:222` scenario and the "only listed path escapes" scenario to expect `severity: warning` and the warning row. Leave the plugin `installed`/`available`. If the maintainer prefers the silent drop, record it as a decision ID that amends D-PG4-01, and correct the "existing refusal notes still print" sentence.
+
+#### WR-05: The restriction note can name a tool the agent does not have, because the engine's child session takes its built-ins from the user's Pi `defaultTools` setting
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/discover-names.ts:77-82`, `:90-97`, `:143`, `:150-153`
+**Issue:** `unkeptBuiltinTools` takes for granted that, outside codemode, the child always holds `read`, `bash`, `edit`, and `write`. The doc comment says "so a note is never false". The engine builds the child with `settingsManager: SettingsManager.create(runCwd, agentDir)` (`pi-dynamic-workflows/src/agent.ts:1416`), and `sessionOptions` is `{}` unless an embedder passes one (`:873`). Pi then computes the child's active built-ins as `settingsManager.getDefaultTools() ?? DEFAULT_TOOL_NAMES` (`pi-coding-agent/dist/core/sdk.js:148`, `:160`). `defaultTools` is a documented user setting (`docs/cli.md:128`) that accepts `-name` modifiers. The policy-filtered custom tools (`agent.ts:1210-1214`) do not add back a tool that the agent's `tools` excludes. Example: a user with `"defaultTools": ["-write"]` installs a plugin whose workflow runs an agent with `tools: Read, Grep`. The note says "the agent can use bash, edit, and write", but the agent has no `write`. D-PG4-11 accepts a missing note but never a false one. The iteration-1 fix suggestion ("may use") would have avoided this. The chosen form "can use <list>" does not.
+
+There is a related wording risk. Pi has its own `codemode` tool (`"defaultTools": ["+codemode"]`, `docs/cli.md:164`), which is not the engine's `builtin:codemode` provider-middleware option. Only the engine option makes the child keep the restriction (`agent.ts:1238-1239`). A user who turned on Pi's codemode can read "outside codemode" as "not my case".
+**Fix:** Make the clause depend on Pi's default tools, and name the engine option. For example: `…which restricts its tools; unless the workflow engine runs with builtin:codemode, it does not keep that restriction, so the agent may use bash, edit, and write`. Or keep "can use" and add "when Pi's default tools include them". Change the `discover-names.ts:150-153` doc comment so it no longer says "never false". Update the expected text in the four scenarios of `features/workflow/agent-restrictions.feature` and in the `restrictionNote` helper in `test/orchestrators/plugin/discover-names.test.ts`. This wording is still part of D-PG4-12, which is pending maintainer review.
+
+### Info
+
+#### IN-05: An agent whose `tools` lists all four built-ins, or a scoped `Bash(spec)`, now gets no note, which narrows the D-PG4-11 trigger without a recorded decision
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/discover-names.ts:90-97` (pinned by the `'["Read", "Bash(git log *)"]'` → `"edit and write"` case and the "allows every built-in" no-note case in `test/orchestrators/plugin/discover-names.test.ts`)
+**Issue:** D-PG4-11 defines the trigger as a non-empty `tools` or `disallowedTools`. The fix suppresses the note when the four built-ins are all kept, and `listedToolNames` reads `Bash(git log *)` as plain `Bash`. Take `tools: Read, Bash(git log *), Edit, Write`. Before the fix this agent got a note. Now it gets none. Outside codemode the engine gives it unrestricted `bash` (Pi's core tool, not policy-filtered). With a user `defaultTools` that adds `grep`/`find`/`ls`, the agent also gets tools its upstream list leaves out. Both are missing notes, which D-PG4-11 accepts. But this suppression was not part of D-PG4-11 or D-PG4-12, and it was introduced as a review fix.
+**Fix:** Add it to the D-PG4-12 maintainer question: "suppress the note when the four built-ins are kept, and treat `Tool(spec)` as a full allowance". Alternatively, count a `Tool(spec)` entry as a restriction the engine does not keep, and list that tool.
+
+### Iteration-1 findings, status after the fixes
+
+| ID | Status | Note |
+| --- | --- | --- |
+| WR-01 | Withdrawn | Upstream `_Ao` re-admits a listed root (question 1). The current code matches 2.1.323. |
+| WR-02 | Fixed, with a residual | The plugin now loads as upstream loads it. The missing user report is WR-04. |
+| WR-03 | Fixed | The normalization is lexical. Unit cases at the cwd and at `/` cover it. |
+| IN-01 | Fixed | The lenient fallback now matches the strict one. The listing still keeps missing paths when another path survives, which is harmless: they read as empty. |
+| IN-02 | Recorded | A residual bullet in `docs/research/parity-gaps/skills-commands.md`. The maintainer still has to decide. |
+| IN-03 | Fixed | The CHANGELOG wording now matches update semantics. |
+| IN-04 | Fixed, with residuals | The "outside codemode" qualifier is correct for the engine. WR-05 and IN-05 are the residuals. |
+
+Planning residuals (not source, not counted): `04-01-SUMMARY.md` and `04-02-SUMMARY.md` still describe the behavior from before the fixes, as the fixer's "Parent lines" note says.
+
+---
+
+## Iteration 1
+
 **Reviewed:** 2026-11-14T12:00:00Z
 **Depth:** standard
 **Iteration:** 1
-**Files Reviewed:** 33
+**Range:** `e739fcfa..852b033f`
+**Files Reviewed:** 33 (`extensions/pi-claude-marketplace/bridges/skills/stage.ts`, `domain/component-paths.ts`, `domain/skill-sibling-paths.ts`, `domain/skill-tokens.ts`, `domain/workflow-script.ts`, `orchestrators/plugin/discover-names.ts`, `orchestrators/plugin/info.ts`, `orchestrators/plugin/install-outcome.ts`, `orchestrators/plugin/update-swap.ts`; `features/lib/published-marketplace.ts`, `features/lib/upstream/index.ts`, `features/lib/upstream/workflows.ts`; `features/skill/root-source-entries.feature`, `features/skill/sibling-links.feature`, `features/workflow/agent-restrictions.feature`, `features/workflow/references.feature`; `features/step_definitions/marketplace/publishing.steps.ts`, `features/step_definitions/plugin/installation.steps.ts`, `features/step_definitions/workflow/runs.steps.ts`; `test/bridges/skills/stage.test.ts`, `test/domain/{component-paths,skill-sibling-paths,skill-tokens,version,workflow-script}.test.ts`, `test/orchestrators/plugin/{discover-names,info,install-outcome,update-swap}.test.ts`; `CHANGELOG.md`, `docs/workflows-compatibility.md`, `.agents/skills/cucumber/rules/world-and-stand-ins.md`, `.fallowrc.json`)
+**Findings:** critical 0, warning 3, info 4, total 7, necessity 0
 **Status:** issues_found
 
 ## Summary
@@ -161,6 +214,6 @@ function containedRelativePath(declared: string): string | undefined {
 
 ---
 
-_Reviewed: 2026-11-14T12:00:00Z_
+_Reviewed: 2026-11-14T13:30:00Z (iteration 2); 2026-11-14T12:00:00Z (iteration 1)_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
