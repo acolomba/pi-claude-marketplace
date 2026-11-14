@@ -83,8 +83,15 @@ function runnerInput(cwd: string): ChildLaunchInput {
   };
 }
 
-/** The value of the one `<key>: ` line the bridge writes for `raw`. */
-function convertedLine(raw: RawAgentFrontmatter, key: string): string {
+/**
+ * The value of the one `<key>: ` line the bridge writes for `raw`, in the
+ * adapter form over the written MCP servers `mcpServerNames`.
+ */
+function convertedLine(
+  raw: RawAgentFrontmatter,
+  key: string,
+  mcpServerNames?: readonly string[],
+): string {
   const agent = convertAgent({
     pluginName: "demo",
     pluginRoot: "/root",
@@ -100,6 +107,7 @@ function convertedLine(raw: RawAgentFrontmatter, key: string): string {
     },
     sourceHash: "abc",
     mapModel: false,
+    mcpServerNames,
   });
   const lines = agent.fileContent.split("\n").filter((line) => line.startsWith(`${key}: `));
   assert.strictEqual(lines.length, 1);
@@ -208,6 +216,63 @@ test("explicit short MCP grant selects its adapter tool", async (t) => {
     // assert
     assert.deepStrictEqual(child.session.tools, ["mcp__plugin_demo_stub__echo"]);
     assert.strictEqual(child.session.processEnv.MCP_DIRECT_TOOLS, "plugin_demo_stub_/echo");
+  });
+});
+
+test("PG-AGENT-09: the exclude name written beside a whole-server grant removes that adapter tool from the child", async (t) => {
+  // arrange
+  const { peer, launch } = await loadLaunch(t);
+  const allowlist = await importPeerModule<McpAllowlistModule>(
+    peer,
+    "src",
+    "runs",
+    "shared",
+    "mcp-direct-tool-allowlist.js",
+  );
+  await withHermeticEnvironment("child-launch-grant-exclude-", async ({ agentDir, cwd }) => {
+    const definition = {
+      command: "node",
+      args: ["server.js"],
+      directTools: "search",
+      toolPrefix: "mcp",
+    };
+    await writeFile(
+      path.join(agentDir, "mcp-adapter.json"),
+      JSON.stringify({ mcpServers: { plugin_demo_stub_: definition } }),
+    );
+    await writeFile(
+      path.join(agentDir, "mcp-cache.json"),
+      JSON.stringify({
+        version: 1,
+        servers: {
+          plugin_demo_stub_: {
+            configHash: allowlist.computeMcpServerHash(definition),
+            cachedAt: Date.now(),
+            tools: [{ name: "echo" }, { name: "drop" }],
+          },
+        },
+      }),
+    );
+    const raw = {
+      description: "d",
+      tools: "Read, mcp__plugin_demo_stub",
+      disallowedTools: "mcp__plugin_demo_stub__drop",
+    };
+    const tools = convertedLine(raw, "tools", ["stub"]).split(",");
+    const excludeTools = convertedLine(raw, "excludeTools", ["stub"]).split(",");
+
+    // act
+    const child = launch.buildInProcessChildLaunch({
+      ...runnerInput(cwd),
+      tools: tools.filter((entry) => !entry.startsWith("mcp:")),
+      mcpDirectTools: tools
+        .filter((entry) => entry.startsWith("mcp:"))
+        .map((entry) => entry.slice("mcp:".length)),
+      excludeTools,
+    });
+
+    // assert
+    assert.deepStrictEqual(child.session.tools, ["read", "mcp__plugin_demo_stub__echo"]);
   });
 });
 
