@@ -1,10 +1,11 @@
 // bridges/agents/mcp-async-warning.ts
 //
-// D-CF6-10: the warning of an agent that runs plugin MCP tools, which
-// launches in the background where Claude Code runs it in the foreground.
-// Both MCP implementations have the same foreground gap, so the sentence is
-// the same up to its last clause, which names the implementation that must
-// have listed the server's tools before a launch can reach them (MGRT-01).
+// D-CF6-10: the warning of an agent that runs plugin MCP tools, which always
+// launches in the background (D-PG3-02). The sentence is the same for both MCP
+// implementations up to its last clause, which names the implementation that
+// must have listed the server's tools before a launch can reach them
+// (MGRT-01). The first generation wrongly said Claude Code runs the agent in
+// the foreground; it stays recognized because stored rows carry it (D-PG3-03).
 
 import type { McpImplementationId } from "../../domain/mcp-implementation.ts";
 
