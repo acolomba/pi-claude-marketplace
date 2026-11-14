@@ -6,6 +6,7 @@ import { describe, test } from "node:test";
 
 import {
   collectStrictComponentPaths,
+  isMarketplaceRootSource,
   shadowedFolderDiscoveryWarnings,
 } from "../../extensions/pi-claude-marketplace/domain/component-paths.ts";
 
@@ -1077,5 +1078,287 @@ describe("collectStrictComponentPaths shadowed folders", () => {
 
     // assert
     assert.deepStrictEqual(resolution.shadowedFolders, ["agents"]);
+  });
+});
+
+describe("isMarketplaceRootSource", () => {
+  const cases = [
+    { source: "./", expected: true },
+    { source: ".", expected: true },
+    { source: "", expected: true },
+    { source: ".\\", expected: true },
+    { source: "././", expected: true },
+    { source: "./alpha", expected: false },
+    { source: "..", expected: false },
+    { source: "alpha", expected: false },
+    { source: { source: "directory", path: "./" }, expected: false },
+    { source: undefined, expected: false },
+  ] as const;
+
+  for (const { source, expected } of cases) {
+    test(`D-PG4-01 reads ${JSON.stringify(source)} as ${expected ? "" : "not "}the marketplace root`, () => {
+      // act
+      const actual = isMarketplaceRootSource(source);
+
+      // assert
+      assert.strictEqual(actual, expected);
+    });
+  }
+});
+
+describe("collectStrictComponentPaths root-source entries", () => {
+  interface RootSourceCase {
+    readonly title: string;
+    readonly source: unknown;
+    /** The entry's `skills`; a missing key declares nothing. */
+    readonly entry?: { readonly skills?: unknown };
+    readonly manifestSkills?: unknown;
+    /** Directories under the plugin root; `.` is the root itself. */
+    readonly directories: readonly string[];
+    readonly files?: readonly string[];
+    readonly expectedPaths: readonly string[];
+    readonly expectedNotes?: readonly string[];
+  }
+
+  const ALL_FOLDERS = [".", "skills", "skills/a", "skills/b", "extra"] as const;
+
+  const rootSourceCases: readonly RootSourceCase[] = [
+    ...(["./", ".", ".\\", "././"] as const).map((source): RootSourceCase => ({
+      title: `D-PG4-01 the root source ${JSON.stringify(source)} collects only its listed skill folder`,
+      source,
+      entry: { skills: ["./skills/a"] },
+      manifestSkills: ["extra"],
+      directories: ALL_FOLDERS,
+      expectedPaths: ["skills/a"],
+    })),
+    {
+      title: "D-PG4-01 a single listed path selects that one folder",
+      source: "./",
+      entry: { skills: "./skills/b" },
+      directories: ALL_FOLDERS,
+      expectedPaths: ["skills/b"],
+    },
+    {
+      title: "D-PG4-01 a listed plugin root collects the root and then the skills folder",
+      source: "./",
+      entry: { skills: ["."] },
+      directories: ALL_FOLDERS,
+      expectedPaths: [".", "skills"],
+    },
+    {
+      title: "D-PG4-01 a listed plugin root collects no skills folder when none exists",
+      source: "./",
+      entry: { skills: ["./"] },
+      directories: ["."],
+      expectedPaths: ["."],
+    },
+    {
+      title: "D-PG4-01 a listed skills folder collects once in either spelling",
+      source: "./",
+      entry: { skills: ["skills", "./skills/"] },
+      directories: ALL_FOLDERS,
+      expectedPaths: ["skills"],
+    },
+    {
+      title: "D-PG4-01 two spellings of one listed folder collect once",
+      source: "./",
+      entry: { skills: ["./skills/a", "skills/a/"] },
+      directories: ALL_FOLDERS,
+      expectedPaths: ["skills/a"],
+    },
+    {
+      title: "D-PG4-01 the listed paths keep their listed order",
+      source: "./",
+      entry: { skills: ["./skills/b", "./skills/a"] },
+      directories: ALL_FOLDERS,
+      expectedPaths: ["skills/b", "skills/a"],
+    },
+    {
+      title: "D-PG4-01 a missing or file listed path does not survive beside one that does",
+      source: "./",
+      entry: { skills: ["./skills/missing", "./skills/file", "./skills/a"] },
+      directories: ALL_FOLDERS,
+      files: ["skills/file"],
+      expectedPaths: ["skills/a"],
+    },
+    {
+      title: "D-PG4-01 no survivor and an escaping listed path collect no skill path",
+      source: "./",
+      entry: { skills: ["../outside", "./skills/missing"] },
+      manifestSkills: ["extra"],
+      directories: ALL_FOLDERS,
+      expectedPaths: [],
+      expectedNotes: ['component path for "skills" escapes plugin root: "../outside"'],
+    },
+    {
+      title: "D-PG4-01 no survivor and an absolute listed path collect no skill path",
+      source: "./",
+      entry: { skills: ["/outside/skills"] },
+      directories: ALL_FOLDERS,
+      expectedPaths: [],
+      expectedNotes: [
+        'component path for "skills" must be relative (got absolute "/outside/skills")',
+      ],
+    },
+    {
+      title: "D-PG4-01 no survivor and no traversal apply the D-CF1-06 rule",
+      source: "./",
+      entry: { skills: ["./skills/missing"] },
+      manifestSkills: ["extra"],
+      directories: ALL_FOLDERS,
+      expectedPaths: ["skills/missing", "extra", "skills"],
+    },
+    {
+      title:
+        "D-PG4-01 a listed path that is not a string is no traversal, so the D-CF1-06 rule applies",
+      source: "./",
+      entry: { skills: [42, "./skills/missing"] },
+      manifestSkills: ["../manifest-outside"],
+      directories: ["skills"],
+      expectedPaths: ["skills/missing", "skills"],
+      expectedNotes: [
+        'component path for "skills" is not a string (got number)',
+        'component path for "skills" escapes plugin root: "../manifest-outside"',
+      ],
+    },
+    {
+      title:
+        "D-PG4-01 a refused plugin.json path still marks the plugin when a listed path survives",
+      source: "./",
+      entry: { skills: ["./skills/a"] },
+      manifestSkills: ["/outside/manifest"],
+      directories: ALL_FOLDERS,
+      expectedPaths: ["skills/a"],
+      expectedNotes: [
+        'component path for "skills" must be relative (got absolute "/outside/manifest")',
+      ],
+    },
+    ...(
+      [
+        { label: "absent", entry: {} },
+        { label: "null", entry: { skills: null } },
+        { label: "an empty string", entry: { skills: "" } },
+        { label: "an empty list", entry: { skills: [] } },
+      ] as const
+    ).map(({ label, entry }): RootSourceCase => ({
+      title: `D-PG4-01 a root-source entry whose skills is ${label} applies the D-CF1-06 rule`,
+      source: "./",
+      entry,
+      manifestSkills: ["extra"],
+      directories: ALL_FOLDERS,
+      expectedPaths: ["extra", "skills"],
+    })),
+    {
+      title: "D-PG4-01 an object-form source applies the D-CF1-06 rule to its listed skills",
+      source: { source: "directory", path: "./" },
+      entry: { skills: ["./skills/a"] },
+      directories: ALL_FOLDERS,
+      expectedPaths: ["skills/a", "skills"],
+    },
+    {
+      title: "D-PG4-01 a source below the root applies the D-CF1-06 rule to its listed skills",
+      source: "./alpha",
+      entry: { skills: ["./skills/a"] },
+      manifestSkills: ["extra"],
+      directories: ALL_FOLDERS,
+      expectedPaths: ["skills/a", "extra", "skills"],
+    },
+  ];
+
+  for (const {
+    title,
+    source,
+    entry,
+    manifestSkills,
+    directories,
+    files,
+    expectedPaths,
+    expectedNotes,
+  } of rootSourceCases) {
+    test(title, async () => {
+      // arrange
+      const pluginRoot = "/plugins/alpha";
+      const resolution = emptyResolution();
+      const directoryPaths = new Set(directories.map((folder) => path.join(pluginRoot, folder)));
+      const filePaths = new Set((files ?? []).map((file) => path.join(pluginRoot, file)));
+      const statKind = (candidate: string): Promise<"dir" | "file" | null> => {
+        if (directoryPaths.has(candidate)) {
+          return Promise.resolve("dir");
+        }
+
+        return Promise.resolve(filePaths.has(candidate) ? "file" : null);
+      };
+
+      // act
+      const dirty = await collectStrictComponentPaths(
+        {
+          entry: { name: "alpha", source, ...entry },
+          manifest: manifestSkills === undefined ? null : { skills: manifestSkills },
+          pluginRoot,
+          resolution,
+        },
+        statKind,
+      );
+
+      // assert
+      assert.deepStrictEqual(
+        { dirty, resolution },
+        {
+          dirty: expectedNotes !== undefined,
+          resolution: {
+            supported: expectedPaths.length > 0 ? ["skills"] : [],
+            notes: expectedNotes ?? [],
+            componentPaths: { skills: expectedPaths, commands: [], agents: [], workflows: [] },
+          },
+        },
+      );
+    });
+  }
+
+  test("D-PG4-01 the stat reader receives no refused listed path", async () => {
+    // arrange
+    const pluginRoot = "/plugins/alpha";
+    const resolution = emptyResolution();
+    const statted: string[] = [];
+
+    // act
+    const dirty = await collectStrictComponentPaths(
+      {
+        entry: {
+          name: "alpha",
+          source: "./",
+          skills: ["../outside", "/outside/skills", "./skills/a"],
+        },
+        manifest: null,
+        pluginRoot,
+        resolution,
+      },
+      (candidate) => {
+        statted.push(candidate);
+        return Promise.resolve(candidate === path.join(pluginRoot, "skills/a") ? "dir" : null);
+      },
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      { dirty, resolution, statted },
+      {
+        dirty: true,
+        resolution: {
+          supported: ["skills"],
+          notes: [
+            'component path for "skills" escapes plugin root: "../outside"',
+            'component path for "skills" must be relative (got absolute "/outside/skills")',
+          ],
+          componentPaths: { skills: ["skills/a"], commands: [], agents: [], workflows: [] },
+        },
+        statted: [
+          path.join(pluginRoot, "skills/a"),
+          path.join(pluginRoot, "commands"),
+          path.join(pluginRoot, "agents"),
+          path.join(pluginRoot, "workflows"),
+        ],
+      },
+    );
   });
 });

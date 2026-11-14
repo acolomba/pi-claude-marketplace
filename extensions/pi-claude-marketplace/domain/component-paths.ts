@@ -87,6 +87,15 @@ function readPathOrArray(value: unknown): readonly unknown[] {
 }
 
 /**
+ * The outcome of validating one declared path. A refusal's `cause` tells a
+ * traversal, an absolute path or one that escapes the plugin root, from a
+ * value that is not a string (D-PG4-01).
+ */
+type ComponentPathValidation =
+  | { readonly ok: true; readonly relative: string }
+  | { readonly ok: false; readonly reason: string; readonly cause: "traversal" | "type" };
+
+/**
  * Validates one declared path of `kind`. `subject` opens each refusal note;
  * a command map entry's source names its key there (D-CF3-03).
  */
@@ -95,11 +104,12 @@ async function validateComponentPath(
   raw: unknown,
   pluginRoot: string,
   subject = `component path for "${kind}"`,
-): Promise<{ ok: true; relative: string } | { ok: false; reason: string }> {
+): Promise<ComponentPathValidation> {
   if (Array.isArray(raw)) {
     return {
       ok: false,
       reason: `${subject} contains nested array element; must be a string`,
+      cause: "type",
     };
   }
 
@@ -107,6 +117,7 @@ async function validateComponentPath(
     return {
       ok: false,
       reason: `${subject} is not a string (got ${typeof raw})`,
+      cause: "type",
     };
   }
 
@@ -119,11 +130,12 @@ async function validateComponentPath(
     return {
       ok: false,
       reason: `${subject} must be relative (got absolute "${raw}")`,
+      cause: "traversal",
     };
   }
 
   if (!contained.ok) {
-    return { ok: false, reason: `${subject} escapes plugin root: "${raw}"` };
+    return { ok: false, reason: `${subject} escapes plugin root: "${raw}"`, cause: "traversal" };
   }
 
   // Deduplicate equivalent spellings only after enforcing containment.
@@ -358,7 +370,7 @@ async function validateCommandMapEntry(
     `source of ${subject}`,
   );
   if (!validated.ok) {
-    return validated;
+    return { ok: false, reason: validated.reason };
   }
 
   return { ok: true, entry: { key, source: validated.relative, origin, ...overrides } };
@@ -470,7 +482,8 @@ async function collectStrictCommandPaths(
  * `workflows/` only when the kind's declaration is falsy (absent, `null`, or
  * `""`), so a declared `[]` also leaves the folder unread. `commands/` follows
  * its own rule (D-CF3-04) in `collectStrictCommandPaths` and never reaches
- * this function.
+ * this function, and so does `skills/` for a root-source entry that lists
+ * skills (D-PG4-01), in `collectRootSourceSkillPaths`.
  */
 function conventionalFolderApplies(
   kind: ComponentPathKind,
@@ -490,6 +503,143 @@ function declaredPathReachesFolder(declared: readonly string[], kind: ComponentP
   );
 }
 
+/**
+ * D-PG4-01: whether a marketplace entry's `source` names the marketplace
+ * root, as Claude Code 2.1.323 tests it: a string whose segments, split on
+ * `/` or `\`, are all empty or `.`, such as `./` or `.`. An object-form
+ * source never does.
+ */
+export function isMarketplaceRootSource(source: unknown): boolean {
+  return (
+    typeof source === "string" &&
+    source.split(/[\\/]/u).every((segment) => segment === "" || segment === ".")
+  );
+}
+
+/**
+ * D-PG4-01: the `skills` paths a root-source entry lists, or none when the
+ * entry's source is not the marketplace root. An absent, `null`, or empty
+ * declaration lists none, as `readPathOrArray` reads it.
+ */
+function rootSourceListedSkills(entry: PluginEntry, kind: ComponentPathKind): readonly unknown[] {
+  return kind === "skills" && isMarketplaceRootSource(entry.source)
+    ? readPathOrArray(entry.skills)
+    : [];
+}
+
+/** Validates each path in order and records the note of each refused one. */
+async function validateComponentPaths(
+  resolution: ComponentPathResolution,
+  kind: ComponentPathKind,
+  raws: readonly unknown[],
+  pluginRoot: string,
+): Promise<readonly ComponentPathValidation[]> {
+  const validations = await Promise.all(
+    raws.map((raw) => validateComponentPath(kind, raw, pluginRoot)),
+  );
+  for (const validated of validations) {
+    if (!validated.ok) {
+      resolution.notes.push(validated.reason);
+    }
+  }
+
+  return validations;
+}
+
+/**
+ * D-PG4-01: the listed paths that survive, as in Claude Code 2.1.323: the
+ * path is contained and names an existing directory. Only a contained path
+ * is statted.
+ */
+async function survivingListedPaths(
+  listed: readonly ComponentPathValidation[],
+  pluginRoot: string,
+  statKind: StatKindReader,
+): Promise<readonly string[]> {
+  const accepted = listed.flatMap((validated) => (validated.ok ? [validated.relative] : []));
+  const kinds = await Promise.all(
+    accepted.map((relative) => statKind(path.join(pluginRoot, relative))),
+  );
+  return accepted.filter((_relative, index) => kinds[index] === "dir");
+}
+
+/**
+ * D-PG4-01: collects the surviving listed paths in listed order. The
+ * conventional `skills/` folder follows only when the plugin root is listed;
+ * a listed `skills/` is already a survivor and collects once.
+ */
+async function addListedSkillPaths(
+  resolution: ComponentPathResolution,
+  survivors: readonly string[],
+  pluginRoot: string,
+  statKind: StatKindReader,
+): Promise<void> {
+  const seenPaths = new Set<string>();
+  for (const relative of survivors) {
+    addComponentPath(resolution, "skills", seenPaths, relative);
+  }
+
+  if (survivors.includes(".") && (await statKind(path.join(pluginRoot, "skills"))) === "dir") {
+    addComponentPath(resolution, "skills", seenPaths, "skills");
+  }
+}
+
+/**
+ * D-CF1-06 over paths already validated: the accepted declared paths in
+ * order, then the `skills/` folder when it exists.
+ */
+async function addDeclaredSkillPaths(
+  resolution: ComponentPathResolution,
+  declared: readonly ComponentPathValidation[],
+  pluginRoot: string,
+  statKind: StatKindReader,
+): Promise<void> {
+  const seenPaths = new Set<string>();
+  for (const validated of declared) {
+    if (validated.ok) {
+      addComponentPath(resolution, "skills", seenPaths, validated.relative);
+    }
+  }
+
+  if ((await statKind(path.join(pluginRoot, "skills"))) === "dir") {
+    addComponentPath(resolution, "skills", seenPaths, "skills");
+  }
+}
+
+/**
+ * D-PG4-01, as in Claude Code 2.1.323: a root-source entry that lists skills
+ * gets the listed folders that survive, in place of both the `skills/` folder
+ * and the `plugin.json` paths, and no folder is reported unread. When none
+ * survives, a listed path refused as a traversal leaves the plugin with no
+ * skill path; otherwise the D-CF1-06 rule applies. Every declared path is
+ * validated once, so the notes and the returned refusal flag match the
+ * D-CF1-06 rule's.
+ */
+async function collectRootSourceSkillPaths(
+  listedRaws: readonly unknown[],
+  manifest: Record<string, unknown> | null,
+  pluginRoot: string,
+  resolution: ComponentPathResolution,
+  statKind: StatKindReader,
+): Promise<boolean> {
+  const listed = await validateComponentPaths(resolution, "skills", listedRaws, pluginRoot);
+  const declared = await validateComponentPaths(
+    resolution,
+    "skills",
+    readPathOrArray(manifest?.skills),
+    pluginRoot,
+  );
+  const survivors = await survivingListedPaths(listed, pluginRoot, statKind);
+  if (survivors.length > 0) {
+    await addListedSkillPaths(resolution, survivors, pluginRoot, statKind);
+  } else if (!listed.some((validated) => !validated.ok && validated.cause === "traversal")) {
+    await addDeclaredSkillPaths(resolution, [...listed, ...declared], pluginRoot, statKind);
+  }
+
+  markSupportedWhenCollected(resolution, "skills");
+  return [...listed, ...declared].some((validated) => !validated.ok);
+}
+
 async function collectStrictComponentKind(
   entry: PluginEntry,
   manifest: Record<string, unknown> | null,
@@ -500,6 +650,17 @@ async function collectStrictComponentKind(
 ): Promise<boolean> {
   if (kind === "commands") {
     return await collectStrictCommandPaths(entry, manifest, pluginRoot, resolution, statKind);
+  }
+
+  const rootSourceSkills = rootSourceListedSkills(entry, kind);
+  if (rootSourceSkills.length > 0) {
+    return await collectRootSourceSkillPaths(
+      rootSourceSkills,
+      manifest,
+      pluginRoot,
+      resolution,
+      statKind,
+    );
   }
 
   const seenPaths = new Set<string>();
@@ -531,9 +692,11 @@ async function collectStrictComponentKind(
  * paths come first, a declared `skills` path adds to the conventional
  * `skills/` folder, and a declared `agents` or `workflows` path replaces its
  * conventional folder, which is read only for an undeclared kind. Commands
- * are the exception (D-CF3-04, E4): `commands/` comes first and is read
+ * are one exception (D-CF3-04, E4): `commands/` comes first and is read
  * unless `plugin.json` declares `commands`, then the `plugin.json` paths,
- * then the marketplace entry's paths, which add to the folder.
+ * then the marketplace entry's paths, which add to the folder. A root-source
+ * entry that lists skills is the other (D-PG4-01, Claude Code 2.1.323): its
+ * surviving listed folders replace `skills/` and the `plugin.json` paths.
  */
 export async function collectStrictComponentPaths(
   input: {

@@ -721,9 +721,26 @@ export async function writePublishedPluginFiles(
   plugin: string,
   files: Readonly<Record<string, string>>,
 ): Promise<void> {
+  await writePublishedMarketplaceFiles(
+    published,
+    Object.fromEntries(
+      Object.entries(files).map(([file, text]) => [path.join("plugins", plugin, file), text]),
+    ),
+  );
+}
+
+/**
+ * Writes every text of `files`, by its path inside the published marketplace
+ * root, as `writePublishedPluginFiles` does inside one plugin. A marketplace
+ * entry whose source is the marketplace root keeps its skills there, such as
+ * `skills/<name>/SKILL.md`.
+ */
+export async function writePublishedMarketplaceFiles(
+  published: PublishedMarketplace,
+  files: Readonly<Record<string, string>>,
+): Promise<void> {
   const targets = Object.entries(files).map(
-    ([file, text]) =>
-      [ownedTarget(published, path.join(published.root, "plugins", plugin, file)), text] as const,
+    ([file, text]) => [ownedTarget(published, path.join(published.root, file)), text] as const,
   );
   await changePublication(published, async () => {
     await Promise.all(

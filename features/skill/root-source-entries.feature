@@ -1,0 +1,73 @@
+Feature: Skill root-source entries
+
+  Protects the D-PG4-01 rule of Claude Code 2.1.323: a marketplace entry whose source is the
+  marketplace root and which lists skills gets only the listed skill folders. A local
+  marketplace stands in for a published one.
+
+  Background:
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" has the file "skills/a/SKILL.md" at its root with this text:
+      """
+      ---
+      name: a
+      description: Skill a.
+      ---
+
+      Skill a body.
+      """
+    Given the marketplace "fixtures" has the file "skills/b/SKILL.md" at its root with this text:
+      """
+      ---
+      name: b
+      description: Skill b.
+      ---
+
+      Skill b body.
+      """
+
+  Scenario: Installing a root-source entry that lists skills stages only the listed skills
+    Given the marketplace "fixtures" has the file "skills/a/references/deep.md" at its root with this text:
+      """
+      A deep reference.
+      """
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {"name":"fixtures","owner":{"name":"features"},"plugins":[{"name":"root","source":"./","version":"1.0.0","skills":["./skills/a"]}]}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install root@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | root@fixtures | root | installed |         | project | 1.0.0   |
+    Then the staged skills directory of the project scope holds these files:
+      | file                      | text                                                                                                                                                                                                                   |
+      | root-a/                   |                                                                                                                                                                                                                        |
+      | root-a/references/        |                                                                                                                                                                                                                        |
+      | root-a/references/deep.md | A deep reference.                                                                                                                                                                                                      |
+      | root-a/SKILL.md           | ---\nname: root-a\ndescription: Skill a.\npi-claude-marketplace: {"names":["root:a","a"],"pluginRoot":"{home}/marketplaces/fixtures","pluginData":"{project dir}/.pi/pi-claude-marketplace/data/fixtures/root"}\n---\n\nSkill a body. |
+
+  Scenario: Two root-source entries that share one skills folder each stage only their own listed skills
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {"name":"fixtures","owner":{"name":"features"},"plugins":[{"name":"one","source":"./","version":"1.0.0","skills":["./skills/a"]},{"name":"two","source":"./","version":"1.0.0","skills":["./skills/b"]}]}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install one@fixtures --scope project"
+    When the user runs "/claude:plugin install two@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name | status    | reasons | scope   | version |
+      | fixtures         | project           | two@fixtures | two  | installed |         | project | 1.0.0   |
+    Then the staged skills directory of the project scope holds these files:
+      | file           | text                                                                                                                                                                                                                 |
+      | one-a/         |                                                                                                                                                                                                                      |
+      | one-a/SKILL.md | ---\nname: one-a\ndescription: Skill a.\npi-claude-marketplace: {"names":["one:a","a"],"pluginRoot":"{home}/marketplaces/fixtures","pluginData":"{project dir}/.pi/pi-claude-marketplace/data/fixtures/one"}\n---\n\nSkill a body. |
+      | two-b/         |                                                                                                                                                                                                                      |
+      | two-b/SKILL.md | ---\nname: two-b\ndescription: Skill b.\npi-claude-marketplace: {"names":["two:b","b"],"pluginRoot":"{home}/marketplaces/fixtures","pluginData":"{project dir}/.pi/pi-claude-marketplace/data/fixtures/two"}\n---\n\nSkill b body. |

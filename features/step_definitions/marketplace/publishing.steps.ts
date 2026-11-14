@@ -12,7 +12,7 @@
  */
 
 import assert from "node:assert/strict";
-import { rm, stat } from "node:fs/promises";
+import { readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { type DataTable, Given } from "@cucumber/cucumber";
@@ -42,6 +42,7 @@ import {
   republishMarketplace,
   requireFreeRoot,
   rewritePublishedManifest,
+  writePublishedMarketplaceFiles,
 } from "../../lib/published-marketplace.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
 
@@ -181,6 +182,17 @@ Given(
   "the marketplace {string} publishes this manifest:",
   async function (this: ScenarioWorld, name: string, text: string) {
     await rewritePublishedManifest(this.requirePublished(name), text);
+  },
+);
+
+// Writes a file at the marketplace root, outside every `plugins/` folder,
+// where a marketplace entry whose source is the root keeps its skills.
+Given(
+  "the marketplace {string} has the file {string} at its root with this text:",
+  async function (this: ScenarioWorld, name: string, file: string, text: string) {
+    const published = this.requirePublished(name);
+    await writePublishedMarketplaceFiles(published, { [file]: text });
+    assert.strictEqual(await readFile(path.join(published.root, file), "utf8"), text);
   },
 );
 
