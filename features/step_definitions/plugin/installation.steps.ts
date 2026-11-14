@@ -4,8 +4,9 @@
  * A result can report a failure after the install already reached disk. These
  * steps look at what the install leaves behind: the plugins the scope's
  * installation record holds, with the version and enabled state of each, the
- * files a plugin's data directory holds, the skills and prompts it stages, and
- * the git clones of plugins and marketplaces the scope keeps. A clone is shown
+ * skill names it records for one plugin, the files a plugin's data directory
+ * holds, the skills and prompts it stages, and the git clones of plugins and
+ * marketplaces the scope keeps. A clone is shown
  * by its origin URL and, when pinned, by its revision, never by its directory
  * name, which hashes a URL with the git host's random port.
  * The setup steps change files as a user can: they plant a file in an
@@ -425,6 +426,17 @@ Then(
         String(plugin.enabled),
       ]);
     assert.deepStrictEqual([["id", "version", "enabled"], ...rows], table.raw());
+  },
+);
+
+Then(
+  "the installation record of the {word} scope holds these skills of {string}:",
+  async function (this: ScenarioWorld, scope: string, id: string, table: DataTable) {
+    const recorded = await recordedPlugins(extensionRoot(this, scope));
+    const plugin =
+      recorded.find((candidate) => candidate.id === id) ??
+      assert.fail(`the installation record of the ${scope} scope holds no plugin ${id}`);
+    assert.deepStrictEqual([["skill"], ...plugin.skills.map((skill) => [skill])], table.raw());
   },
 );
 

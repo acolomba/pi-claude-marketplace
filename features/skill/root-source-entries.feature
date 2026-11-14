@@ -71,3 +71,124 @@ Feature: Skill root-source entries
       | one-a/SKILL.md | ---\nname: one-a\ndescription: Skill a.\npi-claude-marketplace: {"names":["one:a","a"],"pluginRoot":"{home}/marketplaces/fixtures","pluginData":"{project dir}/.pi/pi-claude-marketplace/data/fixtures/one"}\n---\n\nSkill a body. |
       | two-b/         |                                                                                                                                                                                                                      |
       | two-b/SKILL.md | ---\nname: two-b\ndescription: Skill b.\npi-claude-marketplace: {"names":["two:b","b"],"pluginRoot":"{home}/marketplaces/fixtures","pluginData":"{project dir}/.pi/pi-claude-marketplace/data/fixtures/two"}\n---\n\nSkill b body. |
+
+  Scenario: An update that drops a listed skill removes its staged folder and its record
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {"name":"fixtures","owner":{"name":"features"},"plugins":[{"name":"root","source":"./","version":"1.0.0","skills":["./skills/a","./skills/b"]}]}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install root@fixtures --scope project"
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {"name":"fixtures","owner":{"name":"features"},"plugins":[{"name":"root","source":"./","version":"1.1.0","skills":["./skills/a"]}]}
+      """
+    When the user runs "/claude:plugin update root@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons | scope   | from  | to    |
+      | fixtures         | project           | root@fixtures | root | updated |         | project | 1.0.0 | 1.1.0 |
+    Then the staged skills directory of the project scope holds these files:
+      | file            | text                                                                                                                                                                                                                                  |
+      | root-a/         |                                                                                                                                                                                                                                       |
+      | root-a/SKILL.md | ---\nname: root-a\ndescription: Skill a.\npi-claude-marketplace: {"names":["root:a","a"],"pluginRoot":"{home}/marketplaces/fixtures","pluginData":"{project dir}/.pi/pi-claude-marketplace/data/fixtures/root"}\n---\n\nSkill a body. |
+    Then the installation record of the project scope holds these skills of "root@fixtures":
+      | skill  |
+      | root-a |
+
+  Scenario: A reinstall removes a skill that the entry stopped listing under the same version
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {"name":"fixtures","owner":{"name":"features"},"plugins":[{"name":"root","source":"./","version":"1.0.0","skills":["./skills/a","./skills/b"]}]}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install root@fixtures --scope project"
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {"name":"fixtures","owner":{"name":"features"},"plugins":[{"name":"root","source":"./","version":"1.0.0","skills":["./skills/a"]}]}
+      """
+    When the user runs "/claude:plugin reinstall root@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
+      | fixtures         | project           | root@fixtures | root | reinstalled |         | project | 1.0.0   |
+    Then the staged skills directory of the project scope holds these files:
+      | file            | text                                                                                                                                                                                                                                  |
+      | root-a/         |                                                                                                                                                                                                                                       |
+      | root-a/SKILL.md | ---\nname: root-a\ndescription: Skill a.\npi-claude-marketplace: {"names":["root:a","a"],"pluginRoot":"{home}/marketplaces/fixtures","pluginData":"{project dir}/.pi/pi-claude-marketplace/data/fixtures/root"}\n---\n\nSkill a body. |
+    Then the installation record of the project scope holds these skills of "root@fixtures":
+      | skill  |
+      | root-a |
+
+  Scenario: A new session after the update offers only the skill that stays
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {"name":"fixtures","owner":{"name":"features"},"plugins":[{"name":"root","source":"./","version":"1.0.0","skills":["./skills/a","./skills/b"]}]}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install root@fixtures --scope project"
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {"name":"fixtures","owner":{"name":"features"},"plugins":[{"name":"root","source":"./","version":"1.1.0","skills":["./skills/a"]}]}
+      """
+    Given the user has run "/claude:plugin update root@fixtures --scope project"
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command       | description |
+      | /skill:root-a | Skill a.    |
+
+  Scenario: The Claude Code name of a dropped skill reaches the model as typed
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {"name":"fixtures","owner":{"name":"features"},"plugins":[{"name":"root","source":"./","version":"1.0.0","skills":["./skills/a","./skills/b"]}]}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install root@fixtures --scope project"
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {"name":"fixtures","owner":{"name":"features"},"plugins":[{"name":"root","source":"./","version":"1.1.0","skills":["./skills/a"]}]}
+      """
+    Given the user has run "/claude:plugin update root@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts "/root:b Ada"
+    Then the model receives these calls:
+      | call | role | text        |
+      | 1    | user | /root:b Ada |
+
+  Scenario: A second reinstall of a converged root-source plugin changes nothing
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {"name":"fixtures","owner":{"name":"features"},"plugins":[{"name":"root","source":"./","version":"1.0.0","skills":["./skills/a","./skills/b"]}]}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install root@fixtures --scope project"
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {"name":"fixtures","owner":{"name":"features"},"plugins":[{"name":"root","source":"./","version":"1.0.0","skills":["./skills/a"]}]}
+      """
+    Given the user has run "/claude:plugin reinstall root@fixtures --scope project"
+    When the user runs "/claude:plugin reinstall root@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
+      | fixtures         | project           | root@fixtures | root | reinstalled |         | project | 1.0.0   |
+    Then the staged skills directory of the project scope holds these files:
+      | file            | text                                                                                                                                                                                                                                  |
+      | root-a/         |                                                                                                                                                                                                                                       |
+      | root-a/SKILL.md | ---\nname: root-a\ndescription: Skill a.\npi-claude-marketplace: {"names":["root:a","a"],"pluginRoot":"{home}/marketplaces/fixtures","pluginData":"{project dir}/.pi/pi-claude-marketplace/data/fixtures/root"}\n---\n\nSkill a body. |
+    Then the installation record of the project scope holds these skills of "root@fixtures":
+      | skill  |
+      | root-a |
