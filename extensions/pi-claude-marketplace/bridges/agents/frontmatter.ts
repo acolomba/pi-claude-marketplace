@@ -92,13 +92,21 @@ function descriptionLines(value: string): string[] {
 }
 
 /**
+ * Control characters and line terminators, which no stored key and no
+ * provenance value may hold (T-07-05). Pi's YAML reader turns a lone CR into a
+ * line feed, so a CR left in a provenance value would start a new key there.
+ */
+const UNSAFE_KEY_CHARACTER = /[\p{Cc}\u2028\u2029]/gu;
+
+/**
  * Normalize a free-text provenance value to a single line so it cannot be
- * misread as a new frontmatter key by pi-subagents' line-based parser.
- * Provenance values are purely informational; collapsing an embedded
- * newline to a space is safe.
+ * misread as a new frontmatter key by pi-subagents' line-based parser or by
+ * the workflow engine's YAML reader. Provenance values are purely
+ * informational; a CRLF pair and every other unsafe character become one
+ * space each.
  */
 function sanitizeProvenanceValue(value: string): string {
-  return value.replace(/\r?\n/g, " ");
+  return value.replaceAll("\r\n", " ").replaceAll(UNSAFE_KEY_CHARACTER, " ");
 }
 
 export interface ParsedFrontmatter {
@@ -160,9 +168,6 @@ function parseSource(
     return repaired === undefined ? { parseError: errorMessage(error) } : { parsed: repaired };
   }
 }
-
-/** Control characters and line terminators, which no stored key may hold (T-07-05). */
-const UNSAFE_KEY_CHARACTER = /[\p{Cc}\u2028\u2029]/gu;
 
 /**
  * D-PG7-05 as extended: one YAML value as the converter's string. A scalar is

@@ -388,6 +388,11 @@ Review files.
       expectedProvenanceValue: "agents/reviewer.md injected: field warning",
     },
     {
+      description: "a lone CR, U+2028, U+2029, and other control characters as spaces",
+      provenanceValue: "agents/reviewer.md\rinjected: field\u2028a\u2029b\tc\u0000d",
+      expectedProvenanceValue: "agents/reviewer.md injected: field a b c d",
+    },
+    {
       description: "the empty provenance unchanged",
       provenanceValue: "",
       expectedProvenanceValue: "",

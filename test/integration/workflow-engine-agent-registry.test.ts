@@ -99,3 +99,18 @@ for (const description of [
     );
   });
 }
+
+test("T-07-05: the engine finds the agent and its tools when a provenance warning holds a lone CR", async (t) => {
+  // act
+  const definition = await engineDefinition(t, {
+    description: "Reads.",
+    tools: "Read",
+    thinking: "deep\rname: other",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    { description: definition?.description, tools: definition?.tools },
+    { description: "Reads.", tools: ["read"] },
+  );
+});
