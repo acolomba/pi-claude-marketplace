@@ -4,7 +4,7 @@
  * A result can report a failure after the install already reached disk. These
  * steps look at what the install leaves behind: the plugins the scope's
  * installation record holds, with the version and enabled state of each, the
- * skill names it records for one plugin, the files a plugin's data directory
+ * skill and agent names it records for one plugin, the files a plugin's data directory
  * holds, the skills and prompts it stages, and the git clones of plugins and
  * marketplaces the scope keeps. A clone is shown
  * by its origin URL and, when pinned, by its revision, never by its directory
@@ -59,6 +59,8 @@ interface RecordedPlugin {
   readonly enabled: boolean;
   /** The names of the plugin's installed skill directories. */
   readonly skills: readonly string[];
+  /** The generated names of the plugin's installed agents. */
+  readonly agents: readonly string[];
 }
 
 // The directory where the extension keeps the scope's record, staged resources, and data.
@@ -69,6 +71,25 @@ function extensionRoot(world: ScenarioWorld, scope: string): string {
 // Whether `name` names one entry of a directory: no separator, and not `.` or `..`.
 function isEntryName(name: string): boolean {
   return name !== "" && name !== "." && name !== ".." && !/[/\\]/u.test(name);
+}
+
+// The `resources.<kind>` list of names of the plugin `id`'s record in `file`.
+function recordedNames(
+  id: string,
+  record: object,
+  kind: string,
+  file: string,
+  content: string,
+): readonly string[] {
+  const names: unknown =
+    "resources" in record && isPlainObject(record.resources)
+      ? Reflect.get(record.resources, kind)
+      : undefined;
+  if (!Array.isArray(names) || !names.every((name): name is string => typeof name === "string")) {
+    assert.fail(`the plugin ${id} in ${file} has no resources.${kind} list of names: ${content}`);
+  }
+
+  return names;
 }
 
 // The plugin `id` as its record in `file` holds it; `content` is the file's text.
@@ -90,18 +111,13 @@ function recordedPlugin(
     );
   }
 
-  const skills =
-    "resources" in record && isPlainObject(record.resources) && "skills" in record.resources
-      ? record.resources.skills
-      : undefined;
-  if (
-    !Array.isArray(skills) ||
-    !skills.every((skill): skill is string => typeof skill === "string")
-  ) {
-    assert.fail(`the plugin ${id} in ${file} has no resources.skills list of names: ${content}`);
-  }
-
-  return { id, version: record.version, enabled: record.enabled, skills };
+  return {
+    id,
+    version: record.version,
+    enabled: record.enabled,
+    skills: recordedNames(id, record, "skills", file, content),
+    agents: recordedNames(id, record, "agents", file, content),
+  };
 }
 
 // The plugins the scope's installation record holds, in record order.
@@ -123,6 +139,19 @@ async function recordedPlugins(root: string): Promise<readonly RecordedPlugin[]>
       recordedPlugin(`${plugin}@${marketplace}`, record, file, content),
     );
   });
+}
+
+// The plugin `id` of the scope's installation record, which must hold it.
+async function recordedPluginOf(
+  world: ScenarioWorld,
+  scope: string,
+  id: string,
+): Promise<RecordedPlugin> {
+  const recorded = await recordedPlugins(extensionRoot(world, scope));
+  return (
+    recorded.find((candidate) => candidate.id === id) ??
+    assert.fail(`the installation record of the ${scope} scope holds no plugin ${id}`)
+  );
 }
 
 // The schema version each earlier release wrote, from its `state.json` schema.
@@ -432,11 +461,16 @@ Then(
 Then(
   "the installation record of the {word} scope holds these skills of {string}:",
   async function (this: ScenarioWorld, scope: string, id: string, table: DataTable) {
-    const recorded = await recordedPlugins(extensionRoot(this, scope));
-    const plugin =
-      recorded.find((candidate) => candidate.id === id) ??
-      assert.fail(`the installation record of the ${scope} scope holds no plugin ${id}`);
+    const plugin = await recordedPluginOf(this, scope, id);
     assert.deepStrictEqual([["skill"], ...plugin.skills.map((skill) => [skill])], table.raw());
+  },
+);
+
+Then(
+  "the installation record of the {word} scope holds these agents of {string}:",
+  async function (this: ScenarioWorld, scope: string, id: string, table: DataTable) {
+    const plugin = await recordedPluginOf(this, scope, id);
+    assert.deepStrictEqual([["agent"], ...plugin.agents.map((agent) => [agent])], table.raw());
   },
 );
 
@@ -483,6 +517,16 @@ Then(
   "the agents directory of the {word} scope holds these files:",
   async function (this: ScenarioWorld, scope: string, table: DataTable) {
     assert.deepStrictEqual(await fileRows(agentsDirectory(this, scope)), table.raw());
+  },
+);
+
+// The file names alone, under a `file` heading: the files step above also
+// compares whole texts.
+Then(
+  "the agents directory of the {word} scope holds these file names:",
+  async function (this: ScenarioWorld, scope: string, table: DataTable) {
+    const names = (await fileRows(agentsDirectory(this, scope))).map(([name]) => [name ?? ""]);
+    assert.deepStrictEqual(names, table.raw());
   },
 );
 

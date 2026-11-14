@@ -802,3 +802,233 @@ Feature: Agent frontmatter
 
       Answer the task.
       """
+
+  Scenario: An update renames an agent that was installed under a name with quote marks
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file     | name  | description             | body             |
+      | named.md | '"x"' | Names itself in quotes. | Answer the task. |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the agents folder of the user scope holds the file "pi-claude-marketplace-demo-\"x\".md" as an earlier release wrote it, with this text:
+      """
+      ---
+      name: demo:"x"
+      description: Names itself in quotes.
+      aliases: pi-claude-marketplace-demo-"x"
+      systemPromptMode: replace
+      inheritProjectContext: true
+      inheritSkills: true
+      advertise: true
+      async: false
+      provenance:
+        generatedBy: pi-claude-marketplace
+        sourcePlugin: demo
+        sourceAgent: "x"
+        sourcePath: {home}/marketplaces/fixtures/plugins/demo/agents/named.md
+        droppedFields: []
+        droppedTools: []
+        warnings: []
+      ---
+
+      Answer the task.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file     | name | description             | body             |
+      | named.md | "x"  | Names itself in quotes. | Answer the task. |
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope | from  | to    |
+      | fixtures         | user              | demo@fixtures | demo | will update |         | user  | 1.0.0 | 1.1.0 |
+      | fixtures         | user              | demo@fixtures | demo | will update |         | user  | 1.0.0 | 1.1.0 |
+    Then the agents directory of the user scope holds these file names:
+      | file                              |
+      | pi-claude-marketplace-demo-"x".md |
+    Then the agents folder of the user scope holds the file "pi-claude-marketplace-demo-\"x\".md" with this text:
+      """
+      ---
+      name: demo:"x"
+      description: Names itself in quotes.
+      aliases: pi-claude-marketplace-demo-"x"
+      systemPromptMode: replace
+      inheritProjectContext: true
+      inheritSkills: true
+      advertise: true
+      async: false
+      provenance:
+        generatedBy: pi-claude-marketplace
+        sourcePlugin: demo
+        sourceAgent: "x"
+        sourcePath: {home}/marketplaces/fixtures/plugins/demo/agents/named.md
+        droppedFields: []
+        droppedTools: []
+        warnings: []
+      ---
+
+      Answer the task.
+      """
+    Then the agents index of the user scope holds these rows:
+      | generated name                 | target file                       |
+      | pi-claude-marketplace-demo-"x" | pi-claude-marketplace-demo-"x".md |
+    When the user runs "/claude:plugin update demo@fixtures --scope user"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons | scope | from  | to    |
+      | fixtures         | user              | demo@fixtures | demo | updated |         | user  | 1.0.0 | 1.1.0 |
+    Then the agents directory of the user scope holds these file names:
+      | file                            |
+      | pi-claude-marketplace-demo-x.md |
+    Then the agents folder of the user scope holds the file "pi-claude-marketplace-demo-x.md" with this text:
+      """
+      ---
+      name: demo:x
+      description: Names itself in quotes.
+      aliases: pi-claude-marketplace-demo-x
+      systemPromptMode: replace
+      inheritProjectContext: true
+      inheritSkills: true
+      advertise: true
+      provenance:
+        generatedBy: pi-claude-marketplace
+        sourcePlugin: demo
+        sourceAgent: x
+        sourcePath: {home}/marketplaces/fixtures/plugins/demo/agents/named.md
+        droppedFields: []
+        droppedTools: []
+        warnings: []
+      ---
+
+      Answer the task.
+      """
+    Then the agents index of the user scope holds these rows:
+      | generated name               | target file                     |
+      | pi-claude-marketplace-demo-x | pi-claude-marketplace-demo-x.md |
+    Then the installation record of the user scope holds these agents of "demo@fixtures":
+      | agent                        |
+      | pi-claude-marketplace-demo-x |
+
+  Scenario: A reinstall renames an agent that was installed under a name with quote marks
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file     | name  | description             | body             |
+      | named.md | '"x"' | Names itself in quotes. | Answer the task. |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the agents folder of the user scope holds the file "pi-claude-marketplace-demo-\"x\".md" as an earlier release wrote it, with this text:
+      """
+      ---
+      name: demo:"x"
+      description: Names itself in quotes.
+      aliases: pi-claude-marketplace-demo-"x"
+      systemPromptMode: replace
+      inheritProjectContext: true
+      inheritSkills: true
+      advertise: true
+      async: false
+      provenance:
+        generatedBy: pi-claude-marketplace
+        sourcePlugin: demo
+        sourceAgent: "x"
+        sourcePath: {home}/marketplaces/fixtures/plugins/demo/agents/named.md
+        droppedFields: []
+        droppedTools: []
+        warnings: []
+      ---
+
+      Answer the task.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file     | name | description             | body             |
+      | named.md | "x"  | Names itself in quotes. | Answer the task. |
+    When the user starts a new pi session
+    Then the session reports no results
+    Then the agents directory of the user scope holds these file names:
+      | file                              |
+      | pi-claude-marketplace-demo-"x".md |
+    Then the agents folder of the user scope holds the file "pi-claude-marketplace-demo-\"x\".md" with this text:
+      """
+      ---
+      name: demo:"x"
+      description: Names itself in quotes.
+      aliases: pi-claude-marketplace-demo-"x"
+      systemPromptMode: replace
+      inheritProjectContext: true
+      inheritSkills: true
+      advertise: true
+      async: false
+      provenance:
+        generatedBy: pi-claude-marketplace
+        sourcePlugin: demo
+        sourceAgent: "x"
+        sourcePath: {home}/marketplaces/fixtures/plugins/demo/agents/named.md
+        droppedFields: []
+        droppedTools: []
+        warnings: []
+      ---
+
+      Answer the task.
+      """
+    Then the agents index of the user scope holds these rows:
+      | generated name                 | target file                       |
+      | pi-claude-marketplace-demo-"x" | pi-claude-marketplace-demo-"x".md |
+    When the user runs "/claude:plugin reinstall demo@fixtures --scope user"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | reinstalled |         | user  | 1.0.0   |
+    Then the agents directory of the user scope holds these file names:
+      | file                            |
+      | pi-claude-marketplace-demo-x.md |
+    Then the agents folder of the user scope holds the file "pi-claude-marketplace-demo-x.md" with this text:
+      """
+      ---
+      name: demo:x
+      description: Names itself in quotes.
+      aliases: pi-claude-marketplace-demo-x
+      systemPromptMode: replace
+      inheritProjectContext: true
+      inheritSkills: true
+      advertise: true
+      provenance:
+        generatedBy: pi-claude-marketplace
+        sourcePlugin: demo
+        sourceAgent: x
+        sourcePath: {home}/marketplaces/fixtures/plugins/demo/agents/named.md
+        droppedFields: []
+        droppedTools: []
+        warnings: []
+      ---
+
+      Answer the task.
+      """
+    Then the agents index of the user scope holds these rows:
+      | generated name               | target file                     |
+      | pi-claude-marketplace-demo-x | pi-claude-marketplace-demo-x.md |
+    Then the installation record of the user scope holds these agents of "demo@fixtures":
+      | agent                        |
+      | pi-claude-marketplace-demo-x |
