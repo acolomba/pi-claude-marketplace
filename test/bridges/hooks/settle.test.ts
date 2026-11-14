@@ -2071,9 +2071,16 @@ for (const { name, results, notices, continued } of [
       Object.keys(results).map((pluginId) => stopEntry(pluginId)),
     );
     const host = makeNoticeHost();
+    const executor = resultsExecutor(results);
 
     // act
-    const boundaryResult = await runStop(runtime, host.pi, host.ctx, resultsExecutor(results));
+    const boundaryResult = await runStop(runtime, host.pi, host.ctx, executor);
+    await settleHandlerFor(
+      runtime,
+      runtime.currentGeneration(),
+      host.pi,
+      executor,
+    )(settledEvent, host.ctx);
 
     // assert
     assert.deepStrictEqual(
@@ -2086,14 +2093,14 @@ for (const { name, results, notices, continued } of [
   });
 }
 
-test("shows no stop line when an earlier boundary handler already continued the run (D-PG5-13)", async (t) => {
+test("shows the stop line once the run settles, though an earlier boundary handler asked to continue (D-PG5-13)", async () => {
   // arrange
-  const debugLines = observeHookDebug(t);
   const runtime = createHooksRuntime();
   runtime.advanceGeneration();
   runtime.setRoutingBucket("Stop", [stopEntry("halt")]);
   const host = makeNoticeHost();
   const generation = runtime.currentGeneration();
+  const executor = resultsExecutor({ halt: { kind: "stop", stopReason: "done for today" } });
   agentEndCacheHandler(runtime, generation)(agentEnd("stop"));
   const continuedEvent = { ...boundaryEvent, continue: true } as AgentBeforeSettleEvent;
 
@@ -2102,18 +2109,47 @@ test("shows no stop line when an earlier boundary handler already continued the 
     runtime,
     generation,
     host.pi,
-    resultsExecutor({ halt: { kind: "stop", stopReason: "done for today" } }),
+    executor,
   )(continuedEvent, host.ctx);
+  const noticesAtBoundary = [...host.capture.entries];
+  const settle = settleHandlerFor(runtime, generation, host.pi, executor);
+  await settle(settledEvent, host.ctx);
+  await settle(settledEvent, host.ctx);
 
   // assert
   assert.deepStrictEqual(
-    { notices: host.capture.entries, boundaryResult, debug: debugLines() },
+    { boundaryResult, noticesAtBoundary, notices: host.capture.entries },
+    {
+      boundaryResult: undefined,
+      noticesAtBoundary: [],
+      notices: [hookNoticeEntry("Stop hook stopped continuation: done for today")],
+    },
+  );
+});
+
+test("drops the stop line when the run goes on past the boundary (D-PG5-13)", async (t) => {
+  // arrange
+  const debugLines = observeHookDebug(t);
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket("Stop", [stopEntry("halt")]);
+  const host = makeNoticeHost();
+  const generation = runtime.currentGeneration();
+  const executor = resultsExecutor({ halt: { kind: "stop", stopReason: "done for today" } });
+  await runStop(runtime, host.pi, host.ctx, executor);
+
+  // act
+  agentEndCacheHandler(runtime, generation)(agentEnd("aborted"));
+  await settleHandlerFor(runtime, generation, host.pi, executor)(settledEvent, host.ctx);
+
+  // assert
+  assert.deepStrictEqual(
+    { notices: host.capture.entries, debug: debugLines() },
     {
       notices: [],
-      boundaryResult: undefined,
       debug: [
         "[hooks] settle: continue:false from halt suppresses Stop continuation; stopReason=done for today",
-        "[hooks] settle: an earlier boundary handler continued the run; stopReason not shown",
+        "[hooks] settle: the run went on after a Stop hook stopped it; stopReason not shown",
       ],
     },
   );
@@ -2193,6 +2229,7 @@ test("debug-logs a Stop failure notice and a stop line that fail to show", async
 
   // act
   const boundaryResult = await runStop(runtime, pi, ctx, executor);
+  await settleHandlerFor(runtime, runtime.currentGeneration(), pi, executor)(settledEvent, ctx);
 
   // assert
   assert.deepStrictEqual(debugLines(), [

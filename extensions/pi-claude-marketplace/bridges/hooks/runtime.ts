@@ -149,6 +149,14 @@ export interface HooksRuntime {
    * or `error` ending.
    */
   readonly takeStopEnding: () => AssistantMessage | undefined;
+  /**
+   * D-PG5-13: keeps the `stopReason` of a Stop hook's `continue: false`
+   * until the run is known to stop. Pi decides whether the run goes on only
+   * after every boundary handler, so the bridge cannot know at its own turn.
+   */
+  readonly holdStopReason: (reason: string) => void;
+  /** D-PG5-13: takes the held `stopReason`, or `undefined` when none is held. */
+  readonly takeHeldStopReason: () => string | undefined;
   /** D-PG5-06: marks the Stop boundary handler as running its hooks. */
   readonly openStopBoundary: () => void;
   /** D-PG5-06: marks the Stop boundary handler as done with its hooks. */
@@ -273,6 +281,7 @@ export function createHooksRuntime(): HooksRuntime {
   let stopHookActive = false;
   let runStartedByRewake = false;
   let stopBoundaryOpen = false;
+  let heldStopReason: string | undefined;
   let consecutiveBlockCount = 0;
   let capNotifiedThisSession = false;
   const shownStartFailures = new Set<string>();
@@ -289,6 +298,7 @@ export function createHooksRuntime(): HooksRuntime {
     stopHookActive = false;
     runStartedByRewake = false;
     stopBoundaryOpen = false;
+    heldStopReason = undefined;
     shownStartFailures.clear();
     finishStopSequence();
   }
@@ -375,6 +385,16 @@ export function createHooksRuntime(): HooksRuntime {
       const message = lastAssistant;
       lastAssistant = undefined;
       return message;
+    },
+
+    holdStopReason(reason: string): void {
+      heldStopReason = reason;
+    },
+
+    takeHeldStopReason(): string | undefined {
+      const reason = heldStopReason;
+      heldStopReason = undefined;
+      return reason;
     },
 
     openStopBoundary(): void {

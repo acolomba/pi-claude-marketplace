@@ -172,6 +172,7 @@ test("keeps every state family isolated between runtime instances", () => {
   firstRuntime.appendPendingPromptContext(firstPendingEntry);
   firstRuntime.recordLastAssistant(assistantMessage("first message"));
   firstRuntime.recordStopReentry();
+  firstRuntime.holdStopReason("first reason");
   firstRuntime.registerChild(childEntry);
   const secondState = {
     generation: secondRuntime.currentGeneration(),
@@ -181,6 +182,7 @@ test("keeps every state family isolated between runtime instances", () => {
     promptPending: secondRuntime.pendingPromptContextEntries(),
     assistant: secondRuntime.takeLastAssistant(),
     stopHookActive: secondRuntime.isStopHookActive(),
+    stopReason: secondRuntime.takeHeldStopReason(),
     pidEntries: secondRuntime.pidTableEntries(loc),
     child: secondRuntime.takeChild("dispatch-first"),
   };
@@ -194,6 +196,7 @@ test("keeps every state family isolated between runtime instances", () => {
     promptPending: [],
     assistant: undefined,
     stopHookActive: false,
+    stopReason: undefined,
     pidEntries: [],
     child: undefined,
   });
@@ -544,6 +547,36 @@ for (const stopReason of ["length", "error"] as const) {
     assert.strictEqual(runtime.takeLastAssistant(), ending);
   });
 }
+
+test("hands out a held stop reason once, and the last one held (D-PG5-13)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const before = runtime.takeHeldStopReason();
+  runtime.holdStopReason("first");
+  runtime.holdStopReason("done for today");
+
+  // act
+  const taken = runtime.takeHeldStopReason();
+  const takenAgain = runtime.takeHeldStopReason();
+
+  // assert
+  assert.deepStrictEqual(
+    { before, taken, takenAgain },
+    { before: undefined, taken: "done for today", takenAgain: undefined },
+  );
+});
+
+test("drops a held stop reason at a bridge load (D-PG5-13)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.holdStopReason("done for today");
+
+  // act
+  runtime.prepareSettleForRegistration();
+
+  // assert
+  assert.strictEqual(runtime.takeHeldStopReason(), undefined);
+});
 
 test("marks a wake sent while the stop boundary is open, and no other wake (D-BG-210 / D-PG5-06)", () => {
   // arrange

@@ -14,7 +14,9 @@
  * The other-extension `Given` starts the profile Pi with a harness extension
  * loaded before the real one, which continues the first run end with a hidden
  * `go on` message, so the Stop hooks of that end run after a handler that
- * already continued the run (D-PG5-05).
+ * already continued the run (D-PG5-05). Its two-extension form also loads a
+ * harness extension after the real one, which ends every run end, so Pi
+ * stops the run that the first one continued (D-PG5-13).
  *
  * The run-start `Given` starts the profile Pi with a harness extension that
  * logs each `before_agent_start`, and the counts `Then` states the turn's run
@@ -44,6 +46,7 @@ import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
 import { promptDisposition } from "../../../test/e2e/_rpc.ts";
 import { BOUNDARY_CONTINUER_EXTENSION } from "../../lib/boundary-continuer.ts";
+import { BOUNDARY_REFUSER_EXTENSION } from "../../lib/boundary-refuser.ts";
 import {
   HOOK_LIFECYCLE_LOG,
   HOOK_RUNS_LOG,
@@ -213,6 +216,18 @@ Given(
     await this.usePiWithProfile({
       companions: [],
       leadingExtensions: [BOUNDARY_CONTINUER_EXTENSION],
+    });
+  },
+);
+
+Given(
+  "pi runs with the scripted model, another extension, loaded first, that continues the run once, and a third, loaded last, that ends it",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    await this.usePiWithProfile({
+      companions: [],
+      leadingExtensions: [BOUNDARY_CONTINUER_EXTENSION],
+      extraExtensions: [BOUNDARY_REFUSER_EXTENSION],
     });
   },
 );

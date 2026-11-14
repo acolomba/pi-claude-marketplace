@@ -23,7 +23,10 @@
 // `Stop says: <text>`, never to the model (D-CF5-14). A Stop hook that fails
 // without blocking shows its failure notice, and the first `continue: false`
 // shows its `stopReason` as `Stop hook stopped continuation: <reason>`
-// (D-PG5-10, D-PG5-13). A StopFailure hook shows neither.
+// (D-PG5-10, D-PG5-13). Pi decides only after every boundary handler whether
+// the run goes on, so the reason waits for `agent_settled`, which Pi raises
+// once the run stops. An `agent_end` before it means that the run went on,
+// and the reason is dropped. A StopFailure hook shows neither.
 //
 // Every handler carries the captured-generation guard so a stale closure from
 // a prior `/reload` cannot fire against rebuilt routing tables;
@@ -132,7 +135,9 @@ function findLastAssistant(messages: readonly AgentMessage[]): AssistantMessage 
 /**
  * `agent_end` cache handler: records the run's last assistant message so the
  * subsequent `agent_settled` (which carries no payload) can read its
- * `stopReason`. Last-write-wins; no-ops on a stale generation (STOP-01).
+ * `stopReason`. Last-write-wins; no-ops on a stale generation (STOP-01). A
+ * run end after the boundary held a stop reason means that the run went on,
+ * so the reason is dropped (D-PG5-13).
  */
 export function agentEndCacheHandler(
   runtime: HooksRuntime,
@@ -141,6 +146,10 @@ export function agentEndCacheHandler(
   return (event) => {
     if (capturedGeneration !== runtime.currentGeneration()) {
       return;
+    }
+
+    if (runtime.takeHeldStopReason() !== undefined) {
+      hookDebugLog("settle: the run went on after a Stop hook stopped it; stopReason not shown");
     }
 
     runtime.recordLastAssistant(findLastAssistant(event.messages));
@@ -198,7 +207,7 @@ export function beforeSettleHandlerFor(
     try {
       const continuation = await runStopBoundary(
         runtime,
-        { last, runContinues: event.continue },
+        last,
         capturedGeneration,
         ctx,
         pi,
@@ -214,18 +223,11 @@ export function beforeSettleHandlerFor(
   };
 }
 
-// The ending the Stop hooks run for, and whether a handler that ran earlier
-// at the same boundary already continued the run (D-PG5-05).
-interface StopBoundaryEnding {
-  readonly last: AssistantMessage;
-  readonly runContinues: boolean;
-}
-
 // Runs the Stop bucket with the stop boundary open, and closes it again
 // however the bucket ends (D-PG5-06).
 async function runStopBoundary(
   runtime: HooksRuntime,
-  ending: StopBoundaryEnding,
+  last: AssistantMessage,
   capturedGeneration: number,
   ctx: ExtensionContext,
   pi: ExtensionAPI,
@@ -234,7 +236,7 @@ async function runStopBoundary(
   const run = openNotificationRun(pi, { kind: "hook" });
   runtime.openStopBoundary();
   try {
-    return await runStopBucket(runtime, ending, capturedGeneration, ctx, pi, run, executor);
+    return await runStopBucket(runtime, last, capturedGeneration, ctx, pi, run, executor);
   } finally {
     runtime.closeStopBoundary();
   }
@@ -253,8 +255,9 @@ function stopBlockDraft({ parts, pluginId }: StopContinuation): BoundaryEntry {
 }
 
 /**
- * `agent_settled` dispatcher: reads the cached last assistant message and
- * gates on `stopReason` (STOP-01). `error` / `length` route to the
+ * `agent_settled` dispatcher: first shows the stop reason that the boundary
+ * held, because the run stopped (D-PG5-13). Then it reads the cached last
+ * assistant message and gates on `stopReason` (STOP-01). `error` / `length` route to the
  * StopFailure observation-only arm (SFAIL-01, D-PG5-03); `stop` runs nothing,
  * because the boundary handler runs the Stop hooks of that ending, or Pi
  * skipped the boundary after an abort; `pending` / `aborted` / `toolUse` /
@@ -281,6 +284,15 @@ export function settleHandlerFor(
     } catch (error: unknown) {
       hookDebugLog(`settle: context unavailable: ${errorMessage(error)}`);
       return;
+    }
+
+    const heldReason = runtime.takeHeldStopReason();
+    if (heldReason !== undefined) {
+      showStopNotice(
+        ctx,
+        openNotificationRun(pi, { kind: "hook" }),
+        hookStoppedText("Stop", heldReason),
+      );
     }
 
     // One-shot consumption: clear the cache so a spurious second `agent_settled`
@@ -427,17 +439,13 @@ function showStopNotices(
   }
 }
 
-// D-PG5-13: the `stopReason` of the first stopping Stop hook, shown to the
-// user and never to the model. Claude Code 2.1.323 shows no line for a
-// missing or empty reason.
-function showStopReason(
-  ctx: ExtensionContext,
-  run: NotificationRun,
-  stopReason: string | undefined,
-): void {
+// D-PG5-13: keeps the `stopReason` of the first stopping Stop hook for
+// `agent_settled`, which shows it to the user and never to the model. Claude
+// Code 2.1.323 shows no line for a missing or empty reason.
+function holdStopReason(runtime: HooksRuntime, stopReason: string | undefined): void {
   const reason = nonEmpty(stopReason);
   if (reason !== undefined) {
-    showStopNotice(ctx, run, hookStoppedText("Stop", reason));
+    runtime.holdStopReason(reason);
   }
 }
 
@@ -471,7 +479,7 @@ function showStopReason(
  */
 async function runStopBucket(
   runtime: HooksRuntime,
-  ending: StopBoundaryEnding,
+  last: AssistantMessage,
   capturedGeneration: number,
   ctx: ExtensionContext,
   pi: ExtensionAPI,
@@ -484,7 +492,7 @@ async function runStopBucket(
   }
 
   const event: StopEvent = {
-    last_assistant_message: renderAssistantText(ending.last),
+    last_assistant_message: renderAssistantText(last),
     // STOP-07: the NEXT Stop payload after a bridge continuation carries
     // `stop_hook_active: true` so the hook can see it is running inside a
     // bridge-driven continuation loop.
@@ -517,14 +525,7 @@ async function runStopBucket(
       `settle: continue:false from ${stop.entry.pluginId} suppresses Stop continuation; ` +
         `stopReason=${stop.result.stopReason ?? "<none>"}`,
     );
-    // D-PG5-13: the line claims a stop, so it is left out when an earlier
-    // handler at the boundary already continued the run.
-    if (ending.runContinues) {
-      hookDebugLog("settle: an earlier boundary handler continued the run; stopReason not shown");
-    } else {
-      showStopReason(ctx, run, stop.result.stopReason);
-    }
-
+    holdStopReason(runtime, stop.result.stopReason);
     runtime.recordStopNonReentry();
     return undefined;
   }
