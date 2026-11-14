@@ -10,8 +10,8 @@
  * `<tool>:<text>`. Calls for `redact`, `image`, and `fail` return distinct
  * fixture payloads. When started for a plugin, it writes the same request and
  * process records as the plugin stub, each request record naming its tool,
- * so listing waits and cleanup remain deterministic. A direct Pi server needs neither record. The server exits
- * when Pi closes its stdin.
+ * so listing waits and cleanup remain deterministic. A direct Pi server needs
+ * neither record. The server exits when Pi closes its stdin.
  */
 
 import { appendFileSync, rmSync, writeFileSync } from "node:fs";
