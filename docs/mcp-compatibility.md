@@ -402,6 +402,16 @@ agent "demo:broken": its source frontmatter could not be parsed (Missing closing
 
 Claude Code's retry quotes more values than this one does; see [Agents](#agents). Evidence: the scenarios "Quoted frontmatter values are listed without their quote marks", "A comment after a frontmatter value is not part of the value", "Installing an agent whose frontmatter cannot be parsed reports the agent", and "An agent whose frontmatter cannot be parsed is listed under its file name with Claude Code's fallback description" in `features/agent/frontmatter.feature`.
 
+A description written as a YAML block, such as `description: |`, keeps its lines. The generated file holds it as a `|-` block, with each line indented two spaces, so no line of it can become a key or end the frontmatter. `subagent get` shows each line. `subagent list` shows the lines joined into one, which is how pi-subagents lists a description (D-PG7-06, scenario "A description block keeps its lines" in `features/agent/frontmatter.feature`).
+
+An earlier release kept the quote marks of a quoted name. So `name: "x"` gave the agent `demo:"x"` and the file `pi-claude-marketplace-demo-"x".md`. This release reads the name as `x`. A start or `/reload` leaves the installed file as it is (APL-D1). These commands write `pi-claude-marketplace-demo-x.md` and remove the old file, its agents-index row, and its recorded name (D-PG7-07): `/claude:plugin update` when the marketplace offers a newer version, `/claude:plugin reinstall`, and an `apply` that moves the plugin. Three cases are not covered:
+
+- If you edited the old file, it stays with its row, because this extension never removes a file that it no longer recognizes as its own (AG-5).
+- A pi-subagents `agentOverrides` entry for the old name no longer matches. Rename it yourself.
+- If a file that no agents-index row names already exists at the new path, the install refuses to replace it (PI-6).
+
+Evidence: the scenarios "An update renames an agent that was installed under a name with quote marks" and "A reinstall renames an agent that was installed under a name with quote marks" in `features/agent/frontmatter.feature`.
+
 An ordinary generated agent names no launch mode. Its file holds no `async` key, so pi-subagents and its own configuration choose the mode (D-PG3-01). Claude Code also runs a subagent in the background unless it is told otherwise. With pi-subagents 0.88.1 and no configuration, a call that names no mode runs such an agent as a detached background child. With `asyncByDefault: false` in pi-subagents' configuration, the same call runs it in the foreground. This extension adds no setting of its own for the choice.
 
 This extension writes `async: true` in two cases (D-PG3-02):
