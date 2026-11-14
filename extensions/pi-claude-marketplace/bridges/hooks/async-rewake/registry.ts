@@ -93,6 +93,7 @@ import { rewakeBody, rewakeLabel, rewakeSummaryText } from "./rewake-text.ts";
 import type { DispatchableEvent } from "../../../domain/components/hook-events.ts";
 import type { ScopedLocations } from "../../../persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../../platform/pi-api.ts";
+import type { saveHookOutput } from "../hook-output-files.ts";
 import type { RoutingEntry } from "../routing-state.ts";
 import type { ChildJournalOwner, HooksRuntime, HooksRuntimeChildEntry } from "../runtime.ts";
 
@@ -257,6 +258,11 @@ export interface SpawnDeps {
   readonly signalGroup?: SignalGroup;
   readonly dispatchId?: () => string;
   readonly pidTableWriter?: typeof writePidTable;
+  /**
+   * Saves a hook's context string over the model's limit and resolves to its
+   * path (D-PG5-15). Defaults to `saveHookOutput` of ../hook-output-files.ts.
+   */
+  readonly saveHookOutput?: typeof saveHookOutput;
 }
 
 /**

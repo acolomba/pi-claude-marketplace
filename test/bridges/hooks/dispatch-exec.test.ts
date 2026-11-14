@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { ChildProcess, spawn } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
@@ -2741,5 +2741,278 @@ test("blocks on the exit code of a hook whose two streams pass 1 MB and 64 KB", 
     kind: "block",
     reason: `denied\n${"e".repeat(64 * 1024)}more`,
     fromStderr: true,
+  });
+});
+
+describe("the 10,000-character context cap (D-PG5-14, D-PG5-15)", () => {
+  const PROMPT_EVENT = { type: "input", text: "hello", source: "interactive" } satisfies InputEvent;
+  const BIG = "x".repeat(12_000);
+  const SAVED_WRAPPER =
+    "<persisted-output>\n" +
+    "Output too large (11.7KB). Full output saved to: /saved/hook.txt\n\n" +
+    `Preview (first 2KB):\n${"x".repeat(2_000)}\n...\n</persisted-output>`;
+
+  function contextStdout(context: string, extra = ""): string {
+    return `{${extra}"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"${context}"}}`;
+  }
+
+  // A writer double that records each save and settles as `outcome` gives.
+  function createSaver(outcome: () => Promise<string> = () => Promise.resolve("/saved/hook.txt")) {
+    const saves: { dataRoot: string; id: string; source: string; text: string }[] = [];
+    let announceSave: () => void = () => undefined;
+    const saving = new Promise<void>((resolve) => {
+      announceSave = resolve;
+    });
+    const saveHookOutput = (
+      loc: { readonly dataRoot: string },
+      id: string,
+      source: string,
+      text: string,
+    ): Promise<string> => {
+      saves.push({ dataRoot: loc.dataRoot, id, source, text });
+      announceSave();
+      return outcome();
+    };
+
+    return { saves, saving, saveHookOutput };
+  }
+
+  async function dispatchPrompt(
+    t: import("node:test").TestContext,
+    stdout: string,
+    saver: ReturnType<typeof createSaver>,
+  ): Promise<{ readonly outcome: HookExecResult; readonly dataRoot: string }> {
+    const caseRoot = await makeCaseRoot(t, "dispatch-context-cap-");
+    const processChild = makeInjectedChild(t);
+    const processBoundary = observeSpawn(t, processChild);
+    const pendingOutcome = dispatchHookExec(
+      makeEntry(caseRoot, { claudeEvent: "UserPromptSubmit" }),
+      PROMPT_EVENT,
+      makeContext(caseRoot),
+      undefined,
+      createHooksRuntime(),
+      {
+        spawnImpl: processBoundary.spawnImpl,
+        dispatchId: () => "id-1",
+        saveHookOutput: saver.saveHookOutput,
+      },
+    );
+    await processBoundary.spawned;
+    processChild.stdout?.write(stdout);
+    await processChild.close(0);
+    return {
+      outcome: await pendingOutcome,
+      dataRoot: path.join(caseRoot, ".pi", "pi-claude-marketplace", "data"),
+    };
+  }
+
+  test("settles a 12,000-character additionalContext as the saved wrapper", async (t) => {
+    // arrange
+    const saver = createSaver();
+
+    // act
+    const { outcome, dataRoot } = await dispatchPrompt(t, contextStdout(BIG), saver);
+
+    // assert
+    assert.deepStrictEqual(
+      { outcome, saves: saver.saves },
+      {
+        outcome: { kind: "mutate", additionalContext: SAVED_WRAPPER },
+        saves: [{ dataRoot, id: "id-1", source: "additionalContext", text: BIG }],
+      },
+    );
+  });
+
+  test("saves 12,000 characters of plain prompt stdout with the source stdout", async (t) => {
+    // arrange
+    const saver = createSaver();
+
+    // act
+    const { outcome, dataRoot } = await dispatchPrompt(t, `${BIG}\n`, saver);
+
+    // assert
+    assert.deepStrictEqual(
+      { outcome, saves: saver.saves },
+      {
+        outcome: { kind: "mutate", additionalContext: SAVED_WRAPPER },
+        saves: [{ dataRoot, id: "id-1", source: "stdout", text: BIG }],
+      },
+    );
+  });
+
+  for (const { name, stdout, outcome } of [
+    {
+      name: "a context of 10,000 characters",
+      stdout: contextStdout("x".repeat(10_000)),
+      outcome: { kind: "mutate", additionalContext: "x".repeat(10_000) },
+    },
+    {
+      name: "a context of 6,000 characters",
+      stdout: contextStdout("x".repeat(6_000)),
+      outcome: { kind: "mutate", additionalContext: "x".repeat(6_000) },
+    },
+    {
+      name: "a result with no context",
+      stdout: '{"suppressOutput":true}',
+      outcome: { kind: "noop", suppressOutput: true },
+    },
+  ] satisfies { name: string; stdout: string; outcome: HookExecResult }[]) {
+    test(`settles ${name} unchanged and saves nothing`, async (t) => {
+      // arrange
+      const saver = createSaver();
+
+      // act
+      const settled = await dispatchPrompt(t, stdout, saver);
+
+      // assert
+      assert.deepStrictEqual(
+        { outcome: settled.outcome, saves: saver.saves },
+        { outcome, saves: [] },
+      );
+    });
+  }
+
+  test("settles the failure text and keeps the decision when the save rejects", async (t) => {
+    // arrange
+    const saver = createSaver(() => Promise.reject(new Error("disk full")));
+    const marker =
+      "\n\n[Hook additionalContext truncated at 10000 chars \u2014 persist-to-disk failed: disk full]";
+
+    // act
+    const { outcome } = await dispatchPrompt(
+      t,
+      contextStdout(BIG, '"decision":"block","reason":"no",'),
+      saver,
+    );
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      kind: "block",
+      reason: "no",
+      additionalContext: "x".repeat(10_000 - marker.length) + marker,
+    });
+  });
+
+  test("writes the saved file under the scope's data root with the production writer", async (t) => {
+    // arrange
+    const caseRoot = await makeCaseRoot(t, "dispatch-context-file-");
+    const processChild = makeInjectedChild(t);
+    const processBoundary = observeSpawn(t, processChild);
+    const folder = path.join(
+      caseRoot,
+      ".pi",
+      "pi-claude-marketplace",
+      "data",
+      "_shared",
+      "hook-output",
+    );
+
+    // act
+    const pendingOutcome = dispatchHookExec(
+      makeEntry(caseRoot, { claudeEvent: "UserPromptSubmit" }),
+      PROMPT_EVENT,
+      makeContext(caseRoot),
+      undefined,
+      createHooksRuntime(),
+      { spawnImpl: processBoundary.spawnImpl },
+    );
+    await processBoundary.spawned;
+    processChild.stdout?.write(contextStdout(BIG));
+    await processChild.close(0);
+    const outcome = await pendingOutcome;
+    const names = await readdir(folder);
+    const savedPath = path.join(folder, names[0] ?? "");
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        names: names.map((name) => /^hook-[0-9a-f-]{36}-additionalContext\.txt$/u.test(name)),
+        outcome,
+        saved: await readFile(savedPath, "utf8"),
+      },
+      {
+        names: [true],
+        outcome: {
+          kind: "mutate",
+          additionalContext: SAVED_WRAPPER.replace("/saved/hook.txt", savedPath),
+        },
+        saved: BIG,
+      },
+    );
+  });
+
+  test("cancels the timer at close, before the save ends, and ignores an error during the save", async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    let releaseSave: (filePath: string) => void = () => undefined;
+    const held = new Promise<string>((resolve) => {
+      releaseSave = resolve;
+    });
+    const saver = createSaver(() => held);
+    const caseRoot = await makeCaseRoot(t, "dispatch-context-order-");
+    const processChild = makeInjectedChild(t);
+    const processBoundary = observeSpawn(t, processChild);
+    let settlements = 0;
+
+    // act
+    const pendingOutcome = dispatchHookExec(
+      makeEntry(caseRoot, { claudeEvent: "UserPromptSubmit", timeout: 2 }),
+      PROMPT_EVENT,
+      makeContext(caseRoot),
+      undefined,
+      createHooksRuntime(),
+      { spawnImpl: processBoundary.spawnImpl, saveHookOutput: saver.saveHookOutput },
+    );
+    void pendingOutcome.then(() => {
+      settlements += 1;
+    });
+    await processBoundary.spawned;
+    processChild.stdout?.write(contextStdout(BIG));
+    await processChild.close(0);
+    await saver.saving;
+    t.mock.timers.tick(7_000);
+    processChild.emitError(new Error("late during the save"));
+    const settledDuringSave = settlements;
+    releaseSave("/saved/hook.txt");
+    const outcome = await pendingOutcome;
+
+    // assert
+    assert.deepStrictEqual(
+      { settledDuringSave, killSignals: processChild.killSignals, outcome, settlements },
+      {
+        settledDuringSave: 0,
+        killSignals: [],
+        outcome: { kind: "mutate", additionalContext: SAVED_WRAPPER },
+        settlements: 1,
+      },
+    );
+  });
+
+  test("settles a spawn error once when the process closes after it", async (t) => {
+    // arrange
+    const caseRoot = await makeCaseRoot(t, "dispatch-error-then-close-");
+    const processChild = makeInjectedChild(t);
+    const processBoundary = observeSpawn(t, processChild);
+
+    // act
+    const pendingOutcome = dispatchHookExec(
+      makeEntry(caseRoot, { claudeEvent: "UserPromptSubmit" }),
+      PROMPT_EVENT,
+      makeContext(caseRoot),
+      undefined,
+      createHooksRuntime(),
+      { spawnImpl: processBoundary.spawnImpl },
+    );
+    await processBoundary.spawned;
+    processChild.emitError(new Error("spawn ENOENT"));
+    processChild.stdout?.write(contextStdout(BIG));
+    await processChild.close(0);
+    const outcome = await pendingOutcome;
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      kind: "noop",
+      failure: { kind: "spawn", error: "spawn ENOENT" },
+    });
   });
 });

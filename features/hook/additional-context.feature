@@ -117,6 +117,26 @@ Feature: Hook additional context
       | 4    | user        | UserPromptSubmit hook additional context: ctx-from-hook |
       | 4    | user        | also say hi                                             |
 
+  Scenario: A prompt hook's context over 10,000 characters reaches the model as a saved file and a preview
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name | event            | matcher | form   | output                                                                          | output bytes | trailing output |
+      | big  | UserPromptSubmit |         | script | {"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":" | 12000        | "}}             |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments |
+      | Done. |      |           |
+    When the user prompts "hello there"
+    Then the model receives these saved hook outputs:
+      | label                                    | size   | path                                                                                               | preview characters | saved characters |
+      | UserPromptSubmit hook additional context | 11.7KB | {project dir}/.pi/pi-claude-marketplace/data/_shared/hook-output/hook-{uuid}-additionalContext.txt | 2000               | 12000            |
+
   Scenario: A session start hook's additional context reaches the model on the first turn
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source

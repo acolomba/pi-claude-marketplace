@@ -26,9 +26,10 @@
 //      process group.
 //   5. Arm the SIGTERM -> 5s -> SIGKILL ladder (EXEC-02) against that
 //      process group (`./process-group.ts`). `ladder.cancel()`
-//      runs from the shared `settle()` closure, which both `child.once(
-//      "close", ...)` and `child.once("error", ...)` call, to close the
-//      TOCTOU window against the timer firing on a recycled pid.
+//      runs from the shared `claim()` closure, which both `child.once(
+//      "close", ...)` and `child.once("error", ...)` call synchronously, to
+//      close the TOCTOU window against the timer firing on a recycled pid;
+//      the first call claims the one settle.
 //   6. Collect the whole of stdout and stderr through `./stream-text.ts`. As
 //      in Claude Code, no size limit applies, so a JSON answer of any size
 //      decides (EXEC-02).
@@ -44,7 +45,10 @@
 //      start failure (`error`), an exit other than 0 and 2, a timeout, or
 //      broken JSON stdout. A JSON deny still wins over that block. At every
 //      end of the process, a PostCompact result also carries how the hook
-//      ended (D-BG-503).
+//      ended (D-BG-503). Before the result settles, its `additionalContext`
+//      passes the 10,000-character cap of `./context-cap.ts`, which saves a
+//      longer string to a file and sends a preview in its place (D-PG5-14,
+//      D-PG5-15); only the resolve of the `close` path waits for the save.
 //
 // Never-throws contract: every error path resolves to a noop +
 // `hookDebugLog`, or to the onFailure block when the hook asks for one. The
@@ -66,6 +70,7 @@
 // justification in the docstring header.
 
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 
 import { locationsFor } from "../../persistence/locations.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -73,8 +78,10 @@ import { errorMessage } from "../../shared/errors.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 
 import { spawnAndRegister } from "./async-rewake/registry.ts";
+import { capHookContext } from "./context-cap.ts";
 import { installTimerLadder } from "./exec-timer.ts";
 import { hookPathVars, prepareHookEnv } from "./hook-env.ts";
+import { saveHookOutput } from "./hook-output-files.ts";
 import { onFailureBlock } from "./on-failure.ts";
 import { postCompactRunOf, translatePostCompact } from "./payloads/post-compact.ts";
 import { translatePostToolUseFailure } from "./payloads/post-tool-use-failure.ts";
@@ -94,11 +101,13 @@ import { buildTranslationContext, type TranslationContext } from "./translation-
 import { parseHookStdout } from "./wire-protocol.ts";
 
 import type { SpawnDeps } from "./async-rewake/registry.ts";
+import type { HookContextSource } from "./context-cap.ts";
 import type { HookExecResult } from "./exec-result.ts";
 import type { HookExitFacts } from "./on-failure.ts";
 import type { RoutingEntry } from "./routing-state.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type { DispatchableEvent } from "../../domain/components/hook-events.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { ClaudePluginVars } from "../../shared/vars.ts";
 
@@ -222,7 +231,7 @@ export async function dispatchHookExec(
     const loc = locationsFor(entry.scope, transCtx.cwd);
     const env = await prepareHookEnv(entry, transCtx, loc);
     const vars = hookPathVars(entry, transCtx, loc);
-    return await spawnAndCollect(entry, vars, env, stdinJson, deps);
+    return await spawnAndCollect(entry, vars, env, stdinJson, loc, deps);
   } catch (err) {
     hookDebugLog(`exec: caught (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`);
     // D-CF5-18: a hook that cannot start blocks when it sets onFailure "block".
@@ -259,6 +268,30 @@ function endedResult(
   }
 
   return { ...result, postCompactRun: postCompactRunOf(facts, answer, failure !== undefined) };
+}
+
+/**
+ * D-PG5-14 / D-PG5-16: the parsed result with its `additionalContext` capped
+ * alone, before any join with another hook's. The string saves as `stdout`
+ * when it is the trimmed plain stdout, and as `additionalContext` otherwise.
+ * Never rejects, because the cap never does.
+ */
+async function withCappedContext(
+  parsed: HookExecResult,
+  stdout: string,
+  loc: ScopedLocations,
+  deps: SpawnDeps,
+): Promise<HookExecResult> {
+  const context = parsed.additionalContext;
+  if (context === undefined) {
+    return parsed;
+  }
+
+  const source: HookContextSource = context === stdout.trim() ? "stdout" : "additionalContext";
+  const save = deps.saveHookOutput ?? saveHookOutput;
+  const makeId = deps.dispatchId ?? randomUUID;
+  const capped = await capHookContext(context, source, (text) => save(loc, makeId(), source, text));
+  return { ...parsed, additionalContext: capped };
 }
 
 /**
@@ -349,6 +382,7 @@ async function spawnAndCollect(
   vars: ClaudePluginVars,
   env: NodeJS.ProcessEnv,
   stdinJson: string,
+  loc: ScopedLocations,
   deps: SpawnDeps,
 ): Promise<HookExecResult> {
   const spawnImpl = deps.spawnImpl ?? spawn;
@@ -378,14 +412,16 @@ async function spawnAndCollect(
 
     const ladder = installTimerLadder(asGroupLeader(child, deps), timeoutSeconds, ladderLabel);
 
-    const settle = (result: HookExecResult): void => {
+    // The first end of the process claims the one settle and stops the timer
+    // at once; a later end finds it claimed.
+    const claim = (): boolean => {
       if (settled) {
-        return;
+        return false;
       }
 
       settled = true;
       ladder.cancel();
-      resolve(result);
+      return true;
     };
 
     const stdout = collectStreamText(child.stdout, (err) => {
@@ -413,7 +449,10 @@ async function spawnAndCollect(
       const failure = onFailureBlock(entry, facts, noop);
       // A PostCompact run reads the start error, redacted as the outer catch does.
       const started = { ...facts, stderr: error };
-      settle(endedResult(entry, started, noop, failure));
+      const result = endedResult(entry, started, noop, failure);
+      if (claim()) {
+        resolve(result);
+      }
     });
 
     child.once("close", (code) => {
@@ -425,20 +464,28 @@ async function spawnAndCollect(
       }
 
       const outText = stdout.text();
+      const timedOut = ladder.fired();
       const parsed = withoutTimeoutFailure(
         parseHookStdout(code, outText, errText, entry.claudeEvent),
-        ladder.fired(),
+        timedOut,
       );
       // D-CF5-18: a failed hook that sets onFailure "block" blocks whatever its
       // stdout says, except that a JSON deny keeps its own reason.
       const facts: HookExitFacts = {
         startFailed: false,
-        timedOut: ladder.fired(),
+        timedOut,
         exitCode: code,
         stdout: outText,
         stderr: errText,
       };
-      settle(endedResult(entry, facts, parsed, onFailureBlock(entry, facts, parsed)));
+      if (!claim()) {
+        return;
+      }
+
+      // Only the resolve waits for the cap, which never rejects.
+      void withCappedContext(parsed, outText, loc, deps).then((capped) => {
+        resolve(endedResult(entry, facts, capped, onFailureBlock(entry, facts, capped)));
+      });
     });
 
     // EPIPE defense: attach the error listener BEFORE write so a child

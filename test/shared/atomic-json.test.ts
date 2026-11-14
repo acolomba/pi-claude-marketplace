@@ -1,10 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 
-import { atomicWriteJson } from "../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
+import {
+  atomicWriteJson,
+  atomicWriteText,
+} from "../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
 
 test("writes two-space JSON with one trailing newline", async (t) => {
   // arrange
@@ -154,3 +157,31 @@ for (const { name, content, expectedJsonBytes } of [
     assert.strictEqual(jsonBytes, expectedJsonBytes);
   });
 }
+
+test("NFR-1: writes the exact UTF-8 bytes of a text into a missing parent tree", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(os.tmpdir(), "atomic-text-parent-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const filePath = path.join(directory, "new", "nested", "out.txt");
+  const expectedBytes = Buffer.from("café\nline two", "utf8");
+
+  // act
+  await atomicWriteText(filePath, "café\nline two");
+
+  // assert
+  assert.deepStrictEqual(await readFile(filePath), expectedBytes);
+});
+
+test("NFR-1: replaces an existing file whole with the text", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(os.tmpdir(), "atomic-text-replace-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const filePath = path.join(directory, "out.txt");
+  await writeFile(filePath, "an older and much longer text\n", "utf8");
+
+  // act
+  await atomicWriteText(filePath, "new");
+
+  // assert
+  assert.strictEqual(await readFile(filePath, "utf8"), "new");
+});
