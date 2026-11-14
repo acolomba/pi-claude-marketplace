@@ -35,6 +35,7 @@ test("maps a failed built-in tool to the complete PostToolUseFailure envelope", 
     hook_event_name: "PostToolUseFailure",
     tool_name: "Bash",
     tool_input: { command: "false" },
+    tool_use_id: "tool-call-built-in",
     error: "exit code 1: command failed",
     is_interrupt: false,
   };
@@ -81,6 +82,7 @@ for (const identity of [
       hook_event_name: "PostToolUseFailure",
       tool_name: "catalog",
       tool_input: { query: "entry" },
+      tool_use_id: "child-failure",
       error: "lookup failed",
       is_interrupt: false,
       ...(identity?.sessionId === context.sessionId
@@ -124,6 +126,7 @@ test("preserves a failed custom tool name and nested values without mutation", (
       query: { phrase: "hook contracts", languages: ["typescript"] },
       limit: 2,
     },
+    tool_use_id: "tool-call-custom",
     error: "catalog lookup failed\nretryable: false",
     is_interrupt: false,
   };
@@ -230,8 +233,96 @@ test("translates a failed Read path without inventing a successful response", ()
     hook_event_name: "PostToolUseFailure",
     tool_name: "Read",
     tool_input: { file_path: "/workspace/failed-read/missing.txt" },
+    tool_use_id: "missing-read",
     error: "Path not found: missing.txt",
     is_interrupt: false,
   });
   assert.strictEqual("tool_response" in payload, false);
+});
+
+for (const toolCallId of ["call-1", "call-1/2"]) {
+  test(`sends the call id ${toolCallId} unchanged as tool_use_id after tool_input (D-PG6-05)`, () => {
+    // arrange
+    const event = {
+      type: "tool_result",
+      toolCallId,
+      toolName: "custom",
+      input: { query: "one" },
+      content: [{ type: "text", text: "lookup failed" }],
+      details: undefined,
+      isError: true,
+    } satisfies ToolResultEvent;
+    const context = {
+      sessionId: "session-id",
+      transcriptPath: "",
+      cwd: "/workspace",
+    } satisfies TranslationContext;
+
+    // act
+    const payload = translatePostToolUseFailure(event, context);
+
+    // assert
+    assert.deepStrictEqual(payload, {
+      session_id: "session-id",
+      transcript_path: "",
+      cwd: "/workspace",
+      hook_event_name: "PostToolUseFailure",
+      tool_name: "custom",
+      tool_input: { query: "one" },
+      tool_use_id: toolCallId,
+      error: "lookup failed",
+      is_interrupt: false,
+    });
+    assert.deepStrictEqual(Object.keys(payload), [
+      "session_id",
+      "transcript_path",
+      "cwd",
+      "hook_event_name",
+      "tool_name",
+      "tool_input",
+      "tool_use_id",
+      "error",
+      "is_interrupt",
+    ]);
+    assert.strictEqual(Object.hasOwn(payload, "permission_mode"), false);
+    assert.strictEqual(Object.hasOwn(payload, "duration_ms"), false);
+    assert.strictEqual(Object.hasOwn(payload, "mcp_server"), false);
+  });
+}
+
+test("keeps a child's identity after tool_use_id", () => {
+  // arrange
+  const event = {
+    type: "tool_result",
+    toolCallId: "call-1",
+    toolName: "custom",
+    input: { query: "one" },
+    content: [{ type: "text", text: "lookup failed" }],
+    details: undefined,
+    isError: true,
+  } satisfies ToolResultEvent;
+  const context = {
+    sessionId: "child-session",
+    transcriptPath: "",
+    cwd: "/workspace",
+    childIdentity: { agentType: "reviewer", sessionId: "child-session" },
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translatePostToolUseFailure(event, context);
+
+  // assert
+  assert.deepStrictEqual(Object.entries(payload), [
+    ["session_id", "child-session"],
+    ["transcript_path", ""],
+    ["cwd", "/workspace"],
+    ["hook_event_name", "PostToolUseFailure"],
+    ["tool_name", "custom"],
+    ["tool_input", { query: "one" }],
+    ["tool_use_id", "call-1"],
+    ["error", "lookup failed"],
+    ["is_interrupt", false],
+    ["agent_type", "reviewer"],
+    ["agent_id", "child-session"],
+  ]);
 });

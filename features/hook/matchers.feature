@@ -42,11 +42,11 @@ Feature: Hook matchers
       | severity                       | info                                           |
     When the user prompts "use each listed tool"
     Then the hooks record these runs:
-      | event      | session | tool name | tool input                                                                            | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | PreToolUse | first   | Read      | {"file_path":"{project dir}/original.txt"}                                            | {project dir} |                 | listed    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
-      | PreToolUse | first   | Write     | {"file_path":"{project dir}/written.txt","content":"written"}                         | {project dir} |                 | listed    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
-      | PreToolUse | first   | Edit      | {"file_path":"{project dir}/original.txt","old_string":"before","new_string":"after"} | {project dir} |                 | listed    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
-      | PreToolUse | first   | Bash      | {"command":"echo from-model"}                                                         | {project dir} |                 | listed    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | event      | session | tool name | tool use id  | tool input                                                                            | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Read      | {tool use 1} | {"file_path":"{project dir}/original.txt"}                                            | {project dir} |                 | listed    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PreToolUse | first   | Write     | {tool use 2} | {"file_path":"{project dir}/written.txt","content":"written"}                         | {project dir} |                 | listed    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PreToolUse | first   | Edit      | {tool use 3} | {"file_path":"{project dir}/original.txt","old_string":"before","new_string":"after"} | {project dir} |                 | listed    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PreToolUse | first   | Bash      | {tool use 4} | {"command":"echo from-model"}                                                         | {project dir} |                 | listed    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
 
   Scenario: Spaces inside one literal do not create extra tools
     Given pi runs with the scripted model
@@ -102,8 +102,8 @@ Feature: Hook matchers
       | severity                       | info                                       |
     When the user prompts "run the echo"
     Then the hooks record these runs:
-      | event      | session | tool name | tool input                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | PreToolUse | first   | Bash      | {"command":"echo from-model"} | {project dir} |                 | regex     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | event      | session | tool name | tool use id  | tool input                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {tool use 1} | {"command":"echo from-model"} | {project dir} |                 | regex     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
 
   Scenario: A regex group matches an unanchored tool-name substring
     Given pi runs with the scripted model
@@ -124,8 +124,8 @@ Feature: Hook matchers
       | Done. |      |                                |
     When the user prompts "run the echo"
     Then the hooks record these runs:
-      | event      | session | tool name | tool input                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | PreToolUse | first   | Bash      | {"command":"echo from-model"} | {project dir} |                 | substring | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | event      | session | tool name | tool use id  | tool input                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {tool use 1} | {"command":"echo from-model"} | {project dir} |                 | substring | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
 
   Scenario: An invalid regex drops only its own group
     Given pi runs with the scripted model
@@ -163,8 +163,8 @@ Feature: Hook matchers
       | severity                       | info                                                                                                                   |
     When the user prompts "run the echo"
     Then the hooks record these runs:
-      | event      | session | tool name | tool input                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | PreToolUse | first   | Bash      | {"command":"echo from-model"} | {project dir} |                 | valid     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | event      | session | tool name | tool use id  | tool input                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {tool use 1} | {"command":"echo from-model"} | {project dir} |                 | valid     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
 
   Scenario: Prompt and Stop hooks ignore even invalid matchers
     Given pi runs with the scripted model
@@ -222,5 +222,5 @@ Feature: Hook matchers
       | Done. |      |                                |
     When the user reloads pi in the terminal and then prompts "run the echo"
     Then the hooks record these runs:
-      | event      | session | tool name | tool input                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                   | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | PreToolUse | first   | Bash      | {"command":"echo from-model"} | {project dir} |                 | regex     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {agent dir}/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | event      | session | tool name | tool use id  | tool input                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                   | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {tool use 1} | {"command":"echo from-model"} | {project dir} |                 | regex     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {agent dir}/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |

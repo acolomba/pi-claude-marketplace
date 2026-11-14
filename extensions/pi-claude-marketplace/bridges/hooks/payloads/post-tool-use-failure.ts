@@ -13,7 +13,8 @@
 // has no text and is left out. `is_interrupt` is always `false`: the
 // bridge runs no PostToolUseFailure hook on a call the user cancels, so
 // every run is a failure the tool reported (D-BG-401, D-BG-402).
-// `tool_use_id` and `duration_ms` are not sent (D-CF5-28, D-BG-403).
+// `tool_use_id` is the call's own id, as on PreToolUse and PostToolUse;
+// `duration_ms` is not sent (D-PG6-04).
 
 import { homedir } from "node:os";
 
@@ -30,6 +31,7 @@ export interface PostToolUseFailureStdin {
   readonly hook_event_name: "PostToolUseFailure";
   readonly tool_name: string;
   readonly tool_input: unknown;
+  readonly tool_use_id: string;
   readonly error: string;
   readonly is_interrupt: false;
   readonly agent_type?: string;
@@ -59,6 +61,7 @@ export function translatePostToolUseFailure(
     hook_event_name: "PostToolUseFailure",
     tool_name: mapPiToClaudeToolName(event.toolName),
     tool_input: toHookToolInput(event.toolName, event.input, ctx.cwd, homedir()),
+    tool_use_id: event.toolCallId,
     error: errorText(event.content),
     is_interrupt: false,
     ...(ctx.childIdentity?.sessionId === ctx.sessionId

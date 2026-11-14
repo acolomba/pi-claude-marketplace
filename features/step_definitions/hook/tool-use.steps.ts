@@ -37,6 +37,7 @@ import {
   HOOK_RESULT_OBSERVER_EXTENSION,
   HOOK_RESULT_OBSERVER_LOG,
 } from "../../lib/hook-result-observer.ts";
+import { hookRunTokens } from "../../lib/hook-run-tokens.ts";
 import { mcpImplementationLaunch } from "../../lib/mcp-implementation.ts";
 import { MCP_STUB_SERVER, readStubRequests, stubPidFiles } from "../../lib/mcp-stub-server.ts";
 import { writePublishedPluginFiles } from "../../lib/published-marketplace.ts";
@@ -142,17 +143,26 @@ function toolCallRows(world: ScenarioWorld): string[][] {
   ]);
 }
 
+// Each record is the whole run, with the session id read as `first` and a
+// tool use id as its `{tool use <n>}` token (D-PG6-12).
 Then(
   "the hooks record these complete mcp inputs:",
   function (this: ScenarioWorld, table: DataTable) {
     const runs = (this.requireTurn().logs.get(HOOK_RUNS_LOG) ?? []) as readonly HookRun[];
+    const tokenOf = hookRunTokens(runs);
     const actual = runs.map((run) => {
       const session = run.stdin.session_id;
       if (typeof session !== "string") {
         throw new Error("MCP hook run has no session id");
       }
 
-      return projectTokens("text", JSON.stringify(run), this.tokens).replaceAll(session, "first");
+      const stdin = Object.fromEntries(
+        Object.entries(run.stdin).map(([key, value]) => [key, tokenOf(key, value) ?? value]),
+      );
+      return projectTokens("text", JSON.stringify({ ...run, stdin }), this.tokens).replaceAll(
+        session,
+        "first",
+      );
     });
     const expected = profileRecords(table, this.mcpProfile);
     assert.deepStrictEqual(actual, expected);

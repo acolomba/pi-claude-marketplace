@@ -13,6 +13,8 @@
 // input is translated into `tool_input`, and the tool's result
 // MCP content and structured content flow into Claude's `tool_response` field
 // (claude-hook-config-syntax.md § 3).
+// `tool_use_id` is Pi's `toolCallId`, the id the call's PreToolUse hook
+// read (D-PG6-04, D-PG6-05).
 
 import { homedir } from "node:os";
 
@@ -31,6 +33,7 @@ export interface PostToolUseStdin {
   readonly hook_event_name: "PostToolUse";
   readonly tool_name: string;
   readonly tool_input: unknown;
+  readonly tool_use_id: string;
   readonly tool_response: unknown;
   readonly agent_type?: string;
   readonly agent_id?: string;
@@ -60,6 +63,7 @@ export function translatePostToolUse(
     hook_event_name: "PostToolUse",
     tool_name: mapPiToClaudeToolName(event.toolName),
     tool_input: toHookToolInput(event.toolName, event.input, ctx.cwd, homedir()),
+    tool_use_id: event.toolCallId,
     tool_response:
       fileToolResponse(event, ctx.cwd) ??
       searchShellToolResponse(event, ctx.cwd) ??

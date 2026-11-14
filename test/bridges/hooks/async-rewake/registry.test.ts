@@ -91,6 +91,7 @@ for (const eventName of ["PostToolUse", "PostToolUseFailure"] as const) {
       hook_event_name: eventName,
       tool_name: "Read",
       tool_input: { file_path: path.join(root, "missing.txt") },
+      tool_use_id: "read-rewake",
     };
     assert.deepStrictEqual(
       payload,
@@ -1113,6 +1114,7 @@ test(
       hook_event_name: "PreToolUse",
       tool_name: "Bash",
       tool_input: { command: "printf shared" },
+      tool_use_id: "shared-owner-call",
       agent_type: "shared-runner",
       agent_id: "shared-owner-session",
     };
@@ -1202,6 +1204,7 @@ for (const { name, marker, handlerDecl } of [
       hook_event_name: "PreToolUse",
       tool_name: "Bash",
       tool_input: { command: "printf absent" },
+      tool_use_id: "identity-absent-call",
     });
     assert.strictEqual(Object.hasOwn(payload, "agent_type"), false);
     assert.strictEqual(Object.hasOwn(payload, "agent_id"), false);
@@ -1516,7 +1519,7 @@ const IDENTITY_TOOL_EVENTS = [
       toolName: "bash",
       input: { command: "pwd" },
     } satisfies ToolCallEvent,
-    fields: { tool_name: "Bash", tool_input: { command: "pwd" } },
+    fields: { tool_name: "Bash", tool_input: { command: "pwd" }, tool_use_id: "recording-call" },
   },
   {
     claudeEvent: "PostToolUse",
@@ -1532,6 +1535,7 @@ const IDENTITY_TOOL_EVENTS = [
     fields: {
       tool_name: "Bash",
       tool_input: { command: "pwd" },
+      tool_use_id: "recording-call",
       tool_response: {
         interrupted: false,
         structuredContent: [{ type: "text", text: "recorded\n" }],
@@ -1552,6 +1556,7 @@ const IDENTITY_TOOL_EVENTS = [
     fields: {
       tool_name: "Bash",
       tool_input: { command: "pwd" },
+      tool_use_id: "recording-call",
       error: "pwd failed",
       is_interrupt: false,
     },
@@ -2643,6 +2648,7 @@ test(
       hook_event_name: "PreToolUse",
       tool_name: "Bash",
       tool_input: { command: "printf ready" },
+      tool_use_id: "tool-call-lifecycle",
     });
     const tablePath = pidTablePath(locations);
     const expectedRegisteredBytes =

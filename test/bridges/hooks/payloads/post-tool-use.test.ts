@@ -41,6 +41,7 @@ test("maps a successful built-in tool to the complete PostToolUse envelope", () 
       command: "printf 'completed\\n'",
       timeout: 12000,
     },
+    tool_use_id: "tool-call-built-in",
     tool_response: {
       interrupted: false,
       structuredContent: [{ type: "text", text: "completed\n" }],
@@ -90,6 +91,7 @@ for (const identity of [
       hook_event_name: "PostToolUse",
       tool_name: "catalog",
       tool_input: { query: "entry" },
+      tool_use_id: "child-result",
       tool_response: [{ type: "text", text: "found" }],
       ...(identity?.sessionId === context.sessionId
         ? { agent_type: "reviewer", agent_id: "child-session" }
@@ -239,6 +241,7 @@ test("preserves a successful custom tool name and nested values without mutation
       query: { phrase: "hook payloads", languages: ["typescript", "javascript"] },
       limit: 3,
     },
+    tool_use_id: "tool-call-custom",
     tool_response: {
       content: [
         { type: "text", text: "three matches" },
@@ -409,4 +412,88 @@ test("projects a successful write from its executed input", () => {
     filePath: "/workspace/result/output.txt",
     content: "written",
   });
+});
+
+for (const toolCallId of ["call-1", "call-1/2"]) {
+  test(`sends the call id ${toolCallId} unchanged as tool_use_id after tool_input (D-PG6-05)`, () => {
+    // arrange
+    const event = {
+      type: "tool_result",
+      toolCallId,
+      toolName: "custom",
+      input: { query: "one" },
+      content: [{ type: "text", text: "found" }],
+      details: undefined,
+      isError: false,
+    } satisfies ToolResultEvent;
+    const context = {
+      sessionId: "session-id",
+      transcriptPath: "",
+      cwd: "/workspace",
+    } satisfies TranslationContext;
+
+    // act
+    const payload = translatePostToolUse(event, context);
+
+    // assert
+    assert.deepStrictEqual(payload, {
+      session_id: "session-id",
+      transcript_path: "",
+      cwd: "/workspace",
+      hook_event_name: "PostToolUse",
+      tool_name: "custom",
+      tool_input: { query: "one" },
+      tool_use_id: toolCallId,
+      tool_response: [{ type: "text", text: "found" }],
+    });
+    assert.deepStrictEqual(Object.keys(payload), [
+      "session_id",
+      "transcript_path",
+      "cwd",
+      "hook_event_name",
+      "tool_name",
+      "tool_input",
+      "tool_use_id",
+      "tool_response",
+    ]);
+    assert.strictEqual(Object.hasOwn(payload, "permission_mode"), false);
+    assert.strictEqual(Object.hasOwn(payload, "duration_ms"), false);
+    assert.strictEqual(Object.hasOwn(payload, "mcp_server"), false);
+  });
+}
+
+test("keeps a child's identity after tool_use_id", () => {
+  // arrange
+  const event = {
+    type: "tool_result",
+    toolCallId: "call-1",
+    toolName: "custom",
+    input: { query: "one" },
+    content: [{ type: "text", text: "found" }],
+    details: undefined,
+    isError: false,
+  } satisfies ToolResultEvent;
+  const context = {
+    sessionId: "child-session",
+    transcriptPath: "",
+    cwd: "/workspace",
+    childIdentity: { agentType: "reviewer", sessionId: "child-session" },
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translatePostToolUse(event, context);
+
+  // assert
+  assert.deepStrictEqual(Object.entries(payload), [
+    ["session_id", "child-session"],
+    ["transcript_path", ""],
+    ["cwd", "/workspace"],
+    ["hook_event_name", "PostToolUse"],
+    ["tool_name", "custom"],
+    ["tool_input", { query: "one" }],
+    ["tool_use_id", "call-1"],
+    ["tool_response", [{ type: "text", text: "found" }]],
+    ["agent_type", "reviewer"],
+    ["agent_id", "child-session"],
+  ]);
 });

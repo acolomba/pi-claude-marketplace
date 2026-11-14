@@ -232,6 +232,7 @@ test("executes a blocking hook through the portable process boundary", async (t)
     hook_event_name: "PreToolUse",
     tool_name: "Bash",
     tool_input: { command: "printf portable" },
+    tool_use_id: "portable-call",
     agent_type: 'a&b"c',
     agent_id: "portable-session",
   });
@@ -661,8 +662,8 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
   },
   {
     claudeEvent: "PreToolUse",
-    diagnosedOmissions: ["toolName", "input"],
-    benignOmission: "toolCallId",
+    diagnosedOmissions: ["toolName", "input", "toolCallId"],
+    benignOmission: "type",
     createEvent: () =>
       ({
         type: "tool_call",
@@ -673,12 +674,13 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
     eventFields: {
       tool_name: "Bash",
       tool_input: { command: "printf pre" },
+      tool_use_id: "pre-tool-call",
     },
   },
   {
     claudeEvent: "PostToolUse",
-    diagnosedOmissions: ["toolName", "input"],
-    benignOmission: "toolCallId",
+    diagnosedOmissions: ["toolName", "input", "toolCallId"],
+    benignOmission: "type",
     createEvent: () =>
       ({
         type: "tool_result",
@@ -692,13 +694,14 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
     eventFields: {
       tool_name: "Bash",
       tool_input: { command: "printf post" },
+      tool_use_id: "post-tool-call",
       tool_response: { interrupted: false, structuredContent: [{ type: "text", text: "post\n" }] },
     },
   },
   {
     claudeEvent: "PostToolUseFailure",
-    diagnosedOmissions: ["toolName", "input"],
-    benignOmission: "toolCallId",
+    diagnosedOmissions: ["toolName", "input", "toolCallId"],
+    benignOmission: "type",
     createEvent: () =>
       ({
         type: "tool_result",
@@ -712,6 +715,7 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
     eventFields: {
       tool_name: "Bash",
       tool_input: { command: "false" },
+      tool_use_id: "failed-tool-call",
       error: "exit 1",
       is_interrupt: false,
     },
@@ -906,6 +910,7 @@ test("omits stale child identity from synchronous stdin", { concurrency: false }
     hook_event_name: "PreToolUse",
     tool_name: "Bash",
     tool_input: { command: "printf stale" },
+    tool_use_id: "stale-call",
   });
   assert.strictEqual(Object.hasOwn(payload, "agent_type"), false);
   assert.strictEqual(Object.hasOwn(payload, "agent_id"), false);
@@ -1198,6 +1203,7 @@ test("contains a wrong-shape payload whose required property throws as a runner 
   const processBoundary = observeSpawn(t, processChild);
   const entry = makeEntry(caseRoot, { claudeEvent: "PreToolUse" });
   const event = {
+    toolCallId: "wrong-shape-call",
     get toolName(): never {
       throw new Error("wrong-shape toolName getter");
     },

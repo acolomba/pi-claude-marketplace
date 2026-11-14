@@ -10,8 +10,9 @@
  * before it compares them whole; sorting drops no row (D-CF5-09). A session
  * id differs on every run, so a cell that holds one names the session by the
  * order it first appears in, and a session id inside a cell, such as the one
- * `CLAUDE_ENV_FILE` names, reads as that ordinal too (D-CF5-26). A turn that
- * ran no hook is stated by the no-runs step.
+ * `CLAUDE_ENV_FILE` names, reads as that ordinal too (D-CF5-26). A tool use
+ * id reads as its `{tool use <n>}` token from `features/lib/hook-run-tokens.ts`
+ * (D-PG6-12). A turn that ran no hook is stated by the no-runs step.
  *
  * A hook script that outlives its event also appends a start line and an end
  * line to the harness log `hook-lifecycle.jsonl` (D-BG-12). The lifecycle
@@ -36,10 +37,12 @@ import {
   recordingHooksText,
 } from "../../lib/hook-files.ts";
 import { HOOK_LIFECYCLE_LOG, HOOK_RUNS_LOG } from "../../lib/hook-recorder.ts";
+import { hookRunTokens } from "../../lib/hook-run-tokens.ts";
 import { projectTokens } from "../../lib/run-tokens.ts";
 import { isRunning } from "../../lib/turn-records.ts";
 
 import type { HookLifecycleEvent, HookRun } from "../../lib/hook-recorder.ts";
+import type { HookRunTokenOf } from "../../lib/hook-run-tokens.ts";
 import type { RunTokens } from "../../lib/run-tokens.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -97,12 +100,16 @@ function runRecord(
   run: HookRun,
   tokens: RunTokens,
   ordinals: ReadonlyMap<string, string>,
+  tokenOf: HookRunTokenOf,
 ): Map<string, string> {
   assert.strictEqual(run.event, run.stdin.hook_event_name, "the recorded event is the stdin's");
   return fieldRecord([
     ...Object.entries(run.stdin).map(
       ([key, value]) =>
-        [STDIN_COLUMNS[key] ?? key.replaceAll("_", " "), cell(value, tokens, ordinals)] as const,
+        [
+          STDIN_COLUMNS[key] ?? key.replaceAll("_", " "),
+          tokenOf(key, value) ?? cell(value, tokens, ordinals),
+        ] as const,
     ),
     ["arguments", projectTokens("text", run.arguments.join(" "), tokens)],
     ...Object.entries(run.environment).map(
@@ -125,7 +132,8 @@ Given(
 function runsTable(world: ScenarioWorld, table: DataTable): string[][] {
   const runs = (world.requireTurn().logs.get(HOOK_RUNS_LOG) ?? []) as readonly HookRun[];
   const ordinals = sessionOrdinals(runs);
-  const records = runs.map((run) => runRecord(run, world.tokens, ordinals));
+  const tokenOf = hookRunTokens(runs);
+  const records = runs.map((run) => runRecord(run, world.tokens, ordinals, tokenOf));
   const [stated = []] = table.raw();
   return recordTable(stated, records);
 }

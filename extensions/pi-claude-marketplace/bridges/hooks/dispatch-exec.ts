@@ -326,9 +326,9 @@ function withoutTimeoutFailure(parsed: HookExecResult, timedOut: boolean): HookE
 const REQUIRED_EVENT_FIELDS: Record<DispatchableEvent, readonly string[]> = {
   SessionStart: [],
   UserPromptSubmit: ["text"],
-  PreToolUse: ["toolName", "input"],
-  PostToolUse: ["toolName", "input"],
-  PostToolUseFailure: ["toolName", "input"],
+  PreToolUse: ["toolName", "input", "toolCallId"],
+  PostToolUse: ["toolName", "input", "toolCallId"],
+  PostToolUseFailure: ["toolName", "input", "toolCallId"],
   PreCompact: [],
   PostCompact: [],
   SessionEnd: [],
