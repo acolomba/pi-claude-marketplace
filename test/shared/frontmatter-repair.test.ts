@@ -2,8 +2,12 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  colonRepairTrigger,
+  emitSafeDoubleQuotedScalar,
+  extractBodyAfterFrontmatter,
   frontmatterBlockEnd,
   keyValueEnd,
+  repairSingleLineScalars,
 } from "../../extensions/pi-claude-marketplace/shared/frontmatter-repair.ts";
 
 describe("frontmatterBlockEnd", () => {
@@ -182,6 +186,284 @@ describe("keyValueEnd", () => {
 
       // assert
       assert.strictEqual(keyEnd, expectedFrontmatterKeyValueEnd);
+    });
+  }
+});
+
+describe("repairSingleLineScalars", () => {
+  for (const { description, sourceContent } of [
+    {
+      description: "a document with no opening fence",
+      sourceContent: "name: helper\ndescription: Use this: when reviewing\n---\n",
+    },
+    {
+      description: "an opening fence with no closing fence",
+      sourceContent: "---\ndescription: Use this: when reviewing\n",
+    },
+    {
+      description: "empty content",
+      sourceContent: "",
+    },
+    {
+      description: "an already double-quoted value",
+      sourceContent: '---\ndescription: "Use this: when reviewing"\n---\n',
+    },
+    {
+      description: "an already single-quoted value",
+      sourceContent: "---\ndescription: 'Use this: when reviewing'\n---\n",
+    },
+    {
+      description: "a flow sequence",
+      sourceContent: "---\ntags: [alpha: 1, beta]\n---\n",
+    },
+    {
+      description: "a flow mapping",
+      sourceContent: "---\nmeta: {alpha: 1}\n---\n",
+    },
+    {
+      description: "a folded block scalar",
+      sourceContent: "---\ndescription: >-\n  Use this: when reviewing\n---\n",
+    },
+    {
+      description: "a literal block scalar",
+      sourceContent: "---\ndescription: |\n  Use this: when reviewing\n---\n",
+    },
+    {
+      description: "a multi-line plain scalar",
+      sourceContent: "---\ndescription: Use this: when reviewing\n  pull requests\n---\n",
+    },
+    {
+      description: "a colon-free single-line value",
+      sourceContent: "---\nname: helper\ndescription: Reviews pull requests\n---\n",
+    },
+    {
+      description: "a comment line",
+      sourceContent: "---\n# note: an author comment\nname: helper\n---\n",
+    },
+    {
+      description: "an indented line under a nested key",
+      sourceContent: "---\nmeta:\n  note: Use this: when reviewing\n---\n",
+    },
+    {
+      description: "an empty value",
+      sourceContent: "---\ndescription: \nname: helper\n---\n",
+    },
+  ]) {
+    test(`SKFM-01 returns ${description} byte-for-byte`, () => {
+      // arrange
+      const expectedContent = sourceContent;
+
+      // act
+      const skillContent = repairSingleLineScalars(sourceContent, colonRepairTrigger);
+
+      // assert
+      assert.strictEqual(skillContent, expectedContent);
+    });
+  }
+
+  for (const { description, sourceContent, expectedContent } of [
+    {
+      description: "quotes a single-line value carrying an unquoted colon",
+      sourceContent:
+        "---\nname: helper\ndescription: Use this: when reviewing\n---\n\nBody prose.\n",
+      expectedContent:
+        '---\nname: helper\ndescription: "Use this: when reviewing"\n---\n\nBody prose.\n',
+    },
+    {
+      description: "escapes a backslash and a quote inside a repaired value",
+      sourceContent: '---\ndescription: at C:\\skills the "main": entry\n---\n',
+      expectedContent: '---\ndescription: "at C:\\\\skills the \\"main\\": entry"\n---\n',
+    },
+    {
+      description: "repairs one line and leaves a sibling flow sequence untouched",
+      sourceContent: "---\ntags: [alpha: 1, beta]\ndescription: Use this: when reviewing\n---\n",
+      expectedContent:
+        '---\ntags: [alpha: 1, beta]\ndescription: "Use this: when reviewing"\n---\n',
+    },
+    {
+      description: "repairs a line after a block scalar holding an indented rule line",
+      sourceContent:
+        "---\ndescription: |\n  Part one.\n  ---\n  Part two.\nargument-hint: Use this: carefully\n---\n",
+      expectedContent:
+        '---\ndescription: |\n  Part one.\n  ---\n  Part two.\nargument-hint: "Use this: carefully"\n---\n',
+    },
+    {
+      description: "drops the trailing carriage return of a repaired CRLF line",
+      sourceContent: "---\r\ndescription: Use this: when reviewing\r\n---\r\n",
+      expectedContent: '---\r\ndescription: "Use this: when reviewing"\n---\r\n',
+    },
+  ]) {
+    test(`SKFM-01 ${description}`, () => {
+      // arrange
+      const expectedSkillContent = expectedContent;
+
+      // act
+      const skillContent = repairSingleLineScalars(sourceContent, colonRepairTrigger);
+
+      // assert
+      assert.strictEqual(skillContent, expectedSkillContent);
+    });
+  }
+
+  for (const { description, sourceContent } of [
+    {
+      description: "an empty value",
+      sourceContent: "---\ndescription: \n---\n",
+    },
+    {
+      description: "a double-quoted value",
+      sourceContent: '---\ndescription: "Reviews"\n---\n',
+    },
+    {
+      description: "a single-quoted value",
+      sourceContent: "---\ndescription: 'Reviews'\n---\n",
+    },
+    {
+      description: "a flow sequence",
+      sourceContent: "---\ntools: [Read, Grep]\n---\n",
+    },
+    {
+      description: "a flow mapping",
+      sourceContent: "---\nmeta: {alpha: 1}\n---\n",
+    },
+    {
+      description: "a literal block header",
+      sourceContent: "---\ndescription: |\n  Reviews\n---\n",
+    },
+    {
+      description: "a folded block header",
+      sourceContent: "---\ndescription: >\n  Reviews\n---\n",
+    },
+    {
+      description: "a scalar that continues on an indented line",
+      sourceContent: "---\ndescription: Reviews\n  pull requests\n---\n",
+    },
+    {
+      description: "a document with no opening fence",
+      sourceContent: "description: Reviews\n---\n",
+    },
+    {
+      description: "an opening fence with no closing fence",
+      sourceContent: "---\ndescription: Reviews\n",
+    },
+  ]) {
+    test(`D-PG7-02 an always-true trigger returns ${description} byte-for-byte`, () => {
+      // arrange
+      const expectedContent = sourceContent;
+
+      // act
+      const repairedContent = repairSingleLineScalars(sourceContent, () => true);
+
+      // assert
+      assert.strictEqual(repairedContent, expectedContent);
+    });
+  }
+
+  test("D-PG7-02 quotes a value the trigger accepts", () => {
+    // arrange
+    const sourceContent = "---\nname: helper\ntools: *\n---\n";
+
+    // act
+    const repairedContent = repairSingleLineScalars(sourceContent, (value) =>
+      value.startsWith("*"),
+    );
+
+    // assert
+    assert.strictEqual(repairedContent, '---\nname: helper\ntools: "*"\n---\n');
+  });
+
+  test("D-PG7-02 leaves a line the trigger refuses byte-for-byte", () => {
+    // arrange
+    const sourceContent = "---\nname: helper\ndescription: Use this: when reviewing\n---\n";
+
+    // act
+    const repairedContent = repairSingleLineScalars(sourceContent, (value) =>
+      value.startsWith("*"),
+    );
+
+    // assert
+    assert.strictEqual(repairedContent, sourceContent);
+  });
+});
+
+describe("colonRepairTrigger", () => {
+  for (const { description, value, expected } of [
+    {
+      description: "accepts a value with a colon inside",
+      value: "Use this: carefully",
+      expected: true,
+    },
+    { description: "accepts a value that ends with a colon", value: "Note:", expected: true },
+    {
+      description: "refuses a value with no colon",
+      value: "Reviews pull requests",
+      expected: false,
+    },
+  ]) {
+    test(description, () => {
+      // act
+      const triggered = colonRepairTrigger(value);
+
+      // assert
+      assert.strictEqual(triggered, expected);
+    });
+  }
+});
+
+describe("emitSafeDoubleQuotedScalar", () => {
+  for (const { description, value, expected } of [
+    {
+      description: "escapes a backslash before a double quote",
+      value: String.raw`a\"b`,
+      expected: String.raw`"a\\\"b"`,
+    },
+    { description: "turns a line feed into one space", value: "one\ntwo", expected: '"one two"' },
+    { description: "turns a CRLF into one space", value: "one\r\ntwo", expected: '"one two"' },
+  ]) {
+    test(description, () => {
+      // act
+      const scalar = emitSafeDoubleQuotedScalar(value);
+
+      // assert
+      assert.strictEqual(scalar, expected);
+    });
+  }
+});
+
+describe("extractBodyAfterFrontmatter", () => {
+  for (const { description, content, expected } of [
+    {
+      description: "returns the trimmed body after an LF block",
+      content: "---\nname: x\n---\n\nBody.\n",
+      expected: "Body.",
+    },
+    {
+      description: "returns the trimmed body after a CRLF block",
+      content: "---\r\nname: x\r\n---\r\n\r\nBody.\r\n",
+      expected: "Body.",
+    },
+    {
+      description: "returns the trimmed body after a lone-CR block",
+      content: "---\rname: x\r---\r\rBody.\r",
+      expected: "Body.",
+    },
+    {
+      description: "treats a ---x line as the close, as Pi does",
+      content: "---\nname: x\n---x\nBody.\n",
+      expected: "x\nBody.",
+    },
+    {
+      description: "does not stop at an indented ---",
+      content: "---\ndescription: |\n  ---\n---\nBody.\n",
+      expected: "Body.",
+    },
+  ]) {
+    test(description, () => {
+      // act
+      const body = extractBodyAfterFrontmatter(content);
+
+      // assert
+      assert.strictEqual(body, expected);
     });
   }
 });

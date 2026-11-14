@@ -76,3 +76,139 @@ export function keyValueEnd(lines: readonly string[], keyIndex: number, blockEnd
 
   return lastReplaced;
 }
+
+/**
+ * Emit `value` as a safe double-quoted single-line YAML scalar. Embedded
+ * newlines collapse to spaces, then `\` and `"` are escaped, so the emitted
+ * scalar cannot re-form a new YAML key on a following line (the AG-8
+ * provenance-injection class). Backslashes are escaped BEFORE quotes so an
+ * author `"` is not double-processed.
+ */
+export function emitSafeDoubleQuotedScalar(value: string): string {
+  const oneLine = value.replaceAll(/\r?\n/g, " ");
+  const escaped = oneLine.replaceAll("\\", String.raw`\\`).replaceAll('"', String.raw`\"`);
+  return `"${escaped}"`;
+}
+
+/** An opening `---` fence anchored at the very start of the document. */
+const OPENING_FENCE = /^---[ \t]*\r?\n/;
+
+/** A column-0 key -- no whitespace, colon or `#` -- followed by a colon and a space or tab. */
+const TOP_LEVEL_KEY = /^[^\s:#]+:[ \t]/;
+
+/** Value openers a colon repair leaves alone: already quoted, flow collection, block scalar. */
+const UNREPAIRABLE_VALUE = /^["'[{|>]/;
+
+/**
+ * Read a frontmatter line as a single-line plain scalar that `trigger` accepts,
+ * returning its key and its whitespace-trimmed value. Returns `undefined` for
+ * every other line shape, so the caller copies that line byte-identically. The
+ * empty-value and opener tests run before the trigger, so no trigger reaches a
+ * quoted value, a flow collection, or a block scalar. The key pattern admits no
+ * colon, so the first `:` in an accepted line is always the key separator.
+ */
+function repairableScalar(
+  line: string,
+  trigger: (value: string) => boolean,
+): { key: string; value: string } | undefined {
+  if (!TOP_LEVEL_KEY.test(line)) {
+    return undefined;
+  }
+
+  const separator = line.indexOf(":");
+  const value = line.slice(separator + 1).trim();
+  if (value === "" || UNREPAIRABLE_VALUE.test(value) || !trigger(value)) {
+    return undefined;
+  }
+
+  return { key: line.slice(0, separator), value };
+}
+
+/**
+ * SKFM-01: the skills trigger of `repairSingleLineScalars`. It accepts a value
+ * that holds a colon, the defect that makes YAML refuse a plain scalar.
+ */
+export function colonRepairTrigger(value: string): boolean {
+  return value.includes(":");
+}
+
+/**
+ * SKFM-01 / D-PG7-02: repair the one frontmatter defect class that is safe to
+ * rewrite -- a single-line plain scalar that YAML refuses -- and let the
+ * caller's `trigger` say which values of that class to quote. The skills bridge
+ * passes `colonRepairTrigger`: a single-line plain scalar carrying an unquoted
+ * colon, such as `description: Use this: when reviewing`. YAML forbids `: `
+ * inside a plain scalar, so Pi's strict parser rejects the whole block and the
+ * author loses every key in it to the SKILL-01 / D-86-02 placeholder.
+ * Re-emitting just that line through the safe double-quoted scalar emitter
+ * recovers the author's real text and leaves every sibling byte untouched.
+ *
+ * A line is repaired only when it sits inside the frontmatter block, starts at
+ * column 0 with a whitespace-, colon- and `#`-free key followed by a colon and a
+ * space or tab, spans exactly one line (`keyValueEnd`), and carries a non-empty
+ * value that `trigger` accepts. Every other form is copied byte-identically, because
+ * quoting it would change what the document MEANS rather than what it parses as:
+ * an already-quoted value needs no repair, `[` and `{` open a flow collection
+ * whose members would collapse into one string, `|` and `>` open a block scalar
+ * whose continuation lines would be orphaned, and a multi-line plain scalar
+ * likewise spans lines a single-line re-emit cannot see. Eligibility is decided
+ * per line, so an excluded sibling never vetoes a repairable one. Content
+ * without an opening fence, without a closing fence, or with no eligible line at
+ * all is returned unchanged, and the caller degrades as before.
+ *
+ * The repair is SILENT by design: no warning, no notification, no result field.
+ * It restores what the author wrote, so there is nothing for the user to act on,
+ * and the notification layer renders state that commands decide rather than
+ * probing for it. This is deliberately MORE lenient than Claude Code, which
+ * strict-parses these same bytes to empty metadata. PARSE-01 still decides the
+ * degrade from the SOURCE parse, and PARSE-02 still re-parses whatever bytes the
+ * repair produces.
+ */
+export function repairSingleLineScalars(
+  content: string,
+  trigger: (value: string) => boolean,
+): string {
+  if (!OPENING_FENCE.test(content)) {
+    return content;
+  }
+
+  const lines = content.split("\n");
+  const blockEnd = frontmatterBlockEnd(lines);
+  if (blockEnd === lines.length) {
+    return content;
+  }
+
+  const repaired = [...lines];
+  let changed = false;
+  for (const [offset, line] of lines.slice(1, blockEnd).entries()) {
+    const index = offset + 1;
+    const scalar = repairableScalar(line, trigger);
+    if (scalar === undefined || keyValueEnd(lines, index, blockEnd) !== index) {
+      continue;
+    }
+
+    repaired[index] = `${scalar.key}: ${emitSafeDoubleQuotedScalar(scalar.value)}`;
+    changed = true;
+  }
+
+  return changed ? repaired.join("\n") : content;
+}
+
+/**
+ * SKILL-01: extract the markdown body from a skill source whose frontmatter
+ * block failed to parse, reproducing `parseFrontmatter`'s OWN split so the
+ * synthesized block preserves the body byte-for-byte identically to the
+ * parseable path (PARSE-01 encoding parity). Newlines are normalized (CR/CRLF ->
+ * LF, including lone CR) exactly as the parser does; the opening fence is the
+ * parser's anchored `---` prefix (`startsWith`, NOT a per-line `trim`); and the
+ * close is the parser's `\n---` prefix search. An exotic delimiter -- a `---x`
+ * line or an indented `---` -- is therefore classified identically to Pi rather
+ * than by a looser `line.trim() === "---"` match. Called ONLY on the gate-1
+ * throw arm, where a closed `---` block is present by construction -- the body
+ * is everything after the closing delimiter, trimmed.
+ */
+export function extractBodyAfterFrontmatter(content: string): string {
+  const normalized = content.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
+  const closeIndex = normalized.indexOf("\n---", 3);
+  return normalized.slice(closeIndex + 4).trim();
+}
