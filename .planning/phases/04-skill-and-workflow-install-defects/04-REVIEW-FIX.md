@@ -1,15 +1,102 @@
 ---
 phase: 04-skill-and-workflow-install-defects
-fixed_at: 2026-11-14T06:24:43Z
+fixed_at: 2026-11-14T07:13:32Z
 review_path: .planning/phases/04-skill-and-workflow-install-defects/04-REVIEW.md
-iteration: 1
-findings_in_scope: 7
-fixed: 6
+iteration: 2
+findings_in_scope: 3
+fixed: 2
 skipped: 1
 status: partial
+iteration_1_fixed_at: 2026-11-14T06:24:43Z
+iteration_1_findings_in_scope: 7
+iteration_1_fixed: 6
+iteration_1_skipped: 1
 ---
 
 # Phase 4: Code Review Fix Report
+
+## Iteration 2
+
+**Fixed at:** 2026-11-14T07:13:32Z
+**Source review:** .planning/phases/04-skill-and-workflow-install-defects/04-REVIEW.md ("Iteration 2")
+**Iteration:** 2
+
+**Summary:**
+
+- Findings in scope: 3 (WR-04, WR-05, IN-05)
+- Fixed: 2 (WR-04, WR-05)
+- Skipped: 1 (IN-05, a maintainer question; the orchestrator said not to change behavior)
+
+The run was autonomous. Every decision below is **pending maintainer review**.
+
+### Where verification ran (iteration 2)
+
+Every check ran in the main checkout `/home/acolomba/src/pi-claude-marketplace-gaps` on `features/gaps`, with no worktree, so the results can be reproduced from that tree. Node v26.13.1. Each unit test ran under `test/platform/isolated-pi-home.ts` or `withHermeticHome`, and each scenario in the cucumber sandbox. The checks were: `tsc --noEmit`, ESLint on every changed `.ts` file, `npm run fallow` (dead code, cycles, health, dupes; exit 0), `npm run check:features`, direct coverage at 100% for each touched source-test pair, the owner scenarios under the `adapter` profile, and the commit hook's `npm run check:commit` on each commit. These scenarios carry no MCP tag, so the `builtin` profile does not run them. The full `npm run check` was not run, as instructed.
+
+### WR-04: A refused listed skills path of a root-source entry is dropped without a word
+
+**Files modified:** `extensions/pi-claude-marketplace/domain/component-paths.ts`, `domain/resolver-types.ts`, `domain/plugin-resolver.ts`, `orchestrators/plugin/install-outcome.ts`, `orchestrators/plugin/update-swap.ts`, `orchestrators/plugin/info.ts`; `test/domain/component-paths.test.ts`, `test/domain/plugin-resolver.test.ts`, `test/orchestrators/plugin/{install-outcome,update-swap,info}.test.ts`; `features/skill/root-source-entries.feature`; `CHANGELOG.md`
+**Commits:** f273f776, then 1ea9b3b9 (one-character alignment of the new Examples table, no behavior change)
+**Status:** fixed: requires human verification (a logic change, and new user-visible text)
+**Applied fix:**
+
+- New typed resolver field `refusedListedSkillPaths?: { path; cause: "traversal" | "missing" | "file" }[]` on the materializable arms (`resolver-types.ts`, exported as `RefusedListedSkillPath`). `collectRootSourceSkillPaths` fills it through `classifyListedPaths`, which replaces `survivingListedPaths`. It does not set the dirty flag, so the plugin stays `installed` or `available`. A value that is not a string keeps its D-CF1-06 note and is not reported twice.
+- `refusedListedSkillPathMessages` renders Claude Code 2.1.323's `/plugin` errors wording: `skills path escapes plugin directory: <path>`, `skills path not found: <path>`, and `Failed to load skills from <path>: path is a file; skills entries must be directories containing SKILL.md`, plus upstream's ` — point to the parent directory '<dir>' instead` or `'.'` hint when the file is a `SKILL.md`. Each path goes through `forMessage`, so a control character cannot break a line.
+- Install and update spread the messages as discovery warnings at the two `shadowedFolders` sites, so the per-plugin diagnostic prints them as `warning` rows under `Plugin "<p>" [<scope>] installed; N declared components have a note.` (the cascade row stays `info`). Reinstall, enable, and apply moves reach the same two sites. `info` adds them first in `notes` (`plugin notes`, severity `info`), after `redactAbsolutePaths`, as install's diagnostic reduces them.
+- T-04-01 holds. Only a contained path is statted. The owner case "the stat reader receives no refused listed path" still expects the same four stat calls, and now also the two recorded traversals.
+- Every refused listed path is reported in every arm, including the D-CF1-06 fallback arm (no survivor, no traversal), where upstream's `_Ao` pass also reports it.
+- Scenarios: the `:222` install scenario became a Scenario Outline over the three causes. It checks the warning row, the `installed` row, and the staged files. A new update scenario checks the warning on `updated`. The two info escape scenarios now expect `plugin notes`. Red with the old source: 16 scenarios, 6 failed (the three Outline rows, the update, and the two info scenarios). Green after: 16 of 16.
+- Unit cases: the root-source case table now asserts `refusedListedSkillPaths` for each case with a refused path. There are six message cases (three causes, both hint arms, and a control character) and an empty case. There is one resolver case (installable, carries the field) and one install-ledger case and one swap case (the warning reaches the discovery and staging warnings). One info case covers a relative traversal, an absolute traversal (reduced to its basename), and a missing path.
+
+**Deviation to confirm, path forms.** Upstream reports a traversal and a file path as written, and a missing path as the resolved absolute path. Here a traversal is reported as written, and a missing or file path is reported relative to the plugin root (`./skills/missing` becomes `skills/missing`). The reason is the shared diagnostic redaction. `redactAbsolutePaths` collapses `./skills/missing` to `.missing` and `../outside/x` to `..x`, because its lookbehind does not exclude `.`. An absolute path would be reduced to its basename anyway (NFR-9).
+
+**Residual (not fixed, out of scope):** a multi-segment relative traversal such as `../outside/x` still prints as `..x` through that redaction. The same defect already affects the existing `escapes plugin root: "../a/b"` notes. A one-character fix (`(?<![\w:/\\.])` in `shared/redact-absolute-paths.ts`) is a BACKLOG candidate.
+
+**Residual (by design):** the `unavailable` arm of `info` carries no resolver payload (NFR-7), so its lenient listing shows no refusal notes.
+
+### WR-05: The restriction note can name a tool the agent does not have
+
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/discover-names.ts`; `test/orchestrators/plugin/{discover-names,info,install-outcome,update-swap}.test.ts`; `features/workflow/agent-restrictions.feature`; `docs/workflows-compatibility.md`; `.planning/upstream/pi-dynamic-workflows-agent-tool-restriction.md`; `CHANGELOG.md`
+**Commit:** 91b0c917
+**Status:** fixed: requires human verification (D-PG4-12 wording)
+**Applied fix:**
+
+- The one `restrictionNote` builder, which install, update, and `info` share, now reads:
+
+  ```text
+  workflow script "scan.js" in "workflows" runs agent type "demo:reader", which restricts its tools; unless the workflow engine's providerMiddlewareExtensions setting lists builtin:codemode, the engine does not keep that restriction, so the agent may use bash, edit, and write
+  ```
+
+- The setting name was checked in the engine source at 3.15.0. `providerMiddlewareExtensions` is the host setting in `~/.pi/workflows/settings.json` (README:204-269, `src/pi-extension.ts:102`), and `childCodemode` tests it for `builtin:codemode` (`src/agent.ts:1238-1239`). So the note cannot be read as Pi's own `+codemode` tool.
+- "may use" holds under the user's Pi `defaultTools` and the engine's `excludeSubagentTools`, which can each remove a built-in.
+- The doc comments of `ENGINE_BUILTIN_TOOLS`, `unkeptBuiltinTools`, and `workflowAgentRestrictionNotes` no longer say the note is never false, and they name both settings.
+- Scenarios: the feature description and the three note scenarios carry the new text. Red with the old source: 4 scenarios, 3 failed (the no-note scenario passed, as it should). Green after: 4 of 4. The unit expectations and the `restrictionNote` test helper carry the new text. Two expectations became template literals because of the apostrophe.
+- The docs row names the setting, says that Pi's default tools decide what the subagent holds, and explains the "may". The engine draft says "may get" and names the setting in its issue body. The CHANGELOG bullet now reads "...whose tool restriction the workflow engine keeps only under `builtin:codemode`."
+
+### IN-05: An agent whose `tools` lists all four built-ins, or a scoped `Bash(spec)`, now gets no note
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/discover-names.ts:90-97`
+**Reason:** Skipped. This is a maintainer question, and the orchestrator said not to change behavior. Add it to the D-PG4-12 review: "suppress the note when the four built-ins are kept, and treat `Tool(spec)` as a full allowance", or count a `Tool(spec)` entry as a restriction the engine does not keep.
+**Original issue:** D-PG4-11 triggers on any non-empty `tools`/`disallowedTools`. The iteration-1 fix suppresses the note when all four built-ins are kept and reads `Bash(git log *)` as `Bash`, which narrows the trigger without a recorded decision.
+
+### Decisions pending maintainer review (iteration 2)
+
+1. WR-04: a missing or file listed path is reported relative to the plugin root, not as upstream's absolute or written form, so the redaction cannot mangle it.
+2. WR-04: the SKILL.md parent hint keeps upstream's em dash.
+3. WR-04: a refused listed path is reported in the D-CF1-06 fallback arm too.
+4. WR-05: the D-PG4-12 wording names `providerMiddlewareExtensions` and `builtin:codemode` and says "may use".
+5. IN-05: as above.
+
+### Parent lines (iteration 2)
+
+- **D-PG4-01 (CONTEXT, PROJECT.md row when it lands):** add "A listed path that escapes the plugin, is missing, or names a file is reported at install, update, and `info` in Claude Code 2.1.323's wording, and the plugin still installs." The CONTEXT sentence "The existing refusal notes still print" is true again for traversals, through the new warning.
+- **D-PG4-12 wording:** replace the proposed install wording with the text above.
+- **BACKLOG candidate:** `redactAbsolutePaths` collapses `./a/b` and `../a/b` (lookbehind misses `.`).
+- **04-01-SUMMARY.md (not edited):** it still describes the silent drop.
+
+---
+
+## Iteration 1
 
 **Fixed at:** 2026-11-14T06:24:43Z
 **Source review:** .planning/phases/04-skill-and-workflow-install-defects/04-REVIEW.md
