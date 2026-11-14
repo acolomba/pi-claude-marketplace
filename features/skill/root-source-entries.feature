@@ -243,9 +243,9 @@ Feature: Skill root-source entries
       | root-a/SKILL.md | ---\nname: root-a\ndescription: Skill a.\npi-claude-marketplace: {"names":["root:a","a"],"pluginRoot":"{home}/marketplaces/fixtures","pluginData":"{project dir}/.pi/pi-claude-marketplace/data/fixtures/root"}\n---\n\nSkill a body. |
 
     Examples:
-      | listed path      | warning                                                                                                    |
-      | ../outside       | skills path escapes plugin directory: ../outside                                                           |
-      | ./skills/missing | skills path not found: skills/missing                                                                      |
+      | listed path      | warning                                                                                                     |
+      | ../outside       | skills path escapes plugin directory: ../outside                                                            |
+      | ./skills/missing | skills path not found: skills/missing                                                                       |
       | ./notes.md       | Failed to load skills from notes.md: path is a file; skills entries must be directories containing SKILL.md |
 
   Scenario: Updating a root-source entry to a version that lists an escaping path warns about it
