@@ -548,6 +548,11 @@ describe("redactAbsolutePaths", () => {
       expected: "skills path escapes plugin directory: skills/../../x/y",
     },
     {
+      name: "redacts an absolute path that follows a sentence period",
+      input: "Failed./srv/private/a.json",
+      expected: "Failed.a.json",
+    },
+    {
       name: "redacts multiple paths deterministically",
       input: String.raw`from /srv/private/a.json to C:\Users\alice\b.json`,
       expected: "from a.json to b.json",
