@@ -60,14 +60,14 @@ When behavioral coverage is split into streams of work that run in parallel, eac
 
 Each component kind has one function directory, one fixture writer, and one seed step module (D-CF1-08). The slash-command directory is `features/slash-command/`, because `command` already names `command.steps.ts`, the steps that run any `/claude:plugin` command. The MCP directory is `features/mcp-server/`, not `features/mcp/`.
 
-| Kind           | Function directory        | Fixture writer                        | Seed step module                                           |
-| -------------- | ------------------------- | ------------------------------------- | ---------------------------------------------------------- |
-| Skills         | `features/skill/`         | `features/lib/skill-files.ts`         | `features/step_definitions/skill/listing.steps.ts`         |
-| Slash commands | `features/slash-command/` | `features/lib/slash-command-files.ts` | `features/step_definitions/slash-command/listing.steps.ts` |
-| Agents         | `features/agent/`         | `features/lib/agent-files.ts`         | `features/step_definitions/agent/listing.steps.ts`         |
-| Hooks          | `features/hook/`          | `features/lib/hook-files.ts`          | `features/step_definitions/hook/runs.steps.ts`             |
-| MCP servers    | `features/mcp-server/`    | `features/lib/mcp-server-files.ts`    | `features/step_definitions/mcp-server/listing.steps.ts`    |
-| Workflows      | `features/workflow/`      | `features/lib/workflow-files.ts`      | `features/step_definitions/workflow/runs.steps.ts`         |
+| Kind           | Function directory        | Fixture writer                                                  | Seed step module                                           |
+| -------------- | ------------------------- | --------------------------------------------------------------- | ---------------------------------------------------------- |
+| Skills         | `features/skill/`         | `features/lib/skill-files.ts`                                   | `features/step_definitions/skill/listing.steps.ts`         |
+| Slash commands | `features/slash-command/` | `features/lib/slash-command-files.ts`                           | `features/step_definitions/slash-command/listing.steps.ts` |
+| Agents         | `features/agent/`         | `features/lib/agent-files.ts`                                   | `features/step_definitions/agent/listing.steps.ts`         |
+| Hooks          | `features/hook/`          | `features/lib/hook-files.ts`, `features/lib/hook-run-tokens.ts` | `features/step_definitions/hook/runs.steps.ts`             |
+| MCP servers    | `features/mcp-server/`    | `features/lib/mcp-server-files.ts`                              | `features/step_definitions/mcp-server/listing.steps.ts`    |
+| Workflows      | `features/workflow/`      | `features/lib/workflow-files.ts`                                | `features/step_definitions/workflow/runs.steps.ts`         |
 
 For workflows, `runs.steps.ts` stays the seed module and `features/step_definitions/workflow/listing.steps.ts` is the shared topic module (the listing `Then` steps, the no-run `When`, and the notices `Then`). The shared record helpers `progressOf`, `WorkflowCommandTurn`, and `sendWorkflowCommand` live in `features/lib/workflow-files.ts` beside the fixture writer.
 
