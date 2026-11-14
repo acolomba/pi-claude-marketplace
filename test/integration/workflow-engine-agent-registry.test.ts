@@ -81,3 +81,21 @@ test("D-PG7-17: the engine reads no model for an agent whose source model is inh
     { description: "Reads.", model: undefined },
   );
 });
+
+for (const description of [
+  "Reviews: code.",
+  "Reviews #1 and #2",
+  "@reviewer checks it",
+  '"Quoted words."',
+]) {
+  test(`D-PG7-18: the engine finds the agent and its tools under the description ${JSON.stringify(description)}`, async (t) => {
+    // act
+    const definition = await engineDefinition(t, { description, tools: "Read" });
+
+    // assert
+    assert.deepStrictEqual(
+      { description: definition?.description, tools: definition?.tools },
+      { description, tools: ["read"] },
+    );
+  });
+}

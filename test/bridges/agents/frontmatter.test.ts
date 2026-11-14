@@ -259,24 +259,44 @@ describe("emitGeneratedAgentFile", () => {
       expectedScalar: "plain description",
     },
     {
-      description: "matching double quotes inside single quotes",
+      description: "D-PG7-18: matching double quotes as a literal block",
       scalar: '"quoted description"',
-      expectedScalar: `'"quoted description"'`,
+      expectedScalar: '|-\n  "quoted description"',
     },
     {
-      description: "matching single quotes inside double quotes",
+      description: "D-PG7-18: matching single quotes as a literal block",
       scalar: "'quoted description'",
-      expectedScalar: `"'quoted description'"`,
+      expectedScalar: "|-\n  'quoted description'",
     },
     {
-      description: "an unmatched opening double quote unchanged",
+      description: "D-PG7-18: an unmatched opening double quote as a literal block",
       scalar: '"quoted description',
-      expectedScalar: '"quoted description',
+      expectedScalar: '|-\n  "quoted description',
     },
     {
-      description: "an unmatched opening single quote unchanged",
+      description: "D-PG7-18: an unmatched opening single quote as a literal block",
       scalar: "'quoted description",
-      expectedScalar: "'quoted description",
+      expectedScalar: "|-\n  'quoted description",
+    },
+    ...[
+      { scalar: "Reviews: code.", label: "a colon before a space" },
+      { scalar: "Reviews the code:", label: "a colon at its end" },
+      { scalar: "Reviews #1 and #2", label: "a comment after a space" },
+      { scalar: "@reviewer checks it", label: "a leading at sign" },
+      { scalar: "- checks it", label: "a leading dash" },
+      { scalar: "[draft] checks it", label: "a leading bracket" },
+      { scalar: "123", label: "a number" },
+      { scalar: "true", label: "a boolean" },
+      { scalar: "null", label: "a null" },
+    ].map(({ scalar, label }) => ({
+      description: `D-PG7-18: ${label} as a literal block`,
+      scalar,
+      expectedScalar: `|-\n  ${scalar}`,
+    })),
+    {
+      description: "D-PG7-18: a colon and a hash that YAML reads as text unchanged",
+      scalar: "Runs at 10:30 on issue#5",
+      expectedScalar: "Runs at 10:30 on issue#5",
     },
     {
       description: "two lines as a literal block with a two-space indent",
@@ -305,14 +325,14 @@ describe("emitGeneratedAgentFile", () => {
       expectedScalar: "|-\n  first line\n  second line",
     })),
     ...["|", "|-", ">", ">-"].map((header) => ({
-      description: `the block header ${header} alone inside double quotes`,
+      description: `the block header ${header} alone as a literal block`,
       scalar: header,
-      expectedScalar: `"${header}"`,
+      expectedScalar: `|-\n  ${header}`,
     })),
     {
-      description: "the empty scalar unchanged",
+      description: "the empty scalar as an empty literal block",
       scalar: "",
-      expectedScalar: "",
+      expectedScalar: "|-\n",
     },
   ]) {
     test(`emits a description with ${description}`, () => {

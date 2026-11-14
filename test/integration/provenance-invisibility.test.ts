@@ -14,7 +14,8 @@
 //
 // D-PG7-06 / AG-8: the same reader proves that no line of a multi-line
 // description becomes a key or closes the frontmatter, and that a one-line
-// description that is only a block header is read as text.
+// description that is only a block header is read as text. D-PG7-18: so is a
+// one-line description that YAML would not read as its text.
 //
 // pi-subagents is an optional peer. The test imports its compiled
 // `src/agents/frontmatter.js` in place from the version the suites run in the optional
@@ -210,5 +211,38 @@ for (const header of ["|", "|-", ">", ">-"]) {
     assert.equal(frontmatter.description, header);
     assert.equal(frontmatter.tools, "read");
     assert.equal(frontmatter.systemPromptMode, "replace");
+  });
+}
+
+for (const description of [
+  "Reviews: code.",
+  "Reviews #1 and #2",
+  "@reviewer checks it",
+  '"Quoted words."',
+]) {
+  test(`D-PG7-18: the one-line description ${JSON.stringify(description)} reads as its text under pi-subagents' own reader`, async () => {
+    // arrange
+    const peer = await findPiSubagentsPackage();
+    const fm = await loadPiSubagentsModule<PiSubagentsFrontmatterModule>(peer, "frontmatter");
+    const agentFileContent = emitGeneratedAgentFile({
+      frontmatter: {
+        name: "pi-claude-marketplace-acme-bot",
+        description,
+        tools: ["read"],
+        skills: [],
+        inheritSkills: true,
+      },
+      provenance: EMPTY_PROVENANCE,
+      body: "Answer the task.",
+    });
+
+    // act
+    const { frontmatter } = fm.parseFrontmatter(agentFileContent);
+
+    // assert
+    assert.deepStrictEqual(
+      { description: frontmatter.description, tools: frontmatter.tools },
+      { description, tools: "read" },
+    );
   });
 }

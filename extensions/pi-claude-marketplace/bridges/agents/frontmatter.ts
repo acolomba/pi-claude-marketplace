@@ -24,9 +24,10 @@
 // frontmatter under pi-subagents' line-based reader. A multi-line description
 // is written as a `|-` literal block whose lines carry a fixed two-space
 // indent, so none of them sits at column 0, where that reader looks for a
-// key and for the closing `---` (D-PG7-06). A one-line description is
-// quote-flipped by emitYamlScalar, and sanitizeProvenanceValue collapses the
-// line breaks of a provenance value.
+// key and for the closing `---` (D-PG7-06). The workflow engine reads the
+// same file as YAML, so a one-line description that is not plain YAML text
+// is written as the same block, which both readers take literally (D-PG7-18).
+// sanitizeProvenanceValue collapses the line breaks of a provenance value.
 
 import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { stripBom } from "../../shared/bom.ts";
@@ -42,28 +43,26 @@ import { GENERATED_AGENT_MARKER } from "./marker.ts";
 
 import type { RawAgentFrontmatter } from "./types.ts";
 
-/** The values pi-subagents reads as a block header rather than as text. */
-const BLOCK_HEADERS: ReadonlySet<string> = new Set(["|", "|-", ">", ">-"]);
+/**
+ * D-PG7-18: the plain values YAML does not read as their text: one that starts
+ * with an indicator (a quote, a flow collection, a block header, a tag, an
+ * anchor, an alias, a directive, or a reserved one), one with a colon before a
+ * space or at its end, and one with a comment after a space. Such a value is
+ * never parsed, so no tag or anchor reaches the YAML reader and its warnings.
+ */
+const YAML_UNSAFE_PLAIN = /(?:^[-?:,[\]{}#&*!|>'"%@`])|(?::(?:\s|$))|(?:\s#)/u;
 
 /**
- * Emit a one-line free-text scalar in pi-subagents' frontmatter form.
- *
- * pi-subagents' parser naively strips a single surrounding pair of matching
- * quotes (`"..."` or `'...'`) and processes no escape. A value that starts
- * AND ends with the same quote char is wrapped in the opposing quote char so
- * the round-trip keeps its quotes, and a value that is exactly a block header
- * is wrapped in double quotes so it is read as text (AG-8).
+ * D-PG7-18: whether YAML reads `description: <value>` as exactly `value`, as
+ * pi-subagents does. Besides the unsafe forms, a value that YAML reads as a
+ * number, a boolean, or null fails. The value holds no line break, and the
+ * unsafe forms are the ones that make YAML throw, so the parse does not throw.
  */
-function emitYamlScalar(value: string): string {
-  if (value.startsWith('"') && value.endsWith('"')) {
-    return `'${value}'`;
-  }
-
-  if ((value.startsWith("'") && value.endsWith("'")) || BLOCK_HEADERS.has(value)) {
-    return `"${value}"`;
-  }
-
-  return value;
+function readsAsPlainYamlText(value: string): boolean {
+  return (
+    !YAML_UNSAFE_PLAIN.test(value) &&
+    parseFrontmatter(`---\ndescription: ${value}\n---\n`).frontmatter.description === value
+  );
 }
 
 /**
@@ -74,17 +73,19 @@ function emitYamlScalar(value: string): string {
 const DESCRIPTION_LINE_BREAK = /\r\n|[\r\n\u2028\u2029]/u;
 
 /**
- * D-PG7-06 / AG-8: the description line or lines. A one-line value sits on
- * the key line. A multi-line value is a `|-` literal block, the one header
- * form pi-subagents reads besides `|`: each empty line stays empty and every
- * other line gets two spaces in front, so no line starts at column 0, where
- * pi-subagents looks for a key and for the closing `---`. No escape is
- * written, because pi-subagents would show the backslashes to the model.
+ * D-PG7-06 / AG-8: the description line or lines. A one-line value that YAML
+ * reads as its own text sits on the key line. Any other value is a `|-`
+ * literal block, the one header form pi-subagents reads besides `|`: each
+ * empty line stays empty and every other line gets two spaces in front, so no
+ * line starts at column 0, where pi-subagents looks for a key and for the
+ * closing `---`. No escape is written, because pi-subagents would show the
+ * backslashes to the model, and both readers take the block literally, quote
+ * marks and colons included (D-PG7-18).
  */
 function descriptionLines(value: string): string[] {
   const parts = value.split(DESCRIPTION_LINE_BREAK);
-  if (parts.length === 1) {
-    return [`description: ${emitYamlScalar(value)}`];
+  if (parts.length === 1 && readsAsPlainYamlText(value)) {
+    return [`description: ${value}`];
   }
 
   return ["description: |-", ...parts.map((part) => (part === "" ? "" : `  ${part}`))];

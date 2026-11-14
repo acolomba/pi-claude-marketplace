@@ -34,3 +34,31 @@ Feature: Workflow agent steps
     Then the workflow engine shows these notices:
       | notice            |
       | started /demo:ask |
+
+  Scenario: A workflow step on a plugin agent whose quoted description holds a colon runs on the agent's body
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "agents/reader.md" with this text:
+      """
+      ---
+      name: reader
+      description: "Reviews: code."
+      ---
+
+      Read the files you are given.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/scan.js" with this text:
+      """
+      export const meta = {name:"scan",description:"Scans with the reader."};
+
+      return await agent("Scan the files.", {agentType:"demo:reader"});
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply           | tool | arguments |
+      | The files pass. |      |           |
+    When the user runs the workflow command "/demo:scan", whose agent steps the model answers
+    Then the workflow run ends with the status "completed" and the result "The files pass."
+    Then the model receives these calls:
+      | call | role | text                                                                    |
+      | 1    | user | Read the files you are given.\n\nTask label: agent 1\n\nScan the files. |
