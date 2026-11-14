@@ -16,7 +16,9 @@
 // non-blocking status code: <stderr>` for a failed exit, with `Error occurred
 // while executing hook command: <error>` after the prefix for a command that
 // cannot be spawned, and `<label> hook error: Failed to run: <error>` for an
-// exception in the runner.
+// exception in the runner. The exit 2 of a missing script shows its whole
+// text, `<label> hook error: Hook script appears to be missing` and the
+// reinstall command of the hook's plugin (D-PG5-08, D-PG5-11).
 //
 // A leaf: no Pi and no runtime imports, so every adapter and every output
 // carrier can share one wording.
@@ -24,6 +26,7 @@
 import { mapPiToClaudeToolName } from "../../domain/components/hook-tool-names.ts";
 
 import type { HookFailure } from "./exec-result.ts";
+import type { Scope } from "../../shared/types.ts";
 
 // Claude Code's reason for a block that names none: an exit 2 with no stderr,
 // and a block or deny decision with no reason.
@@ -34,6 +37,10 @@ const NO_DECISION_REASON = "Blocked by hook";
 // length at which its renderer cuts the line it shows.
 const NON_BLOCKING_PREFIX = "Failed with non-blocking status code: ";
 const FAILURE_LINE_LIMIT = 200;
+
+// D-PG5-11: the em dash of Claude Code 2.1.323's missing-script notice. It
+// stays escaped because the fix-unicode-dashes hook rewrites a literal one.
+const MISSING_SCRIPT_DASH = "\u2014";
 
 /**
  * D-CF5-11: the label Claude Code gives a hook outcome: `<Event>`, or
@@ -160,8 +167,8 @@ function failureLine(text: string): string {
 }
 
 // D-PG5-11: the whole failure text before the cut, as Claude Code 2.1.323
-// builds it for each kind of failure.
-function failureMessage(failure: HookFailure): string {
+// builds it for each kind of failure that is cut.
+function failureMessage(failure: Exclude<HookFailure, { kind: "missing-script" }>): string {
   switch (failure.kind) {
     case "exit": {
       const stderr = failure.stderr.trim();
@@ -175,6 +182,25 @@ function failureMessage(failure: HookFailure): string {
   }
 }
 
+/** The hook a failure notice names: its declared command and its plugin. */
+export interface FailedHook {
+  readonly command: string;
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly scope: Scope;
+}
+
+// D-PG5-08 / D-PG5-11: Claude Code 2.1.323's text for the exit 2 of a missing
+// script, with this extension's reinstall command for the hook's own plugin
+// and scope in place of upstream's `/plugin` sentence.
+function missingScriptMessage(stderr: string, hook: FailedHook): string {
+  return (
+    `Hook script appears to be missing ${MISSING_SCRIPT_DASH} "${hook.command}" exited 2 with: ` +
+    `${stderr.trim()}. Treating as non-blocking. Run /claude:plugin reinstall ` +
+    `${hook.plugin}@${hook.marketplace} --scope ${hook.scope} to reinstall it.`
+  );
+}
+
 /**
  * D-PG5-11: the notice of a synchronous hook that failed without blocking, as
  * Claude Code 2.1.323 shows it, on one line: `<label> hook error: ` and the
@@ -182,8 +208,13 @@ function failureMessage(failure: HookFailure): string {
  * prefix included. A failed exit reads `Failed with non-blocking status code:
  * <stderr>`, or `No stderr output`; a command that cannot be spawned adds
  * `Error occurred while executing hook command: <error>` after that prefix;
- * an exception in the runner reads `Failed to run: <error>`.
+ * an exception in the runner reads `Failed to run: <error>`. The exit 2 of a
+ * missing script shows its whole text, which names `hook` (D-PG5-08).
  */
-export function hookFailureText(label: string, failure: HookFailure): string {
+export function hookFailureText(label: string, failure: HookFailure, hook: FailedHook): string {
+  if (failure.kind === "missing-script") {
+    return `${label} hook error: ${missingScriptMessage(failure.stderr, hook)}`;
+  }
+
   return `${label} hook error: ${failureLine(failureMessage(failure))}`;
 }

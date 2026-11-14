@@ -4913,6 +4913,84 @@ describe("failure notices (D-PG5-10 / D-PG5-12)", () => {
   }
 });
 
+const MISSING_SCRIPT_STDERR =
+  "python3: can't open file '/x/gone.py': [Errno 2] No such file or directory\n";
+// The em dash (U+2014) of the missing-script notice, escaped because the
+// fix-unicode-dashes hook rewrites a literal one.
+const MISSING_SCRIPT_NOTICE = `UserPromptSubmit hook error: Hook script appears to be missing \u2014 "printf gone" exited 2 with: ${MISSING_SCRIPT_STDERR.trim()}. Treating as non-blocking. Run /claude:plugin reinstall gone@dispatch-catalog --scope user to reinstall it.`;
+
+describe("missing-script notices (D-PG5-08 / D-PG5-11)", () => {
+  const missing = {
+    kind: "noop",
+    failure: { kind: "missing-script", stderr: MISSING_SCRIPT_STDERR },
+  } as const;
+
+  for (const { name, results, outcome, notices } of [
+    {
+      name: "lets the prompt go on with the other hooks' results and shows the notice",
+      results: { gone: missing, quiet: { kind: "noop" } },
+      outcome: undefined,
+      notices: [MISSING_SCRIPT_NOTICE],
+    },
+    {
+      name: "blocks the prompt beside a hook that blocks and shows both notices",
+      results: { gone: missing, guard: { kind: "block", reason: "no" } },
+      outcome: { action: "handled" },
+      notices: ["UserPromptSubmit operation blocked by hook:\nno", MISSING_SCRIPT_NOTICE],
+    },
+  ] satisfies ReadonlyArray<{
+    readonly name: string;
+    readonly results: Readonly<Record<string, HookExecResult>>;
+    readonly outcome: unknown;
+    readonly notices: readonly string[];
+  }>) {
+    test(name, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket(
+        "UserPromptSubmit",
+        routedEntries("UserPromptSubmit", Object.keys(results)),
+      );
+      const host = createNoticeHost("/workspace/missing-script");
+      const handler = compositeHandlerFor(
+        runtime,
+        "UserPromptSubmit",
+        runtime.currentGeneration(),
+        host.pi,
+        createRecordingExecutor(results, []),
+      );
+
+      // act
+      const result = await handler(PROMPT_EVENT, host.context);
+
+      // assert
+      assert.deepStrictEqual(result, outcome);
+      assert.deepStrictEqual(
+        host.capture.entries,
+        notices.map((text) => hookNoticeEntry(text)),
+      );
+      host.capture.assertValid();
+    });
+  }
+
+  test("shows the notice of a missing script on every prompt", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptSubmit", routedEntries("UserPromptSubmit", ["gone"]));
+
+    // act
+    const entries = await promptNotices(runtime, { gone: missing }, 2);
+
+    // assert
+    assert.deepStrictEqual(entries, [
+      hookNoticeEntry(MISSING_SCRIPT_NOTICE),
+      hookNoticeEntry(MISSING_SCRIPT_NOTICE),
+    ]);
+  });
+});
+
 const SPAWN_FAILURE = {
   kind: "noop",
   failure: { kind: "spawn", error: "spawn guard.sh ENOENT" },

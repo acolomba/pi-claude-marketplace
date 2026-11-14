@@ -72,6 +72,12 @@ void ({
 } satisfies HookExecResult);
 void ({ kind: "noop", failure: { kind: "run", error: "bad root" } } satisfies HookExecResult);
 void ({ kind: "exit", stderr: "" } satisfies HookFailure);
+void ({
+  kind: "noop",
+  failure: { kind: "missing-script", stderr: "python3: can't open file" },
+} satisfies HookExecResult);
+// @ts-expect-error a missing script carries its stderr, not an error
+void ({ kind: "missing-script", error: "gone" } satisfies HookFailure);
 // @ts-expect-error a block decides something, so it carries no failure
 void ({ kind: "block", failure: { kind: "exit", stderr: "boom" } } satisfies HookExecResult);
 // @ts-expect-error a mutation decides something, so it carries no failure

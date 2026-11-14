@@ -245,3 +245,57 @@ describe("onFailureBlock without onFailure block", () => {
     });
   }
 });
+
+describe("onFailureBlock for the exit 2 of a missing script (D-PG5-09)", () => {
+  const stderr = "python3: can't open file '/x/gone.py': [Errno 2] No such file or directory\n";
+  const facts = { ...CLEAN_EXIT, exitCode: 2, stderr } satisfies HookExitFacts;
+  const missing = { kind: "noop", failure: { kind: "missing-script", stderr } } as const;
+
+  test("blocks a prompt hook with onFailure block, ending with the trimmed stderr", () => {
+    // act
+    const block = onFailureBlock(guardEntry({ onFailure: "block" }), facts, missing);
+
+    // assert
+    assert.deepStrictEqual(block, {
+      kind: "block",
+      reason: `[${COMMAND}]: failed; blocking because onFailure is "block"\n${stderr.trim()}`,
+    });
+  });
+
+  test("ignores onFailure block on a Stop hook with a debug line", (t) => {
+    // arrange
+    const lines = observeDebug(t);
+
+    // act
+    const block = onFailureBlock(guardEntry({ onFailure: "block" }, "Stop"), facts, missing);
+
+    // assert
+    assert.strictEqual(block, undefined);
+    assert.deepStrictEqual(lines, [
+      '[hooks] on-failure: onFailure "block" ignored on Stop (guard-plugin/Stop)',
+    ]);
+  });
+
+  test("changes nothing for a prompt hook with no onFailure", () => {
+    // act
+    const block = onFailureBlock(guardEntry({}), facts, missing);
+
+    // assert
+    assert.strictEqual(block, undefined);
+  });
+
+  test("leaves an exit-2 block to apply as the wire protocol read it", () => {
+    // arrange
+    const stderrBlock = {
+      kind: "block",
+      reason: "denied",
+      fromStderr: true,
+    } satisfies HookExecResult;
+
+    // act
+    const block = onFailureBlock(guardEntry({ onFailure: "block" }), facts, stderrBlock);
+
+    // assert
+    assert.strictEqual(block, undefined);
+  });
+});

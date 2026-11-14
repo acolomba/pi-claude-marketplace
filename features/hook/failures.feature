@@ -25,10 +25,11 @@ Feature: Hook failures
       | info     | <notice> |
 
     Examples:
-      | exit code | stderr | output     | timeout | sleep | notice |
-      | 1         | boom   |            |         |       | UserPromptSubmit operation blocked by hook:\n[${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: failed; blocking because onFailure is "block"\nboom |
-      |           |        | {not json} |         |       | UserPromptSubmit operation blocked by hook:\n[${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: failed; blocking because onFailure is "block" |
-      |           |        |            | 1       | 3     | UserPromptSubmit operation blocked by hook:\n[${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: timed out; blocking because onFailure is "block" |
+      | exit code | stderr                                                                     | output     | timeout | sleep | notice |
+      | 1         | boom                                                                       |            |         |       | UserPromptSubmit operation blocked by hook:\n[${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: failed; blocking because onFailure is "block"\nboom |
+      |           |                                                                            | {not json} |         |       | UserPromptSubmit operation blocked by hook:\n[${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: failed; blocking because onFailure is "block" |
+      |           |                                                                            |            | 1       | 3     | UserPromptSubmit operation blocked by hook:\n[${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: timed out; blocking because onFailure is "block" |
+      | 2         | python3: can't open file '/x/gone.py': [Errno 2] No such file or directory |            |         |       | UserPromptSubmit operation blocked by hook:\n[${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: failed; blocking because onFailure is "block"\npython3: can't open file '/x/gone.py': [Errno 2] No such file or directory |
 
   Scenario: A failing prompt hook without onFailure lets the prompt through and shows its error
     Given pi runs with the scripted model
@@ -55,6 +56,32 @@ Feature: Hook failures
     Then the hooks show the user these messages:
       | severity | text                                                                    |
       | info     | UserPromptSubmit hook error: Failed with non-blocking status code: boom |
+
+  Scenario: A prompt hook whose script is missing lets the prompt through and shows its error
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name | event            | matcher | form   | exit code | stderr                                                                     |
+      | gone | UserPromptSubmit |         | script | 2         | python3: can't open file '/x/gone.py': [Errno 2] No such file or directory |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply |
+      | Done. |
+    When the user prompts "say done"
+    Then the hooks record these runs:
+      | event            | session | prompt   | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | UserPromptSubmit | first   | say done | {project dir} |                 | gone      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the model receives these calls:
+      | call | role | text     |
+      | 1    | user | say done |
+    Then the hooks show the user these messages:
+      | severity | text                                                                                                                                                                                                                                                                                                            |
+      | info     | UserPromptSubmit hook error: Hook script appears to be missing {em dash} "${CLAUDE_PLUGIN_ROOT}/hooks/gone.sh" exited 2 with: python3: can't open file '/x/gone.py': [Errno 2] No such file or directory. Treating as non-blocking. Run /claude:plugin reinstall demo@fixtures --scope project to reinstall it. |
 
   Scenario: A succeeding prompt hook with onFailure block lets the prompt through
     Given pi runs with the scripted model

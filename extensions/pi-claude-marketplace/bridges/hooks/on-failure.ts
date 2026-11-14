@@ -3,7 +3,10 @@
 // D-CF5-18 (FG-22): the `onFailure` field of a command hook. Claude Code
 // 2.1.316 (probed, E6; static read 2026-11-02) treats four outcomes of a
 // command hook as a failure: it cannot start, it exits with a code other than
-// 0 and 2, its timeout kills it, or it prints broken JSON. Broken JSON is
+// 0 and 2, its timeout kills it, or it prints broken JSON. Claude Code 2.1.323
+// adds a fifth, the exit 2 of a missing script (D-PG5-09). The wire protocol
+// decides that one and marks it with a `missing-script` failure on its noop,
+// which this module reads, so one rule decides both. Broken JSON is
 // trimmed stdout that starts with `{`, ends with `}`, does not parse, and is
 // not JSON lines. Stdout that starts with `{` and ends with anything else is
 // plain text, which is a success. With `onFailure: "block"` a failure does
@@ -70,13 +73,17 @@ function isBrokenJson(stdout: string): boolean {
   return !parses(trimmed) && !isJsonLines(trimmed);
 }
 
-function isFailure(facts: HookExitFacts): boolean {
+function isFailure(facts: HookExitFacts, answer: HookExecResult): boolean {
   if (facts.startFailed || facts.timedOut) {
     return true;
   }
 
+  if (facts.exitCode === 2) {
+    return answer.kind === "noop" && answer.failure?.kind === "missing-script";
+  }
+
   if (facts.exitCode !== 0) {
-    return facts.exitCode !== 2;
+    return true;
   }
 
   return isBrokenJson(facts.stdout);
@@ -118,7 +125,7 @@ export function onFailureBlock(
     return undefined;
   }
 
-  if (!isFailure(facts)) {
+  if (!isFailure(facts, answer)) {
     return undefined;
   }
 

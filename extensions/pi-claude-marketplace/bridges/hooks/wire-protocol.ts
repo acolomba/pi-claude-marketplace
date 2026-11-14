@@ -13,7 +13,10 @@
 // Wire-protocol branching (D-CF5-11, as Claude Code 2.1.316 reads a hook):
 //   - exit 2          -> block; the reason is the stdout JSON's block or
 //                        deny reason when it prints one, else the trimmed
-//                        stderr, marked `fromStderr`
+//                        stderr, marked `fromStderr`. On Stop and
+//                        UserPromptSubmit, an exit 2 with a blank stdout and a
+//                        stderr that names a missing file is a noop that
+//                        carries a `missing-script` failure (D-PG5-08)
 //   - exit non-zero   -> the stdout JSON object decides, as on exit 0, when
 //                        stdout is one; else a noop that carries the stderr
 //                        as an `exit` failure (debug-log; D-PG5-10)
@@ -48,6 +51,20 @@ const PLAIN_CONTEXT_EVENTS: ReadonlySet<BucketAEvent> = new Set([
   "UserPromptSubmit",
 ]);
 
+// D-PG5-08: Claude Code 2.1.323 reads an exit 2 of a hook on these events as
+// a missing script, not a block, when stdout is blank and stderr matches
+// `MISSING_SCRIPT_STDERR`, the interpreter's report of a file it cannot open.
+const MISSING_SCRIPT_EVENTS: ReadonlySet<BucketAEvent> = new Set(["Stop", "UserPromptSubmit"]);
+const MISSING_SCRIPT_STDERR = /no such file|can't open/i;
+
+function isMissingScriptExit(claudeEvent: BucketAEvent, stdout: string, stderr: string): boolean {
+  return (
+    MISSING_SCRIPT_EVENTS.has(claudeEvent) &&
+    stdout.trim() === "" &&
+    MISSING_SCRIPT_STDERR.test(stderr)
+  );
+}
+
 /**
  * D-60-01 wire-protocol parse. Maps child exit code + stdout + stderr, and
  * the Claude event the hook ran on, to a `HookExecResult`. Pure function --
@@ -61,7 +78,7 @@ export function parseHookStdout(
   claudeEvent: BucketAEvent,
 ): HookExecResult {
   if (exitCode === 2) {
-    return exitTwoBlock(stdout, stderr);
+    return exitTwoResult(stdout, stderr, claudeEvent);
   }
 
   if (exitCode !== 0) {
@@ -121,9 +138,15 @@ function stdoutObject(stdout: string): object | undefined {
  * D-CF5-11: exit 2 blocks. The reason is the block or deny reason of the
  * stdout JSON when the hook printed one, else the trimmed stderr, which the
  * `fromStderr` marker labels so the adapter can show it after the hook's
- * command, as Claude Code does.
+ * command, as Claude Code does. The exit 2 of a missing script decides
+ * nothing and carries its stderr as written, for the notice (D-PG5-08).
  */
-function exitTwoBlock(stdout: string, stderr: string): HookExecResult {
+function exitTwoResult(stdout: string, stderr: string, claudeEvent: BucketAEvent): HookExecResult {
+  if (isMissingScriptExit(claudeEvent, stdout, stderr)) {
+    hookDebugLog(`wire-protocol: exit 2 of a missing script on ${claudeEvent}; defaulting to noop`);
+    return { kind: "noop", failure: { kind: "missing-script", stderr } };
+  }
+
   const parsed = stdoutObject(stdout);
   const outputs = hookOutputs(parsed);
   const decided = parsed === undefined ? undefined : decideClaudeStdout(parsed);

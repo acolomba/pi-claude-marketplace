@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { describe, test } from "node:test";
 
 import { parseHookStdout } from "../../../extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts";
+import { BUCKET_A_EVENTS } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
+import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
 
@@ -67,6 +69,113 @@ test("blocks exit 2 with stderr when the stdout block decision has no reason", (
     reason: "stderr reason",
     fromStderr: true,
   });
+});
+
+const MISSING_STDERR =
+  "python3: can't open file '/x/gone.py': [Errno 2] No such file or directory\n";
+
+describe("the exit 2 of a missing script (D-PG5-08)", () => {
+  for (const claudeEvent of ["Stop", "UserPromptSubmit"] as const) {
+    for (const { name, stdout, stderr } of [
+      { name: "an interpreter that cannot open its file", stdout: "", stderr: MISSING_STDERR },
+      { name: "a blank stdout", stdout: " \n\t", stderr: MISSING_STDERR },
+      { name: "a shell's no such file", stdout: "", stderr: "sh: /x/gone.sh: no such file" },
+      { name: "an upper-case report", stdout: "", stderr: "CAN'T OPEN /x/gone.py" },
+      {
+        name: "a capitalized No such file or directory",
+        stdout: "",
+        stderr: "bash: /x/gone.sh: No such file or directory",
+      },
+    ]) {
+      test(`passes on ${claudeEvent} with ${name}, carrying the stderr as written`, () => {
+        // act
+        const hookOutcome = parseHookStdout(2, stdout, stderr, claudeEvent);
+
+        // assert
+        assert.deepStrictEqual(hookOutcome, {
+          kind: "noop",
+          failure: { kind: "missing-script", stderr },
+        });
+      });
+    }
+  }
+
+  test("reports a missing script in a debug line", (t) => {
+    // arrange
+    const lines = captureDebugLog(t);
+
+    // act
+    parseHookStdout(2, "", MISSING_STDERR, "Stop");
+
+    // assert
+    assert.deepStrictEqual(lines, [
+      "[hooks] wire-protocol: exit 2 of a missing script on Stop; defaulting to noop",
+    ]);
+  });
+
+  for (const { name, stdout, stderr, hookOutcome } of [
+    {
+      name: "any text on stdout",
+      stdout: "partial output",
+      stderr: MISSING_STDERR,
+      hookOutcome: { kind: "block", reason: MISSING_STDERR.trim(), fromStderr: true },
+    },
+    {
+      name: "a JSON object on stdout",
+      stdout: "{}",
+      stderr: MISSING_STDERR,
+      hookOutcome: { kind: "block", reason: MISSING_STDERR.trim(), fromStderr: true },
+    },
+    {
+      name: "a stderr that names no missing file",
+      stdout: "",
+      stderr: "permission denied",
+      hookOutcome: { kind: "block", reason: "permission denied", fromStderr: true },
+    },
+    {
+      name: "an empty stderr",
+      stdout: "",
+      stderr: "",
+      hookOutcome: { kind: "block", fromStderr: true },
+    },
+  ] satisfies { name: string; stdout: string; stderr: string; hookOutcome: HookExecResult }[]) {
+    test(`keeps the exit-2 block of a prompt hook with ${name}`, () => {
+      // act
+      const outcome = parseHookStdout(2, stdout, stderr, "UserPromptSubmit");
+
+      // assert
+      assert.deepStrictEqual(outcome, hookOutcome);
+    });
+  }
+
+  for (const claudeEvent of BUCKET_A_EVENTS.filter(
+    (event) => event !== "Stop" && event !== "UserPromptSubmit",
+  )) {
+    test(`keeps the exit-2 block of a missing script on ${claudeEvent}`, () => {
+      // act
+      const hookOutcome = parseHookStdout(2, "", MISSING_STDERR, claudeEvent);
+
+      // assert
+      assert.deepStrictEqual(hookOutcome, {
+        kind: "block",
+        reason: MISSING_STDERR.trim(),
+        fromStderr: true,
+      });
+    });
+  }
+
+  for (const exitCode of [1, 127, null]) {
+    test(`reads an exit ${String(exitCode)} with a missing-file stderr as a failed exit`, () => {
+      // act
+      const hookOutcome = parseHookStdout(exitCode, "", MISSING_STDERR, "Stop");
+
+      // assert
+      assert.deepStrictEqual(hookOutcome, {
+        kind: "noop",
+        failure: { kind: "exit", stderr: MISSING_STDERR },
+      });
+    });
+  }
 });
 
 for (const { name, stdout, hookOutcome } of [

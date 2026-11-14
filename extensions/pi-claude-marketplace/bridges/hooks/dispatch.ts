@@ -663,8 +663,9 @@ function startFailureKey(claudeEvent: NoticeEvent, entry: RoutingEntry): string 
   return `${claudeEvent}:${command}`;
 }
 
-// D-PG5-12: a failed exit shows on every event, and a hook that cannot start
-// shows once for each event and resolved command in a bridge load.
+// D-PG5-12: a failed exit and a missing script show on every event, and a
+// hook that cannot start shows once for each event and resolved command in a
+// bridge load.
 function claimsFailureNotice(
   runtime: HooksRuntime,
   claudeEvent: NoticeEvent,
@@ -672,7 +673,9 @@ function claimsFailureNotice(
   failure: HookFailure,
 ): boolean {
   return (
-    failure.kind === "exit" || runtime.claimStartFailureNotice(startFailureKey(claudeEvent, entry))
+    failure.kind === "exit" ||
+    failure.kind === "missing-script" ||
+    runtime.claimStartFailureNotice(startFailureKey(claudeEvent, entry))
   );
 }
 
@@ -698,7 +701,12 @@ function failureNotices(
       continue;
     }
 
-    const text = hookFailureText(label, result.failure);
+    const text = hookFailureText(label, result.failure, {
+      command: entry.handlerDecl.command ?? "",
+      plugin: entry.pluginId,
+      marketplace: entry.marketplace,
+      scope: entry.scope,
+    });
     const repeated = shown.some((notice) => notice.entry === entry && notice.text === text);
     if (!repeated && claimsFailureNotice(runtime, claudeEvent, entry, result.failure)) {
       shown.push({ entry, text });

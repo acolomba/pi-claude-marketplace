@@ -14,11 +14,22 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/hook-labels.ts";
 
 import type { HookFailure } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
+import type { FailedHook } from "../../../extensions/pi-claude-marketplace/bridges/hooks/hook-labels.ts";
 
 const GUARD_COMMAND = "$" + "{CLAUDE_PLUGIN_ROOT}/hooks/guard.sh";
 const EXIT_HEAD = "UserPromptSubmit hook error: Failed with non-blocking status code: ";
 const SPAWN_HEAD =
   "PreToolUse:Bash hook error: Failed with non-blocking status code: Error occurred while executing hook command: ";
+const FAILED_HOOK = {
+  command: GUARD_COMMAND,
+  plugin: "demo",
+  marketplace: "fixtures",
+  scope: "user",
+} satisfies FailedHook;
+// The em dash (U+2014) of the missing-script notice, escaped because the
+// fix-unicode-dashes hook rewrites a literal one.
+const EM_DASH = "\u2014";
+const MISSING_STDERR = "python3: can't open file '/x/gone.py': [Errno 2] No such file or directory";
 
 describe("hookEventLabel", () => {
   for (const { name, claudeEvent, piToolName, label } of [
@@ -345,7 +356,36 @@ describe("hookFailureText", () => {
   ] satisfies { name: string; label: string; failure: HookFailure; text: string }[]) {
     test(`writes ${name} (D-PG5-11)`, () => {
       // act
-      const notice = hookFailureText(label, failure);
+      const notice = hookFailureText(label, failure, FAILED_HOOK);
+
+      // assert
+      assert.strictEqual(notice, text);
+    });
+  }
+
+  for (const { name, stderr, hook, text } of [
+    {
+      name: "the trimmed stderr and the reinstall command of a user-scope hook",
+      stderr: `\n  ${MISSING_STDERR}  \n`,
+      hook: FAILED_HOOK,
+      text: `Stop hook error: Hook script appears to be missing ${EM_DASH} "${GUARD_COMMAND}" exited 2 with: ${MISSING_STDERR}. Treating as non-blocking. Run /claude:plugin reinstall demo@fixtures --scope user to reinstall it.`,
+    },
+    {
+      name: "the plugin, marketplace, and scope of a project-scope hook",
+      stderr: "no such file",
+      hook: { command: "./run.sh", plugin: "lint", marketplace: "tools", scope: "project" },
+      text: `Stop hook error: Hook script appears to be missing ${EM_DASH} "./run.sh" exited 2 with: no such file. Treating as non-blocking. Run /claude:plugin reinstall lint@tools --scope project to reinstall it.`,
+    },
+    {
+      name: "a stderr of 400 characters whole",
+      stderr: "n".repeat(400),
+      hook: FAILED_HOOK,
+      text: `Stop hook error: Hook script appears to be missing ${EM_DASH} "${GUARD_COMMAND}" exited 2 with: ${"n".repeat(400)}. Treating as non-blocking. Run /claude:plugin reinstall demo@fixtures --scope user to reinstall it.`,
+    },
+  ] satisfies { name: string; stderr: string; hook: FailedHook; text: string }[]) {
+    test(`writes the missing-script notice with ${name} (D-PG5-08, D-PG5-11)`, () => {
+      // act
+      const notice = hookFailureText("Stop", { kind: "missing-script", stderr }, hook);
 
       // assert
       assert.strictEqual(notice, text);
