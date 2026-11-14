@@ -430,6 +430,21 @@ describe("blankEarlierDuplicateKeys", () => {
       expectedContent: "---\nname: a\n\n\n\n\ntools: Grep\n---\n",
     },
     {
+      description: "blanks the column-0 items of an earlier copy across a column-0 comment",
+      sourceContent: "---\ntools:\n- Read\n# c\n- Bash\ntools: Grep\n---\n",
+      expectedContent: "---\n\n\n\n\ntools: Grep\n---\n",
+    },
+    {
+      description: "blanks the indented items of an earlier copy across a column-0 comment",
+      sourceContent: "---\ntools:\n  - Read\n# c\n  - Bash\ntools: Grep\n---\n",
+      expectedContent: "---\n\n\n\n\ntools: Grep\n---\n",
+    },
+    {
+      description: "keeps a column-0 comment after the last item of an earlier copy",
+      sourceContent: "---\ntools:\n- Read\n# c\ntools: Grep\n---\n",
+      expectedContent: "---\n\n\n# c\ntools: Grep\n---\n",
+    },
+    {
       description: "blanks the column-0 items of an earlier copy with a comment on its key line",
       sourceContent: "---\ntools: # read only\n- Read\ntools: Grep\n---\n",
       expectedContent: "---\n\n\ntools: Grep\n---\n",

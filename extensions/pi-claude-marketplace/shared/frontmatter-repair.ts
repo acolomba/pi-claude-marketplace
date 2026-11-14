@@ -243,7 +243,9 @@ function topLevelKey(
  * The index of the last line the value of the key at `start` spans. A key
  * with a value on its line spans what `keyValueEnd` finds. An empty-valued
  * key also spans the column-0 `- ` items that follow it, because YAML reads
- * them as its list (`tools:` then `- Read`).
+ * them as its list (`tools:` then `- Read`). An open value is a list or
+ * null, never a block scalar, so a column-0 comment line does not end it:
+ * YAML reads the comment as nothing, and the list goes on after it.
  */
 function duplicateKeySpanEnd(
   lines: readonly string[],
@@ -257,7 +259,7 @@ function duplicateKeySpanEnd(
 
   let end = start;
   for (const [offset, line] of lines.slice(start + 1, blockEnd).entries()) {
-    if (line.trim() === "") {
+    if (line.trim() === "" || line.startsWith("#")) {
       continue;
     }
 

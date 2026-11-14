@@ -775,6 +775,7 @@ Feature: Agent frontmatter
       description: Lists its tools twice.
       <earlier key line>
       - Bash
+      <middle line>
       - Write
       tools: Read, Grep
       ---
@@ -797,12 +798,13 @@ Feature: Agent frontmatter
       | 2    | tool result | subagent returned: agent demo:twice, aliases pi-claude-marketplace-demo-twice: Lists its tools twice.; tools read, grep |
 
     Examples:
-      | earlier key line          |
-      | tools:                    |
-      | tools: # the earlier list |
-      | "tools":                  |
-      | 'tools':                  |
-      | tools :                   |
+      | earlier key line          | middle line         |
+      | tools:                    | - Edit              |
+      | tools: # the earlier list | - Edit              |
+      | "tools":                  | - Edit              |
+      | 'tools':                  | - Edit              |
+      | tools :                   | - Edit              |
+      | tools:                    | # a column-0 remark |
 
   Scenario: Installing an agent whose frontmatter cannot be parsed reports the agent
     Given the marketplace "fixtures" is published as a dir source

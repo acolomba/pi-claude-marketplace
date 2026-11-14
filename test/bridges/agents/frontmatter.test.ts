@@ -160,6 +160,18 @@ describe("readAgentFrontmatter", () => {
       expectedAgentFile: { raw: { name: "a", tools: "Grep" }, body: "Body." },
     },
     {
+      description:
+        "D-PG7-19: the last value of a key whose earlier column-0 list holds a comment line",
+      agentFile: "---\nname: a\ntools:\n- Read\n# c\n- Bash\ntools: Grep\n---\nBody.\n",
+      expectedAgentFile: { raw: { name: "a", tools: "Grep" }, body: "Body." },
+    },
+    {
+      description:
+        "D-PG7-19: the last value of a key whose earlier indented list holds a comment line",
+      agentFile: "---\nname: a\ntools:\n  - Read\n# c\n  - Bash\ntools: Grep\n---\nBody.\n",
+      expectedAgentFile: { raw: { name: "a", tools: "Grep" }, body: "Body." },
+    },
+    {
       description: "D-PG7-19: the last value of a key written once quoted and once plain",
       agentFile: '---\nname: a\ntools: Read\n"tools": Grep\n---\nBody.\n',
       expectedAgentFile: { raw: { name: "a", tools: "Grep" }, body: "Body." },
