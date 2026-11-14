@@ -28,13 +28,17 @@
 import { homedir } from "node:os";
 import path from "node:path";
 
+import { discoverPluginAgents } from "../../bridges/agents/index.ts";
 import { discoverPluginWorkflows } from "../../bridges/workflows/index.ts";
 import {
   scanClaudeServerVariables,
   type ClaudeEnv,
   type ServerVariableScan,
 } from "../../domain/claude-mcp-variables.ts";
-import { isMarketplaceRootSource } from "../../domain/component-paths.ts";
+import {
+  isMarketplaceRootSource,
+  resolveContainedComponentPath,
+} from "../../domain/component-paths.ts";
 import { BUCKET_A_EVENTS } from "../../domain/components/hook-events.ts";
 import {
   hookSummaryEntriesFromPersisted,
@@ -124,6 +128,7 @@ import {
   resolveGitPluginRootWithSubdir,
   resolvePluginPin,
 } from "./clone-cache.ts";
+import { workflowAgentRestrictionNotes } from "./discover-names.ts";
 import { makePresenceProbe } from "./git-source-probe.ts";
 import { withMcpServerStatus } from "./info-mcp-status.ts";
 import { PLUGIN_INFO_CONTEXT, type PluginInfoCascadeMsg } from "./info.messaging.ts";
@@ -145,6 +150,7 @@ import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { RestrictionWorkflow } from "./discover-names.ts";
 import type { Dirent } from "node:fs";
 
 // INFO-05: BUCKET_A_EVENTS is a string[] tuple; rewrap as a Set for O(1)
@@ -1033,6 +1039,11 @@ function parseLenientHooksJson(raw: string): unknown {
  * is free text, already reduced and already ordered, and the caller spreads it
  * onto the row only when non-empty.
  *
+ * PG-SEC-01 / D-PG4-12 / D-PG4-13: the workflow agent restriction notes follow
+ * the workflow advisories. They are added here, the one function every row
+ * builder calls, so each row carries them once. They are recomputed at every
+ * run and never stored.
+ *
  * SURF-01: object-literal field placement is documentation
  * only -- the renderer iterates `COMPONENT_KINDS` to enforce the
  * `["agents", "commands", "hooks", "mcp", "skills", "workflows"]` ordering.
@@ -1121,6 +1132,12 @@ async function composeResolvedComponents(
   const workflows = await previewWorkflows(pluginRoot, resolved.componentPaths.workflows, {
     pluginName,
   });
+  const restrictionNotes = await previewAgentRestrictionNotes(
+    pluginName,
+    pluginRoot,
+    resolved.componentPaths.agents,
+    workflows.discovered,
+  );
 
   return {
     components: {
@@ -1131,7 +1148,7 @@ async function composeResolvedComponents(
       ...(skills.length > 0 && { skills }),
       ...(workflows.names.length > 0 && { workflows: workflows.names }),
     },
-    notes: workflows.warnings,
+    notes: [...workflows.warnings, ...restrictionNotes],
     mcpDependency: mcpDependencyOf(Object.values(resolved.declaredMcpServers)),
   };
 }
@@ -1188,7 +1205,12 @@ async function previewWorkflows(
   pluginRoot: string,
   declared: readonly string[],
   opts: { readonly pluginName: string },
-): Promise<{ readonly names: readonly string[]; readonly warnings: readonly string[] }> {
+): Promise<{
+  readonly names: readonly string[];
+  readonly warnings: readonly string[];
+  /** The discovered records, which the restriction notes read (PG-SEC-01). */
+  readonly discovered: readonly RestrictionWorkflow[];
+}> {
   const { discovered, warnings } = await discoverPluginWorkflows({
     pluginName: opts.pluginName,
     resolved: { pluginRoot, componentPaths: { workflows: declared } },
@@ -1204,7 +1226,49 @@ async function previewWorkflows(
         .map((verdict) => verdict.generatedName),
     ),
     warnings: warnings.map((warning) => redactAbsolutePaths(warning)),
+    discovered,
   };
+}
+
+/**
+ * PG-SEC-01 / D-PG4-12: the restriction notes of this row, from the join that
+ * install and update use. Nothing is read when no admitted script names an
+ * agent type as a literal, so an unaffected row reads no agent file.
+ *
+ * NFR-10: each agents path must resolve inside the plugin root before any
+ * read, because the lenient listing of a refused plugin carries the entry's
+ * raw strings. A refused path is not read.
+ *
+ * D-PG4-11: a note may cost itself and never the row, so a throw from the
+ * agent read, such as an unsafe agent name, yields no notes.
+ */
+async function previewAgentRestrictionNotes(
+  pluginName: string,
+  pluginRoot: string,
+  agentPaths: readonly string[],
+  workflows: readonly RestrictionWorkflow[],
+): Promise<readonly string[]> {
+  const namesAgentTypes = workflows.some(
+    ({ verdict }) => verdict.outcome === "named" && verdict.agentTypes !== undefined,
+  );
+  if (!namesAgentTypes) {
+    return [];
+  }
+
+  try {
+    const contained = await Promise.all(
+      agentPaths.map(async (raw) => resolveContainedComponentPath(pluginRoot, raw, "agents path")),
+    );
+    const agentsDirs = contained.flatMap((result) => (result.ok ? [result.absolutePath] : []));
+    const { discovered } = await discoverPluginAgents({ pluginName, agentsDirs });
+
+    return workflowAgentRestrictionNotes(pluginName, discovered, workflows).map((note) =>
+      redactAbsolutePaths(note),
+    );
+  } catch (err) {
+    hookDebugLog(`info: agent restriction notes skipped for "${pluginName}": ${errorMessage(err)}`);
+    return [];
+  }
 }
 
 /**

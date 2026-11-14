@@ -51,7 +51,7 @@ export interface DiscoveredGeneratedNames {
 }
 
 /** The part of a discovered agent the restriction join reads. */
-interface RestrictionAgent {
+export interface RestrictionAgent {
   readonly sourceName: string;
   readonly generatedName: string;
   readonly namespace?: readonly string[];
@@ -59,7 +59,7 @@ interface RestrictionAgent {
 }
 
 /** The part of a discovered workflow script the restriction join reads. */
-interface RestrictionWorkflow {
+export interface RestrictionWorkflow {
   readonly verdict: WorkflowVerdict;
   readonly scriptFile: string;
 }
@@ -127,8 +127,11 @@ function restrictionNote(fileName: string, scriptFile: string, agentType: string
  * normalization. One note for each distinct pair of script and agent type,
  * in script order and then in the order the script names them. Pure: it reads
  * no file.
+ *
+ * Two surfaces consume it: the install and update discovery below, and the
+ * `info` surface, which joins the agents and workflows it previews itself.
  */
-function workflowAgentRestrictionNotes(
+export function workflowAgentRestrictionNotes(
   pluginName: string,
   agents: readonly RestrictionAgent[],
   workflows: readonly RestrictionWorkflow[],

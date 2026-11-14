@@ -1,7 +1,7 @@
 Feature: Workflow agent restrictions
 
-  An install or an update notes when a workflow runs a plugin agent that restricts its
-  tools, because the workflow engine does not keep the restriction (PG-SEC-01, a Pi
+  An install, an update, or an info notes when a workflow runs a plugin agent that
+  restricts its tools, because the workflow engine does not keep the restriction (PG-SEC-01, a Pi
   capability gap). A scripted model and a local marketplace stand in for real ones.
 
   Background:
@@ -74,3 +74,41 @@ Feature: Workflow agent restrictions
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status  | reasons | scope | from  | to    |
       | fixtures         | user              | demo@fixtures | demo | updated |         | user  | 1.0.0 | 1.1.0 |
+
+  Scenario: Info on a plugin whose workflow runs a tool-restricted agent shows the note
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "agents/reader.md" with this text:
+      """
+      ---
+      name: reader
+      description: Reads files.
+      tools: Read
+      ---
+
+      Read the files you are given.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/scan.js" with this text:
+      """
+      export const meta = {name:"scan",description:"Scans with the reader."};
+
+      return await agent("Scan the files.", {agentType:"demo:reader"});
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    When the user runs "/claude:plugin info demo@fixtures"
+    Then the result has these fields:
+      | kind                           | plugin-info                                                                                                                                                                                             |
+      | marketplace details autoupdate | false                                                                                                                                                                                                   |
+      | marketplace name               | fixtures                                                                                                                                                                                                |
+      | marketplace scope              | user                                                                                                                                                                                                    |
+      | needs reload                   | false                                                                                                                                                                                                   |
+      | plugin components agents       | reader                                                                                                                                                                                                  |
+      | plugin components resolved     | true                                                                                                                                                                                                    |
+      | plugin components skills       | demo-skill                                                                                                                                                                                              |
+      | plugin components workflows    | demo:scan                                                                                                                                                                                               |
+      | plugin id                      | demo@fixtures                                                                                                                                                                                           |
+      | plugin name                    | demo                                                                                                                                                                                                    |
+      | plugin notes                   | workflow script "scan.js" in "workflows" runs agent type "demo:reader", which restricts its tools; the workflow engine does not keep that restriction, so the agent can use read, bash, edit, and write |
+      | plugin reasons                 |                                                                                                                                                                                                         |
+      | plugin requires                | [{"companion":"pi-dynamic-workflows","missing":false},{"companion":"pi-subagents","missing":false}]                                                                                                     |
+      | plugin status                  | available                                                                                                                                                                                               |
+      | plugin version                 | 1.0.0                                                                                                                                                                                                   |
+      | severity                       | info                                                                                                                                                                                                    |

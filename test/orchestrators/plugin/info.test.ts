@@ -99,6 +99,7 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { TestContext } from "node:test";
 
 type FaultableFsPromiseMethod = "readFile" | "readdir" | "stat";
 
@@ -10693,6 +10694,262 @@ test("WR-09: the workflow names and the advisories come from one discovery pass"
     assert.ok(
       message.includes('    note: workflow script "roll.js" in "workflows" will be refused'),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PG-SEC-01 / D-PG4-12: the workflow agent restriction note on the info row.
+//
+// `info` shows the note that install and update print, from the same join,
+// after the workflow advisories. It reads agent files only for a script that
+// names an agent type as a literal, and only inside the plugin root.
+// ---------------------------------------------------------------------------
+
+const RESTRICTED_A1_AGENT =
+  "---\nname: a1\ndescription: Reads files.\ntools: Read\n---\n\nRead the files.\n";
+const WORKFLOW_RUNS_FOO_A1 =
+  'export const meta = { name: "scan", description: "scans" };\n' +
+  'return await agent("Scan the files.", { agentType: "foo:a1" });\n';
+const FOO_A1_RESTRICTION_NOTE =
+  '    note: workflow script "scan.js" in "workflows" runs agent type "foo:a1", which ' +
+  "restricts its tools; the workflow engine does not keep that restriction, so the agent " +
+  "can use read, bash, edit, and write";
+
+async function seedPluginFile(
+  mpRoot: string,
+  pluginDir: string,
+  rel: string,
+  text: string,
+): Promise<string> {
+  const abs = path.join(mpRoot, pluginDir, rel);
+  await mkdir(path.dirname(abs), { recursive: true });
+  await writeFile(abs, text, "utf8");
+  return abs;
+}
+
+/** Counts the `readFile` calls on `files` for the rest of the test. */
+function countReadsOf(t: TestContext, files: readonly string[]): { readonly count: () => number } {
+  let reads = 0;
+  const filesystemPromises = createRequire(import.meta.url)(
+    "node:fs/promises",
+  ) as typeof import("node:fs/promises");
+  const originalReadFile = filesystemPromises.readFile;
+  t.mock.method(
+    filesystemPromises,
+    "readFile",
+    async (...args: Parameters<typeof originalReadFile>) => {
+      if (typeof args[0] === "string" && files.includes(args[0])) {
+        reads += 1;
+      }
+
+      return originalReadFile(...args);
+    },
+  );
+  syncBuiltinESMExports();
+  t.after(() => {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  });
+  return { count: () => reads };
+}
+
+test("PG-SEC-01: an installed plugin whose workflow runs a tool-restricted agent renders the note after the workflow advisories", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedFooInstalled(home, cwd);
+    await seedPluginFile(mpRoot, "foo", "agents/a1.md", RESTRICTED_A1_AGENT);
+    await seedWorkflowScripts(mpRoot, "foo", {
+      "helper.js": WORKFLOW_NO_META,
+      "scan.js": WORKFLOW_RUNS_FOO_A1,
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert -- the folder is its name, never the absolute path (NFR-9).
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          EXPECTED_FOO_COMPONENT_LINES,
+          "    workflows: foo:scan",
+          FOO_WORKFLOWS_REQUIRES_LINE,
+          '    note: workflow script "helper.js" in "workflows" will not be installed: ' +
+            "helper.js declares no `meta`, so there is nothing to install",
+          FOO_A1_RESTRICTION_NOTE,
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("PG-SEC-01: a plugin whose scripts name no literal agent type reads no agent file for notes", async (t) => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- a bound agent type is not a literal, so the restricted agent
+    // gets no note (D-PG4-11) and its file is never opened.
+    const mpRoot = await seedFooInstalled(home, cwd);
+    const agentFile = await seedPluginFile(mpRoot, "foo", "agents/a1.md", RESTRICTED_A1_AGENT);
+    await seedWorkflowScripts(mpRoot, "foo", {
+      "scan.js":
+        'export const meta = { name: "scan", description: "scans" };\n' +
+        'const reader = "foo:a1";\n' +
+        'return await agent("Scan the files.", { agentType: reader });\n',
+      "zeta.js": WORKFLOW_NAMED_ZETA,
+    });
+    const agentReads = countReadsOf(t, [agentFile]);
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `${EXPECTED_FOO_COMPONENT_LINES}\n    workflows: foo:scan, foo:zeta\n${FOO_WORKFLOWS_REQUIRES_LINE}`,
+      },
+    ]);
+    assert.equal(agentReads.count(), 0);
+  });
+});
+
+test("D-PG4-11: an agent read that throws leaves the row resolved and without a restriction note", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- the agent's name `.` is unsafe, so the agents read throws.
+    const mpRoot = await seedFooInstalled(home, cwd);
+    await seedPluginFile(
+      mpRoot,
+      "foo",
+      "agents/a1.md",
+      "---\nname: .\ntools: Read\n---\n\nRead.\n",
+    );
+    await seedWorkflowScripts(mpRoot, "foo", { "scan.js": WORKFLOW_RUNS_FOO_A1 });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `${EXPECTED_FOO_COMPONENT_LINES}\n    workflows: foo:scan\n${FOO_WORKFLOWS_REQUIRES_LINE}`,
+      },
+    ]);
+  });
+});
+
+test("NFR-10 / PG-SEC-01: an agents path that is absolute or escapes the plugin root is not read for notes", async (t) => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- both declared agents paths hold a restricted agent that the
+    // script names. The refused plugin's lenient listing carries both raw
+    // strings, and containment drops them before any agent file is read.
+    const absoluteAgents = path.join(home, "absolute-agents");
+    const mpRoot = await seedFooInstalled(home, cwd, { agents: ["../outside", absoluteAgents] });
+    const restricted = "---\nname: spy\ndescription: Spies.\ntools: Read\n---\n\nSpy.\n";
+    const escapingFile = await seedPluginFile(mpRoot, "outside", "spy.md", restricted);
+    const absoluteFile = path.join(absoluteAgents, "spy.md");
+    await mkdir(absoluteAgents, { recursive: true });
+    await writeFile(absoluteFile, restricted, "utf8");
+    await seedWorkflowScripts(mpRoot, "foo", {
+      "scan.js":
+        'export const meta = { name: "scan", description: "scans" };\n' +
+        'return await agent("Spy.", { agentType: "foo:spy" });\n',
+    });
+    const outsideReads = countReadsOf(t, [escapingFile, absoluteFile]);
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert -- the `agents:` line is the existing directory listing; the
+    // note is absent because no agent file outside the root was read.
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● foo v1.2.3 (installed) {unsupported source}",
+          "    Foo plugin",
+          "    agents: spy",
+          "    commands: c1",
+          "    skills: s1",
+          "    workflows: foo:scan",
+          FOO_WORKFLOWS_REQUIRES_LINE,
+        ].join("\n"),
+      },
+    ]);
+    assert.equal(outsideReads.count(), 0);
+  });
+});
+
+test("PG-SEC-01: an available plugin's row carries the restriction note", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [fooInstalledEntry()] },
+      installablePluginDirs: ["foo"],
+    });
+    await seedPluginFile(mpRoot, "foo", "agents/a1.md", RESTRICTED_A1_AGENT);
+    await seedWorkflowScripts(mpRoot, "foo", { "scan.js": WORKFLOW_RUNS_FOO_A1 });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ○ foo v1.2.3 (available)",
+          "    Foo plugin",
+          "    agents: a1",
+          "    workflows: foo:scan",
+          FOO_WORKFLOWS_REQUIRES_LINE,
+          FOO_A1_RESTRICTION_NOTE,
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("PG-SEC-01: a partially available plugin's row carries the restriction note", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- `lspServers` makes the plugin partially available.
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [fooInstalledEntry({ lspServers: { ls: { command: "ls-server" } } })],
+      },
+      installablePluginDirs: ["foo"],
+    });
+    await seedPluginFile(mpRoot, "foo", "agents/a1.md", RESTRICTED_A1_AGENT);
+    await seedWorkflowScripts(mpRoot, "foo", { "scan.js": WORKFLOW_RUNS_FOO_A1 });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ⊖ foo v1.2.3 (partially-available) {lsp}",
+          "    Foo plugin",
+          "    agents: a1",
+          "    workflows: foo:scan",
+          FOO_WORKFLOWS_REQUIRES_LINE,
+          FOO_A1_RESTRICTION_NOTE,
+        ].join("\n"),
+      },
+    ]);
   });
 });
 
