@@ -415,6 +415,36 @@ describe("blankEarlierDuplicateKeys", () => {
       expectedContent: "---\nhooks:\n  tools: a\ntools: Read\n---\n",
     },
     {
+      description: "blanks an earlier copy written as a list in a CRLF block",
+      sourceContent: "---\r\ntools:\r\n  - Read\r\n  - Bash\r\ntools: Grep\r\n---\r\n",
+      expectedContent: "---\r\n\n\n\ntools: Grep\r\n---\r\n",
+    },
+    {
+      description: "blanks an earlier copy beside a last copy written as a list in a CRLF block",
+      sourceContent: "---\r\ntools: Read\r\ntools:\r\n  - Grep\r\n---\r\n",
+      expectedContent: "---\r\n\ntools:\r\n  - Grep\r\n---\r\n",
+    },
+    {
+      description: "blanks the column-0 items of an earlier copy written as a list",
+      sourceContent: "---\nname: a\ntools:\n- Read\n\n- Bash\ntools: Grep\n---\n",
+      expectedContent: "---\nname: a\n\n\n\n\ntools: Grep\n---\n",
+    },
+    {
+      description: "blanks the column-0 items of an earlier copy with a comment on its key line",
+      sourceContent: "---\ntools: # read only\n- Read\ntools: Grep\n---\n",
+      expectedContent: "---\n\n\ntools: Grep\n---\n",
+    },
+    {
+      description: "keeps the column-0 items of the last copy written as a list",
+      sourceContent: "---\ntools: Read\ntools:\n- Grep\n- Bash\n---\n",
+      expectedContent: "---\n\ntools:\n- Grep\n- Bash\n---\n",
+    },
+    {
+      description: "leaves an explicit key beside a plain copy unchanged",
+      sourceContent: "---\n? tools\n: Read\ntools: Grep\n---\n",
+      expectedContent: "---\n? tools\n: Read\ntools: Grep\n---\n",
+    },
+    {
       description: "leaves a repeated key after the closing fence unchanged",
       sourceContent: "---\ntools: Read\n---\ntools: Bash\ntools: Grep\n",
       expectedContent: "---\ntools: Read\n---\ntools: Bash\ntools: Grep\n",

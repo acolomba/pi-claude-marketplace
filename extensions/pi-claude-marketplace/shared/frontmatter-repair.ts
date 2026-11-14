@@ -207,17 +207,73 @@ export function repairSingleLineScalars(
   return changed ? repaired.join("\n") : content;
 }
 
-/** A column-0 key -- no whitespace, colon or `#` -- followed by a colon and a space, a tab, or the line end. */
-const TOP_LEVEL_KEY_NAME = /^([^\s:#]+):(?:[ \t]|$)/;
+/**
+ * A column-0 key -- no whitespace, colon or `#` -- then a colon and whitespace
+ * or the line end. Any whitespace matches, so the `\r` of a CRLF line does too.
+ */
+const TOP_LEVEL_KEY_NAME = /^[^\s:#]+:(?=\s|$)/;
+
+/** A line that continues an empty-valued key: indented, or a column-0 `- ` item of a compact list. */
+const OPEN_VALUE_LINE = /^(?:\s|-(?:\s|$))/;
+
+/**
+ * The key a top-level line writes, and whether its value is empty on the key
+ * line, which leaves room for a list whose items start at column 0. Returns
+ * `undefined` for any other line.
+ */
+function topLevelKey(
+  line: string,
+): { readonly key: string; readonly openValue: boolean } | undefined {
+  const match = TOP_LEVEL_KEY_NAME.exec(line);
+  if (match === null) {
+    return undefined;
+  }
+
+  const value = line.slice(match[0].length).trim();
+  return { key: match[0].slice(0, -1), openValue: value === "" || value.startsWith("#") };
+}
+
+/**
+ * The index of the last line the value of the key at `start` spans. A key
+ * with a value on its line spans what `keyValueEnd` finds. An empty-valued
+ * key also spans the column-0 `- ` items that follow it, because YAML reads
+ * them as its list (`tools:` then `- Read`).
+ */
+function duplicateKeySpanEnd(
+  lines: readonly string[],
+  start: number,
+  blockEnd: number,
+  openValue: boolean,
+): number {
+  if (!openValue) {
+    return keyValueEnd(lines, start, blockEnd);
+  }
+
+  let end = start;
+  for (const [offset, line] of lines.slice(start + 1, blockEnd).entries()) {
+    if (line.trim() === "") {
+      continue;
+    }
+
+    if (!OPEN_VALUE_LINE.test(line)) {
+      break;
+    }
+
+    end = start + 1 + offset;
+  }
+
+  return end;
+}
 
 /**
  * D-PG7-19: keep only the last copy of a top-level key that a frontmatter
  * block writes more than once, as `Bun.YAML.parse` keeps the last value where
  * Pi's YAML reader refuses the whole block. Every line of an earlier copy,
- * its continuation lines included (`keyValueEnd`), becomes an empty line, so
- * the block keeps its line count and a later parse error names the source's
- * line. Content without an opening and a closing fence, or with no repeated
- * key, is returned unchanged.
+ * its continuation lines and the column-0 items of its list included, becomes
+ * an empty line, so the block keeps its line count and a later parse error
+ * names the source's line. A quoted key, an explicit key (`? tools`), and a
+ * key repeated inside a nested mapping are not matched. Content without an
+ * opening and a closing fence, or with no repeated key, is returned unchanged.
  */
 export function blankEarlierDuplicateKeys(content: string): string {
   const block = fencedBlock(content);
@@ -229,14 +285,15 @@ export function blankEarlierDuplicateKeys(content: string): string {
 
   const lastStart = new Map<string, number>();
   const spans: { readonly key: string; readonly start: number; readonly end: number }[] = [];
-  // A line a key's value spans is indented or is the `:` line of an explicit
-  // key, so no key pattern matches inside a span.
+  // A line a key's value spans is indented or is a column-0 `- ` item, and the
+  // key pattern matches neither, so no key is found inside a span.
   for (const [offset, line] of lines.slice(1, blockEnd).entries()) {
-    const key = TOP_LEVEL_KEY_NAME.exec(line)?.[1];
-    if (key !== undefined) {
+    const topLevel = topLevelKey(line);
+    if (topLevel !== undefined) {
       const start = offset + 1;
-      spans.push({ key, start, end: keyValueEnd(lines, start, blockEnd) });
-      lastStart.set(key, start);
+      const end = duplicateKeySpanEnd(lines, start, blockEnd, topLevel.openValue);
+      spans.push({ key: topLevel.key, start, end });
+      lastStart.set(topLevel.key, start);
     }
   }
 

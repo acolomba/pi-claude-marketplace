@@ -759,6 +759,48 @@ Feature: Agent frontmatter
       | 2    | assistant   | tool call subagent {"action":"list","capabilities":true}                                                                |
       | 2    | tool result | subagent returned: agent demo:twice, aliases pi-claude-marketplace-demo-twice: Lists its tools twice.; tools read, grep |
 
+  Scenario Outline: An earlier copy of a key that lists its items at column 0 gives way to the last copy
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given pi-subagents hides its builtin agents
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "agents/twice.md" with this text:
+      """
+      ---
+      name: twice
+      description: Lists its tools twice.
+      <earlier key line>
+      - Bash
+      - Write
+      tools: Read, Grep
+      ---
+
+      Answer the task.
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply                  | tool     | arguments                             |
+      |                        | subagent | {"action":"list","capabilities":true} |
+      | The agents are listed. |          |                                       |
+    When the user prompts "List the agents."
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                    |
+      | 1    | user        | List the agents.                                                                                                        |
+      | 2    | user        | List the agents.                                                                                                        |
+      | 2    | assistant   | tool call subagent {"action":"list","capabilities":true}                                                                |
+      | 2    | tool result | subagent returned: agent demo:twice, aliases pi-claude-marketplace-demo-twice: Lists its tools twice.; tools read, grep |
+
+    Examples:
+      | earlier key line          |
+      | tools:                    |
+      | tools: # the earlier list |
+
   Scenario: Installing an agent whose frontmatter cannot be parsed reports the agent
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:

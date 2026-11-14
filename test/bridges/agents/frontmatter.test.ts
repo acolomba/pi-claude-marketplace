@@ -141,6 +141,24 @@ describe("readAgentFrontmatter", () => {
       expectedAgentFile: { raw: { description: "Use: x", tools: "Read" }, body: "Body." },
     },
     {
+      description:
+        "D-PG7-19: the last value of a key whose earlier copy is a list in a CRLF source",
+      agentFile:
+        "---\r\nname: a\r\ntools:\r\n  - Read\r\n  - Bash\r\ntools: Grep\r\n---\r\nBody.\r\n",
+      expectedAgentFile: { raw: { name: "a", tools: "Grep" }, body: "Body." },
+    },
+    {
+      description: "D-PG7-19: the last value of a key whose last copy is a list in a CRLF source",
+      agentFile: "---\r\nname: a\r\ntools: Read\r\ntools:\r\n  - Grep\r\n---\r\nBody.\r\n",
+      expectedAgentFile: { raw: { name: "a", tools: "Grep" }, body: "Body." },
+    },
+    {
+      description:
+        "D-PG7-19: the last value of a key whose earlier copy lists its items at column 0",
+      agentFile: "---\nname: a\ntools:\n- Read\n- Bash\ntools: Grep\n---\nBody.\n",
+      expectedAgentFile: { raw: { name: "a", tools: "Grep" }, body: "Body." },
+    },
+    {
       description: "the same fields for a CRLF source as for its LF form",
       agentFile: "---\r\nname: reviewer\r\ntools:\r\n  - Read\r\n  - Bash\r\n---\r\nBody.\r\n",
       expectedAgentFile: { raw: { name: "reviewer", tools: "Read,Bash" }, body: "Body." },
