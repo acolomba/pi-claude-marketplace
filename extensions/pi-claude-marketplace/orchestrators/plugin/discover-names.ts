@@ -14,6 +14,11 @@
 // re-exporting across bridge kinds would launder around the
 // no-cross-bridge-imports boundary rule, so the per-kind barrels are the
 // only bridge entry points here.
+//
+// PG-SEC-01 / D-PG4-13: this is also where the workflow agent restriction
+// notes are built. They join the agents discovery with the workflows
+// discovery, and no bridge may import a sibling bridge, so the join lives in
+// the one orchestrator module that already holds both results.
 
 import path from "node:path";
 
@@ -21,8 +26,11 @@ import { discoverPluginAgents } from "../../bridges/agents/index.ts";
 import { discoverPluginCommands } from "../../bridges/commands/index.ts";
 import { discoverPluginSkills } from "../../bridges/skills/index.ts";
 import { discoverPluginWorkflows } from "../../bridges/workflows/index.ts";
+import { declaredAgentName } from "../../domain/name.ts";
+import { forMessage } from "../../domain/workflow-script.ts";
 
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
+import type { WorkflowVerdict } from "../../domain/workflow-script.ts";
 
 export interface DiscoveredGeneratedNames {
   readonly skills: readonly string[];
@@ -35,6 +43,26 @@ export interface DiscoveredGeneratedNames {
    * workflow envelope's target is refused at commit if another owner holds it.
    */
   readonly workflows: readonly string[];
+  /**
+   * PG-SEC-01: one note for each distinct pair of an admitted script and an
+   * agent type it names that restricts its tools. The folder in each note is
+   * absolute; the sites that surface it reduce it.
+   */
+  readonly workflowAgentRestrictionNotes: readonly string[];
+}
+
+/** The part of a discovered agent the restriction join reads. */
+interface RestrictionAgent {
+  readonly sourceName: string;
+  readonly generatedName: string;
+  readonly namespace?: readonly string[];
+  readonly raw: { readonly tools?: string; readonly disallowedTools?: string };
+}
+
+/** The part of a discovered workflow script the restriction join reads. */
+interface RestrictionWorkflow {
+  readonly verdict: WorkflowVerdict;
+  readonly scriptFile: string;
 }
 
 function resolvedAgentsDirs(resolved: MaterializablePlugin): readonly string[] {
@@ -44,8 +72,77 @@ function resolvedAgentsDirs(resolved: MaterializablePlugin): readonly string[] {
 }
 
 /**
- * Name preview only. The four discoveries also return D-07 warnings, and
- * this function drops them on purpose.
+ * D-PG4-11: a `tools` or `disallowedTools` value that is not blank restricts
+ * the agent's tools. A YAML list arrives folded into one comma-joined string.
+ */
+function restrictsTools(agent: RestrictionAgent): boolean {
+  return [agent.raw.tools, agent.raw.disallowedTools].some(
+    (field) => field !== undefined && field.trim() !== "",
+  );
+}
+
+/**
+ * D-PG4-11: the names a script may use for a restricted agent of the plugin:
+ * the upstream `<plugin>:<agent>`, which the engine's registry resolves, and
+ * the generated name. Discovery already checked every part of both names, so
+ * `declaredAgentName` cannot throw here.
+ */
+function restrictedAgentNames(
+  pluginName: string,
+  agents: readonly RestrictionAgent[],
+): ReadonlySet<string> {
+  return new Set(
+    agents
+      .filter(restrictsTools)
+      .flatMap((agent) => [
+        declaredAgentName(pluginName, agent.sourceName, agent.namespace),
+        agent.generatedName,
+      ]),
+  );
+}
+
+/**
+ * D-PG4-12: one note in the shape of the workflows bridge's notes. Each span
+ * of plugin text goes through `forMessage` where it enters the string.
+ */
+function restrictionNote(fileName: string, workflowsDir: string, agentType: string): string {
+  return `workflow script "${forMessage(fileName)}" in "${forMessage(workflowsDir)}" runs agent type "${forMessage(agentType)}", which restricts its tools; the workflow engine does not keep that restriction, so the agent can use read, bash, edit, and write`;
+}
+
+/**
+ * PG-SEC-01 / D-PG4-11: the notes for a plugin whose admitted workflow
+ * scripts name, as a string literal, an agent of the same plugin that
+ * restricts its tools. Claude Code keeps that restriction when a workflow
+ * runs the agent; the workflow engine passes no tool list to Pi for the
+ * child session, so the agent gets read, bash, edit, and write.
+ *
+ * Matching is exact string equality, with no case folding or Unicode
+ * normalization. One note for each distinct pair of script and agent type,
+ * in script order and then in the order the script names them. Pure: it reads
+ * no file.
+ */
+function workflowAgentRestrictionNotes(
+  pluginName: string,
+  agents: readonly RestrictionAgent[],
+  workflows: readonly RestrictionWorkflow[],
+): readonly string[] {
+  const restricted = restrictedAgentNames(pluginName, agents);
+
+  return workflows.flatMap(({ verdict, scriptFile }) =>
+    verdict.outcome === "named"
+      ? (verdict.agentTypes ?? [])
+          .filter((agentType) => restricted.has(agentType))
+          .map((agentType) =>
+            restrictionNote(verdict.fileName, path.dirname(scriptFile), agentType),
+          )
+      : [],
+  );
+}
+
+/**
+ * Name preview, plus the workflow agent restriction notes. The four
+ * discoveries also return D-07 warnings, and this function drops them on
+ * purpose.
  *
  * Every caller runs the same walk again during staging, and that pass is the
  * one that reports: `install-outcome.ts` folds each `prepareStage*` result onto
@@ -61,6 +158,12 @@ function resolvedAgentsDirs(resolved: MaterializablePlugin): readonly string[] {
  *
  * The workflows tense is `install` because every caller is about to stage; the
  * warnings the tense would word are dropped here regardless.
+ *
+ * PG-SEC-01: the restriction notes are the one output this function reports.
+ * No staging pass builds them, because the join needs the agents and the
+ * workflows together and each bridge sees only its own kind. Each caller adds
+ * them at exactly one site, so a verb prints them once. They are recomputed
+ * at every call and never stored (D-PG4-13).
  */
 export async function discoverGeneratedNames(
   plugin: string,
@@ -86,6 +189,11 @@ export async function discoverGeneratedNames(
     agentsDirs,
     workflows: workflowsDiscovery.discovered.flatMap((w) =>
       w.verdict.outcome === "named" ? [w.verdict.generatedName] : [],
+    ),
+    workflowAgentRestrictionNotes: workflowAgentRestrictionNotes(
+      plugin,
+      agentsDiscovery.discovered,
+      workflowsDiscovery.discovered,
     ),
   };
 }

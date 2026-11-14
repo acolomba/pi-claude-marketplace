@@ -91,6 +91,14 @@ export interface NamedWorkflow {
    * precisely because a gate reading may never turn into a refusal (WGATE-03).
    */
   readonly gate?: WorkflowGate;
+  /**
+   * PG-SEC-01 / D-PG4-11: each distinct string literal the script passes as an
+   * `agentType`, in first-seen order, absent when there is none. Advisory like
+   * `gate`: an orchestrator joins it with the plugin's agents to say that the
+   * workflow engine drops a restricted agent's tool list, and it never changes
+   * whether the script is admitted.
+   */
+  readonly agentTypes?: readonly string[];
 }
 
 /**
@@ -225,8 +233,9 @@ export function admitWorkflowScript(
   // off a script that is about to be refused, and a refusal carries no gate by
   // type (WGATE-03/WGATE-04).
   const gate = readEngineGate(parsed.ast, meta.elements);
+  const agentTypes = readAgentTypes(parsed.ast);
 
-  return namedVerdict(pluginName, fileName, metaName.value, description, gate);
+  return namedVerdict(pluginName, fileName, metaName.value, description, gate, agentTypes);
 }
 
 /**
@@ -307,6 +316,7 @@ function namedVerdict(
   metaName: string,
   description: string | undefined,
   gate: WorkflowGate | undefined,
+  agentTypes: readonly string[],
 ): NamedWorkflow | RefusedWorkflow {
   const generated = generateOrRefuse(pluginName, fileName, metaName);
 
@@ -321,6 +331,7 @@ function namedVerdict(
     generatedName: generated.generatedName,
     ...(description === undefined ? {} : { description }),
     ...(gate === undefined ? {} : { gate }),
+    ...(agentTypes.length === 0 ? {} : { agentTypes }),
   };
 }
 
@@ -853,6 +864,94 @@ function gateContext(ast: Program, elements: readonly MetaElement[]): GateContex
  * `readEngineGate` is exercised by a real script rather than only inspected.
  */
 const GATE_WALK_MAX_DEPTH = 32;
+
+/**
+ * PG-SEC-01: how many nodes deep the `agentType` walk goes before it gives up
+ * on a script. Real scripts nest far less; a member chain such as
+ * `x.a.a.a...` is the cheap way to build a deeper tree, because acorn parses
+ * it in a loop. The budget keeps the walk's own recursion inside the stack.
+ */
+const AGENT_TYPE_WALK_MAX_DEPTH = 1_000;
+
+/**
+ * PG-SEC-01 / D-PG4-11: the distinct string literals the script passes as an
+ * `agentType`, in first-seen order.
+ *
+ * Contained like `readEngineGate`: the walk reads untrusted AST, so a breach of
+ * its depth budget, or a node shape it was not written for, costs the script
+ * its note and never fails the install. The walk follows no binding and
+ * evaluates nothing, so `agentType: SCAN_AGENT` gives no value: a missing
+ * note, never a false one.
+ */
+function readAgentTypes(ast: Program): readonly string[] {
+  const found = new Set<string>();
+
+  try {
+    collectAgentTypes(ast, 0, found);
+  } catch {
+    return [];
+  }
+
+  return [...found];
+}
+
+/**
+ * Visits every node under `value`, in source order, and adds the literal of
+ * each `agentType` property it finds. Arrays are walked at their parent's
+ * depth, so the budget counts nodes.
+ */
+function collectAgentTypes(value: unknown, depth: number, found: Set<string>): void {
+  if (Array.isArray(value)) {
+    for (const element of value) {
+      collectAgentTypes(element, depth, found);
+    }
+
+    return;
+  }
+
+  if (!isAstNode(value)) {
+    return;
+  }
+
+  if (depth > AGENT_TYPE_WALK_MAX_DEPTH) {
+    throw new Error("script nesting exceeds the agentType walk budget");
+  }
+
+  const agentType = isProperty(value) ? agentTypeLiteral(value) : undefined;
+
+  if (agentType !== undefined) {
+    found.add(agentType);
+  }
+
+  for (const child of Object.values(value)) {
+    collectAgentTypes(child, depth + 1, found);
+  }
+}
+
+/**
+ * The value of one `agentType` property, as the engine reads it: a string
+ * literal or a template with no substitution, decoded. A computed key is not
+ * statically known, so `{ ["agentType"]: "x" }` gives nothing; a shorthand or
+ * a method has a non-literal value and gives nothing either.
+ */
+function agentTypeLiteral(property: Property): string | undefined {
+  if (property.computed || metaPropertyKey(property) !== "agentType") {
+    return undefined;
+  }
+
+  return literalString(property.value);
+}
+
+/** An acorn node: an object carrying a string `type`. */
+function isAstNode(value: unknown): value is { readonly type: string } {
+  return (
+    typeof value === "object" && value !== null && "type" in value && typeof value.type === "string"
+  );
+}
+
+function isProperty(node: { readonly type: string }): node is Property {
+  return node.type === "Property";
+}
 
 /**
  * The `meta` key names the engine refuses outright, read from its own

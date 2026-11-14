@@ -49,6 +49,11 @@ function admission(verdict: WorkflowVerdict): Admission {
   };
 }
 
+/** PG-SEC-01: the agent types a verdict carries, read only off the arm that can carry them. */
+function agentTypesOf(verdict: WorkflowVerdict): readonly string[] | undefined {
+  return verdict.outcome === "named" ? verdict.agentTypes : undefined;
+}
+
 interface DecoyRow {
   readonly decoy: string;
   readonly source: string;
@@ -1312,6 +1317,135 @@ export const meta = { name: "ship" };
 
     // assert
     assert.deepStrictEqual(refusal(verdict), expectedVerdict);
+  });
+
+  for (const { form, call } of [
+    { form: "an identifier key", call: `agent("scan", { agentType: "acme:reader" });` },
+    { form: "a quoted key", call: `agent("scan", { "agentType": "acme:reader" });` },
+    { form: "a substitution-free template", call: 'agent("scan", { agentType: `acme:reader` });' },
+    {
+      form: "an escaped literal",
+      call: String.raw`agent("scan", { agentType: "acme:\x72eader" });`,
+    },
+  ] satisfies readonly { form: string; call: string }[]) {
+    test(`PG-SEC-01: carries the agent type written with ${form}, decoded`, () => {
+      // arrange
+      const source = `export const meta = { name: "scan", description: "d" };\n${call}\n`;
+
+      // act
+      const verdict = admitWorkflowScript("acme", "scan.js", source);
+
+      // assert
+      assert.deepStrictEqual(agentTypesOf(verdict), ["acme:reader"]);
+    });
+  }
+
+  for (const { form, call } of [
+    { form: "an identifier value", call: `agent("scan", { agentType: READER });` },
+    { form: "a call value", call: `agent("scan", { agentType: pick() });` },
+    { form: "a number value", call: `agent("scan", { agentType: 7 });` },
+    { form: "a substituted template", call: 'agent("scan", { agentType: `acme:${name}` });' },
+    { form: "a computed key", call: `agent("scan", { ["agentType"]: "acme:reader" });` },
+    { form: "a shorthand property", call: `agent("scan", { agentType });` },
+    { form: "a method", call: `agent("scan", { agentType() { return "acme:reader"; } });` },
+    { form: "a property of another name", call: `const x = { kind: "acme:reader" };` },
+  ] satisfies readonly { form: string; call: string }[]) {
+    test(`PG-SEC-01: leaves the agent types off a script whose only candidate is ${form}`, () => {
+      // arrange
+      const source = `export const meta = { name: "scan", description: "d" };\n${call}\n`;
+
+      // act
+      const verdict = admitWorkflowScript("acme", "scan.js", source);
+
+      // assert
+      assert.strictEqual(verdict.outcome, "named");
+      assert.strictEqual(Object.hasOwn(verdict, "agentTypes"), false);
+    });
+  }
+
+  test("PG-SEC-01: finds nested agent types once each, in first-seen order", () => {
+    // arrange
+    const source = [
+      `export const meta = { name: "scan", description: "d" };`,
+      `export default async function run(ctx) {`,
+      `  const jobs = [{ agentType: "acme:writer" }, { agentType: "acme:reader" }];`,
+      `  if (ctx.deep) {`,
+      `    await Promise.all(jobs.map(() => agent("x", { agentType: "acme:writer" })));`,
+      `  }`,
+      `  return ctx.fast ? agent("y", { opts: { agentType: "acme:fixer" } }) : null;`,
+      `}`,
+      ``,
+    ].join("\n");
+
+    // act
+    const verdict = admitWorkflowScript("acme", "scan.js", source);
+
+    // assert
+    assert.deepStrictEqual(agentTypesOf(verdict), ["acme:writer", "acme:reader", "acme:fixer"]);
+  });
+
+  test("PG-SEC-01: an agent type changes nothing else about the admitted verdict", () => {
+    // arrange
+    const plain = `export const meta = { name: "scan", description: "d" };\n`;
+    const withAgent = `${plain}agent("scan", { agentType: "acme:reader" });\n`;
+
+    // act
+    const plainVerdict = admitWorkflowScript("acme", "scan.js", plain);
+    const agentVerdict = admitWorkflowScript("acme", "scan.js", withAgent);
+
+    // assert
+    assert.deepStrictEqual(agentVerdict, { ...plainVerdict, agentTypes: ["acme:reader"] });
+  });
+
+  for (const { verdictKind, source, expectedVerdict } of [
+    {
+      verdictKind: "a skipped script",
+      source: `agent("scan", { agentType: "acme:reader" });\n`,
+      expectedVerdict: { outcome: "skipped", cause: "no-meta" },
+    },
+    {
+      verdictKind: "a refused script",
+      source: `export const meta = { name: "scan", description: "d" };\nagent("scan", { agentType: "acme:reader", at: Date.now() });\n`,
+      expectedVerdict: { outcome: "refused", cause: "determinism-code" },
+    },
+  ] satisfies readonly { verdictKind: string; source: string; expectedVerdict: NonAdmission }[]) {
+    test(`PG-SEC-01: gives ${verdictKind} no agent types`, () => {
+      // act
+      const verdict = admitWorkflowScript("acme", "scan.js", source);
+
+      // assert
+      assert.deepStrictEqual(nonAdmission(verdict), expectedVerdict);
+      assert.strictEqual(Object.hasOwn(verdict, "agentTypes"), false);
+    });
+  }
+
+  test("PG-SEC-01: still reads the agent types of a script nested just inside the walk budget", () => {
+    // arrange
+    const source = `export const meta = { name: "scan", description: "d" };\nagent("scan", { agentType: "acme:reader" });\nconst deep = x${".a".repeat(990)};\n`;
+
+    // act
+    const verdict = admitWorkflowScript("acme", "scan.js", source);
+
+    // assert
+    assert.deepStrictEqual(agentTypesOf(verdict), ["acme:reader"]);
+  });
+
+  test("PG-SEC-01: keeps the verdict and drops the agent types of a script nested past the walk budget", () => {
+    // arrange -- acorn parses a member chain in a loop, so this tree is deeper
+    // than the walk's budget yet parses cleanly. The breach costs the note only.
+    const source = `export const meta = { name: "scan", description: "d" };\nagent("scan", { agentType: "acme:reader" });\nconst deep = x${".a".repeat(1_100)};\n`;
+    const expectedVerdict = {
+      outcome: "named",
+      metaName: "scan",
+      generatedName: "acme:scan",
+    } satisfies Admission;
+
+    // act
+    const verdict = admitWorkflowScript("acme", "scan.js", source);
+
+    // assert
+    assert.deepStrictEqual(admission(verdict), expectedVerdict);
+    assert.strictEqual(Object.hasOwn(verdict, "agentTypes"), false);
   });
 });
 

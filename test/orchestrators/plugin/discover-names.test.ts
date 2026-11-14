@@ -44,10 +44,15 @@ function resolvedPlugin(
   };
 }
 
-async function writeAgent(directory: string, fileName: string, name?: string): Promise<void> {
+async function writeAgent(
+  directory: string,
+  fileName: string,
+  frontmatter: Readonly<Record<string, string>> = {},
+): Promise<void> {
   await mkdir(directory, { recursive: true });
+  const fields = Object.entries(frontmatter).map(([key, value]) => `${key}: ${value}\n`);
   const contents =
-    name === undefined ? "Agent body.\n" : `---\nname: ${name}\n---\n\nAgent body.\n`;
+    fields.length === 0 ? "Agent body.\n" : `---\n${fields.join("")}---\n\nAgent body.\n`;
   await writeFile(path.join(directory, fileName), contents, "utf8");
 }
 
@@ -66,13 +71,22 @@ async function writeWorkflow(
   directory: string,
   fileName: string,
   metaName?: string,
+  body = "",
 ): Promise<void> {
   await mkdir(directory, { recursive: true });
   const contents =
     metaName === undefined
-      ? "export function help() {\n  return 1;\n}\n"
-      : `export const meta = { name: ${JSON.stringify(metaName)}, description: "d" };\n`;
+      ? `export function help() {\n  return 1;\n}\n${body}`
+      : `export const meta = { name: ${JSON.stringify(metaName)}, description: "d" };\n${body}`;
   await writeFile(path.join(directory, fileName), contents, "utf8");
+}
+
+function agentCall(agentType: string): string {
+  return `await agent("run", { agentType: ${JSON.stringify(agentType)} });\n`;
+}
+
+function restrictionNote(fileName: string, workflowsDirectory: string, agentType: string): string {
+  return `workflow script "${fileName}" in "${workflowsDirectory}" runs agent type "${agentType}", which restricts its tools; the workflow engine does not keep that restriction, so the agent can use read, bash, edit, and write`;
 }
 
 test("composes generated names from every bridge in each bridge's declared order", async (t) => {
@@ -111,6 +125,7 @@ test("composes generated names from every bridge in each bridge's declared order
     commands: ["acme:alpha", "acme:zeta"],
     skills: ["acme-alpha-guide", "acme-zeta-guide"],
     workflows: ["acme:alpha", "acme:zeta"],
+    workflowAgentRestrictionNotes: [],
   });
 });
 
@@ -134,6 +149,7 @@ test("returns empty names and a null source when no components are declared", as
     commands: [],
     skills: [],
     workflows: [],
+    workflowAgentRestrictionNotes: [],
   });
 });
 
@@ -159,6 +175,7 @@ test("returns an empty agent list with the selected relative source directory", 
     commands: [],
     skills: [],
     workflows: [],
+    workflowAgentRestrictionNotes: [],
   });
 });
 
@@ -168,8 +185,8 @@ test("keeps first-wins names while deliberately dropping all bridge warnings", a
   const agentsDirectory = path.join(pluginRoot, "agents");
   const commandsDirectory = path.join(pluginRoot, "commands");
   const skillsDirectory = path.join(pluginRoot, "skills");
-  await writeAgent(agentsDirectory, "a.md", "review");
-  await writeAgent(agentsDirectory, "b.md", "review");
+  await writeAgent(agentsDirectory, "a.md", { name: "review" });
+  await writeAgent(agentsDirectory, "b.md", { name: "review" });
   await writeCommand(commandsDirectory, "acme-run.md");
   await writeCommand(commandsDirectory, "run.md");
   await writeSkill(skillsDirectory, "acme-helper");
@@ -191,6 +208,7 @@ test("keeps first-wins names while deliberately dropping all bridge warnings", a
     commands: ["acme:run"],
     skills: ["acme-helper"],
     workflows: [],
+    workflowAgentRestrictionNotes: [],
   });
 });
 
@@ -199,9 +217,9 @@ test("discovers agents from every resolved directory in resolver order", async (
   const pluginRoot = await createPluginRoot(t, "plugin-discover-names-agent-dirs-");
   const declaredDirectory = path.join(pluginRoot, "declared-agents");
   const conventionalDirectory = path.join(pluginRoot, "agents");
-  await writeAgent(declaredDirectory, "shared.md", "shared");
-  await writeAgent(conventionalDirectory, "later.md", "later");
-  await writeAgent(conventionalDirectory, "shared.md", "shared");
+  await writeAgent(declaredDirectory, "shared.md", { name: "shared" });
+  await writeAgent(conventionalDirectory, "later.md", { name: "later" });
+  await writeAgent(conventionalDirectory, "shared.md", { name: "shared" });
   const resolved = resolvedPlugin(pluginRoot, {
     agents: ["declared-agents", "agents"],
     commands: [],
@@ -219,6 +237,7 @@ test("discovers agents from every resolved directory in resolver order", async (
     commands: [],
     skills: [],
     workflows: [],
+    workflowAgentRestrictionNotes: [],
   });
 });
 
@@ -228,7 +247,7 @@ test("propagates a hard agent failure after successful skill and command discove
   const agentsDirectory = path.join(pluginRoot, "agents");
   const commandsDirectory = path.join(pluginRoot, "commands");
   const skillsDirectory = path.join(pluginRoot, "skills");
-  await writeAgent(agentsDirectory, "invalid.md", ".");
+  await writeAgent(agentsDirectory, "invalid.md", { name: "." });
   await writeCommand(commandsDirectory, "valid.md");
   await writeSkill(skillsDirectory, "valid");
   const resolved = resolvedPlugin(pluginRoot, {
@@ -243,4 +262,215 @@ test("propagates a hard agent failure after successful skill and command discove
     name: "Error",
     message: `agent name in ${path.join(agentsDirectory, "invalid.md")} must not be "." or "..".`,
   });
+});
+
+test("PG-SEC-01: notes a workflow script that runs a tool-restricted agent of the plugin", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "plugin-discover-names-restricted-");
+  const agentsDirectory = path.join(pluginRoot, "agents");
+  const workflowsDirectory = path.join(pluginRoot, "workflows");
+  await writeAgent(agentsDirectory, "reader.md", { tools: "Read" });
+  await writeWorkflow(workflowsDirectory, "scan.js", "scan", agentCall("acme:reader"));
+  const resolved = resolvedPlugin(pluginRoot, {
+    agents: ["agents"],
+    commands: [],
+    skills: [],
+    workflows: ["workflows"],
+  });
+
+  // act
+  const discovered = await discoverGeneratedNames("acme", resolved);
+
+  // assert
+  assert.deepStrictEqual(discovered, {
+    agents: ["pi-claude-marketplace-acme-reader"],
+    agentsDirs: [agentsDirectory],
+    commands: [],
+    skills: [],
+    workflows: ["acme:scan"],
+    workflowAgentRestrictionNotes: [
+      `workflow script "scan.js" in "${workflowsDirectory}" runs agent type "acme:reader", which restricts its tools; the workflow engine does not keep that restriction, so the agent can use read, bash, edit, and write`,
+    ],
+  });
+});
+
+for (const { shape, agentFile, frontmatter, agentType } of [
+  {
+    shape: "the generated agent name",
+    agentFile: "reader.md",
+    frontmatter: { tools: "Read" },
+    agentType: "pi-claude-marketplace-acme-reader",
+  },
+  {
+    shape: "an agent that sets disallowedTools",
+    agentFile: "reader.md",
+    frontmatter: { disallowedTools: "Bash" },
+    agentType: "acme:reader",
+  },
+  {
+    shape: "the namespaced upstream name of an agent in a subfolder",
+    agentFile: path.join("review", "security.md"),
+    frontmatter: { tools: "Read" },
+    agentType: "acme:review:security",
+  },
+] satisfies readonly {
+  shape: string;
+  agentFile: string;
+  frontmatter: Readonly<Record<string, string>>;
+  agentType: string;
+}[]) {
+  test(`PG-SEC-01: notes a restricted agent named by ${shape}`, async (t) => {
+    // arrange
+    const pluginRoot = await createPluginRoot(t, "plugin-discover-names-restricted-match-");
+    const agentsDirectory = path.join(pluginRoot, "agents");
+    const workflowsDirectory = path.join(pluginRoot, "workflows");
+    await writeAgent(
+      path.dirname(path.join(agentsDirectory, agentFile)),
+      path.basename(agentFile),
+      frontmatter,
+    );
+    await writeWorkflow(workflowsDirectory, "scan.js", "scan", agentCall(agentType));
+    const resolved = resolvedPlugin(pluginRoot, {
+      agents: ["agents"],
+      commands: [],
+      skills: [],
+      workflows: ["workflows"],
+    });
+
+    // act
+    const discovered = await discoverGeneratedNames("acme", resolved);
+
+    // assert
+    assert.deepStrictEqual(discovered.workflowAgentRestrictionNotes, [
+      restrictionNote("scan.js", workflowsDirectory, agentType),
+    ]);
+  });
+}
+
+for (const { shape, frontmatter, script } of [
+  {
+    shape: "an agent with no tool restriction",
+    frontmatter: { description: "reads" },
+    script: `export const meta = { name: "scan", description: "d" };\n${agentCall("acme:reader")}`,
+  },
+  {
+    shape: "an agent whose tools value is blank",
+    frontmatter: { tools: "" },
+    script: `export const meta = { name: "scan", description: "d" };\n${agentCall("acme:reader")}`,
+  },
+  {
+    shape: "an agent type of another plugin",
+    frontmatter: { tools: "Read" },
+    script: `export const meta = { name: "scan", description: "d" };\n${agentCall("other:reader")}`,
+  },
+  {
+    shape: "an empty agent type",
+    frontmatter: { tools: "Read" },
+    script: `export const meta = { name: "scan", description: "d" };\n${agentCall("")}`,
+  },
+  {
+    shape: "an agent type that differs only by case",
+    frontmatter: { tools: "Read" },
+    script: `export const meta = { name: "scan", description: "d" };\n${agentCall("acme:Reader")}`,
+  },
+  {
+    shape: "a script that names the agent but is skipped",
+    frontmatter: { tools: "Read" },
+    script: agentCall("acme:reader"),
+  },
+  {
+    shape: "a script that names the agent but is refused",
+    frontmatter: { tools: "Read" },
+    script: `export const meta = { name: "scan", description: "d" };\n${agentCall("acme:reader")}const at = Date.now();\n`,
+  },
+] satisfies readonly {
+  shape: string;
+  frontmatter: Readonly<Record<string, string>>;
+  script: string;
+}[]) {
+  test(`PG-SEC-01: gives no restriction note for ${shape}`, async (t) => {
+    // arrange
+    const pluginRoot = await createPluginRoot(t, "plugin-discover-names-unrestricted-");
+    await writeAgent(path.join(pluginRoot, "agents"), "reader.md", frontmatter);
+    const workflowsDirectory = path.join(pluginRoot, "workflows");
+    await mkdir(workflowsDirectory, { recursive: true });
+    await writeFile(path.join(workflowsDirectory, "scan.js"), script, "utf8");
+    const resolved = resolvedPlugin(pluginRoot, {
+      agents: ["agents"],
+      commands: [],
+      skills: [],
+      workflows: ["workflows"],
+    });
+
+    // act
+    const discovered = await discoverGeneratedNames("acme", resolved);
+
+    // assert
+    assert.deepStrictEqual(discovered.workflowAgentRestrictionNotes, []);
+  });
+}
+
+test("PG-SEC-01: gives one note per distinct script and agent type pair, in script order", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "plugin-discover-names-restricted-pairs-");
+  const agentsDirectory = path.join(pluginRoot, "agents");
+  const workflowsDirectory = path.join(pluginRoot, "workflows");
+  await writeAgent(agentsDirectory, "reader.md", { tools: "Read" });
+  await writeAgent(agentsDirectory, "writer.md", { disallowedTools: "Bash" });
+  await writeAgent(agentsDirectory, "free.md");
+  await writeWorkflow(
+    workflowsDirectory,
+    "b.js",
+    "bee",
+    agentCall("acme:writer") + agentCall("acme:free") + agentCall("acme:reader"),
+  );
+  await writeWorkflow(
+    workflowsDirectory,
+    "a.js",
+    "ay",
+    agentCall("acme:reader") + agentCall("acme:reader"),
+  );
+  const resolved = resolvedPlugin(pluginRoot, {
+    agents: ["agents"],
+    commands: [],
+    skills: [],
+    workflows: ["workflows"],
+  });
+
+  // act
+  const discovered = await discoverGeneratedNames("acme", resolved);
+
+  // assert
+  assert.deepStrictEqual(discovered.workflowAgentRestrictionNotes, [
+    restrictionNote("a.js", workflowsDirectory, "acme:reader"),
+    restrictionNote("b.js", workflowsDirectory, "acme:writer"),
+    restrictionNote("b.js", workflowsDirectory, "acme:reader"),
+  ]);
+});
+
+test("PG-SEC-01: escapes format characters in the file name and the agent type of a note", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "plugin-discover-names-restricted-escape-");
+  const agentsDirectory = path.join(pluginRoot, "agents");
+  const workflowsDirectory = path.join(pluginRoot, "workflows");
+  await writeAgent(agentsDirectory, "reader.md", { name: "rea\u200bder", tools: "Read" });
+  await writeWorkflow(workflowsDirectory, "sc\u202ean.js", "scan", agentCall("acme:rea\u200bder"));
+  const resolved = resolvedPlugin(pluginRoot, {
+    agents: ["agents"],
+    commands: [],
+    skills: [],
+    workflows: ["workflows"],
+  });
+
+  // act
+  const discovered = await discoverGeneratedNames("acme", resolved);
+
+  // assert
+  assert.deepStrictEqual(discovered.workflowAgentRestrictionNotes, [
+    restrictionNote(
+      String.raw`sc\u{202e}an.js`,
+      workflowsDirectory,
+      String.raw`acme:rea\u{200b}der`,
+    ),
+  ]);
 });
