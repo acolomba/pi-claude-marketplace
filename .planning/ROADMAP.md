@@ -99,7 +99,7 @@ run against them. Phase 4 depends on Phase 1 alone, so it can move earlier.
 
 - [x] **Phase 1: Companion Floors and MCP Defaults** - The pi-subagents floor is 0.87.0 and the pi-mcp-adapter floor is 7.0.1, mapped model IDs carry no provider, long tool names work under the adapter, and a server with no `timeout` gets Claude Code's idle window (completed 2026-11-12)
 - [x] **Phase 2: Hook Payloads, Matchers, and Stop Limit** - Hooks on file tools get and return Claude-shaped tool input, matchers follow Claude Code's rules, and a `Stop` hook can block eight times in a row (completed 2026-11-13)
-- [ ] **Phase 3: Background Subagents** - A bridged agent runs in the launch mode pi-subagents chooses, and a subagent child runs none of the plugin's main-session hooks
+- [x] **Phase 3: Background Subagents** - A bridged agent runs in the launch mode pi-subagents chooses, and a subagent child runs none of the plugin's main-session hooks (completed 2026-11-13)
 - [ ] **Phase 4: Skill and Workflow Install Defects** - A root-source entry installs only its listed skills, sibling skill links resolve, a plugin starts its own workflow by name, and an install notes that a workflow does not keep an agent's tool restriction
 - [ ] **Phase 5: Stop Continuation and Hook Failures** - A blocking `Stop` hook continues the same run, a missing script does not block, failures and `stopReason` are shown, context stops at 10,000 characters, and a plain `async` hook has no timeout
 - [ ] **Phase 6: Hook Inputs and Events** - Hooks receive `tool_use_id` and the other missing stdin fields, `UserPromptExpansion` hooks run before an expansion, and a continued session reports `resume`
@@ -270,7 +270,7 @@ Plans:
   3. In the stand-in child of `features/plugin/subagent-child.feature`, a plugin's recording `SessionStart`, `UserPromptSubmit`, `Stop`, and `SessionEnd` hooks record no run, and its `PreToolUse` hook still runs (PG-HOOK-07a).
   4. A tool hook that runs in the child receives `agent_type`, and `agent_id` when the child can know it. The same hook in a main session receives neither field (PG-HOOK-07a).
 
-**Plans**: 8/8 plans executed
+**Plans**: 8/8 plans complete
 - [x] 03-01-PLAN.md
 - [x] 03-02-PLAN.md
 - [x] 03-03-PLAN.md
@@ -316,7 +316,7 @@ Plans:
 **Goal**: Hooks receive the stdin fields that official plugins read, `UserPromptExpansion` hooks run before a plugin command or skill expands, and a `SessionStart` hook can tell a continued session from a new one.
 **Depends on**: Phase 2, Phase 5
 **Requirements**: PG-HOOK-04, PG-HOOK-06, PG-HOOK-11
-**Discuss step**: Decisions 9 and 25 come first. Decision 9: send `tool_use_id` and the other stdin fields now, which reopens D-CF5-28 and D-BG-403. A "no" moves PG-HOOK-04 to Out of Scope. Decision 25: leave `permission_mode` out of hook stdin, or send a constant; Pi has no permission modes.
+**Discuss step**: Decisions 9, 25 and 26 come first. Decision 26 (raised by Phase 3 verification): in a pi-subagents child, should hook stdin `session_id`, `transcript_path` and `CLAUDE_CODE_SESSION_ID` name the parent session or the child's own? Today they name the child's own, equal to `agent_id`; pi-subagents passes `PI_SUBAGENT_PARENT_SESSION` to background children, so the parent id is reachable there. Decision 9: send `tool_use_id` and the other stdin fields now, which reopens D-CF5-28 and D-BG-403. A "no" moves PG-HOOK-04 to Out of Scope. Decision 25: leave `permission_mode` out of hook stdin, or send a constant; Pi has no permission modes.
 **Spike first**: S7 is the first work: does a session started with `--continue` hold its restored entries when `session_start` fires? It gates PG-HOOK-11, which also needs a launcher flag in the harness.
 **Evidence**: PRD section 7.2; report `hooks.md`.
 **Notes**: PG-HOOK-06 depends on part (c) of PG-HOOK-03 in Phase 2: the one plugin in the sample that uses the event, `claude-security`, has a regular expression matcher. MCP prompt expansions are out of reach. The cucumber step that compares whole payloads needs a placeholder for ids and timings. PG-HOOK-11 amends D-CF5-06. `agent_id` and `agent_type` are PG-HOOK-07a in Phase 3, not part of PG-HOOK-04.
@@ -326,6 +326,7 @@ Plans:
   3. A `UserPromptExpansion` hook with the matcher `demo:deploy` blocks. The user types `/demo:deploy`, the model receives no call, and the notice shows the reason (PG-HOOK-06).
   4. A `UserPromptExpansion` hook that does not block receives `expansion_type`, `command_name` in Claude form, `command_args`, `command_source`, and `prompt`, for a typed prompt template and for a typed skill, and the expansion then runs (PG-HOOK-06).
   5. A recording `SessionStart` hook records `resume` in a session started with `--continue` or `--resume`, and `startup` in a new session (PG-HOOK-11).
+  6. In a pi-subagents child, a tool hook's `session_id`, `transcript_path` and `CLAUDE_CODE_SESSION_ID` name the session the discuss step chooses for decision 26 (the parent session, as Claude Code appears to send them, or the child's own), and `docs/hooks-compatibility.md` records the answer (carried from Phase 3 verification; BACKLOG CHILDSESSIONID-01).
 
 **Plans**: TBD
 
@@ -420,7 +421,7 @@ Plans:
 | --- | --- | --- | --- |
 | 1. Companion Floors and MCP Defaults | 11/11 | Complete    | 2026-11-12 |
 | 2. Hook Payloads, Matchers, and Stop Limit | 10/10 | Complete    | 2026-11-13 |
-| 3. Background Subagents | 5/8 | In Progress | - |
+| 3. Background Subagents | 8/8 | Complete    | 2026-11-13 |
 | 4. Skill and Workflow Install Defects | 0/0 | Not started | - |
 | 5. Stop Continuation and Hook Failures | 0/0 | Not started | - |
 | 6. Hook Inputs and Events | 0/0 | Not started | - |

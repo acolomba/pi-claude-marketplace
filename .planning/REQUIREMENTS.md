@@ -24,7 +24,7 @@
   - Design resolution accepted 2026-11-12 (D-PG2-01..09): include available-field result translation and reverse result rewriting; document missing fields and carry full execution wrappers as HOOKRESULT-01. Unsupported input rewrites run the original call with a notice; explicit denials and conflicting multi-edit file targets still block.
 - [x] **PG-HOOK-03**: A hook matcher follows Claude Code's rules: (a) an exact list with commas or pipes matches each listed tool, trims surrounding spaces and keeps internal spaces literal; (b) a matcher on `UserPromptSubmit` or `Stop` is ignored, and the group runs; (c) any other matcher is an unanchored regular expression tested against the Claude-form tool name, a pattern that does not compile drops the group, and `info` reports a regular expression group as supported. (P0; decisions 6 and 24 answered)
 - [x] **PG-HOOK-13**: A `Stop` hook can block eight times in a row before the limit applies, and a run that called a tool starts the count again. (P0)
-- [ ] **PG-HOOK-07a**: In a pi-subagents child, the plugin's `SessionStart`, `UserPromptSubmit`, `Stop`, and `SessionEnd` hooks do not run, and tool hook payloads carry `agent_type`, and `agent_id` when the child can know it. Lands with PG-AGENT-01. (P0)
+- [x] **PG-HOOK-07a**: In a pi-subagents child, the plugin's `SessionStart`, `UserPromptSubmit`, `Stop`, and `SessionEnd` hooks do not run, and tool hook payloads carry `agent_type`, and `agent_id` when the child can know it. Lands with PG-AGENT-01. (P0)
 - [ ] **PG-HOOK-02**: A `Stop` hook that blocks continues the same run, on Pi's `agent_before_settle` event. Listeners of `agent_settled` see one event for a run, however many times a `Stop` hook blocked. (P1; spike S1 ran in print mode only)
 - [ ] **PG-HOOK-04**: A hook receives `tool_use_id` on the three tool events, `duration_ms` on `PostToolUse` and `PostToolUseFailure`, `mcp_server` for MCP tools, `custom_instructions` on `PreCompact`, `model` and `session_title` on `SessionStart`, and `effort` when Pi's level is one of Claude's levels. (P1; decisions 9 and 25)
 - [ ] **PG-HOOK-06**: When a typed line names a prompt template or a skill, `UserPromptExpansion` hooks run before the expansion with Claude Code's fields, and a block stops the expansion and shows the reason. Depends on PG-HOOK-03 (c). (P1)
@@ -35,7 +35,7 @@
 
 ### Subagents
 
-- [ ] **PG-AGENT-01**: A bridged agent runs in the launch mode that pi-subagents chooses, unless the source sets `background: true` or the agent has plugin MCP tools; those two run in the background. The warning for agents with MCP tools no longer says that Claude Code runs them in the foreground. Lands with PG-HOOK-07a. (P0; decision 1 answered)
+- [x] **PG-AGENT-01**: A bridged agent runs in the launch mode that pi-subagents chooses, unless the source sets `background: true` or the agent has plugin MCP tools; those two run in the background. The warning for agents with MCP tools no longer says that Claude Code runs them in the foreground. Lands with PG-HOOK-07a. (P0; decision 1 answered)
 - [x] **PG-AGENT-02**: The declared pi-subagents floor is 0.87.0 in `package.json`, the README, and `scripts/install-test-peers.mjs`, and the documentation no longer describes the two fixed pi-subagents bugs as open. Lands with PG-AGENT-07b. (P0; decision 2 answered)
 - [x] **PG-AGENT-07b**: A model ID that `--map-model` writes has no provider prefix, so the agent runs on the session's provider when that provider has the model. (P0)
 - [ ] **PG-AGENT-07a**: A source agent with `model: inherit` runs on the parent's model, with or without `--map-model`. (P1)
@@ -175,7 +175,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PG-HOOK-01   | Phase 2  | Complete |
 | PG-HOOK-03   | Phase 2  | Complete |
 | PG-HOOK-13   | Phase 2  | Complete |
-| PG-HOOK-07a  | Phase 3  | Pending |
+| PG-HOOK-07a  | Phase 3  | Complete |
 | PG-HOOK-02   | Phase 5  | Pending |
 | PG-HOOK-04   | Phase 6  | Pending |
 | PG-HOOK-06   | Phase 6  | Pending |
@@ -183,7 +183,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PG-HOOK-14   | Phase 5  | Pending |
 | PG-HOOK-21   | Phase 5  | Pending |
 | PG-HOOK-11   | Phase 6  | Pending |
-| PG-AGENT-01  | Phase 3  | Pending |
+| PG-AGENT-01  | Phase 3  | Complete |
 | PG-AGENT-02  | Phase 1  | Complete |
 | PG-AGENT-07b | Phase 1  | Complete |
 | PG-AGENT-07a | Phase 7  | Pending |

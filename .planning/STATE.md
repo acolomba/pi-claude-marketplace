@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: parity-gaps
 milestone_name: Claude Code Parity Gaps and Defects
-current_phase: 03
-current_phase_name: Background Subagents
-status: executing
-stopped_at: Phase 03 all waves gated; phase verification next
-last_updated: "2026-11-13T20:14:42.363Z"
+current_phase: 4
+current_phase_name: Skill and Workflow Install Defects
+status: ready_to_discuss
+stopped_at: Phase 03 complete; Phase 4 discuss next
+last_updated: "2026-11-14T01:03:37.300Z"
 last_activity: 2026-11-13
-last_activity_desc: Phase 03 execution resumed (wave continue)
-state_head: 73358164c3fcbdd99d841ab86d0f405a2537d863
+last_activity_desc: Phase 03 complete, transitioned to Phase 4
+state_head: a98ae4aea3af1aaea49e59643c32f579b6e3b2c8
 progress:
   total_phases: 11
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 29
   completed_plans: 29
-  percent: 18
+  percent: 27
 ---
 
 # Project State
@@ -31,12 +31,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 03 (Background Subagents) — EXECUTING
-Plan: 8 of 8
-Status: Executing Phase 03
-Last activity: 2026-11-13 — Phase 03 execution resumed (wave continue)
+Phase: 4 — Skill and Workflow Install Defects
+Plan: not planned
+Status: Ready to discuss Phase 4
+Last activity: 2026-11-13 — Phase 03 complete, transitioned to Phase 4
 
-Progress: [██░░░░░░░░] 18%
+Progress: [███░░░░░░░] 27%
 
 
 ### parity-gaps Phase 3 execution
@@ -1132,7 +1132,7 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 ## Session Continuity
 
 Last session: 2026-11-13T14:18:54.541735+00:00
-Stopped at: Phase 02 verified complete; Phase 03 discussion next
+Stopped at: Phase 03 complete; Phase 4 discuss next
 Resume file: None
 
 ### Phase 2 completion-helper notes
