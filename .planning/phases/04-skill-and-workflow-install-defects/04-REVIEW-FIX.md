@@ -231,3 +231,13 @@ So the strict `[".", "skills"]` matches upstream's `skillsPath: skills/` with `s
 _Fixed: 2026-11-14T06:24:43Z_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 1_
+
+## Iteration 3 (orchestrator)
+
+The final review iteration left one Warning and two Info items. The review loop is capped at three iterations, so the orchestrator fixed the Warning directly and left the Info items as maintainer questions.
+
+| ID | Outcome | Commit |
+| --- | --- | --- |
+| WR-06 | fixed: `shared/redact-absolute-paths.ts` excludes `.` before an absolute-path match, so `../outside/x`, `./skills/missing` and `skills/../../x/y` print as written. Three owner cases and a `../outside/skills` row in the install Outline; the row fails with the old lookbehind and passes with the new one. | `71df5c78` |
+| IN-06 | skipped, pending maintainer review: `missing` and `file` paths print plugin-relative and normalized. With WR-06 fixed, the as-written form is now possible. | none |
+| IN-07 | skipped, pending maintainer review: an absolute listed path reduces to its basename (NFR-9), so the note can read like the `skills/` folder. | none |

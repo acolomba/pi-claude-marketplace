@@ -1,39 +1,117 @@
 ---
 phase: 04-skill-and-workflow-install-defects
-reviewed: 2026-11-14T13:30:00Z
+reviewed: 2026-11-14T15:00:00Z
 depth: standard
-iteration: 2
-reviewed_range: 03f6b319..1729cfc9
+iteration: 3
+reviewed_range: 1729cfc9..e50b3afd
+iteration_2_range: 03f6b319..1729cfc9
 iteration_1_range: e739fcfa..852b033f
 files_reviewed: 17
 files_reviewed_list:
-  - extensions/pi-claude-marketplace/bridges/agents/convert.ts
-  - extensions/pi-claude-marketplace/bridges/agents/index.ts
   - extensions/pi-claude-marketplace/domain/component-paths.ts
+  - extensions/pi-claude-marketplace/domain/plugin-resolver.ts
+  - extensions/pi-claude-marketplace/domain/resolver-types.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/discover-names.ts
   - extensions/pi-claude-marketplace/orchestrators/plugin/info.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts
+  - extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts
   - features/skill/root-source-entries.feature
   - features/workflow/agent-restrictions.feature
-  - test/bridges/agents/convert.test.ts
-  - test/bridges/agents/index.test.ts
   - test/domain/component-paths.test.ts
+  - test/domain/plugin-resolver.test.ts
   - test/orchestrators/plugin/discover-names.test.ts
   - test/orchestrators/plugin/info.test.ts
   - test/orchestrators/plugin/install-outcome.test.ts
   - test/orchestrators/plugin/update-swap.test.ts
   - CHANGELOG.md
   - docs/workflows-compatibility.md
-  - docs/research/parity-gaps/skills-commands.md
 findings:
   critical: 0
-  warning: 2
-  info: 1
+  warning: 1
+  info: 2
   total: 3
   necessity: 0
 status: issues_found
 ---
 
 # Phase 4: Code Review Report
+
+## Iteration 3
+
+**Reviewed:** 2026-11-14T15:00:00Z
+**Depth:** standard
+**Iteration:** 3 (final)
+**Range:** `1729cfc9..e50b3afd` (f273f776 and 1ea9b3b9 for WR-04, 91b0c917 for WR-05)
+**Files Reviewed:** 17
+**Findings:** critical 0, warning 1, info 2, total 3, necessity 0
+**Status:** issues_found
+
+### Summary
+
+This iteration reviews the two fix commits for WR-04 and WR-05 and the one-character table alignment. I read every changed production function in full: `skillFileHint`, `refusedListedSkillPathMessage`, `refusedListedSkillPathMessages`, `classifyListedPaths`, and `collectRootSourceSkillPaths` (`component-paths.ts`), the `materializableFields` spread (`plugin-resolver.ts`), the `RefusedListedSkillPath` type (`resolver-types.ts`), the two discovery-warning spread sites (`install-outcome.ts:1251-1255`, `update-swap.ts:1710-1715`), `composeResolvedComponents` and its four callers (`info.ts`), and the note builder (`discover-names.ts`). I also read the callees that decide what the user sees: `notifyStagingHalves` (`staging-diagnostics.ts:126`, which redacts every discovery warning), `redactAbsolutePaths` (`shared/redact-absolute-paths.ts`), `resolveContainedComponentPath`, `validateComponentPath`, and `readDirEntriesTolerant`. I checked the wording against the Claude Code 2.1.323 binary through `strings`. I checked the engine claims against `@quintinshaw/pi-dynamic-workflows` 3.15.0 in `node_modules/.cache/optional-peers` (`src/agent.ts`, `src/pi-extension.ts`, `src/workflow-settings.ts`, `README.md`). I probed `redactAbsolutePaths` with a short `node -e` run on the new message shapes. I did not run `npm run check`, did not edit source, and did not commit. I read the necessity rubric. No finding meets its evidence rule.
+
+Answers to the questions:
+
+1. **WR-04 wording: matches 2.1.323.** The `/plugin` errors view renderer (`Xy`) prints `` `${component} path escapes plugin directory: ${path}` ``, `` `${component} path not found: ${path}` ``, and, for `component-load-failed`, `` `Failed to load ${component} from ${path}: ${reason}` ``. The loader `sD` builds the reason `path is a file; skills entries must be directories containing SKILL.md`, and it adds ` — point to the plugin root '.' instead` or ` — point to the parent directory '<dir>' instead` when the basename, lowercased, is `skill.md`. The fixer's three messages and both hint arms are the same text. Only the path forms differ (IN-06).
+2. **WR-04 placement: correct.** Upstream pushes these errors into the plugin's error list, and the plugin still loads. Here, install (`install-outcome.ts:1253`) and update (`update-swap.ts:1712`) add them to the discovery warnings. The per-plugin diagnostic prints them as `warning` rows, and the cascade row stays `info`. Enable, reinstall, and apply moves reach the same two sites. `info` puts them first in `notes` (`info.ts:1170-1176`) for the installable, partially-available, and installed rows.
+3. **The plugin stays installed.** `collectRootSourceSkillPaths` stores `refused` and leaves it out of its dirty return value, so `decideResolution` is not changed.
+4. **T-04-01 still holds.** `classifyListedPaths` calls `statKind` only for `validated.ok`. A traversal is recorded from `listedRaws[index]` and never statted. The containment check itself (`assertPathInside`) is unchanged and runs before any read.
+5. **NFR-7 is respected.** The field is on `MaterializableFields` only. `composeResolvedComponents` takes it as an optional member, and the `unavailable` lenient arm (`info.ts:2363-2371`) does not build it, so no consumer reads it from an arm that cannot carry it.
+6. **WR-05 note: true in every Pi configuration.** Engine 3.15.0 sets `childCodemode = !this.sessionOptions.resourceLoader && this.providerMiddlewareExtensions.includes("builtin:codemode")` (`src/agent.ts:1238-1239`). It filters Pi's built-ins only in that arm (`:1247-1263`). The setting comes from the global `~/.pi/workflows/settings.json` or the project `<cwd>/.pi/workflows/settings.json` (`src/workflow-settings.ts`, `src/pi-extension.ts:102`). The Pi extension entry point passes no `resourceLoader`, so inside Pi the only case that keeps the restriction is the one the note names. "may use" covers Pi's `defaultTools` and the engine's `excludeSubagentTools`. The setting name and the value `builtin:codemode` are named exactly, and they cannot be confused with Pi's own `codemode` tool. The docs row, the upstream draft, and the CHANGELOG say the same.
+7. **Regression, coverage, and fallow: no blocking risk.** Every new branch has an owner case: the three causes and both hint arms (`test/domain/component-paths.test.ts:1063-1118`), `file` against `missing` (`:1248-1249`), the traversal and absolute arms (`:1261-1283`), the `undefined` input, both arms of the resolver spread, and both spread sites. The new tests use `createHermeticEnvironment` or `withHermeticHome`. The new import `component-paths.ts` → `workflow-script.ts` stays inside `domain/`. `workflow-script.ts` imports only `name.ts` and `shared/errors.ts`, so it forms no cycle. Each new export has a consumer. The three-line spread at the two sites is short enough that the fixer's `npm run fallow` run (exit 0) covers it.
+
+Fixer's open points:
+
+- **Path forms.** For `missing`, upstream prints the resolved absolute path. NFR-9 would reduce that to its basename here, so the plugin-relative form tells the user more. For `file`, upstream prints the path as written (`./notes.md`, hint `'./skills/a'`), and the fix prints the normalized path (`notes.md`, hint `'skills/a'`). This is a small difference, and the fixer records it as a decision for the maintainer to confirm (IN-06).
+- **`../outside/x` printing as `..x`.** This is a real defect in the new warning, not only a pre-existing note problem. See WR-06.
+
+### Narrative Findings (AI reviewer)
+
+### Warnings
+
+#### WR-06: The new traversal warning prints a different path for any traversal with more than one segment
+
+**File:** `extensions/pi-claude-marketplace/domain/component-paths.ts:95-100` (the message), rendered through `extensions/pi-claude-marketplace/orchestrators/plugin/staging-diagnostics.ts:126` and `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts:1171-1173`; root cause `extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts:71-72`
+**Issue:** WR-04 exists to tell the user which listed path does not load. The warning puts the traversal in as written. But both surfaces then pass the line through `redactAbsolutePaths`, and the last regex there, `(?<![\w:/\\])(?:…|\/)[\w./\\~-]+[\\/][\w./\\~-]+`, does not exclude `.` from its lookbehind. So the `/` after `..` starts an "absolute path", and the regex reduces it to its basename. Measured with `node -e` on the current tree:
+
+| Listed path | Printed at install and `info` |
+| --- | --- |
+| `../outside` | `skills path escapes plugin directory: ../outside` (correct) |
+| `../outside/x` | `skills path escapes plugin directory: ..x` |
+| `../../x` | `skills path escapes plugin directory: ..x` |
+| `skills/../../x/y` | `skills path escapes plugin directory: skills/..y` |
+
+Claude Code prints each of these as written. No decision licenses the change: NFR-9 covers absolute paths, and these paths are relative. The printed `..x` names a path that the plugin does not list, so the warning is false for the most likely real form of the mistake (`../<sibling>/skills`). The scenario Outline (`features/skill/root-source-entries.feature:246-247`), the update scenario, and the two `info` scenarios use only the one-segment `../outside`, so they do not catch it. The fixer found the cause and also noted that the same defect affects the older `escapes plugin root: "../a/b"` notes. That does not make the new text correct.
+**Fix:** Exclude `.` from the lookbehind, so that a separator after a dot never starts an absolute path:
+```ts
+const absolutePath =
+  /(?<![\w:/\\.])(?:[A-Za-z]:[\\/]|\\\\(?:\?\\)?|\/)[\w./\\~-]+[\\/][\w./\\~-]+/g;
+```
+No case in `test/shared/redact-absolute-paths.test.ts` has a dot directly before a separator, so the change should not break an existing case. Add owner cases for `../a/b`, `./a/b`, and `skills/../../x/y`. Those cases must keep their text, and an absolute path after a space must still be reduced. Add a `../outside/skills` row to the install Outline. With this change, `missing` and `file` can also print as written (IN-06), if the maintainer wants that. If changing the shared redaction is out of scope for this phase, record the defect as a BACKLOG item and as a known limit in the D-PG4-01 parent line. Do not leave it unrecorded.
+
+### Info
+
+#### IN-06: `missing` and `file` paths print plugin-relative and normalized, not in upstream's form
+
+**File:** `extensions/pi-claude-marketplace/domain/component-paths.ts:619-623`
+**Issue:** Upstream prints a missing path as the resolved absolute path (`Ce`) and a file path as written (`ve`), and it takes the hint's parent from the written path. The fix prints `validated.relative` for both: `./notes.md` → `notes.md`, and the hint names `'skills/a'` for `./skills/a/SKILL.md` where upstream names `'./skills/a'`. NFR-9 explains the `missing` form. For `file`, the only reason is the redaction defect in WR-06.
+**Fix:** Keep the current form as the fixer's pending decision 1. Or, after WR-06, print the `file` path as written. Either way, record the form in the D-PG4-01 parent line.
+
+#### IN-07: An absolute listed path prints as `skills path escapes plugin directory: skills`, which reads like the conventional folder escapes
+
+**File:** `extensions/pi-claude-marketplace/domain/component-paths.ts:97`; pinned by `test/orchestrators/plugin/info.test.ts:2196`
+**Issue:** NFR-9 reduces `/home/u/outside/skills` to its basename `skills`. That is correct under the project rule, but the result names the conventional folder that the plugin does load. The older `must be relative (got absolute "skills")` note has the same shape.
+**Fix:** A wording question for the maintainer. One option is to keep the cause visible, for example `skills path escapes plugin directory: skills (absolute path)`. Another is to accept the reduced form as it is.
+
+### Iteration-2 findings, status after the fixes
+
+| ID | Status | Note |
+| --- | --- | --- |
+| WR-04 | Fixed, with a residual | The wording and placement match 2.1.323, the plugin stays installed, and T-04-01 and NFR-7 hold. Multi-segment traversals print the wrong path (WR-06). |
+| WR-05 | Fixed | The note is true in every Pi configuration and names `providerMiddlewareExtensions` and `builtin:codemode` exactly. The D-PG4-12 wording is still pending maintainer review. |
+| IN-05 | Open (maintainer question) | Not changed, as instructed. It does not block. |
+
+---
 
 ## Iteration 2
 
@@ -214,6 +292,6 @@ function containedRelativePath(declared: string): string | undefined {
 
 ---
 
-_Reviewed: 2026-11-14T13:30:00Z (iteration 2); 2026-11-14T12:00:00Z (iteration 1)_
+_Reviewed: 2026-11-14T15:00:00Z (iteration 3); 2026-11-14T13:30:00Z (iteration 2); 2026-11-14T12:00:00Z (iteration 1)_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
