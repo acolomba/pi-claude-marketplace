@@ -60,7 +60,7 @@ last_mapped_at: 2026-10-05
 **Critical:**
 - `isomorphic-git` `^1.41.8` - pure-JS git implementation used for marketplace clone/fetch/pull (no dependency on a `git` binary on PATH); wrapped in `extensions/pi-claude-marketplace/platform/git.ts`, paired with `isomorphic-git/http/node` as its HTTP transport (`platform/git.ts:4`)
 - `typebox` `^1.1.38` (also a peer dep `*`) - runtime schema validation and discriminated-union modeling (e.g. `installable: true | false`)
-- `write-file-atomic` `^8.0.0` - atomic JSON writes for `state.json`, `mcp.json`, `agents-index.json`
+- `write-file-atomic` `^8.0.0` - atomic JSON writes for `state.json`, `mcp.json`, `agents-index.json` (`atomicWriteJson`), and atomic text writes for saved hook output (`atomicWriteText`), both in `shared/atomic-json.ts`
 - `proper-lockfile` `^4.1.2` - cross-process file locking for `withStateGuard` concurrent-write detection
 
 **Infrastructure:**
