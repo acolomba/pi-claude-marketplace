@@ -32,11 +32,15 @@ Feature: MCP server configuration
             "directTools": "search",
             "toolPrefix": "mcp",
             "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "openUi": false,
             "_piClaudeMarketplace": {
               "plugin": "demo",
               "marketplace": "fixtures",
               "defaultFields": {
-                "requestTimeoutMs": 1800000
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive",
+                "openUi": false
               }
             }
           },
@@ -45,11 +49,107 @@ Feature: MCP server configuration
             "directTools": "search",
             "toolPrefix": "mcp",
             "requestTimeoutMs": 300000,
+            "openUi": false,
             "_piClaudeMarketplace": {
               "plugin": "demo",
               "marketplace": "fixtures",
               "defaultFields": {
-                "requestTimeoutMs": 300000
+                "requestTimeoutMs": 300000,
+                "openUi": false
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @adapter-only
+  Scenario: An install writes the lifecycle that keeps a stdio plugin server for the session, no lifecycle for a remote server, and openUi false for both (PG-MCP-06, PG-SEC-03, D-PG9-01, D-PG9-02, D-PG9-07)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"plain": {"command": "pi-features-absent-mcp-server"}, "typed": {"type": "stdio", "command": "pi-features-absent-mcp-server"}, "events": {"type": "sse", "url": "https://example.invalid/sse"}, "stream": {"type": "streamable-http", "url": "https://example.invalid/mcp"}}}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    When the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_plain_": {
+            "command": "pi-features-absent-mcp-server",
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "openUi": false,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive",
+                "openUi": false
+              }
+            }
+          },
+          "plugin_demo_typed_": {
+            "command": "pi-features-absent-mcp-server",
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "openUi": false,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive",
+                "openUi": false
+              }
+            }
+          },
+          "plugin_demo_events_": {
+            "url": "https://example.invalid/sse",
+            "httpTransport": "sse",
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 300000,
+            "openUi": false,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 300000,
+                "openUi": false
+              }
+            }
+          },
+          "plugin_demo_stream_": {
+            "url": "https://example.invalid/mcp",
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 300000,
+            "openUi": false,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 300000,
+                "openUi": false
               }
             }
           }

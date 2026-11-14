@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  adapterEntryDefaults,
   checkClaudeShape,
   classifyMcpServer,
   defaultRequestTimeoutMs,
@@ -55,6 +56,82 @@ describe("defaultRequestTimeoutMs", () => {
       assert.strictEqual(requestTimeoutMs, expectedMilliseconds);
     });
   }
+});
+
+describe("adapterEntryDefaults", () => {
+  const stdioDefaults = [
+    ["requestTimeoutMs", 1_800_000],
+    ["lifecycle", "lazy-keep-alive"],
+    ["openUi", false],
+  ];
+  const remoteDefaults = [
+    ["requestTimeoutMs", 300_000],
+    ["openUi", false],
+  ];
+  for (const { title, server, defaults } of [
+    {
+      title: "D-PG9-01 / D-PG9-07: a server without a type stays for the session and gets no UI",
+      server: {},
+      defaults: stdioDefaults,
+    },
+    {
+      title: "D-PG9-01 / D-PG9-07: a stdio server stays for the session and gets no UI",
+      server: { type: "stdio" },
+      defaults: stdioDefaults,
+    },
+    {
+      title: "D-PG9-02 / D-PG9-07: an sse server keeps the adapter's lifecycle and gets no UI",
+      server: { type: "sse" },
+      defaults: remoteDefaults,
+    },
+    {
+      title: "D-PG9-02 / D-PG9-07: an http server keeps the adapter's lifecycle and gets no UI",
+      server: { type: "http" },
+      defaults: remoteDefaults,
+    },
+    {
+      title:
+        "D-PG9-02 / D-PG9-07: a streamable-http server keeps the adapter's lifecycle and gets no UI",
+      server: { type: "streamable-http" },
+      defaults: remoteDefaults,
+    },
+    { title: "D-PG9-02: a ws server gets no default", server: { type: "ws" }, defaults: [] },
+    { title: "D-PG9-02: an unknown type gets no default", server: { type: "ftp" }, defaults: [] },
+  ]) {
+    test(title, () => {
+      // arrange
+      const expectedDefaults = defaults;
+
+      // act
+      const entryDefaults = adapterEntryDefaults(server);
+
+      // assert
+      assert.deepStrictEqual(Object.entries(entryDefaults), expectedDefaults);
+    });
+  }
+
+  test("D-PG9-01 / D-PG9-07: the closed table writes no lifecycle and no openUi, even when the plugin declares them", () => {
+    // arrange
+    const servers = [
+      { command: "plugin-command", lifecycle: "eager", openUi: true },
+      { type: "http", url: "https://mcp.example.com/mcp", lifecycle: "eager", openUi: true },
+    ];
+
+    // act
+    const translated = servers.map((server) => translateMcpServer(server, undefined));
+
+    // assert
+    assert.deepStrictEqual(
+      translated.map((entry) => [
+        Object.hasOwn(entry, "lifecycle"),
+        Object.hasOwn(entry, "openUi"),
+      ]),
+      [
+        [false, false],
+        [false, false],
+      ],
+    );
+  });
 });
 
 const ROWS: readonly TranslationRow[] = [

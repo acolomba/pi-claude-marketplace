@@ -10,13 +10,16 @@
 // `mcp__plugin_<plugin>_<server>__<tool>` whatever the user's global
 // `settings.toolPrefix` says (ANAME-01). The user's own fields carry over from
 // the entry it replaces (AFILE-06), except a carried field the plugin's entry
-// sets, which belongs to the plugin (ANAME-07). A default follows the user's
-// value (D-PG1-11); the MC-5 marker goes last. It names the fields the plugin
-// set and the defaults this extension wrote, and may keep the user override
-// the entry replaced, verbatim and inert (AFILE-06). Every change to entry
-// content belongs in this module or the table.
+// sets, which belongs to the plugin (ANAME-07). This extension's defaults
+// (`requestTimeoutMs`, `lifecycle`, `openUi`) fill only what neither the plugin
+// nor the user set (D-PG1-11, D-PG9-01, D-PG9-07); the MC-5 marker goes last.
+// It names the fields the plugin set and the defaults this extension wrote,
+// which a restage computes again and never carries (D-PG1-13, D-PG9-03), and
+// may keep the user override the entry replaced, verbatim and inert
+// (AFILE-06). Every change to entry content belongs in this module or the
+// table.
 
-import { defaultRequestTimeoutMs, translateMcpServer } from "../../domain/mcp-server-features.ts";
+import { adapterEntryDefaults, translateMcpServer } from "../../domain/mcp-server-features.ts";
 import { ADAPTER_EMPTY_ENV } from "../../shared/session-env.ts";
 
 import {
@@ -316,30 +319,34 @@ function keptOverrideFor(
   return isPlainObject(override) ? override : undefined;
 }
 
-/** D-PG1-11: fill only a timeout neither the plugin nor the user supplied. */
+/**
+ * D-PG1-11 / D-PG9-01 / D-PG9-07: fill only a default neither the plugin's
+ * translated entry nor the user's carried fields hold, in the order of the
+ * defaults table.
+ */
 function defaultFieldsFor(
   entry: unknown,
   translated: Readonly<Record<string, unknown>>,
   carried: Readonly<Record<string, unknown>>,
-): Readonly<Record<string, number>> {
-  if (
-    !isPlainObject(entry) ||
-    Object.hasOwn(translated, "requestTimeoutMs") ||
-    Object.hasOwn(carried, "requestTimeoutMs")
-  ) {
+): Readonly<Record<string, MarkerDefaultValue>> {
+  if (!isPlainObject(entry)) {
     return {};
   }
 
-  const timeout = defaultRequestTimeoutMs(entry);
-  return timeout === undefined ? {} : { requestTimeoutMs: timeout };
+  return Object.fromEntries(
+    Object.entries(adapterEntryDefaults(entry)).filter(
+      ([field]) => !Object.hasOwn(translated, field) && !Object.hasOwn(carried, field),
+    ),
+  );
 }
 
 /**
  * Builds the entry for each plugin server: the translated and expanded plugin
  * entry with its owned fields (ANAME-04, ANAME-06, ANAME-07), then the fields
- * carried from the entry it replaces in carried-set order, then defaults the
- * extension owns, then the MC-5 marker (D-PG1-11). The marker names the fields
- * the plugin sets and the defaults to recompute (D-PG1-13), and keeps the
+ * carried from the entry it replaces in carried-set order, then the defaults
+ * the extension owns (D-PG1-11, D-PG9-01, D-PG9-07), then the MC-5 marker. The
+ * marker names the fields the plugin sets and the defaults to recompute, never
+ * carry (D-PG1-13, D-PG9-03), and keeps the
  * server's user override when there is one. A carried field the plugin sets
  * takes the plugin's value, so a timeout change in a later version applies
  * (ANAME-07). Carried fields come from `previous` and the override its marker

@@ -4,9 +4,11 @@
 // the MCP bridge share. `translateMcpServer` maps the fields Claude reads to
 // their pi-mcp-adapter `ServerEntry` equivalents. A field the table does not
 // name never reaches `mcp-adapter.json`, so a plugin cannot set an adapter-only
-// power Claude never grants, such as `auth`, `approveTools` or `lifecycle`
-// (ANAME-05, ANAME-07). The table writes `auth: "oauth"` itself where Claude
-// keeps OAuth beside `headers` (D-08-04); a plugin's own `auth` is dropped.
+// power Claude never grants, such as `auth`, `approveTools`, `lifecycle` or
+// `openUi` (ANAME-05, ANAME-07). The table writes `auth: "oauth"` itself where
+// Claude keeps OAuth beside `headers` (D-08-04); a plugin's own `auth` is
+// dropped. `adapterEntryDefaults` holds this extension's own entry defaults,
+// which the bridge writes after the user's fields, never through the table.
 //
 // `checkClaudeShape` is the one Claude-shape check every MCP implementation
 // shares (MSEL-01): it decides malformed and hands back the typed server.
@@ -63,6 +65,26 @@ const STDIO_IDLE_TIMEOUT_MS = 1_800_000;
 const REMOTE_IDLE_TIMEOUT_MS = 300_000;
 const MAX_PORT = 65_535;
 
+/** D-PG9-02: no `type` or `"stdio"` is stdio; `sse`, `http`, `streamable-http` are remote. */
+function transportKind(server: Readonly<Record<string, unknown>>): "stdio" | "remote" | undefined {
+  switch (server.type) {
+    case undefined:
+    case "stdio":
+      return "stdio";
+    case "sse":
+    case "http":
+    case "streamable-http":
+      return "remote";
+    default:
+      return undefined;
+  }
+}
+
+const ADAPTER_ENTRY_DEFAULTS = {
+  stdio: { requestTimeoutMs: STDIO_IDLE_TIMEOUT_MS, lifecycle: "lazy-keep-alive", openUi: false },
+  remote: { requestTimeoutMs: REMOTE_IDLE_TIMEOUT_MS, openUi: false },
+} as const;
+
 /**
  * D-PG1-11: Claude Code 2.1.322 stops a call that sends no response and no
  * progress for 30 minutes on a stdio server and 5 minutes on a remote server.
@@ -72,17 +94,26 @@ const MAX_PORT = 65_535;
 export function defaultRequestTimeoutMs(
   server: Readonly<Record<string, unknown>>,
 ): number | undefined {
-  switch (server.type) {
-    case undefined:
-    case "stdio":
-      return STDIO_IDLE_TIMEOUT_MS;
-    case "sse":
-    case "http":
-    case "streamable-http":
-      return REMOTE_IDLE_TIMEOUT_MS;
-    default:
-      return undefined;
-  }
+  const kind = transportKind(server);
+  return kind === undefined ? undefined : ADAPTER_ENTRY_DEFAULTS[kind].requestTimeoutMs;
+}
+
+/**
+ * The defaults of a pi-mcp-adapter entry, in the order the entry writes them:
+ * the idle window as `requestTimeoutMs` (D-PG1-11); for a stdio server,
+ * `lifecycle: "lazy-keep-alive"`, because Claude Code connects a stdio plugin
+ * server at session start and keeps it, and pi-mcp-adapter 7.0.1 keeps a
+ * started `lazy-keep-alive` server for the session (D-PG9-01); a remote server
+ * keeps the adapter's `lazy` (D-PG9-02); and `openUi: false`, because Claude
+ * Code 2.1.323 declares the MCP Apps UI extension only when a host application
+ * sets `CLAUDE_CODE_MCP_APPS_HOST`, and pi-mcp-adapter 7.0.1 declares it unless
+ * `openUi` is `false` (D-PG9-07). Any other type gets none.
+ */
+export function adapterEntryDefaults(
+  server: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, number | string | boolean>> {
+  const kind = transportKind(server);
+  return kind === undefined ? {} : ADAPTER_ENTRY_DEFAULTS[kind];
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
