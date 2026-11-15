@@ -22,6 +22,7 @@ import {
   builtinRegistrationStep,
   resyncBuiltinRegistrations,
 } from "./orchestrators/mcp/builtin-registration-step.ts";
+import { recordedMcpServerNames } from "./orchestrators/mcp/recorded-servers.ts";
 import { createMcpSessionMaterializer } from "./orchestrators/mcp/session-materialize.ts";
 import { createUpdateOperations } from "./orchestrators/plugin/operations.ts";
 import { composePackageInstallAbortScope } from "./orchestrators/plugin/package-install.ts";
@@ -107,7 +108,13 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     builtin: createBuiltinMcpStatusReader(pi),
   };
   const pluginUpdateOperations = createUpdateOperations(hooksRouting, completionCache);
-  const hooksHydration = createHooksHydration(hooksRuntime, { loadState, readHooksJson });
+  // D-PG6-07 / MREC-02: the hooks bridge names a record's MCP servers through
+  // the one reader of them, so a record that predates the field is re-resolved.
+  const hooksHydration = createHooksHydration(hooksRuntime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: recordedMcpServerNames,
+  });
   // RECON-01..05: one reconcile apply operation and one load reconcile step
   // per extension load, both bound to the production state reader.
   // `/claude:plugin apply` (APL-01) drives the apply operation; the

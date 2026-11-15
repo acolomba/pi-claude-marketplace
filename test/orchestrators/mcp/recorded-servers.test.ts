@@ -8,6 +8,7 @@ import { mock, verify, when } from "strong-mock";
 import {
   legacyServersSourceFor,
   readLegacyServers,
+  recordedMcpServerNames,
   recordedMcpServers,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/mcp/recorded-servers.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -60,6 +61,8 @@ interface MarketplaceFixture {
   readonly root: string;
   readonly marketplaceRoot: string;
   readonly locations: ScopedLocations;
+  /** The marketplace record `mp`, which lists `record` as `p1`. */
+  readonly marketplaceFor: (record: PluginInstallRecord) => ExtensionState["marketplaces"][string];
   /** The servers source of `record`, which the marketplace record `mp` lists as `p1`. */
   readonly sourceFor: (record: PluginInstallRecord) => LegacyServersSource;
 }
@@ -96,24 +99,21 @@ async function marketplaceListing(
     });
   }
 
+  const marketplaceFor = (record: PluginInstallRecord): ExtensionState["marketplaces"][string] => ({
+    name: "mp",
+    scope: "user",
+    addedFromCwd: environment.cwd,
+    manifestPath,
+    marketplaceRoot,
+    source: cloned === undefined ? { kind: "path", raw: marketplaceRoot } : GITHUB_MARKETPLACE,
+    plugins: { p1: record },
+  });
   return {
     root: environment.root,
     marketplaceRoot,
     locations,
-    sourceFor: (record) =>
-      legacyServersSourceFor(
-        locations,
-        {
-          name: "mp",
-          scope: "user",
-          manifestPath,
-          marketplaceRoot,
-          source:
-            cloned === undefined ? { kind: "path", raw: marketplaceRoot } : GITHUB_MARKETPLACE,
-          plugins: { p1: record },
-        },
-        "p1",
-      ),
+    marketplaceFor,
+    sourceFor: (record) => legacyServersSourceFor(locations, marketplaceFor(record), "p1"),
   };
 }
 
@@ -432,6 +432,69 @@ describe("recordedMcpServers", () => {
       "[mcp] recorded MCP servers unreadable: cannot read the MCP servers of p1@mp: uncontained",
     ]);
     verify(reader);
+  });
+});
+
+describe("recordedMcpServerNames", () => {
+  test("D-PG6-07: names the stored servers of a contained record in their order", async (t) => {
+    // arrange
+    const marketplace = await marketplaceListing(t, undefined);
+    const record: PluginInstallRecord = {
+      ...installRecord(path.join(marketplace.marketplaceRoot, "plugin")),
+      mcpServerConfigs: [
+        { name: "b", config: { command: "node" } },
+        { name: "a", config: { type: "http", url: "https://mcp.example.com" } },
+      ],
+    };
+
+    // act
+    const names = await recordedMcpServerNames(
+      marketplace.locations,
+      marketplace.marketplaceFor(record),
+      "p1",
+    );
+
+    // assert
+    assert.deepStrictEqual(names, ["b", "a"]);
+  });
+
+  test("D-PG6-07 / MREC-02: names the servers it re-resolves for a record that predates the field", async (t) => {
+    // arrange
+    const marketplace = await marketplaceListing(t, [{ name: "p1", source: "./plugin" }]);
+    const pluginRoot = path.join(marketplace.marketplaceRoot, "plugin");
+    await writeJson(path.join(pluginRoot, ".mcp.json"), {
+      mcpServers: { beta: { command: "beta" }, alpha: { command: "alpha" } },
+    });
+
+    // act
+    const names = await recordedMcpServerNames(
+      marketplace.locations,
+      marketplace.marketplaceFor(installRecord(pluginRoot)),
+      "p1",
+    );
+
+    // assert
+    assert.deepStrictEqual(names, ["beta", "alpha"]);
+  });
+
+  test("UF-1 / NFR-10: names no server of a record whose plugin root is outside its marketplace", async (t) => {
+    // arrange
+    const marketplace = await marketplaceListing(t, undefined);
+    captureDebugLog(t);
+    const record: PluginInstallRecord = {
+      ...installRecord(path.join(marketplace.root, "outside", "plugin")),
+      mcpServerConfigs: [{ name: "a", config: { command: "node" } }],
+    };
+
+    // act
+    const names = await recordedMcpServerNames(
+      marketplace.locations,
+      marketplace.marketplaceFor(record),
+      "p1",
+    );
+
+    // assert
+    assert.deepStrictEqual(names, []);
   });
 });
 

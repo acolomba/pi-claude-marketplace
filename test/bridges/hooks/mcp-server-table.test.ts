@@ -5,7 +5,9 @@ import {
   findMcpServer,
   mcpServerEntries,
   type McpServerEntry,
+  type McpServerNamesReader,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/mcp-server-table.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 import type { McpToolIdentity } from "../../../extensions/pi-claude-marketplace/domain/components/hooks/builtin-mcp-tool-names.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -64,24 +66,67 @@ function adapterTool(piName: string, claudeName?: string): McpToolIdentity {
   return { piName, builtinServer: undefined, ...(claudeName === undefined ? {} : { claudeName }) };
 }
 
+interface NamesRead {
+  readonly scope: string;
+  readonly marketplace: string;
+  readonly plugin: string;
+}
+
+/** A names reader that answers `names` for every record and records each read. */
+function namesReader(names: readonly string[]): {
+  readonly reads: NamesRead[];
+  readonly read: McpServerNamesReader;
+} {
+  const reads: NamesRead[] = [];
+  return {
+    reads,
+    read(locations, marketplace, plugin) {
+      reads.push({ scope: locations.scope, marketplace: marketplace.name, plugin });
+      return Promise.resolve(names);
+    },
+  };
+}
+
+const USER_LOCATIONS = locationsFor("user", "/workspace");
+
 describe("mcpServerEntries", () => {
-  test("names each server of an enabled record under both keys (D-PG6-07)", () => {
+  test("names each server the reader gives for an enabled record under both keys (D-PG6-07)", async () => {
     // arrange
-    const state = stateOf(scopeState("user", { demo: storedPlugin(["stub"]) }));
+    const state = stateOf(scopeState("user", { demo: storedPlugin(["ignored"]) }));
+    const reader = namesReader(["stub"]);
 
     // act
-    const entries = mcpServerEntries(state, "user");
+    const entries = await mcpServerEntries(state, USER_LOCATIONS, reader.read);
+
+    // assert
+    assert.deepStrictEqual(entries, [demoStubEntry()]);
+    assert.deepStrictEqual(reader.reads, [
+      { scope: "user", marketplace: "user-catalog", plugin: "demo" },
+    ]);
+  });
+
+  test("MREC-02: names the servers the reader re-resolves for a record written before mcpServerConfigs", async () => {
+    // arrange
+    const state = stateOf(scopeState("user", { demo: storedPlugin(undefined) }));
+    const reader = namesReader(["stub"]);
+
+    // act
+    const entries = await mcpServerEntries(state, USER_LOCATIONS, reader.read);
 
     // assert
     assert.deepStrictEqual(entries, [demoStubEntry()]);
   });
 
-  test("keeps a `-` and a `.` of the server name in the name it sends", () => {
+  test("keeps a `-` and a `.` of the server name in the name it sends", async () => {
     // arrange
-    const state = stateOf(scopeState("user", { demo: storedPlugin(["stub-server.v1"]) }));
+    const state = stateOf(scopeState("user", { demo: storedPlugin([]) }));
 
     // act
-    const entries = mcpServerEntries(state, "user");
+    const entries = await mcpServerEntries(
+      state,
+      USER_LOCATIONS,
+      namesReader(["stub-server.v1"]).read,
+    );
 
     // assert
     assert.deepStrictEqual(entries, [
@@ -93,37 +138,52 @@ describe("mcpServerEntries", () => {
     ]);
   });
 
-  for (const { name, plugins } of [
-    { name: "a disabled record", plugins: { demo: storedPlugin(["stub"], false) } },
+  for (const { name, plugins, names } of [
     {
-      name: "a record written before mcpServerConfigs",
-      plugins: { demo: storedPlugin(undefined) },
+      name: "a record whose reader names no server",
+      plugins: { demo: storedPlugin([]) },
+      names: [],
     },
-    { name: "a record that declares no server", plugins: { demo: storedPlugin([]) } },
-    { name: "a plugin name the key builders refuse", plugins: { "de/mo": storedPlugin(["stub"]) } },
+    {
+      name: "a plugin name the key builders refuse",
+      plugins: { "de/mo": storedPlugin([]) },
+      names: ["stub"],
+    },
   ]) {
-    test(`gives no entry for ${name}`, () => {
+    test(`gives no entry for ${name}`, async () => {
       // arrange
       const state = stateOf(scopeState("user", plugins));
 
       // act
-      const entries = mcpServerEntries(state, "user");
+      const entries = await mcpServerEntries(state, USER_LOCATIONS, namesReader(names).read);
 
       // assert
       assert.deepStrictEqual(entries, []);
     });
   }
 
-  test("gives no entry for a record of the other scope", () => {
-    // arrange
-    const state = stateOf(scopeState("project", { demo: storedPlugin(["stub"]) }));
+  for (const { name, marketplace } of [
+    {
+      name: "a disabled record",
+      marketplace: scopeState("user", { demo: storedPlugin([], false) }),
+    },
+    {
+      name: "a record of the other scope",
+      marketplace: scopeState("project", { demo: storedPlugin([]) }),
+    },
+  ]) {
+    test(`reads no server of ${name}`, async () => {
+      // arrange
+      const reader = namesReader(["stub"]);
 
-    // act
-    const entries = mcpServerEntries(state, "user");
+      // act
+      const entries = await mcpServerEntries(stateOf(marketplace), USER_LOCATIONS, reader.read);
 
-    // assert
-    assert.deepStrictEqual(entries, []);
-  });
+      // assert
+      assert.deepStrictEqual(entries, []);
+      assert.deepStrictEqual(reader.reads, []);
+    });
+  }
 });
 
 describe("findMcpServer", () => {

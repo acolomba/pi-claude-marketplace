@@ -48,6 +48,7 @@ void ({} satisfies { readonly retired?: HooksBarrel.HooksRuntime });
 void ({
   loadState: () => Promise.resolve({ schemaVersion: 2, marketplaces: {} }),
   readHooksJson: () => Promise.resolve("{}"),
+  readMcpServerNames: () => Promise.resolve([]),
 } satisfies Parameters<typeof createHooksHydration>[1]);
 
 // @ts-expect-error the barrel keeps accumulateStream internal

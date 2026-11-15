@@ -365,6 +365,7 @@ test("same-runtime reload makes every retained registration inert before argumen
       return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
     },
     readHooksJson,
+    readMcpServerNames: () => Promise.resolve([]),
   };
   const registrations: Array<{ readonly event: string; readonly handler: unknown }> = [];
   const messages: unknown[] = [];

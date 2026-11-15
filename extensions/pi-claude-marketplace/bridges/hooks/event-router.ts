@@ -85,7 +85,7 @@ import {
 } from "./event-adapters.ts";
 import { FILE_SYSTEM_SWEEP_OPS, sweepHookOutput } from "./hook-output-files.ts";
 import { compileIfPredicate, MATCH_ALL_IF } from "./if-field/index.ts";
-import { mcpServerEntries } from "./mcp-server-table.ts";
+import { mcpServerEntries, type McpServerNamesReader } from "./mcp-server-table.ts";
 import { createHookToolView } from "./mcp-tool-view.ts";
 import { claudeSessionEndReason } from "./payloads/session-end.ts";
 import { claudeSessionStartSource } from "./payloads/session-start.ts";
@@ -640,12 +640,14 @@ export interface HooksFileReader {
 }
 
 /**
- * The hooks read port plus the one persisted-state operation hydration
+ * The hooks read port plus the persisted-state operations hydration
  * additionally needs. The `extends` composes that port's single member into
  * this bundle; it does not claim a dependency bundle is a kind of file reader.
  */
 export interface HooksHydrationDeps extends HooksFileReader {
   readonly loadState: (extensionRoot: string) => Promise<ExtensionState>;
+  /** D-PG6-07: the names of a record's MCP servers, from the one reader of them (MREC-01/02). */
+  readonly readMcpServerNames: McpServerNamesReader;
 }
 
 /**
@@ -773,18 +775,17 @@ async function hydrateCacheFromDisk(
  * disabled records (ENBL-14), find plugins with declared hook resources, read +
  * parse each hooks.json, and populate the cache. Parse failures are logged
  * through hookDebugLog and skipped (the resolver flips installable: false on
- * the next reconcile). The scope's plugin MCP servers come first, from every
+ * the next reconcile). The scope's plugin MCP servers come last, from every
  * enabled record, with hooks or not (D-PG6-07).
  */
 async function hydrateScopeFromState(
   state: ExtensionState,
   loc: ScopedLocations,
   cwd: string,
-  reader: HooksFileReader,
+  reader: HooksHydrationDeps,
   routingState: EventRouterRoutingState,
   generationIsCurrent: GenerationGuard,
 ): Promise<void> {
-  routingState.setMcpServers(loc.scope, mcpServerEntries(state, loc.scope));
   for (const target of hydrateTargets(state, loc, cwd)) {
     // eslint-disable-next-line no-await-in-loop -- each plugin's hydrate writes the shared routing table
     await tryHydrateOnePlugin(reader, routingState, generationIsCurrent, target);
@@ -792,6 +793,13 @@ async function hydrateScopeFromState(
       return;
     }
   }
+
+  const servers = await mcpServerEntries(state, loc, reader.readMcpServerNames);
+  if (!generationIsCurrent()) {
+    return;
+  }
+
+  routingState.setMcpServers(loc.scope, servers);
 }
 
 /** The hydration targets of every enabled plugin of `loc`'s scope with recorded hooks. */

@@ -25,6 +25,7 @@ import {
   createHooksRuntime,
   readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { recordedMcpServerNames } from "../../extensions/pi-claude-marketplace/orchestrators/mcp/recorded-servers.ts";
 import {
   loadState,
   saveState,
@@ -117,7 +118,11 @@ function buildStateWithHooksPlugin(sourcesPluginRoot: string): ExtensionState {
 
 test("HOOK-E2E-02: a real SessionStart hook fires through bash and the handler writes its sentinel file", async () => {
   const runtime = createHooksRuntime();
-  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
+  const hooksHydration = createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: recordedMcpServerNames,
+  });
 
   await withHermeticPiHome(async ({ extensionRoot, sourcesPluginRoot, sentinelPath }) => {
     // Lay out the source plugin tree the way the install pipeline would
@@ -234,7 +239,11 @@ echo '{}'
 
 test("HOOK-E2E-05: path-source plugin whose resolvedSource is OUTSIDE extensionRoot still spawns the handler", async () => {
   const runtime = createHooksRuntime();
-  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
+  const hooksHydration = createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: recordedMcpServerNames,
+  });
 
   return withHermeticEnvironment("hooks-spawn-pathsrc-", async ({ root: tmpRoot, agentDir }) => {
     const extensionRoot = path.join(agentDir, "pi-claude-marketplace");

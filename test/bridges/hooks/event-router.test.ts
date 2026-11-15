@@ -55,6 +55,7 @@ import type {
   TypedExpansionResolver,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
+import type { McpServerNamesReader } from "../../../extensions/pi-claude-marketplace/bridges/hooks/mcp-server-table.ts";
 import type {
   HooksRuntime,
   HooksRuntimeChildEntry,
@@ -203,6 +204,7 @@ test(
         return loadState(extensionRoot);
       },
       readHooksJson,
+      readMcpServerNames: readStoredServerNames,
     });
     const userHooksPath = path.join(userLocations.hooksDir, "user-hooks", "hooks.json");
     const projectHooksPath = path.join(projectLocations.hooksDir, "project-hooks", "hooks.json");
@@ -946,12 +948,24 @@ function assistantForBookkeeping(): AssistantMessage {
   };
 }
 
+/**
+ * D-PG6-07: names a record's stored MCP servers, as the production reader
+ * does for a record whose plugin root is contained.
+ */
+function readStoredServerNames(
+  ...[, marketplace, plugin]: Parameters<McpServerNamesReader>
+): Promise<readonly string[]> {
+  const stored = marketplace.plugins[plugin]?.mcpServerConfigs ?? [];
+  return Promise.resolve(stored.map(({ name }) => name));
+}
+
 /** An empty-state reader, so registration hydrates without touching disk state. */
 const EMPTY_STATE_READER: HooksHydrationDeps = {
   loadState(): Promise<ExtensionState> {
     return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
   },
   readHooksJson,
+  readMcpServerNames: readStoredServerNames,
 };
 
 for (const mode of ["tui", "print", "json", "rpc"]) {
@@ -2582,10 +2596,11 @@ test(
     await saveState(locations.extensionRoot, state);
 
     // act
-    await createHooksHydration(runtime, { loadState, readHooksJson }).hydrateProjectScopeForCwd(
-      root,
-      true,
-    );
+    await createHooksHydration(runtime, {
+      loadState,
+      readHooksJson,
+      readMcpServerNames: readStoredServerNames,
+    }).hydrateProjectScopeForCwd(root, true);
     createHooksRouting(runtime, { readHooksJson }).rebuildRoutingTables();
     const cache = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
       scope: entry.scope,
@@ -2639,6 +2654,7 @@ test(
         return Promise.reject(loadError);
       },
       readHooksJson,
+      readMcpServerNames: readStoredServerNames,
     };
     const config = makeConfig([{ event: "PreToolUse", handlers: 1, prefix: "cached" }]);
     const runtime = createHooksRuntime();
@@ -2721,6 +2737,7 @@ test(
         return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
       },
       readHooksJson,
+      readMcpServerNames: readStoredServerNames,
     };
     const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
     process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
@@ -2779,6 +2796,7 @@ test("same-runtime registration invalidates an earlier callback before lazy hydr
       return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
     },
     readHooksJson,
+    readMcpServerNames: readStoredServerNames,
   };
   const runtime = createHooksRuntime();
   const hooksHydration = createHooksHydration(runtime, hydrationReader);
@@ -2873,6 +2891,7 @@ test(
         return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
       },
       readHooksJson,
+      readMcpServerNames: readStoredServerNames,
     };
     const runtime = createHooksRuntime();
     const hydration = createHooksHydration(runtime, reader);
@@ -2916,6 +2935,7 @@ test(
         );
       },
       readHooksJson,
+      readMcpServerNames: readStoredServerNames,
     };
     const runtime = createHooksRuntime();
     const hydration = createHooksHydration(runtime, reader);
@@ -2971,6 +2991,7 @@ test("runtime hydration stops before mirroring when registration advances its ge
       return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
     },
     readHooksJson,
+    readMcpServerNames: readStoredServerNames,
   };
   const runtime = createHooksRuntime();
   const hydration = createHooksHydration(runtime, reader);
@@ -3011,6 +3032,7 @@ test(
         return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
       },
       readHooksJson,
+      readMcpServerNames: readStoredServerNames,
     };
     const runtime = createHooksRuntime();
     const hydration = createHooksHydration(runtime, reader);
@@ -3048,6 +3070,7 @@ test("project hydration parses a plugin's hooks.json into the parsed-config cach
       );
     },
     readHooksJson,
+    readMcpServerNames: readStoredServerNames,
   };
   const runtime = createHooksRuntime();
 
@@ -3082,6 +3105,7 @@ function fixtureStateReader(fixture: ProjectHookFixture): HooksHydrationDeps {
       );
     },
     readHooksJson,
+    readMcpServerNames: readStoredServerNames,
   };
 }
 
@@ -3154,6 +3178,7 @@ test("D-LOC-01 readAndCachePluginHooks caches a project config once the hydrate 
   await createHooksHydration(runtime, {
     loadState: () => Promise.resolve({ schemaVersion: 2, marketplaces: {} }),
     readHooksJson,
+    readMcpServerNames: readStoredServerNames,
   }).hydrateProjectScopeForCwd(fixture.projectRoot, true);
 
   // act
@@ -3206,6 +3231,7 @@ test("project hydration stops before parsing a plugin's hooks.json read under a 
           : { schemaVersion: 2, marketplaces: {} },
       );
     },
+    readMcpServerNames: readStoredServerNames,
     readHooksJson(hooksJsonPath: string): Promise<string> {
       if (hooksJsonPath === fixture.hookPath) {
         runtime.advanceGeneration();
@@ -3227,6 +3253,28 @@ test("project hydration stops before parsing a plugin's hooks.json read under a 
   assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
 });
 
+test("D-PG6-07: project hydration names no server when the server read advances the generation", async (t) => {
+  // arrange
+  const fixture = await makeProjectHookFixture(t, "stale-after-server-read", "PreToolUse");
+  const runtime = createHooksRuntime();
+  const reader: HooksHydrationDeps = {
+    ...fixtureStateReader(fixture),
+    readMcpServerNames(): Promise<readonly string[]> {
+      runtime.advanceGeneration();
+      return Promise.resolve(["stub"]);
+    },
+  };
+
+  // act
+  await createHooksHydration(runtime, reader).hydrateProjectScopeForCwd(fixture.projectRoot, true);
+
+  // assert
+  assert.strictEqual(
+    runtime.mcpServerFor({ piName: "mcp__plugin_owner_stub__echo", builtinServer: undefined }),
+    undefined,
+  );
+});
+
 test(
   "SessionStart stops after preparing the shared data dir when the routing read advances the generation",
   { concurrency: false },
@@ -3242,6 +3290,7 @@ test(
         );
       },
       readHooksJson,
+      readMcpServerNames: readStoredServerNames,
     };
     const runtime = createHooksRuntime();
     let advanceOnTheSessionStartRead = false;
@@ -3292,6 +3341,7 @@ test("separate runtimes keep their current callbacks live and route through thei
       return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
     },
     readHooksJson,
+    readMcpServerNames: readStoredServerNames,
   };
   const firstRuntime = createHooksRuntime();
   const secondRuntime = createHooksRuntime();
@@ -3531,7 +3581,11 @@ test(
     const { pi, registrations, messages } = makeRecordingPi();
 
     // act
-    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    await createHooksHydration(runtime, {
+      loadState,
+      readHooksJson,
+      readMcpServerNames: readStoredServerNames,
+    }).registerHooksBridge(pi, {
       cwd: projectRoot,
     });
     const sharedState = {
@@ -3582,7 +3636,11 @@ test(
     const { pi, registrations } = makeRecordingPi();
 
     // act
-    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    await createHooksHydration(runtime, {
+      loadState,
+      readHooksJson,
+      readMcpServerNames: readStoredServerNames,
+    }).registerHooksBridge(pi, {
       cwd: projectRoot,
       executor: (entry) => {
         dispatched.push(entry.scope);
@@ -3627,7 +3685,11 @@ for (const mode of ["tui", "print", "json", "rpc"] as const) {
         return Reflect.get(target, property, receiver);
       },
     });
-    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    await createHooksHydration(runtime, {
+      loadState,
+      readHooksJson,
+      readMcpServerNames: readStoredServerNames,
+    }).registerHooksBridge(pi, {
       cwd: projectRoot,
       executor: (entry) => {
         observations.push({ scope: entry.scope, directories: sharedPaths.map(fs.existsSync) });
@@ -3681,7 +3743,11 @@ for (const failure of ["unknown-mode", "stale-mode"] as const) {
         return capture.ui;
       },
     };
-    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    await createHooksHydration(runtime, {
+      loadState,
+      readHooksJson,
+      readMcpServerNames: readStoredServerNames,
+    }).registerHooksBridge(pi, {
       cwd: projectRoot,
       executor: (entry) => {
         dispatches.push(entry.scope);
@@ -3731,7 +3797,11 @@ for (const { rejectedRead, directories } of [
         return Reflect.get(target, property, receiver);
       },
     });
-    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    await createHooksHydration(runtime, {
+      loadState,
+      readHooksJson,
+      readMcpServerNames: readStoredServerNames,
+    }).registerHooksBridge(pi, {
       cwd: projectRoot,
       executor: (entry) => {
         dispatches.push(entry.scope);
@@ -3759,7 +3829,11 @@ test("SessionStart contains a dispatch failure after preparing both directories"
   const { pi, registrations, messages } = makeRecordingPi();
   const runtime = createHooksRuntime();
   const dispatched: string[] = [];
-  await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+  await createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: readStoredServerNames,
+  }).registerHooksBridge(pi, {
     cwd: projectRoot,
     executor: (entry) => {
       dispatched.push(entry.scope);
@@ -3786,7 +3860,11 @@ test("SessionStart runs once when Pi repeats the same session start (SSDEDUP-01)
   const { pi, registrations } = makeRecordingPi();
   const runtime = createHooksRuntime();
   const dispatched: string[] = [];
-  await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+  await createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: readStoredServerNames,
+  }).registerHooksBridge(pi, {
     cwd: projectRoot,
     executor: (entry, event, ctx) => {
       dispatched.push(
@@ -3835,7 +3913,11 @@ for (const { reason, source } of [
     const { pi, registrations } = makeRecordingPi();
     const runtime = createHooksRuntime();
     const dispatched: unknown[] = [];
-    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    await createHooksHydration(runtime, {
+      loadState,
+      readHooksJson,
+      readMcpServerNames: readStoredServerNames,
+    }).registerHooksBridge(pi, {
       cwd: projectRoot,
       executor: (entry, event) => {
         dispatched.push({ scope: entry.scope, event });
@@ -3909,6 +3991,7 @@ async function launchRouter(
   await createHooksHydration(createHooksRuntime(), {
     loadState,
     readHooksJson,
+    readMcpServerNames: readStoredServerNames,
   }).registerHooksBridge(pi, {
     cwd: projectRoot,
     processStartedAt,
@@ -4079,7 +4162,11 @@ test("session_start on Pi reload prepares the shared directories and runs no Ses
   const { pi, registrations, messages } = makeRecordingPi();
   const runtime = createHooksRuntime();
   const dispatched: string[] = [];
-  await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+  await createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: readStoredServerNames,
+  }).registerHooksBridge(pi, {
     cwd: projectRoot,
     executor: (entry) => {
       dispatched.push(entry.scope);
@@ -4193,7 +4280,11 @@ test("SessionStart runs a repeat whose first event was skipped for its mode", as
   const { pi, registrations } = makeRecordingPi();
   const runtime = createHooksRuntime();
   const dispatched: string[] = [];
-  await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+  await createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: readStoredServerNames,
+  }).registerHooksBridge(pi, {
     cwd: projectRoot,
     executor: (entry) => {
       dispatched.push(entry.scope);
@@ -4262,7 +4353,11 @@ test(
       });
     };
 
-    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    await createHooksHydration(runtime, {
+      loadState,
+      readHooksJson,
+      readMcpServerNames: readStoredServerNames,
+    }).registerHooksBridge(pi, {
       cwd: factoryRoot,
       executor,
     });
@@ -4363,7 +4458,11 @@ test("D-LOC-01 session_start in a project Pi does not trust runs no project Sess
     return Promise.resolve({ kind: "noop" });
   };
 
-  await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+  await createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: readStoredServerNames,
+  }).registerHooksBridge(pi, {
     cwd: path.join(root, "factory-cwd"),
     executor,
   });
@@ -4403,7 +4502,11 @@ test("session_start contains a lazy project cwd failure and still delegates safe
     return Promise.resolve({ kind: "noop" });
   };
 
-  await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+  await createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: readStoredServerNames,
+  }).registerHooksBridge(pi, {
     cwd: projectRoot,
     executor,
   });
@@ -5222,7 +5325,11 @@ test(
     const runtime = createHooksRuntime();
     const { pi, registrations } = makeRecordingPi();
     const dispatched: string[] = [];
-    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    await createHooksHydration(runtime, {
+      loadState,
+      readHooksJson,
+      readMcpServerNames: readStoredServerNames,
+    }).registerHooksBridge(pi, {
       cwd: root,
       executor: (entry) => {
         dispatched.push(`${entry.scope}:${entry.pluginId}`);
@@ -5467,6 +5574,7 @@ function mcpStateReader(states: ReadonlyMap<string, ExtensionState>): HooksHydra
         : Promise.resolve(state);
     },
     readHooksJson,
+    readMcpServerNames: readStoredServerNames,
   };
 }
 

@@ -31,6 +31,7 @@ import {
   readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { type RoutingEntry } from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import { recordedMcpServerNames } from "../../extensions/pi-claude-marketplace/orchestrators/mcp/recorded-servers.ts";
 import {
   loadState,
   saveState,
@@ -179,7 +180,11 @@ const SESSION_START_EVENT: SessionStartEvent = { type: "session_start", reason: 
 test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and dispatches SessionStart end-to-end", async () => {
   // arrange
   const runtime = createHooksRuntime();
-  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
+  const hooksHydration = createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: recordedMcpServerNames,
+  });
   const { calls, executor } = recordingExecutor();
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
@@ -228,7 +233,11 @@ test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and 
 test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_start lazy project hydrate", async () => {
   // arrange
   const runtime = createHooksRuntime();
-  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
+  const hooksHydration = createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: recordedMcpServerNames,
+  });
   const { calls, executor } = recordingExecutor();
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
@@ -275,7 +284,11 @@ test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_
 test("HOOK-E2E-03: WR-05 -- session_start lazy hydrate writes nothing under a pristine project cwd", async () => {
   // arrange
   const runtime = createHooksRuntime();
-  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
+  const hooksHydration = createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: recordedMcpServerNames,
+  });
   const { executor } = recordingExecutor();
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
@@ -319,7 +332,11 @@ test("HOOK-E2E-03: WR-05 -- session_start lazy hydrate writes nothing under a pr
 test("HOOK-E2E-04: a throwing lazy project hydrate never blocks SessionStart dispatch", async () => {
   // arrange
   const runtime = createHooksRuntime();
-  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
+  const hooksHydration = createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: recordedMcpServerNames,
+  });
   const { calls, executor } = recordingExecutor();
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
@@ -386,7 +403,11 @@ test(
         JSON.stringify({ PostToolUse: [recorder], PostToolUseFailure: [recorder] }),
       );
       const runtime = createHooksRuntime();
-      const hydration = createHooksHydration(runtime, { loadState, readHooksJson });
+      const hydration = createHooksHydration(runtime, {
+        loadState,
+        readHooksJson,
+        readMcpServerNames: recordedMcpServerNames,
+      });
       const { pi, registrations } = makeMockPi();
       const ctx = {
         cwd: projectCwd,

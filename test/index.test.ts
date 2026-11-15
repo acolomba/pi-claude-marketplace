@@ -1517,7 +1517,7 @@ test("constructs one runtime, completion cache and reconcile operation per exten
 
   // act
   const hydrationConstruction = source.match(
-    /createHooksHydration\(hooksRuntime, \{ loadState, readHooksJson \}\)/g,
+    /createHooksHydration\(hooksRuntime, \{\s*loadState,\s*readHooksJson,\s*readMcpServerNames: recordedMcpServerNames,\s*\}\)/g,
   );
 
   // assert
@@ -1529,9 +1529,12 @@ test("constructs one runtime, completion cache and reconcile operation per exten
   assert.deepStrictEqual(updateConstructions, [
     "createUpdateOperations(hooksRouting, completionCache)",
   ]);
-  assert.deepStrictEqual(hydrationConstruction, [
-    "createHooksHydration(hooksRuntime, { loadState, readHooksJson })",
-  ]);
+  assert.deepStrictEqual(
+    hydrationConstruction?.map((construction) => construction.replaceAll(/\s+/g, " ")),
+    [
+      "createHooksHydration(hooksRuntime, { loadState, readHooksJson, readMcpServerNames: recordedMcpServerNames, })",
+    ],
+  );
   assert.deepStrictEqual(reconcileConstructions, ["createApplyReconcile({ loadState })"]);
   assert.deepStrictEqual(loadConstructions, ["createLoadReconcile({ loadState }, applyReconcile)"]);
 });

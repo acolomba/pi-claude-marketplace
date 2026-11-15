@@ -15,7 +15,7 @@ import {
 import { isRecordedButDisabled, type ExtensionState } from "../../persistence/state-io.ts";
 
 import type { HookMcpServer } from "./payloads/tool-event-facts.ts";
-import type { Scope } from "../../shared/types.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
 
 /** One server of an enabled plugin record, under the key of each MCP implementation. */
 export interface McpServerEntry {
@@ -40,17 +40,40 @@ function serverEntry(plugin: string, server: string): McpServerEntry | undefined
 }
 
 /**
- * The servers of every enabled record of `scope` in `state`. A record written
- * before `mcpServerConfigs` existed gives none.
+ * MREC-01 / MREC-02: the names of the MCP servers of the plugin that
+ * `marketplace` lists under `plugin`, read with `locations`, the locations of
+ * the scope whose state holds `marketplace`. The composition root passes the
+ * one reader of a record's servers, so a record written before
+ * `mcpServerConfigs` existed is re-resolved. A record whose servers cannot be
+ * read names none. It never throws.
  */
-export function mcpServerEntries(state: ExtensionState, scope: Scope): McpServerEntry[] {
-  return Object.values(state.marketplaces)
-    .filter((marketplace) => marketplace.scope === scope)
-    .flatMap((marketplace) => Object.entries(marketplace.plugins))
-    .filter(([, record]) => !isRecordedButDisabled(record))
-    .flatMap(([plugin, record]) =>
-      (record.mcpServerConfigs ?? []).flatMap(({ name }) => serverEntry(plugin, name) ?? []),
+export type McpServerNamesReader = (
+  locations: ScopedLocations,
+  marketplace: ExtensionState["marketplaces"][string],
+  plugin: string,
+) => Promise<readonly string[]>;
+
+/** The servers of every enabled record of `locations`' scope in `state`, as `readNames` names them. */
+export async function mcpServerEntries(
+  state: ExtensionState,
+  locations: ScopedLocations,
+  readNames: McpServerNamesReader,
+): Promise<McpServerEntry[]> {
+  const records = Object.values(state.marketplaces)
+    .filter((marketplace) => marketplace.scope === locations.scope)
+    .flatMap((marketplace) =>
+      Object.entries(marketplace.plugins)
+        .filter(([, record]) => !isRecordedButDisabled(record))
+        .map(([plugin]) => ({ marketplace, plugin })),
     );
+  const entries = await Promise.all(
+    records.map(async ({ marketplace, plugin }) =>
+      (await readNames(locations, marketplace, plugin)).flatMap(
+        (name) => serverEntry(plugin, name) ?? [],
+      ),
+    ),
+  );
+  return entries.flat();
 }
 
 // pi-mcp-adapter names a tool `mcp__<key>_<tool>`. A recovered full name is
