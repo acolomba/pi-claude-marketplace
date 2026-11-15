@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { describe, test } from "node:test";
 
 import {
+  ownedOptionVariables,
   serializeLiteral,
   serializeSegments,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/adapter-escape.ts";
@@ -311,4 +313,65 @@ describe("serializeLiteral", () => {
       assert.strictEqual(writtenValue, expectedWritten);
     });
   }
+});
+
+describe("ownedOptionVariables", () => {
+  function ownedName(joined: string): string {
+    const hex = createHash("sha256").update(joined).digest("hex").slice(0, 16);
+    return `PI_CLAUDE_MARKETPLACE_OPTION_${hex}`;
+  }
+
+  test("D-PG10-23: names each option of the MCP value map by scope, marketplace, plugin, and key, in map order", () => {
+    // arrange
+    const mcpValues = new Map([
+      ["mode", "fast"],
+      ["note", ""],
+    ]);
+
+    // act
+    const variables = ownedOptionVariables(
+      { scope: "project", marketplace: "mp", plugin: "plug" },
+      mcpValues,
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      [...variables],
+      [
+        ["mode", { name: ownedName("project\0mp\0plug\0mode"), value: "fast" }],
+        ["note", { name: ownedName("project\0mp\0plug\0note"), value: "" }],
+      ],
+    );
+  });
+
+  test("D-PG10-23 / AVAR-05: exports a marker default as escaped text, not as the raw text", () => {
+    // arrange
+    const mcpValues = new Map([["home", "{env:HOME}"]]);
+
+    // act
+    const variables = ownedOptionVariables(
+      { scope: "user", marketplace: "mp", plugin: "plug" },
+      mcpValues,
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      [...variables],
+      [["home", { name: ownedName("user\0mp\0plug\0home"), value: `{env:${SPLIT}HOME}` }]],
+    );
+  });
+
+  test("D-PG10-23: gives nothing for an empty MCP value map", () => {
+    // arrange
+    const mcpValues = new Map<string, string>();
+
+    // act
+    const variables = ownedOptionVariables(
+      { scope: "user", marketplace: "mp", plugin: "plug" },
+      mcpValues,
+    );
+
+    // assert
+    assert.deepStrictEqual([...variables], []);
+  });
 });

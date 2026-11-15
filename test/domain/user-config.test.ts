@@ -5,6 +5,7 @@ import { describe, test } from "node:test";
 import {
   declaredOptions,
   hookOptionVariableName,
+  OWNED_VARIABLE_PREFIX,
   ownedOptionVariableName,
   parseUserConfig,
   replaceUserConfigReferences,
@@ -507,6 +508,19 @@ describe("hookOptionVariableName", () => {
       assert.strictEqual(variable, name);
     });
   }
+});
+
+describe("OWNED_VARIABLE_PREFIX", () => {
+  test("uses the exact prefix of every owned option variable (D-PG10-23)", () => {
+    // arrange
+    const expectedPrefix = "PI_CLAUDE_MARKETPLACE_OPTION_";
+
+    // act
+    const prefix = OWNED_VARIABLE_PREFIX;
+
+    // assert
+    assert.strictEqual(prefix, expectedPrefix);
+  });
 });
 
 describe("ownedOptionVariableName", () => {

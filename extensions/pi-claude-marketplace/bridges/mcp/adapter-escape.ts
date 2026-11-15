@@ -19,9 +19,11 @@
 // default ends up beside the text around the reference, so both get the
 // guards a plain reference gets.
 
+import { ownedOptionVariableName } from "../../domain/user-config.ts";
 import { ADAPTER_EMPTY_ENV } from "../../shared/session-env.ts";
 
 import type { Segment } from "../../domain/claude-mcp-variables.ts";
+import type { OwnedOptionAddress } from "../../domain/user-config.ts";
 
 const SPLIT_TOKEN = `{env:${ADAPTER_EMPTY_ENV}}`;
 
@@ -121,4 +123,29 @@ export function serializeSegments(segments: readonly Segment[], secret: boolean)
 /** Writes a value Claude leaves unexpanded as one literal run. */
 export function serializeLiteral(text: string, secret: boolean): string {
   return serializeSegments([{ kind: "text", text }], secret);
+}
+
+/** One option's owned process variable: its name and its escaped value. */
+export interface OwnedOptionVariable {
+  readonly name: string;
+  readonly value: string;
+}
+
+/**
+ * D-PG10-23 / AVAR-05: the owned process variable of each option of one
+ * plugin's MCP value map, by option key, in the map's order. The value is
+ * written as a literal run, so the adapter's later `$env:` and `{env:` passes
+ * cannot expand a marker in it. The entry that references an option and the
+ * variable that holds its value both take their name from here.
+ */
+export function ownedOptionVariables(
+  plugin: Omit<OwnedOptionAddress, "key">,
+  mcpValues: ReadonlyMap<string, string>,
+): ReadonlyMap<string, OwnedOptionVariable> {
+  return new Map(
+    [...mcpValues].map(([key, value]) => [
+      key,
+      { name: ownedOptionVariableName({ ...plugin, key }), value: serializeLiteral(value, false) },
+    ]),
+  );
 }

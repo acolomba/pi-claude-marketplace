@@ -146,3 +146,79 @@ Feature: Plugin options
       | plugin status                  | partially-available                                      |
       | plugin version                 | 1.0.0                                                    |
       | severity                       | info                                                     |
+
+  Scenario: The bash tool's environment holds the option variable of a trusted project's plugin (D-PG10-11)
+    Given pi runs with the scripted model
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "mode": { "type": "string", "title": "Mode", "description": "The mode.", "default": "fast" }
+        }
+      }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                                                    |
+      |       | bash | {"command": "printf %s \"$PI_CLAUDE_MARKETPLACE_OPTIONS\""}                  |
+      |       | bash | {"command": "printf %s \"$PI_CLAUDE_MARKETPLACE_OPTION_34f6bcb3de70f47b\""} |
+      | Done. |      |                                                                              |
+    When the user prompts "show the plugin options"
+    Then the model receives these calls:
+      | call | role        | text                                                                                 |
+      | 1    | user        | show the plugin options                                                              |
+      | 2    | user        | show the plugin options                                                              |
+      | 2    | assistant   | tool call bash {"command":"printf %s \"$PI_CLAUDE_MARKETPLACE_OPTIONS\""}            |
+      | 2    | tool result | bash returned: project:PI_CLAUDE_MARKETPLACE_OPTION_34f6bcb3de70f47b                 |
+      | 3    | user        | show the plugin options                                                              |
+      | 3    | assistant   | tool call bash {"command":"printf %s \"$PI_CLAUDE_MARKETPLACE_OPTIONS\""}            |
+      | 3    | tool result | bash returned: project:PI_CLAUDE_MARKETPLACE_OPTION_34f6bcb3de70f47b                 |
+      | 3    | assistant   | tool call bash {"command":"printf %s \"$PI_CLAUDE_MARKETPLACE_OPTION_34f6bcb3de70f47b\""} |
+      | 3    | tool result | bash returned: fast                                                                  |
+
+  Scenario: In a project the user marked do not trust, only the user-scope plugin's option variable is set (D-PG10-23)
+    Given pi runs with the scripted model in a project the user marked "do not trust"
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "mode": { "type": "string", "title": "Mode", "description": "The mode.", "default": "fast" }
+        }
+      }
+      """
+    Given the marketplace "mine" is published as a dir source
+    Given the marketplace "mine" offers these plugins:
+      | name     | version |
+      | personal | 1.0.0   |
+    Given the published plugin "personal" of the marketplace "mine" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "personal",
+        "version": "1.0.0",
+        "userConfig": {
+          "mode": { "type": "string", "title": "Mode", "description": "The mode.", "default": "fast" }
+        }
+      }
+      """
+    Given the marketplace "mine" is added to the user scope
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install personal@mine --scope user"
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                                   |
+      |       | bash | {"command": "printf %s \"$PI_CLAUDE_MARKETPLACE_OPTIONS\""} |
+      | Done. |      |                                                             |
+    When the user prompts "show the plugin options"
+    Then the model receives these calls:
+      | call | role        | text                                                                      |
+      | 1    | user        | show the plugin options                                                   |
+      | 2    | user        | show the plugin options                                                   |
+      | 2    | assistant   | tool call bash {"command":"printf %s \"$PI_CLAUDE_MARKETPLACE_OPTIONS\""} |
+      | 2    | tool result | bash returned: user:PI_CLAUDE_MARKETPLACE_OPTION_17d4e1bcc7bbb7b4         |

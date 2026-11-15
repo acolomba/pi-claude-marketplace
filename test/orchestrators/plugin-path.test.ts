@@ -6,10 +6,9 @@ import { describe, test } from "node:test";
 import { recomputePluginPath } from "../../extensions/pi-claude-marketplace/orchestrators/plugin-path.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
-import type {
-  ExtensionState,
-  PluginInstallRecord,
-} from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { marketplaceRecord, pluginRecord, seedState, stateFor } from "./scope-state-seeds.ts";
+
+import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { TestContext } from "node:test";
 
 interface PathEnvironmentSnapshot {
@@ -18,60 +17,12 @@ interface PathEnvironmentSnapshot {
   readonly path: string | undefined;
 }
 
-function pluginRecord(resolvedSource: string, enabled: boolean): PluginInstallRecord {
-  return {
-    version: "1.0.0",
-    resolvedSource,
-    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
-    enabled,
-    provenance: "explicit",
-    installedAt: "2026-08-31T00:00:00.000Z",
-    updatedAt: "2026-08-31T00:00:00.000Z",
-  };
-}
-
-function marketplaceRecord(
-  name: string,
-  scope: "user" | "project",
-  sourceRoot: string,
-  plugins: Record<string, PluginInstallRecord>,
-): ExtensionState["marketplaces"][string] {
-  return {
-    name,
-    scope,
-    source: { kind: "path", raw: sourceRoot },
-    addedFromCwd: sourceRoot,
-    manifestPath: path.join(sourceRoot, ".claude-plugin", "marketplace.json"),
-    marketplaceRoot: sourceRoot,
-    plugins,
-  };
-}
-
-function stateFor(
-  scope: "user" | "project",
-  sourceRoot: string,
-  plugins: Record<string, PluginInstallRecord>,
-): ExtensionState {
-  return {
-    schemaVersion: 2,
-    marketplaces: {
-      catalog: marketplaceRecord("catalog", scope, sourceRoot, plugins),
-    },
-  };
-}
-
 // D-PG10-03: a bin joins PATH only when it is a directory, so a case that
 // expects an entry gives the plugin a real one.
 async function binDirectoryOf(pluginRoot: string): Promise<string> {
   const binDir = path.join(pluginRoot, "bin");
   await mkdir(binDir, { recursive: true });
   return binDir;
-}
-
-async function seedState(extensionRoot: string, state: ExtensionState): Promise<void> {
-  await mkdir(extensionRoot, { recursive: true });
-  await writeFile(path.join(extensionRoot, "state.json"), JSON.stringify(state), "utf8");
 }
 
 async function seedUnsupportedState(extensionRoot: string): Promise<void> {

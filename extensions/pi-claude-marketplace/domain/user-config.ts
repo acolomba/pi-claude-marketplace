@@ -117,7 +117,8 @@ const OPTION_VALUE_LIMIT = 64;
 
 const HOOK_VARIABLE_PREFIX = "CLAUDE_PLUGIN_OPTION_";
 
-const OWNED_VARIABLE_PREFIX = "PI_CLAUDE_MARKETPLACE_OPTION_";
+/** The start of every process variable name this extension owns for an option (D-PG10-23). */
+export const OWNED_VARIABLE_PREFIX = "PI_CLAUDE_MARKETPLACE_OPTION_";
 
 const OWNED_HASH_LENGTH = 16;
 

@@ -43,6 +43,7 @@
 // from any of these cases fails where it happens.
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import https from "node:https";
@@ -170,20 +171,25 @@ const EMPTY_DISCOVERY: ResourcesDiscoverResult = { skillPaths: [], promptPaths: 
  * Which `event.cwd` read each NFR-2 refusal case targets, and how many reads the
  * handler makes in all. The discover handler reads the event's working directory
  * once per stage, in this order: the deferred project-scope hydrate, the
- * reconcile, the plugin PATH recompute, and the project-scope half of the
- * resource aggregation. Naming the ordinals states which stage a case refuses;
- * asserting the total states that the stage list itself has not moved.
+ * reconcile, the plugin PATH recompute, the plugin option variables, and the
+ * project-scope half of the resource aggregation. Naming the ordinals states
+ * which stage a case refuses; asserting the total states that the stage list
+ * itself has not moved.
  *
- * Each of the three named ordinals has its own case, and each case asserts an
+ * Each of the four named ordinals has its own case, and each case asserts an
  * observable only its own stage produces -- otherwise the ordinal is decoration
  * and the case's title is a claim about a stage it is not pinned to. The aggregate
- * discovery case counts all four reads across two calls while a real filesystem
- * fault targets the fourth stage without a synthetic event refusal.
+ * discovery case counts all five reads across two calls while a real filesystem
+ * fault targets the fifth stage without a synthetic event refusal.
  */
 const CWD_READ_DEFERRED_HYDRATE = 1;
 const CWD_READ_RECONCILE = 2;
 const CWD_READ_PLUGIN_PATH_RECOMPUTE = 3;
-const CWD_READS_PER_DISCOVER = 4;
+const CWD_READ_PLUGIN_OPTIONS = 4;
+const CWD_READS_PER_DISCOVER = 5;
+
+/** The start of every option variable name the extension owns (D-PG10-23). */
+const OWNED_OPTION_PREFIX = "PI_CLAUDE_MARKETPLACE_OPTION_";
 
 /**
  * Soft-dependency probes per `resources_discover` pass. The pass opens one
@@ -299,18 +305,27 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
   const { agentDir, cwd, home } = await createHermeticEnvironment(t, `index-${label}-`);
   const processRoot = await mkdtemp(path.join(tmpdir(), `index-${label}-process-`));
   const previousCwd = process.cwd();
+  // D-PG10-23: the factory and each load set option variables too.
+  const ownedOptionNames = (): string[] =>
+    Object.keys(process.env).filter((key) => key.startsWith(OWNED_OPTION_PREFIX));
   const tracked = [
     "PATH",
     "PI_CLAUDE_MARKETPLACE_PATH",
     "PI_CLAUDE_MARKETPLACE_EMPTY",
+    "PI_CLAUDE_MARKETPLACE_OPTIONS",
     "CLAUDE_PROJECT_DIR",
     ...SESSION_ENV_KEYS,
+    ...ownedOptionNames(),
   ];
   const saved = tracked.map((key) => {
     return { key, previous: process.env[key] };
   });
   t.after(async () => {
     process.chdir(previousCwd);
+    for (const key of ownedOptionNames()) {
+      Reflect.deleteProperty(process.env, key);
+    }
+
     for (const { key, previous } of saved) {
       restoreEnv(key, previous);
     }
@@ -913,7 +928,11 @@ async function seedPluginBinDirectory(resolvedSource: string): Promise<string> {
   return binDir;
 }
 
-async function seedEnabledPlugin(cwd: string, resolvedSource: string): Promise<void> {
+async function seedEnabledPlugin(
+  cwd: string,
+  resolvedSource: string,
+  extra: Readonly<Record<string, unknown>> = {},
+): Promise<void> {
   const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
   const marketplaceRoot = path.join(cwd, "mp-src");
   await mkdir(extensionRoot, { recursive: true });
@@ -958,6 +977,7 @@ async function seedEnabledPlugin(cwd: string, resolvedSource: string): Promise<v
               provenance: "explicit",
               installedAt: "2026-08-03T00:00:00.000Z",
               updatedAt: "2026-08-03T00:00:00.000Z",
+              ...extra,
             },
           },
         },
@@ -965,6 +985,19 @@ async function seedEnabledPlugin(cwd: string, resolvedSource: string): Promise<v
     }),
     "utf8",
   );
+}
+
+/** A plugin record's declared option `mode`, whose default is `fast` (D-PG10-23). */
+const MODE_OPTION = {
+  userConfig: {
+    mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+  },
+};
+
+/** The owned variable name of one option, built from its four address parts (D-PG10-23). */
+function ownedOptionName(scope: string, marketplace: string, plugin: string, key: string): string {
+  const joined = [scope, marketplace, plugin, key].join("\0");
+  return OWNED_OPTION_PREFIX + createHash("sha256").update(joined).digest("hex").slice(0, 16);
 }
 
 /**
@@ -2478,6 +2511,137 @@ test("AVAR-03: the factory sets the reserved empty variable and CLAUDE_PROJECT_D
   assert.deepStrictEqual(
     [process.env.PI_CLAUDE_MARKETPLACE_EMPTY, process.env.CLAUDE_PROJECT_DIR],
     ["", expectedProjectDir],
+  );
+  verifyBoundary();
+});
+
+/** Record one enabled user-scope plugin `plug@mp` with the option `mode` (D-PG10-23). */
+async function seedUserOptionPlugin(agentDir: string): Promise<void> {
+  const extensionRoot = path.join(agentDir, "pi-claude-marketplace");
+  const marketplaceRoot = path.join(agentDir, "mp-src");
+  await mkdir(extensionRoot, { recursive: true });
+  await writeFile(
+    path.join(extensionRoot, "state.json"),
+    JSON.stringify({
+      schemaVersion: 3,
+      marketplaces: {
+        mp: {
+          name: "mp",
+          scope: "user",
+          source: { kind: "path", raw: marketplaceRoot },
+          addedFromCwd: agentDir,
+          manifestPath: path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+          marketplaceRoot,
+          plugins: {
+            plug: {
+              ...buildInstalledPluginRecord(
+                { version: "1.0.0", resolvedSource: path.join(marketplaceRoot, "plugins", "plug") },
+                { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+              ),
+              ...MODE_OPTION,
+            },
+          },
+        },
+      },
+    }),
+    "utf8",
+  );
+}
+
+test("D-PG10-23: the factory sets the user scope's option variables before it returns", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "options-factory");
+  await seedUserOptionPlugin(scope.agentDir);
+  const name = ownedOptionName("user", "mp", "plug", "mode");
+
+  // act
+  const { verifyBoundary } = await loadExtension(0, 0);
+
+  // assert
+  assert.deepStrictEqual(
+    [process.env[name], process.env.PI_CLAUDE_MARKETPLACE_OPTIONS],
+    ["fast", `user:${name}`],
+  );
+  verifyBoundary();
+});
+
+test("D-PG10-23: a load in a trusted project sets the project plugin's option variables", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "options-trusted");
+  await seedEnabledPlugin(scope.cwd, path.join(scope.cwd, "vendored-plugin"), MODE_OPTION);
+  const name = ownedOptionName("project", "mp", "plug", "mode");
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, PROBES_PER_DISCOVER);
+
+  // act
+  await discover(discoverEvent(scope.cwd), ctx);
+
+  // assert
+  assert.deepStrictEqual(
+    [process.env[name], process.env.PI_CLAUDE_MARKETPLACE_OPTIONS],
+    ["fast", `project:${name}`],
+  );
+  verifyBoundary();
+});
+
+test("D-PG10-23: a load in an untrusted project removes the project's option variables, reading trust no more often", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "options-untrusted");
+  await seedEnabledPlugin(scope.cwd, path.join(scope.cwd, "vendored-plugin"), MODE_OPTION);
+  const name = ownedOptionName("project", "mp", "plug", "mode");
+  // The case's own proxy answers the trust reads, so the mock promises none.
+  const loaded = await loadExtension(0, PROBES_PER_DISCOVER, undefined, undefined, undefined, 0);
+  let trustReads = 0;
+  const untrusted = new Proxy(loaded.ctx, {
+    get(target, property, receiver): unknown {
+      if (property === "isProjectTrusted") {
+        return () => {
+          trustReads += 1;
+          return false;
+        };
+      }
+
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  process.env[name] = "fast";
+  process.env.PI_CLAUDE_MARKETPLACE_OPTIONS = `project:${name}`;
+
+  // act
+  await loaded.discover(discoverEvent(scope.cwd), untrusted);
+
+  // assert
+  assert.deepStrictEqual(
+    [process.env[name], process.env.PI_CLAUDE_MARKETPLACE_OPTIONS, trustReads],
+    [undefined, undefined, TRUST_READS_PER_DISCOVER],
+  );
+  loaded.verifyBoundary();
+});
+
+test("still answers when the plugin option apply fails (NFR-2)", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "options-refused");
+  await seedEnabledPlugin(scope.cwd, path.join(scope.cwd, "vendored-plugin"), MODE_OPTION);
+  const name = ownedOptionName("project", "mp", "plug", "mode");
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
+    0,
+    PROBES_PER_DISCOVER,
+  );
+  process.env[name] = "stale";
+  process.env.PI_CLAUDE_MARKETPLACE_OPTIONS = `project:${name}`;
+  const refusal = eventRefusingCwdRead(discoverEvent(scope.cwd), CWD_READ_PLUGIN_OPTIONS);
+  const expectedReads = { refused: true, reads: CWD_READS_PER_DISCOVER };
+
+  // act
+  const discovered = await discover(refusal.event, ctx);
+
+  // assert
+  assert.deepStrictEqual(discovered, EMPTY_DISCOVERY);
+  assert.deepStrictEqual(notifications, []);
+  assert.deepStrictEqual({ refused: refusal.refused(), reads: refusal.readCount() }, expectedReads);
+  // The refusal landed ON the option stage, so that stage left the variables alone.
+  assert.deepStrictEqual(
+    [process.env[name], process.env.PI_CLAUDE_MARKETPLACE_OPTIONS],
+    ["stale", `project:${name}`],
   );
   verifyBoundary();
 });
