@@ -103,8 +103,8 @@ run against them. Phase 4 depends on Phase 1 alone, so it can move earlier.
 - [x] **Phase 4: Skill and Workflow Install Defects** - A root-source entry installs only its listed skills, sibling skill links resolve, a plugin starts its own workflow by name, and an install notes that a workflow does not keep an agent's tool restriction (completed 2026-11-14)
 - [x] **Phase 5: Stop Continuation and Hook Failures** - A blocking `Stop` hook continues the same run, a missing script does not block, failures and `stopReason` are shown, context stops at 10,000 characters, and a plain `async` hook has no timeout (completed 2026-11-14)
 - [x] **Phase 6: Hook Inputs and Events** - Hooks receive `tool_use_id` and the other missing stdin fields, `UserPromptExpansion` hooks run before an expansion, and a continued session reports `resume` (completed 2026-11-15)
-- [ ] **Phase 7: Agent Frontmatter and Grants** - Agent frontmatter is read as YAML, `Agent` and `Task` grants let an agent delegate, `model: inherit` is passed on, and both tool lists restrict an agent
-- [ ] **Phase 8: Workflow Agents and Run Paths** - A workflow runs the plugin's own agents and notes a missing one, an agent with a `Workflow` grant starts its plugin's workflow, and the uncovered run paths and the limits of a workflow subagent are proven or documented
+- [x] **Phase 7: Agent Frontmatter and Grants** - Agent frontmatter is read as YAML, `Agent` and `Task` grants let an agent delegate, `model: inherit` is passed on, and both tool lists restrict an agent (completed 2026-11-14)
+- [x] **Phase 8: Workflow Agents and Run Paths** - A workflow runs the plugin's own agents and notes a missing one, an agent with a `Workflow` grant starts its plugin's workflow, and the uncovered run paths and the limits of a workflow subagent are proven or documented (completed 2026-11-15)
 - [ ] **Phase 9: Adapter Entries and MCP Features** - Under the adapter a stdio server stays alive and user-written fields survive updates, the sampling and UI question is settled, and resources, prompts, and elicitation are documented and tested
 - [ ] **Phase 10: Plugin Options, Variables, and Trust** - `userConfig` defaults reach hooks, servers, and content, user-scope skills and commands get the project directory, a plugin `bin` joins `PATH` only when it exists and the project is trusted, and the trust gap is decided
 - [ ] **Phase 11: Skills, Commands, and Records** - Typed commands and skills attach `@file` references, commands answer to their Claude Code names, alias suggestions show descriptions, and the compatibility page and the record corrections land
@@ -402,7 +402,13 @@ Plans:
   4. `subagent get` shows `model inherit` for a source agent with `model: inherit`, with and without `--map-model` (PG-AGENT-07a).
   5. `subagent list` shows both the tools and the excluded tools of an agent whose source has `tools` and `disallowedTools`, and its install prints neither of the two warnings about limits of pi-subagents versions below the floor (PG-AGENT-09).
 
-**Plans**: TBD
+**Plans:** 6/6 plans complete
+- [x] 07-01-PLAN.md — Share the frontmatter repair and give it a trigger
+- [x] 07-02-PLAN.md — Read agent frontmatter as YAML and report an unparseable agent
+- [x] 07-03-PLAN.md — Keep description lines and prove the quoted-name rename
+- [x] 07-04-PLAN.md — Map Agent and Task grants and keep model inherit
+- [x] 07-05-PLAN.md — Nested delegation for an agent with no tools list
+- [x] 07-06-PLAN.md — Restrict by both tool lists and remove the stale warnings
 
 ### Phase 8: Workflow Agents and Run Paths
 
@@ -417,9 +423,27 @@ Plans:
   2. A plugin whose script names `agentType: "demo:ghost"`, with no such agent, installs and prints one note for each such name. The compatibility page no longer says that an unresolved `agentType` is not an error in Claude Code (PG-WF-02).
   3. A scenario passes for each of these run paths: a run the model starts by name with object `args`, `agent({schema})`, `isolation: 'worktree'`, `workflow()` nesting to a sibling, and two scripts with one `meta.name` (PG-WF-07).
   4. The workflow compatibility page says what a workflow subagent can reach, names the engine settings `inheritMainModel` and `providerMiddlewareExtensions`, and says that Pi's built-in MCP cannot load in a subagent and that plugin hooks do not run there. It states the adapter setting as spike S5 measured it (PG-WF-04).
-  5. For a bridged agent whose source grants `Workflow` or `Workflow(<name>)`, in a plugin that stages a workflow, `subagent get` shows the engine's `workflow` tool and the background launch mode. In a live run with a real pi-subagents child, the lead agent of a fixture plugin starts the plugin's workflow (PG-WF-05).
+  5. For a bridged agent whose source grants `Workflow` or `Workflow(<name>)`, in a plugin that stages a workflow, `subagent get` shows no `workflow` tool and no forced launch mode, as Claude Code gives the Workflow tool to no subagent, and docs/mcp-compatibility.md says why (PG-WF-05, closed as not a gap under D-PG8-11 option A).
 
-**Plans**: TBD
+**Plans**: 7/7 plans complete
+
+Plans:
+**Wave 1**
+- [x] 08-01-PLAN.md -- Wave 1: run spike S5 (the engine in a real pi-subagents background child; the adapter in a workflow subagent) and record it
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 08-02-PLAN.md -- Wave 2: note a workflow agent type the plugin does not install, prove the agent type binding, and correct the `agentType` row
+- [x] 08-03-PLAN.md -- Wave 2: cover the five uncovered workflow run paths with guard scenarios and a git-repository step
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 08-04-PLAN.md -- Wave 3: say what a workflow subagent can reach, graded by the spike, and correct the fan-out failure paragraph
+- [x] 08-07-PLAN.md -- Wave 3: document the missing-agent note's `info` state in the output catalog, with its fixture and the pinned catalog counts
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 08-05-PLAN.md -- Wave 4: the maintainer chooses whether a bridged agent may hold the `workflow` tool; under option A, record and pin the drop
+
+**Wave 5** *(blocked on Wave 4 completion; only under option B)*
+- [x] 08-06-PLAN.md -- Wave 5: grant `workflow` when the plugin stages a workflow, launch in the background, and prove it with a real child (skipped: option A)
 
 ### Phase 9: Adapter Entries and MCP Features
 
@@ -483,8 +507,8 @@ Plans:
 | 4. Skill and Workflow Install Defects | 6/6 | Complete    | 2026-11-14 |
 | 5. Stop Continuation and Hook Failures | 6/6 | Complete    | 2026-11-14 |
 | 6. Hook Inputs and Events | 13/13 | Complete    | 2026-11-15 |
-| 7. Agent Frontmatter and Grants | 0/0 | Not started | - |
-| 8. Workflow Agents and Run Paths | 0/0 | Not started | - |
+| 7. Agent Frontmatter and Grants | 6/6 | Complete    | 2026-11-14 |
+| 8. Workflow Agents and Run Paths | 7/7 | Complete    | 2026-11-15 |
 | 9. Adapter Entries and MCP Features | 0/0 | Not started | - |
 | 10. Plugin Options, Variables, and Trust | 0/0 | Not started | - |
 | 11. Skills, Commands, and Records | 0/0 | Not started | - |

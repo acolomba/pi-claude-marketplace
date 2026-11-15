@@ -72,9 +72,22 @@ const MODEL_MAP: ReadonlyMap<string, string> = new Map([
 const LONG_CONTEXT_SUFFIX = "[1m]";
 
 /**
+ * D-PG7-17: the `model:` value written for a source `inherit`, an empty quoted
+ * string. pi-subagents reads it as an empty model, which keeps
+ * `subagents.defaultModel` off the agent and runs the child on the parent's
+ * model. The workflow engine reads an empty model as no model, so an
+ * `agent({agentType})` step runs as it does for an agent with no `model:`.
+ * The engine reads `model: inherit` as a model ID and fails the step.
+ */
+const INHERIT_MODEL_VALUE = '""';
+
+/**
  * AG-7 user contract: Claude tool name -> Pi tool name. Tokens not present
  * here are dropped. A `Map`, so a token such as `constructor` cannot find an
- * `Object.prototype` member.
+ * `Object.prototype` member. D-PG7-08 / PG-AGENT-03: `Agent` and its alias
+ * `Task` map to pi-subagents' nested delegation tool. The agent types an
+ * `Agent(...)` entry lists are not applied, as Claude Code does not apply
+ * them inside a subagent.
  */
 const TOOL_MAP: ReadonlyMap<string, string> = new Map([
   ["Read", "read"],
@@ -84,6 +97,8 @@ const TOOL_MAP: ReadonlyMap<string, string> = new Map([
   ["Grep", "grep"],
   ["Glob", "find"],
   ["LS", "ls"],
+  ["Agent", "subagent"],
+  ["Task", "subagent"],
 ]);
 
 /**
@@ -130,12 +145,13 @@ function excludeNameFor(
  * `tools:` list. `exact` holds the Pi names and `mcp:` entries to remove;
  * `servers` holds the `mcp:` selector of each disallowed whole server, whose
  * per-tool entries are removed too. `perTool` keeps each per-tool disallow
- * with its source token for the cannot-narrow warning.
+ * with the selector of its server and the name the form's MCP implementation
+ * registers for the tool, its `excludeTools` name (D-PG7-12, D-PG1-10).
  */
 interface ExplicitDisallow {
   readonly exact: ReadonlySet<string>;
   readonly servers: ReadonlySet<string>;
-  readonly perTool: readonly { readonly token: string; readonly server: string }[];
+  readonly perTool: readonly { readonly server: string; readonly excludeName: string }[];
 }
 
 /**
@@ -165,6 +181,12 @@ interface ExplicitToolMapping extends ToolMappingBase {
    * AG-11 gates it non-empty.
    */
   readonly mapped: string[];
+  /**
+   * D-PG7-12 / PG-AGENT-09: the registered names of the per-tool MCP
+   * disallows whose whole-server grant `mapped` keeps, for `excludeTools:`
+   * beside `tools:`. pi-subagents removes them from the resolved server.
+   */
+  readonly excludeTools: string[];
   /** AGSK-05 / D-83-01: Skill declared in tools: AND not disallowed. */
   readonly inheritSkills: boolean;
 }
@@ -183,6 +205,8 @@ interface OmittedToolMapping extends ToolMappingBase {
    * included), so the flag follows the disallow check alone (#179).
    */
   readonly inheritSkills: boolean;
+  /** D-PG7-09: every tool includes `Agent`, unless a deny of Agent or Task removed it. */
+  readonly allowNestedSubagents: boolean;
 }
 
 /**
@@ -206,19 +230,17 @@ function splitToolList(value: string | undefined): string[] {
     return [];
   }
 
-  // Accept both the bare CSV form (`tools: Read, Bash, Edit`) and the YAML
-  // inline-array form (`tools: ["Read", "Bash", "Edit"]`). Many real agents
-  // -- including Anthropic's own claude-plugins-official -- use the array
-  // form, which our line-based frontmatter parser hands us as a single
-  // string with the brackets and surrounding quotes intact.
-  let raw = value.trim();
-  if (raw.startsWith("[") && raw.endsWith("]")) {
-    raw = raw.slice(1, -1);
-  }
-
-  return topLevelParts(raw)
-    .map((part) => withoutMatchingQuotes(part.trim()))
-    .filter((part) => part !== "");
+  // The YAML reader hands a flow or block sequence over already joined with
+  // commas and unquoted (D-PG7-05). The bracket form can still arrive inside
+  // a quoted string (`tools: "[Read, 'Bash']"`), so it is unwrapped here with
+  // the quotes of its items. A quote mark left in any other value is part of
+  // the name, as Claude Code reads it.
+  const trimmed = value.trim();
+  const bracketed = trimmed.startsWith("[") && trimmed.endsWith("]");
+  const parts = topLevelParts(bracketed ? trimmed.slice(1, -1) : trimmed).map((part) =>
+    part.trim(),
+  );
+  return (bracketed ? parts.map(withoutMatchingQuotes) : parts).filter((part) => part !== "");
 }
 
 /** The parts of `raw` between commas and whitespace outside parentheses. */
@@ -306,18 +328,26 @@ interface ModelMapping {
 
 /**
  * AG-7 / D-CF4-07 as amended: the model a source `model` selects, read as
- * Claude Code reads it. The value is trimmed; `inherit`, in any case, leaves
- * the session's model; an alias maps through MODEL_MAP; a full `claude-` ID
- * passes through. `originalModel` keeps the source value.
+ * Claude Code reads it. The value is trimmed. D-PG7-11 / PG-AGENT-07a:
+ * `inherit`, in any case, writes `INHERIT_MODEL_VALUE` whatever the flag
+ * is, so the agent runs on the session's model and not on
+ * `subagents.defaultModel`, as Claude Code ranks a frontmatter `inherit`
+ * above its default subagent model (D-PG7-17). Any other value maps only when
+ * `mapModelFlag` is set: an alias through MODEL_MAP, a full `claude-` ID
+ * passing through. `originalModel` keeps the source value of what is mapped.
  */
-function mapModel(raw: string | undefined): ModelMapping {
+function mapModel(raw: string | undefined, mapModelFlag: boolean): ModelMapping {
   const value = raw?.trim() ?? "";
   if (raw === undefined || value === "") {
     return { emit: undefined, originalModel: undefined, warning: undefined };
   }
 
   if (value.toLowerCase() === "inherit") {
-    return { emit: undefined, originalModel: raw, warning: undefined };
+    return { emit: INHERIT_MODEL_VALUE, originalModel: raw, warning: undefined };
+  }
+
+  if (!mapModelFlag) {
+    return { emit: undefined, originalModel: undefined, warning: undefined };
   }
 
   const emit = aliasModel(value) ?? fullModelId(value);
@@ -479,7 +509,9 @@ function mapTools(
   // see it.
   const inheritSkills = tokens.some(isSkillToken) && !disallowedTokens.some(isSkillToken);
 
-  // Apply disallowedTools after mapping.
+  // D-PG7-12: the deny applies first, as in Claude Code. Exact names leave
+  // the allowlist; a per-tool deny under a kept whole-server grant is
+  // written to excludeTools.
   const { mapped, dropped } = mapToolTokens(tokens, grants);
   const disallow = explicitDisallow(disallowedTokens, grants);
   const kept = dedupePreservingOrder(mapped.filter((name) => !isDisallowed(name, disallow)));
@@ -487,8 +519,9 @@ function mapTools(
   return {
     omitted: false,
     mapped: kept,
+    excludeTools: explicitExcludeTools(kept, disallow),
     dropped,
-    warnings: explicitMcpWarnings(kept, disallow),
+    warnings: [],
     inheritSkills,
   };
 }
@@ -504,7 +537,7 @@ function explicitDisallow(
 ): ExplicitDisallow {
   const exact = new Set<string>();
   const servers = new Set<string>();
-  const perTool: { token: string; server: string }[] = [];
+  const perTool: { server: string; excludeName: string }[] = [];
   for (const token of disallowedTokens) {
     const name = mapToolName(token, grants);
     if (name !== undefined) {
@@ -519,7 +552,7 @@ function explicitDisallow(
     if (match.tool === undefined) {
       servers.add(match.server);
     } else {
-      perTool.push({ token, server: match.server });
+      perTool.push({ server: match.server, excludeName: match.excludeName(match.tool) });
     }
   }
 
@@ -533,22 +566,18 @@ function isDisallowed(entry: string, disallow: ExplicitDisallow): boolean {
 }
 
 /**
- * ANAME-02: a per-tool disallow cannot narrow a whole-server grant that
- * survives the filter, so it warns. pi-subagents 0.62 and later do apply
- * `excludeTools` beside an explicit `tools:` list (D-CF4-08); the per-tool
- * warning text still says otherwise and stays unchanged, because it belongs
- * to the MCP-07 warning surface.
+ * D-PG7-12 / PG-AGENT-09: the `excludeTools` names of the per-tool disallows
+ * whose whole-server grant survives the filter, once each, in deny order.
+ * pi-subagents applies `excludeTools` after it resolves an explicit list, so
+ * the tool leaves the server's grant.
  */
-function explicitMcpWarnings(kept: readonly string[], disallow: ExplicitDisallow): string[] {
+function explicitExcludeTools(kept: readonly string[], disallow: ExplicitDisallow): string[] {
   const keptSet = new Set(kept);
-  const warnings = disallow.perTool
-    .filter(({ server }) => keptSet.has(server))
-    .map(
-      ({ token, server }) =>
-        `disallowedTools entry ${token} cannot narrow the whole-server grant ${server} -- ` +
-        "pi-subagents takes no excludeTools beside an explicit tools: list, so the agent keeps every tool of that server",
-    );
-  return dedupePreservingOrder(warnings);
+  return dedupePreservingOrder(
+    disallow.perTool
+      .filter(({ server }) => keptSet.has(server))
+      .map(({ excludeName }) => excludeName),
+  );
 }
 
 /**
@@ -568,12 +597,18 @@ function perToolMcpName(token: string, grants: readonly McpGrant[]): string | un
  * omitting the allowlist -- the child then gets Pi's normal builtin tools
  * (and, for background children, ambient extension tools such as
  * pi-mcp-adapter's MCP tools). disallowedTools narrows that default set via
- * excludeTools (pi-subagents 0.62.0; earlier versions store-and-ignore the
- * key). A per-tool MCP name of a written server joins excludeTools in the
- * form's spelling (ANAME-02, MGRT-01). Both degradations on that path warn:
- * a disallow token with no such mapping cannot narrow anything, and an
- * emitted excludeTools is inert below the version floor -- each is an
- * author-written restriction that must not weaken without a trace.
+ * excludeTools, which every pi-subagents version at the declared floor
+ * applies, so an emitted excludeTools warns of nothing (D-PG7-13). A per-tool
+ * MCP name of a written server joins excludeTools in the form's spelling
+ * (ANAME-02, MGRT-01). excludeTools takes exact names, so a disallow token
+ * with no such mapping, such as a pattern or a whole server, cannot narrow
+ * anything and warns: an author-written restriction must not weaken without
+ * a trace (D-PG7-14).
+ *
+ * D-PG7-09 / PG-AGENT-03: every tool in Claude Code includes `Agent`, so the
+ * mapping grants nested delegation, which the emitter writes as
+ * `allowNestedSubagents: true`. A denied `Agent` or `Task` puts `subagent`
+ * into excludeTools and withholds the grant.
  */
 function omittedToolMapping(
   disallowedTokens: readonly string[],
@@ -604,18 +639,13 @@ function omittedToolMapping(
   }
 
   const excludeTools = dedupePreservingOrder(excluded);
-  if (excludeTools.length > 0) {
-    warnings.push(
-      "`excludeTools` requires pi-subagents >= 0.62.0 -- earlier versions ignore it and keep the default tool set",
-    );
-  }
-
   return {
     omitted: true,
     excludeTools,
     dropped: [],
     warnings,
     inheritSkills: !disallowedTokens.some(isSkillToken),
+    allowNestedSubagents: !excludeTools.includes("subagent"),
   };
 }
 
@@ -847,10 +877,12 @@ export interface ConvertAgentInput {
   /**
    * AG-7 opt-in. When false (the default at the call sites), the AG-7
    * model-mapping table is NOT consulted and the generated frontmatter
-   * omits `model:` entirely (Pi picks its own default). When true (only
-   * passed when the user supplies `--map-model` on install/update), the
-   * mapping table applies. The marketplace autoupdate cascade never passes
-   * this flag, so cascade-driven re-installs always omit `model:`.
+   * omits `model:` (Pi picks its own default), except that a source
+   * `inherit` is always written as `model: ""` (D-PG7-11, D-PG7-17,
+   * PG-AGENT-07a). When true (only passed when the user supplies
+   * `--map-model` on install/update), the mapping table applies. The
+   * marketplace autoupdate cascade never passes this flag, so
+   * cascade-driven re-installs write no other `model:`.
    */
   mapModel: boolean;
   /**
@@ -956,12 +988,11 @@ function convertAgentOrEmpty(input: ConvertAgentInput): AgentConversion {
   }
 
   // 2. Model mapping. AG-7 is opt-in: when `mapModel` is false the
-  //    generated frontmatter omits `model:` entirely (no mapping, no
-  //    originalModel provenance, no unknown-model warning -- absence is
-  //    self-documenting). When true the mapping table applies.
-  const modelResult = mapModelFlag
-    ? mapModel(raw.model)
-    : { emit: undefined, originalModel: undefined, warning: undefined };
+  //    generated frontmatter omits `model:` (no mapping, no originalModel
+  //    provenance, no unknown-model warning), except that a source
+  //    `inherit` is always written (D-PG7-11, PG-AGENT-07a). When true the
+  //    mapping table applies.
+  const modelResult = mapModel(raw.model, mapModelFlag);
   if (modelResult.warning !== undefined) {
     warnings.push(modelResult.warning);
   }
@@ -1076,7 +1107,8 @@ function convertAgentOrEmpty(input: ConvertAgentInput): AgentConversion {
 
 /**
  * D-CF4-05: whether the source asks for a background launch, through
- * `background` set to `true` or `"true"`. Such an agent gets `async: true`.
+ * `background` set to `true` or `"true"`, which the YAML reader both hands
+ * over as the text `true` (D-PG7-05). Such an agent gets `async: true`.
  * D-PG3-01 amends D-CF4-05: any other agent gets no `async` key, so
  * pi-subagents and its user configuration choose the launch mode.
  * Residual: a pi-subagents call can still ask for either launch mode, where
@@ -1088,7 +1120,7 @@ function convertAgentOrEmpty(input: ConvertAgentInput): AgentConversion {
  * (its docs/agents.md), so a foreground launch could not reach the tools.
  */
 function isTrueBackground(rawBackground: unknown): boolean {
-  return typeof rawBackground === "string" && withoutMatchingQuotes(rawBackground) === "true";
+  return rawBackground === "true";
 }
 
 /**
@@ -1150,19 +1182,29 @@ function emptyToolListError(
 /**
  * AG-11 / #179: an explicit source `tools:` declaration emits a non-empty
  * allowlist; an omitted one emits no `tools:` at all, so pi-subagents
- * grants its default builtin tools, with disallowedTools narrowing that
- * set via excludeTools. The GeneratedToolsFields return type is what keeps
- * the two lines from ever rendering together. The validated mapping carries
- * the nonempty explicit list proved by hasMappedTools, so the
- * emitter does not need a second runtime check.
+ * grants its default builtin tools. The validated mapping carries the
+ * nonempty explicit list proved by hasMappedTools, so the emitter does not
+ * need a second runtime check. Either arm may carry `excludeTools`: beside
+ * `tools:` it removes one tool of a granted MCP server (D-PG7-12,
+ * PG-AGENT-09), and without it the mapped disallowedTools narrow the
+ * default set.
  */
 function toolsFields(result: ValidatedToolMapping): GeneratedToolsFields {
   if (result.omitted) {
-    const [first, ...rest] = result.excludeTools;
-    return first === undefined ? {} : { excludeTools: [first, ...rest] };
+    return {
+      ...excludeToolsField(result.excludeTools),
+      ...(result.allowNestedSubagents && { allowNestedSubagents: true }),
+    };
   }
 
-  return { tools: result.mapped };
+  return { tools: result.mapped, ...excludeToolsField(result.excludeTools) };
+}
+
+function excludeToolsField(names: readonly string[]): {
+  readonly excludeTools?: readonly [string, ...string[]];
+} {
+  const [first, ...rest] = names;
+  return first === undefined ? {} : { excludeTools: [first, ...rest] };
 }
 
 /**

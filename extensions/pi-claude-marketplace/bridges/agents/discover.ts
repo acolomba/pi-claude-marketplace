@@ -39,11 +39,11 @@ import { createHash } from "node:crypto";
 import { lstat, readFile } from "node:fs/promises";
 import path from "node:path";
 
-import { assertSafeName, generatedAgentName } from "../../domain/name.ts";
+import { assertSafeName, declaredAgentName, generatedAgentName } from "../../domain/name.ts";
 import { isErrnoException } from "../../shared/errors.ts";
 import { readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 
-import { parseFrontmatter } from "./frontmatter.ts";
+import { readAgentFrontmatter } from "./frontmatter.ts";
 
 import type { DiscoveredAgent } from "./types.ts";
 
@@ -74,6 +74,25 @@ function duplicateWarning(
     `agent source "${sourceName}" at "${sourcePath}" duplicates generated name ` +
     `"${incumbent.generatedName}" already produced by agent source "${incumbent.sourceName}" ` +
     `at "${incumbent.sourcePath}"; keeping first discovered source.`
+  );
+}
+
+// D-PG7-04: the note for an agent whose frontmatter did not parse after the
+// repair. It names the agent as `subagent list` shows it, never by its path,
+// because the staging diagnostic cuts a line at a redacted path, and keeps
+// only the first line of the parser's message, so the note is one line.
+function unparseableWarning(
+  pluginName: string,
+  sourceName: string,
+  namespace: readonly string[],
+  parseError: string,
+): string {
+  const firstLineEnd = `${parseError}\n`.indexOf("\n");
+  const reason = parseError.slice(0, firstLineEnd).trim().replace(/:$/, "");
+  return (
+    `agent "${declaredAgentName(pluginName, sourceName, namespace)}": its source frontmatter ` +
+    `could not be parsed (${reason}); the agent is loaded with no frontmatter fields, so its ` +
+    `tools, model, and description settings are not applied.`
   );
 }
 
@@ -135,10 +154,11 @@ async function collectAgentFile(
   const sourcePath = file.path;
   const bytes = await readFile(sourcePath);
   const sourceHash = createHash("sha256").update(bytes).digest("hex");
-  const { raw, body } = parseFrontmatter(bytes.toString("utf8"));
+  const { raw, body, parseError } = readAgentFrontmatter(bytes.toString("utf8"));
   const fileName = path.basename(sourcePath);
   const stem = fileName.endsWith(".md") ? fileName.slice(0, -3) : fileName;
-  const sourceName = raw.name ?? stem;
+  const declaredName = raw.name?.trim() ?? "";
+  const sourceName = declaredName === "" ? stem : declaredName;
   assertSafeName(sourceName, `agent name in ${sourcePath}`);
 
   const generatedName = generatedAgentName(pluginName, sourceName, file.namespace);
@@ -146,6 +166,10 @@ async function collectAgentFile(
   if (incumbent !== undefined) {
     warnings.push(duplicateWarning(incumbent, sourceName, sourcePath));
     return;
+  }
+
+  if (parseError !== undefined) {
+    warnings.push(unparseableWarning(pluginName, sourceName, file.namespace, parseError));
   }
 
   seenByGenerated.set(generatedName, {
@@ -167,10 +191,15 @@ async function collectAgentFile(
  * - Walks each folder recursively in `localeCompare` order; skips symlinks
  *   and files whose name does not end in `.md` in any case (T-03-27).
  * - sourceHash over raw bytes for BOM/line-ending tolerance.
- * - sourceName = frontmatter `name:` field if present, else the file name
- *   without a lower-case `.md`; the folders become `namespace`.
+ * - D-PG7-05: sourceName = the frontmatter `name:` value, trimmed; when it is
+ *   absent or empty, the file name without a lower-case `.md`. The folders
+ *   become `namespace`.
  * - AG-12: first-discovered generated names win within and across paths;
  *   later duplicates warn with both full paths. Discovery owns this policy.
+ * - D-PG7-04: an agent whose frontmatter cannot be parsed, even after the
+ *   repair, is kept with no fields and one note in `warnings` that names it
+ *   and says its frontmatter settings are not applied. A skipped duplicate
+ *   gets only its duplicate warning.
  */
 export async function discoverPluginAgents(input: {
   pluginName: string;

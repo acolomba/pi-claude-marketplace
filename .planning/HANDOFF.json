@@ -36,7 +36,7 @@
     },
     {
       "id": 16,
-      "name": "Merge features/gaps-agents and features/gaps-mcp into features/gaps, combined npm run check, apply parent lines",
+      "name": "Merge features/gaps-mcp into features/gaps, combined npm run check, apply its parent lines (features/gaps-agents merged 2026-11-15)",
       "status": "not_started"
     },
     {
@@ -77,6 +77,6 @@
     }
   ],
   "uncommitted_files": [],
-  "next_action": "Phase 6 is complete on features/gaps. Continue Phase 10 in ~/src/pi-claude-marketplace-gaps-mcp, then merge features/gaps-agents and features/gaps-mcp into features/gaps, then Phase 11.",
-  "context_notes": "Full detail in .planning/phases/06-hook-inputs-and-events/HANDOFF-parity-gaps-session.md. Three worktrees: features/gaps (this), features/gaps-agents (Phases 7-8 complete), features/gaps-mcp (Phase 9 complete, Phase 10 at 10-05). Side branches keep stale STATE.md on purpose."
+  "next_action": "Phases 1-8 are complete on features/gaps (features/gaps-agents merged). Continue Phase 10 in ~/src/pi-claude-marketplace-gaps-mcp, then merge features/gaps-mcp into features/gaps, then the security re-checks for Phases 7 and 9, then Phase 11.",
+  "context_notes": "Full detail in .planning/phases/06-hook-inputs-and-events/HANDOFF-parity-gaps-session.md. Worktrees: features/gaps (this; Phases 1-8), features/gaps-mcp (Phase 9 complete, Phase 10 in progress). features/gaps-agents is merged. Side branches keep stale STATE.md on purpose."
 }

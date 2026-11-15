@@ -5,17 +5,17 @@ milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 10
 current_phase_name: Plugin Options, Variables, and Trust
 status: executing
-stopped_at: Phase 6 complete on features/gaps; Phase 10 continues on features/gaps-mcp, then the merge, then Phase 11
+stopped_at: features/gaps-agents (Phases 7-8) merged into features/gaps; next Phase 10 continues on features/gaps-mcp, then the merge of features/gaps-mcp, then the security re-checks for Phases 7 and 9, then Phase 11
 last_updated: "2026-11-15T13:41:31.858Z"
 last_activity: 2026-11-15
-last_activity_desc: Phase 6 complete (verification passed, two overrides pending maintainer review)
+last_activity_desc: Merged features/gaps-agents (Phases 7 and 8 complete) into features/gaps and applied its parent records
 state_head: 4b3392d25ceab27186df3abaa1a39af564bcc377
 progress:
   total_phases: 11
-  completed_phases: 6
-  total_plans: 54
-  completed_plans: 54
-  percent: 55
+  completed_phases: 8
+  total_plans: 67
+  completed_plans: 67
+  percent: 73
 ---
 
 # Project State
@@ -27,16 +27,33 @@ See: `.planning/PROJECT.md` (updated 2026-11-13 after parity-gaps Phase 2)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 10 — Plugin Options, Variables, and Trust (on features/gaps-mcp), then the merge of features/gaps-agents and features/gaps-mcp, then Phase 11
+**Current focus:** Phase 10 — Plugin Options, Variables, and Trust (on features/gaps-mcp), then the merge of features/gaps-mcp, then the security re-checks for Phases 7 and 9, then Phase 11
 
 ## Current Position
 
 Phase: 10 — Plugin Options, Variables, and Trust (executing on features/gaps-mcp)
 Plan: see that branch
-Status: Phases 1–6 complete on features/gaps; Phases 7–9 complete on their side branches (7–8 on features/gaps-agents, 9 on features/gaps-mcp)
-Last activity: 2026-11-15 — Phase 6 complete: verification passed with two overrides (judgment-tier prohibitions, pending maintainer review), phase gate green at 4a4f3a82 (1967 + 188 scenarios)
+Status: Phases 1–8 complete on features/gaps (7–8 merged from features/gaps-agents); Phase 9 complete on features/gaps-mcp, Phase 10 executing there
+Last activity: 2026-11-15 — merged features/gaps-agents (Phases 7 and 8, head 98aaf822) and applied its parent records (PROJECT D-PG7-01..19 and D-PG8-01..17, BACKLOG, CHANGELOG, STACK.md, ROADMAP Phase 8 criterion 5 and PG-WF-05 to option A)
 
-Progress: [██████░░░░] 55% (this branch: Phases 1–6 of 11; the side branches hold Phases 7–9)
+Progress: [███████░░░] 73% (this branch: Phases 1–8 of 11; features/gaps-mcp holds Phase 9 and Phase 10 in progress)
+
+Next, in order:
+
+1. Phase 10 continues on features/gaps-mcp (`~/src/pi-claude-marketplace-gaps-mcp`).
+2. Merge features/gaps-mcp into features/gaps, run the combined `npm run check`, and apply its parent lines (D-PG9-*, D-PG10-*, the CHANGELOG lines of 10-20).
+3. Security re-checks for Phases 7 and 9: both audits predate their review-fix rounds.
+4. Phase 11 — Skills, Commands, and Records.
+
+### parity-gaps merge of features/gaps-agents (Phases 7 and 8)
+
+Phase 7 (Agent Frontmatter and Grants, 6/6 plans) and Phase 8 (Workflow
+Agents and Run Paths, 7/7 plans; 08-06 skipped under option A) are complete.
+Both verifications passed with overrides pending maintainer review: Phase 7
+criteria 3 and 4 (D-PG7-17 writes `model: ""`), Phase 8 criterion 5 (option A
+of D-PG8-11; ROADMAP criterion 5 and PG-WF-05 amended to it). Open for the
+maintainer: D-PG7-02/04/07/10/17/18/19, D-PG8-04..15, and T-08-13 (open
+nonblocking; BACKLOG WFLENGINE-01 carries the engine-trust request).
 
 
 ### parity-gaps Phase 3 execution

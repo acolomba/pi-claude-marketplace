@@ -3820,6 +3820,8 @@ Carried from `any-git-host` (`03-REVIEW-DISPOSITION.md`; milestone audit, 2026-0
 
 ## WOUT-01: workflow output quality is unobserved because engine subagents declined every tool call
 
+**Out of date 2026-11-15** (parity-gaps Phase 8, 08-03 and 08-04). Workflow subagents get Pi's `read`, `bash`, `edit`, and `write` since engine 3.13.1. In the scenario "A workflow step that asks for worktree isolation runs in a git worktree of the project, which the engine keeps where Claude Code removes an unchanged one" (`features/workflow/agent-steps.feature`), two workflow subagents each ran `bash` and got its result. Output quality on a real plugin is still unmeasured.
+
 Carried from the json-output close (WINDOWS #84).
 
 The bridge-to-engine path is proven end to end; workflow output quality is not.
@@ -4568,6 +4570,8 @@ Deferred by component-features Phase 7. Trigger: `@quintinshaw/pi-dynamic-workfl
 
 - Engine request for D-CF7-01: a pre-run hook (or approval option) in `@quintinshaw/pi-dynamic-workflows` so a host can ask before a saved workflow runs.
 - Engine request for D-CF7-02: a raw-string `args` mode for the slash path, so a script written for Claude Code receives the typed text as one string, or `undefined` when nothing is typed.
+- Engine requests that parity-gaps Phase 8 depends on and did not draft (PRD section 8.4, D-PG8-17): an `agent()` call whose `agentType` names no agent throws, as Claude Code 2.1.323 does (the scenario "A workflow step that names an agent type the plugin does not install still runs, where Claude Code stops the step" fails on that day); `parallel()` and `pipeline()` return `null` for a failed thunk and never reject; `builtin:mcp` in `providerMiddlewareExtensions` works in subagents.
+- [workflows] Ask the pi-dynamic-workflows engine to apply Pi project trust to `<project>/.pi/workflows/settings.json` (3.15.0 `src/workflow-settings.ts:122-134` reads it untrusted; a cloned repo can set `providerMiddlewareExtensions` and `inheritMainModel`). Source: 08-REVIEW.md CR-01, 08-SECURITY.md T-08-13 (open nonblocking, pending maintainer acceptance).
 
 ## WFLLIST-01: the workflow listing step assumes no engine built-in command name holds a colon
 
@@ -4617,7 +4621,9 @@ Added 2026-11-01 (component-features Phase 6, D-CF6-04). `test/live-uat/mcp-adap
 
 Added 2026-11-01 (component-features Phase 6). Since pi-mcp-adapter 6.0, a call through the `mcp` proxy tool runs the real tool as a nested Pi tool call under its Claude Code name (measured on 7.0.0, Pi 1.4.0). No run has checked whether the hooks bridge fires a plugin's `PreToolUse` and `PostToolUse` matchers and `if` predicates for that nested call. Measure it with the hooks scenarios, then state the result in `docs/hooks-compatibility.md` (the two MCP matcher rows and the paragraph under "Tool name mapping") and in `docs/mcp-compatibility.md` "Hooks and agents".
 
-## AGTEXCL-01: per-tool MCP disallows beside an explicit `tools:` list
+## ~~AGTEXCL-01: per-tool MCP disallows beside an explicit `tools:` list~~ -- CLOSED
+
+**CLOSED 2026-11-14** by parity-gaps Phase 7 (D-PG7-12, D-PG7-13; PG-AGENT-09, verified in 07-VERIFICATION.md). A per-tool MCP deny under a whole-server grant is written to `excludeTools` beside `tools`, and the ANAME-02 warning and the `excludeTools` version-floor warning are removed instead of reworded, because pi-subagents 0.87.0 and later apply `excludeTools` beside an explicit list.
 
 Deferred by component-features Phase 4 (D-CF4-08). pi-subagents 0.62 and later apply `excludeTools` beside `tools`. Emit `excludeTools` beside an explicit `tools:` list for a per-tool MCP disallow, and reword the stale ANAME-02 warning `disallowedTools entry <tool> cannot narrow the whole-server grant <server> -- pi-subagents takes no excludeTools beside an explicit tools: list, so the agent keeps every tool of that server` (`bridges/agents/convert.ts`). The warning is user-visible, so the change needs a cucumber scenario. It touches MCP-07 (D-CF6-07, D-CF6-10).
 
@@ -5429,3 +5435,18 @@ Noted 2026-11-15 (parity-gaps, Phase 6 re-review IN2-01). `mcpServerEntries` (`b
 ## TYPEDEXPANSIONDRIFT-01: the typed-line resolver copies the alias and command handlers' rules
 
 Noted 2026-11-15 (parity-gaps, Phase 6 review IN-02). `orchestrators/typed-expansion.ts` copies the token pattern and the order in which `edge/skill-aliases.ts` and `edge/command-invocation.ts` take a line. Nothing ties the copies together, so a change to one handler can leave `UserPromptExpansion` hooks told a different command than the line expands to (T-06-27).
+
+## AGTREPAIRSET-01: widen the agents frontmatter repair to Claude Code's full retry set
+
+Noted 2026-11-14 (parity-gaps, Phase 7, D-PG7-02 residual). The agents repair quotes a single-line plain value with an unquoted `: `, or one that starts with `*`, `&`, `!`, `%`, `@`, or a backtick. Claude Code 2.1.323's retry also quotes a value that holds any of ``{}[]*&#!|>%@` `` anywhere and turns leading tabs into spaces. Widening it needs a split trigger in `shared/frontmatter-repair.ts`, so the skills bridge keeps its colon rule.
+
+## AGTWORKFLOWAMBIENT-01: a no-tools agent's child is offered the engine's workflow tools
+
+Noted 2026-11-14 (parity-gaps, Phase 8, spike S5 row a1, T-08-17). A background pi-subagents child of a bridged agent with no `tools` list is offered the engine's `workflow` and `workflow_control` tools (pi-subagents 0.88.1, engine 3.15.0), where Claude Code gives a subagent neither; `disallowedTools: Workflow` does not remove them. Decide whether the converter should write `excludeTools: workflow, workflow_control` (or map a `Workflow` deny to them) for such an agent (D-PG8-14, 08-RESEARCH.md item 12).
+
+## AGTWFDOCS-01: two documentation follow-ups from the Phase 8 review
+
+Noted 2026-11-15 (parity-gaps, Phase 8, 08-REVIEW.md IN3-01 and IN3-02).
+
+- IN3-01: `docs/mcp-compatibility.md` says AG-11 licenses refusing a plugin install that holds an agent with zero tools. AG-11's stated reason (pi-subagents could not express "no tools") no longer holds, and Claude Code refuses only that agent's launch, not the install. Reword it to say so and point at PRD decision 15 (AGENT-10), which proposes to skip such an agent, pending the maintainer's decision.
+- IN3-02: `docs/workflows-compatibility.md` says a repository's `keywordTriggerEnabled` turns on workflows mode, which is already the engine's default. Name `keywordTriggerWord` (a repository can set the trigger to an ordinary word) and `defaultAgentTimeoutMs` (`null` removes the user's own timeout) instead.

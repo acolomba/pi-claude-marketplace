@@ -40,6 +40,110 @@ Feature: MCP server agent grants
       | 2    | tool result | subagent returned: agent demo:runner\npath {agent dir}/agents/pi-claude-marketplace-demo-runner.md\ndescription Excludes the long MCP tool.\naliases pi-claude-marketplace-demo-runner\nexcluded tools mcp__plugin_demo_a-server-whose-name-runs-well-past-the_a4df039c\nsystem prompt mode replace\ninherit project context true\ninherit skills true\nasync true\nsystem prompt:\nCall the tools the task names. |
 
   @adapter-only
+  Scenario: An agent that grants a plugin MCP server and disallows one of its tools lists the grant and the excluded tool under pi-mcp-adapter (PG-AGENT-09, D-PG7-12)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file      | name   | description                       | tools                       | disallowedTools             | body                           |
+      | runner.md | runner | Uses the server but not its echo. | mcp__plugin_demo_stub, Read | mcp__plugin_demo_stub__echo | Call the tools the task names. |
+    Given the marketplace "fixtures" is added to the user scope
+    Given pi-subagents hides its builtin agents
+    Given pi runs with the scripted model, pi-subagents, and the mcp implementation
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the scripted model plays these steps:
+      | reply                  | tool     | arguments                             |
+      |                        | subagent | {"action":"list","capabilities":true} |
+      | The agents are listed. |          |                                       |
+    When the user prompts "List the agents."
+    Then the model receives these calls:
+      | call | role        | text                                                     |
+      | 1    | user        | List the agents.                                         |
+      | 2    | user        | List the agents.                                         |
+      | 2    | assistant   | tool call subagent {"action":"list","capabilities":true} |
+      | 2    | tool result | subagent returned: agent demo:runner, aliases pi-claude-marketplace-demo-runner: Uses the server but not its echo.; tools read, mcp:plugin_demo_stub_; excluded tools mcp__plugin_demo_stub__echo |
+    Then the agents folder of the user scope holds the file "pi-claude-marketplace-demo-runner.md" with this text:
+      """
+      ---
+      name: demo:runner
+      description: Uses the server but not its echo.
+      aliases: pi-claude-marketplace-demo-runner
+      tools: mcp:plugin_demo_stub_,read
+      excludeTools: mcp__plugin_demo_stub__echo
+      systemPromptMode: replace
+      inheritProjectContext: true
+      inheritSkills: false
+      advertise: true
+      async: true
+      provenance:
+        generatedBy: pi-claude-marketplace
+        sourcePlugin: demo
+        sourceAgent: runner
+        sourcePath: {home}/marketplaces/fixtures/plugins/demo/agents/runner.md
+        droppedFields: []
+        droppedTools: []
+        warnings:
+          - "tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before pi-mcp-adapter has cached the server's tools still fails"
+      ---
+
+      Call the tools the task names.
+      """
+
+  @builtin-only
+  Scenario: An agent that grants a plugin MCP server and disallows one of its tools lists the grant and the excluded tool under Pi's built-in MCP (PG-AGENT-09, D-PG7-12)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "stub"
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file      | name   | description                       | tools                       | disallowedTools             | body                           |
+      | runner.md | runner | Uses the server but not its echo. | mcp__plugin_demo_stub, Read | mcp__plugin_demo_stub__echo | Call the tools the task names. |
+    Given the marketplace "fixtures" is added to the user scope
+    Given pi-subagents hides its builtin agents
+    Given pi runs with the scripted model, pi-subagents, and the mcp implementation
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the scripted model plays these steps:
+      | reply                  | tool     | arguments                             |
+      |                        | subagent | {"action":"list","capabilities":true} |
+      | The agents are listed. |          |                                       |
+    When the user prompts "List the agents."
+    Then the model receives these calls:
+      | call | role        | text                                                     |
+      | 1    | user        | List the agents.                                         |
+      | 2    | user        | List the agents.                                         |
+      | 2    | assistant   | tool call subagent {"action":"list","capabilities":true} |
+      | 2    | tool result | subagent returned: agent demo:runner, aliases pi-claude-marketplace-demo-runner: Uses the server but not its echo.; tools read, mcp:plugin_demo_stub; excluded tools mcp__plugin_demo_stub__echo |
+    Then the agents folder of the user scope holds the file "pi-claude-marketplace-demo-runner.md" with this text:
+      """
+      ---
+      name: demo:runner
+      description: Uses the server but not its echo.
+      aliases: pi-claude-marketplace-demo-runner
+      tools: mcp:plugin_demo_stub,read
+      excludeTools: mcp__plugin_demo_stub__echo
+      systemPromptMode: replace
+      inheritProjectContext: true
+      inheritSkills: false
+      advertise: true
+      async: true
+      provenance:
+        generatedBy: pi-claude-marketplace
+        sourcePlugin: demo
+        sourceAgent: runner
+        sourcePath: {home}/marketplaces/fixtures/plugins/demo/agents/runner.md
+        droppedFields: []
+        droppedTools: []
+        warnings:
+          - "tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before Pi's built-in MCP has listed the server's tools still fails"
+      ---
+
+      Call the tools the task names.
+      """
+
+  @adapter-only
   Scenario: Installing a plugin in a pi session stages its agent with pi-mcp-adapter's mcp grant (MGRT-01)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -435,7 +539,7 @@ Feature: MCP server agent grants
         droppedFields: []
         droppedTools: []
         warnings:
-          - tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before pi-mcp-adapter has cached the server's tools still fails
+          - "tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before pi-mcp-adapter has cached the server's tools still fails"
       ---
 
       Call the tools the task names.

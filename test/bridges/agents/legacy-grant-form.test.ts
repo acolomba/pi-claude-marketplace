@@ -195,6 +195,51 @@ test("D-CF6-10 / ANAME-02: the async and cannot-narrow warnings take the built-i
   });
 });
 
+for (const { label, adapterAsync, builtinAsync } of [
+  { label: "first", adapterAsync: ADAPTER_ASYNC, builtinAsync: BUILTIN_ASYNC },
+  { label: "corrected", adapterAsync: CORRECTED_ADAPTER, builtinAsync: CORRECTED_BUILTIN },
+]) {
+  test(`D-CF6-10 / T-07-05: a double-quoted ${label} async warning item takes the quoted built-in text`, () => {
+    // arrange
+    const warnings = [adapterAsync, ADAPTER_NARROW];
+    const adapter = agentBlock(
+      "tools: read,mcp:plugin_demo_my-db_",
+      warnings.map((warning) => `"${warning}"`),
+    );
+    const row = legacyRow(TARGET, warnings);
+    const builtinWarnings = [builtinAsync, BUILTIN_NARROW];
+
+    // act
+    const recorded = deriveLegacyGrantForms(adapter + PLAIN_BODY, row);
+
+    // assert
+    assert.deepStrictEqual(recorded?.mcpForms?.builtin, {
+      frontmatter: agentBlock(
+        "tools: read,mcp:plugin_demo_my-db",
+        builtinWarnings.map((warning) => `"${warning}"`),
+      ),
+      warnings: builtinWarnings,
+      droppedTools: [],
+    });
+  });
+}
+
+test("D-CF6-10: an async warning item with a mismatched closing quote stays byte identical", () => {
+  // arrange
+  const item = `"${CORRECTED_ADAPTER}'`;
+  const adapter = agentBlock("tools: read,mcp:plugin_demo_stub_/echo", [item]);
+  const row = legacyRow(TARGET, [CORRECTED_ADAPTER]);
+
+  // act
+  const recorded = deriveLegacyGrantForms(adapter + PLAIN_BODY, row);
+
+  // assert
+  assert.strictEqual(
+    recorded?.mcpForms?.builtin?.frontmatter,
+    agentBlock("tools: read,mcp:plugin_demo_stub/echo", [item]),
+  );
+});
+
 test("AG-6: a body holding a --- line does not move the end of the block", () => {
   // arrange
   const row = legacyRow(TARGET, [ADAPTER_ASYNC]);

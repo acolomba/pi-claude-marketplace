@@ -15,10 +15,12 @@
 // no-cross-bridge-imports boundary rule, so the per-kind barrels are the
 // only bridge entry points here.
 //
-// PG-SEC-01 / D-PG4-13: this is also where the workflow agent restriction
-// notes are built. They join the agents discovery with the workflows
-// discovery, and no bridge may import a sibling bridge, so the join lives in
-// the one orchestrator module that already holds both results.
+// PG-SEC-01 / D-PG4-13 and PG-WF-02 / D-PG8-04: this is also where the
+// workflow agent notes are built: the note for an agent type that restricts
+// its tools, and the note for an agent type the plugin does not install. They
+// join the agents discovery with the workflows discovery, and no bridge may
+// import a sibling bridge, so the join lives in the one orchestrator module
+// that already holds both results.
 
 import path from "node:path";
 
@@ -44,22 +46,23 @@ export interface DiscoveredGeneratedNames {
    */
   readonly workflows: readonly string[];
   /**
-   * PG-SEC-01: one note for each distinct pair of an admitted script and an
-   * agent type it names that restricts its tools.
+   * Both kinds of workflow agent note in one list, so no surface can print
+   * one kind and forget the other: PG-SEC-01 notes an agent type that
+   * restricts its tools, and PG-WF-02 / D-PG8-04 notes an agent type of the
+   * plugin's own namespace that the plugin does not install.
    */
-  readonly workflowAgentRestrictionNotes: readonly string[];
+  readonly workflowAgentNotes: readonly string[];
 }
 
-/** The part of a discovered agent the restriction join reads. */
-export interface RestrictionAgent {
+/** The part of a discovered agent the workflow agent join reads. */
+export interface WorkflowNoteAgent {
   readonly sourceName: string;
-  readonly generatedName: string;
   readonly namespace?: readonly string[];
   readonly raw: { readonly tools?: string; readonly disallowedTools?: string };
 }
 
-/** The part of a discovered workflow script the restriction join reads. */
-export interface RestrictionWorkflow {
+/** The part of a discovered workflow script the workflow agent join reads. */
+export interface WorkflowNoteScript {
   readonly verdict: WorkflowVerdict;
   readonly scriptFile: string;
 }
@@ -88,7 +91,7 @@ const ENGINE_BUILTIN_TOOLS: readonly (readonly [pi: string, claude: string])[] =
  * `disallowedTools` denies, which the agent may get anyway. An absent or blank
  * `tools`, or one that lists `*`, allows every tool, as in Claude Code.
  */
-function unkeptBuiltinTools(agent: RestrictionAgent): readonly string[] {
+function unkeptBuiltinTools(agent: WorkflowNoteAgent): readonly string[] {
   const allowed = listedToolNames(agent.raw.tools);
   const denied = new Set(listedToolNames(agent.raw.disallowedTools));
   const allowsAll = allowed.length === 0 || allowed.includes("*");
@@ -99,24 +102,23 @@ function unkeptBuiltinTools(agent: RestrictionAgent): readonly string[] {
 
 /**
  * D-PG4-11: the built-ins each restricted agent of the plugin gets anyway,
- * under each name a script may use for it: the upstream `<plugin>:<agent>`,
- * which the engine's registry resolves, and the generated name. An agent
- * whose restriction keeps every built-in is left out. Discovery already
- * checked every part of both names, so `declaredAgentName` cannot throw here.
+ * under the one name the engine's registry resolves: the frontmatter `name`,
+ * which the bridge writes as the upstream `<plugin>:<agent>`. The registry
+ * reads the file name only when `name` is absent, so the generated flat name
+ * binds no agent and gets no restriction note (D-PG8-04). An agent whose
+ * restriction keeps every built-in is left out. Discovery already checked
+ * every part of the name, so `declaredAgentName` cannot throw here.
  */
 function restrictedAgentTools(
   pluginName: string,
-  agents: readonly RestrictionAgent[],
+  agents: readonly WorkflowNoteAgent[],
 ): ReadonlyMap<string, readonly string[]> {
   return new Map(
     agents.flatMap((agent) => {
       const unkept = unkeptBuiltinTools(agent);
       return unkept.length === 0
         ? []
-        : [
-            [declaredAgentName(pluginName, agent.sourceName, agent.namespace), unkept] as const,
-            [agent.generatedName, unkept] as const,
-          ];
+        : [[declaredAgentName(pluginName, agent.sourceName, agent.namespace), unkept] as const];
     }),
   );
 }
@@ -124,31 +126,124 @@ function restrictedAgentTools(
 const TOOL_LIST_FORMAT = new Intl.ListFormat("en", { type: "conjunction" });
 
 /**
- * D-PG4-12: one note in the shape of the workflows bridge's notes. Each span
- * of plugin text goes through `forMessage` where it enters the string.
+ * D-PG8-05: the most missing-agent notes one script prints, and the longest
+ * agent type a note prints. A script may hold as many literals as its
+ * 524,288 bytes allow, and one literal may be as long as the script, so
+ * without them one script could flood the install output. A missing agent
+ * type past either limit is counted in one line instead.
+ */
+const MISSING_AGENT_NOTE_LIMIT = 5;
+const AGENT_TYPE_DISPLAY_LIMIT = 128;
+
+/**
+ * D-PG4-12: the start of every workflow agent note, in the shape of the
+ * workflows bridge's notes. Each span of plugin text goes through
+ * `forMessage` where it enters the string.
  *
  * The folder is the script folder's base name, which is what the bridge's
- * notes show once `redactAbsolutePaths` reduces their absolute folder. This
- * note cannot leave that to the redaction: a quoted absolute path that more
+ * notes show once `redactAbsolutePaths` reduces their absolute folder. These
+ * notes cannot leave that to the redaction: a quoted absolute path that more
  * quotes follow is redacted to the end of the line, and the agent type is
  * quoted after the folder.
  */
+function scriptLead(fileName: string, scriptFile: string): string {
+  const folder = path.basename(path.dirname(scriptFile));
+
+  return `workflow script "${forMessage(fileName)}" in "${forMessage(folder)}"`;
+}
+
+function agentTypeLead(fileName: string, scriptFile: string, agentType: string): string {
+  return `${scriptLead(fileName, scriptFile)} runs agent type "${forMessage(agentType)}"`;
+}
+
 function restrictionNote(
   fileName: string,
   scriptFile: string,
   agentType: string,
   unkept: readonly string[],
 ): string {
-  const folder = path.basename(path.dirname(scriptFile));
+  return `${agentTypeLead(fileName, scriptFile, agentType)}, which restricts its tools; unless the workflow engine's providerMiddlewareExtensions setting lists builtin:codemode, the engine does not keep that restriction, so the agent may use ${TOOL_LIST_FORMAT.format(unkept)}`;
+}
 
-  return `workflow script "${forMessage(fileName)}" in "${forMessage(folder)}" runs agent type "${forMessage(agentType)}", which restricts its tools; unless the workflow engine's providerMiddlewareExtensions setting lists builtin:codemode, the engine does not keep that restriction, so the agent may use ${TOOL_LIST_FORMAT.format(unkept)}`;
+/** PG-WF-02 / D-PG8-05: the text has no tense, so install and `info` print the same bytes. */
+function missingAgentNote(fileName: string, scriptFile: string, agentType: string): string {
+  return `${agentTypeLead(fileName, scriptFile, agentType)}, which this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code fails the step`;
 }
 
 /**
- * PG-SEC-01 / D-PG4-11: the notes for a plugin whose admitted workflow
- * scripts name, as a string literal, an agent of the same plugin that
- * restricts its tools. Claude Code keeps that restriction when a workflow
- * runs the agent. The workflow engine keeps it only when its
+ * D-PG8-05: the line that counts the missing agent types the notes leave out.
+ * When no missing-agent note comes before it, every one of them was too long to
+ * print, so the line says so and gives the consequence that a note would have
+ * given. A restriction note may still come before it.
+ */
+function missingAgentCountLine(
+  fileName: string,
+  scriptFile: string,
+  count: number,
+  shown: number,
+): string {
+  const types = count === 1 ? "agent type" : "agent types";
+  const lead = `${scriptLead(fileName, scriptFile)} runs ${count}`;
+  if (shown > 0) {
+    return `${lead} more ${types} that this plugin does not install`;
+  }
+
+  const place = count === 1 ? "in its place" : "in place of each";
+
+  return `${lead} ${types} longer than ${AGENT_TYPE_DISPLAY_LIMIT} characters that this plugin does not install; the workflow engine runs a default agent ${place}, where Claude Code fails the step`;
+}
+
+/** What the join knows about the plugin before it reads a script. */
+interface AgentNoteJoin {
+  /** `<plugin>:`, the prefix of every agent type the plugin could install. */
+  readonly ownPrefix: string;
+  /** The declared name of every discovered agent. */
+  readonly installed: ReadonlySet<string>;
+  readonly restricted: ReadonlyMap<string, readonly string[]>;
+}
+
+/**
+ * The notes of one admitted script, in the order the script names its agent
+ * types, and then the count line. An agent type is either a restricted agent
+ * of the plugin or missing, never both, because a restricted agent is a
+ * discovered one.
+ */
+function scriptAgentNotes(
+  join: AgentNoteJoin,
+  fileName: string,
+  scriptFile: string,
+  agentTypes: readonly string[],
+): readonly string[] {
+  const notes: string[] = [];
+  let missing = 0;
+  let shown = 0;
+  for (const agentType of agentTypes) {
+    const unkept = join.restricted.get(agentType);
+    if (unkept !== undefined) {
+      notes.push(restrictionNote(fileName, scriptFile, agentType, unkept));
+    } else if (agentType.startsWith(join.ownPrefix) && !join.installed.has(agentType)) {
+      missing += 1;
+      if (shown < MISSING_AGENT_NOTE_LIMIT && agentType.length <= AGENT_TYPE_DISPLAY_LIMIT) {
+        notes.push(missingAgentNote(fileName, scriptFile, agentType));
+        shown += 1;
+      }
+    }
+  }
+
+  if (missing > shown) {
+    notes.push(missingAgentCountLine(fileName, scriptFile, missing - shown, shown));
+  }
+
+  return notes;
+}
+
+/**
+ * The workflow agent notes of a plugin whose admitted workflow scripts name
+ * agent types as string literals. Pure: it reads no file.
+ *
+ * PG-SEC-01 / D-PG4-11: a note for an agent of the same plugin that restricts
+ * its tools. Claude Code keeps that restriction when a workflow runs the
+ * agent. The workflow engine keeps it only when its
  * `providerMiddlewareExtensions` setting lists `builtin:codemode`, which is
  * not Pi's own `codemode` tool. Otherwise the engine passes no tool list to Pi
  * for the child session, and the child gets Pi's default tools. Those are
@@ -157,35 +252,45 @@ function restrictionNote(
  * the agent may use the ones its restriction does not keep, and an agent whose
  * restriction keeps all four gets no note.
  *
+ * PG-WF-02 / D-PG8-04: a note for an agent type that starts with the plugin
+ * name and a colon and equals the declared name of no discovered agent.
+ * Claude Code fails such a step; the workflow engine runs a default agent in
+ * its place. The discovered agents are exactly the ones a successful install
+ * writes: AG-11 fails the whole install, and AG-12 drops a duplicate inside
+ * discovery. A name outside the plugin's namespace gets no note, because
+ * another install may provide it. A generated flat name is never compared: it
+ * does not start with the plugin name and a colon. D-PG8-05 limits these
+ * notes for one script.
+ *
  * Matching is exact string equality, with no case folding or Unicode
  * normalization. One note for each distinct pair of script and agent type,
- * in script order and then in the order the script names them. Pure: it reads
- * no file.
+ * in script order and then in the order the script names them.
  *
  * Two surfaces consume it: the install and update discovery below, and the
  * `info` surface, which joins the agents and workflows it previews itself.
  */
-export function workflowAgentRestrictionNotes(
+export function workflowAgentNotes(
   pluginName: string,
-  agents: readonly RestrictionAgent[],
-  workflows: readonly RestrictionWorkflow[],
+  agents: readonly WorkflowNoteAgent[],
+  workflows: readonly WorkflowNoteScript[],
 ): readonly string[] {
-  const restricted = restrictedAgentTools(pluginName, agents);
+  const join: AgentNoteJoin = {
+    ownPrefix: `${pluginName}:`,
+    installed: new Set(
+      agents.map((agent) => declaredAgentName(pluginName, agent.sourceName, agent.namespace)),
+    ),
+    restricted: restrictedAgentTools(pluginName, agents),
+  };
 
   return workflows.flatMap(({ verdict, scriptFile }) =>
     verdict.outcome === "named"
-      ? (verdict.agentTypes ?? []).flatMap((agentType) => {
-          const unkept = restricted.get(agentType);
-          return unkept === undefined
-            ? []
-            : [restrictionNote(verdict.fileName, scriptFile, agentType, unkept)];
-        })
+      ? scriptAgentNotes(join, verdict.fileName, scriptFile, verdict.agentTypes ?? [])
       : [],
   );
 }
 
 /**
- * Name preview, plus the workflow agent restriction notes. The four
+ * Name preview, plus the workflow agent notes. The four
  * discoveries also return D-07 warnings, and this function drops them on
  * purpose.
  *
@@ -204,11 +309,12 @@ export function workflowAgentRestrictionNotes(
  * The workflows tense is `install` because every caller is about to stage; the
  * warnings the tense would word are dropped here regardless.
  *
- * PG-SEC-01: the restriction notes are the one output this function reports.
- * No staging pass builds them, because the join needs the agents and the
- * workflows together and each bridge sees only its own kind. Each caller adds
- * them at exactly one site, so a verb prints them once. They are recomputed
- * at every call and never stored (D-PG4-13).
+ * PG-SEC-01 and PG-WF-02: the workflow agent notes are the one output this
+ * function reports. No staging pass builds them, because the join needs the
+ * agents and the workflows together and each bridge sees only its own kind.
+ * Each caller adds them at exactly one site, so a verb prints them once. They
+ * are recomputed at every call, never stored, and never refuse an install
+ * (D-PG4-13, D-PG8-04).
  */
 export async function discoverGeneratedNames(
   plugin: string,
@@ -235,7 +341,7 @@ export async function discoverGeneratedNames(
     workflows: workflowsDiscovery.discovered.flatMap((w) =>
       w.verdict.outcome === "named" ? [w.verdict.generatedName] : [],
     ),
-    workflowAgentRestrictionNotes: workflowAgentRestrictionNotes(
+    workflowAgentNotes: workflowAgentNotes(
       plugin,
       agentsDiscovery.discovered,
       workflowsDiscovery.discovered,

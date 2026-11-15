@@ -12,7 +12,7 @@ last_mapped_at: 2026-10-05
 - TypeScript `^6.0.3` (strict mode) - all extension source (`extensions/pi-claude-marketplace/`) and tests (`test/`)
 
 **Secondary:**
-- YAML - agent and skill frontmatter, read and emitted line-by-line by `bridges/agents/frontmatter.ts` and `bridges/skills/frontmatter-degrade.ts` (line-based, no nested mappings), not via a YAML library. Plugin and marketplace manifests are JSON and go through `JSON.parse`
+- YAML - agent and skill frontmatter. `bridges/agents/frontmatter.ts` reads agent frontmatter as YAML through Pi's `parseFrontmatter` (re-exported by `platform/pi-api.ts`), and on a failed parse retries once after the shared line-based repair in `shared/frontmatter-repair.ts` (D-PG7-01); it still emits the generated agent frontmatter line by line. `bridges/skills/frontmatter-degrade.ts` stays line-based (no nested mappings). Plugin and marketplace manifests are JSON and go through `JSON.parse`
 - Markdown - documentation, agent/skill/command definitions consumed as plugin artifacts
 
 ## Runtime

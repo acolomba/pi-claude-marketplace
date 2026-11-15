@@ -31,6 +31,7 @@ import {
 } from "../../lib/workflow-files.ts";
 
 import type { RpcRecord } from "../../lib/pi-process.ts";
+import type { WorkflowModelCalls } from "../../lib/workflow-files.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
 
 const TERMINAL_STATUSES: ReadonlySet<string> = new Set(["completed", "failed", "aborted"]);
@@ -117,6 +118,20 @@ function runOutcome(world: ScenarioWorld): RunOutcome {
   return { status, result, error };
 }
 
+// Runs the workflow command `text` and records what it left as the last turn.
+async function runWorkflowCommand(
+  world: ScenarioWorld,
+  text: string,
+  modelCalls: WorkflowModelCalls,
+): Promise<void> {
+  const settle = (from: number): Promise<RpcRecord> =>
+    world.pi.waitForRecord(from, endsRun, WORKFLOW_RUN_TIMEOUT_MS);
+  const command = expandTokens(text, world.tokens);
+  world.recordTurn(
+    await sendWorkflowCommand(world.pi, world.profileHarness(), command, settle, modelCalls),
+  );
+}
+
 Given(
   "the published plugin {string} of the marketplace {string} has the workflow {string} described as {string} that returns {string}",
   async function (
@@ -142,10 +157,16 @@ Given(
 When(
   "the user runs the workflow command {string}",
   async function (this: ScenarioWorld, text: string) {
-    const settle = (from: number): Promise<RpcRecord> =>
-      this.pi.waitForRecord(from, endsRun, WORKFLOW_RUN_TIMEOUT_MS);
-    const command = expandTokens(text, this.tokens);
-    this.recordTurn(await sendWorkflowCommand(this.pi, this.profileHarness(), command, settle));
+    await runWorkflowCommand(this, text, "none");
+  },
+);
+
+// A script's `agent()` step runs in a child session of the engine, which
+// calls the scripted model; the step otherwise waits as the one above does.
+When(
+  "the user runs the workflow command {string}, whose agent steps the model answers",
+  async function (this: ScenarioWorld, text: string) {
+    await runWorkflowCommand(this, text, "agent steps");
   },
 );
 

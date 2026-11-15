@@ -28,6 +28,11 @@ import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { stripBom } from "../../shared/bom.ts";
 import { SkillFrontmatterNodeError } from "../../shared/errors-bridges.ts";
 import { appendLeakToError, errorMessage } from "../../shared/errors.ts";
+import {
+  colonRepairTrigger,
+  extractBodyAfterFrontmatter,
+  repairSingleLineScalars,
+} from "../../shared/frontmatter-repair.ts";
 import { cleanupStaging } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { discoveryWarning } from "../../shared/staging-warnings.ts";
@@ -36,7 +41,6 @@ import { substituteClaudeVars } from "../../shared/vars.ts";
 import { discoverPluginSkills } from "./discover.ts";
 import {
   foldWhenToUse,
-  repairSingleLineScalars,
   setDescriptionScalar,
   synthesizeUnparseableSkill,
   truncate1536,
@@ -62,25 +66,6 @@ import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { RemovalOps } from "../../shared/fs-utils.ts";
 import type { ClaudePluginVars } from "../../shared/vars.ts";
 
-/**
- * SKILL-01: extract the markdown body from a skill source whose frontmatter
- * block failed to parse, reproducing `parseFrontmatter`'s OWN split so the
- * synthesized block preserves the body byte-for-byte identically to the
- * parseable path (PARSE-01 encoding parity). Newlines are normalized (CR/CRLF ->
- * LF, including lone CR) exactly as the parser does; the opening fence is the
- * parser's anchored `---` prefix (`startsWith`, NOT a per-line `trim`); and the
- * close is the parser's `\n---` prefix search. An exotic delimiter -- a `---x`
- * line or an indented `---` -- is therefore classified identically to Pi rather
- * than by a looser `line.trim() === "---"` match. Called ONLY on the gate-1
- * throw arm, where a closed `---` block is present by construction -- the body
- * is everything after the closing delimiter, trimmed.
- */
-function extractBodyAfterFrontmatter(content: string): string {
-  const normalized = content.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
-  const closeIndex = normalized.indexOf("\n---", 3);
-  return normalized.slice(closeIndex + 4).trim();
-}
-
 /** The frontmatter and body Pi's own `parseFrontmatter` yields for a skill source. */
 type ParsedSkillFrontmatter = ReturnType<typeof parseFrontmatter>;
 
@@ -94,7 +79,7 @@ type ParsedSkillFrontmatter = ReturnType<typeof parseFrontmatter>;
 function repairUnparseableFrontmatter(
   content: string,
 ): { repaired: string; parsed: ParsedSkillFrontmatter } | undefined {
-  const repaired = repairSingleLineScalars(content);
+  const repaired = repairSingleLineScalars(content, colonRepairTrigger);
   if (repaired === content) {
     return undefined;
   }

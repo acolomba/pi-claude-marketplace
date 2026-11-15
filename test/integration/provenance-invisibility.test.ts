@@ -8,9 +8,14 @@
 // `parseFrontmatter(content)` and sets `systemPrompt: body`), so running a
 // real `emitGeneratedAgentFile(...)`
 // output through that parser and inspecting its `body` + top-level
-// `frontmatter` keys is the load-bearing check -- not this extension's own
-// line-based parseFrontmatter (which trims lines and does NOT mirror
-// pi-subagents' anchored `^([\w-]+):` key regex over indented content).
+// `frontmatter` keys is the load-bearing check. This extension reads source
+// agents as YAML, which is not how pi-subagents reads the generated file, so
+// only pi-subagents' own reader can prove what reaches the child.
+//
+// D-PG7-06 / AG-8: the same reader proves that no line of a multi-line
+// description becomes a key or closes the frontmatter, and that a one-line
+// description that is only a block header is read as text. D-PG7-18: so is a
+// one-line description that YAML would not read as its text.
 //
 // pi-subagents is an optional peer. The test imports its compiled
 // `src/agents/frontmatter.js` in place from the version the suites run in the optional
@@ -58,10 +63,11 @@ test("T-d8i-01: provenance stays invisible to pi-subagents' own frontmatter pars
       originalModel: "sonnet",
       // Exercises BOTH list forms: a non-empty block list (droppedFields,
       // warnings, each rendered `    - item`) and an empty inline `[]`
-      // (droppedTools) -- the two shapes the safety claim must survive.
-      droppedFields: ["provColorField"],
+      // (droppedTools) -- the two shapes the safety claim must survive. The
+      // second item of each block list is written double-quoted (T-07-05).
+      droppedFields: ["provColorField", "@provQuotedField"],
       droppedTools: [],
-      warnings: ["provWarningText leaked check"],
+      warnings: ["provWarningText leaked check", "provQuotedWarning: a: b"],
     },
     body: bodyText,
   });
@@ -86,7 +92,9 @@ test("T-d8i-01: provenance stays invisible to pi-subagents' own frontmatter pars
     GENERATED_AGENT_MARKER,
     // values
     "provColorField",
+    "provQuotedField",
     "provWarningText",
+    "provQuotedWarning",
     "/abs/provenance-source.md",
   ];
   for (const needle of provenanceLeaks) {
@@ -136,5 +144,135 @@ test("T-d8i-01: provenance stays invisible to pi-subagents' own frontmatter pars
   assert.ok(
     frontmatter.provenance?.includes(GENERATED_AGENT_MARKER),
     "the provenance mapping value must carry the generated marker",
+  );
+});
+
+const EMPTY_PROVENANCE = {
+  pluginName: "acme",
+  sourceName: "bot",
+  sourcePath: "agents/bot.md",
+  droppedFields: [],
+  droppedTools: [],
+  warnings: [],
+} as const;
+
+test("D-PG7-06: no line of a description block becomes a key under pi-subagents' own reader", async () => {
+  // arrange
+  const peer = await findPiSubagentsPackage();
+  const fm = await loadPiSubagentsModule<PiSubagentsFrontmatterModule>(peer, "frontmatter");
+  const description = [
+    "First line: with a colon.",
+    "name: injected",
+    "tools: bash",
+    "# not a comment",
+    "",
+    "---",
+    "Last line.",
+  ].join("\n");
+  const agentFileContent = emitGeneratedAgentFile({
+    frontmatter: {
+      name: "pi-claude-marketplace-acme-bot",
+      description,
+      skills: [],
+      inheritSkills: true,
+    },
+    provenance: EMPTY_PROVENANCE,
+    body: "Answer the task.",
+  });
+
+  // act
+  const { frontmatter, body } = fm.parseFrontmatter(agentFileContent);
+
+  // assert
+  assert.equal(frontmatter.description, description);
+  assert.equal(frontmatter.name, "pi-claude-marketplace-acme-bot");
+  assert.equal(Object.hasOwn(frontmatter, "tools"), false);
+  assert.equal(body, "Answer the task.");
+});
+
+for (const header of ["|", "|-", ">", ">-"]) {
+  test(`D-PG7-06: a description that is only ${header} reads as text under pi-subagents' own reader`, async () => {
+    // arrange
+    const peer = await findPiSubagentsPackage();
+    const fm = await loadPiSubagentsModule<PiSubagentsFrontmatterModule>(peer, "frontmatter");
+    const agentFileContent = emitGeneratedAgentFile({
+      frontmatter: {
+        name: "pi-claude-marketplace-acme-bot",
+        description: header,
+        tools: ["read"],
+        skills: [],
+        inheritSkills: true,
+      },
+      provenance: EMPTY_PROVENANCE,
+      body: "Answer the task.",
+    });
+
+    // act
+    const { frontmatter } = fm.parseFrontmatter(agentFileContent);
+
+    // assert
+    assert.equal(frontmatter.description, header);
+    assert.equal(frontmatter.tools, "read");
+    assert.equal(frontmatter.systemPromptMode, "replace");
+  });
+}
+
+for (const description of [
+  "Reviews: code.",
+  "Reviews #1 and #2",
+  "@reviewer checks it",
+  '"Quoted words."',
+]) {
+  test(`D-PG7-18: the one-line description ${JSON.stringify(description)} reads as its text under pi-subagents' own reader`, async () => {
+    // arrange
+    const peer = await findPiSubagentsPackage();
+    const fm = await loadPiSubagentsModule<PiSubagentsFrontmatterModule>(peer, "frontmatter");
+    const agentFileContent = emitGeneratedAgentFile({
+      frontmatter: {
+        name: "pi-claude-marketplace-acme-bot",
+        description,
+        tools: ["read"],
+        skills: [],
+        inheritSkills: true,
+      },
+      provenance: EMPTY_PROVENANCE,
+      body: "Answer the task.",
+    });
+
+    // act
+    const { frontmatter } = fm.parseFrontmatter(agentFileContent);
+
+    // assert
+    assert.deepStrictEqual(
+      { description: frontmatter.description, tools: frontmatter.tools },
+      { description, tools: "read" },
+    );
+  });
+}
+
+test("T-07-05: a quoted name and alias read as their text under pi-subagents' own reader", async () => {
+  // arrange
+  const peer = await findPiSubagentsPackage();
+  const fm = await loadPiSubagentsModule<PiSubagentsFrontmatterModule>(peer, "frontmatter");
+  const agentFileContent = emitGeneratedAgentFile({
+    frontmatter: {
+      name: "acme:Reviewer: code",
+      description: "Reviews files",
+      aliases: ["pi-claude-marketplace-acme-Reviewer: code"],
+      tools: ["read"],
+      skills: [],
+      inheritSkills: true,
+    },
+    provenance: EMPTY_PROVENANCE,
+    body: "Answer the task.",
+  });
+
+  // act
+  const { frontmatter } = fm.parseFrontmatter(agentFileContent);
+
+  // assert
+  assert.deepStrictEqual(
+    { name: frontmatter.name, aliases: frontmatter.aliases },
+    { name: "acme:Reviewer: code", aliases: "pi-claude-marketplace-acme-Reviewer: code" },
   );
 });

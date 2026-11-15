@@ -301,3 +301,114 @@ Feature: Agent invocation
       | 3    | user        | Ask the reviewer to check the README.                                                   |
       | 3    | assistant   | tool call subagent {"agent":"tools:reviewer","task":"Review the README.","async":false} |
       | 3    | tool result | subagent returned: The README has no problems.                                          |
+
+  Scenario: A child of an agent that grants Agent starts a second agent and gets its reply
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file      | name   | description              | tools                    | body                              |
+      | lead.md   | lead   | Delegates the review.    | Read, Agent(demo:helper) | Ask the helper to do the task.    |
+      | helper.md | helper | Reviews the files given. | Read                     | Review the files named in a task. |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply                         | tool     | arguments                                                         |
+      |                               | subagent | {"agent":"demo:lead","task":"Review the README.","async":false}   |
+      |                               | subagent | {"agent":"demo:helper","task":"Review the README.","async":false} |
+      | The README has no problems.   |          |                                                                   |
+      | The helper found no problems. |          |                                                                   |
+      | The lead found no problems.   |          |                                                                   |
+    When the user prompts "Ask the lead to check the README."
+    Then the model receives these calls:
+      | call | role        | text                                                                                 |
+      | 1    | user        | Ask the lead to check the README.                                                    |
+      | 2    | user        | task Review the README.                                                              |
+      | 3    | user        | task Review the README.                                                              |
+      | 4    | user        | task Review the README.                                                              |
+      | 4    | assistant   | tool call subagent {"agent":"demo:helper","task":"Review the README.","async":false} |
+      | 4    | tool result | subagent returned: The README has no problems.                                       |
+      | 5    | user        | Ask the lead to check the README.                                                    |
+      | 5    | assistant   | tool call subagent {"agent":"demo:lead","task":"Review the README.","async":false}   |
+      | 5    | tool result | subagent returned: The helper found no problems.                                     |
+
+  Scenario: A child of an agent without a tools list starts a second agent and gets its reply
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file      | name   | description              | tools | body                              |
+      | lead.md   | lead   | Delegates the review.    |       | Ask the helper to do the task.    |
+      | helper.md | helper | Reviews the files given. | Read  | Review the files named in a task. |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply                         | tool     | arguments                                                         |
+      |                               | subagent | {"agent":"demo:lead","task":"Review the README.","async":false}   |
+      |                               | subagent | {"agent":"demo:helper","task":"Review the README.","async":false} |
+      | The README has no problems.   |          |                                                                   |
+      | The helper found no problems. |          |                                                                   |
+      | The lead found no problems.   |          |                                                                   |
+    When the user prompts "Ask the lead to check the README."
+    Then the model receives these calls:
+      | call | role        | text                                                                                 |
+      | 1    | user        | Ask the lead to check the README.                                                    |
+      | 2    | user        | task Review the README.                                                              |
+      | 3    | user        | task Review the README.                                                              |
+      | 4    | user        | task Review the README.                                                              |
+      | 4    | assistant   | tool call subagent {"agent":"demo:helper","task":"Review the README.","async":false} |
+      | 4    | tool result | subagent returned: The README has no problems.                                       |
+      | 5    | user        | Ask the lead to check the README.                                                    |
+      | 5    | assistant   | tool call subagent {"agent":"demo:lead","task":"Review the README.","async":false}   |
+      | 5    | tool result | subagent returned: The helper found no problems.                                     |
+
+  Scenario: A child of an agent that disallows Agent cannot start a second agent
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these agents:
+      | file      | name   | description              | tools | disallowedTools | body                              |
+      | lead.md   | lead   | Delegates the review.    |       | Agent           | Ask the helper to do the task.    |
+      | helper.md | helper | Reviews the files given. | Read  |                 | Review the files named in a task. |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply                         | tool     | arguments                                                         |
+      |                               | subagent | {"agent":"demo:lead","task":"Review the README.","async":false}   |
+      |                               | subagent | {"agent":"demo:helper","task":"Review the README.","async":false} |
+      | The README has no problems.   |          |                                                                   |
+      | The helper found no problems. |          |                                                                   |
+    When the user prompts "Ask the lead to check the README."
+    Then the agent's model call 2 is offered these of the tools an agent can name:
+      | tool  |
+      | read  |
+      | bash  |
+      | edit  |
+      | write |
+    Then the agent's model call 3 runs on the body of the agent file "pi-claude-marketplace-demo-lead.md" of the user scope, which reads:
+      """
+      Ask the helper to do the task.
+      """
+    Then the model receives these calls:
+      | call | role        | text                                                                               |
+      | 1    | user        | Ask the lead to check the README.                                                  |
+      | 2    | user        | task Review the README.                                                            |
+      | 3    | user        | task Review the README.                                                            |
+      | 4    | user        | Ask the lead to check the README.                                                  |
+      | 4    | assistant   | tool call subagent {"agent":"demo:lead","task":"Review the README.","async":false} |
+      | 4    | tool result | subagent returned: The README has no problems.                                     |

@@ -17,7 +17,11 @@
  *   agent sets. pi-subagents' own agents, such as its builtins, read as one
  *   line `pi-subagents' own agents`. An empty list reads `no agents`;
  * - an agent detail: one `<field> <value>` line per field this extension
- *   writes, in a fixed order, then `system prompt:` and the body;
+ *   writes, in a fixed order, then `system prompt:` and the body. A value
+ *   that spans lines, such as a description block, keeps each line. The
+ *   detail ends its fields at the first blank line, so a description that
+ *   holds a blank line, or a line that reads as `<label>: <value>`, cannot
+ *   be read here;
  * - a run: the child's final text alone;
  * - an error: `error`, or `error naming <value>, <value>` with each value
  *   that this extension wrote and the error names: a model id, an adapter
@@ -48,8 +52,9 @@ const EMPTY_LIST_PATTERN = /^-\s*\(?none\)?$/iu;
 const FIELD_PATTERN = /^([A-Za-z][A-Za-z -]*):\s*(.*)$/u;
 
 // A value pi-subagents prints for a field the agent leaves unset, such as
-// `default/ambient` tools or a model that `inherits current session`.
-const UNSET_PATTERN = /\b(?:default|ambient|inherits?)\b/iu;
+// `default/ambient` tools or a model that `inherits current session`. A
+// written `model: inherit` is a value, so the bare word does not match.
+const UNSET_PATTERN = /\b(?:default|ambient|inherits)\b/iu;
 
 // pi-subagents marks models absent from the session registry when listing
 // capabilities; the marker is its wording, not a value the bridge writes.
@@ -202,14 +207,22 @@ function projectList(text: string): string {
 }
 
 // The `<label>: <value>` fields before the first blank line of a detail, by
-// normalized label.
+// normalized label. A line that is not a field continues the value of the
+// field before it, as the second line of a description does.
 function detailFields(head: readonly string[]): ReadonlyMap<string, string> {
-  return new Map(
-    head.flatMap((line) => {
-      const match = FIELD_PATTERN.exec(line);
-      return match === null ? [] : [[normalizedLabel(match[1] ?? ""), (match[2] ?? "").trim()]];
-    }),
-  );
+  const fields = new Map<string, string>();
+  let label: string | undefined;
+  for (const line of head) {
+    const match = FIELD_PATTERN.exec(line);
+    if (match !== null) {
+      label = normalizedLabel(match[1] ?? "");
+      fields.set(label, (match[2] ?? "").trim());
+    } else if (label !== undefined) {
+      fields.set(label, `${fields.get(label) ?? ""}\n${line.trimEnd()}`);
+    }
+  }
+
+  return fields;
 }
 
 // An agent detail: the fields, a blank line, a `<label>:` line, and the body.

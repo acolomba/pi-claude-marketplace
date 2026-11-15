@@ -24,7 +24,7 @@ This extension installs plugins from Claude plugin marketplaces that contain the
 
 - Commands.
 - Skills.
-- Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents). An agent's MCP grants follow the MCP implementation in use. Agents in subfolders get their folder names, as in Claude Code, for example `demo:review:security`.
+- Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents). An agent's MCP grants follow the MCP implementation in use. An agent's `Workflow` grant is dropped, because Claude Code gives the Workflow tool to no subagent. Agents in subfolders get their folder names, as in Claude Code, for example `demo:review:security`.
 - Hooks. Partial support. For more information, see [Hook compatibility](docs/hooks-compatibility.md).
 - MCP servers. Uses Pi's built-in MCP or, for more MCP features, [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). For more information, see [MCP compatibility](docs/mcp-compatibility.md).
 - Workflows. Requires [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). For more information, see [Workflow compatibility](docs/workflows-compatibility.md).
@@ -376,7 +376,7 @@ Update one installed plugin, every installed plugin from one marketplace, or all
 ```
 
 > [!NOTE]
-> Agent definitions in plugins can name a preferred model for the agent, for example "sonnet" or "opus". This extension discards these models by default. To map them to Pi models as a best effort, use the `--map-model` option with `install` and `update`. It maps `sonnet`, `opus`, `haiku`, `fable`, `best`, and `opusplan`, with or without `[1m]`, to the current Claude models, for example `claude-sonnet-5-5`. It keeps full `claude-` model IDs.
+> Agent definitions in plugins can name a preferred model for the agent, for example "sonnet" or "opus". This extension discards these models by default. To map them to Pi models as a best effort, use the `--map-model` option with `install` and `update`. It maps `sonnet`, `opus`, `haiku`, `fable`, `best`, and `opusplan`, with or without `[1m]`, to the current Claude models, for example `claude-sonnet-5-5`. It keeps full `claude-` model IDs. An agent with `model: inherit` always gets `model: ""`, with or without `--map-model`. So it runs on the session's model, also in a workflow step.
 
 Reinstall one installed plugin, every installed plugin from one marketplace, or all installed plugins.
 

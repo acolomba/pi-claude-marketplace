@@ -9,7 +9,8 @@
  *
  * The engine handles a workflow command itself, so Pi answers `handled` and
  * starts no model turn. A run appends progress entries to Pi's session, and Pi
- * prints each one as a record.
+ * prints each one as a record. Only a script's `agent()` step calls the model,
+ * in a child session of the engine's own.
  */
 
 import assert from "node:assert/strict";
@@ -111,17 +112,24 @@ function isRunFault(record: RpcRecord): boolean {
 }
 
 /**
+ * Whether a workflow command may call the model: `none` for a script with no
+ * `agent()` step, `agent steps` for one whose steps the scripted model answers.
+ */
+export type WorkflowModelCalls = "none" | "agent steps";
+
+/**
  * Sends the workflow command `command` to `pi`, requires Pi to answer
  * `handled`, waits for `settle` with the index of the first record of the
  * command, and returns what the command left. Fails when Pi reports an
- * extension error or opens a dialog, or when the command called the model
- * whose logs `harness` holds.
+ * extension error or opens a dialog, and when the model whose logs `harness`
+ * holds was called with `modelCalls` `none`, or not called with `agent steps`.
  */
 export async function sendWorkflowCommand(
   pi: PiProcess,
   harness: string,
   command: string,
   settle: (from: number) => Promise<unknown>,
+  modelCalls: WorkflowModelCalls = "none",
 ): Promise<WorkflowCommandTurn> {
   const from = pi.recordCount();
   const lengths = await readLogLengths(harness);
@@ -131,6 +139,12 @@ export async function sendWorkflowCommand(
   const records = pi.recordsSince(from);
   assert.deepStrictEqual(records.filter(isRunFault), []);
   const logs = await readLogLinesSince(harness, lengths);
-  assert.deepStrictEqual(modelCallsOf(logs), [], "the workflow command called the model");
+  const calls = modelCallsOf(logs);
+  if (modelCalls === "none") {
+    assert.deepStrictEqual(calls, [], "the workflow command called the model");
+  } else {
+    assert.notStrictEqual(calls.length, 0, "no agent step of the workflow called the model");
+  }
+
   return { prompt: command, disposition: "handled", records, logs };
 }

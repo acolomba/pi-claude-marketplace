@@ -3154,6 +3154,22 @@ The plugin ships a workflow script that the command installs and that the host w
     note: workflow script "greet.js" in "workflows" would be installed but the engine will refuse to load it: the engine refuses at its check 9 -- `meta.description` must be a non-empty string, and `meta.model` (a string) and `meta.phases` (an array of objects each carrying a string `title`) must match those shapes wherever they are declared
 ```
 
+### Success -- a workflow script that runs an agent type the plugin does not install (PG-WF-02)
+
+The plugin ships a workflow script that runs an agent type in the plugin's own namespace, and the plugin does not install that agent type. The row shows one `note:` line for each pair of a script and an agent type the plugin does not install, after every component line and after any `dependencies:` line. The line is the text the install diagnostic shows for the same script: install, update, and `info` print the same words. The line names the script, the directory that holds it, and the agent type, and then it says that the workflow engine runs a default agent in its place, where Claude Code fails the step. The directory shows as its name alone and never as a full path, so the row does not disclose where the user's home directory is (NFR-9) and its bytes do not change from one machine to another. One script gets at most five such lines; after them, one count line gives the number of the other agent types that the script runs and the plugin does not install. An agent type longer than 128 characters is counted and not printed. When no missing-agent note of the script comes before the count line, every type it counts was too long, so it says so and says what the engine does in its place. A note about an agent that restricts its tools may still come before it. The header of the install and update diagnostic counts lines, and not scripts or agent types: each note and the count line count as one declared component with a note, so a script with seven such agent types reads "6 declared components have notes". A `note:` line does not change the severity of the row: it is a statement about one file, and not a failure of the read. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: installed-with-workflow-missing-agent-note -->
+
+```text
+● claude-plugins-official [user] <autoupdate>
+  ● commit-commands v1.2.0 (installed)
+    Helpful git commit commands for everyday use.
+    skills: commit-summary
+    workflows: commit-commands:changelog
+    requires: pi-dynamic-workflows
+    note: workflow script "changelog.js" in "workflows" runs agent type "commit-commands:reviewer", which this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code fails the step
+```
+
 ### Success -- installed single scope with dependency constraints
 
 Same as above, but each dependency carries the constraint its manifest declared, in one parenthetical after the address (D-01-30). A version range renders bare, because a range is self-evidently a version. A sha renders labelled and short-formed to seven characters, because a 40-hex string is not. When an element declares both, the version comes first and a comma separates them inside the one parenthetical. An element that declares neither renders the bare address, as the state above shows. The line is ordered by dependency name, not by the rendered string (D-01-04). Severity `info`.
@@ -5411,6 +5427,18 @@ Plugins updated: 3 plugins · Run /reload to apply
 ```
 
 Emitted once by `notifyBackgroundUpdate` after a background update that moved at least one plugin. A background update runs after the first message of a tui session, once for each extension runtime. The notice names plugins, without their marketplace. A plugin is named once even when it was updated in both scopes or from two marketplaces (D-PL8-21), and names keep the order of the update. The background update changes the project scope only when Pi trusts the project (D-LOC-01). Two names are joined with "and". Three or more names are counted instead. Severity: `info`. The notice always asks for `/reload`, because Claude Code reloads a plugin in the running session only for a plugin source kind this extension does not have (D-PL8-11). A background update that moved nothing, failed, or was skipped prints nothing, and its detail goes to the debug log (`PI_CLAUDE_MARKETPLACE_DEBUG=1`). A json or rpc session never runs the background update, so it never receives its `background-update` entry; the payload kind stays in the schema (D-PL8-20, see [`docs/json-output.md`](json-output.md)). The byte form is locked by `test/architecture/background-update-notice.test.ts`, not by the catalog-uat walk, whose parser skips this section.
+
+### Agent frontmatter not parsed (PG-AGENT-05 / D-PG7-04)
+
+<!-- catalog-state: agent-frontmatter-not-parsed -->
+
+```text
+Plugin "demo" [user] installed; 1 declared component has a note.
+
+agent "demo:broken": its source frontmatter could not be parsed (Missing closing "quote at line 3, column 12); the agent is loaded with no frontmatter fields, so its tools, model, and description settings are not applied.
+```
+
+Emitted when a plugin agent's frontmatter does not parse as YAML, even after the one-line repair, and when it parses to text or to a list, which holds no keys; that note gives the reason `the frontmatter is not a mapping of keys`. The agent still installs, under its file name, with no frontmatter fields. Every staging verb prints the note: install, update, reinstall, enable, and the apply, import, and marketplace update cascades. It comes from the discovery warnings of the agents bridge (`extensions/pi-claude-marketplace/bridges/agents/discover.ts`) and is shown as a staging diagnostic after the command's own row. The note names the agent as `subagent list` shows it and holds only the first line of the parser's message, so it is one line and holds no path. When the repair changed the block, the message is the one for the repaired block, which names the defect the repair left at its line in the source block. Severity: `warning`. The byte form is locked by `test/bridges/agents/discover.test.ts` and by the scenario "Installing an agent whose frontmatter cannot be parsed reports the agent" in `features/agent/frontmatter.feature`, not by the catalog-uat walk, whose parser skips this section.
 
 ### Hook notice (HOOK-05 / D-CF5-14 / D-CF5-24)
 

@@ -18,8 +18,9 @@
 //   - each per-tool MCP exclude name of this plugin (the Claude-form token
 //     `mcp__plugin_<plugin>_...`) becomes Pi's built-in tool name: every
 //     character outside `[A-Za-z0-9_]` turns into `_`;
-//   - the adapter async warning becomes the built-in text, and the
-//     cannot-narrow warning's `mcp:<key>` selector becomes the built-in one.
+//   - the adapter async warning, bare or double-quoted, becomes the built-in
+//     text, and the cannot-narrow warning's `mcp:<key>` selector becomes the
+//     built-in one.
 //
 // Known gaps (P4-DC-06):
 //   - A grant of a server Pi's built-in MCP cannot run (an `sse` server) is
@@ -34,6 +35,7 @@
 
 import { builtinMcpServerName } from "../../domain/name.ts";
 import { storedGrantForms } from "../../persistence/agents-index-io.ts";
+import { emitSafeDoubleQuotedScalar } from "../../shared/frontmatter-repair.ts";
 
 import { GENERATED_AGENT_MARKER } from "./marker.ts";
 import { rewriteMcpAsyncWarning } from "./mcp-async-warning.ts";
@@ -100,6 +102,21 @@ function translateWarning(warning: string, serverPrefix: string): string {
   );
 }
 
+/**
+ * A warning list item in the built-in form. A current file writes the async
+ * warning double-quoted, because it holds `: ` (T-07-05), and an earlier
+ * release wrote it bare; the quoted item is matched byte for byte.
+ */
+function translateItem(item: string, serverPrefix: string): string {
+  const quoted = item.slice(1, -1);
+  const rewritten = rewriteMcpAsyncWarning(quoted, "builtin");
+  if (rewritten !== quoted && emitSafeDoubleQuotedScalar(quoted) === item) {
+    return emitSafeDoubleQuotedScalar(rewritten);
+  }
+
+  return translateWarning(item, serverPrefix);
+}
+
 function isTranslated(line: string | undefined): line is string {
   return line !== undefined;
 }
@@ -120,7 +137,7 @@ function translateLine(line: string, serverPrefix: string): string | undefined {
   }
 
   if (line.startsWith(LIST_ITEM)) {
-    return LIST_ITEM + translateWarning(line.slice(LIST_ITEM.length), serverPrefix);
+    return LIST_ITEM + translateItem(line.slice(LIST_ITEM.length), serverPrefix);
   }
 
   return line;

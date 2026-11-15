@@ -22,7 +22,8 @@ const BUILTIN_SUFFIX =
 
 const MCP_ASYNC_WARNINGS: Readonly<Record<McpImplementationId, string>> = Object.freeze({
   // Stored rows carry this exact text, and `grant-rewrite.ts` and
-  // `legacy-grant-form.ts` recognize them by it, so its bytes stay fixed.
+  // `legacy-grant-form.ts` recognize them by it, or a file's list item by its
+  // double-quoted form, so its bytes stay fixed.
   adapter: `${MCP_ASYNC_WARNING_LEAD}${ADAPTER_SUFFIX}`,
   // pi-subagents resolves a built-in selector against the parent's tools at
   // launch, so a launch before Pi's built-in MCP lists them finds none.

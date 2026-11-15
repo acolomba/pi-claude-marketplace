@@ -239,6 +239,7 @@ Source: `bridges/agents/convert.ts` (C), `frontmatter.ts` (F), `discover.ts` (D)
 - **Current (V):** `GeneratedToolsFields` forbids `tools` with `excludeTools` (F:422-424). The warning says "pi-subagents takes no excludeTools beside an explicit tools: list" (C:540-541), which the code comment itself calls stale (C:527-533). Every omitted-`tools` agent with a disallow also gets "`excludeTools` requires pi-subagents >= 0.62.0" (C:598-602) although the floor is 0.84.0.
 - **Enabling capability (V):** "With an explicit `tools` allowlist, matching names are removed" (`docs/agents.md:472`).
 - **Proposed change:** emit both keys; delete both warnings. **Size:** S. **Scenario:** `subagent list capabilities` shows `tools …; excluded tools …`. **Confidence:** high; whether an `excludeTools` name removes one tool of a whole-server `mcp:` grant is unverified.
+- **Status:** done (D-PG7-12, D-PG7-13). The conversion writes `excludeTools` beside `tools`, and both warnings are gone. The "Current" line above describes the code before that change.
 
 ### AGENT-10 -- An agent whose `tools` maps to nothing fails the whole plugin install (AG-11)
 

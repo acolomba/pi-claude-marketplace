@@ -28,6 +28,14 @@
   - `UserPromptExpansion` hooks now run when you type a plugin command or a skill, and they can block it. Run `/claude:plugin update` or `/claude:plugin reinstall` on a plugin installed earlier to get these hooks.
   - A `SessionStart` hook now gets `resume` when Pi starts with `--continue` or `--session`, and `fork` when Pi starts with `--fork`.
   - In a background subagent, a tool hook's `session_id` now names the session that started the subagent.
+  - Plugin agent frontmatter is now read as YAML, as Claude Code reads it: quoted values lose their quote marks, comments are ignored, a multi-line description keeps its lines, and an agent whose frontmatter cannot be parsed installs with no fields and a note.
+  - An agent whose plugin quotes its name, such as `name: "x"`, is now named without the quote marks.
+  - A plugin agent whose `tools` grant `Agent` or `Task` can now start subagents, and so can an agent with no `tools` list unless it disallows `Agent` or `Task`.
+  - A plugin agent's `model: inherit` now runs on the session's model instead of `subagents.defaultModel`.
+  - A plugin agent with both `tools` and `disallowedTools` is now restricted by both lists, and the two warnings about pi-subagents limits are gone.
+  - Run `/claude:plugin reinstall` once on an installed plugin to get these agent changes.
+  - Install, update, and `info` now note a workflow agent type that the plugin does not install, because the workflow engine runs a default agent in its place where Claude Code stops the run.
+  - The workflow compatibility page now says what a workflow subagent can reach, and which engine settings give it MCP tools and the session's model.
 
 - More plugin hook events now behave as in Claude Code, and the model-facing tools return what the model asks for. (#310)
 

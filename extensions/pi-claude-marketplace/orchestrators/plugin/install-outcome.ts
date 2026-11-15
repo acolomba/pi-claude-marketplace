@@ -1244,14 +1244,16 @@ async function runInstallLedgerBody(
     bridgeWarnings: [],
     // D-CF1-06: every conventional folder a declaration leaves unread, so
     // each verb that runs this ledger names it, and a failed install keeps it.
-    // PG-SEC-01: the workflow agent restriction notes join them here and
-    // nowhere else in this file, so an install prints each note once.
+    // PG-SEC-01 and PG-WF-02: the workflow agent notes, for an agent type
+    // that restricts its tools and for one the plugin does not install, join
+    // them here and nowhere else in this file, so an install prints each note
+    // once.
     // D-PG4-01: so does each listed skills path of a root-source entry that
     // does not load.
     discoveryWarnings: [
       ...shadowedFolderDiscoveryWarnings(installable.shadowedFolders),
       ...refusedListedSkillPathMessages(installable.refusedListedSkillPaths).map(discoveryWarning),
-      ...generatedNames.workflowAgentRestrictionNotes.map(discoveryWarning),
+      ...generatedNames.workflowAgentNotes.map(discoveryWarning),
     ],
     agentForeignFailures: [],
     mcpConfigNotices: [],

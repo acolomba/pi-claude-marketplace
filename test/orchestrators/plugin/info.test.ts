@@ -11026,7 +11026,9 @@ test("NFR-10 / PG-SEC-01: an agents path that is absolute or escapes the plugin 
     await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
 
     // assert -- the `agents:` line is the existing directory listing; the
-    // note is absent because no agent file outside the root was read.
+    // restriction note is absent because no agent file outside the root was
+    // read, so the agent type reads as one the plugin does not install
+    // (PG-WF-02).
     assert.deepStrictEqual(notifications, [
       {
         message: [
@@ -11038,6 +11040,9 @@ test("NFR-10 / PG-SEC-01: an agents path that is absolute or escapes the plugin 
           "    skills: s1",
           "    workflows: foo:scan",
           FOO_WORKFLOWS_REQUIRES_LINE,
+          '    note: workflow script "scan.js" in "workflows" runs agent type "foo:spy", which ' +
+            "this plugin does not install; the workflow engine runs a default agent in its " +
+            "place, where Claude Code fails the step",
         ].join("\n"),
       },
     ]);
