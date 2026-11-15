@@ -7,6 +7,7 @@ import {
   assertSafeName,
   builtinMcpServerName,
   catalogMarketplaceNameRefusal,
+  claudeCommandName,
   declaredAgentName,
   generatedAgentName,
   generatedCommandName,
@@ -1162,6 +1163,45 @@ describe("generatedCommandName", () => {
         assert.strictEqual(error.message, errorMessage);
         return true;
       });
+    });
+  }
+});
+
+describe("claudeCommandName", () => {
+  const cases = [
+    { plugin: "demo", source: "demo-lint", expectedName: "demo:demo-lint" },
+    { plugin: "demo", source: "lint", expectedName: "demo:lint" },
+    { plugin: "demo", source: "build/web", expectedName: "demo:build:web" },
+    { plugin: "acme", source: "acme-tools/lint", expectedName: "acme:acme-tools:lint" },
+    { plugin: "deploy-tools", source: "about", expectedName: "deploy-tools:about" },
+  ];
+
+  for (const { plugin, source, expectedName } of cases) {
+    test(`D-PG11-01 names ${JSON.stringify(source)} of ${JSON.stringify(plugin)} ${JSON.stringify(expectedName)}`, () => {
+      // arrange
+      const pluginName = plugin;
+      const sourceName = source;
+
+      // act
+      const name = claudeCommandName(pluginName, sourceName);
+
+      // assert
+      assert.strictEqual(name, expectedName);
+    });
+  }
+
+  for (const { plugin, source, expectedName } of cases) {
+    test(`D-PG11-01 names ${JSON.stringify(source)} of ${JSON.stringify(plugin)} ${JSON.stringify(expectedName)} on win32`, (t) => {
+      // arrange
+      setCasePlatform(t, "win32");
+      const pluginName = plugin;
+      const sourceName = source;
+
+      // act
+      const name = claudeCommandName(pluginName, sourceName);
+
+      // assert
+      assert.strictEqual(name, expectedName);
     });
   }
 });

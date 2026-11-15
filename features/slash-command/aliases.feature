@@ -1,8 +1,8 @@
 Feature: Slash command aliases
 
   Protects the names a user can type for a bridged command besides its own: the names Claude Code
-  gives a command from its frontmatter name, over RPC and in the terminal UI. A local marketplace
-  stands in for a published one, and a scripted model for a real one.
+  gives a command from its frontmatter name and from its file path, over RPC and in the terminal UI.
+  A local marketplace stands in for a published one, and a scripted model for a real one.
 
   Background:
     Given the marketplace "fixtures" is published as a dir source
@@ -37,6 +37,33 @@ Feature: Slash command aliases
       | /demo:ship  |
       | /demo:fancy |
       | /fancy      |
+
+  Scenario Outline: A command answers to its Pi name and to the name Claude Code gives it (PG-CMD-09)
+    Given pi runs with the scripted model
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "<source path>" with this command file:
+      """
+      ---
+      description: Lints the sources.
+      ---
+
+      Lint the sources.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply   |
+      | Linted. |
+    When the user prompts "<typed name> src"
+    Then the model receives these calls:
+      | call | role | text                                |
+      | 1    | user | Lint the sources.\n\nARGUMENTS: src |
+
+    Examples:
+      | source path     | typed name            |
+      | demo-lint       | /demo:lint            |
+      | demo-lint       | /demo:demo-lint       |
+      | demo-tools/lint | /demo:demo-tools:lint |
 
   Scenario: A bare frontmatter name two commands share goes to the first command
     Given pi runs with the scripted model

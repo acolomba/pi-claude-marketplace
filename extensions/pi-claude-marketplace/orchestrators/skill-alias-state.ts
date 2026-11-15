@@ -13,6 +13,15 @@
 // the staged file at session time with the skills' own rule
 // (`frontmatterNameAliases`).
 //
+// D-PG11-01: a bridged command also answers to the name Claude Code 2.1.323
+// gives it, `<plugin>:<path>:<file>` with nothing elided, which install stored
+// in the command's record (`readCommandRecord`). The Pi name keeps the
+// D-141-01 elision, so `demo/commands/demo-lint.md` is `/demo:lint` and also
+// answers to `/demo:demo-lint`. When the stored name is the Pi name, the
+// reserved names below drop it. A command staged before D-PG11-01 has no
+// stored name and gets this alias when its plugin is staged again; this
+// module only reads.
+//
 // A name goes to the first skill or command that claims it, in loader order:
 // the user root before the project root, and state order within a root. Every
 // skill claims before any command, so a command alias never takes a name a
@@ -27,6 +36,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { readCommandRecord } from "../bridges/commands/command-record.ts";
 import { frontmatterNameAliases, readSkillRecord } from "../bridges/skills/skill-names.ts";
 import { generatedSkillName } from "../domain/name.ts";
 import { loadState } from "../persistence/state-io.ts";
@@ -150,12 +160,29 @@ const SKILL_KIND: AliasKind = {
   },
 };
 
+/**
+ * D-PG11-01 / T-02-17: the Claude Code name stored in the record of a command
+ * of `pluginName`, in the form install writes: under the plugin's own prefix
+ * and with no whitespace. A record that stores another name was not written by
+ * install for this plugin, so the name is dropped.
+ */
+function storedClaudeName(
+  pluginName: string,
+  frontmatter: Record<string, unknown>,
+): readonly string[] {
+  const name = readCommandRecord(frontmatter)?.claudeName;
+  return name?.startsWith(`${pluginName}:`) === true && !/\s/.test(name) ? [name] : [];
+}
+
 const COMMAND_KIND: AliasKind = {
   source: "prompt",
   resources: (record) => record.prompts ?? [],
   stagedFile: (root, name) =>
     path.join(root, "pi-claude-marketplace", "resources", "prompts", `${name}.md`),
-  names: (entry, frontmatter) => frontmatterNameAliases(entry.pluginName, frontmatter.name),
+  names: (entry, frontmatter) => [
+    ...storedClaudeName(entry.pluginName, frontmatter),
+    ...frontmatterNameAliases(entry.pluginName, frontmatter.name),
+  ],
 };
 
 /** The names the staged file of `entry` claims; none when it cannot be read. */
@@ -298,8 +325,9 @@ function skillClaudeNames(claims: readonly EntryClaim[]): ReadonlyMap<string, st
 export interface PluginNames {
   /**
    * D-CF2-02: every name a loaded bridged skill stored, mapped to its generated
-   * name, then each name that the frontmatter `name` of a loaded bridged
-   * command gives it and no skill claimed, mapped to the command's Pi name. A
+   * name, then each name that a loaded bridged command answers to and no skill
+   * claimed, mapped to the command's Pi name: the Claude Code name its record
+   * stores (D-PG11-01), then the names its frontmatter `name` gives it. A
    * command alias never displaces a name a skill answers to.
    */
   readonly aliases: ReadonlyMap<string, PluginAliasTarget>;

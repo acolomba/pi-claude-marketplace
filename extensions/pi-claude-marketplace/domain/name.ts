@@ -536,6 +536,18 @@ export function generatedCommandName(plugin: string, source: string): string {
 }
 
 /**
+ * D-PG11-01 / PG-CMD-09: the name Claude Code 2.1.323 gives the command
+ * `source` of `plugin`, which a bridged command also answers to as an alias.
+ * The plugin name and each `/`-separated segment of `source` are joined with
+ * a colon on every platform, and nothing is elided. This amends D-141-01 for
+ * the alias only: `generatedCommandName` still gives the Pi name. `source` has
+ * already passed `generatedCommandName`, so it is not validated again.
+ */
+export function claudeCommandName(plugin: string, source: string): string {
+  return [plugin, ...source.split("/")].join(":");
+}
+
+/**
  * Agent name generator (RN-1 / AG-1).
  *
  * Format: `pi-claude-marketplace-<plugin>-<agent>` (Pi-namespacing prefix

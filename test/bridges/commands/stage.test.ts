@@ -69,9 +69,9 @@ function resolvedFor(
   };
 }
 
-/** The D-CF3-06 record line a staged command ends its frontmatter with. */
-function recordLine(pluginRoot: string, pluginData: string): string {
-  return `"pi-claude-marketplace": {"pluginRoot":"${pluginRoot}","pluginData":"${pluginData}"}\n`;
+/** The D-CF3-06 / D-PG11-01 record line a staged command ends its frontmatter with. */
+function recordLine(pluginRoot: string, pluginData: string, claudeName: string): string {
+  return `"pi-claude-marketplace": {"pluginRoot":"${pluginRoot}","pluginData":"${pluginData}","claudeName":"${claudeName}"}\n`;
 }
 
 async function pathIsPresent(filePath: string): Promise<boolean> {
@@ -95,12 +95,12 @@ test("stages recursive commands with exact names, records, substitutions, and pr
   const nestedSource = "---\ndescription: Build the web app\n---\nBuild web.\n";
   const expectedDeploy =
     '---\n"description": "Deploy the service"\n' +
-    recordLine(pluginRoot, pluginDataDir) +
+    recordLine(pluginRoot, pluginDataDir, "acme:acme-deploy") +
     "---\n" +
     `Deploy from ${pluginRoot} in ${locations.scopeRoot}.\n`;
   const expectedStatus =
     '---\n"description": "Show status"\n' +
-    recordLine(pluginRoot, pluginDataDir) +
+    recordLine(pluginRoot, pluginDataDir, "acme:status") +
     "---\n" +
     `Read ${pluginDataDir}/status.json.\n`;
   await mkdir(path.join(commandsRoot, "build"), { recursive: true });
@@ -163,7 +163,7 @@ test("stages recursive commands with exact names, records, substitutions, and pr
   assert.strictEqual(
     nestedBytes,
     '---\n"description": "Build the web app"\n' +
-      recordLine(pluginRoot, pluginDataDir) +
+      recordLine(pluginRoot, pluginDataDir, "acme:build:web") +
       "---\nBuild web.\n",
   );
   assert.strictEqual(statusBytes, expectedStatus);
@@ -197,7 +197,7 @@ test("D-PG10-13 writes the options of its input into each staged command", async
   assert.strictEqual(
     staged,
     '---\n"description": "Options"\n' +
-      recordLine(pluginRoot, pluginDataDir) +
+      recordLine(pluginRoot, pluginDataDir, "acme:opts") +
       "---\nMode fast, token [sensitive option 'token' not available in skill content].\n",
   );
 });
@@ -231,7 +231,7 @@ test("rewrites skill and command references in staged command Markdown", async (
   assert.strictEqual(
     content,
     '---\n"description": "Review"\n' +
-      recordLine(pluginRoot, path.join(locations.scopeRoot, "plugin-data")) +
+      recordLine(pluginRoot, path.join(locations.scopeRoot, "plugin-data"), "acme:review") +
       "---\nUse /skill:acme-helper, then /acme:review.\n",
   );
 });
@@ -255,7 +255,7 @@ test("stages a source led by a byte-order mark without the marker or a duplicate
   );
   const expectedDeploy =
     '---\n"description": "Deploy the service"\n"model": "sonnet"\n' +
-    recordLine(pluginRoot, pluginDataDir) +
+    recordLine(pluginRoot, pluginDataDir, "acme:deploy") +
     "---\nDeploy carefully.\n";
 
   // act
@@ -484,7 +484,11 @@ test("aborts staged commands without creating target prompts", async (t) => {
   assert.strictEqual(
     stagedBytes,
     '---\n"description": "Abort me"\n' +
-      recordLine(pluginRoot, path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME)) +
+      recordLine(
+        pluginRoot,
+        path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+        "acme:abort",
+      ) +
       "---\nDo not commit.\n",
   );
   assert.strictEqual(abortLeak, undefined);
@@ -528,7 +532,11 @@ test("removes prior owned prompts and tolerates a missing prior prompt during co
   assert.strictEqual(
     currentBytes,
     '---\n"description": "Current"\n' +
-      recordLine(pluginRoot, path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME)) +
+      recordLine(
+        pluginRoot,
+        path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+        "acme:current",
+      ) +
       "---\nCurrent prompt.\n",
   );
 });
@@ -543,7 +551,11 @@ test("neutralizes malformed frontmatter and preserves exact substituted body byt
     "Run the deployment for ${CLAUDE_PLUGIN_ROOT}.\n";
   const expectedBytes =
     `---\n"description": "Run the deployment for ${pluginRoot}."\n` +
-    recordLine(pluginRoot, path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME)) +
+    recordLine(
+      pluginRoot,
+      path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
+      "acme:bad-command",
+    ) +
     "---\n" +
     `\nRun the deployment for ${pluginRoot}.\n`;
   const expectedParseError =
@@ -590,7 +602,7 @@ test("substitutes project variables and retains command-inapplicable skill varia
     "Skill: ${CLAUDE_SKILL_DIR}\n";
   const expectedBytes =
     `---\n"description": "Root: ${pluginRoot}"\n` +
-    recordLine(pluginRoot, pluginDataDir) +
+    recordLine(pluginRoot, pluginDataDir, "acme:vars") +
     "---\n" +
     `Root: ${pluginRoot}\n` +
     `Data: ${pluginDataDir}\n` +
@@ -629,7 +641,7 @@ test("retains the project variable for user scope and restores the user director
     "Project: ${CLAUDE_PROJECT_DIR}\n";
   const expectedBytes =
     `---\n"description": "Root: ${pluginRoot}"\n` +
-    recordLine(pluginRoot, pluginDataDir) +
+    recordLine(pluginRoot, pluginDataDir, "acme:vars") +
     "---\n" +
     `Root: ${pluginRoot}\n` +
     `Data: ${pluginDataDir}\n` +
@@ -665,7 +677,7 @@ test("D-CF3-06 records the same plugin root and data at user and project scope",
   await writeFile(path.join(pluginRoot, "commands", "scoped.md"), "Scope check.\n");
   const expectedBytes =
     '---\n"description": "Scope check."\n' +
-    recordLine(pluginRoot, pluginDataDir) +
+    recordLine(pluginRoot, pluginDataDir, "acme:scoped") +
     "---\nScope check.\n";
 
   // act
@@ -1125,21 +1137,24 @@ test("normalizes lone-CR and repeated malformed blocks to exact body bytes", asy
     prepared.result.degraded.map(({ generatedName }) => generatedName),
     ["acme:frontmatter-only", "acme:lone-cr", "acme:repeated"],
   );
-  const expectedRecord = recordLine(
-    pluginRoot,
-    path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
-  );
+  const pluginDataDir = path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME);
   assert.strictEqual(
     loneCrBytes,
-    '---\n"description": "Lone CR body."\n' + expectedRecord + "---\n\nLone CR body.\n",
+    '---\n"description": "Lone CR body."\n' +
+      recordLine(pluginRoot, pluginDataDir, "acme:lone-cr") +
+      "---\n\nLone CR body.\n",
   );
   assert.strictEqual(
     repeatedBytes,
-    '---\n"description": "Repeated body."\n' + expectedRecord + "---\nRepeated body.\n",
+    '---\n"description": "Repeated body."\n' +
+      recordLine(pluginRoot, pluginDataDir, "acme:repeated") +
+      "---\nRepeated body.\n",
   );
   assert.strictEqual(
     frontmatterOnlyBytes,
-    '---\n"description": "Plugin command"\n' + expectedRecord + "---\n",
+    '---\n"description": "Plugin command"\n' +
+      recordLine(pluginRoot, pluginDataDir, "acme:frontmatter-only") +
+      "---\n",
   );
 });
 
@@ -1256,7 +1271,7 @@ test("D-CF3-03 stages an inline command map entry and records it under the plugi
   const pluginDataDir = path.join(pluginRoot, "data");
   const expectedBeta =
     '---\n"description": "Beta from the manifest."\n' +
-    recordLine(pluginRoot, pluginDataDir) +
+    recordLine(pluginRoot, pluginDataDir, "acme:beta") +
     "---\nBeta inline body in ${CLAUDE_PLUGIN_ROOT}".replace("${CLAUDE_PLUGIN_ROOT}", pluginRoot);
   const resolved: ResolvedPluginInstallable = {
     ...resolvedFor(pluginRoot, []),

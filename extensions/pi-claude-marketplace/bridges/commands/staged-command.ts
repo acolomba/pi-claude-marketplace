@@ -21,7 +21,9 @@
 //
 // The rebuilt frontmatter ends with the install-time record (D-CF3-06,
 // `command-record.ts`). It is added after the substitution and the reference
-// rewrite, so neither pass reads or changes it (T-03-02).
+// rewrite, so neither pass reads or changes it (T-03-02). Beside the two path
+// values, it stores the name Claude Code gives the command
+// (`claudeCommandName`), which the session's alias reader adds (D-PG11-01).
 //
 // The writer re-parses its own output with Pi's parser and throws when the
 // result is not the frontmatter it meant or the body Pi read from the source,
@@ -36,6 +38,7 @@ import { readFile } from "node:fs/promises";
 
 import { descriptionFallback } from "../../domain/description-fallback.ts";
 import { droppedInvocationFieldsWarning } from "../../domain/invocation-frontmatter.ts";
+import { claudeCommandName } from "../../domain/name.ts";
 import { rewriteMarkdownReferences } from "../../domain/skill-tokens.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { stripBom } from "../../shared/bom.ts";
@@ -45,7 +48,6 @@ import { substituteClaudeContent } from "../../shared/vars.ts";
 
 import { withCommandRecord } from "./command-record.ts";
 
-import type { CommandRecord } from "./command-record.ts";
 import type { CommandOverrides, DiscoveredCommand } from "./types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ClaudeContentOptions } from "../../shared/vars.ts";
@@ -287,13 +289,13 @@ export async function buildStagedCommand(
   );
   const parsed = parseFrontmatter(substituted);
   const body = parsed.body.trim();
-  const record: CommandRecord = {
-    pluginRoot: context.pluginRoot,
-    pluginData: context.pluginDataDir,
-  };
   const frontmatter = withCommandRecord(
     stagedFrontmatter(parsed.frontmatter, body, command.overrides),
-    record,
+    {
+      pluginRoot: context.pluginRoot,
+      pluginData: context.pluginDataDir,
+      claudeName: claudeCommandName(context.pluginName, command.sourceName),
+    },
   );
   const text = rebuildCommandText(substituted, frontmatter);
   assertReadsBack(command.generatedName, text, frontmatter, body);
