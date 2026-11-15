@@ -1,102 +1,68 @@
 ---
 phase: 08-workflow-agents-and-run-paths
-iteration: 2
-reviewed: 2026-11-15T06:09:51Z
+iteration: 3
+reviewed: 2026-11-15T06:27:25Z
 depth: deep
-diff_base: 3826ad12
-diff_head: 8305e78b
-files_reviewed: 10
+diff_base: b3fdc46f
+diff_head: a78def62
+files_reviewed: 6
 files_reviewed_list:
+  - .planning/phases/08-workflow-agents-and-run-paths/08-REVIEW-FIX.md
   - .planning/phases/08-workflow-agents-and-run-paths/08-SECURITY.md
   - docs/mcp-compatibility.md
   - docs/output-catalog.md
   - docs/workflows-compatibility.md
   - extensions/pi-claude-marketplace/orchestrators/plugin/discover-names.ts
-  - features/workflow/agent-types.feature
-  - test/architecture/catalog-uat/catalog-contract.test.ts
-  - test/architecture/catalog-uat/fixtures/plugin-info.ts
-  - test/orchestrators/plugin/discover-names.test.ts
-  - test/orchestrators/plugin/info.test.ts
 findings:
   critical: 0
-  warning: 1
-  info: 4
-  total: 5
+  warning: 0
+  info: 2
+  total: 2
   necessity: 0
 status: issues_found
 ---
 
-# Phase 8: Code Review Report (iteration 2)
+# Phase 8: Code Review Report (iteration 3)
 
-**Reviewed:** 2026-11-15T06:09:51Z
+**Reviewed:** 2026-11-15T06:27:25Z
 **Depth:** deep
-**Files Reviewed:** 10
+**Files Reviewed:** 6
 **Status:** issues_found
 
 ## Summary
 
-Scope: `git diff 3826ad12..8305e78b`. 08-REVIEW-FIX.md was the only planning file I read for intent. 08-SECURITY.md is in scope because the fix changed the T-08-13 row. I checked each claim against the installed engine 3.15.0 source (`node_modules/.cache/optional-peers/node_modules/@quintinshaw/pi-dynamic-workflows/src`). Owner tests passed in a scratchpad HOME with `--import test/platform/isolated-pi-home.ts`: `discover-names.test.ts` and `catalog-contract.test.ts`, 53/53.
+Scope: `git diff b3fdc46f..a78def62`, six commits (e03e0408, 8975cda6, dffbb2da, 9a0e0e05, 6e2f0a11, a78def62). I read 08-REVIEW-FIX.md (Iteration 2) for intent. I checked the engine claims against the installed engine 3.15.0 (`node_modules/.cache/optional-peers/node_modules/@quintinshaw/pi-dynamic-workflows/src`). I checked the upstream claim against the installed 2.1.323 Claude Code binary. I checked every line citation in 08-SECURITY.md against the current tree. The owner tests passed in a scratchpad HOME with `--import test/platform/isolated-pi-home.ts`: `discover-names.test.ts` and `catalog-contract.test.ts`, 53/53. The worktree stayed clean.
 
-The iteration-1 findings, one by one:
-- **CR-01 fixed.** `loadWorkflowSettings` (`src/workflow-settings.ts:122-136`) merges `<cwd>/.pi/workflows/settings.json` with no trust check, and every caller passes only `{ cwd }` (`src/pi-extension.ts:95, 162, 316, 376, 389, 394`; `src/workflow-tool.ts:488`). The paragraph at `docs/workflows-compatibility.md:242` now says this. The README line 253 is quoted no more. The T-08-13 row has a problem in its disposition, not in its facts (WR2-01).
-- **WR-01 fixed.** The short form fires only when `shown === 0`. In that case `shown < 5` holds, so every type the line counts must be over 128 characters. The claim is sound. The owner cases use `acme:` plus 124 characters, which is 129. The scenario type is also 129 characters (measured).
-- **WR-02 fixed.** "fails the step" now reads the same in the code (`discover-names.ts:170, 192`), the catalog state and prose, the fixture, the owner tests, `info.test.ts`, every scenario table and title, and the `agentType` row. The byte pin moved by +1, which matches the one changed state line. `grep "stops the run"` finds the old text only in `.planning/` history.
-- **WR-03 fixed.** `restrictedAgentTools` now keys only on `declaredAgentName`. This matches `parseAgentDefinition` (`src/agent-registry.ts:97-98`, `fmName || basename`). No caller read `WorkflowNoteAgent.generatedName`: the one external caller, `info.ts:1291`, passes discovered agents, which still fit the narrower type. The other `generatedName` reads in `discover-names.ts:336-341`, `install-outcome.ts`, and `update-swap.ts` read the bridge discovery types, not this interface. The new owner case and the scenario at `agent-types.feature:135` both assert that no note appears. The `agentType` row records the fifth limit. Keeping the flat name without a note is reasonable: an upstream-authored script cannot name a `pi-claude-marketplace-` file.
-- **WR-04 fixed.** The row now matches the engine's own order, "explicit model > agentType model > tier > phase model > metadata model > inherited main model > implicit medium > session default" (`src/workflow-capability-contract.ts:330`), and `resolveAgentModelSpec` (`src/agent.ts:242-265`).
-- **IN-01, IN-02, IN-03 fixed** as recorded. IN-02's call text pins the absence of an agent body. Removing the IN-03 sentence leaves one gap (IN2-03).
+The iteration-2 findings, one by one:
 
-New defects: the T-08-13 change leaves 08-SECURITY.md contradicting itself (WR2-01), plus four Info items. No new code defect was found in the over-128 count line or the name-only join.
+- **WR2-01 fixed.** T-08-13 is now `open (nonblocking)`, rated `medium`, with the disposition "accept (pending maintainer acceptance)". The frontmatter reads `threats_open_nonblocking: 1` and `threats_closed: 26`. A tally of the table gives 4 high, 14 medium, 9 low, 26 closed (6 of them n/a) and 1 open, which matches the intro and the frontmatter. The sign-off no longer says "no new acceptance inferred". It has one unchecked item for the pending acceptance. The approval line limits the verification to the blocking gate. A new audit-trail row records the change. The BACKLOG carrier is the parent's merge, which is accepted and known, so it is not a finding. The loader cite `src/workflow-settings.ts:122-134` is the whole body of `loadWorkflowSettings`.
+- **IN2-01 fixed.** The comment (`discover-names.ts:173-178`) and the catalog prose (`docs/output-catalog.md:3159`) now give the code's condition. `shown` counts only missing-agent notes (`discover-names.ts:220-231`), and the count line is pushed after the loop (233-235), so a restriction note can come before it. The byte pin counts example bytes only (`catalog-contract.test.ts:283-286`), so 55,018 still holds after a prose-only change. The test run confirms this.
+- **IN2-02 fixed.** I checked every re-pointed citation against a78def62. Every later commit replaced exactly one line, so 8975cda6 and a78def62 have the same line numbers. The citations hold: `discover-names.ts` 135-136, 149-157, 150, 169-171, 179-194, 211-238, 224, 277-283; `discover-names.test.ts` 505-531, 742-822 (cases at 742, 769, 801), 824-842; `agent-types.feature` 161-190, 192-206; `plugin-info.ts` 234-236; `catalog-contract.test.ts` 21-22, 279-300; `output-catalog.md` 3161-3171. I spot-checked the rows that were not re-pointed (T-08-01, -02, -08, -09, -10, -12, -14, -15, -16, -17), and they still match.
+- **IN2-03 fixed, with a residual (IN3-01).** The 2.1.323 binary contains the launch-time check. It logs `tengu_subagent_zero_tools` and throws `subagent_tool_resolution` / `zero_tools_refused` with "Agent '${agentType}' would be spawned with zero tools — refusing. Its tools list resolved to nothing: … not available to subagents [...]". So the upstream statement is correct. The doc writes the em dash as `--`, as the repository's dash fixer requires. AGENT-10 exists at `docs/research/parity-gaps/subagents.md:244`.
+- **IN2-04 fixed, with a residual (IN3-02).** `defaultEffort`, `defaultTokenBudget` (a normalized `null` survives the merge, `workflow-settings.ts:198-199`), `defaultConcurrency`, `defaultAgentRetries`, and `persistAgentSessions` are described correctly. The `keywordTriggerEnabled` gloss is misleading.
+
+No new defect was found in the one code change, which is a comment. The new defects are two Info items in the documentation.
 
 Necessity rubric applied. No necessity findings.
 
 ## Narrative Findings (AI reviewer)
 
-## Warnings
-
-### WR2-01: The T-08-13 fix makes 08-SECURITY.md contradict itself: a fixer-inferred "accept" is marked closed, the sign-off says no acceptance was inferred, and the residual has no carrier
-
-**File:** `.planning/phases/08-workflow-agents-and-run-paths/08-SECURITY.md:48, 68, 84, 88-93` (frontmatter lines 4-8)
-**Issue:**
-- The fix changed T-08-13 from `transfer` to `accept` and set the status to `closed`. Its own text says "Pending maintainer review" (lines 48 and 68). The autonomous fixer chose the acceptance. The maintainer did not.
-- The Sign-Off still says "Residual risks documented; no new acceptance inferred." and "No blocking or nonblocking threat remains open". The approval line still says "verified 2026-11-15 at f7360834". The frontmatter still says `status: verified`, `threats_open: 0`.
-- A downstream gate that reads `threats_open` therefore sees an acceptance that nobody owns as settled.
-- The severity is also out of line. T-08-13 is rated `low`, yet it lets a cloned repository bring about T-08-12 (`medium`: an adapter in workflow children holds every adapter tool) with no consent from the user. It can also load any other enabled user extension into every subagent.
-- The BACKLOG line for the engine request is drafted twice, in 08-REVIEW-FIX.md and on line 68, but `.planning/BACKLOG.md` has no entry. The residual has no carrier.
-
-**Fix:**
-- Until the maintainer accepts T-08-13, give it status `open` (nonblocking). Set `threats_open_nonblocking: 1` and `threats_closed: 26`.
-- Reword the sign-off bullet to name the pending acceptance.
-- Rate T-08-13 `medium` to match T-08-12, or record why it is lower.
-- Append the drafted line to `.planning/BACKLOG.md`, or name the carrier the parent will write.
-
 ## Info
 
-### IN2-01: The comment and the catalog say "no note" or "the only line", but the code's test is "no missing-agent note"
-
-**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/discover-names.ts:175-178`; `docs/output-catalog.md:3159` ("When the count line is the only line of the script")
-**Issue:** `shown` counts only missing-agent notes. A script with one restricted agent and one over-128 missing type prints the restriction note first, then the short count line. That output is correct. But the count line is then not "the only line of the script", and a note does come before it. The prose gives the wrong condition.
-**Fix:** Say "when no missing-agent note comes before it" in both places. You can also add an owner case for a restriction note followed by the short count line.
-
-### IN2-02: The other 08-SECURITY rows cite line numbers that the fixes moved
-
-**File:** `.planning/phases/08-workflow-agents-and-run-paths/08-SECURITY.md:39-41, 59`
-**Issue:** T-08-04, T-08-05, T-08-06, and T-08-24 still cite the f7360834 lines. Since then, the limits have moved from 137-138 to 135-136, the count line from 175-179 to 177-193, `missingAgentNote` from 171-173 to 169-171, the seven-type scenario from 135-161 to 161-190, and the fixture note from 221 to 233. The edited T-08-13 row cites the current tree, so the register now mixes two baselines.
-**Fix:** Re-point the four rows at 8305e78b, or state in the register that every row except T-08-13 cites f7360834.
-
-### IN2-03: Removing the IN-03 sentence leaves the AG-11 refusal of a Workflow-only agent with no upstream statement
+### IN3-01: The new upstream sentence says AG-11 licenses the install refusal, but the project's own records say AG-11's stated reason is no longer true
 
 **File:** `docs/mcp-compatibility.md:391`
-**Issue:** The bullet now says only that the install is refused (AG-11). It no longer says what Claude Code does with such an agent, so a reader cannot tell whether the refusal matches upstream or is a divergence. AGENTS.md requires every divergence to carry a recorded license.
-**Fix:** Read the 2.1.323 binary for an agent whose `tools` resolve to nothing. Then either restore a graded upstream sentence or name the decision that licenses the refusal.
+**Issue:** The bullet now says "refusing the install is a divergence, and the recorded requirement AG-11 licenses it". AGENTS.md allows two kinds of license: a recorded decision, or a Pi capability gap. AG-11 rested on a gap, "pi-subagents has no safe representation of 'no tools'". Two project records say that this gap no longer exists. `docs/prd/parity-gaps-prd.md:179` (decision 15) says "The stated reason, that pi-subagents cannot express 'no tools', is no longer true". `docs/research/parity-gaps/subagents.md:248` says that `tools:` empty now means no tools. So a reader of the compatibility page sees a divergence that looks settled, while it is an open decision whose basis has lapsed. The divergence is also larger than the sentence says. Claude Code installs the agent and refuses only its launch, but the refusal here fails the whole plugin install (`parity-gaps-prd.md:771`), not only that agent's. The last sentence implies this, but it does not say it.
+**Fix:** Write, for example: "So refusing the whole plugin install is a divergence. The recorded requirement AG-11 still requires it, but its stated reason (pi-subagents could not express 'no tools') no longer holds. Decision 15 in `docs/prd/parity-gaps-prd.md` (AGENT-10) proposes to skip such an agent and install the rest of the plugin, pending the maintainer's decision."
 
-### IN2-04: The untrusted settings paragraph names two keys; the file sets more that cost money or write data
+### IN3-02: The `keywordTriggerEnabled` gloss describes the engine's default, not what a repository adds, and the paragraph leaves out `keywordTriggerWord`
 
 **File:** `docs/workflows-compatibility.md:242`
-**Issue:** Through the same untrusted merge, a repository can also set `defaultEffort: "ultra"`, `defaultTokenBudget: null`, `defaultConcurrency`, `defaultAgentRetries`, `persistAgentSessions` (which writes subagent transcripts to disk), and `keywordTriggerEnabled` (`src/workflow-settings.ts:14-49`). The paragraph does not claim to list every key. Still, a user who checks only the two named keys can miss a cost or a transcript write.
-**Fix:** Add "among other settings", or tell the user to read the whole file. The paragraph's last sentence already says to read it.
+**Issue:** The paragraph says that a cloned repository can set "`keywordTriggerEnabled` (which lets a keyword in your input turn on workflows mode)". In engine 3.15.0 the trigger is already on by default (`src/workflow-editor.ts:320`, `keywordTriggerEnabled: initialSettings.keywordTriggerEnabled ?? true`; the fallback at 467 is also `true`). A repository file can only turn it back on after the user turned it off. The bigger lever is in the same file and goes through the same untrusted merge (`src/pi-extension.ts:393-394` passes `loadWorkflowSettings({ cwd })` as the arming store): `keywordTriggerWord`. It accepts any single token that has no whitespace and no leading `/` (`src/config.ts:39-44`). So a repository can set the trigger to an ordinary word, and that word in normal input then arms workflows mode. The paragraph also leaves out `defaultAgentTimeoutMs` (`null` removes a user's global hard timeout, `workflow-settings.ts:189-190`), which costs money in the same way as `defaultTokenBudget: null`. The paragraph does not claim to list every key, so this is a gap in a security note, not a false statement.
+**Fix:** Replace the gloss with "`keywordTriggerEnabled` and `keywordTriggerWord` (which can turn the keyword trigger back on and set it to an ordinary word, so that word in your input turns on workflows mode)". Add "`defaultAgentTimeoutMs` (`null` removes your own timeout)" next to `defaultTokenBudget`.
 
 ---
 
-_Reviewed: 2026-11-15T06:09:51Z_
+_Reviewed: 2026-11-15T06:27:25Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: deep_
