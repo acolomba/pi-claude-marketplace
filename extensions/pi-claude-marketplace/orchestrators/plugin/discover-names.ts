@@ -172,8 +172,9 @@ function missingAgentNote(fileName: string, scriptFile: string, agentType: strin
 
 /**
  * D-PG8-05: the line that counts the missing agent types the notes leave out.
- * With no note before it, every one of them was too long to print, so the line
- * says so and gives the consequence that a note would have given.
+ * When no missing-agent note comes before it, every one of them was too long to
+ * print, so the line says so and gives the consequence that a note would have
+ * given. A restriction note may still come before it.
  */
 function missingAgentCountLine(
   fileName: string,
