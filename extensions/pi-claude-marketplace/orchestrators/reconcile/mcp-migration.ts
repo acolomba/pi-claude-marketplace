@@ -87,7 +87,12 @@ import { effectiveMcpCompatibility } from "../../domain/mcp-implementation.ts";
 import { generatedMcpServerKey } from "../../domain/name.ts";
 import { resolutionFor, resolveStrict } from "../../domain/plugin-resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { isRecordedButDisabled, replaceCompatibility } from "../../persistence/state-io.ts";
+import {
+  isRecordedButDisabled,
+  replaceCompatibility,
+  replaceUserConfig,
+  userConfigFieldsOf,
+} from "../../persistence/state-io.ts";
 import { McpConfigFileError, McpServerCollisionError } from "../../shared/errors-bridges.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
@@ -577,6 +582,9 @@ function applyNeutralVerdict(action: OwnerAction): boolean {
     "neutral",
   );
   record.mcpServerConfigs = servers;
+  // D-PG10-23: the options of the same resolution, so the staged entries and
+  // the record agree.
+  replaceUserConfig(record, userConfigFieldsOf(action.resolved.declaredUserConfig));
   if (bundle) {
     record.mcpBundle = true;
   } else {

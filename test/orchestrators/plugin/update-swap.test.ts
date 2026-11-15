@@ -58,6 +58,7 @@ import type {
   ThreePhaseArgs,
   ThreePhaseArgsBase,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
+import type { PluginInstallRecord } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { TestContext } from "node:test";
 
@@ -776,6 +777,115 @@ test("MREC-01: a failed swap keeps the previous MCP servers beside the intent ma
       notes: ["update-in-progress"],
       mcpServerConfigs: PREVIOUS_MCP_SERVER_CONFIGS,
       mcpBundle: true,
+    },
+  );
+});
+
+const MODE_OPTION = { type: "string", title: "Mode", description: "The mode." } as const;
+
+/**
+ * D-PG10-15: seeds `hello` 1.0.0 -> 2.0.0, gives the 1.0.0 record the
+ * `previous` options, and writes the 2.0.0 manifest with the `declared` ones.
+ */
+async function seedOptionsUpdate(
+  cwd: string,
+  previous: Record<string, unknown>,
+  declared: Record<string, unknown> | undefined,
+): Promise<ThreePhaseArgsBase & { readonly cascade: true }> {
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "2.0.0", hasSkill: true } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  await writeFile(
+    path.join(marketplaceRoot, "plugins", "hello", ".claude-plugin", "plugin.json"),
+    JSON.stringify({
+      name: "hello",
+      version: "2.0.0",
+      ...(declared !== undefined && { userConfig: declared }),
+    }),
+  );
+  const args = cascadeSwapArgs(cwd);
+  const state = await loadState(args.locations.extensionRoot);
+  const record = state.marketplaces.mp?.plugins.hello;
+  assert.ok(record !== undefined);
+  record.userConfig = previous;
+  await saveState(args.locations.extensionRoot, state);
+  return args;
+}
+
+async function swapOptionsUpdate(
+  args: ThreePhaseArgsBase & { readonly cascade: true },
+): Promise<{ readonly partition: string; readonly record: PluginInstallRecord | undefined }> {
+  const preflight = await preparePluginUpdate({ policy: UPDATE_POLICY, ...args });
+  assert.ok(!("partition" in preflight));
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+  const record = (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  return { partition: outcome.partition, record };
+}
+
+test("D-PG10-15: an all-success swap records the options the new version declares", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-options-");
+  const args = await seedOptionsUpdate(
+    cwd,
+    { mode: { ...MODE_OPTION, default: "fast" } },
+    { mode: { ...MODE_OPTION, default: "slow" } },
+  );
+
+  // act
+  const { partition, record } = await swapOptionsUpdate(args);
+
+  // assert
+  assert.deepStrictEqual(
+    { partition, userConfig: record?.userConfig },
+    { partition: "updated", userConfig: { mode: { ...MODE_OPTION, default: "slow" } } },
+  );
+});
+
+test("D-PG10-15: a swap to a version that declares no options removes the recorded options", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-options-drop-");
+  const args = await seedOptionsUpdate(
+    cwd,
+    { mode: { ...MODE_OPTION, default: "fast" } },
+    undefined,
+  );
+
+  // act
+  const { partition, record } = await swapOptionsUpdate(args);
+
+  // assert
+  assert.deepStrictEqual(
+    { partition, hasUserConfig: record !== undefined && Object.hasOwn(record, "userConfig") },
+    { partition: "updated", hasUserConfig: false },
+  );
+});
+
+test("D-PG10-23: a failed swap keeps the previous options beside the intent mark", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-options-failure-");
+  const args = await seedOptionsUpdate(
+    cwd,
+    { mode: { ...MODE_OPTION, default: "fast" } },
+    { mode: { ...MODE_OPTION, default: "slow" } },
+  );
+  await mkdir(args.locations.skillsTargetDir, { recursive: true });
+  await writeFile(path.join(args.locations.skillsTargetDir, "hello-tool"), "old-resource-tree");
+
+  // act
+  const { partition, record } = await swapOptionsUpdate(args);
+
+  // assert
+  assert.deepStrictEqual(
+    { partition, notes: record?.compatibility.notes, userConfig: record?.userConfig },
+    {
+      partition: "failed",
+      notes: ["update-in-progress"],
+      userConfig: { mode: { ...MODE_OPTION, default: "fast" } },
     },
   );
 });

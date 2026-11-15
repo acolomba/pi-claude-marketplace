@@ -9923,6 +9923,76 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
+  for (const { title, label, recorded } of [
+    {
+      title:
+        "D-PG10-23: a held-down record whose enable fails after its pin refresh gets back its own options",
+      label: "deferred-options-restore",
+      recorded: {
+        mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+      },
+    },
+    {
+      title:
+        "D-PG10-15: a legacy held-down record whose enable fails after its pin refresh stays without recorded options",
+      label: "deferred-options-legacy",
+      recorded: undefined,
+    },
+  ]) {
+    test(title, async (t) => {
+      // arrange -- `widget` 1.1.0 declares `mode` with the default `slow`
+      const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+        t,
+        label,
+        coShippedSeed({ enabled: false, dependencyDisabled: true }),
+      );
+      await declareEnabled(project, cwd, ["widget", "zcore"]);
+      const manifestFile = path.join(
+        marketplaceRoot,
+        "plugins",
+        "widget",
+        ".claude-plugin",
+        "plugin.json",
+      );
+      const manifest = JSON.parse(await readFile(manifestFile, "utf8")) as Record<string, unknown>;
+      await writeFile(
+        manifestFile,
+        JSON.stringify({
+          ...manifest,
+          userConfig: {
+            mode: { type: "string", title: "Mode", description: "The mode.", default: "slow" },
+          },
+        }),
+      );
+      if (recorded !== undefined) {
+        const seeded = await loadState(project.extensionRoot);
+        const seededWidget = seeded.marketplaces.mp?.plugins.widget;
+        assert.ok(seededWidget !== undefined);
+        seededWidget.userConfig = recorded;
+        await saveState(project.extensionRoot, seeded);
+      }
+
+      await unreadableSkill(marketplaceRoot, "widget");
+      const before = await recordFor(project, "mp", "widget");
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+      const { gitOps } = createOfflineGitOps();
+
+      // act
+      await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ● zcore v1.0.0 → v2.0.0 (updated)\n  ⊘ widget v1.0.0 → v1.1.0 (failed) {unreadable}\n\nReconcile: 1 failure, 1 success\n\n/reload to pick up changes",
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(await recordFor(project, "mp", "widget"), before);
+      verifyBoundary();
+    });
+  }
+
   test("a failed enable after a catalog move keeps its rollback details on the failed move row", async (t) => {
     // arrange
     const { cwd, project, marketplaceRoot } = await seedConvergenceScope(

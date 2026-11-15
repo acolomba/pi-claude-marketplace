@@ -17,6 +17,7 @@ import {
   mcpServerConfigsOf,
   rangeVersionOf,
   replaceCompatibility,
+  replaceUserConfig,
   saveState,
   toDisabledRecord,
   userConfigFieldsOf,
@@ -786,6 +787,40 @@ test("D-PG10-23: keeps an option named __proto__ as an own key of the stored sch
       text: '{"__proto__":{"type":"string","title":"Proto","description":"The proto.","default":"x"}}',
     },
   );
+});
+
+test("D-PG10-15: replaces a record's recorded options with the fields given", () => {
+  // arrange
+  const record: Pick<PluginInstallRecord, "userConfig"> = {
+    userConfig: {
+      mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+    },
+  };
+
+  // act
+  replaceUserConfig(record, {
+    userConfig: {
+      mode: { type: "string", title: "Mode", description: "The mode.", default: "slow" },
+    },
+  });
+
+  // assert
+  assert.deepStrictEqual(record, {
+    userConfig: {
+      mode: { type: "string", title: "Mode", description: "The mode.", default: "slow" },
+    },
+  });
+});
+
+test("D-PG10-15: removes a record's recorded options when the fields given hold none", () => {
+  // arrange
+  const record: Pick<PluginInstallRecord, "userConfig"> = { userConfig: {} };
+
+  // act
+  replaceUserConfig(record, {});
+
+  // assert
+  assert.strictEqual(Object.hasOwn(record, "userConfig"), false);
 });
 
 test("returns the exact default for a missing state file", async (t) => {

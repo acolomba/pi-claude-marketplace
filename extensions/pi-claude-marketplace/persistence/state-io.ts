@@ -341,6 +341,19 @@ export function userConfigFieldsOf(
 }
 
 /**
+ * D-PG10-15 / D-PG10-23: replaces a record's `userConfig` with `fields`, which
+ * `userConfigFieldsOf` gives, so a restage to a version that declares no
+ * options removes it.
+ */
+export function replaceUserConfig(
+  record: Pick<PluginInstallRecord, "userConfig">,
+  fields: Pick<PluginInstallRecord, "userConfig">,
+): void {
+  delete record.userConfig;
+  Object.assign(record, fields);
+}
+
+/**
  * MREC-01: replaces a record's `compatibility` and its `compatibilityBasis` in
  * one call, because the basis describes the `compatibility` beside it. A
  * `basis` of `"neutral"` marks the verdict as the neutral one; `undefined`

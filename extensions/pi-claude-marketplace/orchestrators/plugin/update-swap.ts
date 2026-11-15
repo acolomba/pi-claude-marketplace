@@ -103,7 +103,12 @@ import {
 } from "../../domain/mcp-implementation.ts";
 import { resolutionFor } from "../../domain/plugin-resolver.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
-import { mcpServerConfigsOf, replaceCompatibility } from "../../persistence/state-io.ts";
+import {
+  mcpServerConfigsOf,
+  replaceCompatibility,
+  replaceUserConfig,
+  userConfigFieldsOf,
+} from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   CleanupContextError,
@@ -954,6 +959,8 @@ function applyAllSuccessRecordFields(sRecord: PluginStateRecord, preflight: Plug
   // beside `compatibility` so a failed update keeps the previous servers next
   // to the intent mark.
   sRecord.mcpServerConfigs = mcpServerConfigsOf(installable.declaredMcpServers);
+  // D-PG10-15: the options `toVersion` declares, written beside it too.
+  replaceUserConfig(sRecord, userConfigFieldsOf(installable.declaredUserConfig));
   if (installable.mcpBundle === true) {
     sRecord.mcpBundle = true;
   } else {
