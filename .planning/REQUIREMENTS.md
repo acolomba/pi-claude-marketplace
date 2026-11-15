@@ -63,10 +63,10 @@
 ### Plugin Container
 
 - [x] **PG-CORE-01**: For a marketplace entry whose source is the marketplace root and which lists `skills`, only the listed skill folders are installed. No file or record of a skill that an update removes stays behind. (P0)
-- [ ] **PG-CORE-03**: `userConfig` defaults and export (step 1 of the PRD's CORE-03): each option resolves to its `default`; hooks receive `CLAUDE_PLUGIN_OPTION_<KEY>`; `${user_config.KEY}` is filled in exec-form hook commands and arguments, in the five MCP fields that take variables, and in skill and agent content for values that are not sensitive. A plugin whose options all have a default installs without `--partial`. A plugin with a required option that has no default stays partially available. (P1; decision 17)
-- [ ] **PG-CORE-05**: A user-scope skill or command that names `${CLAUDE_PROJECT_DIR}` gets the session directory when the user invokes it, when the model reads it, and through the `run_plugin_command` tool. Agent bodies stay as they are. (P1; decision 10)
-- [ ] **PG-CORE-06**: In a project that Pi does not trust, a project-scope plugin's `bin` directory is not on `PATH`. (P1; decision 23)
-- [ ] **PG-CORE-07**: A plugin with no `bin` directory adds nothing to `PATH`. (P1)
+- [x] **PG-CORE-03**: `userConfig` defaults and export (step 1 of the PRD's CORE-03): each option resolves to its `default`; hooks receive `CLAUDE_PLUGIN_OPTION_<KEY>`; `${user_config.KEY}` is filled in exec-form hook commands and arguments, in the five MCP fields that take variables, and in skill and agent content for values that are not sensitive. A plugin whose options all have a default installs without `--partial`. A plugin with a required option that has no default stays partially available. (P1; decision 17)
+- [x] **PG-CORE-05**: A user-scope skill or command that names `${CLAUDE_PROJECT_DIR}` gets the session directory when the user invokes it, when the model reads it, and through the `run_plugin_command` tool. Agent bodies stay as they are. (P1; decision 10)
+- [x] **PG-CORE-06**: In a project that Pi does not trust, a project-scope plugin's `bin` directory is not on `PATH`. (P1; decision 23)
+- [x] **PG-CORE-07**: A plugin with no `bin` directory adds nothing to `PATH`. (P1)
 
 ### Skills and Commands
 
@@ -78,7 +78,7 @@
 ### Security
 
 - [x] **PG-SEC-01**: The install of a plugin whose workflow script names an agent with a `tools` or `disallowedTools` field prints a note that the workflow does not keep the restriction, `info` shows it, and the workflow compatibility page says so. The request to pi-dynamic-workflows of the PRD's section 8.4 is drafted under `.planning/upstream/` for the maintainer to file. (P0)
-- [ ] **PG-SEC-02**: The maintainer confirms or reopens the accepted project trust gap of D-LOC-01, and the decision is recorded with its premise and the Pi version it was checked against. (P1; decision 23)
+- [ ] **PG-SEC-02**: The maintainer confirms or reopens the accepted project trust gap of D-LOC-01, and the decision is recorded with its premise and the Pi version it was checked against. (P1; decision 23) Recorded as D-PG10-01 (option A, pending maintainer review); stays open until the maintainer answers.
 - [x] **PG-SEC-03**: Under the adapter, a plugin server either gets the fields that withhold the `sampling` capability and the MCP UI extension, or the divergence is recorded as a decision. (P1; decision 20)
 
 ### Documentation
@@ -201,10 +201,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PG-MCP-08    | Phase 9  | Complete |
 | PG-MCP-09    | Phase 9  | Complete |
 | PG-CORE-01   | Phase 4  | Complete |
-| PG-CORE-03   | Phase 10 | Pending |
-| PG-CORE-05   | Phase 10 | Pending |
-| PG-CORE-06   | Phase 10 | Pending |
-| PG-CORE-07   | Phase 10 | Pending |
+| PG-CORE-03   | Phase 10 | Complete |
+| PG-CORE-05   | Phase 10 | Complete |
+| PG-CORE-06   | Phase 10 | Complete |
+| PG-CORE-07   | Phase 10 | Complete |
 | PG-SKILL-04  | Phase 4  | Complete |
 | PG-SKILL-01  | Phase 11 | Pending |
 | PG-CMD-09    | Phase 11 | Pending |
