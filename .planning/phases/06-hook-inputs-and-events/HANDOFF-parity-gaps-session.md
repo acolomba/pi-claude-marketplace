@@ -3,7 +3,7 @@
 Standing instruction: run all phases autonomously (reversible upstream-parity defaults, flagged for maintainer review); stop only for PR, publish, merge to main. Hermetic homes only; never touch the real ~/.pi/agent.
 
 ## Branches and worktrees
-- `features/gaps` — /home/acolomba/src/pi-claude-marketplace-gaps (this session's cwd). Phases 1–5 complete; Phase 6 in progress.
+- `features/gaps` — /home/acolomba/src/pi-claude-marketplace-gaps (this session's cwd). Phases 1–6 complete.
 - `features/gaps-agents` — ~/src/pi-claude-marketplace-gaps-agents. Phase 7 complete (d0898ebd); Phase 8 executed, in review.
 - `features/gaps-mcp` — ~/src/pi-claude-marketplace-gaps-mcp. Phase 9 complete (f52e67d9); Phase 10 executing (wave 1 done).
 - Side branches keep their old STATE.md on purpose (phase complete there reverted STATE; update STATE at merge).
@@ -15,6 +15,7 @@ and start the prompt with `[gsd:dispatch phase="NN" plan="NN-MM"]`. Shared execu
 Wave gate: `npm run check > log 2>&1; echo "exit=$?" >> log` in background; read the exit= line. A timing-only failure may be rerun once.
 
 ## Status at handoff
+- UPDATE 2026-11-15: Phase 6 COMPLETE on features/gaps. Parent records applied (daef4bac: D-PG6 rows, D-CF5-06/28 and D-BG-403 superseded, BACKLOG items, codebase maps, reasoning-model skill rule, 03-VERIFICATION PG-HOOK-07a row closed); validation and security (205e10b8, 31/31 threats closed); review iteration 1 fixed WR-01/02 and documented WR-03 (cf060a19..aa4b5b6e), iteration 2 Info only; phase gate green at 4a4f3a82 (1967+188); verification passed with two judgment-tier overrides pending maintainer review (4b3392d2); HOOKPAYLOAD-01, HOOKLAUNCH-01, CHILDSESSIONID-01 closed; PG-HOOK-04/06/11 complete.
 - UPDATE: Phase 6 06-12 done, wave 7 gate green at 3312c94a (1966+186). Phase 10: 10-04 and 10-05 done (8c993ecd; wave 2 complete, wave 2 gate NOT yet run — run it next, then 10-06). Parent line from 10-05: remove `userConfig` from the not-bridged list in .agents/skills/claude-code-compat-research/SKILL.md:43. Phase 8 close-out delegated to a general-purpose agent (fix WR2-01/IN2, gate, verify, phase complete 8 on its branch) — check its report/commits on features/gaps-agents.
 - Phase 8 COMPLETE on features/gaps-agents (98aaf822): gate green a78def62 (1974+185), verification passed with criterion-5 override (option A). Open for maintainer: T-08-13 open nonblocking; AG-11 zero-tool-agent install refusal vs Claude Code launch-time refusal (IN3-01); IN3-02 settings keys docs. Merge parent lines: BACKLOG engine-trust request, IN3 docs follow-up, CHANGELOG workflow agents line.
 - Phase 6: plans 06-01..06-12 done; 06-13 (docs + consolidated records) next; then validation, security, review loop (max 3), phase gate, verifier, fingerprint, `phase complete 6`, STATE/REQUIREMENTS hand fixes. Last green gate 4d74af3a (wave 6). Wave 7 gate after 06-12.
@@ -24,8 +25,8 @@ Wave gate: `npm run check > log 2>&1; echo "exit=$?" >> log` in background; read
 
 ## Merge work (after 6, 8, 10)
 Merge features/gaps-agents and features/gaps-mcp into features/gaps (no rebase), resolve STATE/ROADMAP, run combined `npm run check`. Apply parent lines collected in SUMMARYs/fix reports:
-- PROJECT.md Key Decisions: D-PG5 (done), D-PG6-01..24 (06-13 consolidates), D-PG7-01..19, D-PG8-01..17, D-PG10-* (10-20 writes).
-- BACKLOG: close AGTEXCL-01, HOOKLAUNCH-01, CHILDSESSIONID-01, HOOKPAYLOAD-01 after verification; mark WOUT-01 stale; add: ambient workflow/workflow_control on no-tools agents (T-08-17), engine trust for .pi/workflows/settings.json (T-08-13), F12 child Bash CLAUDE_CODE_SESSION_ID, widen agents repair to Claude Code's full set; MCPSAMPLING-01/MCPOPENUI-01 already added on gaps-mcp.
+- PROJECT.md Key Decisions: D-PG5 (done), D-PG6-01..24 (done on features/gaps), D-PG7-01..19, D-PG8-01..17, D-PG10-* (10-20 writes).
+- BACKLOG: close AGTEXCL-01 after verification (HOOKLAUNCH-01, CHILDSESSIONID-01, HOOKPAYLOAD-01 closed on features/gaps); mark WOUT-01 stale; add: ambient workflow/workflow_control on no-tools agents (T-08-17), engine trust for .pi/workflows/settings.json (T-08-13), widen agents repair to Claude Code's full set; MCPSAMPLING-01/MCPOPENUI-01 already added on gaps-mcp.
 - CHANGELOG lines from 07-xx, 08-02/04, 06-13, 10-20.
 - ROADMAP/REQUIREMENTS: amend Phase 8 criterion 5 and PG-WF-05 (option A, not a gap).
 - STACK.md YAML bullet (agent frontmatter is now YAML).

@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: parity-gaps
 milestone_name: Claude Code Parity Gaps and Defects
-current_phase: 6
-current_phase_name: Hook Inputs and Events
-status: ready_to_execute
-stopped_at: context exhaustion at 76% (2026-11-15)
-last_updated: "2026-11-15T07:51:49.559Z"
-last_activity: 2026-11-14
-last_activity_desc: Phase 5 complete, transitioned to Phase 6
-state_head: 3312c94a92b422ed82d0a744ed9c200c16334914
+current_phase: 10
+current_phase_name: Plugin Options, Variables, and Trust
+status: executing
+stopped_at: Phase 6 complete on features/gaps; Phase 10 continues on features/gaps-mcp, then the merge, then Phase 11
+last_updated: "2026-11-15T13:41:31.858Z"
+last_activity: 2026-11-15
+last_activity_desc: Phase 6 complete (verification passed, two overrides pending maintainer review)
+state_head: 4b3392d25ceab27186df3abaa1a39af564bcc377
 progress:
   total_phases: 11
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 54
-  completed_plans: 53
-  percent: 45
+  completed_plans: 54
+  percent: 55
 ---
 
 # Project State
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-11-13 after parity-gaps Phase 2)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 6 — Hook Inputs and Events
+**Current focus:** Phase 10 — Plugin Options, Variables, and Trust (on features/gaps-mcp), then the merge of features/gaps-agents and features/gaps-mcp, then Phase 11
 
 ## Current Position
 
-Phase: 6 — Hook Inputs and Events
-Plan: 0 of 13 complete
-Status: Ready to execute Phase 6
-Last activity: 2026-11-14 — Phase 5 complete: verification passed with one override, phase gate green at 59e6f5f7
+Phase: 10 — Plugin Options, Variables, and Trust (executing on features/gaps-mcp)
+Plan: see that branch
+Status: Phases 1–6 complete on features/gaps; Phases 7–9 complete on their side branches (7–8 on features/gaps-agents, 9 on features/gaps-mcp)
+Last activity: 2026-11-15 — Phase 6 complete: verification passed with two overrides (judgment-tier prohibitions, pending maintainer review), phase gate green at 4a4f3a82 (1967 + 188 scenarios)
 
-Progress: [█████░░░░░] 45%
+Progress: [██████░░░░] 55% (this branch: Phases 1–6 of 11; the side branches hold Phases 7–9)
 
 
 ### parity-gaps Phase 3 execution
@@ -1131,9 +1131,9 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-15T07:51:47.029Z
-Stopped at: context exhaustion at 76% (2026-11-15)
-Resume file: .planning/phases/06-hook-inputs-and-events/.continue-here.md
+Last session: 2026-11-15
+Stopped at: Phase 6 complete; next: Phase 10 on features/gaps-mcp, then the merge, then Phase 11
+Resume file: .planning/HANDOFF.json
 
 ### Phase 2 completion-helper notes
 

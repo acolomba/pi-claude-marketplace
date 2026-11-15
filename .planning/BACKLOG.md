@@ -4735,7 +4735,9 @@ Noted by component-features Phase 3. `platform/pi-api.ts` exports `ThinkingLevel
 
 Noted by component-features Phase 5 (DUBIOUS-CHOICES P5-DC-23 item 5). `test/index.test.ts` imports `TurnEndEvent` straight from the Pi peer, because `platform/pi-api.ts` does not re-export it. A re-export alone fails `fallow dead-code` as an unused type, because the `turn_end` handler in `bridges/hooks/event-router.ts` types its event with the structural `FollowUpTurnEnd`. Re-export it when a production module names the type, for example that handler.
 
-## HOOKLAUNCH-01: SessionStart `resume` and `fork` for resumed and forked launches
+## ~~HOOKLAUNCH-01: SessionStart `resume` and `fork` for resumed and forked launches~~ -- CLOSED
+
+**CLOSED 2026-11-15** by parity-gaps Phase 6 (D-PG6-14, D-PG6-15, D-PG6-17). A launch that continues a saved session sends `resume`, and a `--fork` launch sends `fork`.
 
 Deferred by component-features Phase 5 (D-CF5-06). A Pi launch with `--continue`, `--resume`, `--session`, or `--fork` sends SessionStart `startup`, where Claude Code sends `resume` or `fork`. Detect them through the session header: `parentSession` means fork, existing entries mean resume. Its scenario needs a launcher change in the cucumber harness.
 
@@ -4755,7 +4757,9 @@ Deferred by component-features Phase 5 (D-CF5-16). Set `CLAUDE_CODE_CHILD_SESSIO
 
 Deferred by component-features Phase 5 (D-CF5-20). Merge a `plugin.json` `hooks` field (path, array, or inline object) with `hooks/hooks.json` per event, and apply a marketplace entry's inline `hooks` as upstream: an entry event replaces that event, and without `plugin.json` the entry replaces the whole config. Then drop the `{unsupported hooks}` report for these fields. Also decide whether `plugin info` names the declared field.
 
-## HOOKPAYLOAD-01: missing fields in the tool hook payloads
+## ~~HOOKPAYLOAD-01: missing fields in the tool hook payloads~~ -- CLOSED
+
+**CLOSED 2026-11-15** by parity-gaps Phase 6 (D-PG6-04 to D-PG6-07). The tool hooks receive `tool_use_id` on the three tool events, `duration_ms` on the result hooks, and `mcp_server` for a plugin MCP tool; `is_interrupt` shipped earlier (D-BG-401). Residual: HOOKMCPSERVERSCOPE-01.
 
 Deferred by component-features Phase 5 (D-CF5-28, 05-09 addendum). Add `tool_use_id` and `mcp_server` to the tool stdin payloads, and `tool_use_id`, `is_interrupt`, and `duration_ms` to the PostToolUseFailure payload, as Claude Code sends them.
 
@@ -5300,7 +5304,9 @@ resolve this item or waive the full-suite requirement.
 
 Noted 2026-11-14 (parity-gaps, Phase 3 code review WR-03, iteration 2). Present at `cab4a540`, before Phase 3; the Phase 3 child-only shutdown drain (CR-01 fix `0b49ad9e`) restores that base behavior. Each load builds its own hooks runtime with its own write queue, but all loads share one PID-table file per scope. A main-session shutdown leaves the old runtime's registry intact; the new load's reap kills the old hooks and rewrites the table, then each old hook's `close` runs the old runtime's `finalizeChild` (`bridges/hooks/async-rewake/registry.ts`), which writes its leftover snapshot over the shared table with no ordering against the new runtime's writes. A hook the new load started in that window can lose its row and be orphaned after a crash. The window is short on Linux unless a grandchild holds the hook's stdio open; elsewhere the reap skips live processes, so old hooks run to their 600 s timeout and the window lasts minutes. After D-PG5-17 (parity-gaps, Phase 5) a plain `async` hook has no timer, so outside Linux nothing stops one that never ends after a quit or a crash, and the window lasts as long as that hook runs (D-PG5-18). Suggested fix: in a main session, detach the old runtime's entries at shutdown without signalling them (clear the map, keep each timeout armed), so late exits write nothing; add a router test asserting no table write and no signal after a `reload` followed by `close`.
 
-## CHILDSESSIONID-01: should a child tool hook's session fields name the parent session?
+## ~~CHILDSESSIONID-01: should a child tool hook's session fields name the parent session?~~ -- CLOSED
+
+**CLOSED 2026-11-15** by parity-gaps Phase 6 (decision 26, D-PG6-01 to D-PG6-03). A child's tool hooks name the session that launched it, and `agent_id` names the child. Residuals: CHILDBASHSESSION-01, NESTEDCHILDROOT-01.
 
 Noted 2026-11-14 (parity-gaps, Phase 3 verification, PG-HOOK-07a unclassified row). In a pi-subagents child, a tool hook's `session_id`, `transcript_path` and `CLAUDE_CODE_SESSION_ID` name the child's own Pi session, so `session_id` equals `agent_id`. Claude Code appears to keep the main session in those fields: its 2.1.323 `SubagentStop` schema carries `agent_transcript_path` beside the base `transcript_path`; not confirmed for `PreToolUse`/`PostToolUse`. pi-subagents 0.88.1 sets `PI_SUBAGENT_PARENT_SESSION` in the runner environment of background children (`src/runs/background/async-execution.js:553-555`), so the parent id is reachable there; the parent's transcript path is not known to be. Carried to Phase 6 as decision 26 and success criterion 6; research the upstream contract first (`claude-code-compat-research`).
 
