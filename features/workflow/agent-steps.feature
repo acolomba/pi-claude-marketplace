@@ -124,3 +124,23 @@ Feature: Workflow agent steps
       | 4    | user        | Task label: agent 2\n\nCount the worktrees.                                                                                                                |
       | 4    | assistant   | tool call bash {"command":"echo worktrees $(git worktree list \| wc -l) branches $(git branch \| wc -l)"}                                                  |
       | 4    | tool result | bash returned: worktrees 2 branches 2\n                                                                                                                    |
+
+  Scenario: A workflow step with a schema returns the object its subagent reports
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/judge.js" with this text:
+      """
+      export const meta = {name:"judge",description:"Judges the change."};
+
+      const verdict = await agent("Judge the change.", {schema:{type:"object",properties:{verdict:{type:"string"}},required:["verdict"]}});
+      return "verdict=" + verdict.verdict + " type=" + typeof verdict;
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool              | arguments          |
+      |       | structured_output | {"verdict":"pass"} |
+    When the user runs the workflow command "/demo:judge", whose agent steps the model answers
+    Then the workflow run ends with the status "completed" and the result "verdict=pass type=object"
+    Then the workflow engine shows these notices:
+      | notice              |
+      | started /demo:judge |
