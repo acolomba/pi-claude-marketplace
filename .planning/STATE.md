@@ -51,6 +51,7 @@ Options, Variables, and Trust, 21/21 plans) are complete.
 - Phase 10 complete 2026-11-15: 6/6 truths, PG-SEC-02 by override, PG-SEC-02 Pending; gate exit 0 at 16ef48af (adapter 1983, builtin 199).
 - Phase 10 security: 52/52 closed, threats_open 0.
 - Phase 07 security re-audited at 24de427b: 21/21 closed, threats_open 0; UF-07-02 open for maintainer decision. (3a59a8fd)
+- Phase 09 security re-audited at 25caef67: 23/23 closed, threats_open 0; T-09-09 stays an accepted residual pending D-PG9-07; UF-09-01 (low, quadratic CLAUDE_VARIABLE scan) logged, no fix. (976c4786)
 
 Decisions (Phase 10):
 
