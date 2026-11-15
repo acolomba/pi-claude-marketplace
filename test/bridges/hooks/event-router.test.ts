@@ -3671,36 +3671,43 @@ for (const { launch, header, holdsMessage, processStartedAt, source } of [
   });
 }
 
-test("session_start at Pi startup debug-logs a session read that throws and dispatches nothing (NFR-2)", async (t) => {
-  // arrange
-  const debugLines = observeRouterDebug(t);
-  const { root, projectRoot, sessionStart, dispatched } = await launchRouter(t, 0);
-  const sessionManager = new Proxy(SessionManager.inMemory(root, { id: "router-launch-throws" }), {
-    get(target, property, receiver): unknown {
-      if (property === "getEntries") {
-        return (): never => {
-          throw new Error("entries unreadable");
-        };
-      }
+for (const read of ["getHeader", "getEntries"] as const) {
+  test(`session_start at Pi startup debug-logs a ${read} that throws and dispatches SessionStart with source startup (NFR-2)`, async (t) => {
+    // arrange
+    const debugLines = observeRouterDebug(t);
+    const { root, projectRoot, sessionStart, dispatched } = await launchRouter(t, 0);
+    const sessionManager = new Proxy(launchSession(root, { timestamp: LAUNCH_HEADER_TIME }, true), {
+      get(target, property, receiver): unknown {
+        if (property === read) {
+          return (): never => {
+            throw new Error("session unreadable");
+          };
+        }
 
-      return Reflect.get(target, property, receiver);
-    },
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const context = withSessionManager(makeContext(projectRoot, root), sessionManager);
+
+    // act
+    const update = await sessionStart({ type: "session_start", reason: "startup" }, context);
+
+    // assert
+    assert.deepStrictEqual(
+      { update, dispatched, debugLines: debugLines() },
+      {
+        update: undefined,
+        dispatched: [
+          { scope: "project", event: { source: "startup" } },
+          { scope: "user", event: { source: "startup" } },
+        ],
+        debugLines: [
+          "[hooks] session_start launch read failed, source stays startup: session unreadable",
+        ],
+      },
+    );
   });
-  const context = withSessionManager(makeContext(projectRoot, root), sessionManager);
-
-  // act
-  const update = await sessionStart({ type: "session_start", reason: "startup" }, context);
-
-  // assert
-  assert.deepStrictEqual(
-    { update, dispatched, debugLines: debugLines() },
-    {
-      update: undefined,
-      dispatched: [],
-      debugLines: ["[hooks] session_start skipped: entries unreadable"],
-    },
-  );
-});
+}
 
 test("session_start at Pi startup dispatches a continued session once when Pi repeats its start (SSDEDUP-01)", async (t) => {
   // arrange

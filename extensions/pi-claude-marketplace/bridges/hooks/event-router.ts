@@ -163,17 +163,23 @@ const NO_LAUNCH_FACTS: SessionLaunchFacts = { holdsMessages: false, forkedByThis
 // D-PG6-13..15: read from Pi's session manager only, never from a file or
 // the command line. A new session already holds setting entries, so only a
 // `message` entry marks a continued one. A header timestamp that does not
-// parse marks no fork.
+// parse marks no fork. Claude Code always runs SessionStart, so a read that
+// throws keeps Pi's `startup` and the hooks still run (NFR-2).
 function readSessionLaunchFacts(
   sessionManager: ExtensionContext["sessionManager"],
   processStartedAt: number,
 ): SessionLaunchFacts {
-  const header = sessionManager.getHeader();
-  return {
-    holdsMessages: sessionManager.getEntries().some((entry) => entry.type === "message"),
-    forkedByThisLaunch:
-      header?.parentSession !== undefined && Date.parse(header.timestamp) >= processStartedAt,
-  };
+  try {
+    const header = sessionManager.getHeader();
+    return {
+      holdsMessages: sessionManager.getEntries().some((entry) => entry.type === "message"),
+      forkedByThisLaunch:
+        header?.parentSession !== undefined && Date.parse(header.timestamp) >= processStartedAt,
+    };
+  } catch (err) {
+    hookDebugLog(`session_start launch read failed, source stays startup: ${errorMessage(err)}`);
+    return NO_LAUNCH_FACTS;
+  }
 }
 
 /**
