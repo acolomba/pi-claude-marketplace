@@ -997,6 +997,47 @@ Feature: MCP server lifecycle
 
       """
 
+  @adapter-only
+  Scenario: An idleTimeout of zero the user wrote for a stdio plugin server leaves the lifecycle default in place (PG-MCP-06, D-PG9-15)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers":{"srv":{"command":"pi-features-absent-mcp-server"}}}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has written these fields on the mcp server "plugin_demo_srv_" in the mcp-adapter.json file of the user scope:
+      """
+      {"idleTimeout":0}
+      """
+    When the user has run "/claude:plugin reinstall demo@fixtures --scope user", which did not fail
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "command": "pi-features-absent-mcp-server",
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "idleTimeout": 0,
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              }
+            }
+          }
+        }
+      }
+
+      """
+
   @mcp
   Scenario: A new session offers the plugin's tool again (BLT-01)
     Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail

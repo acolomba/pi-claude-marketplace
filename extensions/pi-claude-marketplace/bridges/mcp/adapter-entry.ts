@@ -462,15 +462,22 @@ function keptOverrideFor(
 }
 
 /**
- * D-PG9-15: a user `idleTimeout` is the user's choice of the server's
- * lifetime, so it also stands for `lifecycle`. pi-mcp-adapter 7.0.1 never
- * stops a started `lazy-keep-alive` server for idle time, whatever
- * `idleTimeout` says (`checkConnections` in its `lifecycle.ts`).
+ * D-PG9-15: a user `idleTimeout` of a positive number of minutes is the
+ * user's choice of the server's lifetime, so it also stands for `lifecycle`.
+ * pi-mcp-adapter 7.0.1 never stops a started `lazy-keep-alive` server for
+ * idle time, whatever `idleTimeout` says (`checkConnections` in its
+ * `lifecycle.ts`). It reads a per-entry idle time only when it is a number,
+ * and it never stops a server for idle time when the number is not positive,
+ * so another value chooses no lifetime.
  */
 function userHolds(carried: Readonly<Record<string, unknown>>, field: string): boolean {
+  const { idleTimeout } = carried;
   return (
     Object.hasOwn(carried, field) ||
-    (field === "lifecycle" && Object.hasOwn(carried, "idleTimeout"))
+    (field === "lifecycle" &&
+      typeof idleTimeout === "number" &&
+      Number.isFinite(idleTimeout) &&
+      idleTimeout > 0)
   );
 }
 
