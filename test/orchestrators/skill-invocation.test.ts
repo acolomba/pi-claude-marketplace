@@ -278,7 +278,7 @@ describe("invokeBridgedSkill", () => {
     });
   });
 
-  test("D-CF2-06: leaves the project and plugin variables of a user skill without a record literal", async () => {
+  test("D-PG10-16: fills the project directory of a user skill without a record and leaves its plugin variables literal", async () => {
     // arrange
     const body = "project ${CLAUDE_PROJECT_DIR} root ${CLAUDE_PLUGIN_ROOT} effort ${CLAUDE_EFFORT}";
     const files = { [USER_SKILL]: skillFile(body) };
@@ -296,7 +296,7 @@ describe("invokeBridgedSkill", () => {
       text: block(
         USER_SKILL,
         USER_SKILL_DIR,
-        "project ${CLAUDE_PROJECT_DIR} root ${CLAUDE_PLUGIN_ROOT} effort high",
+        "project /work root ${CLAUDE_PLUGIN_ROOT} effort high",
       ),
     });
   });
@@ -639,7 +639,7 @@ describe("fillSkillRead", () => {
     );
   });
 
-  test("D-CF1-03: leaves the project directory of a user skill literal", async () => {
+  test("D-PG10-16: fills the project directory of a user skill the model reads in a project pi does not trust", async () => {
     // arrange
     const files = { [USER_SKILL]: VARIABLES_SKILL };
 
@@ -660,7 +660,7 @@ describe("fillSkillRead", () => {
       text,
       [
         ...VARIABLES_FRONTMATTER,
-        `Session session-1 at high in ${USER_SKILL_DIR} for \${CLAUDE_PROJECT_DIR}.`,
+        `Session session-1 at high in ${USER_SKILL_DIR} for /work.`,
         "Args [] [] [$0] [$ARGUMENTS[0]].",
         "Root /plugins/demo, data /data/demo.",
         "Status: !`printf ran`",

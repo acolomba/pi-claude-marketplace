@@ -40,6 +40,31 @@ Feature: Skill model reads
       | 2    | assistant   | tool call read {"path":"{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-status/SKILL.md"}                                                                                                                                                                                                                                                                                       |
       | 2    | tool result | read returned: ---\nname: demo-status\ndescription: Reports the status.\narguments: [target]\npi-claude-marketplace: {"names":["demo:status","status"],"pluginRoot":"{home}/marketplaces/fixtures/plugins/demo","pluginData":"{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"}\n---\n\nSession {uuid} at effort low.\nArguments [], target [], first [$0].\nStatus: !`printf ran` |
 
+  Scenario: A user-scope skill file the model reads shows the project directory (PG-CORE-05)
+    Given the published plugin "demo" of the marketplace "fixtures" has the skill "where" with this skill file:
+      """
+      ---
+      name: where
+      description: Reports the project.
+      ---
+
+      project ${CLAUDE_PROJECT_DIR}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  | tool | arguments                                                                         |
+      |        | read | {"path":"{agent dir}/pi-claude-marketplace/resources/skills/demo-where/SKILL.md"} |
+      | Noted. |      |                                                                                   |
+    When the user prompts "Where is the project?"
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                        |
+      | 1    | user        | Where is the project?                                                                                                                                                                                                                                                                       |
+      | 2    | user        | Where is the project?                                                                                                                                                                                                                                                                       |
+      | 2    | assistant   | tool call read {"path":"{agent dir}/pi-claude-marketplace/resources/skills/demo-where/SKILL.md"}                                                                                                                                                                                            |
+      | 2    | tool result | read returned: ---\nname: demo-where\ndescription: Reports the project.\npi-claude-marketplace: {"names":["demo:where","where"],"pluginRoot":"{home}/marketplaces/fixtures/plugins/demo","pluginData":"{agent dir}/pi-claude-marketplace/data/fixtures/demo"}\n---\n\nproject {project dir} |
+
   Scenario: A part of a skill file the model reads keeps its frontmatter and fills its body lines
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"

@@ -148,7 +148,8 @@ function invocationVariables(
     CLAUDE_SESSION_ID: request.sessionId,
     CLAUDE_EFFORT: claudeEffort(request.thinkingLevel),
     CLAUDE_SKILL_DIR: skill.baseDir,
-    ...(skill.projectScope ? { CLAUDE_PROJECT_DIR: request.cwd } : {}),
+    // D-PG10-16: a user skill's staged file keeps the literal, so this step fills it.
+    CLAUDE_PROJECT_DIR: request.cwd,
     ...(record === undefined
       ? {}
       : { CLAUDE_PLUGIN_ROOT: record.pluginRoot, CLAUDE_PLUGIN_DATA: record.pluginData }),
