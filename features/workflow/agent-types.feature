@@ -260,3 +260,6 @@ Feature: Workflow agent types
     Then the workflow engine shows these notices:
       | notice            |
       | started /demo:ask |
+    Then the model receives these calls:
+      | call | role | text                                                                                 |
+      | 1    | user | Act as workflow subagent type: demo:ghost\n\nTask label: agent 1\n\nAnswer the task. |
