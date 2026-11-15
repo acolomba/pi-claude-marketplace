@@ -106,7 +106,7 @@ Normal commit hooks are mandatory. Each combined-tree gate runs the complete com
 | Wave 6 combined tree | `npm run check` | 2400 seconds | Plans 06-09 and 06-10 merged; the same evidence | ✅ green at `4d74af3a`, Node 26, exit 0, 1950 + 186 scenarios |
 | Wave 7 combined tree | `npm run check` | 2400 seconds | Plans 06-11 and 06-12 merged; the same evidence | ✅ green at `3312c94a`, Node 26, exit 0, 1966 + 186 scenarios |
 | Wave 8 combined tree | `npm run check` | 2400 seconds | Plan 06-13 merged; the same evidence | Reused by the phase gate: plan 06-13 changed docs, the CHANGELOG, and one feature description only; its own run passed `check:features` and 32 scenarios |
-| Phase gate | `npm run check` | 2400 seconds | The final tree after the parent lines; reuse only when the build inputs are identical | ⬜ pending |
+| Phase gate | `npm run check` | 2400 seconds | The final tree after the parent lines; reuse only when the build inputs are identical | ✅ green at `4a4f3a82` (after the parent lines and the review fixes `cf060a19`, `4120ffa0`, `ca48cac1`, `aa4b5b6e`), Node v26.13.1, exit 0, 1967 + 188 scenarios (`/tmp/pg6-iter1.log`); the later commits change only `.planning/` files, which are not build inputs, so the result is reused for the final tree |
 | Merge gate | `npm run check` | 2400 seconds | The merged tree, or a documented identical-input reuse | ⬜ pending |
 | Final PR or release handoff | `npm run check` | 2400 seconds | The final build inputs, or a documented identical-input reuse | ⬜ pending |
 
@@ -172,10 +172,10 @@ The review of the D-PG6 decisions by the maintainer is not a verification of thi
 - [x] No watch-mode flags
 - [x] Feedback latency under 60 seconds for owner tests and about 60 seconds for one feature file
 - [x] Each scenario was seen red before its change and green after it, and each guard and control reading has its recorded red proof
-- [ ] All eight wave gates and the phase gate pass with `npm run check`
+- [x] All eight wave gates and the phase gate pass with `npm run check` (wave 8 reused by the phase gate)
 - [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-11-15 (autonomous run, pending maintainer review)
 
 ## Validation Audit 2026-11-15
 

@@ -5411,3 +5411,15 @@ Noted 2026-11-15 (parity-gaps, Phase 6, 06-12). When the plugin name table canno
 ## EXPANSIONMCPPROMPT-01: `expansion_type` `mcp_prompt`
 
 Noted 2026-11-15 (parity-gaps, Phase 6, D-PG6-22). The bridge never sends `expansion_type` `mcp_prompt`, because Pi has no slash surface for MCP prompts. Revisit if Pi gets one.
+
+## EXPANSIONFOLLOWUPCTX-01: a queued follow-up's expansion context never reaches the model
+
+Noted 2026-11-15 (parity-gaps, Phase 6 review WR-03). The follow-up context entry keeps the typed slash line, while Pi queues the follow-up as its expanded text, so `takeFollowUpContext` never matches it, and a `UserPromptSubmit` and a `UserPromptExpansion` entry for one follow-up cannot both be taken. `docs/hooks-compatibility.md` states the loss. Sending the context at once, as a steer does, would put it on the running task's next model call, before the follow-up; a fix needs a Pi seam that names the queued text.
+
+## MCPSERVERNAMEREAD-01: the hooks bridge does not guard a server-name read that throws
+
+Noted 2026-11-15 (parity-gaps, Phase 6 re-review IN2-01). `mcpServerEntries` (`bridges/hooks/mcp-server-table.ts`) awaits the injected `readMcpServerNames` without a catch, inside the extension's startup hydrate. The production reader (`recordedMcpServerNames`) never throws, so this holds today; a later reader that throws would fail the load (NFR-2). The re-review also notes that the `mcp_server` row of `docs/hooks-compatibility.md` omits some cases where the field is left out (the plugin no longer in the manifest, an unavailable re-resolution, a root mismatch), where its `reinstall` remedy cannot help (IN2-02).
+
+## TYPEDEXPANSIONDRIFT-01: the typed-line resolver copies the alias and command handlers' rules
+
+Noted 2026-11-15 (parity-gaps, Phase 6 review IN-02). `orchestrators/typed-expansion.ts` copies the token pattern and the order in which `edge/skill-aliases.ts` and `edge/command-invocation.ts` take a line. Nothing ties the copies together, so a change to one handler can leave `UserPromptExpansion` hooks told a different command than the line expands to (T-06-27).
