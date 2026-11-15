@@ -154,16 +154,14 @@ function locateStagedCommand(
  */
 function commandVariables(
   request: CommandInvocationRequest,
-  command: StagedCommand,
   frontmatter: Readonly<Record<string, unknown>>,
 ): Readonly<Record<string, string>> {
   const variables: Record<string, string> = {
     CLAUDE_SESSION_ID: request.sessionId,
     CLAUDE_EFFORT: claudeEffort(request.thinkingLevel),
+    // D-PG10-16: a user command's staged body keeps the literal, so this step fills it.
+    CLAUDE_PROJECT_DIR: request.cwd,
   };
-  if (command.scope === "project") {
-    variables.CLAUDE_PROJECT_DIR = request.cwd;
-  }
 
   const record = readCommandRecord(frontmatter);
   if (record !== undefined) {
@@ -204,7 +202,6 @@ function contextShell(
  */
 async function renderCommand(
   request: CommandInvocationRequest,
-  command: StagedCommand,
   file: CommandFile,
   dependencies: CommandInvocationDependencies,
 ): Promise<CommandInvocationOutcome> {
@@ -212,7 +209,7 @@ async function renderCommand(
     body: file.body,
     args: request.args,
     argumentNames: parseArgumentNames(file.frontmatter.arguments),
-    variables: commandVariables(request, command, file.frontmatter),
+    variables: commandVariables(request, file.frontmatter),
   });
   const run = contextShell(request, file.frontmatter, dependencies);
   return run === undefined
@@ -231,8 +228,7 @@ function refusalFor(error: unknown): CommandInvocationOutcome {
 
 /** A staged command read for one invocation, or the outcome that ends it early. */
 type PreparedCommand =
-  | { readonly kind: "ready"; readonly command: StagedCommand; readonly file: CommandFile }
-  | CommandInvocationOutcome;
+  { readonly kind: "ready"; readonly file: CommandFile } | CommandInvocationOutcome;
 
 /** Finds the staged command, refuses it in an untrusted project, and reads its file. */
 async function prepareCommand(
@@ -258,7 +254,7 @@ async function prepareCommand(
   // the body it cached, with its `!` commands not run.
   return dependencies
     .readFile(command.file)
-    .then((text): PreparedCommand => ({ kind: "ready", command, file: parseFrontmatter(text) }))
+    .then((text): PreparedCommand => ({ kind: "ready", file: parseFrontmatter(text) }))
     .catch((error: unknown) =>
       refusal(
         `Cannot read the command ${request.typed}: ${errorMessage(error)}. Run /reload to load the installed commands again.`,
@@ -278,7 +274,7 @@ export async function invokeStagedCommand(
 ): Promise<CommandInvocationOutcome> {
   const prepared = await prepareCommand(request, dependencies);
   return prepared.kind === "ready"
-    ? renderCommand(request, prepared.command, prepared.file, dependencies).catch(refusalFor)
+    ? renderCommand(request, prepared.file, dependencies).catch(refusalFor)
     : prepared;
 }
 
@@ -300,7 +296,7 @@ export async function expandStagedCommand(
     return prepared;
   }
 
-  const { command, file } = prepared;
+  const { file } = prepared;
   if (file.frontmatter["disable-model-invocation"] === true) {
     return refusal(
       `Command ${request.name} cannot be used with ${toolName} due to disable-model-invocation. Ask the user to run ${request.typed} themselves; it cannot be invoked via ${toolName}. Do not replicate this command's workflow by other means; it is reserved for explicit user invocation.`,
@@ -314,7 +310,7 @@ export async function expandStagedCommand(
         body: file.body,
         args: request.args,
         argumentNames: parseArgumentNames(file.frontmatter.arguments),
-        variables: commandVariables(request, command, file.frontmatter),
+        variables: commandVariables(request, file.frontmatter),
       }),
     };
   } catch (error) {

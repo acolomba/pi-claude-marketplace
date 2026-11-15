@@ -110,6 +110,31 @@ Feature: Slash command invocation
       | call | role | text                                                                                                                                    |
       | 1    | user | Root {home}/marketplaces/fixtures/plugins/demo, data {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo, project {project dir}. |
 
+  Scenario: A user-scope command gets the project directory when the user types it (PG-CORE-05)
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "where" with this command file:
+      """
+      ---
+      description: Reports the project.
+      ---
+
+      project ${CLAUDE_PROJECT_DIR}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts "/demo:where"
+    Then the model receives these calls:
+      | call | role | text                  |
+      | 1    | user | project {project dir} |
+
   Scenario: A slash command the user wrote keeps pi's own argument expansion
     Given pi runs with the scripted model
     Given the user's pi directory has the slash command "mine" with this command file:

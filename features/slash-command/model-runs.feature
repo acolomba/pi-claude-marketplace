@@ -76,6 +76,30 @@ Feature: Slash command model runs
       | 2    | assistant   | tool call run_plugin_command {"command":"demo:deploy","args":"production"} |
       | 2    | tool result | run_plugin_command returned: Deploy production now. Status: !`printf ran`  |
 
+  Scenario: The model gets the project directory of a user-scope command through the tool (PG-CORE-05)
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "where" with this command file:
+      """
+      ---
+      description: Reports the project.
+      ---
+
+      project ${CLAUDE_PROJECT_DIR}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  | tool               | arguments                |
+      |        | run_plugin_command | {"command":"demo:where"} |
+      | Noted. |                    |                          |
+    When the user prompts "Where is the project?"
+    Then the model receives these calls:
+      | call | role        | text                                                  |
+      | 1    | user        | Where is the project?                                 |
+      | 2    | user        | Where is the project?                                 |
+      | 2    | assistant   | tool call run_plugin_command {"command":"demo:where"} |
+      | 2    | tool result | run_plugin_command returned: project {project dir}    |
+
   Scenario: The tool refuses a command that only the user may run
     Given the published plugin "demo" of the marketplace "fixtures" has the slash command "manual" with this command file:
       """

@@ -130,25 +130,47 @@ describe("invokeStagedCommand", () => {
     });
   });
 
-  test("D-CF3-10: leaves the project directory literal in a user command", async () => {
-    // arrange
-    const files = {
-      [USER_COMMAND]: commandFile("Session ${CLAUDE_SESSION_ID}, project ${CLAUDE_PROJECT_DIR}."),
-    };
-    const commands = [piCommand("demo:greet", "prompt", USER_COMMAND)];
+  for (const { title, cwd, body, expectedText } of [
+    {
+      title: "fills the project directory in a user command",
+      cwd: CWD,
+      body: "Session ${CLAUDE_SESSION_ID}, project ${CLAUDE_PROJECT_DIR}.",
+      expectedText: "Session session-1, project /work.",
+    },
+    {
+      title: "fills a project directory with a space and a non-ASCII character as given",
+      cwd: "/Work Dir/Café",
+      body: "project ${CLAUDE_PROJECT_DIR}",
+      expectedText: "project /Work Dir/Café",
+    },
+    {
+      title: "fills each place a user command names the project directory",
+      cwd: CWD,
+      body: "${CLAUDE_PROJECT_DIR} and ${CLAUDE_PROJECT_DIR}/notes",
+      expectedText: "/work and /work/notes",
+    },
+    {
+      title: "sends a user command that does not name the project directory unchanged",
+      cwd: CWD,
+      body: "Plain body.",
+      expectedText: "Plain body.",
+    },
+  ]) {
+    test(`D-PG10-16: ${title}`, async () => {
+      // arrange
+      const files = { [USER_COMMAND]: commandFile(body) };
+      const commands = [piCommand("demo:greet", "prompt", USER_COMMAND)];
 
-    // act
-    const outcome = await invokeStagedCommand(
-      request({ commands, args: "", thinkingLevel: undefined }),
-      dependencies(files),
-    );
+      // act
+      const outcome = await invokeStagedCommand(
+        request({ commands, cwd, args: "", thinkingLevel: undefined }),
+        dependencies(files),
+      );
 
-    // assert
-    assert.deepStrictEqual(outcome, {
-      kind: "send",
-      text: "Session session-1, project ${CLAUDE_PROJECT_DIR}.",
+      // assert
+      assert.deepStrictEqual(outcome, { kind: "send", text: expectedText });
     });
-  });
+  }
 
   test("D-CF1-01: fills an empty argument string without appending anything", async () => {
     // arrange
@@ -223,7 +245,7 @@ describe("invokeStagedCommand", () => {
     });
   }
 
-  test("D-CF3-06: a typed argument names the project directory literally in a user command", async () => {
+  test("D-PG10-16: a typed argument names the project directory of a user command", async () => {
     // arrange
     const files = { [USER_COMMAND]: commandFile("Open $ARGUMENTS", [RECORD]) };
     const commands = [piCommand("demo:greet", "prompt", USER_COMMAND)];
@@ -235,7 +257,7 @@ describe("invokeStagedCommand", () => {
     );
 
     // assert
-    assert.deepStrictEqual(outcome, { kind: "send", text: "Open ${CLAUDE_PROJECT_DIR}/notes" });
+    assert.deepStrictEqual(outcome, { kind: "send", text: "Open /work/notes" });
   });
 
   test("D-CF1-01: sends a body that starts with another command as it is, which pi expands again", async () => {
