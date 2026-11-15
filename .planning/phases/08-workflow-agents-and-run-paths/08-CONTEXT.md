@@ -362,3 +362,62 @@ workflow wanted these shared-file edits; the parent decides.
 4. STATE.md: record the Phase 8 context and planning sessions.
 </content>
 </invoke>
+
+## Amendments after research (2026-11-14)
+
+Research (`08-RESEARCH.md`, "Amendments proposed") refined these decisions.
+These amendments win over the text above. All stay pending maintainer review.
+
+- **D-PG8-11..15 amended (product, blocking for PG-WF-05):** Claude Code gives
+  `Workflow` to no subagent: the sub-agents page lists it among the tools
+  removed from every subagent "even when listed in the `tools` field", the
+  2.1.323 binary puts it in the always-denied agent set for every Agent-tool
+  subagent (only a main-thread agent keeps it), and `claude-security`'s own
+  agent says it must run only as the main agent. Pi has no main-session agent
+  mode, so the upstream-parity default is **option A: keep dropping the grant,
+  say why in the compatibility text, and treat PG-WF-05 as not a gap.** Option
+  B (grant `workflow` as a recorded divergence licensed by "no main-session
+  agent mode") needs a maintainer decision with an ID. The WF-05 plan's first
+  task is therefore an unconditional `checkpoint:decision` that presents A
+  (recommended) and B with the S5(a) record. Under A the plan is one docs
+  task; under B it follows RESEARCH R6.
+- **D-PG8-12 amended:** under option B, map the grant only when the plugin
+  stages a workflow (`referenceNames.workflows`): pi-subagents 0.88.1 refuses
+  a child whose `tools` names an unregistered tool, so "map whenever granted"
+  would break the agent for a user without the engine. The "keep the drop
+  warning without the engine" half is not built (it would need a probe in the
+  pure converter).
+- **D-PG8-01 refined:** S5(a) calls `workflow` with `background: false` for
+  the verdict (the script holds at least one `agent()` call), and records the
+  default background call separately; it also measures the no-`tools` arm
+  (today a background child of such an agent gets `workflow` and
+  `workflow_control` as ambient tools, which Claude Code never gives). S5(b)
+  lists the adapter in the fixture's Pi `settings.json` and writes the engine
+  settings at `{agent dir}/workflows/settings.json`, with a control run that
+  has no settings file.
+- **D-PG8-04 resolved:** "installs" is exactly the discovered set: a
+  conversion refusal fails the whole install (AG-11), duplicates are dropped in
+  discovery (AG-12), and agent files are written with pi-subagents absent. The
+  engine resolves only the frontmatter `name`, never an alias.
+- **D-PG8-05 refined:** one tenseless text serves install and `info`, as the
+  PG-SEC-01 note does; no info-tense form. The notes of one script are capped
+  (output-flood threat: a literal needs only the `<plugin>:` prefix); the cap
+  value and its summary wording are the planner's proposal, pending review.
+- **D-PG8-06 refined:** `docs/output-catalog.md` gets one state for the new
+  note with a catalog-uat fixture; the PG-SEC-01 note still has no state
+  (recorded, not fixed here).
+- **D-PG8-07 measured:** all five run paths pass today (RESEARCH R4). One new
+  `Given` step makes the project a git repository; worktree names carry the
+  run id, so the scenario prints stable text. Two scripts with one
+  `meta.name` fail the whole install today, where Claude Code keeps the last
+  script that parses; the scenario title says so.
+- **D-PG8-08 graded:** upstream workflow subagents run on the session model
+  and reach session MCP tools (high), and run hooks and reach plugin skills
+  (medium). On Pi a workflow subagent loads the user's own Pi skills, prompt
+  templates and `AGENTS.md`, not plugin skills; `builtin:mcp` in
+  `providerMiddlewareExtensions` fails every `agent()` call.
+- **D-PG8-10 refined:** the paragraph is on line 165 today; `pipeline()` and
+  `parallel()` both use `Promise.allSettled` upstream and never reject.
+- **Residual for the maintainer:** whether a bridged agent with no `tools`
+  list should get `excludeTools: workflow, workflow_control` (Claude Code
+  gives a subagent neither). Not part of this phase.
