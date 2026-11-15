@@ -197,3 +197,7 @@ None -- no security-relevant surface outside the plan's `<threat_model>` was int
 - features/lib/saved-sessions.ts: FOUND
 - c7c5bf81: FOUND (ancestor of HEAD)
 - 4a92c7b2: FOUND (ancestor of HEAD)
+
+## Amendment (orchestrator, 2026-11-14)
+
+The "a read that throws writes one debug line and dispatches nothing" behavior above was a regression: it dropped every SessionStart dispatch when the session manager lacked `getHeader`/`getEntries` (two integration files failed 5 of 7). Commit 0d07e530 changes it: a throwing launch read writes `[hooks] session_start launch read failed, source stays startup: <message>` and SessionStart still dispatches with source `startup` (NFR-2; Claude Code always runs SessionStart).
