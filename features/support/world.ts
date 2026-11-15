@@ -136,12 +136,13 @@ export interface ScopeBytes {
  * the real extension, the scripted model, and the registry probe, then
  * `companions` in the fixed order pi-subagents, pi-mcp-adapter, pi-dynamic-workflows (HAR-01), then
  * `extraExtensions` in order. It trusts the sandbox project unless `trust` is
- * `untrusted` (D-CF1-07).
+ * `untrusted`, which saves no decision (D-CF1-07), or `refused`, which saves
+ * `false` for the project as Pi's "Do not trust" option does (D-PG10-17).
  */
 export interface PiProfile {
   readonly companions: readonly CompanionName[];
   readonly extraExtensions?: readonly string[];
-  readonly trust?: "trusted" | "untrusted";
+  readonly trust?: "trusted" | "untrusted" | "refused";
   /**
    * The profile Pi's spawn environment carries `PI_SUBAGENT_CHILD=1`, as
    * pi-subagents' runner sets it before any extension of a background child
@@ -668,7 +669,8 @@ export class ScenarioWorld extends World {
    * optional peer cache, and then `profile.extraExtensions`. Its `TMPDIR` and its harness directory lie inside the sandbox home, which
    * the next scenario's `Before()` empties (HAR-05). It trusts the sandbox
    * project through a `trust.json` entry, as Pi records a user's answer to
-   * its trust prompt, unless the profile is untrusted (D-CF1-07). It runs the
+   * its trust prompt, unless the profile is untrusted (D-CF1-07) or refused
+   * (D-PG10-17). It runs the
    * scripted model, with auto retry off, so a call past the script fails at
    * once. The start fails when the Pi does not run the MCP implementation its
    * launch implies (DUAL-02). One scenario starts at most one profile Pi; only
@@ -688,7 +690,7 @@ export class ScenarioWorld extends World {
     await mkdir(harness, { recursive: true });
     await this.prepareTemporaryDirectory();
     if (profile.trust !== "untrusted") {
-      await this.trustSandboxProject();
+      await this.saveSandboxTrust(profile.trust !== "refused");
     }
 
     this.profileHarnessDirectory = harness;
@@ -974,13 +976,14 @@ export class ScenarioWorld extends World {
     );
   }
 
-  // Writes the `trust.json` entry Pi saves when a user trusts the sandbox
-  // project, in Pi's format: sorted keys, two-space JSON, and a trailing
-  // newline. Pi keys the entry by the project's realpath (D-CF1-07).
-  private async trustSandboxProject(): Promise<void> {
+  // Writes the `trust.json` entry Pi saves when a user answers its trust
+  // prompt for the sandbox project, in Pi's format: sorted keys, two-space
+  // JSON, and a trailing newline. Pi keys the entry by the project's realpath
+  // (D-CF1-07, D-PG10-17).
+  private async saveSandboxTrust(trusted: boolean): Promise<void> {
     const { sandbox } = currentRun();
     const file = path.join(sandbox.agentDir, "trust.json");
-    const text = `${JSON.stringify({ [await realpath(sandbox.cwd)]: true }, null, 2)}\n`;
+    const text = `${JSON.stringify({ [await realpath(sandbox.cwd)]: trusted }, null, 2)}\n`;
     await writeFile(file, text, { flag: "wx" });
     assert.strictEqual(await readFile(file, "utf8"), text);
   }
