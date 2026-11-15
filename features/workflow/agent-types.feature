@@ -163,6 +163,22 @@ Feature: Workflow agent types
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
       | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
 
+  Scenario: Installing a plugin whose workflow names only an agent type too long to print says why it is counted and what the engine does
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/scan.js" with this text:
+      """
+      export const meta = {name:"scan",description:"Scans with one long missing agent."};
+
+      return await agent("Look for it.", {agentType:"demo:gggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggggg"});
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    When the user runs "/claude:plugin install demo@fixtures --scope user"
+    Then the workflow install diagnostic reports these lines:
+      | line                                                                                                                                                                                                             |
+      | workflow script "scan.js" in "workflows" runs 1 agent type longer than 128 characters that this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code fails the step |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
+
   Scenario: A workflow step that names an agent of its plugin runs on that agent's instructions
     Given the published plugin "demo" of the marketplace "fixtures" has the file "agents/helper.md" with this text:
       """

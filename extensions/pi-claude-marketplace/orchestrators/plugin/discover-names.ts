@@ -172,10 +172,26 @@ function missingAgentNote(fileName: string, scriptFile: string, agentType: strin
   return `${agentTypeLead(fileName, scriptFile, agentType)}, which this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code fails the step`;
 }
 
-function missingAgentCountLine(fileName: string, scriptFile: string, count: number): string {
+/**
+ * D-PG8-05: the line that counts the missing agent types the notes leave out.
+ * With no note before it, every one of them was too long to print, so the line
+ * says so and gives the consequence that a note would have given.
+ */
+function missingAgentCountLine(
+  fileName: string,
+  scriptFile: string,
+  count: number,
+  shown: number,
+): string {
   const types = count === 1 ? "agent type" : "agent types";
+  const lead = `${scriptLead(fileName, scriptFile)} runs ${count}`;
+  if (shown > 0) {
+    return `${lead} more ${types} that this plugin does not install`;
+  }
 
-  return `${scriptLead(fileName, scriptFile)} runs ${count} more ${types} that this plugin does not install`;
+  const place = count === 1 ? "in its place" : "in place of each";
+
+  return `${lead} ${types} longer than ${AGENT_TYPE_DISPLAY_LIMIT} characters that this plugin does not install; the workflow engine runs a default agent ${place}, where Claude Code fails the step`;
 }
 
 /** What the join knows about the plugin before it reads a script. */
@@ -216,7 +232,7 @@ function scriptAgentNotes(
   }
 
   if (missing > shown) {
-    notes.push(missingAgentCountLine(fileName, scriptFile, missing - shown));
+    notes.push(missingAgentCountLine(fileName, scriptFile, missing - shown, shown));
   }
 
   return notes;

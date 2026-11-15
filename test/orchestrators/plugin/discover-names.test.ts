@@ -789,6 +789,39 @@ test("PG-WF-02 / D-PG8-05: counts an agent type longer than 128 characters inste
   ]);
 });
 
+for (const { count, line } of [
+  {
+    count: 1,
+    line: 'workflow script "scan.js" in "workflows" runs 1 agent type longer than 128 characters that this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code fails the step',
+  },
+  {
+    count: 2,
+    line: 'workflow script "scan.js" in "workflows" runs 2 agent types longer than 128 characters that this plugin does not install; the workflow engine runs a default agent in place of each, where Claude Code fails the step',
+  },
+] satisfies readonly { count: number; line: string }[]) {
+  test(`PG-WF-02 / D-PG8-05: says why and what happens when the count line counts ${count} too-long agent types and no note precedes it`, async (t) => {
+    // arrange -- every missing type is 129 characters long.
+    const pluginRoot = await createPluginRoot(t, "plugin-discover-names-missing-only-long-");
+    const longTypes = Array.from(
+      { length: count },
+      (_, index) => `acme:${String(index).repeat(124)}`,
+    );
+    await writeWorkflow(
+      path.join(pluginRoot, "workflows"),
+      "scan.js",
+      "scan",
+      longTypes.map((agentType) => agentCall(agentType)).join(""),
+    );
+    const resolved = workflowsOnly(pluginRoot, []);
+
+    // act
+    const discovered = await discoverGeneratedNames("acme", resolved);
+
+    // assert
+    assert.deepStrictEqual(discovered.workflowAgentNotes, [line]);
+  });
+}
+
 test("PG-WF-02: escapes control and format characters in the file name and the agent type of a note", async (t) => {
   // arrange
   const pluginRoot = await createPluginRoot(t, "plugin-discover-names-missing-escape-");
