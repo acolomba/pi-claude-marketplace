@@ -46,8 +46,8 @@ export interface SpawnPlan {
  * element get `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`, and
  * `${CLAUDE_PROJECT_DIR}` replaced from `vars`, the values the hook's
  * environment exports, as Claude Code does. No shell reads an exec-form
- * argument, so nothing else would expand them. One pass: a spliced value is
- * never rescanned.
+ * argument, so nothing else would expand them. One pass: a spliced path
+ * value is never rescanned for path variables.
  *
  * D-PG10-10 / D-PG10-21: then each `${user_config.KEY}` of those same fields
  * gets the option's value from `entry.options`, as Claude Code 2.1.323 does

@@ -347,9 +347,11 @@ export function userConfigFieldsOf(
  * value again with the manifest parser, because a project record is a file a
  * repository can commit. D-PG10-25: a stored value that does not parse is
  * logged and reads as declared options with no values, so a hand-edited
- * record never stops a load and every reader fails closed: the built-in MCP
- * leaves out each server that names an option, no option variable is set,
- * and an exec-form hook that names an option is refused as unset.
+ * record never stops a load: the built-in MCP leaves out each server that
+ * names an option, no option variable is set, and an exec-form hook that
+ * names an option is refused as unset. pi-mcp-adapter still starts a stdio
+ * server whose staged reference names that unset variable, with an empty
+ * value.
  */
 export function recordedOptionsOf(
   record: Pick<PluginInstallRecord, "userConfig">,
