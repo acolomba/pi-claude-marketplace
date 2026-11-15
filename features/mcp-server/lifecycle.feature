@@ -768,7 +768,7 @@ Feature: MCP server lifecycle
       """
       {"caFile":"/etc/pki/user/ca-bundle.pem"}
       """
-    Given the user has run "/claude:plugin uninstall demo@fixtures --scope user"
+    Given the user has run "/claude:plugin uninstall demo@fixtures --scope user", which did not fail
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.1.0   |
