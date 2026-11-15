@@ -74,6 +74,7 @@ import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
 import { HOOK_CONTEXT_MESSAGE_TYPE, sendDueFollowUpContext } from "./event-adapters.ts";
 import { FILE_SYSTEM_SWEEP_OPS, sweepHookOutput } from "./hook-output-files.ts";
 import { compileIfPredicate, MATCH_ALL_IF } from "./if-field/index.ts";
+import { mcpServerEntries } from "./mcp-server-table.ts";
 import { createHookToolView } from "./mcp-tool-view.ts";
 import { claudeSessionEndReason } from "./payloads/session-end.ts";
 import { claudeSessionStartSource } from "./payloads/session-start.ts";
@@ -132,6 +133,7 @@ type EventRouterRoutingState = Pick<
   | "isProjectTrusted"
   | "parsedConfigEntries"
   | "recordProjectTrust"
+  | "setMcpServers"
   | "setParsedConfig"
   | "setRoutingBucket"
 >;
@@ -674,7 +676,8 @@ async function hydrateCacheFromDisk(
  * disabled records (ENBL-14), find plugins with declared hook resources, read +
  * parse each hooks.json, and populate the cache. Parse failures are logged
  * through hookDebugLog and skipped (the resolver flips installable: false on
- * the next reconcile).
+ * the next reconcile). The scope's plugin MCP servers come first, from every
+ * enabled record, with hooks or not (D-PG6-07).
  */
 async function hydrateScopeFromState(
   state: ExtensionState,
@@ -684,6 +687,7 @@ async function hydrateScopeFromState(
   routingState: EventRouterRoutingState,
   generationIsCurrent: GenerationGuard,
 ): Promise<void> {
+  routingState.setMcpServers(loc.scope, mcpServerEntries(state, loc.scope));
   for (const target of hydrateTargets(state, loc, cwd)) {
     // eslint-disable-next-line no-await-in-loop -- each plugin's hydrate writes the shared routing table
     await tryHydrateOnePlugin(reader, routingState, generationIsCurrent, target);
@@ -873,6 +877,8 @@ async function hydrateProjectScopeForCwdWith(
     }
   }
 
+  // D-PG6-07: an untrusted project and a state that fails to load name no server.
+  routingState.setMcpServers("project", []);
   routingState.recordProjectTrust(cwd, projectTrusted);
   if (!projectTrusted) {
     hookDebugLog(`hydrate-project: cwd=${cwd} skipped: Pi does not trust the project`);

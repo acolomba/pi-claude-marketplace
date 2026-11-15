@@ -5132,3 +5132,139 @@ for (const trusted of [true, false]) {
     assert.deepStrictEqual(names, trusted ? [] : ["hook-old-output-additionalContext.txt"]);
   });
 }
+
+// D-PG6-07: a reader that gives each extension root its state and refuses
+// every other root.
+function mcpStateReader(states: ReadonlyMap<string, ExtensionState>): HooksHydrationDeps {
+  return {
+    loadState(extensionRoot: string): Promise<ExtensionState> {
+      const state = states.get(extensionRoot);
+      return state === undefined
+        ? Promise.reject(new Error(`no state at ${extensionRoot}`))
+        : Promise.resolve(state);
+    },
+    readHooksJson,
+  };
+}
+
+function mcpServerState(scope: "user" | "project", cwd: string, plugin: string): ExtensionState {
+  return makeScopeState({
+    scope,
+    cwd,
+    plugins: {
+      [plugin]: {
+        ...makeStoredPlugin({ root: path.join(cwd, "plugins", plugin), hooks: [] }),
+        mcpServerConfigs: [{ name: "stub", config: { command: "stub" } }],
+      },
+    },
+  });
+}
+
+const MCP_SERVER_ENTRY = {
+  builtinServer: "plugin_seeded_stub",
+  adapterKey: "plugin_seeded_stub_",
+  server: { name: "plugin:seeded:stub", source: "plugin" },
+} as const;
+
+function mcpServerOf(runtime: HooksRuntime, plugin: string): unknown {
+  return runtime.mcpServerFor({
+    piName: `mcp__plugin_${plugin}_stub__echo`,
+    builtinServer: undefined,
+  });
+}
+
+test("a load names the user scope's plugin MCP servers, also of a plugin with no hooks (D-PG6-07)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-mcp-load-");
+  const runtime = createHooksRuntime();
+  const reader = mcpStateReader(
+    new Map([
+      [locationsFor("user", root).extensionRoot, mcpServerState("user", root, "demo")],
+      [locationsFor("project", root).extensionRoot, { schemaVersion: 2, marketplaces: {} }],
+    ]),
+  );
+
+  // act
+  await createHooksHydration(runtime, reader).registerHooksBridge(makeRecordingPi().pi, {
+    cwd: root,
+  });
+
+  // assert
+  assert.deepStrictEqual(mcpServerOf(runtime, "demo"), {
+    name: "plugin:demo:stub",
+    source: "plugin",
+  });
+});
+
+test("a load whose user state fails to load names no user server (D-PG6-07)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-mcp-load-failure-");
+  const runtime = createHooksRuntime();
+  runtime.setMcpServers("user", [MCP_SERVER_ENTRY]);
+  const reader = mcpStateReader(
+    new Map([
+      [locationsFor("project", root).extensionRoot, { schemaVersion: 2, marketplaces: {} }],
+    ]),
+  );
+
+  // act
+  await createHooksHydration(runtime, reader).registerHooksBridge(makeRecordingPi().pi, {
+    cwd: root,
+  });
+
+  // assert
+  assert.strictEqual(mcpServerOf(runtime, "seeded"), undefined);
+});
+
+for (const { name, trusted, hasState } of [
+  { name: "an untrusted project", trusted: false, hasState: true },
+  { name: "a project whose state fails to load", trusted: true, hasState: false },
+]) {
+  test(`the project hydrate of ${name} names no project server (D-PG6-07)`, async (t) => {
+    // arrange
+    const { root } = await createHermeticEnvironment(t, "hooks-router-mcp-project-none-");
+    const runtime = createHooksRuntime();
+    runtime.setMcpServers("project", [MCP_SERVER_ENTRY]);
+    const states = new Map(
+      hasState
+        ? [[locationsFor("project", root).extensionRoot, mcpServerState("project", root, "demo")]]
+        : [],
+    );
+
+    // act
+    await createHooksHydration(runtime, mcpStateReader(states)).hydrateProjectScopeForCwd(
+      root,
+      trusted,
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      [mcpServerOf(runtime, "seeded"), mcpServerOf(runtime, "demo")],
+      [undefined, undefined],
+    );
+  });
+}
+
+test("the project hydrate of a trusted project names its plugin MCP servers (D-PG6-07)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-mcp-project-");
+  const runtime = createHooksRuntime();
+  runtime.setMcpServers("user", [MCP_SERVER_ENTRY]);
+  const reader = mcpStateReader(
+    new Map([
+      [locationsFor("project", root).extensionRoot, mcpServerState("project", root, "demo")],
+    ]),
+  );
+
+  // act
+  await createHooksHydration(runtime, reader).hydrateProjectScopeForCwd(root, true);
+
+  // assert
+  assert.deepStrictEqual(
+    [mcpServerOf(runtime, "demo"), mcpServerOf(runtime, "seeded")],
+    [
+      { name: "plugin:demo:stub", source: "plugin" },
+      { name: "plugin:seeded:stub", source: "plugin" },
+    ],
+  );
+});

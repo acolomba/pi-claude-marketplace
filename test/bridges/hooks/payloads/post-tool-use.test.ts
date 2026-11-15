@@ -536,3 +536,65 @@ test("sends the measured duration as duration_ms after tool_response (D-PG6-06)"
     ["agent_id", "child-session"],
   ]);
 });
+
+test("sends the plugin MCP server as mcp_server after duration_ms (D-PG6-07)", () => {
+  // arrange
+  const event = {
+    type: "tool_result",
+    toolCallId: "call-1",
+    toolName: "mcp__plugin_demo_stub__echo",
+    input: { text: "ping" },
+    content: [{ type: "text", text: "found" }],
+    details: undefined,
+    isError: false,
+    hookDurationMs: 75,
+    hookMcpServer: { name: "plugin:demo:stub", source: "plugin" },
+  } satisfies ToolResultEvent & HookToolFacts;
+  const context = {
+    sessionId: "session",
+    transcriptPath: "",
+    cwd: "/workspace",
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translatePostToolUse(event, context);
+
+  // assert
+  assert.deepStrictEqual(Object.entries(payload), [
+    ["session_id", "session"],
+    ["transcript_path", ""],
+    ["cwd", "/workspace"],
+    ["hook_event_name", "PostToolUse"],
+    ["tool_name", "mcp__plugin_demo_stub__echo"],
+    ["tool_input", { text: "ping" }],
+    ["tool_use_id", "call-1"],
+    ["tool_response", { content: [{ type: "text", text: "found" }] }],
+    ["duration_ms", 75],
+    ["mcp_server", { name: "plugin:demo:stub", source: "plugin" }],
+  ]);
+});
+
+test("leaves out mcp_server for a result with no server (D-PG6-07)", () => {
+  // arrange
+  const event = {
+    type: "tool_result",
+    toolCallId: "call-1",
+    toolName: "mcp__other__echo",
+    input: { text: "ping" },
+    content: [{ type: "text", text: "found" }],
+    details: undefined,
+    isError: false,
+    hookDurationMs: 75,
+  } satisfies ToolResultEvent & HookToolFacts;
+  const context = {
+    sessionId: "session",
+    transcriptPath: "",
+    cwd: "/workspace",
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translatePostToolUse(event, context);
+
+  // assert
+  assert.strictEqual(Object.hasOwn(payload, "mcp_server"), false);
+});

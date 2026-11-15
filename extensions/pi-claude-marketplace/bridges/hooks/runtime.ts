@@ -1,6 +1,10 @@
 import { isSubagentChild } from "../../platform/subagent-child.ts";
 
+import { findMcpServer } from "./mcp-server-table.ts";
+
 import type { ChildLike, TimerLadder } from "./exec-timer.ts";
+import type { McpServerEntry } from "./mcp-server-table.ts";
+import type { HookMcpServer } from "./payloads/tool-event-facts.ts";
 import type {
   CacheEntry,
   PendingFollowUpContext,
@@ -10,8 +14,10 @@ import type {
 } from "./routing-state.ts";
 import type { StreamText } from "./stream-text.ts";
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
+import type { McpToolIdentity } from "../../domain/components/hooks/builtin-mcp-tool-names.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { AssistantMessage, BeforeAgentStartEvent } from "../../platform/pi-api.ts";
+import type { Scope } from "../../shared/types.ts";
 
 /**
  * STOP-07: the number of consecutive Stop continuations allowed. The next
@@ -129,6 +135,16 @@ export interface HooksRuntime {
    * project at `cwd`. No record, or a record for another directory, is no.
    */
   readonly isProjectTrusted: (cwd: string) => boolean;
+  /**
+   * D-PG6-07: replaces the plugin MCP servers of `scope` with `entries`, as
+   * the scope's hydrate read them from its installation state.
+   */
+  readonly setMcpServers: (scope: Scope, entries: readonly McpServerEntry[]) => void;
+  /**
+   * D-PG6-07: the plugin MCP server of `tool` among the servers of both
+   * scopes, or `undefined` when none or two different servers claim it.
+   */
+  readonly mcpServerFor: (tool: McpToolIdentity) => HookMcpServer | undefined;
   readonly appendPendingSessionStartContext: (entry: PendingSessionStartContext) => void;
   readonly pendingSessionStartContextEntries: () => readonly PendingSessionStartContext[];
   readonly drainPendingSessionStartContext: () => readonly PendingSessionStartContext[];
@@ -293,6 +309,7 @@ export function createHooksRuntime(): HooksRuntime {
   const pidTableOperations = new Map<string, Promise<void>>();
   let generation = 0;
   let trustedProject: string | undefined;
+  const mcpServers = new Map<Scope, readonly McpServerEntry[]>();
   // D-CF5-13: the SessionStart context waits for the next turn of the
   // session; a prompt's context belongs to the turn of that prompt.
   const pendingSessionStartContext = createContextBuffer<PendingSessionStartContext>();
@@ -376,6 +393,14 @@ export function createHooksRuntime(): HooksRuntime {
 
     isProjectTrusted(cwd: string): boolean {
       return trustedProject === cwd;
+    },
+
+    setMcpServers(scope: Scope, entries: readonly McpServerEntry[]): void {
+      mcpServers.set(scope, [...entries]);
+    },
+
+    mcpServerFor(tool: McpToolIdentity): HookMcpServer | undefined {
+      return findMcpServer([...mcpServers.values()].flat(), tool);
     },
 
     appendPendingSessionStartContext: pendingSessionStartContext.append,

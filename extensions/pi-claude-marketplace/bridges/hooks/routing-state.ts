@@ -185,6 +185,7 @@ export interface RoutingStateOperations extends Pick<
   | "routingTableEntries"
   | "recordProjectTrust"
   | "isProjectTrusted"
+  | "setMcpServers"
 > {
   readonly currentEpoch: HooksRuntime["currentGeneration"];
   readonly bumpEpoch: HooksRuntime["advanceGeneration"];
@@ -207,5 +208,6 @@ export function createRoutingStateOperations(runtime: HooksRuntime): RoutingStat
     routingTableEntries: runtime.routingTableEntries,
     recordProjectTrust: runtime.recordProjectTrust,
     isProjectTrusted: runtime.isProjectTrusted,
+    setMcpServers: runtime.setMcpServers,
   };
 }

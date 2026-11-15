@@ -9,6 +9,7 @@ import type {
   ChildLike,
   TimerLadder,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-timer.ts";
+import type { McpServerEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/mcp-server-table.ts";
 import type {
   CacheEntry,
   PendingFollowUpContext,
@@ -20,6 +21,7 @@ import type {
   HooksRuntime,
   HooksRuntimeChildEntry,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
+import type { McpToolIdentity } from "../../../extensions/pi-claude-marketplace/domain/components/hooks/builtin-mcp-tool-names.ts";
 import type {
   AssistantMessage,
   BeforeAgentStartEvent,
@@ -763,6 +765,65 @@ test("counts a call another tool issued from its own mark (D-PG6-06)", () => {
 
   // assert
   assert.deepStrictEqual([nested, parent, next], [30, 300, 20]);
+});
+
+function mcpServerEntry(plugin: string): McpServerEntry {
+  return {
+    builtinServer: `plugin_${plugin}_stub`,
+    adapterKey: `plugin_${plugin}_stub_`,
+    server: { name: `plugin:${plugin}:stub`, source: "plugin" },
+  };
+}
+
+function adapterTool(plugin: string): McpToolIdentity {
+  return { piName: `mcp__plugin_${plugin}_stub__echo`, builtinServer: undefined };
+}
+
+test("finds a tool's server among the servers of both scopes (D-PG6-07)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.setMcpServers("user", [mcpServerEntry("alpha")]);
+  runtime.setMcpServers("project", [mcpServerEntry("beta")]);
+
+  // act
+  const servers = [
+    runtime.mcpServerFor(adapterTool("alpha")),
+    runtime.mcpServerFor(adapterTool("beta")),
+  ];
+
+  // assert
+  assert.deepStrictEqual(servers, [
+    { name: "plugin:alpha:stub", source: "plugin" },
+    { name: "plugin:beta:stub", source: "plugin" },
+  ]);
+});
+
+test("empties the project scope's servers and keeps the user scope's (D-PG6-07)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.setMcpServers("user", [mcpServerEntry("alpha")]);
+  runtime.setMcpServers("project", [mcpServerEntry("beta")]);
+
+  // act
+  runtime.setMcpServers("project", []);
+
+  // assert
+  assert.deepStrictEqual(
+    [runtime.mcpServerFor(adapterTool("alpha")), runtime.mcpServerFor(adapterTool("beta"))],
+    [{ name: "plugin:alpha:stub", source: "plugin" }, undefined],
+  );
+});
+
+test("knows no server in a new runtime (D-PG6-07)", () => {
+  // arrange
+  const firstRuntime = createHooksRuntime();
+  firstRuntime.setMcpServers("user", [mcpServerEntry("alpha")]);
+
+  // act
+  const server = createHooksRuntime().mcpServerFor(adapterTool("alpha"));
+
+  // assert
+  assert.strictEqual(server, undefined);
 });
 
 test("owns child removal, PID snapshots, and shutdown per runtime", () => {

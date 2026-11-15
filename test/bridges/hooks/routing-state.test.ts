@@ -754,3 +754,24 @@ test("advancing generation preserves the runtime's other routing state", () => {
   assert.deepStrictEqual(Array.from(routingState.routingTableEntries()), [["SessionEnd", []]]);
   assert.deepStrictEqual(routingState.pendingSessionStartContextEntries(), [pendingEntry]);
 });
+
+test("sets a scope's plugin MCP servers on the bound runtime (D-PG6-07)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const routingState = createRoutingStateOperations(runtime);
+
+  // act
+  routingState.setMcpServers("user", [
+    {
+      builtinServer: "plugin_demo_stub",
+      adapterKey: "plugin_demo_stub_",
+      server: { name: "plugin:demo:stub", source: "plugin" },
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(
+    runtime.mcpServerFor({ piName: "mcp__plugin_demo_stub__echo", builtinServer: undefined }),
+    { name: "plugin:demo:stub", source: "plugin" },
+  );
+});

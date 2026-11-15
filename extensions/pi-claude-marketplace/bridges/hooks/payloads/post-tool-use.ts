@@ -16,6 +16,8 @@
 // `tool_use_id` is Pi's `toolCallId`, the id the call's PreToolUse hook
 // read (D-PG6-04, D-PG6-05). `duration_ms` is the time the tool ran, which
 // the dispatcher measured, and is left out when it has none (D-PG6-06).
+// `mcp_server` names the plugin MCP server of the tool, and is left out for
+// any other tool (D-PG6-07).
 
 import { homedir } from "node:os";
 
@@ -28,7 +30,7 @@ import { toolFactFields } from "./tool-event-facts.ts";
 
 import type { ToolResultEvent } from "../../../platform/pi-api.ts";
 import type { TranslationContext } from "../translation-context.ts";
-import type { HookToolFacts } from "./tool-event-facts.ts";
+import type { HookMcpServer, HookToolFacts } from "./tool-event-facts.ts";
 
 export interface PostToolUseStdin {
   readonly session_id: string;
@@ -40,6 +42,7 @@ export interface PostToolUseStdin {
   readonly tool_use_id: string;
   readonly tool_response: unknown;
   readonly duration_ms?: number;
+  readonly mcp_server?: HookMcpServer;
   readonly agent_type?: string;
   readonly agent_id?: string;
 }

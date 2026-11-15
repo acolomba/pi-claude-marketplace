@@ -1002,7 +1002,7 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
       return undefined as CompositeReturnFor<E>;
     }
 
-    const view = hookEventView(claudeEvent, event, tools, () => toolEventMcpLiterals(runtime));
+    const view = hookEventView(runtime, claudeEvent, event, tools);
     if (view === undefined) {
       return undefined as CompositeReturnFor<E>;
     }
@@ -1291,7 +1291,10 @@ export function toolResultCompositeHandler(
       return undefined;
     }
 
-    const view = { event: withToolFacts(seen.event, facts), tool: seen.tool };
+    const view = {
+      event: withToolFacts(seen.event, { ...facts, ...mcpServerFacts(runtime, seen.tool) }),
+      tool: seen.tool,
+    };
     const batch =
       event.toolName === "edit" ? editPairViews(event.input, ctx.cwd, homedir()) : undefined;
     const folded =
@@ -1327,6 +1330,13 @@ function takeToolFacts(
 ): HookToolFacts {
   const hookDurationMs = runtime.takeToolDuration(event.toolCallId, now());
   return hookDurationMs === undefined ? {} : { hookDurationMs };
+}
+
+// D-PG6-07: the plugin MCP server of the event's tool, as a fact of the event
+// the hooks read; none when the runtime knows no server of the tool.
+function mcpServerFacts(runtime: HooksRuntime, tool: McpToolIdentity): HookToolFacts {
+  const hookMcpServer = runtime.mcpServerFor(tool);
+  return hookMcpServer === undefined ? {} : { hookMcpServer };
 }
 
 // Each hook receives a pair input and the same native result carriers. Pair
@@ -1544,14 +1554,19 @@ function toolEventView<T extends ToolCallEvent | ToolResultEvent>(
 }
 
 function hookEventView(
+  runtime: HooksRuntime,
   claudeEvent: CompositeDispatchEvent,
   event: unknown,
   tools: HookToolView,
-  candidates: () => readonly string[],
 ): HookEventView | undefined {
-  return claudeEvent === "PreToolUse"
-    ? toolEventView(event as ToolCallEvent, tools, candidates)
-    : { event, tool: undefined };
+  if (claudeEvent !== "PreToolUse") {
+    return { event, tool: undefined };
+  }
+
+  const seen = toolEventView(event as ToolCallEvent, tools, () => toolEventMcpLiterals(runtime));
+  return seen === undefined
+    ? undefined
+    : { event: withToolFacts(seen.event, mcpServerFacts(runtime, seen.tool)), tool: seen.tool };
 }
 
 /**

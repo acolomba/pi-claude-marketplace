@@ -16,6 +16,8 @@
 // `tool_use_id` is the call's own id, as on PreToolUse and PostToolUse.
 // `duration_ms` is the time the failed tool ran, which the dispatcher
 // measured, and is left out when it has none (D-PG6-04, D-PG6-06).
+// `mcp_server` names the plugin MCP server of the tool, and is left out for
+// any other tool (D-PG6-07).
 
 import { homedir } from "node:os";
 
@@ -26,7 +28,7 @@ import { toolFactFields } from "./tool-event-facts.ts";
 
 import type { ToolResultEvent } from "../../../platform/pi-api.ts";
 import type { TranslationContext } from "../translation-context.ts";
-import type { HookToolFacts } from "./tool-event-facts.ts";
+import type { HookMcpServer, HookToolFacts } from "./tool-event-facts.ts";
 
 export interface PostToolUseFailureStdin {
   readonly session_id: string;
@@ -39,6 +41,7 @@ export interface PostToolUseFailureStdin {
   readonly error: string;
   readonly is_interrupt: false;
   readonly duration_ms?: number;
+  readonly mcp_server?: HookMcpServer;
   readonly agent_type?: string;
   readonly agent_id?: string;
 }

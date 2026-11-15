@@ -28,6 +28,20 @@ test("gives a duration fact as the duration_ms member (D-PG6-06)", () => {
   assert.deepStrictEqual(fields, { duration_ms: 12 });
 });
 
+test("gives a server fact as the mcp_server member after duration_ms (D-PG6-07)", () => {
+  // act
+  const fields = toolFactFields({
+    hookMcpServer: { name: "plugin:demo:stub", source: "plugin" },
+    hookDurationMs: 12,
+  });
+
+  // assert
+  assert.deepStrictEqual(Object.entries(fields), [
+    ["duration_ms", 12],
+    ["mcp_server", { name: "plugin:demo:stub", source: "plugin" }],
+  ]);
+});
+
 test("gives no member for an event with no fact (D-PG6-04)", () => {
   // act
   const fields = toolFactFields({});

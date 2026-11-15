@@ -7543,3 +7543,124 @@ describe("duration marks (D-PG6-06)", () => {
     assert.strictEqual(received[0], event);
   });
 });
+
+describe("MCP server facts (D-PG6-07)", () => {
+  const mcpTool = "mcp__plugin_demo_stub__echo";
+  const demoServer = { name: "plugin:demo:stub", source: "plugin" } as const;
+
+  function runtimeWithDemoServer(): HooksRuntime {
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setMcpServers("user", [
+      { builtinServer: "plugin_demo_stub", adapterKey: "plugin_demo_stub_", server: demoServer },
+    ]);
+    return runtime;
+  }
+
+  test("gives a PreToolUse hook of a plugin MCP tool the tool's server", async () => {
+    // arrange
+    const runtime = runtimeWithDemoServer();
+    runtime.setRoutingBucket(
+      "PreToolUse",
+      builtinToolEntries("PreToolUse", [{ pluginId: "guard", rawMatcher: mcpTool }]),
+    );
+    const received: ReceivedEvent[] = [];
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      createEventKeepingExecutor({}, received),
+      createHookToolView(undefined),
+    );
+    const event = createToolCallEvent(mcpTool, { text: "ping" });
+
+    // act
+    await handler(event, createExtensionContext("/workspace/servers"));
+
+    // assert
+    assert.deepStrictEqual(received, [
+      {
+        pluginId: "guard",
+        event: { ...createToolCallEvent(mcpTool, { text: "ping" }), hookMcpServer: demoServer },
+      },
+    ]);
+    assert.strictEqual((received[0]?.event as ToolCallEvent).input, event.input);
+  });
+
+  test("gives a result hook of a plugin MCP tool the tool's server beside its duration", async () => {
+    // arrange
+    const runtime = runtimeWithDemoServer();
+    runtime.setRoutingBucket("PostToolUse", routedEntries("PostToolUse", ["after"]));
+    runtime.recordToolCallPrepared("dispatch-call", undefined, 100);
+    const received: ReceivedEvent[] = [];
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      createEventKeepingExecutor({}, received),
+      createHookToolView(undefined),
+      () => 175,
+    );
+
+    // act
+    await handler(
+      createToolResultEvent(false, mcpTool),
+      createExtensionContext("/workspace/servers"),
+    );
+
+    // assert
+    assert.deepStrictEqual(received, [
+      {
+        pluginId: "after",
+        event: {
+          ...createToolResultEvent(false, mcpTool),
+          hookDurationMs: 75,
+          hookMcpServer: demoServer,
+        },
+      },
+    ]);
+  });
+
+  test("hands the hooks Pi's own events for a tool with no server", async () => {
+    // arrange
+    const runtime = runtimeWithDemoServer();
+    runtime.setRoutingBucket(
+      "PreToolUse",
+      builtinToolEntries("PreToolUse", [{ pluginId: "guard", rawMatcher: "*" }]),
+    );
+    runtime.setRoutingBucket("PostToolUse", routedEntries("PostToolUse", ["after"]));
+    const received: ReceivedEvent[] = [];
+    const executor = createEventKeepingExecutor({}, received);
+    const tools = createHookToolView(undefined);
+    const preToolUse = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+      tools,
+    );
+    const toolResult = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+      tools,
+    );
+    const callEvent = createToolCallEvent("mcp__other__echo", { text: "ping" });
+    const resultEvent = { ...createToolResultEvent(false, "bash"), toolCallId: "unmarked-call" };
+
+    // act
+    await preToolUse(callEvent, createExtensionContext("/workspace/servers"));
+    await toolResult(resultEvent, createExtensionContext("/workspace/servers"));
+
+    // assert
+    assert.deepStrictEqual(
+      received.map(({ event }) => event),
+      [callEvent, resultEvent],
+    );
+    assert.strictEqual(received[0]?.event, callEvent);
+    assert.strictEqual(received[1]?.event, resultEvent);
+  });
+});
