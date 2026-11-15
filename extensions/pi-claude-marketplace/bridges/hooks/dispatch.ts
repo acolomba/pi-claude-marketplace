@@ -92,6 +92,7 @@ import {
 import { ifFires } from "./if-field/index.ts";
 import { createHookToolView } from "./mcp-tool-view.ts";
 import { compactTrigger } from "./payloads/compact-trigger.ts";
+import { withToolFacts } from "./payloads/tool-event-facts.ts";
 import { decideEditBatch, editPairToolUseId, editPairViews } from "./tool-batch.ts";
 
 import type { CompactionCancel, HookAdapterContext } from "./event-adapters.ts";
@@ -100,6 +101,7 @@ import type { HookBlock } from "./hook-labels.ts";
 import type { HookToolView } from "./mcp-tool-view.ts";
 import type { ClaudeSessionEndEvent } from "./payloads/session-end.ts";
 import type { ClaudeSessionStartEvent } from "./payloads/session-start.ts";
+import type { HookToolFacts } from "./payloads/tool-event-facts.ts";
 import type { RoutingEntry } from "./routing-state.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type { BucketAEvent, DispatchableEvent } from "../../domain/components/hook-events.ts";
@@ -939,6 +941,12 @@ function dropStalePromptContext(runtime: HooksRuntime, event: InputEvent): void 
   }
 }
 
+// D-PG6-06: the default clock of the two tool handlers, in milliseconds. It
+// is monotonic, so a change of the wall clock cannot change a duration.
+function monotonicNow(): number {
+  return performance.now();
+}
+
 /**
  * D-59-01 / D-60-03: six-uniform composite handler factory.
  *
@@ -961,6 +969,8 @@ function dropStalePromptContext(runtime: HooksRuntime, event: InputEvent): void 
  * `tools` identifies a PreToolUse event's tool (D-P5-01) and says whether pi-mcp-adapter's proxy rule applies (D-P5-06); it defaults to
  * a view over `pi`, which reads nothing until a tool event's bucket has hooks.
  * The router passes one view to both tool handlers of a generation (D-P5-07).
+ *
+ * `now` is the clock of the PreToolUse mark (D-PG6-06); production passes none.
  */
 export function compositeHandlerFor<E extends CompositeDispatchEvent>(
   runtime: HooksRuntime,
@@ -969,8 +979,12 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
   pi?: ExtensionAPI,
   executor: HookExecutor = dispatchHookExec,
   tools: HookToolView = createHookToolView(pi),
+  now: () => number = monotonicNow,
 ): (event: CompositeEventFor<E>, ctx: ExtensionContext) => Promise<CompositeReturnFor<E>> {
-  return async (event, ctx) => {
+  const handler = async (
+    event: CompositeEventFor<E>,
+    ctx: ExtensionContext,
+  ): Promise<CompositeReturnFor<E>> => {
     if (capturedGeneration !== runtime.currentGeneration()) {
       return undefined as CompositeReturnFor<E>;
     }
@@ -1025,6 +1039,32 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
 
     const context = { runtime, ctx, pi, attributedTo: folded.attributedTo };
     return (await adaptForEvent(claudeEvent, folded, view.event, context)) as CompositeReturnFor<E>;
+  };
+
+  return claudeEvent === "PreToolUse"
+    ? markedOnExit(runtime, capturedGeneration, handler, now)
+    : handler;
+}
+
+/**
+ * D-PG6-06: the mark of a call is the time its PreToolUse handler ends, on
+ * every exit path, also with no PreToolUse hook and for a blocked call. A
+ * handler of a stale generation keeps no mark.
+ */
+function markedOnExit<V, R>(
+  runtime: HooksRuntime,
+  capturedGeneration: number,
+  handler: (event: V, ctx: ExtensionContext) => Promise<R>,
+  now: () => number,
+): (event: V, ctx: ExtensionContext) => Promise<R> {
+  return async (event, ctx) => {
+    try {
+      return await handler(event, ctx);
+    } finally {
+      if (capturedGeneration === runtime.currentGeneration()) {
+        runtime.recordToolCallPrepared((event as ToolCallEvent).toolCallId, now());
+      }
+    }
   };
 }
 
@@ -1214,7 +1254,9 @@ function routedToolResult(event: ToolResultEvent, tools: HookToolView): ToolResu
  *
  * `executor` is the same injected seam `compositeHandlerFor` takes, defaulted
  * and forwarded identically, and so is `tools`, which identifies the event's
- * tool (D-P5-01).
+ * tool (D-P5-01). `now` is the clock that reads the call's duration as the
+ * handler starts, and the hooks read it as `hookDurationMs` on the event
+ * (D-PG6-06).
  */
 export function toolResultCompositeHandler(
   runtime: HooksRuntime,
@@ -1222,12 +1264,14 @@ export function toolResultCompositeHandler(
   pi?: ExtensionAPI,
   executor: HookExecutor = dispatchHookExec,
   tools: HookToolView = createHookToolView(pi),
+  now: () => number = monotonicNow,
 ): (event: ToolResultEvent, ctx: ExtensionContext) => Promise<ToolResultEventResult | undefined> {
   return async (piEvent, ctx) => {
     if (capturedGeneration !== runtime.currentGeneration()) {
       return undefined;
     }
 
+    const facts = takeToolFacts(runtime, piEvent, now);
     const event = routedToolResult(piEvent, tools);
     const claudeEvent = event.isError ? "PostToolUseFailure" : "PostToolUse";
     const bucket = runtime.getRoutingBucket(claudeEvent);
@@ -1241,11 +1285,12 @@ export function toolResultCompositeHandler(
     }
 
     const verifiedName = event.isError ? undefined : adapterResultToolName(event.details);
-    const view = toolEventView(event, tools, () => toolEventMcpLiterals(runtime), verifiedName);
-    if (view === undefined) {
+    const seen = toolEventView(event, tools, () => toolEventMcpLiterals(runtime), verifiedName);
+    if (seen === undefined) {
       return undefined;
     }
 
+    const view = { event: withToolFacts(seen.event, facts), tool: seen.tool };
     const batch =
       event.toolName === "edit" ? editPairViews(event.input, ctx.cwd, homedir()) : undefined;
     const folded =
@@ -1270,6 +1315,17 @@ export function toolResultCompositeHandler(
 
     return acceptedToolOutput(folded.outcomes, view.event, view.tool, adapterContext);
   };
+}
+
+// D-PG6-06: the call's duration, taken on entry, so its mark is removed
+// whatever the handler does next.
+function takeToolFacts(
+  runtime: HooksRuntime,
+  event: ToolResultEvent,
+  now: () => number,
+): HookToolFacts {
+  const hookDurationMs = runtime.takeToolDuration(event.toolCallId, now());
+  return hookDurationMs === undefined ? {} : { hookDurationMs };
 }
 
 // Each hook receives a pair input and the same native result carriers. Pair

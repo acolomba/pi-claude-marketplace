@@ -551,6 +551,38 @@ test("cache miss, one-shot hit, and stale epoch are visible at public boundaries
   assert.deepStrictEqual(sent, []);
 });
 
+test("an agent end drops the mark of every tool call (D-PG6-06)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.recordToolCallPrepared("a", 100);
+  runtime.recordToolCallPrepared("b", 110);
+
+  // act
+  agentEndCacheHandler(runtime, runtime.currentGeneration())(agentEnd("stop"));
+
+  // assert
+  assert.deepStrictEqual(
+    [runtime.takeToolDuration("a", 200), runtime.takeToolDuration("b", 200)],
+    [undefined, undefined],
+  );
+});
+
+test("a stale agent end keeps the tool call marks (D-PG6-06)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  const stale = runtime.currentGeneration();
+  runtime.advanceGeneration();
+  runtime.recordToolCallPrepared("a", 100);
+
+  // act
+  agentEndCacheHandler(runtime, stale)(agentEnd("stop"));
+
+  // assert
+  assert.strictEqual(runtime.takeToolDuration("a", 200), 100);
+});
+
 test("the last agent ending wins before the boundary", async () => {
   // arrange
   const runtime = createHooksRuntime();

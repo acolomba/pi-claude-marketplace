@@ -185,6 +185,19 @@ export interface HooksRuntime {
   readonly recordStartFailureNotice: (key: string) => void;
   readonly recordStopNonReentry: () => void;
   readonly recordToolCall: () => void;
+  /**
+   * D-PG6-06: keeps `now`, in milliseconds, as the mark of the call
+   * `toolCallId` at the end of its PreToolUse dispatch.
+   */
+  readonly recordToolCallPrepared: (toolCallId: string, now: number) => void;
+  /**
+   * D-PG6-06: removes the mark of the call `toolCallId` and returns the whole
+   * milliseconds from it to `now`, never negative, or `undefined` when the
+   * call has no mark.
+   */
+  readonly takeToolDuration: (toolCallId: string, now: number) => number | undefined;
+  /** D-PG6-06: drops the mark of every call, so a call that never ends keeps none. */
+  readonly clearToolCallMarks: () => void;
   readonly recordUserInput: () => void;
   /**
    * D-BG-210: records whether the run that starts is one an async rewake
@@ -285,6 +298,7 @@ export function createHooksRuntime(): HooksRuntime {
   let consecutiveBlockCount = 0;
   let capNotifiedThisSession = false;
   const shownStartFailures = new Set<string>();
+  const toolCallMarks = new Map<string, number>();
   let childIdentity: ChildIdentity = { kind: "unavailable" };
   let childIdentitySessionId: string | undefined;
 
@@ -300,6 +314,7 @@ export function createHooksRuntime(): HooksRuntime {
     stopBoundaryOpen = false;
     heldStopReason = undefined;
     shownStartFailures.clear();
+    toolCallMarks.clear();
     finishStopSequence();
   }
 
@@ -438,6 +453,24 @@ export function createHooksRuntime(): HooksRuntime {
     recordStopNonReentry: finishStopSequence,
 
     recordToolCall: finishStopSequence,
+
+    recordToolCallPrepared(toolCallId: string, now: number): void {
+      toolCallMarks.set(toolCallId, now);
+    },
+
+    takeToolDuration(toolCallId: string, now: number): number | undefined {
+      const mark = toolCallMarks.get(toolCallId);
+      if (mark === undefined) {
+        return undefined;
+      }
+
+      toolCallMarks.delete(toolCallId);
+      return Math.max(0, Math.round(now - mark));
+    },
+
+    clearToolCallMarks(): void {
+      toolCallMarks.clear();
+    },
 
     recordUserInput(): void {
       stopHookActive = false;

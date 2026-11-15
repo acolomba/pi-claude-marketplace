@@ -14,6 +14,7 @@ import {
   compileIfPredicate,
   MATCH_ALL_IF,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
+import { createHookToolView } from "../../../extensions/pi-claude-marketplace/bridges/hooks/mcp-tool-view.ts";
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
@@ -7260,3 +7261,257 @@ async function runAdapterToolResult(
   const output = await handler(adapterToolResult(details), context);
   return { output, calls };
 }
+
+// A clock that reads `value` and counts its reads.
+function countingClock(value: number): {
+  readonly now: () => number;
+  readonly reads: () => number;
+} {
+  let reads = 0;
+  return {
+    now: () => {
+      reads += 1;
+      return value;
+    },
+    reads: () => reads,
+  };
+}
+
+describe("duration marks (D-PG6-06)", () => {
+  for (const { name, result, entries } of [
+    { name: "an empty PreToolUse bucket", result: { kind: "noop" } as const, entries: [] },
+    {
+      name: "a blocked call",
+      result: { kind: "block", reason: "denied" } as const,
+      entries: ["guard"],
+    },
+    { name: "a call whose executor rejects", result: "reject" as const, entries: ["guard"] },
+    { name: "a call with hooks", result: { kind: "noop" } as const, entries: ["guard"] },
+  ]) {
+    test(`marks the call when its PreToolUse handler ends, after ${name}`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket("PreToolUse", preToolUseEntries(entries));
+      const clock = countingClock(100);
+      const readsWhenHooksRan: number[] = [];
+      const executor: HookExecutor = () => {
+        readsWhenHooksRan.push(clock.reads());
+        return result === "reject"
+          ? Promise.reject(new Error("injected executor refused"))
+          : Promise.resolve(result);
+      };
+
+      const handler = compositeHandlerFor(
+        runtime,
+        "PreToolUse",
+        runtime.currentGeneration(),
+        undefined,
+        executor,
+        createHookToolView(undefined),
+        clock.now,
+      );
+
+      // act
+      await handler(createToolCallEvent(), createExtensionContext("/workspace/marks")).catch(
+        (error: unknown) => error,
+      );
+
+      // assert
+      assert.deepStrictEqual(
+        readsWhenHooksRan,
+        entries.map(() => 0),
+      );
+      assert.strictEqual(clock.reads(), 1);
+      assert.strictEqual(runtime.takeToolDuration("dispatch-call", 175), 75);
+    });
+  }
+
+  test("keeps no mark for a PreToolUse handler of a stale generation", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const stale = runtime.currentGeneration();
+    runtime.advanceGeneration();
+    const clock = countingClock(100);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      stale,
+      undefined,
+      createRecordingExecutor({}, []),
+      createHookToolView(undefined),
+      clock.now,
+    );
+
+    // act
+    const output = await handler(createToolCallEvent(), createExtensionContext("/workspace/marks"));
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.strictEqual(clock.reads(), 0);
+    assert.strictEqual(runtime.takeToolDuration("dispatch-call", 175), undefined);
+  });
+
+  test("gives every result hook the time since the call's mark", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUse", routedEntries("PostToolUse", ["first", "second"]));
+    runtime.recordToolCallPrepared("dispatch-call", 100);
+    const calls: RecordedCall[] = [];
+    const executor = createRecordingExecutor(
+      { first: { kind: "noop" }, second: { kind: "noop" } },
+      calls,
+    );
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+      createHookToolView(undefined),
+      () => 175,
+    );
+
+    // act
+    await handler(createToolResultEvent(false), createExtensionContext("/workspace/marks"));
+
+    // assert
+    assert.deepStrictEqual(
+      calls.map(({ event }) => event),
+      [
+        { ...createToolResultEvent(false), hookDurationMs: 75 },
+        { ...createToolResultEvent(false), hookDurationMs: 75 },
+      ],
+    );
+    assert.strictEqual(runtime.takeToolDuration("dispatch-call", 300), undefined);
+  });
+
+  test("gives each pair of a multi-pair edit the call's duration", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUse", [
+      createRoutingEntry({
+        pluginId: "edits",
+        claudeEvent: "PostToolUse",
+        rawMatcher: "Edit",
+        declarationIndex: 0,
+      }),
+    ]);
+    runtime.recordToolCallPrepared("dispatch-call", 100);
+    const received: unknown[] = [];
+    const executor: HookExecutor = (_entry, event) => {
+      received.push(event);
+      return Promise.resolve({ kind: "noop" });
+    };
+
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+      createHookToolView(undefined),
+      () => 175,
+    );
+
+    // act
+    await handler(
+      { ...createToolResultEvent(false, "edit"), input: EDIT_INPUT },
+      createExtensionContext("/workspace/marks"),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      received.map((event) => [
+        (event as ToolResultEvent).toolCallId,
+        (event as { readonly hookDurationMs?: number }).hookDurationMs,
+      ]),
+      [
+        ["dispatch-call#1", 75],
+        ["dispatch-call#2", 75],
+      ],
+    );
+  });
+
+  test("removes the mark of a result with an empty bucket", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.recordToolCallPrepared("dispatch-call", 100);
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor({}, []),
+      createHookToolView(undefined),
+      () => 175,
+    );
+
+    // act
+    const output = await handler(
+      createToolResultEvent(false),
+      createExtensionContext("/workspace/marks"),
+    );
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.strictEqual(runtime.takeToolDuration("dispatch-call", 300), undefined);
+  });
+
+  test("runs no hook for a cancelled call's failure and still removes its mark (D-BG-402)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUseFailure", routedEntries("PostToolUseFailure", ["fail"]));
+    runtime.recordToolCallPrepared("dispatch-call", 100);
+    const calls: RecordedCall[] = [];
+    const context = createExtensionContext("/workspace/marks");
+    context.signal = AbortSignal.abort();
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor({ fail: { kind: "noop" } }, calls),
+      createHookToolView(undefined),
+      () => 175,
+    );
+
+    // act
+    const output = await handler(createToolResultEvent(true), context);
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(calls, []);
+    assert.strictEqual(runtime.takeToolDuration("dispatch-call", 300), undefined);
+  });
+
+  test("gives a result with no mark no duration (D-PG6-04)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUse", routedEntries("PostToolUse", ["first"]));
+    const received: unknown[] = [];
+    const executor: HookExecutor = (_entry, event) => {
+      received.push(event);
+      return Promise.resolve({ kind: "noop" });
+    };
+
+    const event = createToolResultEvent(false);
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+      createHookToolView(undefined),
+      () => 175,
+    );
+
+    // act
+    await handler(event, createExtensionContext("/workspace/marks"));
+
+    // assert
+    assert.deepStrictEqual(received, [event]);
+    assert.strictEqual(received[0], event);
+  });
+});

@@ -137,7 +137,8 @@ function findLastAssistant(messages: readonly AgentMessage[]): AssistantMessage 
  * subsequent `agent_settled` (which carries no payload) can read its
  * `stopReason`. Last-write-wins; no-ops on a stale generation (STOP-01). A
  * run end after the boundary held a stop reason means that the run went on,
- * so the reason is dropped (D-PG5-13).
+ * so the reason is dropped (D-PG5-13). A run end also drops the mark of every
+ * tool call that never reached its result (D-PG6-06).
  */
 export function agentEndCacheHandler(
   runtime: HooksRuntime,
@@ -148,6 +149,7 @@ export function agentEndCacheHandler(
       return;
     }
 
+    runtime.clearToolCallMarks();
     if (runtime.takeHeldStopReason() !== undefined) {
       hookDebugLog("settle: the run went on after a Stop hook stopped it; stopReason not shown");
     }

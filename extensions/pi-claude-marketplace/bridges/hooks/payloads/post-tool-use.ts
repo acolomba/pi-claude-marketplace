@@ -14,7 +14,8 @@
 // MCP content and structured content flow into Claude's `tool_response` field
 // (claude-hook-config-syntax.md § 3).
 // `tool_use_id` is Pi's `toolCallId`, the id the call's PreToolUse hook
-// read (D-PG6-04, D-PG6-05).
+// read (D-PG6-04, D-PG6-05). `duration_ms` is the time the tool ran, which
+// the dispatcher measured, and is left out when it has none (D-PG6-06).
 
 import { homedir } from "node:os";
 
@@ -23,8 +24,11 @@ import { toHookToolInput } from "../tool-input.ts";
 import { fileToolResponse } from "../tool-result-files.ts";
 import { searchShellToolResponse } from "../tool-result-search-shell.ts";
 
+import { toolFactFields } from "./tool-event-facts.ts";
+
 import type { ToolResultEvent } from "../../../platform/pi-api.ts";
 import type { TranslationContext } from "../translation-context.ts";
+import type { HookToolFacts } from "./tool-event-facts.ts";
 
 export interface PostToolUseStdin {
   readonly session_id: string;
@@ -35,6 +39,7 @@ export interface PostToolUseStdin {
   readonly tool_input: unknown;
   readonly tool_use_id: string;
   readonly tool_response: unknown;
+  readonly duration_ms?: number;
   readonly agent_type?: string;
   readonly agent_id?: string;
 }
@@ -53,7 +58,7 @@ function nativeToolResponse(event: ToolResultEvent): unknown {
 }
 
 export function translatePostToolUse(
-  event: ToolResultEvent,
+  event: ToolResultEvent & HookToolFacts,
   ctx: TranslationContext,
 ): PostToolUseStdin {
   return {
@@ -68,6 +73,7 @@ export function translatePostToolUse(
       fileToolResponse(event, ctx.cwd) ??
       searchShellToolResponse(event, ctx.cwd) ??
       nativeToolResponse(event),
+    ...toolFactFields(event),
     ...(ctx.childIdentity?.sessionId === ctx.sessionId
       ? { agent_type: ctx.childIdentity.agentType, agent_id: ctx.childIdentity.sessionId }
       : {}),

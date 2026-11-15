@@ -13,16 +13,20 @@
 // has no text and is left out. `is_interrupt` is always `false`: the
 // bridge runs no PostToolUseFailure hook on a call the user cancels, so
 // every run is a failure the tool reported (D-BG-401, D-BG-402).
-// `tool_use_id` is the call's own id, as on PreToolUse and PostToolUse;
-// `duration_ms` is not sent (D-PG6-04).
+// `tool_use_id` is the call's own id, as on PreToolUse and PostToolUse.
+// `duration_ms` is the time the failed tool ran, which the dispatcher
+// measured, and is left out when it has none (D-PG6-04, D-PG6-06).
 
 import { homedir } from "node:os";
 
 import { mapPiToClaudeToolName } from "../../../domain/components/hook-tool-names.ts";
 import { toHookToolInput } from "../tool-input.ts";
 
+import { toolFactFields } from "./tool-event-facts.ts";
+
 import type { ToolResultEvent } from "../../../platform/pi-api.ts";
 import type { TranslationContext } from "../translation-context.ts";
+import type { HookToolFacts } from "./tool-event-facts.ts";
 
 export interface PostToolUseFailureStdin {
   readonly session_id: string;
@@ -34,6 +38,7 @@ export interface PostToolUseFailureStdin {
   readonly tool_use_id: string;
   readonly error: string;
   readonly is_interrupt: false;
+  readonly duration_ms?: number;
   readonly agent_type?: string;
   readonly agent_id?: string;
 }
@@ -51,7 +56,7 @@ function errorText(content: ToolResultEvent["content"]): string {
 }
 
 export function translatePostToolUseFailure(
-  event: ToolResultEvent,
+  event: ToolResultEvent & HookToolFacts,
   ctx: TranslationContext,
 ): PostToolUseFailureStdin {
   return {
@@ -64,6 +69,7 @@ export function translatePostToolUseFailure(
     tool_use_id: event.toolCallId,
     error: errorText(event.content),
     is_interrupt: false,
+    ...toolFactFields(event),
     ...(ctx.childIdentity?.sessionId === ctx.sessionId
       ? { agent_type: ctx.childIdentity.agentType, agent_id: ctx.childIdentity.sessionId }
       : {}),

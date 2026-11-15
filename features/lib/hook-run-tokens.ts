@@ -12,6 +12,10 @@
  * the caller's to print as its JSON text, so a wrong type fails the table
  * (D-PG6-12). The tokens differ from the session ordinals `first` to
  * `fourth`.
+ *
+ * A `duration_ms` that is a non-negative integer reads as `{milliseconds}`,
+ * so no table states a timing value; any other value gets no token
+ * (D-PG6-06, D-PG6-12).
  */
 
 import type { HookRun } from "./hook-recorder.ts";
@@ -39,6 +43,12 @@ export function hookRunTokens(runs: readonly HookRun[]): HookRunTokenOf {
   }
 
   return (key, value) => {
+    if (key === "duration_ms") {
+      return typeof value === "number" && Number.isSafeInteger(value) && value >= 0
+        ? "{milliseconds}"
+        : undefined;
+    }
+
     if (key !== "tool_use_id" || typeof value !== "string") {
       return undefined;
     }

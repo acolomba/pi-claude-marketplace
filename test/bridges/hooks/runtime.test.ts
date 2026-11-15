@@ -16,7 +16,10 @@ import type {
   PendingSessionStartContext,
   RoutingEntry,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
-import type { HooksRuntimeChildEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
+import type {
+  HooksRuntime,
+  HooksRuntimeChildEntry,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type {
   AssistantMessage,
   BeforeAgentStartEvent,
@@ -659,6 +662,65 @@ test("keeps the shown start failure notices of one runtime from another (D-PG5-1
   // assert
   assert.strictEqual(shown, false);
 });
+
+test("takes a call's duration once, from its mark (D-PG6-06)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.recordToolCallPrepared("a", 100);
+
+  // act
+  const first = runtime.takeToolDuration("a", 250);
+  const second = runtime.takeToolDuration("a", 260);
+  const unmarked = runtime.takeToolDuration("b", 260);
+
+  // assert
+  assert.deepStrictEqual([first, second, unmarked], [150, undefined, undefined]);
+});
+
+test("gives a duration in whole milliseconds and never below zero (D-PG6-06)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.recordToolCallPrepared("a", 100.4);
+  runtime.recordToolCallPrepared("b", 100);
+
+  // act
+  const rounded = runtime.takeToolDuration("a", 250.9);
+  const early = runtime.takeToolDuration("b", 90);
+
+  // assert
+  assert.deepStrictEqual([rounded, early], [151, 0]);
+});
+
+for (const { name, clear } of [
+  {
+    name: "a clear",
+    clear: (runtime: HooksRuntime): void => {
+      runtime.clearToolCallMarks();
+    },
+  },
+  {
+    name: "a bridge load",
+    clear: (runtime: HooksRuntime): void => {
+      runtime.prepareSettleForRegistration();
+    },
+  },
+]) {
+  test(`drops every call's mark at ${name} (D-PG6-06)`, () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.recordToolCallPrepared("a", 100);
+    runtime.recordToolCallPrepared("b", 110);
+
+    // act
+    clear(runtime);
+
+    // assert
+    assert.deepStrictEqual(
+      [runtime.takeToolDuration("a", 200), runtime.takeToolDuration("b", 200)],
+      [undefined, undefined],
+    );
+  });
+}
 
 test("owns child removal, PID snapshots, and shutdown per runtime", () => {
   // arrange
