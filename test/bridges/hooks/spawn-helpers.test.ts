@@ -114,6 +114,21 @@ describe("planSpawn", () => {
     });
   });
 
+  test("D-PG10-10: fills an option reference that a path value holds, as the option pass runs after the path variables", () => {
+    // arrange
+    const entry = optionEntry("/usr/bin/hook", ["${CLAUDE_PROJECT_DIR}"]);
+
+    // act
+    const spawnPlan = planSpawn(entry, { ...PATH_VARS, projectDir: "/w/${user_config.mode}" });
+
+    // assert
+    assert.deepStrictEqual(spawnPlan, {
+      command: "/usr/bin/hook",
+      args: ["/w/fast"],
+      shell: false,
+    });
+  });
+
   const unsetCases: readonly {
     readonly name: string;
     readonly entry: RoutingEntry;

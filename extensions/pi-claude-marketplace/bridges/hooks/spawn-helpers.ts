@@ -51,7 +51,10 @@ export interface SpawnPlan {
  *
  * D-PG10-10 / D-PG10-21: then each `${user_config.KEY}` of those same fields
  * gets the option's value from `entry.options`, as Claude Code 2.1.323 does
- * for every plugin hook, also one whose plugin declares no `userConfig`. A key
+ * for every plugin hook, also one whose plugin declares no `userConfig`. This
+ * second pass reads the first pass's output, so an option reference that a
+ * path value holds is filled too, as upstream runs its option pass after the
+ * path variables; an option value is never rescanned. A key
  * with no value fails the run with `UnsetPluginOptionError` (D-PG10-08). Any
  * other `${...}` stays literal. A non-string element is passed as its JSON
  * text.
