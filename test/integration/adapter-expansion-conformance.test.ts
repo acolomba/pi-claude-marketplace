@@ -33,6 +33,7 @@ import {
   substituteAndInject,
 } from "../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
 import { expandClaudeValue } from "../../extensions/pi-claude-marketplace/domain/claude-mcp-variables.ts";
+import { ownedOptionVariableName } from "../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { applyMcpAdapterEnv } from "../../extensions/pi-claude-marketplace/shared/session-env.ts";
 import { EXPANSION_BUILTINS, EXPANSION_CASES } from "../bridges/mcp/expansion-cases.ts";
 
@@ -809,4 +810,111 @@ test("AVAR-03: pi-mcp-adapter home-expands a leading ~/ after interpolation, so 
 
   // assert
   assert.strictEqual(output, path.join(os.homedir(), "x"));
+});
+
+// D-PG10-23: an option default is exported into Pi's process under its owned
+// name as `serializeLiteral(value, false)`, and the entry holds a reference to
+// that name. The adapter's second and third passes read the inserted value, so
+// each default must come out raw, and none may pull in another variable.
+const OPTION_DEFAULTS: readonly string[] = [
+  "fast",
+  "",
+  "{env:PI_CM_SECRET}",
+  "$env:PI_CM_SECRET",
+  "${PI_CM_SECRET}",
+  "${PI_CM_SECRET:-x}",
+  "a{env:PI_CM_SECRET}b",
+  "!echo pwned",
+  "~/bin/tool",
+  "$",
+  "{",
+  "$e",
+  "{en",
+];
+
+const OPTION_CONTEXTS: readonly (readonly [string, string])[] = [
+  ["", ""],
+  ["--mode=", ""],
+  ["", "/x"],
+];
+
+const SECRET_VALUE = "leak";
+
+interface OptionRun {
+  readonly written: string;
+  readonly expected: string;
+  readonly output: string;
+}
+
+function optionRuns(utils: PiMcpAdapterUtils, owned: string): OptionRun[] {
+  return OPTION_DEFAULTS.flatMap((value) =>
+    OPTION_CONTEXTS.map(([before, after]) => {
+      const written = serializeSegments(
+        [
+          { kind: "text", text: before },
+          { kind: "ref", name: owned },
+          { kind: "text", text: after },
+        ],
+        false,
+      );
+      const environment = {
+        [owned]: serializeLiteral(value, false),
+        [EMPTY_ENV_NAME]: "",
+        PI_CM_SECRET: SECRET_VALUE,
+      };
+      return {
+        written,
+        expected: `${before}${value}${after}`,
+        output: utils.interpolateEnvVars(written, environment),
+      };
+    }),
+  );
+}
+
+test("D-PG10-23: pi-mcp-adapter turns a reference to an exported option default into the raw default", async () => {
+  // arrange
+  const adapter = await loadAdapter();
+  const owned = ownedOptionVariableName({
+    scope: "project",
+    marketplace: "mp",
+    plugin: "plug",
+    key: "mode",
+  });
+
+  // act
+  const runs = optionRuns(adapter.utils, owned);
+
+  // assert
+  assert.match(owned, /^\w+$/);
+  assert.strictEqual(runs.length, OPTION_DEFAULTS.length * OPTION_CONTEXTS.length);
+  assert.deepStrictEqual(
+    runs.filter((run) => run.output !== run.expected),
+    [],
+  );
+  assert.deepStrictEqual(
+    runs.filter((run) => run.output.includes(SECRET_VALUE)),
+    [],
+  );
+  assert.strictEqual(runs[0]?.written, `\${${owned}}`);
+});
+
+test("D-PG10-23: pi-mcp-adapter home-expands an exported option default that starts with ~/ in command", async () => {
+  // arrange
+  const adapter = await loadAdapter();
+  const owned = ownedOptionVariableName({
+    scope: "user",
+    marketplace: "mp",
+    plugin: "plug",
+    key: "tool",
+  });
+  const environment = {
+    [owned]: serializeLiteral("~/bin/tool", false),
+    [EMPTY_ENV_NAME]: "",
+  };
+
+  // act
+  const output = adapter.utils.resolveConfigPath(`\${${owned}}`, environment);
+
+  // assert
+  assert.strictEqual(output, path.join(os.homedir(), "bin/tool"));
 });
