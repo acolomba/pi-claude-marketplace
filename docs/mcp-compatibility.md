@@ -388,7 +388,7 @@ A `tools:` entry `Workflow` or `Workflow(<name>)` is dropped (D-PG8-11):
 - Claude Code gives the Workflow tool to no subagent. Its sub-agents page lists `Workflow` among the tools that are removed from every subagent, also when the `tools` field lists it. The 2.1.323 binary denies the tool to every subagent that the Agent tool starts. The official `claude-security` agent lists the grant, and it says that it runs only as the main agent of a session.
 - On Pi, every bridged agent runs as a pi-subagents child, and Pi has no main-session agent mode. So the grant has nothing to map to.
 - A plugin's commands and skills start its workflows from the main session. Their references to a workflow name the installed workflow (D-PG4-08, see [Naming](workflows-compatibility.md#naming)). [What a workflow subagent can reach](workflows-compatibility.md#what-a-workflow-subagent-can-reach) describes the subagents of a run.
-- The generated file lists the dropped entries in `droppedTools`, and the staging warning of `apply` and of the update cascades names them. An agent whose `tools:` holds only `Workflow` entries maps to no tool, so its install is refused (AG-11). Claude Code fails such an agent when it launches.
+- The generated file lists the dropped entries in `droppedTools`, and the staging warning of `apply` and of the update cascades names them. An agent whose `tools:` holds only `Workflow` entries maps to no tool, so its install is refused (AG-11).
 
 Evidence: the scenario "An agent that grants Workflow gets no workflow tool, as Claude Code gives the tool to no subagent" in `features/agent/frontmatter.feature`.
 
