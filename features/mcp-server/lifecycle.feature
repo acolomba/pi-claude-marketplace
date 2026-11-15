@@ -21,9 +21,11 @@ Feature: MCP server lifecycle
   because pi-mcp-adapter never stops a started lazy-keep-alive server for
   idle time (D-PG9-15). A caFile is kept only while the server stays an https
   server at the same origin, because pi-mcp-adapter refuses one anywhere else,
-  and the choices kept across an uninstall hold none (D-PG9-14). A stdio stub
-  server stands in for a real one, a scripted model for a real model, and a
-  local marketplace for a published one.
+  and the choices kept across an uninstall hold none (D-PG9-14). A reinstall
+  leaves out a plugin server that names an option with no value, and says so,
+  as an install does (D-PG10-21). A stdio stub server stands in for a real
+  one, a scripted model for a real model, and a local marketplace for a
+  published one.
 
   Background:
     Given the marketplace "fixtures" is published as a dir source
@@ -749,6 +751,59 @@ Feature: MCP server lifecycle
               "marketplace": "fixtures",
               "defaultFields": {
                 "requestTimeoutMs": 300000
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: A reinstall leaves out a plugin server that names an option the manifest does not declare, and says so (D-PG10-21)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "mode": { "type": "string", "title": "Mode", "description": "The mode.", "default": "fast" }
+        }
+      }
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"stub": {"command": "pi-features-absent-mcp-server"}, "keyed": {"command": "pi-features-absent-mcp-server", "args": ["--region", "${user_config.region}"]}}}
+      """
+    When the user runs "/claude:plugin reinstall demo@fixtures --scope user"
+    Then the command reports these results:
+      | kind               | severity | needs reload | notices                                                                                                                             |
+      | cascade            | info     | true         |                                                                                                                                     |
+      | mcp-config-notices | warning  | false        | [{"kind":"option-blocked","scope":"user","file":"mcp-adapter.json","plugin":"demo","server":"keyed","names":["region"],"reason":"unset"}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | reinstalled |         | user  | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_stub_": {
+            "command": "pi-features-absent-mcp-server",
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
               }
             }
           }

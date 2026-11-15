@@ -909,6 +909,86 @@ test("D-PG10-21: a swap to a version that declares no options keeps its skill's 
   assert.strictEqual(body, "Mode ${user_config.mode}.\n");
 });
 
+/**
+ * Swaps `hello` to 2.0.0, whose `keyed` server names `${user_config.region}`
+ * beside a `plain` one, and returns what the swap staged, reported, and wrote.
+ */
+async function swapOptionServers(
+  cwd: string,
+  declared: Record<string, unknown> | undefined,
+): Promise<{
+  readonly staged: readonly string[] | undefined;
+  readonly notices: unknown;
+  readonly entries: readonly string[];
+}> {
+  const args = await seedOptionsUpdate(
+    cwd,
+    { mode: { ...MODE_OPTION, default: "fast" } },
+    declared,
+  );
+  await writeFile(
+    path.join(cwd, "mp-src", "plugins", "hello", ".mcp.json"),
+    JSON.stringify({
+      mcpServers: {
+        keyed: { command: "srv", args: ["--region", "${user_config.region}"] },
+        plain: { command: "srv" },
+      },
+    }),
+  );
+  const preflight = await preparePluginUpdate({ policy: UPDATE_POLICY, ...args });
+  assert.ok(!("partition" in preflight));
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+  assert.strictEqual(outcome.partition, "updated");
+  const file = JSON.parse(await readFile(args.locations.mcpAdapterJsonPath, "utf8")) as {
+    readonly mcpServers: Record<string, unknown>;
+  };
+  return {
+    staged: outcome.stagedMcpServerNames,
+    notices: outcome.mcpConfigNotices,
+    entries: Object.keys(file.mcpServers),
+  };
+}
+
+test("D-PG10-21: a swap leaves out a server that names an option the new version does not set, and reports it", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-mcp-options-");
+
+  // act
+  const swapped = await swapOptionServers(cwd, { mode: { ...MODE_OPTION, default: "slow" } });
+
+  // assert
+  assert.deepStrictEqual(swapped, {
+    staged: ["plain"],
+    notices: [
+      {
+        kind: "option-blocked",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "keyed",
+        names: ["region"],
+        reason: "unset",
+      },
+    ],
+    entries: ["plugin_hello_plain_"],
+  });
+});
+
+test("D-PG10-21: a swap to a version that declares no options stages a server that names an option", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-mcp-no-options-");
+
+  // act
+  const swapped = await swapOptionServers(cwd, undefined);
+
+  // assert
+  assert.deepStrictEqual(swapped, {
+    staged: ["keyed", "plain"],
+    notices: undefined,
+    entries: ["plugin_hello_keyed_", "plugin_hello_plain_"],
+  });
+});
+
 test("D-PG10-23: a failed swap keeps the previous options beside the intent mark", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "update-swap-options-failure-");

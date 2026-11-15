@@ -402,6 +402,7 @@ async function prepareUpdateHandles(
   const { plugin, marketplace, cwd, locations } = args;
   const { installable, record } = preflight;
   const pluginDataDir = await locations.pluginDataDir(marketplace, plugin);
+  const options = declaredOptions(resolveOptions(installable.declaredUserConfig));
   const handles: Partial<PrepHandles> = {};
 
   try {
@@ -417,7 +418,7 @@ async function prepareUpdateHandles(
       // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
       cwd,
       // D-PG10-13: the new version's options are written into skill content.
-      options: declaredOptions(resolveOptions(installable.declaredUserConfig)),
+      options,
     });
     handles.commands = await prepareStageCommands(ops, {
       locations,
@@ -449,7 +450,8 @@ async function prepareUpdateHandles(
       sourcePath: `${installable.pluginRoot}#mcpServers`,
       description: installable.description,
       env: args.env,
-      options: undefined,
+      // D-PG10-21: a server that names an option the new version leaves unset is left out.
+      options,
     });
     handles.workflows = await prepareStageWorkflows({
       locations,
