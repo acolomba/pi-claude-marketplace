@@ -215,6 +215,36 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
       },
     },
 
+    // PG-WF-02: a workflow script names an agent type the plugin does not
+    // install. The note has no tense, because install and `info` print the
+    // same text (D-PG8-05). Free text: an empty brace and `info` severity.
+    "installed-with-workflow-missing-agent-note": {
+      pi: piWithAllLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "commit-commands",
+          version: "1.2.0",
+          description: "Helpful git commit commands for everyday use.",
+          notes: [
+            'workflow script "changelog.js" in "workflows" runs agent type ' +
+              '"commit-commands:reviewer", which this plugin does not install; the workflow ' +
+              "engine runs a default agent in its place, where Claude Code stops the run",
+          ],
+          componentsResolved: true,
+          components: {
+            skills: ["commit-summary"],
+            workflows: ["commit-commands:changelog"],
+          },
+          requires: [{ companion: "pi-dynamic-workflows", missing: false }],
+        },
+      },
+    },
+
     "state-only-installed-single-scope": {
       pi: piWithBothLoaded(),
       message: {

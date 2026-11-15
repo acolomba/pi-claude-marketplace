@@ -3154,6 +3154,22 @@ The plugin ships a workflow script that the command installs and that the host w
     note: workflow script "greet.js" in "workflows" would be installed but the engine will refuse to load it: the engine refuses at its check 9 -- `meta.description` must be a non-empty string, and `meta.model` (a string) and `meta.phases` (an array of objects each carrying a string `title`) must match those shapes wherever they are declared
 ```
 
+### Success -- a workflow script that runs an agent type the plugin does not install (PG-WF-02)
+
+The plugin ships a workflow script that runs an agent type in the plugin's own namespace, and the plugin does not install that agent type. The row shows one `note:` line for each pair of a script and an agent type the plugin does not install, after every component line and after any `dependencies:` line. The line is the text the install diagnostic shows for the same script: install, update, and `info` print the same words. The line names the script, the directory that holds it, and the agent type, and then it says that the workflow engine runs a default agent in its place, where Claude Code stops the run. The directory shows as its name alone and never as a full path, so the row does not disclose where the user's home directory is (NFR-9) and its bytes do not change from one machine to another. One script gets at most five such lines; after them, one count line gives the number of the other agent types that the script runs and the plugin does not install. A `note:` line does not change the severity of the row: it is a statement about one file, and not a failure of the read. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: installed-with-workflow-missing-agent-note -->
+
+```text
+● claude-plugins-official [user] <autoupdate>
+  ● commit-commands v1.2.0 (installed)
+    Helpful git commit commands for everyday use.
+    skills: commit-summary
+    workflows: commit-commands:changelog
+    requires: pi-dynamic-workflows
+    note: workflow script "changelog.js" in "workflows" runs agent type "commit-commands:reviewer", which this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code stops the run
+```
+
 ### Success -- installed single scope with dependency constraints
 
 Same as above, but each dependency carries the constraint its manifest declared, in one parenthetical after the address (D-01-30). A version range renders bare, because a range is self-evidently a version. A sha renders labelled and short-formed to seven characters, because a 40-hex string is not. When an element declares both, the version comes first and a comma separates them inside the one parenthetical. An element that declares neither renders the bare address, as the state above shows. The line is ordered by dependency name, not by the rendered string (D-01-04). Severity `info`.
