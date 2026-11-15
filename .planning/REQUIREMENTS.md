@@ -56,9 +56,9 @@
 - [x] **PG-MCP-01**: A tool call of a plugin MCP server that declares no `timeout` may be silent for 30 minutes on a stdio server and 5 minutes on a remote server, under both implementations. Under the adapter, a timeout the user wrote on the entry still wins. (P0; decision 4 answered)
 - [x] **PG-MCP-02**: The declared pi-mcp-adapter floor is 7.0.1. Under the adapter, a plugin tool whose Claude Code name is longer than 64 characters works everywhere the project names it: a hook matcher written with the Claude Code name matches it, the hook receives the Claude Code name, and an agent's disallowed-tool entry removes it. (P0; decision 3 answered)
   - On 2026-11-13, published pi-subagents 0.88.1 passed the installed-release launch checks and all three real-child controls, including long-name exclusion with a working permitted short tool. The general peer floor remains `>=0.87.0`. PG-MCP-02 is complete after the merged-tree check passed at `2db3b81a`; see the [quick-task summary](quick/261113-8yn-adopt-pi-subagents-0-88-1-ambient-mcp-fi/261113-8yn-SUMMARY.md).
-- [ ] **PG-MCP-06**: Under the adapter, a stdio plugin server that has started stays running for the session (`lifecycle: "lazy-keep-alive"`), unless the user set a lifecycle on the entry. Remote servers stay `lazy`. (P1; decision 5)
-- [ ] **PG-MCP-08**: The MCP compatibility page states, for each implementation, whether a plugin server can use resources, prompts, elicitation, sampling, roots, and output limits, and that `@server:uri` mentions do not exist on Pi. One scenario for each implementation reads a resource of a plugin server. (P1)
-- [ ] **PG-MCP-09**: Under the adapter, a value the user wrote in `protocolVersion`, `tasks`, `exposeResources`, or `caFile` on a plugin entry survives an update or reinstall. (P1)
+- [x] **PG-MCP-06**: Under the adapter, a stdio plugin server that has started stays running for the session (`lifecycle: "lazy-keep-alive"`), unless the user set a lifecycle on the entry. Remote servers stay `lazy`. (P1; decision 5)
+- [x] **PG-MCP-08**: The MCP compatibility page states, for each implementation, whether a plugin server can use resources, prompts, elicitation, sampling, roots, and output limits, and that `@server:uri` mentions do not exist on Pi. One scenario for each implementation reads a resource of a plugin server. (P1)
+- [x] **PG-MCP-09**: Under the adapter, a value the user wrote in `protocolVersion`, `tasks`, `exposeResources`, or `caFile` on a plugin entry survives an update or reinstall. (P1)
 
 ### Plugin Container
 
@@ -79,7 +79,7 @@
 
 - [x] **PG-SEC-01**: The install of a plugin whose workflow script names an agent with a `tools` or `disallowedTools` field prints a note that the workflow does not keep the restriction, `info` shows it, and the workflow compatibility page says so. The request to pi-dynamic-workflows of the PRD's section 8.4 is drafted under `.planning/upstream/` for the maintainer to file. (P0)
 - [ ] **PG-SEC-02**: The maintainer confirms or reopens the accepted project trust gap of D-LOC-01, and the decision is recorded with its premise and the Pi version it was checked against. (P1; decision 23)
-- [ ] **PG-SEC-03**: Under the adapter, a plugin server either gets the fields that withhold the `sampling` capability and the MCP UI extension, or the divergence is recorded as a decision. (P1; decision 20)
+- [x] **PG-SEC-03**: Under the adapter, a plugin server either gets the fields that withhold the `sampling` capability and the MCP UI extension, or the divergence is recorded as a decision. (P1; decision 20)
 
 ### Documentation
 
@@ -197,9 +197,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PG-WF-07     | Phase 8  | Pending |
 | PG-MCP-01    | Phase 1  | Complete |
 | PG-MCP-02    | Phase 1  | Complete |
-| PG-MCP-06    | Phase 9  | Pending |
-| PG-MCP-08    | Phase 9  | Pending |
-| PG-MCP-09    | Phase 9  | Pending |
+| PG-MCP-06    | Phase 9  | Complete |
+| PG-MCP-08    | Phase 9  | Complete |
+| PG-MCP-09    | Phase 9  | Complete |
 | PG-CORE-01   | Phase 4  | Complete |
 | PG-CORE-03   | Phase 10 | Pending |
 | PG-CORE-05   | Phase 10 | Pending |
@@ -211,7 +211,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PG-SKILL-11  | Phase 11 | Pending |
 | PG-SEC-01    | Phase 4  | Complete |
 | PG-SEC-02    | Phase 10 | Pending |
-| PG-SEC-03    | Phase 9  | Pending |
+| PG-SEC-03    | Phase 9  | Complete |
 | PG-DOC-01    | Phase 11 | Pending |
 | PG-DOC-02    | Phase 11 | Pending |
 

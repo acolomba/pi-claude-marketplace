@@ -105,7 +105,7 @@ run against them. Phase 4 depends on Phase 1 alone, so it can move earlier.
 - [ ] **Phase 6: Hook Inputs and Events** - Hooks receive `tool_use_id` and the other missing stdin fields, `UserPromptExpansion` hooks run before an expansion, and a continued session reports `resume`
 - [ ] **Phase 7: Agent Frontmatter and Grants** - Agent frontmatter is read as YAML, `Agent` and `Task` grants let an agent delegate, `model: inherit` is passed on, and both tool lists restrict an agent
 - [ ] **Phase 8: Workflow Agents and Run Paths** - A workflow runs the plugin's own agents and notes a missing one, an agent with a `Workflow` grant starts its plugin's workflow, and the uncovered run paths and the limits of a workflow subagent are proven or documented
-- [ ] **Phase 9: Adapter Entries and MCP Features** - Under the adapter a stdio server stays alive and user-written fields survive updates, the sampling and UI question is settled, and resources, prompts, and elicitation are documented and tested
+- [x] **Phase 9: Adapter Entries and MCP Features** - Under the adapter a stdio server stays alive and user-written fields survive updates, the sampling and UI question is settled, and resources, prompts, and elicitation are documented and tested (completed 2026-11-14)
 - [ ] **Phase 10: Plugin Options, Variables, and Trust** - `userConfig` defaults reach hooks, servers, and content, user-scope skills and commands get the project directory, a plugin `bin` joins `PATH` only when it exists and the project is trusted, and the trust gap is decided
 - [ ] **Phase 11: Skills, Commands, and Records** - Typed commands and skills attach `@file` references, commands answer to their Claude Code names, alias suggestions show descriptions, and the compatibility page and the record corrections land
 
@@ -406,24 +406,24 @@ Plans:
   4. `docs/mcp-compatibility.md` states, for each implementation, whether a plugin server can use resources, prompts, elicitation, sampling, roots, and output limits, and says that `@server:uri` mentions do not exist on Pi (PG-MCP-08).
   5. Under the adapter, a plugin server's entry holds the fields that withhold `sampling` and the MCP UI extension, or the compatibility page cites the recorded decision that accepts the divergence (PG-SEC-03).
 
-**Plans**: 6 plans
+**Plans**: 6/6 plans complete
 
 Plans:
 **Wave 1**
-- [ ] 09-01-PLAN.md -- Wave 1: end the adapter listing wait on Pi's registry so a stub the adapter keeps connected no longer stalls it, and guard a plugin server's resource read under each implementation
-- [ ] 09-02-PLAN.md -- Wave 1: let the entry marker record a string or boolean default, and model an adapter entry as release 0.23.0 wrote it
+- [x] 09-01-PLAN.md -- Wave 1: end the adapter listing wait on Pi's registry so a stub the adapter keeps connected no longer stalls it, and guard a plugin server's resource read under each implementation
+- [x] 09-02-PLAN.md -- Wave 1: let the entry marker record a string or boolean default, and model an adapter entry as release 0.23.0 wrote it
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 09-03-PLAN.md -- Wave 2: write `lifecycle: "lazy-keep-alive"` for stdio plugin servers and `openUi: false` for every plugin server, recorded in the marker, and bring every pinned entry, stub message table, and status row to what the adapter now does
+- [x] 09-03-PLAN.md -- Wave 2: write `lifecycle: "lazy-keep-alive"` for stdio plugin servers and `openUi: false` for every plugin server, recorded in the marker, and bring every pinned entry, stub message table, and status row to what the adapter now does
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 09-04-PLAN.md -- Wave 3: keep a user's `protocolVersion`, `tasks`, `exposeResources`, and `caFile` across an update and a reinstall, and pin a user's lifecycle and openUi across an update
+- [x] 09-04-PLAN.md -- Wave 3: keep a user's `protocolVersion`, `tasks`, `exposeResources`, and `caFile` across an update and a reinstall, and pin a user's lifecycle and openUi across an update
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 09-06-PLAN.md -- Wave 4: record D-PG9-01, D-PG9-07, and D-PG9-08, draft the per-server sampling request with BACKLOG MCPSAMPLING-01, and add the CHANGELOG line
+- [x] 09-06-PLAN.md -- Wave 4: record D-PG9-01, D-PG9-07, and D-PG9-08, draft the per-server sampling request with BACKLOG MCPSAMPLING-01, and add the CHANGELOG line
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 09-05-PLAN.md -- Wave 5: correct the MCP compatibility page and the output catalog, and add the features-beyond-tools section, citing the D-PG9 records
+- [x] 09-05-PLAN.md -- Wave 5: correct the MCP compatibility page and the output catalog, and add the features-beyond-tools section, citing the D-PG9 records
 
 ### Phase 10: Plugin Options, Variables, and Trust
 
@@ -472,7 +472,7 @@ Plans:
 | 6. Hook Inputs and Events | 0/0 | Not started | - |
 | 7. Agent Frontmatter and Grants | 0/0 | Not started | - |
 | 8. Workflow Agents and Run Paths | 0/0 | Not started | - |
-| 9. Adapter Entries and MCP Features | 0/0 | Not started | - |
+| 9. Adapter Entries and MCP Features | 6/6 | Complete    | 2026-11-14 |
 | 10. Plugin Options, Variables, and Trust | 0/0 | Not started | - |
 | 11. Skills, Commands, and Records | 0/0 | Not started | - |
 
