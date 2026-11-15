@@ -1,6 +1,6 @@
 /**
- * @fileoverview Steps about prompts that a UserPromptSubmit hook blocks: the
- * model calls such a prompt leaves.
+ * @fileoverview Steps about prompts that a UserPromptSubmit or a
+ * UserPromptExpansion hook blocks: the model calls such a prompt leaves.
  */
 
 import assert from "node:assert/strict";

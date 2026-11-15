@@ -31,6 +31,8 @@ import {
   createScopeDependencyInstall,
 } from "./orchestrators/reconcile/apply.ts";
 import { createLoadReconcile } from "./orchestrators/reconcile/load.ts";
+import { createPluginNamesCache, loadPluginNames } from "./orchestrators/skill-alias-state.ts";
+import { createTypedExpansionResolver } from "./orchestrators/typed-expansion.ts";
 import { locationsFor } from "./persistence/locations.ts";
 import { loadState } from "./persistence/state-io.ts";
 import { createBuiltinMcpStatusReader } from "./platform/mcp-builtin-status.ts";
@@ -70,8 +72,8 @@ function applyMcpAdapterEnvFrom(readCwd: () => string): void {
  * Registers the extension's Pi hooks, tools, and slash command surface.
  */
 // DISP-01: async factory; Pi's loader awaits this Promise (loader.d.ts
-// `loadExtensionFromFactory(...): Promise<Extension>`), so the 12 pi.on
-// registrations inside `registerHooksBridge` complete BEFORE the loader
+// `loadExtensionFromFactory(...): Promise<Extension>`), so the 14 pi.on call sites
+// inside `registerHooksBridge` complete BEFORE the loader
 // proceeds to emit any session-lifecycle event. The `void` fire-and-forget
 // alternative would race against the first session_start because the loader
 // does not see the un-awaited inner Promise.
@@ -148,9 +150,16 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   //      project cache. Both are idempotent against the same cwd.
   //
   // The `await` is LOAD-BEARING: Pi's loader awaits the factory Promise, so
-  // the 12 pi.on calls + user-scope cache hydrate inside `registerHooksBridge`
+  // the 14 pi.on call sites + user-scope cache hydrate inside `registerHooksBridge`
   // are guaranteed to complete BEFORE the first Pi event fires.
-  await hooksHydration.registerHooksBridge(pi, { cwd: homedir() });
+  //
+  // D-PG6-18: the bridge's resolver of a typed line and the skill alias
+  // handler read one plugin name cache, so both see the same table.
+  const pluginNames = createPluginNamesCache(pi, loadPluginNames);
+  await hooksHydration.registerHooksBridge(pi, {
+    cwd: homedir(),
+    resolveTypedExpansion: createTypedExpansionResolver(pi, pluginNames),
+  });
 
   async function prepareResources(
     event: ResourcesDiscoverEvent,
@@ -321,7 +330,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     { runForeground: backgroundGate.runForeground },
   );
   registerClaudeMarketplaceTools(pi);
-  registerSkillAliases(pi);
+  registerSkillAliases(pi, pluginNames);
   // D-CF1-01 / D-CF1-02: Pi runs input handlers in registration order, so the
   // command invocation handler sees the text after the skill-alias rewrite.
   registerCommandInvocation(pi);
