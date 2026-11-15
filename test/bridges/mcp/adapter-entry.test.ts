@@ -1572,6 +1572,34 @@ describe("stampServers", () => {
     });
   }
 
+  test("D-PG9-14: a stdio entry's caFile left out of an entry whose url names an unset variable reports the unread url", () => {
+    // arrange
+    const previous = {
+      command: "old-command",
+      caFile: "/etc/pki/user/ca-bundle.pem",
+      _piClaudeMarketplace: MARKER,
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { type: "http", url: "${ACME_BASE}/mcp" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous: { server: previous },
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        caFile: Object.hasOwn(stamping.stamped.server as object, "caFile"),
+        caFileRemoved: stamping.caFileRemoved,
+      },
+      { caFile: false, caFileRemoved: [{ server: "server", reason: "url-unresolved" }] },
+    );
+  });
+
   test("D-PG9-14: an absorbed override's caFile stays out of a stdio entry and inside the kept override", () => {
     // arrange
     const override = { caFile: "/etc/pki/user/ca-bundle.pem", disabled: true };

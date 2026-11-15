@@ -362,7 +362,7 @@ function caFileRemovalReason(
 
   const previousUrl = remoteUrlOf(previous);
   if (previousUrl === undefined) {
-    return "origin-changed";
+    return resolved === undefined ? "url-unresolved" : "origin-changed";
   }
 
   const previousResolved = resolvedUrl(previousUrl, env);

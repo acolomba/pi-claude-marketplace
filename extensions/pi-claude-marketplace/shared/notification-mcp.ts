@@ -107,9 +107,9 @@ const CA_FILE_REMOVED_CAUSES = {
   "not-https":
     "is not an https server, so its entry no longer holds your caFile: pi-mcp-adapter accepts a caFile only on an https server.",
   "origin-changed":
-    "is now an https server at another origin than your caFile was set for, so its entry no longer holds it: pi-mcp-adapter uses a caFile only for one origin. Set it on the entry again if the server at the new origin needs it.",
+    "is now an https server, but your caFile was set for another origin or for a server with no url, so its entry no longer holds it: pi-mcp-adapter uses a caFile only for the origin of the server's url. Set it on the entry again if the server at the new origin needs it.",
   "url-unresolved":
-    "has a new url, and its old or new url names a variable that is not set or is not a valid url, so the two origins could not be compared and its entry no longer holds your caFile. Set it on the entry again if the server needs it.",
+    "has a new url, and its old or new url names a variable that is not set or does not read as a url, so the two origins could not be compared and its entry no longer holds your caFile. Set it on the entry again if the server needs it.",
   "entry-removed":
     "was removed, and your caFile on it was not kept with your other fields: a caFile applies only to the url it was set for, and this extension keeps no url for a removed server. Set it on the entry again if the server comes back.",
 } as const satisfies Record<McpCaFileRemovedNotice["reason"], string>;
