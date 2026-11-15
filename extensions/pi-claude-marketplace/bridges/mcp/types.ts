@@ -84,11 +84,11 @@ export interface StageMcpCommitResult {
    * writes back, then the per-server variable notices from the variable
    * reports of the staged entries, in declared server order: a server's
    * `variables-missing` notice before its `credentials-blanked` notice
-   * (AVAR-05), then the per-server
-   * `tool-rules-unenforced` notices, in declared server order (ANAME-07), then
-   * one `leftover-removed` notice per old-name leftover the stage drops from
-   * the target (AMIG-01), then one `ca-file-removed` notice per server whose
-   * entry leaves out the user's `caFile` (D-PG9-14). Distinct from `warnings`, which are hygiene notes
+   * (AVAR-05), then the per-server `tool-rules-unenforced` notices, in
+   * declared server order (ANAME-07), then one `leftover-removed` notice per
+   * old-name leftover the stage drops from the target (AMIG-01), then one
+   * `ca-file-removed` notice per server whose entry leaves out the user's
+   * `caFile` (D-PG9-14). Distinct from `warnings`, which are hygiene notes
    * standalone commands do not show.
    */
   readonly notices: readonly McpConfigNotice[];

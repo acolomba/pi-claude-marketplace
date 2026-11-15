@@ -483,10 +483,9 @@ export function mcpConfigNoticesMember(notices: readonly McpConfigNotice[]): {
  * command's notices, in place. It first drops the `variables-missing`,
  * `credentials-blanked`, `tool-rules-unenforced` and `ca-file-removed` notices
  * of the servers the unstage removed, because they describe entries that the
- * scope's
- * mcp-adapter.json no longer holds. `droppedServers` holds
- * declared names, as `UnstageOutcome.dropped.mcpServers` does. File notices
- * stay, because the files were still rewritten.
+ * scope's mcp-adapter.json no longer holds. `droppedServers` holds declared
+ * names, as `UnstageOutcome.dropped.mcpServers` does. File notices stay,
+ * because the files were still rewritten.
  */
 export function foldUnstageNotices(
   notices: McpConfigNotice[],
