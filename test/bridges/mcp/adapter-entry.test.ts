@@ -9,6 +9,7 @@ import {
   userCarriedFields,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/adapter-entry.ts";
 import { adapterFieldEncoder } from "../../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 
 import type { McpSubstitutionContext } from "../../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
 
@@ -119,6 +120,36 @@ const PROJECT_CONTEXT: McpSubstitutionContext = {
 
 // The adapter's encoder for a plugin that declares no options.
 const ADAPTER_ENCODER = adapterFieldEncoder(new Map());
+
+// D-PG10-20: the full option shape, for the options a remote entry names.
+const REMOTE_OPTIONS = resolveOptions({
+  host: { type: "string", title: "Host", description: "The host.", default: "acme.example" },
+  url: { type: "string", title: "Url", description: "The url.", default: "https://acme.example" },
+  team: { type: "string", title: "Team", description: "The team.", default: "core" },
+});
+
+const OWNED_HOST = "PI_CLAUDE_MARKETPLACE_OPTION_1111111111111111";
+
+const OWNED_URL = "PI_CLAUDE_MARKETPLACE_OPTION_2222222222222222";
+
+const OWNED_TEAM = "PI_CLAUDE_MARKETPLACE_OPTION_3333333333333333";
+
+// The adapter's encoder for the plugin that declares `REMOTE_OPTIONS`.
+const REMOTE_OPTIONS_ENCODER = adapterFieldEncoder(
+  new Map([
+    ["host", OWNED_HOST],
+    ["url", OWNED_URL],
+    ["team", OWNED_TEAM],
+  ]),
+);
+
+/**
+ * The context of a stage whose environment holds each option variable with
+ * the text Pi's process holds, as the stage overlays it (D-PG10-23).
+ */
+function overlaidContext(env: Readonly<Record<string, string>>): McpSubstitutionContext {
+  return { ...PROJECT_CONTEXT, env, options: REMOTE_OPTIONS };
+}
 
 // ANAME-01 / ANAME-04: the fields every stamped entry carries by default.
 const OWNED = { directTools: "search", toolPrefix: "mcp" };
@@ -1983,6 +2014,97 @@ describe("stampServers", () => {
       }),
     );
   });
+
+  test("D-PG10-11: a header that names an option keeps auth, as a literal header does", () => {
+    // arrange
+    const substitution = overlaidContext({ [OWNED_TEAM]: "core" });
+
+    // act
+    const stamping = stampServers({
+      servers: {
+        server: {
+          type: "http",
+          url: "https://mcp.example.test",
+          headers: { "X-Team": "${user_config.team}" },
+        },
+      },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution,
+      encoder: REMOTE_OPTIONS_ENCODER,
+      previous: {},
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(stamping.stamped),
+      JSON.stringify({
+        server: {
+          url: "https://mcp.example.test",
+          headers: { "X-Team": `\${${OWNED_TEAM}}` },
+          auth: "oauth",
+          ...OWNED,
+          ...REMOTE_DEFAULT,
+          _piClaudeMarketplace: REMOTE_MARKER,
+        },
+      }),
+    );
+  });
+
+  // D-PG10-23: the url's origin, read with the option variables the stage
+  // overlays, decides the user's caFile as for a literal url.
+  for (const [title, url, env, caFileRemoved] of [
+    [
+      "a url with an option in its host keeps the user's caFile at the same origin",
+      "https://${user_config.host}/v2/mcp",
+      { [OWNED_HOST]: "acme.example" },
+      [],
+    ],
+    [
+      "a url given whole as an option keeps the user's caFile at the same origin",
+      "${user_config.url}/v2/mcp",
+      { [OWNED_URL]: "https://acme.example" },
+      [],
+    ],
+    [
+      "a url whose option names another origin leaves the user's caFile out and reports it",
+      "https://${user_config.host}/v2/mcp",
+      { [OWNED_HOST]: "other.example" },
+      [{ server: "server", reason: "origin-changed" }],
+    ],
+  ] as const) {
+    test(`D-PG10-23: ${title}`, () => {
+      // arrange
+      const previous = {
+        url: "https://acme.example/v1/mcp",
+        caFile: "/etc/pki/user/ca-bundle.pem",
+        _piClaudeMarketplace: REMOTE_MARKER,
+      };
+
+      // act
+      const stamping = stampServers({
+        servers: { server: { type: "http", url } },
+        pluginName: "acme",
+        marketplaceName: "catalog",
+        substitution: overlaidContext(env),
+        encoder: REMOTE_OPTIONS_ENCODER,
+        previous: { server: previous },
+        keptOverrides: {},
+      });
+
+      // assert
+      const stamped = stamping.stamped.server as Record<string, unknown>;
+      assert.deepStrictEqual(
+        {
+          referencesOption: String(stamped.url).includes("${PI_CLAUDE_MARKETPLACE_OPTION_"),
+          caFile: Object.hasOwn(stamped, "caFile"),
+          caFileRemoved: stamping.caFileRemoved,
+        },
+        { referencesOption: true, caFile: caFileRemoved.length === 0, caFileRemoved },
+      );
+    });
+  }
 
   for (const { title, headers, env, expectedEntry } of OAUTH_HEADER_ROWS) {
     test(`D-08-04: ${title}`, () => {

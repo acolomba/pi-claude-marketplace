@@ -169,6 +169,88 @@ test("AVAR-05: a remote server's header never receives a set deny-listed credent
   });
 });
 
+// D-PG10-20: the full option shape, one option for each of the five fields.
+const FIELD_OPTIONS = {
+  bin: { type: "string", title: "Bin", description: "The server.", default: "/opt/sentinel-bin" },
+  mode: { type: "string", title: "Mode", description: "The mode.", default: "sentinel-mode" },
+  token: { type: "string", title: "Token", description: "The token.", default: "!echo sentinel" },
+  base: {
+    type: "string",
+    title: "Base",
+    description: "The base.",
+    default: "https://sentinel.test",
+  },
+  team: { type: "string", title: "Team", description: "The team.", default: "sentinel-team" },
+};
+
+test("D-PG10-11: a project install writes a reference to each option's process variable in the five fields, and no option value", async () => {
+  await withHermeticEnvironment("mcp-variable-expansion-options-", async ({ cwd }) => {
+    // arrange
+    const pluginRoot = await seedMcpPlugin(cwd, ["project"]);
+    await writeFile(
+      path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "hello", version: "1.0.0", userConfig: FIELD_OPTIONS }),
+    );
+    await writeFile(
+      path.join(pluginRoot, ".mcp.json"),
+      JSON.stringify({
+        mcpServers: {
+          srv: {
+            command: "${user_config.bin}",
+            args: ["--mode=${user_config.mode}"],
+            env: { TOKEN: "${user_config.token}" },
+          },
+          web: {
+            type: "http",
+            url: "${user_config.base}/mcp",
+            headers: { "X-Team": "${user_config.team}" },
+          },
+        },
+      }),
+    );
+    const locations = locationsFor("project", cwd);
+    const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+    const installed = makeCtx();
+    const request = { scope: "project", cwd, marketplace: "mp", plugin: "hello" } as const;
+
+    // act
+    await createInstallOperation(
+      hooksRouting,
+      createCompletionCache(),
+    )({ ...installed.session, ...request });
+    const installedText = await readFile(locations.mcpAdapterJsonPath, "utf8");
+
+    // assert
+    const { mcpServers } = JSON.parse(installedText) as {
+      mcpServers: Record<string, Record<string, unknown>>;
+    };
+    const srv = mcpServers.plugin_hello_srv_;
+    const web = mcpServers.plugin_hello_web_;
+    assert.deepStrictEqual(
+      {
+        command: srv?.command,
+        args: srv?.args,
+        token: (srv?.env as Record<string, unknown> | undefined)?.TOKEN,
+        url: web?.url,
+        headers: web?.headers,
+        auth: web?.auth,
+        holdsValue: installedText.includes("sentinel"),
+        notifiesValue: installed.notifications.some(({ message }) => message.includes("sentinel")),
+      },
+      {
+        command: "${PI_CLAUDE_MARKETPLACE_OPTION_87d4c0b7a9d53ad7}",
+        args: ["--mode=${PI_CLAUDE_MARKETPLACE_OPTION_96c63d939be4ce82}"],
+        token: "${PI_CLAUDE_MARKETPLACE_OPTION_8641bb2f3bc9d3da}",
+        url: "${PI_CLAUDE_MARKETPLACE_OPTION_0252c93943d43492}/mcp",
+        headers: { "X-Team": "${PI_CLAUDE_MARKETPLACE_OPTION_27de899e985aee8e}" },
+        auth: "oauth",
+        holdsValue: false,
+        notifiesValue: false,
+      },
+    );
+  });
+});
+
 // Every verb that stages a plugin's entries reports the unset variable and the
 // withheld credential after its own rows (AVAR-04). Plugin `hello` declares a
 // stdio server `local` that reads `PI_CM_AVAR_SITE`, which the case leaves

@@ -302,3 +302,86 @@ Feature: MCP server options
       | 2    | user        | call the stub                                                                    |
       | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_picker__reverse","args":{"text":"ping"}} |
       | 2    | tool result | mcp returned: reverse:ping                                                       |
+
+  @adapter-only
+  Scenario: A plugin option reaches the command and the environment of a stdio server (PG-CORE-03)
+    Given the published plugin "demo" of the marketplace "fixtures" has this manifest, with the default of the option "node" set to the node executable that runs stub mcp servers:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "node": { "type": "string", "title": "Node", "description": "The node executable." },
+          "tag": { "type": "string", "title": "Tag", "description": "The tag.", "default": "opted" }
+        }
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "tagged" with these fields:
+      """
+      {"command": "${user_config.node}", "env": {"STUB_TAG": "${user_config.tag}"}}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model and these companions:
+      | companion      |
+      | pi-mcp-adapter |
+    Given pi-mcp-adapter has listed the tools of the stub mcp server "tagged" of the plugin "demo"
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                                           |
+      |       | mcp  | {"tool": "mcp__plugin_demo_tagged__echo", "args": {"text": "ping"}} |
+      | Done. |      |                                                                     |
+    When the user prompts "call the stub"
+    Then the model receives these calls:
+      | call | role        | text                                                                          |
+      | 1    | user        | call the stub                                                                 |
+      | 2    | user        | call the stub                                                                 |
+      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_tagged__echo","args":{"text":"ping"}} |
+      | 2    | tool result | mcp returned: opted:echo:ping                                                 |
+
+  @adapter-only
+  Scenario: A plugin option reaches the url and a header of a remote server (PG-CORE-03)
+    Given the published plugin "demo" of the marketplace "fixtures" has this manifest, with the default of the option "url" set to the address of the http mcp server "web":
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "url": { "type": "string", "title": "Url", "description": "The server address." },
+          "team": { "type": "string", "title": "Team", "description": "The team.", "default": "core" }
+        }
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"web": {"type": "http", "url": "${user_config.url}", "headers": {"X-Team": "${user_config.team}"}}}}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model and these companions:
+      | companion      |
+      | pi-mcp-adapter |
+    Given pi-mcp-adapter has listed the tools of the http mcp server "web"
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                                        |
+      |       | mcp  | {"tool": "mcp__plugin_demo_web__echo", "args": {"text": "ping"}} |
+      | Done. |      |                                                                  |
+    When the user prompts "call the web server"
+    Then the model receives these calls:
+      | call | role        | text                                                                       |
+      | 1    | user        | call the web server                                                        |
+      | 2    | user        | call the web server                                                        |
+      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_web__echo","args":{"text":"ping"}} |
+      | 2    | tool result | mcp returned: echo:ping                                                    |
+    Then the http mcp server "web" receives these json-rpc requests:
+      | request                        | x-team | mcp-protocol-version |
+      | POST initialize                | core   | (none)               |
+      | POST notifications/initialized | core   | 2025-11-25           |
+      | POST tools/list                | core   | 2025-11-25           |
+      | POST initialize                | core   | (none)               |
+      | POST notifications/initialized | core   | 2025-11-25           |
+      | POST tools/list                | core   | 2025-11-25           |
+      | POST tools/call                | core   | 2025-11-25           |
+    Then the http mcp server "web" receives these other requests in any order:
+      | request | x-team | mcp-protocol-version |
+      | GET     | core   | 2025-11-25           |
+      | GET     | core   | 2025-11-25           |

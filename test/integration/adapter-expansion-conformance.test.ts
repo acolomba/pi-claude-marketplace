@@ -973,6 +973,69 @@ const OPTION_FIELD_CASES: readonly OptionFieldCase[] = [
     value: "{env:HOME}",
     claudeOutput: "{env:HOME}/x",
   },
+  {
+    title: "a command given whole as an option",
+    field: "command",
+    raw: "${user_config.opt}",
+    value: "/opt/tool/bin/server",
+    claudeOutput: "/opt/tool/bin/server",
+  },
+  {
+    title: "an env value that names an option",
+    field: "env",
+    raw: "--team=${user_config.opt}",
+    value: "core",
+    claudeOutput: "--team=core",
+  },
+  {
+    title: "an env value given whole as an option that starts with !",
+    field: "env",
+    raw: "${user_config.opt}",
+    value: "!echo pwned",
+    claudeOutput: "!echo pwned",
+  },
+  {
+    title: "an env value whose option holds a variable",
+    field: "env",
+    raw: "${user_config.opt}",
+    value: "${HOME}",
+    claudeOutput: "${HOME}",
+  },
+  {
+    title: "a url with an option in its host",
+    field: "url",
+    raw: "https://${user_config.opt}/mcp",
+    value: "acme.example",
+    claudeOutput: "https://acme.example/mcp",
+  },
+  {
+    title: "a url given whole as an option",
+    field: "url",
+    raw: "${user_config.opt}",
+    value: "https://acme.example/mcp",
+    claudeOutput: "https://acme.example/mcp",
+  },
+  {
+    title: "a header value that names an option",
+    field: "headers",
+    raw: "Bearer ${user_config.opt}",
+    value: "t0k3n",
+    claudeOutput: "Bearer t0k3n",
+  },
+  {
+    title: "a header value given whole as an option that starts with !",
+    field: "headers",
+    raw: "${user_config.opt}",
+    value: "!echo pwned",
+    claudeOutput: "!echo pwned",
+  },
+  {
+    title: "a header value whose option holds an adapter marker",
+    field: "headers",
+    raw: "${user_config.opt}",
+    value: "{env:HOME}",
+    claudeOutput: "{env:HOME}",
+  },
 ];
 
 // A translated entry that holds `raw` in `field`.
@@ -1054,8 +1117,12 @@ for (const row of OPTION_FIELD_CASES) {
 
     // assert
     assert.deepStrictEqual(
-      { holdsValue: row.value !== "" && written.includes(row.value), output },
-      { holdsValue: false, output: row.claudeOutput },
+      {
+        holdsValue: row.value !== "" && written.includes(row.value),
+        startsWithBang: written.startsWith("!"),
+        output,
+      },
+      { holdsValue: false, startsWithBang: false, output: row.claudeOutput },
     );
   });
 }

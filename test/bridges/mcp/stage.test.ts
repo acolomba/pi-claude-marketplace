@@ -33,6 +33,12 @@ const MODE_OPTIONS = resolveOptions({
   mode: { type: "string", title: "Mode", description: "The mode.", default: "fast-default" },
 });
 
+// D-PG10-20: the full option shape; the options a remote server names.
+const REMOTE_OPTIONS = resolveOptions({
+  host: { type: "string", title: "Host", description: "The host.", default: "acme.example" },
+  team: { type: "string", title: "Team", description: "The team.", default: "core" },
+});
+
 // The owned process variable of `mode` for the project-scope `acme@catalog`.
 const OWNED_MODE = "PI_CLAUDE_MARKETPLACE_OPTION_a0ba2c2ce4d56fd8";
 
@@ -3750,6 +3756,73 @@ describe("prepareStageMcpServers", () => {
     // assert
     assert.ok(first.kind === "staged" && second.kind === "staged");
     assert.strictEqual(JSON.stringify(second._nextDoc), JSON.stringify(first._nextDoc));
+  });
+
+  test("D-PG10-23: a restage keeps the user's caFile for a url whose host is an option at the same origin", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-option-ca-file-");
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      JSON.stringify({
+        mcpServers: {
+          plugin_acme_remote_: {
+            url: "https://acme.example/v1/mcp",
+            caFile: "/etc/pki/user/ca-bundle.pem",
+            _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
+          },
+        },
+      }),
+    );
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      env: {},
+      options: REMOTE_OPTIONS,
+      servers: { remote: { type: "http", url: "https://${user_config.host}/v2/mcp" } },
+    });
+
+    // assert
+    assert.ok(prepared.kind === "staged");
+    const servers = prepared._nextDoc?.mcpServers as Record<string, Record<string, unknown>>;
+    assert.deepStrictEqual(
+      { caFile: servers.plugin_acme_remote_?.caFile, notices: prepared.result.notices },
+      { caFile: "/etc/pki/user/ca-bundle.pem", notices: [] },
+    );
+  });
+
+  test("D-PG10-23: a header that names an option keeps the entry's auth", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-option-auth-");
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      env: {},
+      options: REMOTE_OPTIONS,
+      servers: {
+        remote: {
+          type: "http",
+          url: "https://acme.example/mcp",
+          headers: { "X-Team": "${user_config.team}" },
+        },
+      },
+    });
+
+    // assert
+    assert.ok(prepared.kind === "staged");
+    const servers = prepared._nextDoc?.mcpServers as Record<string, Record<string, unknown>>;
+    assert.strictEqual(servers.plugin_acme_remote_?.auth, "oauth");
   });
 });
 
