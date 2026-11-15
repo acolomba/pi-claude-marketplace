@@ -67,10 +67,12 @@ Seeded from `10-RESEARCH.md` "Validation Architecture"; the planner and executor
 ## Wave 0 Requirements
 
 - [ ] `extensions/pi-claude-marketplace/domain/user-config.ts` + `test/domain/user-config.test.ts` — the new pair
-- [ ] owned-variable orchestrator pair, if the planner places the state-reading shell in its own module
+- [x] owned-variable orchestrator pair, if the planner places the state-reading shell in its own module — `orchestrators/plugin-options.ts` + `test/orchestrators/plugin-options.test.ts`, 100% direct coverage
 - [ ] cucumber: a step or profile that saves "Do not trust" (`trust.json` value `false`) in a hermetic home
 - [ ] cucumber: a publishing step that writes an executable plugin file
 - [ ] integration: a conformance case running pi-mcp-adapter 7.0.1's `interpolateEnvVars` on reference plus escaped value (assumption A1), landed before the MCP plans
+
+Runtime State Inventory (10-RESEARCH), "Secrets and env vars" row: closed. `PI_CLAUDE_MARKETPLACE_OPTIONS` and `PI_CLAUDE_MARKETPLACE_OPTION_*` are in the env snapshot of `test/index.test.ts` and documented in `docs/env-vars.md`.
 
 ---
 
