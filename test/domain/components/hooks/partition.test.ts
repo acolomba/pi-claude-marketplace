@@ -210,6 +210,39 @@ describe("partitionHooks", () => {
     });
   });
 
+  test("D-PG6-21: keeps UserPromptExpansion groups and drops only an invalid pattern", () => {
+    // arrange
+    const config = {
+      UserPromptExpansion: [
+        { matcher: "deploy, ship", hooks: [{ type: "command", command: "list" }] },
+        {
+          matcher: "^claude-security:claude-security$",
+          hooks: [{ type: "command", command: "regex" }],
+        },
+        { matcher: "", hooks: [{ type: "command", command: "empty" }] },
+        { matcher: "[", hooks: [{ type: "command", command: "invalid" }] },
+      ],
+    };
+
+    // act
+    const partition = partitionHooks(config);
+
+    // assert
+    assert.deepStrictEqual(partition, {
+      supported: {
+        UserPromptExpansion: [
+          { matcher: "deploy, ship", hooks: [{ type: "command", command: "list" }] },
+          {
+            matcher: "^claude-security:claude-security$",
+            hooks: [{ type: "command", command: "regex" }],
+          },
+          { matcher: "", hooks: [{ type: "command", command: "empty" }] },
+        ],
+      },
+      dropped: [{ kind: "group", event: "UserPromptExpansion", matcher: "[", cond: "regex" }],
+    });
+  });
+
   test("keeps a closed-set value and drops values outside the set", () => {
     // arrange
     const config = {

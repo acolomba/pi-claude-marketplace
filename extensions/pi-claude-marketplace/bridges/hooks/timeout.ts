@@ -76,6 +76,7 @@ const BLOCKING_EVENT_DEFAULT_SECONDS: Record<BucketAEvent, number | undefined> =
   SessionEnd: SESSION_END_BUDGET_SECONDS,
   Stop: undefined,
   StopFailure: undefined,
+  UserPromptExpansion: undefined,
 };
 
 /**

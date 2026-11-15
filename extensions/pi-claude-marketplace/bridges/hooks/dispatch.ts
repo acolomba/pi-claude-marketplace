@@ -162,6 +162,7 @@ function matcherFiresOnToolEvent(matcher: ParsedMatcher, tool: McpToolIdentity):
       return [...matcher.toolNames].some((literal) => toolLiteralNames(literal, tool));
     case "regex":
       return matcher.pattern.test(mapPiToClaudeToolName(claudeFormToolName(tool)));
+    case "name-set":
     case "invalid-pattern":
     case "unmapped":
       return false;
@@ -907,13 +908,15 @@ function isMcpProxyCall(event: { readonly toolName: string; readonly input: obje
 /**
  * The event domain served by `compositeHandlerFor`: every dispatchable
  * event except the two `tool_result`-routed events (handled by
- * `toolResultCompositeHandler`) and the two settle-routed events (handled
- * in `settle.ts`). Declared once so the exclusion set cannot drift between
- * the factory constraint and its private helpers.
+ * `toolResultCompositeHandler`), the two settle-routed events (handled
+ * in `settle.ts`), and UserPromptExpansion, which is admitted and routed but
+ * has no handler yet, so no registration dispatches it (D-PG6-18). Declared
+ * once so the exclusion set cannot drift between the factory constraint and
+ * its private helpers.
  */
 export type CompositeDispatchEvent = Exclude<
   DispatchableEvent,
-  "PostToolUse" | "PostToolUseFailure" | "Stop" | "StopFailure"
+  "PostToolUse" | "PostToolUseFailure" | "Stop" | "StopFailure" | "UserPromptExpansion"
 >;
 
 /**

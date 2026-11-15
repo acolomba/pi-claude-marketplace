@@ -219,6 +219,50 @@ Feature: Hook configuration
       | DirectoryAdded |
       | PreModelSwitch |
 
+  Scenario: Info on a plugin with a UserPromptExpansion hook names the plugin available
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event               | matcher     |
+      | guard | UserPromptExpansion | demo:deploy |
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin info demo@fixtures"
+    Then the result has these fields:
+      | kind                           | plugin-info                       |
+      | marketplace details autoupdate | false                             |
+      | marketplace name               | fixtures                          |
+      | marketplace scope              | project                           |
+      | needs reload                   | false                             |
+      | plugin components hooks        | [{"event":"UserPromptExpansion"}] |
+      | plugin components resolved     | true                              |
+      | plugin components skills       | demo-skill                        |
+      | plugin id                      | demo@fixtures                     |
+      | plugin name                    | demo                              |
+      | plugin reasons                 |                                   |
+      | plugin status                  | available                         |
+      | plugin version                 | 1.0.0                             |
+      | severity                       | info                              |
+
+  Scenario: A plugin whose only hook listens to UserPromptExpansion installs without --partial
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event               | matcher     |
+      | guard | UserPromptExpansion | demo:deploy |
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+
   Scenario: A plugin with an unsupported hook event still runs its supported hooks after a partial install
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source

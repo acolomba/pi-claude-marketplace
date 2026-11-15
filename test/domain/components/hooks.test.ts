@@ -471,6 +471,39 @@ test("parseHooksConfig keeps a supported event while dropping an unsupported sib
   });
 });
 
+test("D-PG6-21: parseHooksConfig keeps a UserPromptExpansion group as supported", () => {
+  // arrange
+  const raw = JSON.stringify({
+    hooks: {
+      UserPromptExpansion: [
+        {
+          matcher: "^claude-security:claude-security$",
+          hooks: [{ type: "command", command: "echo guard" }],
+        },
+      ],
+    },
+  });
+
+  // act
+  const result = parseHooksConfig(raw, TEST_IF_CTX, () => null, { skipIfMap: true });
+
+  // assert
+  assert.deepStrictEqual(result, {
+    ok: true,
+    value: {
+      UserPromptExpansion: [
+        {
+          matcher: "^claude-security:claude-security$",
+          hooks: [{ type: "command", command: "echo guard" }],
+        },
+      ],
+    },
+    dropped: [],
+    ifPredicates: new Map(),
+    declaresModule: false,
+  });
+});
+
 test("parseHooksConfig keeps a clean matcher group while dropping an invalid regex group", async () => {
   // arrange
   const raw = await readFile(

@@ -13,7 +13,9 @@ import type { DispatchableEvent } from "../../../domain/components/hook-events.t
 const DEFAULT_SUMMARY = "Stop hook feedback";
 
 // The stdin field each event's matcher selects on, as Claude Code names the
-// hook `<Event>:<value>` by it (D-CF5-14). An event with none is named alone.
+// hook `<Event>:<value>` by it (D-CF5-14). An event with none is named alone,
+// as is UserPromptExpansion, whose runner passes no match query (Claude Code
+// 2.1.323).
 const MATCH_FIELDS: Record<DispatchableEvent, string | undefined> = {
   SessionStart: "source",
   UserPromptSubmit: undefined,
@@ -25,6 +27,7 @@ const MATCH_FIELDS: Record<DispatchableEvent, string | undefined> = {
   SessionEnd: "reason",
   Stop: undefined,
   StopFailure: "error",
+  UserPromptExpansion: undefined,
 };
 
 /**

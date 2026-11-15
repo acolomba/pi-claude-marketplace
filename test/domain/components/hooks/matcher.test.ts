@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { parseMatcher } from "../../../../extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts";
+import {
+  parseMatcher,
+  parseNameMatcher,
+} from "../../../../extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts";
 
 describe("parseMatcher", () => {
   for (const sentinel of ["", "*"]) {
@@ -290,5 +293,85 @@ describe("parseMatcher", () => {
 
     // assert
     assert.deepStrictEqual(matcher, { kind: "regex", pattern: /é/ });
+  });
+});
+
+describe("parseNameMatcher", () => {
+  for (const sentinel of ["", "*"]) {
+    test(`D-PG6-19: maps ${JSON.stringify(sentinel)} to match-all`, () => {
+      // arrange
+
+      // act
+      const matcher = parseNameMatcher(sentinel);
+
+      // assert
+      assert.deepStrictEqual(matcher, { kind: "match-all" });
+    });
+  }
+
+  test("D-PG6-19: splits an exact list on commas and pipes and trims each name", () => {
+    // arrange
+
+    // act
+    const matcher = parseNameMatcher("deploy, ship | test");
+
+    // assert
+    assert.deepStrictEqual(matcher, {
+      kind: "name-set",
+      names: new Set(["deploy", "ship", "test"]),
+    });
+  });
+
+  test("D-PG6-19: keeps exact names as written, with no tool map, and drops empty members", () => {
+    // arrange
+
+    // act
+    const matcher = parseNameMatcher("Bash,,Deploy|");
+
+    // assert
+    assert.deepStrictEqual(matcher, { kind: "name-set", names: new Set(["Bash", "Deploy"]) });
+  });
+
+  test("D-PG6-19: reads a name with a colon as an unanchored expression with no flags", () => {
+    // arrange
+    const matcher = parseNameMatcher("demo:deploy");
+    assert.ok(matcher.kind === "regex");
+
+    // act
+    const matches = ["demo:deploy", "demo:deploy-all", "deploy", "Demo:Deploy"].map((name) =>
+      matcher.pattern.test(name),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      { pattern: matcher.pattern, matches },
+      { pattern: /demo:deploy/, matches: [true, true, false, false] },
+    );
+  });
+
+  test("D-PG6-19: an anchored expression matches only its one name", () => {
+    // arrange
+    const matcher = parseNameMatcher("^claude-security:claude-security$");
+    assert.ok(matcher.kind === "regex");
+
+    // act
+    const matches = [
+      "claude-security:claude-security",
+      "claude-security:claude-security-scan",
+      "x-claude-security:claude-security",
+    ].map((name) => matcher.pattern.test(name));
+
+    // assert
+    assert.deepStrictEqual(matches, [true, false, false]);
+  });
+
+  test("D-PG6-19: reports an expression that does not compile as an invalid pattern", () => {
+    // arrange
+
+    // act
+    const matcher = parseNameMatcher("[");
+
+    // assert
+    assert.deepStrictEqual(matcher, { kind: "invalid-pattern" });
   });
 });

@@ -32,6 +32,7 @@ import type {
   OrphanProbes,
   SpawnDeps,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
+import type { UserPromptExpansionEvent } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-expansion.ts";
 import type { RoutingEntry } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { HooksRuntime } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type { BucketAEvent } from "../../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
@@ -113,6 +114,56 @@ for (const eventName of ["PostToolUse", "PostToolUseFailure"] as const) {
     );
   });
 }
+
+test("D-PG6-19: serializes the UserPromptExpansion stdin for a background hook", async (t) => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "async-expansion-"));
+  const runtime = createHooksRuntime();
+  const locations = locationsFor("project", root);
+  const child = createChild(31_091);
+  const chunks: Buffer[] = [];
+  child.stdin?.on("data", (chunk: Buffer) => {
+    chunks.push(Buffer.from(chunk));
+  });
+  const stdinEnd = child.stdin === null ? Promise.resolve([]) : once(child.stdin, "end");
+  t.after(async () => {
+    shutdownInMemoryChildren(runtime);
+    destroyChild(child);
+    await rm(root, { recursive: true, force: true });
+  });
+  const event = {
+    command_name: "demo:deploy",
+    command_args: "staging",
+    command_source: "plugin",
+    input: { type: "input", text: "/demo:deploy staging", source: "interactive" },
+  } satisfies UserPromptExpansionEvent;
+
+  // act
+  await spawnAndRegister(
+    runtime,
+    createEntry(root, { claudeEvent: "UserPromptExpansion" }),
+    event,
+    createContext(root, "expansion-session", true).context,
+    createPi().pi,
+    locations,
+    { spawnImpl: createSpawn(child.child, []), dispatchId: () => "expansion-dispatch" },
+  );
+  await stdinEnd;
+  const payload: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    session_id: "expansion-session",
+    transcript_path: "",
+    cwd: root,
+    hook_event_name: "UserPromptExpansion",
+    expansion_type: "slash_command",
+    command_name: "demo:deploy",
+    command_args: "staging",
+    command_source: "plugin",
+    prompt: "/demo:deploy staging",
+  });
+});
 
 interface SpawnCall {
   readonly command: string;

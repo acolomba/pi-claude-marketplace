@@ -8,7 +8,7 @@ import {
   type ToolEvent,
 } from "../hook-events.ts";
 
-import { parseMatcher } from "./matcher.ts";
+import { parseMatcher, parseNameMatcher } from "./matcher.ts";
 
 import type { HookHandlerEntry, HooksConfig } from "./schema.ts";
 
@@ -49,6 +49,11 @@ function nonToolMatcherCondition(
   event: Exclude<BucketAEvent, ToolEvent>,
   rawMatcher: string,
 ): MatcherCondition | null {
+  // D-PG6-19: a command name has no closed set; only an invalid pattern drops.
+  if (event === "UserPromptExpansion") {
+    return parseNameMatcher(rawMatcher).kind === "invalid-pattern" ? "regex" : null;
+  }
+
   if (NON_TOOL_EVENT_FIELDS[event] === null) {
     return null;
   }

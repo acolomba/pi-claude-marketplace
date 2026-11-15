@@ -18,6 +18,7 @@ import { createHermeticEnvironment } from "../../platform/hermetic-environment.t
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
 import type { StopFailureEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts";
 import type { StopEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts";
+import type { UserPromptExpansionEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-expansion.ts";
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { DispatchableEvent } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import type {
@@ -825,6 +826,25 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
       error: "server_error",
       error_details: "provider failed",
       last_assistant_message: "failed response",
+    },
+  },
+  {
+    claudeEvent: "UserPromptExpansion",
+    diagnosedOmissions: ["command_name", "command_args"],
+    benignOmission: "command_source",
+    createEvent: () =>
+      ({
+        command_name: "demo:deploy",
+        command_args: "staging",
+        command_source: "plugin",
+        input: { type: "input", text: "/demo:deploy staging", source: "interactive" },
+      }) satisfies UserPromptExpansionEvent,
+    eventFields: {
+      expansion_type: "slash_command",
+      command_name: "demo:deploy",
+      command_args: "staging",
+      command_source: "plugin",
+      prompt: "/demo:deploy staging",
     },
   },
 ];

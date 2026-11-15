@@ -42,9 +42,11 @@ import type { ClaudeHookEvent } from "../../shared/concerns/hooks.ts";
  * other events open/advance one. Both are admitted at the resolver layer
  * here; their matcher dispositions live in the tables below (`Stop`: the
  * `null` no-matcher sentinel like `UserPromptSubmit`; `StopFailure`: the
- * closed error-type set like `SessionStart`). Every admitted event currently
- * has a dispatch translator; each dispatch owner pins that invariant with an
- * exhaustive record keyed by `DispatchableEvent`.
+ * closed error-type set like `SessionStart`). `UserPromptExpansion` is
+ * appended last (D-PG6-21): its matcher selects on `command_name` by the rules
+ * of a tool matcher, with no tool name map (D-PG6-19). Every admitted event
+ * currently has a dispatch translator; each dispatch owner pins that invariant
+ * with an exhaustive record keyed by `DispatchableEvent`.
  */
 const ADMITTED_EVENT_NAMES = [
   "SessionStart",
@@ -57,6 +59,7 @@ const ADMITTED_EVENT_NAMES = [
   "SessionEnd",
   "Stop",
   "StopFailure",
+  "UserPromptExpansion",
 ] as const satisfies readonly ClaudeHookEvent[];
 
 /**
@@ -167,6 +170,7 @@ type NonToolEvent = Exclude<BucketAEvent, ToolEvent>;
  * | UserPromptSubmit | (none -- null) | (none -- no upstream matcher support)                        |
  * | Stop             | (none -- null) | (none -- no upstream matcher support)                        |
  * | StopFailure      | `error`        | `stopReason` error-type classification                       |
+ * | UserPromptExpansion | `command_name` | the Claude-form name of the typed command (D-PG6-19)      |
  *
  * D-CF5-01, D-CF5-02, D-CF5-03, D-CF5-04, D-CF5-21: dispatch compares a
  * matcher with the mapped value, never with Pi's own value.
@@ -185,6 +189,11 @@ type NonToolEvent = Exclude<BucketAEvent, ToolEvent>;
  * `closedSetMatcherValues` reads (D-BG-302, CLOSEDLIST-01). What is
  * load-bearing is the closed set in `NON_TOOL_EVENT_CLOSED_SETS.StopFailure`
  * below.
+ *
+ * `UserPromptExpansion` (D-PG6-19, D-PG6-21) matches `command_name` with no
+ * closed set: an exact list of names or a regular expression, which
+ * `parseNameMatcher` reads. Only an expression that does not compile drops its
+ * group.
  */
 export const NON_TOOL_EVENT_FIELDS = {
   SessionStart: "source",
@@ -194,6 +203,7 @@ export const NON_TOOL_EVENT_FIELDS = {
   UserPromptSubmit: null,
   Stop: null,
   StopFailure: "error",
+  UserPromptExpansion: "command_name",
 } as const satisfies Readonly<Record<NonToolEvent, string | null>>;
 
 /**
@@ -325,6 +335,9 @@ export type SessionEndReason = (typeof SESSION_END_REASONS)[number];
  *     sentinel in `NON_TOOL_EVENT_FIELDS` is the sole handler and the
  *     absence here confirms it (ADMIT-01).
  *
+ *   - **UserPromptExpansion**: omitted entirely. Its matcher selects on an
+ *     open command name (D-PG6-19), so no value set bounds it.
+ *
  *   - **StopFailure** (ADMIT-01 / SFAIL-03): the upstream error-type
  *     vocabulary is a closed set. Membership is exact and case-sensitive.
  *     A `|` list matcher is admitted when at least one listed type is in the
@@ -345,11 +358,15 @@ export const NON_TOOL_EVENT_CLOSED_SETS = {
   PostCompact: new Set(["manual", "auto"]),
   // UserPromptSubmit and Stop intentionally omitted -- the null sentinel in
   // NON_TOOL_EVENT_FIELDS is their no-matcher-support disposition.
+  // UserPromptExpansion is omitted too: its command name has no closed set.
   // SFAIL-03: the closed error-type vocabulary for StopFailure, built from
   // the `STOP_FAILURE_ERROR_TYPES` single source of truth above. Membership
   // is exact; a `|` list is admitted when one listed type is a member
   // (D-BG-302).
   StopFailure: new Set<string>(STOP_FAILURE_ERROR_TYPES),
 } satisfies Readonly<
-  Record<Exclude<NonToolEvent, "UserPromptSubmit" | "Stop">, ReadonlySet<string>>
+  Record<
+    Exclude<NonToolEvent, "UserPromptSubmit" | "Stop" | "UserPromptExpansion">,
+    ReadonlySet<string>
+  >
 >;

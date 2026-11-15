@@ -20,6 +20,7 @@ const LOCAL_DISPATCHABLE: readonly DispatchableEvent[] = [
   "SessionEnd",
   "Stop",
   "StopFailure",
+  "UserPromptExpansion",
 ];
 
 const EVENT_TO_KEBAB: Readonly<Record<DispatchableEvent, string>> = {
@@ -33,6 +34,7 @@ const EVENT_TO_KEBAB: Readonly<Record<DispatchableEvent, string>> = {
   SessionEnd: "session-end",
   Stop: "stop",
   StopFailure: "stop-failure",
+  UserPromptExpansion: "user-prompt-expansion",
 };
 
 const TOOL_EVENTS: readonly ToolEvent[] = ["PreToolUse", "PostToolUse", "PostToolUseFailure"];
@@ -53,6 +55,7 @@ const EVENT_TO_TRANSLATOR_EXPORT: Readonly<Record<DispatchableEvent, string>> = 
   SessionEnd: "translateSessionEnd",
   Stop: "translateStop",
   StopFailure: "translateStopFailure",
+  UserPromptExpansion: "translateUserPromptExpansion",
 };
 
 type Translator = (event: unknown, context: TranslationContext) => unknown;
@@ -98,6 +101,7 @@ test("keeps one translator module for every dispatchable event", async () => {
     { event: "SessionEnd", exportType: "function" },
     { event: "Stop", exportType: "function" },
     { event: "StopFailure", exportType: "function" },
+    { event: "UserPromptExpansion", exportType: "function" },
   ];
   const expectedAdmission = [
     "SessionStart",
@@ -110,6 +114,7 @@ test("keeps one translator module for every dispatchable event", async () => {
     "SessionEnd",
     "Stop",
     "StopFailure",
+    "UserPromptExpansion",
   ];
 
   // act

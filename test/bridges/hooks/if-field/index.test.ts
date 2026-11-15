@@ -382,6 +382,7 @@ for (const event of [
   "PostCompact",
   "Stop",
   "StopFailure",
+  "UserPromptExpansion",
 ] as const satisfies readonly BucketAEvent[]) {
   test(`D-CF5-23: compiles an if condition on ${event} to a predicate that never fires`, () => {
     // arrange

@@ -21,6 +21,7 @@ describe("rewakeLabel", () => {
     ["StopFailure", { error: "rate_limit" }, "StopFailure:rate_limit"],
     ["UserPromptSubmit", { prompt: "hi" }, "UserPromptSubmit"],
     ["Stop", { stop_hook_active: false }, "Stop"],
+    ["UserPromptExpansion", { command_name: "demo:deploy" }, "UserPromptExpansion"],
     ["PreToolUse", { tool_name: 7 }, "PreToolUse"],
     ["SessionStart", {}, "SessionStart"],
     ["SessionStart", null, "SessionStart"],

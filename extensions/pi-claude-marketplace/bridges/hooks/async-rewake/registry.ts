@@ -75,6 +75,7 @@ import { translateSessionEnd } from "../payloads/session-end.ts";
 import { translateSessionStart } from "../payloads/session-start.ts";
 import { translateStopFailure } from "../payloads/stop-failure.ts";
 import { translateStop } from "../payloads/stop.ts";
+import { translateUserPromptExpansion } from "../payloads/user-prompt-expansion.ts";
 import { translateUserPromptSubmit } from "../payloads/user-prompt-submit.ts";
 import { asGroupLeader, type SignalGroup } from "../process-group.ts";
 import { planSpawn, serializeWithTruncation } from "../spawn-helpers.ts";
@@ -156,6 +157,7 @@ const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationCont
   // event, the settle events included (D-BG-206).
   Stop: translateStop,
   StopFailure: translateStopFailure,
+  UserPromptExpansion: translateUserPromptExpansion,
 };
 
 // ──────────────────────────────────────────────────────────────────────────

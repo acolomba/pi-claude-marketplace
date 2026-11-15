@@ -50,6 +50,7 @@ describe("BUCKET_A_EVENTS", () => {
       "SessionEnd",
       "Stop",
       "StopFailure",
+      "UserPromptExpansion",
     ] as const;
 
     // act
@@ -109,6 +110,7 @@ describe("NON_TOOL_EVENT_FIELDS", () => {
       UserPromptSubmit: null,
       Stop: null,
       StopFailure: "error",
+      UserPromptExpansion: "command_name",
     } as const;
 
     // act

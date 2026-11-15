@@ -2199,7 +2199,7 @@ test("registered turn_end sends a follow-up's context before the agent reads it 
   assert.deepStrictEqual(runtime.drainFollowUpContext(), []);
 });
 
-test("rebuildRoutingTables preserves stable plugin and declaration order in all ten buckets", () => {
+test("rebuildRoutingTables preserves stable plugin and declaration order in all eleven buckets", () => {
   // arrange
   const runtime = createHooksRuntime();
   const eventInventory = [
@@ -2212,6 +2212,7 @@ test("rebuildRoutingTables preserves stable plugin and declaration order in all 
     "SessionStart",
     "Stop",
     "StopFailure",
+    "UserPromptExpansion",
     "UserPromptSubmit",
   ] satisfies readonly BucketAEvent[];
   const configFor = (label: string): HooksConfig =>
@@ -2381,6 +2382,52 @@ test("rebuildRoutingTables ignores prompt and Stop matcher text on every rebuild
   assert.deepStrictEqual(second, first);
 });
 
+test("D-PG6-19: rebuildRoutingTables parses a UserPromptExpansion matcher as a command name", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const config: HooksConfig = {
+    UserPromptExpansion: [
+      { matcher: "", hooks: [{ type: "command", command: "expansion-empty" }] },
+      { matcher: "*", hooks: [{ type: "command", command: "expansion-star" }] },
+      { matcher: "deploy, ship | test", hooks: [{ type: "command", command: "expansion-list" }] },
+      { matcher: "demo:deploy", hooks: [{ type: "command", command: "expansion-regex" }] },
+    ],
+    PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "tool-list" }] }],
+  };
+  seedPluginConfig(
+    runtime,
+    "project",
+    "catalog",
+    "expansion",
+    asAbsolutePluginRoot("/router/project/expansion"),
+    config,
+    new Map(),
+  );
+
+  // act
+  createHooksRouting(runtime, { readHooksJson }).rebuildRoutingTables();
+  const routed = (["UserPromptExpansion", "PreToolUse"] as const).map((event) =>
+    runtime.getRoutingBucket(event).map((entry) => ({
+      command: entry.handlerDecl.command,
+      matcher: entry.matcher,
+    })),
+  );
+
+  // assert
+  assert.deepStrictEqual(routed, [
+    [
+      { command: "expansion-empty", matcher: { kind: "match-all" } },
+      { command: "expansion-star", matcher: { kind: "match-all" } },
+      {
+        command: "expansion-list",
+        matcher: { kind: "name-set", names: new Set(["deploy", "ship", "test"]) },
+      },
+      { command: "expansion-regex", matcher: { kind: "regex", pattern: /demo:deploy/ } },
+    ],
+    [{ command: "tool-list", matcher: { kind: "tool-set", toolNames: new Set(["bash"]) } }],
+  ]);
+});
+
 test("rebuildRoutingTables tolerates valid record keys and sparse arrays defensively", () => {
   // arrange
   const runtime = createHooksRuntime();
@@ -2422,6 +2469,7 @@ test("rebuildRoutingTables tolerates valid record keys and sparse arrays defensi
     { event: "SessionStart", commands: [] },
     { event: "Stop", commands: [] },
     { event: "StopFailure", commands: [] },
+    { event: "UserPromptExpansion", commands: [] },
     { event: "UserPromptSubmit", commands: [] },
   ]);
 });
@@ -4967,10 +5015,27 @@ test(
   },
 );
 
+// D-PG6-18: no registration dispatches UserPromptExpansion yet, in any session.
+function policyRuns(claudeEvent: BucketAEvent, child: boolean): BucketAEvent[] {
+  if (claudeEvent === "UserPromptExpansion") {
+    return [];
+  }
+
+  if (child) {
+    return (["PreToolUse", "PostToolUse", "PostToolUseFailure"] as BucketAEvent[]).includes(
+      claudeEvent,
+    )
+      ? [claudeEvent]
+      : [];
+  }
+
+  return claudeEvent === "PostCompact" ? ["SessionStart", "PostCompact"] : [claudeEvent];
+}
+
 for (const child of [false, true]) {
   for (const claudeEvent of BUCKET_A_EVENTS) {
     test(
-      `${child ? "child" : "main"} routes ${claudeEvent} by the ten-event policy`,
+      `${child ? "child" : "main"} routes ${claudeEvent} by the eleven-event policy`,
       { concurrency: false },
       async (t) => {
         const { root } = await createHermeticEnvironment(t, "hooks-router-event-policy-");
@@ -5028,6 +5093,12 @@ for (const child of [false, true]) {
           case "UserPromptSubmit":
             await registeredHandler(registrations, "input")(
               { type: "input", text: "hello", source: "interactive" },
+              context,
+            );
+            break;
+          case "UserPromptExpansion":
+            await registeredHandler(registrations, "input")(
+              { type: "input", text: "/demo:deploy staging", source: "interactive" },
               context,
             );
             break;
@@ -5094,16 +5165,7 @@ for (const child of [false, true]) {
             break;
         }
 
-        const expected: BucketAEvent[] = child
-          ? (["PreToolUse", "PostToolUse", "PostToolUseFailure"] as BucketAEvent[]).includes(
-              claudeEvent,
-            )
-            ? [claudeEvent]
-            : []
-          : claudeEvent === "PostCompact"
-            ? ["SessionStart", "PostCompact"]
-            : [claudeEvent];
-        assert.deepStrictEqual(dispatched, expected);
+        assert.deepStrictEqual(dispatched, policyRuns(claudeEvent, child));
         assert.deepStrictEqual(messages, []);
       },
     );

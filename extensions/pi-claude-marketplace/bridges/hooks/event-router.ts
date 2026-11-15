@@ -49,7 +49,13 @@ import { homedir } from "node:os";
 import path from "node:path";
 
 import { BUCKET_A_EVENTS, type BucketAEvent } from "../../domain/components/hook-events.ts";
-import { parseHooksConfig, parseMatcher, type HooksConfig } from "../../domain/components/hooks.ts";
+import {
+  parseHooksConfig,
+  parseMatcher,
+  parseNameMatcher,
+  type HooksConfig,
+  type ParsedMatcher,
+} from "../../domain/components/hooks.ts";
 import { asAbsolutePluginRoot, type AbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import {
@@ -153,6 +159,8 @@ const CHILD_EVENT_POLICY = {
   SessionEnd: "suppress",
   Stop: "SubagentStop",
   StopFailure: "suppress",
+  // D-PG6-18: the event runs in the main session only.
+  UserPromptExpansion: "suppress",
 } as const satisfies Record<BucketAEvent, ChildEventOutcome>;
 
 const CHILD_IDENTITY_DIAGNOSTIC =
@@ -484,6 +492,21 @@ function collectAllCachedPlugins(routingState: EventRouterRoutingState): CacheEn
 }
 
 /**
+ * The routed parse of a group's matcher: a command name for
+ * UserPromptExpansion (D-PG6-19), none for the two events with no upstream
+ * matcher, and a tool name for the rest.
+ */
+function routedMatcher(claudeEvent: BucketAEvent, rawMatcher: string): ParsedMatcher {
+  if (claudeEvent === "UserPromptExpansion") {
+    return parseNameMatcher(rawMatcher);
+  }
+
+  return parseMatcher(
+    claudeEvent === "UserPromptSubmit" || claudeEvent === "Stop" ? "" : rawMatcher,
+  );
+}
+
+/**
  * Push one matcher group's handlers into its event bucket, in declaration
  * order. Returns the next `declarationIndex` so the caller's running counter
  * stays continuous across every group and event of one plugin.
@@ -497,9 +520,7 @@ function pushGroupHandlers(
 ): number {
   const { claudeEvent, groupIndex } = position;
   const rawMatcher = group.matcher ?? "";
-  const matcher = parseMatcher(
-    claudeEvent === "UserPromptSubmit" || claudeEvent === "Stop" ? "" : rawMatcher,
-  );
+  const matcher = routedMatcher(claudeEvent, rawMatcher);
   let declarationIndex = startIndex;
 
   for (let handlerIndex = 0; handlerIndex < group.hooks.length; handlerIndex++) {

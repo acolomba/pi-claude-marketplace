@@ -92,6 +92,7 @@ import { translateSessionEnd } from "./payloads/session-end.ts";
 import { translateSessionStart } from "./payloads/session-start.ts";
 import { translateStopFailure } from "./payloads/stop-failure.ts";
 import { translateStop } from "./payloads/stop.ts";
+import { translateUserPromptExpansion } from "./payloads/user-prompt-expansion.ts";
 import { translateUserPromptSubmit } from "./payloads/user-prompt-submit.ts";
 import { asGroupLeader } from "./process-group.ts";
 import { planSpawn, serializeWithTruncation } from "./spawn-helpers.ts";
@@ -147,6 +148,7 @@ const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationCont
   SessionEnd: translateSessionEnd,
   Stop: translateStop,
   StopFailure: translateStopFailure,
+  UserPromptExpansion: translateUserPromptExpansion,
 };
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -334,6 +336,7 @@ const REQUIRED_EVENT_FIELDS: Record<DispatchableEvent, readonly string[]> = {
   SessionEnd: [],
   Stop: [],
   StopFailure: [],
+  UserPromptExpansion: ["command_name", "command_args"],
 };
 
 function buildPayload(

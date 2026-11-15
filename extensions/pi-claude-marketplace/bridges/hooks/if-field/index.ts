@@ -16,9 +16,9 @@
 //
 // D-CF5-23: an `if` set on an event that has no tool (SessionStart,
 // SessionEnd, UserPromptSubmit, PreCompact, PostCompact, Stop,
-// StopFailure) compiles to `{ kind: "tool-less-event" }`, which never
-// fires, so the hook never runs, as in Claude Code. A blank `if` still
-// compiles to `MATCH_ALL_IF`.
+// StopFailure, UserPromptExpansion) compiles to
+// `{ kind: "tool-less-event" }`, which never fires, so the hook never runs,
+// as in Claude Code. A blank `if` still compiles to `MATCH_ALL_IF`.
 //
 // NFR-7: the `IfPredicate` union has seven arms; the dispatch switch over
 // `predicate.kind` lists every arm and carries no default. Adding an eighth

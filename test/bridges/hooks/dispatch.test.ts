@@ -16,7 +16,10 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import { createHookToolView } from "../../../extensions/pi-claude-marketplace/bridges/hooks/mcp-tool-view.ts";
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
-import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
+import {
+  parseMatcher,
+  parseNameMatcher,
+} from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 
@@ -59,6 +62,8 @@ void ("PostToolUseFailure" satisfies CompositeDispatchEvent);
 void ("Stop" satisfies CompositeDispatchEvent);
 // @ts-expect-error StopFailure belongs to settle dispatch
 void ("StopFailure" satisfies CompositeDispatchEvent);
+// @ts-expect-error UserPromptExpansion has no handler yet (D-PG6-18)
+void ("UserPromptExpansion" satisfies CompositeDispatchEvent);
 
 interface ExecutorCall {
   readonly entry: {
@@ -1301,6 +1306,40 @@ describe("composite dispatch closure partitions", () => {
     // assert
     assert.deepStrictEqual(output, expectedOutput);
     assert.deepStrictEqual(executorCalls, expectedCalls);
+  });
+
+  test("never runs a tool event's entry whose matcher is a name set", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const entry: RoutingEntry = {
+      ...createRoutingEntry({
+        pluginId: "name-set",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Bash",
+        declarationIndex: 0,
+      }),
+      matcher: parseNameMatcher("Bash"),
+    };
+    const executorCalls: RecordedCall[] = [];
+    const executor = createRecordingExecutor({ "name-set": { kind: "noop" } }, executorCalls);
+    runtime.setRoutingBucket("PreToolUse", [entry]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    const output = await handler(
+      createToolCallEvent(),
+      createExtensionContext("/workspace/name-set"),
+    );
+
+    // assert
+    assert.deepStrictEqual({ output, executorCalls }, { output: undefined, executorCalls: [] });
   });
 
   for (const { pattern, toolName, fires } of [
