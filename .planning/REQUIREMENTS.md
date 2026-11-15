@@ -46,10 +46,10 @@
 ### Workflows
 
 - [x] **PG-WF-01**: A reference to a plugin workflow that the source wrote with no leading slash names the installed workflow with no leading slash, so `Workflow({ name: "plugin:wf" })` in a command body starts the workflow. A reference written with a leading slash keeps it. (P0)
-- [ ] **PG-WF-02**: (a) A workflow's `agent("...", {agentType: "<plugin>:<agent>"})` runs the plugin's bridged agent, and a scenario proves it. (b) The install of a plugin whose script names an `agentType` that the plugin does not install prints one note for each such name and still installs. (c) The compatibility page no longer says an unresolved `agentType` is not an error in Claude Code. Lands with or after PG-SEC-01. (P1)
-- [ ] **PG-WF-04**: The workflow compatibility page says what a workflow subagent can reach, names the engine settings `inheritMainModel` and `providerMiddlewareExtensions`, and says that Pi's built-in MCP cannot load in a subagent and that plugin hooks do not run there. (P1; spike S5 for the adapter setting)
-- [ ] **PG-WF-05**: A bridged agent whose source grants `Workflow` or `Workflow(<name>)` can start the plugin's workflow when the plugin stages one, and such an agent runs in the background. (P1; spike S5; confidence Low)
-- [ ] **PG-WF-07**: Scenarios cover a run the model starts by name with object `args`, `agent({schema})`, `isolation: 'worktree'`, `workflow()` nesting to a sibling, and two scripts with one `meta.name`. (P1)
+- [x] **PG-WF-02**: (a) A workflow's `agent("...", {agentType: "<plugin>:<agent>"})` runs the plugin's bridged agent, and a scenario proves it. (b) The install of a plugin whose script names an `agentType` that the plugin does not install prints one note for each such name and still installs. (c) The compatibility page no longer says an unresolved `agentType` is not an error in Claude Code. Lands with or after PG-SEC-01. (P1)
+- [x] **PG-WF-04**: The workflow compatibility page says what a workflow subagent can reach, names the engine settings `inheritMainModel` and `providerMiddlewareExtensions`, and says that Pi's built-in MCP cannot load in a subagent and that plugin hooks do not run there. (P1; spike S5 for the adapter setting)
+- [x] **PG-WF-05**: A bridged agent whose source grants `Workflow` or `Workflow(<name>)` can start the plugin's workflow when the plugin stages one, and such an agent runs in the background. (P1; spike S5; confidence Low)
+- [x] **PG-WF-07**: Scenarios cover a run the model starts by name with object `args`, `agent({schema})`, `isolation: 'worktree'`, `workflow()` nesting to a sibling, and two scripts with one `meta.name`. (P1)
 
 ### MCP Servers
 
@@ -191,10 +191,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PG-AGENT-03  | Phase 7  | Complete |
 | PG-AGENT-09  | Phase 7  | Complete |
 | PG-WF-01     | Phase 4  | Complete |
-| PG-WF-02     | Phase 8  | Pending |
-| PG-WF-04     | Phase 8  | Pending |
-| PG-WF-05     | Phase 8  | Pending |
-| PG-WF-07     | Phase 8  | Pending |
+| PG-WF-02     | Phase 8  | Complete |
+| PG-WF-04     | Phase 8  | Complete |
+| PG-WF-05     | Phase 8  | Complete (not a gap, D-PG8-11) |
+| PG-WF-07     | Phase 8  | Complete |
 | PG-MCP-01    | Phase 1  | Complete |
 | PG-MCP-02    | Phase 1  | Complete |
 | PG-MCP-06    | Phase 9  | Pending |
