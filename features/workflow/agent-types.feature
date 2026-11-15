@@ -104,3 +104,117 @@ Feature: Workflow agent types
       | plugin status                  | available                                                                                                                                                                                         |
       | plugin version                 | 1.0.0                                                                                                                                                                                             |
       | severity                       | info                                                                                                                                                                                              |
+
+  Scenario: Installing a plugin whose workflow names only agents it installs and agents outside its namespace gives no note
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "agents/helper.md" with this text:
+      """
+      ---
+      name: helper
+      description: Answers the task.
+      ---
+
+      Answer the task.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/scan.js" with this text:
+      """
+      export const meta = {name:"scan",description:"Scans with three agents."};
+
+      await agent("Answer the task.", {agentType:"demo:helper"});
+      await agent("Explore the files.", {agentType:"general-purpose"});
+      return await agent("Review the files.", {agentType:"other:reviewer"});
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    When the user runs "/claude:plugin install demo@fixtures --scope user"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
+
+  Scenario: Installing a plugin whose workflow names seven agent types the plugin does not install notes five and counts the rest
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/scan.js" with this text:
+      """
+      export const meta = {name:"scan",description:"Scans with seven missing agents."};
+
+      await agent("Look for one.", {agentType:"demo:one"});
+      await agent("Look for two.", {agentType:"demo:two"});
+      await agent("Look for three.", {agentType:"demo:three"});
+      await agent("Look for four.", {agentType:"demo:four"});
+      await agent("Look for five.", {agentType:"demo:five"});
+      await agent("Look for six.", {agentType:"demo:six"});
+      return await agent("Look for seven.", {agentType:"demo:seven"});
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    When the user runs "/claude:plugin install demo@fixtures --scope user"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                            | lines                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+      | cascade    | info     | true         |                                                                   |                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+      | diagnostic | warning  | false        | Plugin "demo" [user] installed; 6 declared components have notes. | workflow script "scan.js" in "workflows" runs agent type "demo:one", which this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code stops the run, workflow script "scan.js" in "workflows" runs agent type "demo:two", which this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code stops the run, workflow script "scan.js" in "workflows" runs agent type "demo:three", which this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code stops the run, workflow script "scan.js" in "workflows" runs agent type "demo:four", which this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code stops the run, workflow script "scan.js" in "workflows" runs agent type "demo:five", which this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code stops the run, workflow script "scan.js" in "workflows" runs 2 more agent types that this plugin does not install |
+    Then the workflow install diagnostic reports these lines:
+      | line                                                                                                                                                                                              |
+      | workflow script "scan.js" in "workflows" runs agent type "demo:one", which this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code stops the run   |
+      | workflow script "scan.js" in "workflows" runs agent type "demo:two", which this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code stops the run   |
+      | workflow script "scan.js" in "workflows" runs agent type "demo:three", which this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code stops the run |
+      | workflow script "scan.js" in "workflows" runs agent type "demo:four", which this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code stops the run  |
+      | workflow script "scan.js" in "workflows" runs agent type "demo:five", which this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code stops the run  |
+      | workflow script "scan.js" in "workflows" runs 2 more agent types that this plugin does not install                                                                                                |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
+
+  Scenario: A workflow step that names an agent of its plugin runs on that agent's instructions
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "agents/helper.md" with this text:
+      """
+      ---
+      name: helper
+      description: Answers the task.
+      ---
+
+      Speak as the helper of demo.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/ask.js" with this text:
+      """
+      export const meta = {name:"ask",description:"Asks the helper."};
+
+      return await agent("Answer the task.", {agentType:"demo:helper"});
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply       | tool | arguments |
+      | The answer. |      |           |
+    When the user runs the workflow command "/demo:ask", whose agent steps the model answers
+    Then the workflow run ends with the status "completed" and the result "The answer."
+    Then the model receives these calls:
+      | call | role | text                                                                    |
+      | 1    | user | Speak as the helper of demo.\n\nTask label: agent 1\n\nAnswer the task. |
+
+  Scenario: A workflow step that names an agent type the plugin does not install still runs, where Claude Code stops the step
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "agents/helper.md" with this text:
+      """
+      ---
+      name: helper
+      description: Answers the task.
+      ---
+
+      Speak as the helper of demo.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/ask.js" with this text:
+      """
+      export const meta = {name:"ask",description:"Asks a ghost."};
+
+      return await agent("Answer the task.", {agentType:"demo:ghost"});
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply       | tool | arguments |
+      | The answer. |      |           |
+    When the user runs the workflow command "/demo:ask", whose agent steps the model answers
+    Then the workflow run ends with the status "completed" and the result "The answer."
+    Then the workflow engine shows these notices:
+      | notice            |
+      | started /demo:ask |
