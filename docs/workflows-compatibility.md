@@ -239,7 +239,7 @@ The workflow home is `$PI_CODING_AGENT_DIR/workflows` when that variable is set,
 }
 ```
 
-A project can carry the second file, so a repository can opt its workflow subagents into an extension that the user installed. The engine applies Pi's project trust to that file. In the words of its README, "project resources still require Pi project trust".
+A project can carry the second file. The engine reads it whether or not the project is trusted (source-read at 3.15.0, `src/workflow-settings.ts`): its loader merges the file with no trust check, and its callers pass it only the working directory. So a repository that you clone can turn on `providerMiddlewareExtensions`, which loads any extension that your Pi settings enable into every workflow subagent, and `inheritMainModel`, which runs every untagged step on your session's model. Pi project trust applies only to extensions that the project's own settings declare. Before you run a workflow in a repository that you did not write, read its `.pi/workflows/settings.json`.
 
 This extension writes none of these files (D-PG8-09). They are the user's configuration, and they are outside the paths that this extension may write (NFR-10). To give workflow subagents the plugin MCP tools, set `providerMiddlewareExtensions` yourself, and keep pi-mcp-adapter in the `extensions` list of Pi's `settings.json`.
 
