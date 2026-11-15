@@ -86,6 +86,7 @@ import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { effectiveMcpCompatibility } from "../../domain/mcp-implementation.ts";
 import { generatedMcpServerKey } from "../../domain/name.ts";
 import { resolutionFor, resolveStrict } from "../../domain/plugin-resolver.ts";
+import { declaredOptions, resolveOptions } from "../../domain/user-config.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import {
   isRecordedButDisabled,
@@ -121,6 +122,7 @@ import type {
   ResolvedPlugin,
 } from "../../domain/resolver-types.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
+import type { ResolvedOptions } from "../../domain/user-config.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type {
@@ -458,21 +460,30 @@ function pushStoppedRow(input: McpMigrationInput, owner: LegacyMcpOwner, err: un
 
 /**
  * The servers an owner's stage writes: a moving owner's supported servers
- * from its source, none for a malformed or disabled owner, whose stage only
+ * from its source, with the options its resolution declares, so a server
+ * that names an option with no value is left out as at an install
+ * (D-PG10-21); none for a malformed or disabled owner, whose stage only
  * drops the plugin's old-name leftovers.
  */
 function stagedSource(action: OwnerAction): {
   readonly servers: Record<string, unknown>;
   readonly pluginRoot: string;
   readonly description: string | undefined;
+  readonly options: ResolvedOptions | undefined;
 } {
   return action.arm === "move"
     ? {
         servers: action.resolved.mcpServers,
         pluginRoot: action.resolved.pluginRoot,
         description: action.resolved.description,
+        options: declaredOptions(resolveOptions(action.resolved.declaredUserConfig)),
       }
-    : { servers: {}, pluginRoot: action.record.resolvedSource, description: undefined };
+    : {
+        servers: {},
+        pluginRoot: action.record.resolvedSource,
+        description: undefined,
+        options: undefined,
+      };
 }
 
 /**
@@ -489,7 +500,7 @@ async function stageOwner(
   env: ClaudeEnv,
 ): Promise<readonly string[] | undefined> {
   const { owner } = action;
-  const { servers, pluginRoot, description } = stagedSource(action);
+  const { servers, pluginRoot, description, options } = stagedSource(action);
   try {
     const prepared = await operations.prepareStageMcpServers({
       locations,
@@ -502,7 +513,7 @@ async function stageOwner(
       sourcePath: `${pluginRoot}#mcpServers`,
       description,
       env,
-      options: undefined,
+      options,
     });
     const result = await operations.commitPreparedMcp(prepared);
     input.notices.push(...result.notices);

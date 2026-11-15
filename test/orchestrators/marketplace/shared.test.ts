@@ -1290,6 +1290,39 @@ test("AVAR-04 / ANAME-07 / D-PG9-14: foldUnstageNotices drops the variable, tool
   ]);
 });
 
+test("D-PG10-21: foldUnstageNotices drops every option-blocked notice of the unstaged plugin and scope", () => {
+  // arrange
+  const blocked = (scope: "user" | "project", plugin: string, server: string): McpConfigNotice => ({
+    kind: "option-blocked",
+    scope,
+    file: "mcp-adapter.json",
+    plugin,
+    server,
+    names: ["region"],
+    reason: "unset",
+  });
+  const notices: McpConfigNotice[] = [
+    blocked("project", "hello", "keyed"),
+    blocked("project", "hello", "other"),
+    blocked("user", "hello", "keyed"),
+    blocked("project", "world", "keyed"),
+  ];
+
+  // act
+  foldUnstageNotices(notices, {
+    scope: "project",
+    plugin: "hello",
+    droppedServers: [],
+    notices: [],
+  });
+
+  // assert
+  assert.deepStrictEqual(notices, [
+    blocked("user", "hello", "keyed"),
+    blocked("project", "world", "keyed"),
+  ]);
+});
+
 test("AFILE-04: cascadeUnstagePlugin carries the notice for a commented mcp-adapter.json", async (t) => {
   // arrange
   const { locations } = await createProjectScope(t, "cascade-mcp-comments");

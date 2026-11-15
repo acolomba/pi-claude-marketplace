@@ -1783,6 +1783,67 @@ describe("migrateLegacyMcpEntries", () => {
     assert.strictEqual(record !== undefined && Object.hasOwn(record, "userConfig"), false);
   });
 
+  test("D-PG10-21: a move leaves out a server that names an option with no value, and reports it", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "options-blocked");
+    const { cwd, locations } = scope;
+    const keyed = { command: "srv", args: ["--region", "${user_config.region}"] };
+    const marketplace = await seedMarketplace(cwd, {
+      hello: {
+        servers: { srv: { command: "srv" }, keyed },
+        userConfig: { mode: MODE_OPTION },
+      },
+    });
+    await seedState(
+      locations,
+      stateWith(cwd, marketplace, {
+        hello: pluginRecord(marketplace.marketplaceRoot, "hello", ["srv", "keyed"]),
+      }),
+    );
+    await writeLegacy(locations, {
+      srv: legacyEntry("hello"),
+      keyed: legacyEntry("hello", keyed),
+    });
+    const input = migrationInput(cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, []));
+
+    // assert
+    assert.deepStrictEqual(input.notices, [
+      {
+        kind: "option-blocked",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "keyed",
+        names: ["region"],
+        reason: "unset",
+      },
+    ]);
+    assert.deepStrictEqual(await serverKeys(locations.mcpAdapterJsonPath), ["plugin_hello_srv_"]);
+  });
+
+  test("D-PG10-21: a disabled owner's stage gets no servers and no options", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "options-disabled");
+    await seedNotMovable(scope, { enabled: false });
+    const staged: unknown[] = [];
+    const input = migrationInput(scope.cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, {
+      ...writeRecordingOperations(scope.locations, []),
+      prepareStageMcpServers: async (stageInput) => {
+        staged.push({ servers: stageInput.servers, options: stageInput.options });
+        return prepareStageMcpServers(stageInput);
+      },
+    });
+
+    // assert
+    assert.deepStrictEqual(staged, [{ servers: {}, options: undefined }]);
+  });
+
   test("D-P3-16: a legacy record whose source names an MCP bundle records the bundle with its servers", async (t) => {
     // arrange
     const scope = await createProjectScope(t, "bundle-legacy");
