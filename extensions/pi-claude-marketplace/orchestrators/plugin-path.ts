@@ -7,6 +7,10 @@
  * because it imports `persistence/` -- the D-v1.0-01-11 import-direction rule forbids
  * `shared/` from importing `persistence/`, so the state-reading half of the
  * feature sits here alongside the other load-time reconcile orchestration.
+ *
+ * D-PG10-02: the project scope contributes only in a project Pi trusts. This
+ * closes the case where Pi's answer is "not trusted"; a project Pi trusts
+ * without asking is the gap D-LOC-01 accepts.
  */
 import { homedir } from "node:os";
 import path from "node:path";
@@ -72,8 +76,11 @@ export interface SkippedPathScope {
  * apply it to `process.env`. "At session start" is read as "at load time" --
  * the caller wires this into `resources_discover` after `applyReconcile`.
  *
- * Both scopes contribute (user before project, D-90-04), and each scope is
- * isolated: `loadState` returns DEFAULT_STATE on a missing file but THROWS on
+ * Both scopes contribute (user before project, D-90-04), the project scope only
+ * when `projectTrusted` is true. D-PG10-02 / D-PG10-22: `projectTrusted` is the
+ * answer the load already read from Pi; when it is false the project's
+ * `state.json` is never opened, and the ledger removes the project entries an
+ * earlier load appended. Each scope read is isolated: `loadState` returns DEFAULT_STATE on a missing file but THROWS on
  * malformed/schema-invalid state, and a throw from one scope must not zero the
  * other scope's PATH contribution. A failed scope contributes no bin dirs --
  * its previously-appended entries are removed by the ledger (fail-safe: an
@@ -84,7 +91,10 @@ export interface SkippedPathScope {
  * is left untouched, so a previously-unset PATH is never materialized as an
  * empty string.
  */
-export async function recomputePluginPath(cwd: string): Promise<{
+export async function recomputePluginPath(
+  cwd: string,
+  projectTrusted: boolean,
+): Promise<{
   skipped: SkippedPathScope[];
 }> {
   const priorLedger = process.env[PATH_LEDGER_ENV] ?? "";
@@ -92,10 +102,16 @@ export async function recomputePluginPath(cwd: string): Promise<{
   const skipped: SkippedPathScope[] = [];
   const freshBinDirs: string[] = [];
   // user scope ignores cwd (getAgentDir()); pass homedir() for symmetry.
-  const scopeRoots = [
+  const scopeRoots: { scope: "user" | "project"; extensionRoot: string }[] = [
     { scope: "user", extensionRoot: locationsFor("user", homedir()).extensionRoot },
-    { scope: "project", extensionRoot: locationsFor("project", cwd).extensionRoot },
-  ] as const;
+  ];
+  if (projectTrusted) {
+    scopeRoots.push({
+      scope: "project",
+      extensionRoot: locationsFor("project", cwd).extensionRoot,
+    });
+  }
+
   for (const { scope, extensionRoot } of scopeRoots) {
     try {
       // eslint-disable-next-line no-await-in-loop -- two scopes, one state read each

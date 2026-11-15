@@ -147,7 +147,7 @@ describe("recomputePluginPath", () => {
       await seedState(path.join(projectRoot, ".pi", "pi-claude-marketplace"), state);
 
       // act
-      const pathUpdate = await recomputePluginPath(projectRoot);
+      const pathUpdate = await recomputePluginPath(projectRoot, true);
 
       // assert
       assert.deepStrictEqual(pathUpdate, { skipped: [] });
@@ -175,7 +175,7 @@ describe("recomputePluginPath", () => {
       });
 
       // act
-      const pathUpdate = await recomputePluginPath(projectRoot);
+      const pathUpdate = await recomputePluginPath(projectRoot, true);
 
       // assert
       assert.deepStrictEqual(pathUpdate, { skipped: [] });
@@ -210,7 +210,7 @@ describe("recomputePluginPath", () => {
       await seedState(path.join(projectRoot, ".pi", "pi-claude-marketplace"), state);
 
       // act
-      const pathUpdate = await recomputePluginPath(projectRoot);
+      const pathUpdate = await recomputePluginPath(projectRoot, true);
 
       // assert
       assert.deepStrictEqual(pathUpdate, { skipped: [] });
@@ -272,7 +272,7 @@ describe("recomputePluginPath", () => {
       );
 
       // act
-      const pathUpdate = await recomputePluginPath(projectRoot);
+      const pathUpdate = await recomputePluginPath(projectRoot, true);
 
       // assert
       assert.deepStrictEqual(pathUpdate, { skipped: [] });
@@ -324,7 +324,7 @@ describe("recomputePluginPath", () => {
       );
 
       // act
-      const pathUpdate = await recomputePluginPath(projectRoot);
+      const pathUpdate = await recomputePluginPath(projectRoot, true);
 
       // assert
       assert.deepStrictEqual(pathUpdate, {
@@ -370,7 +370,7 @@ describe("recomputePluginPath", () => {
       await seedUnsupportedState(projectExtensionRoot);
 
       // act
-      const pathUpdate = await recomputePluginPath(projectRoot);
+      const pathUpdate = await recomputePluginPath(projectRoot, true);
 
       // assert
       assert.deepStrictEqual(pathUpdate, {
@@ -413,7 +413,7 @@ describe("recomputePluginPath", () => {
       await seedUnsupportedState(projectExtensionRoot);
 
       // act
-      const pathUpdate = await recomputePluginPath(projectRoot);
+      const pathUpdate = await recomputePluginPath(projectRoot, true);
 
       // assert
       assert.deepStrictEqual(pathUpdate, {
@@ -447,7 +447,7 @@ describe("recomputePluginPath", () => {
       delete process.env.PI_CLAUDE_MARKETPLACE_PATH;
 
       // act
-      const pathUpdate = await recomputePluginPath(projectRoot);
+      const pathUpdate = await recomputePluginPath(projectRoot, true);
 
       // assert
       assert.deepStrictEqual(pathUpdate, { skipped: [] });
@@ -470,7 +470,7 @@ describe("recomputePluginPath", () => {
       process.env.PI_CLAUDE_MARKETPLACE_PATH = "";
 
       // act
-      const pathUpdate = await recomputePluginPath(projectRoot);
+      const pathUpdate = await recomputePluginPath(projectRoot, true);
 
       // assert
       assert.deepStrictEqual(pathUpdate, { skipped: [] });
@@ -503,13 +503,110 @@ describe("recomputePluginPath", () => {
       );
 
       // act
-      const pathUpdate = await recomputePluginPath(projectRoot);
+      const pathUpdate = await recomputePluginPath(projectRoot, true);
 
       // assert
       assert.deepStrictEqual(pathUpdate, { skipped: [] });
       assert.deepStrictEqual(pathEnvironmentShape(), {
         ledger: { present: true, value: path.join(userSource, "bin") },
         path: { present: true, value: path.join(userSource, "bin") },
+      });
+    } finally {
+      restorePathEnvironment(environmentBefore);
+    }
+  });
+
+  test("D-PG10-02: an untrusted project contributes no bin and its owned entries leave PATH", async (t) => {
+    // arrange
+    const environmentBefore = snapshotPathEnvironment();
+    const { agentDir: userRoot, cwd: projectRoot } = await createHermeticEnvironment(
+      t,
+      "plugin-path-untrusted-",
+    );
+    const userSource = path.join(userRoot, "user-plugin");
+    const projectSource = path.join(projectRoot, "project-plugin");
+    const projectOwned = path.join(projectSource, "bin");
+    const baseline = path.join(userRoot, "system-bin");
+
+    try {
+      process.env.PATH = [baseline, projectOwned].join(path.delimiter);
+      process.env.PI_CLAUDE_MARKETPLACE_PATH = projectOwned;
+      await seedState(
+        path.join(userRoot, "pi-claude-marketplace"),
+        stateFor("user", userRoot, { userPlugin: pluginRecord(userSource, true) }),
+      );
+      await seedState(
+        path.join(projectRoot, ".pi", "pi-claude-marketplace"),
+        stateFor("project", projectRoot, { projectPlugin: pluginRecord(projectSource, true) }),
+      );
+
+      // act
+      const pathUpdate = await recomputePluginPath(projectRoot, false);
+
+      // assert
+      assert.deepStrictEqual(pathUpdate, { skipped: [] });
+      assert.deepStrictEqual(pathEnvironmentShape(), {
+        ledger: { present: true, value: path.join(userSource, "bin") },
+        path: {
+          present: true,
+          value: [baseline, path.join(userSource, "bin")].join(path.delimiter),
+        },
+      });
+    } finally {
+      restorePathEnvironment(environmentBefore);
+    }
+  });
+
+  test("D-PG10-02: an untrusted project's state file is not read, so a malformed one is not reported", async (t) => {
+    // arrange
+    const environmentBefore = snapshotPathEnvironment();
+    const { cwd: projectRoot } = await createHermeticEnvironment(t, "plugin-path-unread-");
+    const projectExtensionRoot = path.join(projectRoot, ".pi", "pi-claude-marketplace");
+    const baseline = path.join(projectRoot, "system-bin");
+
+    try {
+      process.env.PATH = baseline;
+      delete process.env.PI_CLAUDE_MARKETPLACE_PATH;
+      await mkdir(projectExtensionRoot, { recursive: true });
+      await writeFile(path.join(projectExtensionRoot, "state.json"), "{ not json", "utf8");
+
+      // act
+      const pathUpdate = await recomputePluginPath(projectRoot, false);
+
+      // assert
+      assert.deepStrictEqual(pathUpdate, { skipped: [] });
+      assert.deepStrictEqual(pathEnvironmentShape(), {
+        ledger: { present: false },
+        path: { present: true, value: baseline },
+      });
+    } finally {
+      restorePathEnvironment(environmentBefore);
+    }
+  });
+
+  test("D-PG10-02: an untrusted project with no user bin and no ledger leaves absent properties absent", async (t) => {
+    // arrange
+    const environmentBefore = snapshotPathEnvironment();
+    const { cwd: projectRoot } = await createHermeticEnvironment(t, "plugin-path-untrusted-empty-");
+
+    try {
+      delete process.env.PATH;
+      delete process.env.PI_CLAUDE_MARKETPLACE_PATH;
+      await seedState(
+        path.join(projectRoot, ".pi", "pi-claude-marketplace"),
+        stateFor("project", projectRoot, {
+          projectPlugin: pluginRecord(path.join(projectRoot, "project-plugin"), true),
+        }),
+      );
+
+      // act
+      const pathUpdate = await recomputePluginPath(projectRoot, false);
+
+      // assert
+      assert.deepStrictEqual(pathUpdate, { skipped: [] });
+      assert.deepStrictEqual(pathEnvironmentShape(), {
+        ledger: { present: false },
+        path: { present: false },
       });
     } finally {
       restorePathEnvironment(environmentBefore);

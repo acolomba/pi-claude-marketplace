@@ -158,8 +158,9 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   ): Promise<void> {
     requireNotificationMode(ctx.mode);
     const run = openNotificationRun(pi, { kind: "load" });
-    // D-LOC-01: an untrusted project's hooks are not routed, and a load with
-    // autoapply on does not apply its scope.
+    // D-LOC-01: an untrusted project's hooks are not routed, a load with
+    // autoapply on does not apply its scope, and its plugins' bin folders stay
+    // off PATH (D-PG10-02).
     const projectTrusted = ctx.isProjectTrusted();
     try {
       await hooksHydration.hydrateProjectScopeForCwd(event.cwd, projectTrusted);
@@ -196,7 +197,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
 
     requireNotificationMode(ctx.mode);
     try {
-      const pathResult = await recomputePluginPath(event.cwd);
+      const pathResult = await recomputePluginPath(event.cwd, projectTrusted);
       for (const skip of pathResult.skipped) {
         try {
           notifyPluginPathSkipped(ctx, run, skip.scope, skip.reason);

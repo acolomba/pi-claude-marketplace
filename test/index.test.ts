@@ -1896,6 +1896,41 @@ test("appends the recorded plugin's binaries to the process PATH and records the
   verifyBoundary();
 });
 
+test("D-PG10-02: leaves the project plugin's binaries off PATH when Pi does not trust the project, reading trust no more often", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "untrusted-plugin-path");
+  const resolvedSource = path.join(scope.cwd, "vendored-plugin");
+  await mkdir(path.join(resolvedSource, "bin"), { recursive: true });
+  await seedEnabledPlugin(scope.cwd, resolvedSource);
+  // The case's own proxy answers the trust reads, so the mock promises none.
+  const loaded = await loadExtension(0, PROBES_PER_DISCOVER, undefined, undefined, undefined, 0);
+  let trustReads = 0;
+  const untrusted = new Proxy(loaded.ctx, {
+    get(target, property, receiver): unknown {
+      if (property === "isProjectTrusted") {
+        return () => {
+          trustReads += 1;
+          return false;
+        };
+      }
+
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  process.env.PATH = "/usr/bin";
+  Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
+
+  // act
+  await loaded.discover(discoverEvent(scope.cwd), untrusted);
+
+  // assert
+  assert.deepStrictEqual(
+    [process.env.PATH, process.env.PI_CLAUDE_MARKETPLACE_PATH, trustReads],
+    ["/usr/bin", undefined, TRUST_READS_PER_DISCOVER],
+  );
+  loaded.verifyBoundary();
+});
+
 test(
   "contains one aggregate discovery failure and recovers through the same callback",
   { concurrency: false },
