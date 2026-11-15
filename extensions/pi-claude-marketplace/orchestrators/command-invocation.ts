@@ -146,11 +146,12 @@ function locateStagedCommand(
 
 /**
  * D-CF3-06 / D-CF3-10: the `${CLAUDE_*}` values a typed argument or the body
- * may name. Install already filled the body's path variables (CM-3, SUB-02);
- * these values reach a typed argument that names one, as upstream. The
- * plugin root and data come from the record install stored in the staged
- * frontmatter. A command has no skill directory, so `${CLAUDE_SKILL_DIR}`
- * stays literal.
+ * may name. Install filled the body's path variables, and the project
+ * directory at project scope only (CM-3, SUB-02); at user scope this step
+ * fills it (D-PG10-16). These values reach a typed argument that names one,
+ * as upstream. The plugin root and data come from the record install stored
+ * in the staged frontmatter. A command has no skill directory, so
+ * `${CLAUDE_SKILL_DIR}` stays literal.
  */
 function commandVariables(
   request: CommandInvocationRequest,
