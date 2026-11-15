@@ -69,3 +69,26 @@ Feature: MCP server builtin options
     Then pi holds these whole mcp server configs:
       | name              | config                                                                                                                                                                                                                                                                             |
       | plugin_demo_keyed | {"command":"pi-features-absent-mcp-server","args":["--tool","reverse"],"env":{"CLAUDE_PLUGIN_ROOT":"{home}/marketplaces/fixtures/plugins/demo","CLAUDE_PLUGIN_DATA":"{agent dir}/pi-claude-marketplace/data/fixtures/demo","TOOL":"reverse"},"timeout":1800,"exposure":"deferred"} |
+
+  Scenario: Pi's built-in MCP does not register a server whose command a plugin option would turn into a home path (D-PG10-11)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "tool": { "type": "string", "title": "Tool", "description": "The tool.", "default": "~/bin/tool" }
+        }
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"homed": {"command": "${user_config.tool}"}, "plain": {"command": "pi-features-absent-mcp-server"}}}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model and a probe of the mcp servers registered with pi's built-in mcp
+    When the user asks pi for the configs of the mcp servers registered with it
+    Then pi holds these whole mcp server configs:
+      | name              | config                                                                                                                                                                                                                                |
+      | plugin_demo_plain | {"command":"pi-features-absent-mcp-server","env":{"CLAUDE_PLUGIN_ROOT":"{home}/marketplaces/fixtures/plugins/demo","CLAUDE_PLUGIN_DATA":"{agent dir}/pi-claude-marketplace/data/fixtures/demo"},"timeout":1800,"exposure":"deferred"} |
