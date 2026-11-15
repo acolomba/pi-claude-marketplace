@@ -222,3 +222,31 @@ Feature: Plugin options
       | 2    | user        | show the plugin options                                                   |
       | 2    | assistant   | tool call bash {"command":"printf %s \"$PI_CLAUDE_MARKETPLACE_OPTIONS\""} |
       | 2    | tool result | bash returned: user:PI_CLAUDE_MARKETPLACE_OPTION_17d4e1bcc7bbb7b4         |
+
+  Scenario: An uninstalled plugin's option variable is gone after the command (D-PG10-11)
+    Given pi runs with the scripted model
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "mode": { "type": "string", "title": "Mode", "description": "The mode.", "default": "fast" }
+        }
+      }
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the user has run "/claude:plugin uninstall demo@fixtures --scope user"
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                                   |
+      |       | bash | {"command": "printf %s \"$PI_CLAUDE_MARKETPLACE_OPTIONS\""} |
+      | Done. |      |                                                             |
+    When the user prompts "show the plugin options"
+    Then the model receives these calls:
+      | call | role        | text                                                                      |
+      | 1    | user        | show the plugin options                                                   |
+      | 2    | user        | show the plugin options                                                   |
+      | 2    | assistant   | tool call bash {"command":"printf %s \"$PI_CLAUDE_MARKETPLACE_OPTIONS\""} |
+      | 2    | tool result | bash returned: (no output)                                                |

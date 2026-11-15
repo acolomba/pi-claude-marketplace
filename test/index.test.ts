@@ -2617,6 +2617,86 @@ test("D-PG10-23: a load in an untrusted project removes the project's option var
   loaded.verifyBoundary();
 });
 
+test("D-PG10-11: a command applies the option variables again in the same session, with no load in between", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "options-after-command");
+  const { command, ctx, verifyBoundary } = await loadExtension(1, 1, undefined, 3, undefined, 0);
+  await seedUserOptionPlugin(scope.agentDir);
+  const name = ownedOptionName("user", "mp", "plug", "mode");
+
+  // act
+  await command.handler("help", ctx);
+
+  // assert
+  assert.deepStrictEqual(
+    [process.env[name], process.env.PI_CLAUDE_MARKETPLACE_OPTIONS],
+    ["fast", `user:${name}`],
+  );
+  verifyBoundary();
+});
+
+test("D-PG10-11 / D-PG10-23: the apply after a command takes the last load's trust answer and reads trust no more often", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "options-after-untrusted-load");
+  const loaded = await loadExtension(
+    1,
+    PROBES_PER_DISCOVER + 1,
+    undefined,
+    MODE_READS_PER_DISCOVER + 3,
+    undefined,
+    0,
+  );
+  let trustReads = 0;
+  const untrusted = new Proxy(loaded.ctx, {
+    get(target, property, receiver): unknown {
+      if (property === "isProjectTrusted") {
+        return () => {
+          trustReads += 1;
+          return false;
+        };
+      }
+
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  await loaded.discover(discoverEvent(scope.cwd), untrusted);
+  const name = ownedOptionName("project", "mp", "plug", "mode");
+  process.env[name] = "fast";
+  process.env.PI_CLAUDE_MARKETPLACE_OPTIONS = `project:${name}`;
+
+  // act
+  await loaded.command.handler("help", untrusted);
+
+  // assert
+  assert.deepStrictEqual(
+    [process.env[name], process.env.PI_CLAUDE_MARKETPLACE_OPTIONS, trustReads],
+    [undefined, undefined, TRUST_READS_PER_DISCOVER],
+  );
+  loaded.verifyBoundary();
+});
+
+test("D-PG10-11 / NFR-2: a command that throws still gets the apply, and the command's error is what the handler rejects with", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "options-after-throw");
+  const { command, ctx, verifyBoundary } = await loadExtension(0, 1, undefined, 3, undefined, 0);
+  const attempted: Notification[] = [];
+  const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
+  await seedUserOptionPlugin(scope.agentDir);
+  const name = ownedOptionName("user", "mp", "plug", "mode");
+
+  // act & assert
+  await assert.rejects(command.handler("help", refusing), {
+    message: "host notification refused",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    [process.env[name], process.env.PI_CLAUDE_MARKETPLACE_OPTIONS],
+    ["fast", `user:${name}`],
+  );
+  verifyBoundary();
+});
+
 test("still answers when the plugin option apply fails (NFR-2)", async (t) => {
   // arrange
   const scope = await createHermeticScope(t, "options-refused");

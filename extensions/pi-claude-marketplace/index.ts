@@ -340,7 +340,19 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     },
     hooksRouting,
     pluginUpdateOperations.updatePlugins,
-    { runForeground: backgroundGate.runForeground },
+    {
+      // D-PG10-11: after every command, whatever its outcome, the option
+      // variables are applied again with the last load's working directory and
+      // trust answer, so an install is usable before the next `/reload`.
+      runForeground: (command) =>
+        backgroundGate.runForeground(async () => {
+          try {
+            await command();
+          } finally {
+            await applyOptionVariablesWith(optionVariables.applyAgain);
+          }
+        }),
+    },
   );
   registerClaudeMarketplaceTools(pi);
   registerSkillAliases(pi);

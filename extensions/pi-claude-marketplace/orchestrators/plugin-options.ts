@@ -47,6 +47,16 @@ export interface PluginOptionVariables {
   readonly applyUserScope: () => Promise<void>;
   /** Applies both scopes for a load, the project scope only when `projectTrusted` is true. */
   readonly applyForLoad: (cwd: string, projectTrusted: boolean) => Promise<void>;
+  /**
+   * D-PG10-11: applies again with the working directory and the trust answer
+   * of the last load, or the user scope only before any load. It reads no trust.
+   */
+  readonly applyAgain: () => Promise<void>;
+}
+
+interface LastLoad {
+  readonly cwd: string;
+  readonly projectTrusted: boolean;
 }
 
 // One pair per option of the MCP value map of each enabled record, in
@@ -95,17 +105,28 @@ export function createPluginOptionVariables(deps: PluginOptionDeps): PluginOptio
     applyOptionLedger(deps.env, change);
   }
 
+  async function applyUserScope(): Promise<void> {
+    // user scope ignores cwd (getAgentDir()); pass homedir() for symmetry.
+    apply(await scopeOutcome("user", homedir()), { kind: "keep" });
+  }
+
+  async function applyLoaded(load: LastLoad): Promise<void> {
+    const user = await scopeOutcome("user", homedir());
+    const project: OptionScopeOutcome = load.projectTrusted
+      ? await scopeOutcome("project", load.cwd)
+      : { kind: "remove" };
+    apply(user, project);
+  }
+
+  let lastLoad: LastLoad | undefined;
   return {
-    applyUserScope: async () => {
-      // user scope ignores cwd (getAgentDir()); pass homedir() for symmetry.
-      apply(await scopeOutcome("user", homedir()), { kind: "keep" });
-    },
+    applyUserScope,
     applyForLoad: async (cwd, projectTrusted) => {
-      const user = await scopeOutcome("user", homedir());
-      const project: OptionScopeOutcome = projectTrusted
-        ? await scopeOutcome("project", cwd)
-        : { kind: "remove" };
-      apply(user, project);
+      lastLoad = { cwd, projectTrusted };
+      await applyLoaded(lastLoad);
+    },
+    applyAgain: async () => {
+      await (lastLoad === undefined ? applyUserScope() : applyLoaded(lastLoad));
     },
   };
 }

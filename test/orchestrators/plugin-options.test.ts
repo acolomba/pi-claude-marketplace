@@ -235,3 +235,123 @@ test("D-PG10-23 / NFR-2: a scope whose state cannot be read keeps its names, is 
     ],
   );
 });
+
+test("D-PG10-11: before any load, the apply after a command applies the user scope only", async (t) => {
+  // arrange
+  const scope = await createOptionScope(t, "again-before-load");
+  const projectName = ownedName("project", "catalog", "alpha", "mode");
+  scope.env[projectName] = "project";
+  scope.env.PI_CLAUDE_MARKETPLACE_OPTIONS = `project:${projectName}`;
+  await seedState(
+    scope.userRoot,
+    stateFor("user", "/marketplaces/catalog", {
+      alpha: optionsRecord("/plugins/alpha", true, { mode: option({ default: "fast" }) }),
+    }),
+  );
+  const userAlpha = ownedName("user", "catalog", "alpha", "mode");
+  const optionVariables = createPluginOptionVariables(scope.deps);
+
+  // act
+  await optionVariables.applyAgain();
+
+  // assert
+  assert.deepStrictEqual(scope.env, {
+    [projectName]: "project",
+    [userAlpha]: "fast",
+    PI_CLAUDE_MARKETPLACE_OPTIONS: `user:${userAlpha},project:${projectName}`,
+  });
+  assert.deepStrictEqual(scope.reads, [scope.userRoot]);
+});
+
+// One enabled `alpha` with the option `mode` in each scope, its default the scope's name.
+async function seedBothScopes(scope: OptionScope): Promise<void> {
+  await seedState(
+    scope.userRoot,
+    stateFor("user", "/marketplaces/catalog", {
+      alpha: optionsRecord("/plugins/alpha", true, { mode: option({ default: "user" }) }),
+    }),
+  );
+  await seedState(
+    scope.projectRoot,
+    stateFor("project", "/marketplaces/catalog", {
+      alpha: optionsRecord("/plugins/alpha", true, { mode: option({ default: "project" }) }),
+    }),
+  );
+}
+
+test("D-PG10-11 / D-PG10-23: the apply after a command reads the project of the last load when it was trusted", async (t) => {
+  // arrange
+  const scope = await createOptionScope(t, "again-trusted");
+  const optionVariables = createPluginOptionVariables(scope.deps);
+  await optionVariables.applyForLoad(scope.cwd, true);
+  await seedBothScopes(scope);
+  scope.reads.length = 0;
+  const userAlpha = ownedName("user", "catalog", "alpha", "mode");
+  const projectAlpha = ownedName("project", "catalog", "alpha", "mode");
+
+  // act
+  await optionVariables.applyAgain();
+
+  // assert
+  assert.deepStrictEqual(scope.env, {
+    [userAlpha]: "user",
+    [projectAlpha]: "project",
+    PI_CLAUDE_MARKETPLACE_OPTIONS: `user:${userAlpha},project:${projectAlpha}`,
+  });
+  assert.deepStrictEqual(scope.reads, [scope.userRoot, scope.projectRoot]);
+});
+
+test("D-PG10-11 / D-PG10-23: the apply after a command leaves the project out when the last load did not trust it", async (t) => {
+  // arrange
+  const scope = await createOptionScope(t, "again-untrusted");
+  const optionVariables = createPluginOptionVariables(scope.deps);
+  await optionVariables.applyForLoad(scope.cwd, false);
+  await seedBothScopes(scope);
+  scope.reads.length = 0;
+  const userAlpha = ownedName("user", "catalog", "alpha", "mode");
+
+  // act
+  await optionVariables.applyAgain();
+
+  // assert
+  assert.deepStrictEqual(scope.env, {
+    [userAlpha]: "user",
+    PI_CLAUDE_MARKETPLACE_OPTIONS: `user:${userAlpha}`,
+  });
+  assert.deepStrictEqual(scope.reads, [scope.userRoot]);
+});
+
+test("D-PG10-11: the next apply removes the names of a plugin that is uninstalled or disabled, or no longer declares the option", async (t) => {
+  // arrange
+  const scope = await createOptionScope(t, "again-gone");
+  await seedState(
+    scope.userRoot,
+    stateFor("user", "/marketplaces/catalog", {
+      alpha: optionsRecord("/plugins/alpha", true, { mode: option({ default: "fast" }) }),
+      beta: optionsRecord("/plugins/beta", true, { mode: option({ default: "fast" }) }),
+      gamma: optionsRecord("/plugins/gamma", true, {
+        mode: option({ default: "fast" }),
+        retries: option({ default: "3" }),
+      }),
+    }),
+  );
+  const optionVariables = createPluginOptionVariables(scope.deps);
+  await optionVariables.applyUserScope();
+  await seedState(
+    scope.userRoot,
+    stateFor("user", "/marketplaces/catalog", {
+      beta: optionsRecord("/plugins/beta", false, { mode: option({ default: "fast" }) }),
+      gamma: optionsRecord("/plugins/gamma", true, { mode: option({ default: "fast" }) }),
+    }),
+  );
+  const gammaMode = ownedName("user", "catalog", "gamma", "mode");
+
+  // act
+  await optionVariables.applyAgain();
+
+  // assert
+  assert.deepStrictEqual(scope.env, {
+    [gammaMode]: "fast",
+    PI_CLAUDE_MARKETPLACE_OPTIONS: `user:${gammaMode}`,
+  });
+});
