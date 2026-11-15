@@ -885,6 +885,57 @@ const OPTION_BLOCK_ROWS: readonly OptionBlockRow[] = [
     options: OPTIONS,
     block: UNSET_TOKEN,
   },
+  {
+    title: "D-PG10-11: an args element that starts with a home-path option blocks the server",
+    server: { command: "node", args: ["--tool", "${user_config.tool}"] },
+    options: OPTIONS,
+    block: { reason: "home-path", keys: ["tool"] },
+  },
+  {
+    title: "D-PG10-11: lists each home-path key once, command first and then the args in order",
+    server: {
+      command: "${user_config.home}",
+      args: ["${user_config.tool}", "${user_config.home}", "${user_config.tool}/x"],
+    },
+    options: OPTIONS,
+    block: { reason: "home-path", keys: ["home", "tool"] },
+  },
+  {
+    title: "D-PG10-11: a home-path option after other text in an args element blocks nothing",
+    server: { command: "node", args: ["--tool=${user_config.tool}"] },
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title: "D-PG10-11: a home-path option at the start of an env value blocks nothing",
+    server: { command: "node", env: { TOOL: "${user_config.tool}" } },
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title: "D-PG10-11: a home-path option at the start of url blocks nothing",
+    server: { type: "http", url: "${user_config.tool}" },
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title: "D-PG10-11: a home-path option at the start of a headers value blocks nothing",
+    server: { type: "sse", url: "https://x.example/sse", headers: { T: "${user_config.tool}" } },
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title: "D-PG10-11: an args element that is not a string blocks nothing",
+    server: { command: "node", args: [7, { a: "${user_config.tool}" }] },
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title: "D-PG10-11: args that is not an array blocks nothing",
+    server: { command: "node", args: "${user_config.tool}" },
+    options: OPTIONS,
+    block: undefined,
+  },
 ];
 
 describe("mcpOptionBlock", () => {

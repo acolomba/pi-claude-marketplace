@@ -321,7 +321,7 @@ function scannedFields(server: unknown): ScannedFields | undefined {
     return {
       fieldClass: "plain",
       values: [...command, ...args, ...recordStrings(server.env, LITERAL_ENV_KEYS)],
-      homeExpanded: command,
+      homeExpanded: [...command, ...args],
     };
   }
 
@@ -387,7 +387,10 @@ export interface McpOptionBlock {
  * default, or a key the manifest does not declare. It catches the throw per
  * server, so that one server does not load. The keys come once each, in
  * first-seen field order. `undefined` options, for a plugin that declares no
- * `userConfig`, block nothing: Claude runs no option pass for it.
+ * `userConfig`, block nothing: Claude runs no option pass for it. A server
+ * with no unset option is left out as `home-path` when `command` or an `args`
+ * element starts with an option whose value pi-mcp-adapter expands to a home
+ * path (D-PG10-11), its keys in the same order.
  */
 export function mcpOptionBlock(
   server: unknown,
