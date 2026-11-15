@@ -31,5 +31,18 @@ Feature: MCP server builtin options
     Given pi runs with the scripted model and a probe of the mcp servers registered with pi's built-in mcp
     When the user asks pi for the configs of the mcp servers registered with it
     Then pi holds these mcp server configs, apart from each stdio server's command and arguments:
-      | name              | config                                                                                                                                                                       |
+      | name              | config                                                                                                                                                                                      |
       | plugin_demo_plain | {"env":{"CLAUDE_PLUGIN_ROOT":"{home}/marketplaces/fixtures/plugins/demo","CLAUDE_PLUGIN_DATA":"{agent dir}/pi-claude-marketplace/data/fixtures/demo"},"timeout":1800,"exposure":"deferred"} |
+
+  Scenario: Pi's built-in MCP registers a server of a plugin with no options with its option reference as written (D-PG10-21)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"keyed": {"command": "pi-features-absent-mcp-server", "env": {"TOKEN": "${user_config.token}"}}}}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model and a probe of the mcp servers registered with pi's built-in mcp
+    When the user asks pi for the configs of the mcp servers registered with it
+    Then pi holds these mcp server configs, apart from each stdio server's command and arguments:
+      | name              | config                                                                                                                                                                                                                      |
+      | plugin_demo_keyed | {"env":{"CLAUDE_PLUGIN_ROOT":"{home}/marketplaces/fixtures/plugins/demo","CLAUDE_PLUGIN_DATA":"{agent dir}/pi-claude-marketplace/data/fixtures/demo","TOKEN":"$${user_config.token}"},"timeout":1800,"exposure":"deferred"} |
