@@ -1755,7 +1755,37 @@ describe("migrateLegacyMcpEntries", () => {
     });
   });
 
-  test("D-PG10-15: a legacy record whose catalog moved past its version records no options of the newer version", async (t) => {
+  test("D-PG10-23: a record that already holds the neutral verdict records the options its stage resolved", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "options-neutral");
+    const { cwd, locations } = scope;
+    const marketplace = await seedMarketplace(cwd, {
+      hello: { servers: { srv: { command: "srv" } }, userConfig: { mode: MODE_OPTION } },
+    });
+    await seedState(
+      locations,
+      stateWith(cwd, marketplace, {
+        hello: pluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+      }),
+    );
+    await writeLegacy(locations, { srv: legacyEntry("hello") });
+    const input = migrationInput(cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, []));
+
+    // assert
+    assert.deepStrictEqual(input.rows, [HELLO_MOVED]);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins, {
+      hello: {
+        ...pluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+        userConfig: { mode: MODE_OPTION },
+        updatedAt: MOVED_AT,
+      },
+    });
+  });
+
+  test("D-PG10-23: a legacy record whose catalog moved past its version records the options its stage resolved, and keeps its stored verdict", async (t) => {
     // arrange
     const scope = await createProjectScope(t, "options-moved-legacy");
     const { cwd, locations } = scope;
@@ -1779,8 +1809,13 @@ describe("migrateLegacyMcpEntries", () => {
     await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, []));
 
     // assert
-    const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"];
-    assert.strictEqual(record !== undefined && Object.hasOwn(record, "userConfig"), false);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins, {
+      hello: {
+        ...legacyPluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+        userConfig: { mode: MODE_OPTION },
+        updatedAt: MOVED_AT,
+      },
+    });
   });
 
   test("D-PG10-21: a move leaves out a server that names an option with no value, and reports it", async (t) => {

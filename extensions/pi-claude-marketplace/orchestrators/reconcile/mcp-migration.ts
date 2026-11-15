@@ -594,15 +594,31 @@ function applyNeutralVerdict(action: OwnerAction): boolean {
     "neutral",
   );
   record.mcpServerConfigs = servers;
-  // D-PG10-23: the options of the same resolution, so the staged entries and
-  // the record agree.
-  replaceUserConfig(record, userConfigFieldsOf(action.resolved.declaredUserConfig));
   if (bundle) {
     record.mcpBundle = true;
   } else {
     delete record.mcpBundle;
   }
 
+  return true;
+}
+
+/**
+ * D-PG10-23: a moving owner's record holds the options its stage resolved, so
+ * the load sets a variable for every option reference the staged entries hold.
+ * They come from the staged source, whatever the verdict, because the record
+ * must agree with the entries the move wrote, as a reinstall's record does.
+ * Returns whether the record changed.
+ */
+function applyStagedOptions(action: Extract<OwnerAction, { arm: "move" }>): boolean {
+  const fields = userConfigFieldsOf(action.resolved.declaredUserConfig);
+  if (
+    JSON.stringify(action.record.userConfig ?? null) === JSON.stringify(fields.userConfig ?? null)
+  ) {
+    return false;
+  }
+
+  replaceUserConfig(action.record, fields);
   return true;
 }
 
@@ -621,8 +637,9 @@ function recordAction(
   }
 
   const namesChanged = applyStagedNames(action.record, stagedNames);
+  const optionsChanged = action.arm === "move" && applyStagedOptions(action);
   const compatibilityChanged = applyNeutralVerdict(action);
-  if (!namesChanged && !compatibilityChanged) {
+  if (!namesChanged && !optionsChanged && !compatibilityChanged) {
     return false;
   }
 

@@ -215,6 +215,35 @@ Feature: MCP server legacy move
       """
 
   @mcp
+  Scenario: After the move, a server of a record that held no plugin options reads its option (D-PG10-23)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "tool": { "type": "string", "title": "Tool", "description": "The tool.", "default": "reverse" }
+        }
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "picker" whose tool name argument is "${user_config.tool}"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the installation record of the plugin "demo@fixtures" in the user scope holds no plugin options, as an earlier release wrote it
+    Given the mcp.json file of the user scope holds the servers of the plugin "demo@fixtures" as release 0.19.2 wrote them, beside the user's own server "mine"
+    Given pi runs with the scripted model and the mcp implementation
+    Given the user has started a new pi session
+    Given the mcp implementation has listed the tools of the stub mcp server "picker" of the plugin "demo"
+    When the user lists the mcp tools pi offers
+    Then pi offers these plugin mcp tools:
+      | tool                             | active |
+      | mcp__plugin_demo_picker__reverse | no     |
+
+  @mcp
   Scenario: A load moves a plugin's servers out of the project's mcp.json into the project's mcp-adapter.json
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
