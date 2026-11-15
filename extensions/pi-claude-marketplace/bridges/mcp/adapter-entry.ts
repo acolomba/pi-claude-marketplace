@@ -314,6 +314,19 @@ function definesServer(entry: Readonly<Record<string, unknown>>): boolean {
   return ["command", "url", "socket"].some((field) => Object.hasOwn(entry, field));
 }
 
+// A scheme written before any reference; `${BASE}/mcp` has none.
+const LITERAL_SCHEME = /^\s*([a-z][a-z\d+.-]*):/i;
+
+// The resolved url's scheme, or the literal one of a url that gives none.
+function schemeOf(url: string, resolved: URL | undefined): string | undefined {
+  if (resolved !== undefined) {
+    return resolved.protocol;
+  }
+
+  const literal = LITERAL_SCHEME.exec(url)?.[1];
+  return literal === undefined ? undefined : `${literal.toLowerCase()}:`;
+}
+
 /**
  * D-PG9-14: why a carried `caFile` no longer applies to the new entry, or
  * none when it still does. pi-mcp-adapter 7.0.1 refuses to connect an entry
@@ -323,9 +336,9 @@ function definesServer(entry: Readonly<Record<string, unknown>>): boolean {
  * entry it replaces defines a server, at that entry's origin. An override stub
  * defines none. A url read with the stage's environment as the adapter reads
  * it gives the origin and the scheme. A url that names an unset variable, or
- * that does not parse, gives neither: the adapter decides at connect time,
- * and against a previous url the `caFile` stays only while the url text is
- * unchanged.
+ * that does not parse, gives no origin, and a scheme only when its text starts
+ * with one: the adapter decides the rest at connect time, and against a
+ * previous url the `caFile` stays only while the url text is unchanged.
  */
 function caFileRemovalReason(
   previous: Readonly<Record<string, unknown>>,
@@ -338,7 +351,8 @@ function caFileRemovalReason(
   }
 
   const resolved = resolvedUrl(url, env);
-  if (resolved !== undefined && resolved.protocol !== "https:") {
+  const scheme = schemeOf(url, resolved);
+  if (scheme !== undefined && scheme !== "https:") {
     return "not-https";
   }
 

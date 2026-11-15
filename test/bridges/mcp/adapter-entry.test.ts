@@ -1373,6 +1373,12 @@ describe("stampServers", () => {
     ],
     ["an unchanged url that names an unset variable", "${ACME_BASE}/mcp", "${ACME_BASE}/mcp", {}],
     [
+      "an unchanged url with an upper-case https scheme that names an unset variable",
+      "HTTPS://${ACME_HOST}/mcp",
+      "HTTPS://${ACME_HOST}/mcp",
+      {},
+    ],
+    [
       "an unchanged url that does not parse",
       "https://acme example/mcp",
       "https://acme example/mcp",
@@ -1440,6 +1446,13 @@ describe("stampServers", () => {
       "url-unresolved",
     ],
     [
+      "a plain http url that names an unset variable",
+      "https://acme.example/mcp",
+      "http://${ACME_HOST}/mcp",
+      {},
+      "not-https",
+    ],
+    [
       "a variable that resolves to plain http",
       "${ACME_BASE}/mcp",
       "${ACME_BASE}/mcp",
@@ -1497,6 +1510,30 @@ describe("stampServers", () => {
         caFileRemoved: stamping.caFileRemoved,
       },
       { caFile: "/etc/pki/user/ca-bundle.pem", caFileRemoved: [] },
+    );
+  });
+
+  test("D-PG9-14: an override stub's caFile stays out of a plain http entry whose url names an unset variable", () => {
+    // arrange
+    const override = { caFile: "/etc/pki/user/ca-bundle.pem" };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { type: "http", url: "http://${ACME_HOST}/mcp" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous: { server: override },
+      keptOverrides: { server: override },
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        caFile: Object.hasOwn(stamping.stamped.server as object, "caFile"),
+        caFileRemoved: stamping.caFileRemoved,
+      },
+      { caFile: false, caFileRemoved: [{ server: "server", reason: "not-https" }] },
     );
   });
 
