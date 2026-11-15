@@ -2689,6 +2689,7 @@ describe("composite per-event adapters", () => {
       scope: "user",
       marketplace: "stale-marketplace",
       pluginId: "stale-plugin",
+      event: "UserPromptSubmit",
     });
     const entry = createRoutingEntry({
       pluginId: "input-context",
@@ -2721,6 +2722,7 @@ describe("composite per-event adapters", () => {
         scope: entry.scope,
         marketplace: entry.marketplace,
         pluginId: "input-context",
+        event: "UserPromptSubmit",
       },
     ]);
   });
@@ -2734,6 +2736,7 @@ describe("composite per-event adapters", () => {
       scope: "project",
       marketplace: "stale-marketplace",
       pluginId: "stale-plugin",
+      event: "UserPromptSubmit",
     });
     const handler = compositeHandlerFor(
       runtime,
@@ -2765,6 +2768,7 @@ describe("composite per-event adapters", () => {
           scope: "project",
           marketplace: "stale-marketplace",
           pluginId: "stale-plugin",
+          event: "UserPromptSubmit",
           prompt: "an earlier follow-up",
         },
       ],
@@ -2779,6 +2783,7 @@ describe("composite per-event adapters", () => {
         scope: "project",
         marketplace: "stale-marketplace",
         pluginId: "stale-plugin",
+        event: "UserPromptSubmit",
         prompt: "an earlier follow-up",
       });
       const handler = compositeHandlerFor(

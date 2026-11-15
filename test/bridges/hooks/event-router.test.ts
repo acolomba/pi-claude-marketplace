@@ -1915,12 +1915,14 @@ test("before_agent_start sends buffered prompt context as one message after the 
     scope: "project",
     marketplace: "catalog",
     pluginId: "alpha",
+    event: "UserPromptSubmit",
   });
   runtime.appendPendingPromptContext({
     context: "ctx-b",
     scope: "user",
     marketplace: "catalog",
     pluginId: "beta",
+    event: "UserPromptSubmit",
   });
 
   // act
@@ -1947,6 +1949,7 @@ test("before_agent_start adds no message for prompt context that is only whitesp
     scope: "project",
     marketplace: "catalog",
     pluginId: "alpha",
+    event: "UserPromptSubmit",
   });
 
   // act
@@ -1965,6 +1968,7 @@ test("before_agent_start sends session start context first and prompt context se
     scope: "user",
     marketplace: "catalog",
     pluginId: "beta",
+    event: "UserPromptSubmit",
   });
   runtime.appendPendingSessionStartContext({
     context: "ss-ctx",
@@ -2002,6 +2006,7 @@ test("before_agent_start of a reloaded bridge sends no context buffered before t
     scope: "project",
     marketplace: "catalog",
     pluginId: "alpha",
+    event: "UserPromptSubmit",
   } as const;
   runtime.appendPendingSessionStartContext(entry);
   runtime.appendPendingPromptContext(entry);
@@ -2165,6 +2170,7 @@ test("registered turn_end sends a follow-up's context before the agent reads it 
     scope: "project",
     marketplace: "catalog",
     pluginId: "live",
+    event: "UserPromptSubmit",
     prompt: "also say hi",
   });
   const event = {

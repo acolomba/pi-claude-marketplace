@@ -174,7 +174,7 @@ test("keeps every state family isolated between runtime instances", () => {
   firstRuntime.setParsedConfig("first-key", firstCacheEntry);
   firstRuntime.setRoutingBucket("PreToolUse", [firstRoutingEntry]);
   firstRuntime.appendPendingSessionStartContext(firstPendingEntry);
-  firstRuntime.appendPendingPromptContext(firstPendingEntry);
+  firstRuntime.appendPendingPromptContext({ ...firstPendingEntry, event: "UserPromptSubmit" });
   firstRuntime.recordLastAssistant(assistantMessage("first message"));
   firstRuntime.recordStopReentry();
   firstRuntime.holdStopReason("first reason");
@@ -281,12 +281,14 @@ test("appends and drains pending prompt context once in arrival order, apart fro
   const firstEntry = {
     context: "first prompt context",
     pluginId: "first-plugin",
+    event: "UserPromptSubmit",
     marketplace: "catalog",
     scope: "user",
   } satisfies PendingPromptContext;
   const secondEntry = {
     context: "second prompt context",
     pluginId: "second-plugin",
+    event: "UserPromptSubmit",
     marketplace: "catalog",
     scope: "project",
   } satisfies PendingPromptContext;
@@ -313,6 +315,7 @@ test("empties every pending context buffer at registration (D-CF5-13)", () => {
   const entry = {
     context: "stale context",
     pluginId: "stale-plugin",
+    event: "UserPromptSubmit",
     marketplace: "catalog",
     scope: "project",
   } satisfies PendingPromptContext;
@@ -336,6 +339,7 @@ test("hands out the context of the follow-up Pi reads and drops the ones queued 
   const entry = (name: string): PendingFollowUpContext => ({
     context: `${name} context`,
     pluginId: `${name}-plugin`,
+    event: "UserPromptSubmit",
     marketplace: "catalog",
     scope: "user",
     prompt: `${name} follow-up`,

@@ -7,6 +7,7 @@ import {
   adaptPreCompactResult,
   adaptToolCallResult,
   adaptToolResultResult,
+  hookContextPart,
   sendDueFollowUpContext,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
@@ -1326,6 +1327,41 @@ describe("adaptToolResultResult", () => {
   }
 });
 
+describe("hookContextPart", () => {
+  test("labels the values with the event of their hooks, joined in order (D-PG6-20)", () => {
+    // act
+    const parts = [
+      hookContextPart("SessionStart", ["first", "second"]),
+      hookContextPart("UserPromptSubmit", ["prompt context"]),
+    ];
+
+    // assert
+    assert.deepStrictEqual(parts, [
+      { type: "text", text: "SessionStart hook additional context: first\nsecond" },
+      { type: "text", text: "UserPromptSubmit hook additional context: prompt context" },
+    ]);
+  });
+
+  test("leaves out a value that is empty or only whitespace (HOOK-05)", () => {
+    // act
+    const part = hookContextPart("UserPromptSubmit", ["", "kept", " \n\t"]);
+
+    // assert
+    assert.deepStrictEqual(part, {
+      type: "text",
+      text: "UserPromptSubmit hook additional context: kept",
+    });
+  });
+
+  test("gives no part when no value has text (HOOK-05)", () => {
+    // act
+    const parts = [hookContextPart("SessionStart", []), hookContextPart("UserPromptSubmit", [" "])];
+
+    // assert
+    assert.deepStrictEqual(parts, [undefined, undefined]);
+  });
+});
+
 describe("adaptInputResult", () => {
   test("returns undefined for noop without changing the complete input event", () => {
     // arrange
@@ -1338,7 +1374,12 @@ describe("adaptInputResult", () => {
     } satisfies InputEvent;
 
     // act
-    const adaptation = adaptInputResult({ kind: "noop" }, event, adapterContext(guardEntry()));
+    const adaptation = adaptInputResult(
+      { kind: "noop" },
+      event,
+      adapterContext(guardEntry()),
+      "UserPromptSubmit",
+    );
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -1365,6 +1406,7 @@ describe("adaptInputResult", () => {
       { kind: "block", reason: "policy denied" },
       event,
       adapterContext(guardEntry()),
+      "UserPromptSubmit",
     );
 
     // assert
@@ -1396,6 +1438,7 @@ describe("adaptInputResult", () => {
       { kind: "mutate", additionalContext: "ctx-a\nctx-b" },
       event,
       context,
+      "UserPromptSubmit",
     );
 
     // assert
@@ -1411,6 +1454,7 @@ describe("adaptInputResult", () => {
         scope: "user",
         marketplace: "owner-marketplace",
         pluginId: "owner-plugin",
+        event: "UserPromptSubmit",
       },
     ]);
     assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
@@ -1432,6 +1476,7 @@ describe("adaptInputResult", () => {
       { kind: "mutate", additionalContext: "ctx-a\nctx-b" },
       event,
       { ...adapterContext(guardEntry()), runtime, pi: createMessagePi(sent) },
+      "UserPromptSubmit",
     );
 
     // assert
@@ -1476,6 +1521,7 @@ describe("adaptInputResult", () => {
       { kind: "mutate", additionalContext: "ctx-a\nctx-b" },
       event,
       context,
+      "UserPromptSubmit",
     );
 
     // assert
@@ -1488,6 +1534,7 @@ describe("adaptInputResult", () => {
         scope: "user",
         marketplace: "owner-marketplace",
         pluginId: "owner-plugin",
+        event: "UserPromptSubmit",
         prompt: "queued prompt",
       },
     ]);
@@ -1503,6 +1550,7 @@ describe("adaptInputResult", () => {
       { kind: "mutate", additionalContext: " \n " },
       { type: "input", text: "queued prompt", source: "rpc", streamingBehavior: "steer" },
       { ...adapterContext(guardEntry()), runtime, pi: createMessagePi(sent) },
+      "UserPromptSubmit",
     );
 
     // assert
@@ -1520,6 +1568,7 @@ describe("adaptInputResult", () => {
       { kind: "mutate", additionalContext: "ctx" },
       { type: "input", text: "queued prompt", source: "rpc", streamingBehavior: "steer" },
       { ...adapterContext(guardEntry()), runtime },
+      "UserPromptSubmit",
     );
 
     // assert
@@ -1548,6 +1597,7 @@ describe("adaptInputResult", () => {
       { kind: "mutate", additionalContext: "ctx" },
       { type: "input", text: "queued prompt", source: "rpc", streamingBehavior: "steer" },
       { ...adapterContext(guardEntry()), runtime, pi: createMessagePi([], new Error("closed")) },
+      "UserPromptSubmit",
     );
 
     // assert
@@ -1569,10 +1619,15 @@ describe("adaptInputResult", () => {
     } satisfies InputEvent;
 
     // act
-    const adaptation = adaptInputResult({ kind: "mutate", additionalContext: "" }, event, {
-      ...adapterContext(guardEntry()),
-      runtime,
-    });
+    const adaptation = adaptInputResult(
+      { kind: "mutate", additionalContext: "" },
+      event,
+      {
+        ...adapterContext(guardEntry()),
+        runtime,
+      },
+      "UserPromptSubmit",
+    );
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -1599,10 +1654,15 @@ describe("adaptInputResult", () => {
       } satisfies InputEvent;
 
       // act
-      const adaptation = adaptInputResult(hookOutcome, event, {
-        ...adapterContext(guardEntry()),
-        runtime,
-      });
+      const adaptation = adaptInputResult(
+        hookOutcome,
+        event,
+        {
+          ...adapterContext(guardEntry()),
+          runtime,
+        },
+        "UserPromptSubmit",
+      );
 
       // assert
       assert.deepStrictEqual(adaptation, { action: "handled" });
@@ -1623,7 +1683,12 @@ describe("adaptInputResult", () => {
     } satisfies HookExecResult;
 
     // act
-    const adaptation = adaptInputResult(hookOutcome, event, adapterContext(guardEntry()));
+    const adaptation = adaptInputResult(
+      hookOutcome,
+      event,
+      adapterContext(guardEntry()),
+      "UserPromptSubmit",
+    );
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -1648,7 +1713,12 @@ describe("adaptInputResult", () => {
       } satisfies InputEvent;
 
       // act
-      const adaptation = adaptInputResult(stopOutcome, event, adapterContext(guardEntry()));
+      const adaptation = adaptInputResult(
+        stopOutcome,
+        event,
+        adapterContext(guardEntry()),
+        "UserPromptSubmit",
+      );
 
       // assert
       assert.deepStrictEqual(adaptation, { action: "handled" });
@@ -1667,6 +1737,7 @@ describe("sendDueFollowUpContext", () => {
     scope: "project",
     marketplace: "fixtures",
     pluginId: "demo",
+    event: "UserPromptSubmit",
     prompt: "also say hi",
   } as const;
 
@@ -2191,7 +2262,12 @@ describe("stop notices (D-PG5-13)", () => {
         stopReason === undefined ? { kind: "stop" } : { kind: "stop", stopReason };
 
       // act
-      const adaptation = adaptInputResult(stopOutcome, { ...PROMPT }, noticeContext(capture));
+      const adaptation = adaptInputResult(
+        stopOutcome,
+        { ...PROMPT },
+        noticeContext(capture),
+        "UserPromptSubmit",
+      );
 
       // assert
       assert.deepStrictEqual(adaptation, { action: "handled" });
@@ -2241,6 +2317,7 @@ describe("stop notices (D-PG5-13)", () => {
       { kind: "stop", stopReason: "not now" },
       { ...PROMPT },
       failingNoticeContext(),
+      "UserPromptSubmit",
     );
 
     // assert

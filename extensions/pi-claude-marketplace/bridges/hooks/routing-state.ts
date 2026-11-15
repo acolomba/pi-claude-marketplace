@@ -142,17 +142,29 @@ export interface PendingSessionStartContext {
 }
 
 /**
- * D-CF5-13: a UserPromptSubmit hook's folded `additionalContext`, buffered by
- * the `input` adapter and drained by the `before_agent_start` handler of the
+ * D-PG6-20: the events whose hooks buffer a prompt's context, in the order
+ * their parts reach the model.
+ */
+export const PROMPT_CONTEXT_EVENTS = [
+  "UserPromptSubmit",
+] as const satisfies readonly BucketAEvent[];
+
+export type PromptContextEvent = (typeof PROMPT_CONTEXT_EVENTS)[number];
+
+/**
+ * D-CF5-13: a prompt hook's folded `additionalContext`, buffered by the
+ * `input` adapter and drained by the `before_agent_start` handler of the
  * same prompt's turn into a message after the prompt. The prompt itself
  * reaches the model unchanged. Provenance is the entry the fold attributes
- * the context to, as for `PendingSessionStartContext`.
+ * the context to, as for `PendingSessionStartContext`. `event` is the hook's
+ * event, which labels the context's text (D-PG6-20).
  */
 export interface PendingPromptContext {
   readonly context: string;
   readonly pluginId: string;
   readonly marketplace: string;
   readonly scope: Scope;
+  readonly event: PromptContextEvent;
 }
 
 /**

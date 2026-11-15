@@ -1407,7 +1407,7 @@ async function adaptForEvent(
       // D-CF5-11: an ask may wait on the user's answer in the terminal.
       return await adaptToolCallResult(result, event as ToolCallEvent, context);
     case "UserPromptSubmit":
-      return adaptInputResult(result, event as InputEvent, context);
+      return adaptInputResult(result, event as InputEvent, context, "UserPromptSubmit");
     case "PreCompact":
       return adaptPreCompactResult(folded.outcomes.map((outcome) => outcome.result));
     case "SessionStart":

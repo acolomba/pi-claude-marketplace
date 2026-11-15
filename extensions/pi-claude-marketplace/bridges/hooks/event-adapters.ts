@@ -29,11 +29,11 @@
 //     `{ content, details, structuredContent }` -- a hook-supplied value cannot rewrite
 //     `event.type`, `event.toolName`, or any other field.
 //
-//   - adaptInputResult           -> Pi `input` (UserPromptSubmit).
+//   - adaptInputResult           -> Pi `input` (the `PROMPT_CONTEXT_EVENTS`).
 //     `block` -> `{ action: "handled" }`; `stop` -> `{ action: "handled" }`,
 //     so the prompt stops, and a stop notice to the user (D-PG5-13);
 //     `mutate.additionalContext` is buffered in the
-//     runtime's prompt-context buffer and the prompt continues unchanged
+//     runtime's prompt-context buffer with its event, and the prompt continues unchanged
 //     (`undefined`); the `before_agent_start` handler sends the context as a
 //     message after the prompt (D-CF5-13); `noop` returns `undefined`.
 //
@@ -82,7 +82,12 @@ import { renderFileToolOutput } from "./tool-output-files.ts";
 import { renderSearchShellToolOutput } from "./tool-output-search-shell.ts";
 
 import type { HookExecResult } from "./exec-result.ts";
-import type { PendingPromptContext, RoutingEntry } from "./routing-state.ts";
+import type {
+  PendingPromptContext,
+  PendingSessionStartContext,
+  PromptContextEvent,
+  RoutingEntry,
+} from "./routing-state.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type {
@@ -121,8 +126,8 @@ const UNATTRIBUTED = { scope: "user", marketplace: "", pluginId: "" } as const s
 };
 
 // A context to buffer, with the provenance of the entry the fold attributes
-// it to. Both pending buffers take this shape.
-function bufferedContext(text: string, context: HookAdapterContext): PendingPromptContext {
+// it to. A prompt's context adds its event (`bufferedPromptContext`).
+function bufferedContext(text: string, context: HookAdapterContext): PendingSessionStartContext {
   const provenance = context.attributedTo ?? UNATTRIBUTED;
   return {
     context: text,
@@ -130,6 +135,14 @@ function bufferedContext(text: string, context: HookAdapterContext): PendingProm
     marketplace: provenance.marketplace,
     pluginId: provenance.pluginId,
   };
+}
+
+function bufferedPromptContext(
+  text: string,
+  claudeEvent: PromptContextEvent,
+  context: HookAdapterContext,
+): PendingPromptContext {
+  return { ...bufferedContext(text, context), event: claudeEvent };
 }
 
 // The declared command of the entry a folded result is attributed to.
@@ -537,11 +550,30 @@ export function adaptPreCompactResult(
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// adaptInputResult -- UserPromptSubmit
+// adaptInputResult -- the prompt events
 // ──────────────────────────────────────────────────────────────────────────
 
 /** The custom type of the message that carries prompt and session hook context to the model. */
 export const HOOK_CONTEXT_MESSAGE_TYPE = "claude-hook-additional-context";
+
+/**
+ * HOOK-05 / D-PG6-20: one `<Event> hook additional context: <values>` text
+ * part, the values joined by `\n` in buffer order, as Claude Code 2.1.316
+ * words it, labeled with the event of the hooks that gave the values. A
+ * value that is empty or only whitespace adds nothing, so no value with text
+ * gives no part.
+ */
+export function hookContextPart(
+  claudeEvent: "SessionStart" | PromptContextEvent,
+  values: readonly string[],
+): { readonly type: "text"; readonly text: string } | undefined {
+  const texts = values.filter((text) => text.trim().length > 0);
+  if (texts.length === 0) {
+    return undefined;
+  }
+
+  return { type: "text", text: `${claudeEvent} hook additional context: ${texts.join("\n")}` };
+}
 
 /**
  * D-CF5-13: send the context of a prompt that Pi queued into the running
@@ -557,8 +589,13 @@ export const HOOK_CONTEXT_MESSAGE_TYPE = "claude-hook-additional-context";
  * default, so the context would get a model call of its own. A blank
  * context, or no Pi API, sends nothing; a send that throws is debug-logged.
  */
-function sendQueuedPromptContext(pi: ExtensionAPI | undefined, text: string): void {
-  if (pi === undefined || text.trim() === "") {
+function sendQueuedPromptContext(
+  pi: ExtensionAPI | undefined,
+  claudeEvent: PromptContextEvent,
+  text: string,
+): void {
+  const part = hookContextPart(claudeEvent, [text]);
+  if (pi === undefined || part === undefined) {
     return;
   }
 
@@ -566,7 +603,7 @@ function sendQueuedPromptContext(pi: ExtensionAPI | undefined, text: string): vo
     pi.sendMessage(
       {
         customType: HOOK_CONTEXT_MESSAGE_TYPE,
-        content: [{ type: "text", text: `UserPromptSubmit hook additional context: ${text}` }],
+        content: [part],
         display: false,
       },
       { triggerTurn: false },
@@ -629,26 +666,31 @@ export function sendDueFollowUpContext(
 
   const entry = runtime.takeFollowUpContext(next);
   if (entry !== undefined) {
-    sendQueuedPromptContext(pi, entry.context);
+    sendQueuedPromptContext(pi, entry.event, entry.context);
   }
 }
 
 // D-CF5-13: where a prompt's context waits. A prompt that starts its own run
 // buffers it for `before_agent_start`; a steer sends it at once; a follow-up
 // queues it for the turn end before Pi reads the follow-up.
-function queuePromptContext(text: string, event: InputEvent, context: HookAdapterContext): void {
+function queuePromptContext(
+  text: string,
+  claudeEvent: PromptContextEvent,
+  event: InputEvent,
+  context: HookAdapterContext,
+): void {
   switch (event.streamingBehavior) {
     case undefined:
-      context.runtime.appendPendingPromptContext(bufferedContext(text, context));
+      context.runtime.appendPendingPromptContext(bufferedPromptContext(text, claudeEvent, context));
       return;
 
     case "steer":
-      sendQueuedPromptContext(context.pi, text);
+      sendQueuedPromptContext(context.pi, claudeEvent, text);
       return;
 
     case "followUp":
       context.runtime.queueFollowUpContext({
-        ...bufferedContext(text, context),
+        ...bufferedPromptContext(text, claudeEvent, context),
         prompt: event.text,
       });
       return;
@@ -661,7 +703,8 @@ function queuePromptContext(text: string, event: InputEvent, context: HookAdapte
  *
  * D-CF5-13 / HOOK-05: a hook's `additionalContext` never replaces the
  * prompt. The adapter buffers it with the provenance of the attributed entry
- * and lets the prompt continue; the `before_agent_start` handler of the same
+ * and `claudeEvent`, the hook's event, which labels it (D-PG6-20), and lets
+ * the prompt continue; the `before_agent_start` handler of the same
  * turn sends it as a message after the prompt. A prompt that Pi queues into
  * the running agent starts no turn of its own, so its context goes out as a
  * message on the model call that reads it (`queuePromptContext`). A block or
@@ -671,6 +714,7 @@ export function adaptInputResult(
   result: HookExecResult,
   event: InputEvent,
   context: HookAdapterContext,
+  claudeEvent: PromptContextEvent,
 ): InputEventResult | undefined {
   switch (result.kind) {
     case "block":
@@ -681,11 +725,11 @@ export function adaptInputResult(
         return undefined;
       }
 
-      queuePromptContext(result.additionalContext, event, context);
+      queuePromptContext(result.additionalContext, claudeEvent, event, context);
       return undefined;
 
     case "stop":
-      // D-CF5-11 / D-PG5-13: a UserPromptSubmit `continue: false` stops the
+      // D-CF5-11 / D-PG5-13: a prompt hook's `continue: false` stops the
       // prompt and shows the user why.
       showAdapterNotice(
         context,

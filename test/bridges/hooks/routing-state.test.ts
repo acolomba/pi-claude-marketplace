@@ -9,7 +9,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { createRoutingStateOperations } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import {
+  createRoutingStateOperations,
+  PROMPT_CONTEXT_EVENTS,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 
@@ -70,6 +73,14 @@ test("reads an empty pending SessionStart context", (t) => {
   assert.deepStrictEqual(entries, []);
 });
 
+test("names the prompt events whose context the buffer carries, in the order of their parts (D-PG6-20)", () => {
+  // act
+  const events = [...PROMPT_CONTEXT_EVENTS];
+
+  // assert
+  assert.deepStrictEqual(events, ["UserPromptSubmit"]);
+});
+
 test("the pending context clear also empties the runtime's prompt context (D-CF5-13)", () => {
   // arrange
   const runtime = createHooksRuntime();
@@ -77,6 +88,7 @@ test("the pending context clear also empties the runtime's prompt context (D-CF5
   runtime.appendPendingPromptContext({
     context: "stale prompt context",
     pluginId: "stale-plugin",
+    event: "UserPromptSubmit",
     marketplace: "catalog",
     scope: "user",
   } satisfies PendingPromptContext);

@@ -78,7 +78,11 @@ import {
 } from "./async-rewake/registry.ts";
 import { resolveChildRootSession } from "./child-root-session.ts";
 import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
-import { HOOK_CONTEXT_MESSAGE_TYPE, sendDueFollowUpContext } from "./event-adapters.ts";
+import {
+  HOOK_CONTEXT_MESSAGE_TYPE,
+  hookContextPart,
+  sendDueFollowUpContext,
+} from "./event-adapters.ts";
 import { FILE_SYSTEM_SWEEP_OPS, sweepHookOutput } from "./hook-output-files.ts";
 import { compileIfPredicate, MATCH_ALL_IF } from "./if-field/index.ts";
 import { mcpServerEntries } from "./mcp-server-table.ts";
@@ -87,7 +91,10 @@ import { claudeSessionEndReason } from "./payloads/session-end.ts";
 import { claudeSessionStartSource } from "./payloads/session-start.ts";
 import {
   createRoutingStateOperations,
+  PROMPT_CONTEXT_EVENTS,
   type CacheEntry,
+  type PendingPromptContext,
+  type PromptContextEvent,
   type RoutingEntry,
   type RoutingStateOperations,
 } from "./routing-state.ts";
@@ -271,22 +278,6 @@ async function readAndCachePluginHooksWith(
 // Hook additionalContext bridge (D-CF5-13)
 // ──────────────────────────────────────────────────────────────────────────
 
-// HOOK-05: one `<Event> hook additional context: <values>` text part, the
-// values joined by `\n` in buffer order, as Claude Code 2.1.316 words it. A
-// value that is empty or only whitespace adds nothing, so a buffer without
-// text gives no part.
-function contextPart(
-  claudeEvent: "SessionStart" | "UserPromptSubmit",
-  entries: readonly { readonly context: string }[],
-): { readonly type: "text"; readonly text: string } | undefined {
-  const values = entries.map((entry) => entry.context).filter((text) => text.trim().length > 0);
-  if (values.length === 0) {
-    return undefined;
-  }
-
-  return { type: "text", text: `${claudeEvent} hook additional context: ${values.join("\n")}` };
-}
-
 /**
  * Factory: build the `before_agent_start` handler closure registered on
  * Pi at `registerHooksBridge` time. The registration wrapper checks its
@@ -295,7 +286,9 @@ function contextPart(
  *
  * D-CF5-13: the handler drains both context buffers into one custom message
  * with a text part per event, `SessionStart hook additional context: <values>`
- * first, then `UserPromptSubmit hook additional context: <values>`. Pi places the message after the prompt, persists
+ * first, then one part for each event of `PROMPT_CONTEXT_EVENTS` that
+ * buffered a context, labeled with that event (D-PG6-20). Pi places the
+ * message after the prompt, persists
  * it in the session, and sends it to the model as a user message, so the
  * SessionStart context stays in the history of every later turn, as Claude
  * Code's does. The prompt and the system prompt are not changed.
@@ -360,6 +353,21 @@ async function childRootSession(ctx: ExtensionContext): Promise<ChildRootSession
   }
 }
 
+// D-PG6-20: one part for each prompt event that buffered a context, in the
+// order of `PROMPT_CONTEXT_EVENTS`, each labeled with its own event.
+function promptContextParts(
+  entries: readonly PendingPromptContext[],
+): ({ readonly type: "text"; readonly text: string } | undefined)[] {
+  const byEvent = new Map<PromptContextEvent, string[]>();
+  for (const entry of entries) {
+    byEvent.set(entry.event, [...(byEvent.get(entry.event) ?? []), entry.context]);
+  }
+
+  return PROMPT_CONTEXT_EVENTS.map((claudeEvent) =>
+    hookContextPart(claudeEvent, byEvent.get(claudeEvent) ?? []),
+  );
+}
+
 // Records how the run started and drains both context buffers into one message.
 function startRun(
   runtime: HooksRuntime,
@@ -368,9 +376,10 @@ function startRun(
   runtime.recordRunStart(
     event.messageType === "custom" && event.message.customType === REWAKE_CUSTOM_TYPE,
   );
+  const sessionStart = runtime.drainPendingSessionStartContext().map((entry) => entry.context);
   const content = [
-    contextPart("SessionStart", runtime.drainPendingSessionStartContext()),
-    contextPart("UserPromptSubmit", runtime.drainPendingPromptContext()),
+    hookContextPart("SessionStart", sessionStart),
+    ...promptContextParts(runtime.drainPendingPromptContext()),
   ].filter((part) => part !== undefined);
   if (content.length === 0) {
     return undefined;
