@@ -1,10 +1,10 @@
 ---
 phase: 08-workflow-agents-and-run-paths
-fixed_at: 2026-11-15T06:03:51Z
+fixed_at: 2026-11-15T06:22:40Z
 review_path: .planning/phases/08-workflow-agents-and-run-paths/08-REVIEW.md
-iteration: 1
-findings_in_scope: 8
-fixed: 8
+iteration: 2
+findings_in_scope: 5
+fixed: 5
 skipped: 0
 status: all_fixed
 ---
@@ -84,8 +84,75 @@ All checks ran in the main checkout of the worktree `/home/acolomba/src/pi-claud
 - `npm run typecheck`: clean. ESLint on the changed TS files: clean. The commit hook (`check:commit`) passed on every commit.
 - `npm run check` was not run: the parent owns the combined-tree gate.
 
----
-
 _Fixed: 2026-11-15T06:03:51Z_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 1_
+
+## Iteration 2
+
+**Fixed at:** 2026-11-15T06:22:40Z
+**Source review:** .planning/phases/08-workflow-agents-and-run-paths/08-REVIEW.md (iteration 2, committed b3fdc46f)
+
+The frontmatter now gives the iteration 2 counts. The iteration 1 counts are in the summary above (8 in scope, 8 fixed).
+
+**Summary:**
+
+- Findings in scope: 5 (WR2-01, IN2-01..04)
+- Fixed: 5
+- Skipped: 0
+
+| Finding | Status | Commit | Notes |
+| --- | --- | --- | --- |
+| WR2-01 | fixed | e03e0408 | Pending maintainer review: T-08-13 acceptance and rating. |
+| IN2-01 | fixed | 8975cda6 | Comment and catalog prose only; no owner case added. |
+| IN2-02 | fixed | dffbb2da | Citations re-pointed at 8975cda6. |
+| IN2-03 | fixed | 9a0e0e05 | Pending maintainer review: AGENT-10 decision. |
+| IN2-04 | fixed | 6e2f0a11 | -- |
+
+### WR2-01: T-08-13 marked closed on an acceptance that nobody owns
+
+**Files modified:** `.planning/phases/08-workflow-agents-and-run-paths/08-SECURITY.md`
+**Commit:** e03e0408
+**Applied fix:** T-08-13 is now `open (nonblocking)` with the disposition "accept (pending maintainer acceptance)". It is below the `block_on: high` limit. The frontmatter now reads `threats_open: 0`, `threats_open_nonblocking: 1`, `threats_closed: 26`. `status: verified` stays, because the blocking gate (`threats_open`) is still 0. The intro gives the new counts (4 high, 14 medium, 9 low). One sign-off item is now unchecked and names the pending acceptance. The approval line says that the verification covers the blocking gate only. A new audit-trail row records the change. The rating is now `medium`, the rating of T-08-12, because a cloned repository can bring about that exposure with no consent from the user. `.planning/BACKLOG.md` is not edited here. The register says that the parent writes the drafted line to BACKLOG when it merges the branch. Pending maintainer review: the acceptance itself, the medium rating, and keeping `status: verified` with one open nonblocking threat.
+
+Drafted BACKLOG line for the parent (the loader cite is now 122-134, its whole body):
+
+`- [workflows] Ask the pi-dynamic-workflows engine to apply Pi project trust to <project>/.pi/workflows/settings.json (3.15.0 src/workflow-settings.ts:122-134 reads it untrusted; a cloned repo can set providerMiddlewareExtensions and inheritMainModel). Source: 08-REVIEW.md CR-01, 08-SECURITY.md T-08-13.`
+
+### IN2-01: The comment and the catalog gave the wrong condition for the short count line
+
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/discover-names.ts`, `docs/output-catalog.md`
+**Commit:** 8975cda6
+**Applied fix:** Both now say "when no missing-agent note comes before it", and they say that a restriction note may still come first. The comment changed, and the catalog prose outside the example block changed. So the byte pin, which counts example bytes only, stays at 55,018. The optional owner case (a restriction note and then the short count line) was not added.
+
+### IN2-02: Stale line citations in 08-SECURITY.md
+
+**Files modified:** `.planning/phases/08-workflow-agents-and-run-paths/08-SECURITY.md`
+**Commit:** dffbb2da
+**Applied fix:** T-08-04, T-08-05, T-08-06, T-08-07, T-08-24, T-08-25 and T-08-26 now cite the tree at 8975cda6. The intro says so. T-08-05 now also cites the owner cases and the scenario for a count line that no note precedes. T-08-25 records the +1 byte move from WR-02. The engine loader cite is now `src/workflow-settings.ts:122-134` (its whole body) in the row, in the log, and in the BACKLOG line. The other rows were checked and still match.
+
+### IN2-03: The AG-11 refusal had no upstream statement
+
+**Files modified:** `docs/mcp-compatibility.md`
+**Commit:** 9a0e0e05
+**Applied fix:** The 2.1.323 binary has a launch-time check, `subagent_tool_resolution` / `zero_tools_refused`. It throws "Agent '<type>' would be spawned with zero tools -- refusing. Its tools list resolved to nothing: ... not available to subagents [...]". `Workflow` is one of the tools that are not available to subagents. So Claude Code installs such an agent and refuses only its launch. The bullet now says this, says that the install refusal is a divergence that the recorded requirement AG-11 licenses, and points to AGENT-10 in `docs/research/parity-gaps/subagents.md`, which proposes to skip the agent instead. Pending maintainer review: the AGENT-10 decision.
+
+### IN2-04: The settings paragraph named only two keys
+
+**Files modified:** `docs/workflows-compatibility.md`
+**Commit:** 6e2f0a11
+**Applied fix:** The paragraph now names `defaultEffort`, `defaultTokenBudget` (`null` removes the user's budget), `defaultConcurrency`, `defaultAgentRetries`, `persistAgentSessions` (it writes subagent transcripts to disk) and `keywordTriggerEnabled`. All of them were checked against the engine 3.15.0 `WorkflowSettings` interface (`src/workflow-settings.ts:13-75`).
+
+### Verification (iteration 2)
+
+All work ran in the main checkout of the worktree `/home/acolomba/src/pi-claude-marketplace-gaps-agents`. No separate fixer worktree was used. Tests ran with a scratchpad HOME and `--import test/platform/isolated-pi-home.ts`.
+
+- `test/architecture/catalog-uat/catalog-contract.test.ts` and `test/orchestrators/plugin/discover-names.test.ts`: 53 pass, 0 fail, after IN2-01.
+- The commit hook ran in full on the IN2-01 commit (`check:commit` passed). The other commits change only docs or planning files. `SKIP=npm-check pre-commit run --files` was clean on each of them.
+- `npm run check` was not run: the parent owns the combined-tree gate.
+
+---
+
+_Fixed: 2026-11-15T06:22:40Z_
+_Fixer: Claude (gsd-code-fixer)_
+_Iteration: 2_
