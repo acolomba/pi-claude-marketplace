@@ -124,6 +124,7 @@ Feature: Agent frontmatter
       name: demo:helper
       description: Helps with the task.
       aliases: pi-claude-marketplace-demo-helper
+      allowNestedSubagents: true
       systemPromptMode: replace
       inheritProjectContext: true
       inheritSkills: true
