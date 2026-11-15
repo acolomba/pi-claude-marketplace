@@ -20,6 +20,12 @@
   - pi-mcp-adapter then starts such a server again in the background when it exits, and asks for project server approval again after the reinstall.
   - pi-mcp-adapter's global `settings.idleTimeout` no longer stops such a server. To let one stop when idle, set `idleTimeout` on its entry.
   - An update keeps your `caFile` only while the server stays https at the same origin, and otherwise removes it with a warning. An uninstall or disable does not keep your `caFile`, and says so.
+  - A plugin's `userConfig` options now give their default to hooks as `CLAUDE_PLUGIN_OPTION_<KEY>`, to MCP servers, and to skill, command, and agent content. A plugin whose options all have a default now installs without `--partial`.
+  - If you installed a plugin with `--partial` because of its `userConfig`, run `/claude:plugin reinstall` once to give it its options.
+  - An MCP server that names a plugin option with no value is left out with a warning. A shell-form hook that names a plugin option does not run.
+  - pi-mcp-adapter asks for project server approval again for a server whose entry names a plugin option, after the plugin's next update or reinstall.
+  - A user-scope skill or command now gets the project directory for `${CLAUDE_PROJECT_DIR}` when you invoke it or the model reads it.
+  - A plugin's `bin` folder now joins `PATH` only when it exists. A project plugin's `bin` folder joins only in a project that Pi trusts.
 
 - More plugin hook events now behave as in Claude Code, and the model-facing tools return what the model asks for. (#310)
 
