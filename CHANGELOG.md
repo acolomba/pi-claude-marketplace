@@ -22,6 +22,12 @@
   - A hook that returns `continue: false` now shows its `stopReason`.
   - Hook context over 10,000 characters now goes to a file in `pi-claude-marketplace/data/_shared/hook-output/`, and the model gets its path and a preview.
   - A plain `async` hook now has no timeout.
+  - Tool hooks now get the call's `tool_use_id` and `duration_ms`, and the hooks of a plugin's MCP tool get `mcp_server`.
+  - Tool, `Stop`, and `StopFailure` hooks now get the session's thinking level as `effort`.
+  - `SessionStart` hooks now get `model` and `session_title`, `UserPromptSubmit` hooks get `session_title`, and `PreCompact` hooks get the text of `/compact`.
+  - `UserPromptExpansion` hooks now run when you type a plugin command or a skill, and they can block it. Run `/claude:plugin update` or `/claude:plugin reinstall` on a plugin installed earlier to get these hooks.
+  - A `SessionStart` hook now gets `resume` when Pi starts with `--continue` or `--session`, and `fork` when Pi starts with `--fork`.
+  - In a background subagent, a tool hook's `session_id` now names the session that started the subagent.
 
 - More plugin hook events now behave as in Claude Code, and the model-facing tools return what the model asks for. (#310)
 
