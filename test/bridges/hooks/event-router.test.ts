@@ -44,12 +44,17 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
+import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { adapterCommand } from "../../platform/pi-inventory-seed.ts";
 
 import type { SpawnDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import type { HookExecutor } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
-import type { HooksHydrationDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import type {
+  HooksHydrationDeps,
+  TypedExpansionResolver,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
 import type {
   HooksRuntime,
   HooksRuntimeChildEntry,
@@ -62,6 +67,7 @@ import type {
   BeforeAgentStartEvent,
   ExtensionAPI,
   ExtensionContext,
+  InputEvent,
   SessionCompactEvent,
   ToolCallEvent,
   ToolResultEvent,
@@ -612,6 +618,7 @@ test(
       "register:session_before_compact",
       "register:session_compact",
       "register:input",
+      "register:input",
       "register:tool_call",
       "register:tool_result",
       "register:before_agent_start",
@@ -628,6 +635,7 @@ test(
         { event: "session_shutdown", handlerType: "function" },
         { event: "session_before_compact", handlerType: "function" },
         { event: "session_compact", handlerType: "function" },
+        { event: "input", handlerType: "function" },
         { event: "input", handlerType: "function" },
         { event: "tool_call", handlerType: "function" },
         { event: "tool_result", handlerType: "function" },
@@ -1094,7 +1102,7 @@ for (const mode of ["tui", "print", "json", "rpc"]) {
         await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
           cwd: root,
         });
-        const handler = registeredHandler(registrations, "input", 1);
+        const handler = registeredHandler(registrations, "input", 2);
         const event = { type: "input", text: "hello", source: "interactive" };
         runtime.recordStopReentry();
 
@@ -2747,7 +2755,7 @@ test(
     assert.strictEqual(sessionStartUpdate, undefined);
     assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
     assert.deepStrictEqual(messages, []);
-    assert.strictEqual(registrations.length, 13);
+    assert.strictEqual(registrations.length, 14);
     assert.deepStrictEqual(diagnostics, [
       `[hooks] hydrate: loadState failed for scope=project extensionRoot=${factoryProjectLocations.extensionRoot}: factory project state refused`,
     ]);
@@ -2800,7 +2808,7 @@ test("same-runtime registration invalidates an earlier callback before lazy hydr
     locationsFor("project", projectRoot).extensionRoot,
   ]);
   assert.deepStrictEqual(messages, []);
-  assert.strictEqual(registrations.length, 26);
+  assert.strictEqual(registrations.length, 28);
 });
 
 test(
@@ -2889,7 +2897,7 @@ test(
     assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
     assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
     assert.deepStrictEqual(messages, []);
-    assert.strictEqual(registrations.length, 26);
+    assert.strictEqual(registrations.length, 28);
   },
 );
 
@@ -3540,6 +3548,7 @@ test(
         { event: "session_before_compact", handlerType: "function" },
         { event: "session_compact", handlerType: "function" },
         { event: "input", handlerType: "function" },
+        { event: "input", handlerType: "function" },
         { event: "tool_call", handlerType: "function" },
         { event: "tool_result", handlerType: "function" },
         { event: "before_agent_start", handlerType: "function" },
@@ -3593,7 +3602,7 @@ test(
     assert.deepStrictEqual(dispatched, ["project", "user"]);
     assert.strictEqual(userSharedBytes, "regular-file-boundary");
     assert.strictEqual(projectSharedStat.isDirectory(), true);
-    assert.strictEqual(registrations.length, 13);
+    assert.strictEqual(registrations.length, 14);
   },
 );
 
@@ -3642,7 +3651,7 @@ for (const mode of ["tui", "print", "json", "rpc"] as const) {
     assert.deepStrictEqual(messages, []);
     assert.deepStrictEqual(capture.entries, []);
     capture.assertValid();
-    assert.strictEqual(registrations.length, 13);
+    assert.strictEqual(registrations.length, 14);
   });
 }
 
@@ -4412,7 +4421,7 @@ test("session_start contains a lazy project cwd failure and still delegates safe
   assert.strictEqual(sessionStartUpdate, undefined);
   assert.deepStrictEqual(dispatches, []);
   assert.deepStrictEqual(messages, []);
-  assert.strictEqual(registrations.length, 13);
+  assert.strictEqual(registrations.length, 14);
 });
 
 /** A manual compaction event whose entry carries `summary`. */
@@ -5023,10 +5032,6 @@ test(
 
 // D-PG6-18: no registration dispatches UserPromptExpansion yet, in any session.
 function policyRuns(claudeEvent: BucketAEvent, child: boolean): BucketAEvent[] {
-  if (claudeEvent === "UserPromptExpansion") {
-    return [];
-  }
-
   if (child) {
     return (["PreToolUse", "PostToolUse", "PostToolUseFailure"] as BucketAEvent[]).includes(
       claudeEvent,
@@ -5062,6 +5067,8 @@ for (const child of [false, true]) {
             dispatched.push(entry.claudeEvent);
             return Promise.resolve({ kind: "noop" });
           },
+          resolveTypedExpansion: () =>
+            Promise.resolve({ commandName: "demo:deploy", commandArgs: "staging" }),
         });
         const entry: RoutingEntry = {
           ...preToolUseEntry("policy-plugin", root),
@@ -5103,10 +5110,11 @@ for (const child of [false, true]) {
             );
             break;
           case "UserPromptExpansion":
-            await registeredHandler(registrations, "input")(
-              { type: "input", text: "/demo:deploy staging", source: "interactive" },
-              context,
-            );
+            await registeredHandler(
+              registrations,
+              "input",
+              1,
+            )({ type: "input", text: "/demo:deploy staging", source: "interactive" }, context);
             break;
           case "PreToolUse":
             await registeredHandler(registrations, "tool_call")(
@@ -5582,4 +5590,358 @@ test("the project hydrate of a trusted project names its plugin MCP servers (D-P
       { name: "plugin:seeded:stub", source: "plugin" },
     ],
   );
+});
+
+const EXPANSION_LINE = {
+  type: "input",
+  text: "/demo:deploy staging",
+  source: "interactive",
+} satisfies InputEvent;
+
+const DEPLOY_EXPANSION = {
+  commandName: "demo:deploy",
+  commandArgs: "staging",
+  commandSource: "plugin",
+} as const;
+
+interface ExpansionRun {
+  readonly claudeEvent: BucketAEvent;
+  readonly event: unknown;
+}
+
+// A registered bridge whose executor records each hook it runs and answers
+// `results` by event, with one match-all hook routed for each prompt event.
+async function expansionFixture(
+  t: TestContext,
+  resolve: TypedExpansionResolver | undefined,
+  results: Partial<Record<BucketAEvent, HookExecResult>> = {},
+): Promise<{
+  readonly runtime: HooksRuntime;
+  readonly registrations: RecordedRegistration[];
+  readonly runs: ExpansionRun[];
+  readonly context: ExtensionContext;
+  readonly register: () => Promise<void>;
+}> {
+  const { root } = await createHermeticEnvironment(t, "hooks-router-expansion-");
+  const runtime = createHooksRuntime();
+  const { pi, registrations } = makeRecordingPi();
+  const runs: ExpansionRun[] = [];
+  const register = (): Promise<void> =>
+    createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+      cwd: root,
+      executor: (entry, event) => {
+        runs.push({ claudeEvent: entry.claudeEvent, event: structuredClone(event) });
+        return Promise.resolve(results[entry.claudeEvent] ?? { kind: "noop" });
+      },
+      ...(resolve === undefined ? {} : { resolveTypedExpansion: resolve }),
+    });
+  await register();
+  for (const claudeEvent of ["UserPromptSubmit", "UserPromptExpansion"] as const) {
+    runtime.setRoutingBucket(claudeEvent, [
+      {
+        ...preToolUseEntry(`${claudeEvent}-plugin`, root),
+        claudeEvent,
+        matcher: parseMatcher(""),
+        rawMatcher: "",
+      },
+    ]);
+  }
+
+  return { runtime, registrations, runs, context: makeContext(root, root), register };
+}
+
+// Walks the bridge's `input` handlers as Pi does: in registration order,
+// stopping at the first that answers `handled`.
+async function runInputHandlers(
+  registrations: readonly RecordedRegistration[],
+  event: InputEvent,
+  context: ExtensionContext,
+): Promise<unknown[]> {
+  const answers: unknown[] = [];
+  for (const { handler } of registrations.filter(
+    (registration) => registration.event === "input",
+  )) {
+    const answer = await (handler as (...args: unknown[]) => unknown)(event, context);
+    answers.push(answer);
+    if ((answer as { readonly action?: string } | undefined)?.action === "handled") {
+      break;
+    }
+  }
+
+  return answers;
+}
+
+function recordingResolver(
+  calls: string[],
+  answer: () => Promise<Awaited<ReturnType<TypedExpansionResolver>>>,
+): TypedExpansionResolver {
+  return (text) => {
+    calls.push(text);
+    return answer();
+  };
+}
+
+test("runs the expansion hooks for a line the resolver names, with the synthetic event (D-PG6-18)", async (t) => {
+  // arrange
+  const resolved: string[] = [];
+  const { registrations, runs, context } = await expansionFixture(
+    t,
+    recordingResolver(resolved, () => Promise.resolve(DEPLOY_EXPANSION)),
+    { UserPromptExpansion: { kind: "block", reason: "not now" } },
+  );
+
+  // act
+  const answer = await registeredHandler(registrations, "input", 1)(EXPANSION_LINE, context);
+
+  // assert
+  assert.deepStrictEqual(
+    { answer, resolved, runs },
+    {
+      answer: { action: "handled" },
+      resolved: ["/demo:deploy staging"],
+      runs: [
+        {
+          claudeEvent: "UserPromptExpansion",
+          event: {
+            command_name: "demo:deploy",
+            command_args: "staging",
+            command_source: "plugin",
+            input: EXPANSION_LINE,
+          },
+        },
+      ],
+    },
+  );
+});
+
+test("leaves out command_source when the resolver gives none (D-PG6-19)", async (t) => {
+  // arrange
+  const { registrations, runs, context } = await expansionFixture(t, () =>
+    Promise.resolve({ commandName: "deploy", commandArgs: "" }),
+  );
+
+  // act
+  const answer = await registeredHandler(
+    registrations,
+    "input",
+    1,
+  )({ type: "input", text: "/deploy", source: "rpc" }, context);
+
+  // assert
+  assert.deepStrictEqual(
+    { answer, runs },
+    {
+      answer: undefined,
+      runs: [
+        {
+          claudeEvent: "UserPromptExpansion",
+          event: {
+            command_name: "deploy",
+            command_args: "",
+            input: { type: "input", text: "/deploy", source: "rpc" },
+          },
+        },
+      ],
+    },
+  );
+});
+
+for (const { name, line, answer, resolverCalls } of [
+  {
+    name: "input from an extension",
+    line: { ...EXPANSION_LINE, source: "extension" },
+    answer: (): Promise<undefined> => Promise.resolve(undefined),
+    resolverCalls: [],
+  },
+  {
+    name: "a line the resolver does not name",
+    line: EXPANSION_LINE,
+    answer: (): Promise<undefined> => Promise.resolve(undefined),
+    resolverCalls: ["/demo:deploy staging"],
+  },
+] satisfies ReadonlyArray<{
+  readonly name: string;
+  readonly line: InputEvent;
+  readonly answer: () => Promise<undefined>;
+  readonly resolverCalls: readonly string[];
+}>) {
+  test(`runs no expansion hook for ${name} (D-PG6-18)`, async (t) => {
+    // arrange
+    const resolved: string[] = [];
+    const { registrations, runs, context } = await expansionFixture(
+      t,
+      recordingResolver(resolved, answer),
+    );
+
+    // act
+    const output = await registeredHandler(registrations, "input", 1)(line, context);
+
+    // assert
+    assert.deepStrictEqual(
+      { output, resolved, runs },
+      { output: undefined, resolved: resolverCalls, runs: [] },
+    );
+  });
+}
+
+test("runs no expansion hook for a registration with no resolver (D-PG6-18)", async (t) => {
+  // arrange
+  const { registrations, runs, context } = await expansionFixture(t, undefined);
+
+  // act
+  const output = await registeredHandler(registrations, "input", 1)(EXPANSION_LINE, context);
+
+  // assert
+  assert.deepStrictEqual({ output, runs }, { output: undefined, runs: [] });
+});
+
+test("asks the resolver nothing when no expansion hook is routed (D-PG6-18)", async (t) => {
+  // arrange
+  const resolved: string[] = [];
+  const { runtime, registrations, runs, context } = await expansionFixture(
+    t,
+    recordingResolver(resolved, () => Promise.resolve(DEPLOY_EXPANSION)),
+  );
+  runtime.setRoutingBucket("UserPromptExpansion", []);
+
+  // act
+  const output = await registeredHandler(registrations, "input", 1)(EXPANSION_LINE, context);
+
+  // assert
+  assert.deepStrictEqual({ output, resolved, runs }, { output: undefined, resolved: [], runs: [] });
+});
+
+test(
+  "runs no expansion hook in a pi-subagents child (D-PG6-18)",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const previous = process.env.PI_SUBAGENT_CHILD;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previous;
+      }
+    });
+    const resolved: string[] = [];
+    const { registrations, runs, context } = await expansionFixture(
+      t,
+      recordingResolver(resolved, () => Promise.resolve(DEPLOY_EXPANSION)),
+    );
+    process.env.PI_SUBAGENT_CHILD = "1";
+
+    // act
+    const output = await registeredHandler(registrations, "input", 1)(EXPANSION_LINE, context);
+
+    // assert
+    assert.deepStrictEqual(
+      { output, resolved, runs },
+      { output: undefined, resolved: [], runs: [] },
+    );
+  },
+);
+
+test("runs no expansion hook through a registration a reload replaced (D-PG6-18)", async (t) => {
+  // arrange
+  const resolved: string[] = [];
+  const { registrations, runs, context, register } = await expansionFixture(
+    t,
+    recordingResolver(resolved, () => Promise.resolve(DEPLOY_EXPANSION)),
+  );
+  const staleHandler = registeredHandler(registrations, "input", 1);
+  await register();
+
+  // act
+  const output = await staleHandler(EXPANSION_LINE, context);
+
+  // assert
+  assert.deepStrictEqual({ output, resolved, runs }, { output: undefined, resolved: [], runs: [] });
+});
+
+test("runs no expansion hook when the resolver rejects, and logs one debug line (D-PG6-18)", async (t) => {
+  // arrange
+  const logged = captureDebugLog(t);
+  const { registrations, runs, context } = await expansionFixture(t, () =>
+    Promise.reject(new Error("alias table unreadable")),
+  );
+
+  // act
+  const output = await registeredHandler(registrations, "input", 1)(EXPANSION_LINE, context);
+
+  // assert
+  assert.deepStrictEqual(
+    { output, runs, logged },
+    {
+      output: undefined,
+      runs: [],
+      logged: ["[hooks] input: typed expansion not resolved: alias table unreadable"],
+    },
+  );
+});
+
+test("a blocked prompt asks the expansion resolver nothing, by registration order (D-PG6-18)", async (t) => {
+  // arrange
+  const resolved: string[] = [];
+  const { registrations, runs, context } = await expansionFixture(
+    t,
+    recordingResolver(resolved, () => Promise.resolve(DEPLOY_EXPANSION)),
+    { UserPromptSubmit: { kind: "block", reason: "no prompts" } },
+  );
+
+  // act
+  const answers = await runInputHandlers(registrations, EXPANSION_LINE, context);
+
+  // assert
+  assert.deepStrictEqual(
+    { answers, resolved, events: runs.map((run) => run.claudeEvent) },
+    { answers: [{ action: "handled" }], resolved: [], events: ["UserPromptSubmit"] },
+  );
+});
+
+test("runs the prompt hooks before the expansion hooks of one line (D-PG6-18)", async (t) => {
+  // arrange
+  const { registrations, runs, context } = await expansionFixture(t, () =>
+    Promise.resolve(DEPLOY_EXPANSION),
+  );
+
+  // act
+  const answers = await runInputHandlers(registrations, EXPANSION_LINE, context);
+
+  // assert
+  assert.deepStrictEqual(
+    { answers, events: runs.map((run) => run.claudeEvent) },
+    {
+      answers: [undefined, undefined, undefined],
+      events: ["UserPromptSubmit", "UserPromptExpansion"],
+    },
+  );
+});
+
+test("before_agent_start sends the prompt context, then the expansion context, of one line (D-PG6-20)", async (t) => {
+  // arrange
+  const { registrations, context } = await expansionFixture(
+    t,
+    () => Promise.resolve(DEPLOY_EXPANSION),
+    {
+      UserPromptSubmit: { kind: "mutate", additionalContext: "prompt context" },
+      UserPromptExpansion: { kind: "mutate", additionalContext: "expansion context" },
+    },
+  );
+  await runInputHandlers(registrations, EXPANSION_LINE, context);
+
+  // act
+  const turn = await registeredHandler(registrations, "before_agent_start")(PROMPT_TURN, context);
+
+  // assert
+  assert.deepStrictEqual(turn, {
+    message: {
+      customType: "claude-hook-additional-context",
+      content: [
+        { type: "text", text: "UserPromptSubmit hook additional context: prompt context" },
+        { type: "text", text: "UserPromptExpansion hook additional context: expansion context" },
+      ],
+      display: false,
+    },
+  });
 });

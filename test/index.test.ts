@@ -430,6 +430,11 @@ async function loadExtension(
   })
     .thenReturn()
     .times(1);
+  when(() => {
+    pi.on("input", It.willCapture<EventListener<InputEvent>>("input expansion"));
+  })
+    .thenReturn()
+    .times(1);
   const toolCallListener = It.willCapture<ToolCallListener>("tool call");
   when(() => {
     pi.on("tool_call", toolCallListener);

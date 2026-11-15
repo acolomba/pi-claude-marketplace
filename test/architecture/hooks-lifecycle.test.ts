@@ -382,13 +382,14 @@ test("same-runtime reload makes every retained registration inert before argumen
   const projectRoot = path.join(root, "project");
   await hydration.registerHooksBridge(pi, { cwd: factoryRoot });
   await hydration.registerHooksBridge(pi, { cwd: factoryRoot });
-  const staleRegistrations = registrations.slice(0, 13);
-  const liveRegistrations = registrations.slice(13);
+  const staleRegistrations = registrations.slice(0, 14);
+  const liveRegistrations = registrations.slice(14);
   const registrationOrder = [
     "session_start",
     "session_shutdown",
     "session_before_compact",
     "session_compact",
+    "input",
     "input",
     "tool_call",
     "tool_result",

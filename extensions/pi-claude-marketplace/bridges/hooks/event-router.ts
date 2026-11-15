@@ -122,6 +122,8 @@ import type {
   ExtensionAPI,
   ExtensionContext,
   ExtensionMode,
+  InputEvent,
+  InputEventResult,
   SessionCompactEvent,
   SessionShutdownEvent,
 } from "../../platform/pi-api.ts";
@@ -654,9 +656,29 @@ export interface HooksHydrationDeps extends HooksFileReader {
  * injection seam documented on `registerHooksBridgeWith`: the sole
  * production caller omits it and runs on the `dispatchHookExec` default.
  */
+/** D-PG6-18 / D-PG6-19: the prompt template or skill a typed line expands, in Claude form. */
+export interface TypedExpansion {
+  readonly commandName: string;
+  readonly commandArgs: string;
+  readonly commandSource?: string;
+}
+
+/** D-PG6-18: names what a typed line expands, or nothing for a line that expands nothing. */
+export type TypedExpansionResolver = (
+  text: string,
+  ctx: ExtensionContext,
+) => Promise<TypedExpansion | undefined>;
+
 export interface RegisterHooksBridgeOptions {
   readonly cwd: string;
   readonly executor?: HookExecutor;
+  /**
+   * D-PG6-18: the extension factory passes the resolver over Pi's commands
+   * and the skill alias table, so a typed line that names a template or a
+   * skill runs its UserPromptExpansion hooks. A registration without one
+   * runs the event for no line.
+   */
+  readonly resolveTypedExpansion?: TypedExpansionResolver;
   /**
    * When this Pi process started, in epoch milliseconds; a fork whose header
    * is not older was made by this launch (D-PG6-15). Defaults to
@@ -1006,6 +1028,59 @@ type CompositeHandler<E extends CompositeDispatchEvent> = (
 ) => Promise<CompositeReturnFor<E>>;
 
 /**
+ * D-PG6-18: the UserPromptExpansion handler of Pi's `input` event. It runs
+ * the event's hooks once for a line the user typed, not for `extension`
+ * input, when `resolve` names what the line expands and a hook is routed,
+ * and only in a main session. Registered right after the UserPromptSubmit
+ * handler, so a blocked prompt runs no expansion hook, and before the alias
+ * and command handlers, so the hooks see the line as typed. The composite
+ * handler checks the generation again after the resolver's await.
+ */
+function expansionInputHandler(
+  runtime: HooksRuntime,
+  handler: CompositeHandler<"UserPromptExpansion">,
+  resolve: TypedExpansionResolver | undefined,
+): (event: InputEvent, ctx: ExtensionContext) => Promise<InputEventResult | undefined> | undefined {
+  return (event, ctx) =>
+    !dispatchesInCurrentSession("UserPromptExpansion") ||
+    event.source === "extension" ||
+    resolve === undefined ||
+    runtime.getRoutingBucket("UserPromptExpansion").length === 0
+      ? undefined
+      : runTypedExpansion(event, ctx, handler, resolve);
+}
+
+// D-PG6-18 / NFR-2: a resolver that rejects runs no hook and lets the line go on.
+async function runTypedExpansion(
+  event: InputEvent,
+  ctx: ExtensionContext,
+  handler: CompositeHandler<"UserPromptExpansion">,
+  resolve: TypedExpansionResolver,
+): Promise<InputEventResult | undefined> {
+  let expansion: TypedExpansion | undefined;
+  try {
+    expansion = await resolve(event.text, ctx);
+  } catch (err) {
+    hookDebugLog(`input: typed expansion not resolved: ${errorMessage(err)}`);
+    return undefined;
+  }
+
+  if (expansion === undefined) {
+    return undefined;
+  }
+
+  return handler(
+    {
+      command_name: expansion.commandName,
+      command_args: expansion.commandArgs,
+      ...(expansion.commandSource === undefined ? {} : { command_source: expansion.commandSource }),
+      input: event,
+    },
+    ctx,
+  );
+}
+
+/**
  * D-60-06: prepares the `_shared` data directory of every scope that has
  * SessionStart entries before a SessionStart dispatch, so `CLAUDE_ENV_FILE`'s
  * directory exists. Scopes are prepared one after the other and each failure
@@ -1156,7 +1231,7 @@ function sessionCompactCallback(
  *   4. Hydrate the parsed-config cache from disk, then rebuild routing tables.
  *   5. Reap persisted orphans per scope (D-62-05), then remove the scope's
  *      saved hook output older than 30 days (D-PG5-15).
- *   6. Register exactly 13 pi.on call sites -- 7 Bucket-A dispatch surfaces
+ *   6. Register exactly 14 pi.on call sites -- 7 Bucket-A dispatch surfaces
  *      (DISP-01) plus `before_agent_start` (the drain point for the
  *      SessionStart `additionalContext` capture buffer) plus `turn_end` (sends
  *      the context of a queued follow-up, D-CF5-13) plus the three
@@ -1165,14 +1240,16 @@ function sessionCompactCallback(
  *      ending and continues the run on a block; D-PG5-01), and
  *      `agent_settled` (runs the StopFailure bucket on an `error` or
  *      `length` ending; STOP-01, D-PG5-03) plus a SECOND `input`
- *      subscription (the STOP-07 loop-protection reset, distinct from the
- *      UserPromptSubmit dispatch handler on the same event). The eight
+ *      subscription right after the UserPromptSubmit one (the
+ *      UserPromptExpansion dispatch for a line `opts.resolveTypedExpansion`
+ *      names, D-PG6-18) plus a THIRD `input` subscription (the STOP-07
+ *      loop-protection reset, distinct from both dispatch handlers). The eight
  *      per-Pi-event Claude buckets fan out from 7 Pi event surfaces because
  *      `tool_result` splits on `event.isError` between the PostToolUse and
  *      PostToolUseFailure buckets (D-59-01); the Stop / StopFailure buckets
  *      are driven off the turn-boundary surfaces rather than a per-Pi-event
- *      surface. The Pi event-name set has 12 names (`input` appears twice),
- *      so 13 calls.
+ *      surface. The Pi event-name set has 12 names (`input` appears three
+ *      times), so 14 calls.
  *
  * `opts.executor` is the hook-execution injection point, forwarded verbatim
  * to every `compositeHandlerFor` / `toolResultCompositeHandler` /
@@ -1397,6 +1474,16 @@ async function registerHooksBridgeWith(
       return (event, ctx) =>
         dispatchesInCurrentSession("UserPromptSubmit") ? handler(event, ctx) : undefined;
     }),
+  );
+  pi.on(
+    "input",
+    bindWithMode((generation) =>
+      expansionInputHandler(
+        runtime,
+        compositeHandlerFor(runtime, "UserPromptExpansion", generation, pi, opts.executor),
+        opts.resolveTypedExpansion,
+      ),
+    ),
   );
   // D-P5-07: both tool handlers of this generation share one view, so they
   // read the proxy rule's implementation at most once together. Creating the
