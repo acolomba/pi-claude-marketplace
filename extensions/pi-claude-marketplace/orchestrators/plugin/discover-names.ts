@@ -57,7 +57,6 @@ export interface DiscoveredGeneratedNames {
 /** The part of a discovered agent the workflow agent join reads. */
 export interface WorkflowNoteAgent {
   readonly sourceName: string;
-  readonly generatedName: string;
   readonly namespace?: readonly string[];
   readonly raw: { readonly tools?: string; readonly disallowedTools?: string };
 }
@@ -103,10 +102,12 @@ function unkeptBuiltinTools(agent: WorkflowNoteAgent): readonly string[] {
 
 /**
  * D-PG4-11: the built-ins each restricted agent of the plugin gets anyway,
- * under each name a script may use for it: the upstream `<plugin>:<agent>`,
- * which the engine's registry resolves, and the generated name. An agent
- * whose restriction keeps every built-in is left out. Discovery already
- * checked every part of both names, so `declaredAgentName` cannot throw here.
+ * under the one name the engine's registry resolves: the frontmatter `name`,
+ * which the bridge writes as the upstream `<plugin>:<agent>`. The registry
+ * reads the file name only when `name` is absent, so the generated flat name
+ * binds no agent and gets no restriction note (D-PG8-04). An agent whose
+ * restriction keeps every built-in is left out. Discovery already checked
+ * every part of the name, so `declaredAgentName` cannot throw here.
  */
 function restrictedAgentTools(
   pluginName: string,
@@ -117,10 +118,7 @@ function restrictedAgentTools(
       const unkept = unkeptBuiltinTools(agent);
       return unkept.length === 0
         ? []
-        : [
-            [declaredAgentName(pluginName, agent.sourceName, agent.namespace), unkept] as const,
-            [agent.generatedName, unkept] as const,
-          ];
+        : [[declaredAgentName(pluginName, agent.sourceName, agent.namespace), unkept] as const];
     }),
   );
 }

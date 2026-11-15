@@ -132,6 +132,32 @@ Feature: Workflow agent types
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
       | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
 
+  Scenario: Installing a plugin whose workflow names a restricted agent by its generated file name gives no restriction note, as the engine never binds that name
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "agents/reader.md" with this text:
+      """
+      ---
+      name: reader
+      description: Reads the files.
+      tools: Read
+      ---
+
+      Read the files.
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/scan.js" with this text:
+      """
+      export const meta = {name:"scan",description:"Scans with a file name."};
+
+      return await agent("Read the files.", {agentType:"pi-claude-marketplace-demo-reader"});
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    When the user runs "/claude:plugin install demo@fixtures --scope user"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
+
   Scenario: Installing a plugin whose workflow names seven agent types the plugin does not install notes five and counts the rest
     Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/scan.js" with this text:
       """

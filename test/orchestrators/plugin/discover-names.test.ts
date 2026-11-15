@@ -309,13 +309,6 @@ test("PG-SEC-01: notes a workflow script that runs a tool-restricted agent of th
 
 for (const { shape, agentFile, frontmatter, agentType, unkept } of [
   {
-    shape: "the generated agent name",
-    agentFile: "reader.md",
-    frontmatter: { tools: "Read" },
-    agentType: "pi-claude-marketplace-acme-reader",
-    unkept: "bash, edit, and write",
-  },
-  {
     shape: "an agent that sets disallowedTools",
     agentFile: "reader.md",
     frontmatter: { disallowedTools: "Bash" },
@@ -410,6 +403,12 @@ for (const { shape, frontmatter, script, otherNotes = [] } of [
     shape: "an agent that denies only a tool that is not a built-in",
     frontmatter: { disallowedTools: "Grep" },
     script: `export const meta = { name: "scan", description: "d" };\n${agentCall("acme:reader")}`,
+  },
+  {
+    shape:
+      "the generated flat name of a restricted agent, which the engine's registry never resolves",
+    frontmatter: { tools: "Read" },
+    script: `export const meta = { name: "scan", description: "d" };\n${agentCall("pi-claude-marketplace-acme-reader")}`,
   },
   {
     shape: "an agent type of another plugin",
