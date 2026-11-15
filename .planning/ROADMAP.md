@@ -440,7 +440,7 @@ Plans:
   4. In a project the user marked "Do not trust", with an enabled project-scope plugin that has `bin/hello`, the bash tool does not find `hello`; in a trusted project it does. With two enabled plugins, one of them with `bin/`, the bash tool's `PATH` holds one plugin entry (PG-CORE-06, PG-CORE-07).
   5. The decision on the trust gap of D-LOC-01 is in `PROJECT.md` with its premise and the Pi version it was checked against (PG-SEC-02).
 
-**Plans**: 14 plans
+**Plans**: 20 plans
 
 Plans:
 **Wave 1**
@@ -454,22 +454,32 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 10-06-PLAN.md -- Wave 3: give the required-option arm the reason `options not set` on every surface, and list the unset option keys in `info`
-- [ ] 10-07-PLAN.md -- Wave 3: keep the option schema on the install record at every write site, and export each option default to hooks as `CLAUDE_PLUGIN_OPTION_<KEY>`
+- [ ] 10-07-PLAN.md -- Wave 3: keep the option schema on the install record, at install and at every restage
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 10-08-PLAN.md -- Wave 4: fill plugin options in exec-form hook commands and arguments, fail a run that names an unset option, and refuse a shell-form command that names one
-- [ ] 10-09-PLAN.md -- Wave 4: write plugin option defaults into skill, command, and agent content at staging, with the placeholder for a sensitive option
-- [ ] 10-10-PLAN.md -- Wave 4: set an escaped process variable for each plugin option, owned through a ledger, with the project scope only in a trusted project
+- [ ] 10-08-PLAN.md -- Wave 4: export each option default to hooks as `CLAUDE_PLUGIN_OPTION_<KEY>` at every load, from the install record and through one reader that validates it again
+- [ ] 10-09-PLAN.md -- Wave 4: write plugin option defaults into skill content at staging, with the sensitive-option text for a sensitive option
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 10-11-PLAN.md -- Wave 5: leave out and report an MCP server that names an option with no value, under both MCP implementations
+- [ ] 10-10-PLAN.md -- Wave 5: set an escaped process variable for each plugin option, owned through a ledger, with the project scope only in a trusted project
+- [ ] 10-11-PLAN.md -- Wave 5: fill plugin options in exec-form hook commands and arguments, fail a run that names an unset option, and refuse a shell-form command that names one
+- [ ] 10-12-PLAN.md -- Wave 5: leave an MCP server that names an option with no value out of `mcp-adapter.json`, and report it, at every staging
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 10-12-PLAN.md -- Wave 6: fill plugin options in the five MCP fields, as a reference in `mcp-adapter.json` and as a value in Pi's built-in registry
+- [ ] 10-13-PLAN.md -- Wave 6: give hooks their option variables in the session that installed, enabled, updated, or reinstalled the plugin
+- [ ] 10-14-PLAN.md -- Wave 6: do not register with Pi's built-in MCP a server that names an option with no value
+- [ ] 10-15-PLAN.md -- Wave 6: leave out and report a stdio server whose command or argument starts with an option that holds a home path
 
 **Wave 7** *(blocked on Wave 6 completion)*
-- [ ] 10-13-PLAN.md -- Wave 7: record D-PG10-01 and the seven other pending decisions, amend D-LOC-01, PENV-01, D-CF5-15, and BACKLOG USRCFG-01, draft the Pi trust-paths request, and add the CHANGELOG lines
-- [ ] 10-14-PLAN.md -- Wave 7: correct `docs/env-vars.md`, the hooks compatibility page, and the MCP compatibility page for plugin options, the project directory, and the `PATH` rule
+- [ ] 10-16-PLAN.md -- Wave 7: write plugin option defaults into command and agent content at staging, preloaded skills included
+- [ ] 10-17-PLAN.md -- Wave 7: fill plugin options in the five MCP fields under pi-mcp-adapter, as a reference in `mcp-adapter.json` and never as a value
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 10-18-PLAN.md -- Wave 8: fill plugin options in the five MCP fields under Pi's built-in MCP, in memory, and run the field scenarios under both profiles
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 10-19-PLAN.md -- Wave 9: record D-PG10-01 and the seven other pending decisions, amend D-LOC-01, PENV-01, D-CF5-15, and BACKLOG USRCFG-01, draft the Pi trust-paths request, and add the CHANGELOG lines
+- [ ] 10-20-PLAN.md -- Wave 9: correct `docs/env-vars.md`, the hooks compatibility page, and the MCP compatibility page for plugin options, the project directory, and the `PATH` rule
 
 ### Phase 11: Skills, Commands, and Records
 
