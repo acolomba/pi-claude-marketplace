@@ -8133,6 +8133,62 @@ test("WR-03: one update owner refreshes direct and cascade routes without leakin
   });
 });
 
+test("D-PG10-15: an update gives the plugin's routing entries the options of the new version", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-hook-options-");
+    try {
+      // arrange
+      const runtime = createHooksRuntime();
+      const operations = createPluginUpdateOperations(
+        createHooksRouting(runtime, { readHooksJson }),
+        createCompletionCache(),
+      );
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: {
+            version: "1.0.0",
+            hasSkill: true,
+            hooksJson: {
+              PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hook" }] }],
+            },
+          },
+        },
+        installedVersions: { hello: "1.0.0" },
+        scope: "user",
+      });
+      const userConfig = {
+        mode: { type: "string", title: "Mode", description: "The mode.", default: "slow" },
+      } as const;
+      await rewriteManifest(seeded.manifestPath, "mp", { hello: { version: "2.0.0" } });
+      await writeFile(
+        path.join(seeded.marketplaceRoot, "plugins", "hello", ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "hello", version: "2.0.0", userConfig }),
+      );
+      const { ctx, run } = makeCtx();
+
+      // act
+      await operations.updatePlugins({
+        ctx,
+        run,
+        scope: "user",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        runtime.getRoutingBucket("PreToolUse").map((entry) => entry.options),
+        [resolveOptions(userConfig)],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ─────────────────────────────────────────────────────────────────────────────
 // LIFE-01: 5th cascade slot in update.ts -- Phase 3a commit loop writes /
 // removes <hooksDir>/<plugin>/hooks.json between agents and mcp commits.

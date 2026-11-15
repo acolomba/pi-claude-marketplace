@@ -1030,7 +1030,7 @@ async function refreshHooksCacheAfterUpdate(
         hooksJsonPath: path.join(installable.pluginRoot, installable.hooksConfigPath),
         cwd: args.cwd,
         logPrefix: "update",
-        options: resolveOptions(undefined),
+        options: resolveOptions(installable.declaredUserConfig),
       });
     }
 

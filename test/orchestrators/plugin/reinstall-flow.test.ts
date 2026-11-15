@@ -4133,6 +4133,49 @@ test("CFG-03: a named flagless reinstall whose local layer cannot be read is ref
 // to install/uninstall; the shared swap wires the cache lifecycle, and this
 // section verifies it end-to-end.
 
+test("D-PG10-15: a reinstall gives the plugin's routing entries the options its manifest declares then", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-hook-options-"));
+    try {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.recordProjectTrust(cwd, true);
+      const { pluginRoot } = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        install: true,
+        resources: {
+          hooksJson: {
+            PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hi" }] }],
+          },
+        },
+      });
+      const userConfig = {
+        mode: { type: "string", title: "Mode", description: "The mode.", default: "slow" },
+      } as const;
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "hello", userConfig }),
+      );
+      const { ctx, run } = makeCtx();
+
+      // act
+      await createReinstallPlugin(
+        createHooksRouting(runtime, { readHooksJson }),
+        createCompletionCache(),
+      )({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(
+        runtime.getRoutingBucket("PreToolUse").map((entry) => entry.options),
+        [resolveOptions(userConfig)],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries without /reload", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wr03-"));

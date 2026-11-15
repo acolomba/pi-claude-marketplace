@@ -2108,6 +2108,46 @@ test("publishes a freshly enabled hook only to the supplied runtime after durabl
   });
 });
 
+test("D-PG10-10: an enable gives its plugin's routing entries the options of the resolution it enabled", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { mpRoot } = await seedRealDisabledMarketplace(home, {
+      hooksJson: {
+        PreToolUse: [{ hooks: [{ command: "echo enabled", type: "command" }], matcher: "" }],
+      },
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    const userConfig = {
+      mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+    } as const;
+    await writeFile(
+      path.join(mpRoot, "plugins", "foo", ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "foo", version: "1.2.3", userConfig }),
+    );
+    const runtime = createHooksRuntime();
+    const { ctx } = makeCtx(cwd);
+
+    // act
+    await createEnableOperation(createHooksRouting(runtime, { readHooksJson }))({
+      ctx,
+      cwd,
+      enable: true,
+      marketplace: "mp",
+      run: runWithNothingLoaded(),
+      plugin: "foo",
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      runtime.getRoutingBucket("PreToolUse").map((entry) => entry.options),
+      [resolveOptions(userConfig)],
+    );
+  });
+});
+
 for (const { failure, label } of [
   { failure: new Error("route publication denied"), label: "Error" },
   { failure: "route publication denied", label: "non-Error" },
@@ -7812,6 +7852,52 @@ test("WR-02: a re-enabled member's hooks are hydrated into the routing cache wit
     assert.deepStrictEqual(
       runtime.getRoutingBucket("PreToolUse").map((entry) => entry.handlerDecl.command),
       ["echo b-hook"],
+    );
+  });
+});
+
+test("D-PG10-10: a re-enabled member's routing entries hold the options of the resolution it enabled", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { mpRoot } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    const userConfig = {
+      mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+    } as const;
+    await writeFile(
+      path.join(mpRoot, "plugins", "b", ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "b", version: "1.0.0", userConfig }),
+    );
+    await mkdir(path.join(mpRoot, "plugins", "b", "hooks"), { recursive: true });
+    await writeFile(
+      path.join(mpRoot, "plugins", "b", "hooks", "hooks.json"),
+      JSON.stringify({
+        PreToolUse: [{ hooks: [{ command: "echo b-hook", type: "command" }], matcher: "" }],
+      }),
+    );
+    const runtime = createHooksRuntime();
+    const { ctx } = makeCtx(cwd);
+
+    // act
+    await createSetPluginEnabled(
+      REAL_ENABLE_DISABLE_TRANSACTION,
+      createHooksRouting(runtime, { readHooksJson }),
+    )({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      runtime.getRoutingBucket("PreToolUse").map((entry) => entry.options),
+      [resolveOptions(userConfig)],
     );
   });
 });

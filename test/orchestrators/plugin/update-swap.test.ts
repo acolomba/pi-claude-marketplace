@@ -24,6 +24,7 @@ import {
   createHooksRuntime,
   readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { preparePluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import {
   assertUpdateNamesFree,
@@ -863,6 +864,56 @@ test("D-PG10-15: a swap to a version that declares no options removes the record
     { partition, hasUserConfig: record !== undefined && Object.hasOwn(record, "userConfig") },
     { partition: "updated", hasUserConfig: false },
   );
+});
+
+/** Swaps `hello` to 2.0.0, which ships a hook, and returns the options of its routing entries. */
+async function swapOptionHooks(
+  cwd: string,
+  declared: Record<string, unknown> | undefined,
+): Promise<readonly unknown[]> {
+  const args = await seedOptionsUpdate(
+    cwd,
+    { mode: { ...MODE_OPTION, default: "fast" } },
+    declared,
+  );
+  const hooksDir = path.join(cwd, "mp-src", "plugins", "hello", "hooks");
+  await mkdir(hooksDir, { recursive: true });
+  await writeFile(
+    path.join(hooksDir, "hooks.json"),
+    JSON.stringify({
+      PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hook" }] }],
+    }),
+  );
+  const runtime = createHooksRuntime();
+  runtime.recordProjectTrust(cwd, true);
+  await swapOptionsUpdate({
+    ...args,
+    hooksRouting: createHooksRouting(runtime, { readHooksJson }),
+  });
+  return runtime.getRoutingBucket("PreToolUse").map((entry) => entry.options);
+}
+
+test("D-PG10-15: a swap gives the plugin's routing entries the options the new version declares", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-hook-options-");
+  const declared = { mode: { ...MODE_OPTION, default: "slow" } };
+
+  // act
+  const options = await swapOptionHooks(cwd, declared);
+
+  // assert
+  assert.deepStrictEqual(options, [resolveOptions(declared)]);
+});
+
+test("D-PG10-15: a swap to a version that declares no options gives its routing entries none", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-hook-options-drop-");
+
+  // act
+  const options = await swapOptionHooks(cwd, undefined);
+
+  // assert
+  assert.deepStrictEqual(options, [resolveOptions(undefined)]);
 });
 
 /** Swaps `hello` to 2.0.0, whose skill names `${user_config.mode}`, and returns the staged body. */
