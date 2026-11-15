@@ -333,3 +333,25 @@ export class UnsetPluginOptionError extends Error {
     this.key = key;
   }
 }
+
+/**
+ * D-PG10-10: a shell-form hook command names `${user_config.*}`, set or not,
+ * so it is not run: a spliced value would be parsed again by the shell.
+ * `plugin` is `<plugin>@<marketplace>`. The text is Claude Code 2.1.323's,
+ * verbatim.
+ */
+export class ShellFormOptionReferenceError extends Error {
+  readonly plugin: string;
+  readonly command: string;
+  constructor(plugin: string, command: string) {
+    super(
+      `Hook from plugin ${plugin} references \${user_config.*} in a shell-form command. ` +
+        "The substituted value would be re-parsed by the shell. Use exec form instead \u2014 " +
+        '{"command": "<executable>", "args": ["${user_config.KEY}", ...]} \u2014 or read ' +
+        `$CLAUDE_PLUGIN_OPTION_<KEY> from the hook's environment. Command: ${command}`,
+    );
+    this.name = "ShellFormOptionReferenceError";
+    this.plugin = plugin;
+    this.command = command;
+  }
+}

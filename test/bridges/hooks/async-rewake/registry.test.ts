@@ -2988,6 +2988,63 @@ test("contains a synchronous spawn failure with semantic diagnostics", async (t)
   }
 });
 
+test("D-PG10-10: spawns no shell-form async hook that names a plugin option and logs the refusal", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const root = await mkdtemp(path.join(tmpdir(), "async-registry-shell-option-"));
+  const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  t.after(() => {
+    if (previousDebug === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    } else {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
+    }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  const diagnostics: string[] = [];
+  t.mock.method(console, "error", (...parts: unknown[]) => {
+    diagnostics.push(parts.map(String).join(" "));
+  });
+  shutdownInMemoryChildren(runtime);
+  const locations = locationsFor("project", root);
+  const context = createContext(root, "session-shell-option", true);
+  const pi = createPi();
+  const spawnCalls: SpawnCall[] = [];
+  const entry = createEntry(root, {
+    handlerDecl: {
+      type: "command",
+      command: "/opt/hooks/scan ${user_config.mode}",
+      asyncRewake: true,
+    },
+  });
+
+  try {
+    // act
+    await spawnAndRegister(runtime, entry, {}, context.context, pi.pi, locations, {
+      spawnImpl: createSpawn(createChild(4242).child, spawnCalls),
+      dispatchId: () => "dispatch-shell-option",
+    });
+    const tableState = await stat(pidTablePath(locations)).catch(filesystemErrorCode);
+
+    // assert
+    assert.deepStrictEqual(spawnCalls, []);
+    assert.strictEqual(tableState, "ENOENT");
+    assert.deepStrictEqual(pi.messages, []);
+    assert.deepStrictEqual(context.notifications, []);
+    assert.deepStrictEqual(diagnostics, [
+      "[hooks] async-rewake: spawnAndRegister threw (plugin-lifecycle/PreToolUse): Hook from " +
+        "plugin plugin-lifecycle@catalog-lifecycle references ${user_config.*} in a shell-form " +
+        "command. The substituted value would be re-parsed by the shell. Use exec form instead " +
+        '\u2014 {"command": "<executable>", "args": ["${user_config.KEY}", ...]} \u2014 or read ' +
+        "$CLAUDE_PLUGIN_OPTION_<KEY> from the hook's environment. Command: /opt/hooks/scan " +
+        "${user_config.mode}",
+    ]);
+  } finally {
+    shutdownInMemoryChildren(runtime);
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
 test("kills a spawned child that has no PID and leaves no registry state", async () => {
   // arrange
   const runtime = createHooksRuntime();

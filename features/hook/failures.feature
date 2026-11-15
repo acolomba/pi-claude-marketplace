@@ -155,6 +155,43 @@ Feature: Hook failures
       | severity | text                                                                                                                                                                             |
       | info     | UserPromptSubmit hook error: Failed to run: Plugin option "token" isn't set. Open /plugin manage to configure it, or check that the plugin's userConfig schema declares "token". |
 
+  Scenario: A shell-form hook that names a plugin option is not run, with Claude Code's message (D-PG10-10)
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "mode": { "type": "string", "title": "Mode", "description": "The mode.", "default": "fast" }
+        }
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name      | event            | matcher | form   | arguments               |
+      | observer  | UserPromptSubmit |         |        |                         |
+      | mode-hook | UserPromptSubmit |         | script | ["${user_config.mode}"] |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply |
+      | Done. |
+    When the user prompts "say done"
+    Then the hooks record these runs:
+      | event            | session | prompt   | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_PLUGIN_OPTION_MODE | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | UserPromptSubmit | first   | say done | {project dir} |                 | observer  | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | fast                      | first                  | first             | 1          |
+    Then the model receives these calls:
+      | call | role | text     |
+      | 1    | user | say done |
+    Then the hooks show the user these messages:
+      | severity | text                                                                                                                                                                                                                                           |
+      | info     | UserPromptSubmit hook error: Failed to run: Hook from plugin demo@fixtures references ${user_config.*} in a shell-form command. The substituted value would be re-parsed by the shell. Use exec form instead {em dash} {"command": "<executab… |
+
   Scenario: An edit hook that fails for each pair of an edit shows its error once
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source

@@ -9,12 +9,16 @@
 // Living here so the two call sites cannot drift on the exec-form vs
 // shell-form discriminator (EXEC-04: `args` field presence, NOT
 // emptiness), on the exec-form path-variable substitution (D-CF5-15,
-// FG-19), on the exec-form plugin option fill that follows it (D-PG10-10),
-// and on the truncation marker placement (WR-02: assign `_truncated: true`
-// LAST so a payload-supplied key cannot win).
+// FG-19), on the exec-form plugin option fill that follows it and the
+// shell-form refusal of an option reference (D-PG10-10), and on the
+// truncation marker placement (WR-02: assign `_truncated: true` LAST so a
+// payload-supplied key cannot win).
 
 import { replaceUserConfigReferences } from "../../domain/user-config.ts";
-import { UnsetPluginOptionError } from "../../shared/errors-bridges.ts";
+import {
+  ShellFormOptionReferenceError,
+  UnsetPluginOptionError,
+} from "../../shared/errors-bridges.ts";
 import { substituteClaudeVars, type ClaudePluginVars } from "../../shared/vars.ts";
 
 import type { RoutingEntry } from "./routing-state.ts";
@@ -50,8 +54,13 @@ export interface SpawnPlan {
  * for every plugin hook, also one whose plugin declares no `userConfig`. A key
  * with no value fails the run with `UnsetPluginOptionError` (D-PG10-08). Any
  * other `${...}` stays literal. A non-string element is passed as its JSON
- * text. The shell-form command is never rewritten: the shell expands the
- * variables from the environment, and its quoting decides where.
+ * text.
+ *
+ * The shell-form command is never rewritten: the shell expands the variables
+ * from the environment, and its quoting decides where. A shell-form command
+ * that names any `${user_config.KEY}`, set or not, throws
+ * `ShellFormOptionReferenceError` instead, as Claude Code 2.1.323 refuses it
+ * (D-PG10-10).
  */
 export function planSpawn(entry: RoutingEntry, vars: ClaudePluginVars): SpawnPlan {
   const command = entry.handlerDecl.command ?? "";
@@ -66,9 +75,22 @@ export function planSpawn(entry: RoutingEntry, vars: ClaudePluginVars): SpawnPla
     return { command: fill(command), args, shell: false };
   }
 
+  if (namesPluginOption(command)) {
+    throw new ShellFormOptionReferenceError(`${entry.pluginId}@${entry.marketplace}`, command);
+  }
+
   const shellField = entry.handlerDecl.shell;
   const shell: boolean | string = typeof shellField === "string" ? shellField : true;
   return { command, args: [], shell };
+}
+
+function namesPluginOption(text: string): boolean {
+  let named = false;
+  replaceUserConfigReferences(text, (_key, matched) => {
+    named = true;
+    return matched;
+  });
+  return named;
 }
 
 function fillPluginOptions(text: string, values: ReadonlyMap<string, string>): string {

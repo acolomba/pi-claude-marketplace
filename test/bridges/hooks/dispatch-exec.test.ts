@@ -1964,6 +1964,54 @@ test("D-PG10-08: blocks an exec-form hook that names an unset option when onFail
   assert.deepStrictEqual(processBoundary.calls, []);
 });
 
+const SHELL_REFUSAL_MESSAGE =
+  "Hook from plugin dispatch-plugin@dispatch-marketplace references ${user_config.*} in a " +
+  "shell-form command. The substituted value would be re-parsed by the shell. Use exec form " +
+  'instead \u2014 {"command": "<executable>", "args": ["${user_config.KEY}", ...]} \u2014 or ' +
+  "read $CLAUDE_PLUGIN_OPTION_<KEY> from the hook's environment. Command: guard ${user_config.mode}";
+
+for (const { onFailure, outcome } of [
+  {
+    onFailure: undefined,
+    outcome: { kind: "noop", failure: { kind: "run", error: SHELL_REFUSAL_MESSAGE } },
+  },
+  {
+    onFailure: "block",
+    outcome: {
+      kind: "block",
+      reason:
+        '[guard ${user_config.mode}]: failed; blocking because onFailure is "block"\n' +
+        SHELL_REFUSAL_MESSAGE,
+    },
+  },
+] satisfies readonly { onFailure: string | undefined; outcome: HookExecResult }[]) {
+  test(`D-PG10-10: refuses a shell-form hook that names an option without spawning it (onFailure ${String(onFailure)})`, async (t) => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const caseRoot = await makeCaseRoot(t, "dispatch-exec-shell-option-");
+    const processChild = makeInjectedChild(t);
+    const processBoundary = observeSpawn(t, processChild);
+    const entry = makeEntry(caseRoot, {
+      command: "guard ${user_config.mode}",
+      ...(onFailure === undefined ? {} : { onFailure }),
+    });
+
+    // act
+    const hookOutcome = await dispatchHookExec(
+      entry,
+      { toolName: "bash", input: {} },
+      makeContext(caseRoot),
+      undefined,
+      runtime,
+      { spawnImpl: processBoundary.spawnImpl },
+    );
+
+    // assert
+    assert.deepStrictEqual(hookOutcome, outcome);
+    assert.deepStrictEqual(processBoundary.calls, []);
+  });
+}
+
 test("blocks a hook that exits 1 when onFailure is block", async (t) => {
   // act
   const hookOutcome = await dispatchDriven(

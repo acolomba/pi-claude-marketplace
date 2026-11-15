@@ -10,6 +10,7 @@ import {
   McpServerCollisionError,
   McpServerKeyCollisionError,
   McpUnstagePartialError,
+  ShellFormOptionReferenceError,
   SkillFrontmatterNodeError,
   UnsetPluginOptionError,
   WorkflowsUnstageRefusedError,
@@ -853,6 +854,33 @@ describe("UnsetPluginOptionError", () => {
           `Plugin option "token" isn't set. Open /plugin manage to configure it, or check ` +
           `that the plugin's userConfig schema declares "token".`,
         key: "token",
+      },
+    );
+  });
+});
+
+describe("ShellFormOptionReferenceError", () => {
+  test("D-PG10-10: states Claude Code's refusal with the plugin and the command, and keeps both", () => {
+    // arrange
+    const command = "${CLAUDE_PLUGIN_ROOT}/hooks/run.sh ${user_config.mode}";
+
+    // act
+    const error = new ShellFormOptionReferenceError("demo@fixtures", command);
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, plugin: error.plugin, command: error.command },
+      {
+        name: "ShellFormOptionReferenceError",
+        message:
+          "Hook from plugin demo@fixtures references ${user_config.*} in a shell-form command. " +
+          "The substituted value would be re-parsed by the shell. Use exec form instead \u2014 " +
+          '{"command": "<executable>", "args": ["${user_config.KEY}", ...]} \u2014 or read ' +
+          "$CLAUDE_PLUGIN_OPTION_<KEY> from the hook's environment. Command: " +
+          "${CLAUDE_PLUGIN_ROOT}/hooks/run.sh ${user_config.mode}",
+        plugin: "demo@fixtures",
+        command,
       },
     );
   });

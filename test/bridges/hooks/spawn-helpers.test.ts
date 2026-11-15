@@ -7,7 +7,10 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
-import { UnsetPluginOptionError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
+import {
+  ShellFormOptionReferenceError,
+  UnsetPluginOptionError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { UserConfigSchema } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
@@ -193,6 +196,52 @@ describe("planSpawn", () => {
     // assert
     assert.deepStrictEqual(spawnPlan, {
       command: "echo ${CLAUDE_PLUGIN_ROOT} '${CLAUDE_PLUGIN_DATA}'",
+      args: [],
+      shell: true,
+    });
+  });
+
+  for (const { name, options, command } of [
+    { name: "an option with a value", options: OPTION_SCHEMA, command: "run ${user_config.mode}" },
+    { name: "an undeclared key", options: OPTION_SCHEMA, command: "run '${user_config.nope}'" },
+    { name: "a plugin with no options", options: undefined, command: "run ${user_config.mode}" },
+  ]) {
+    test(`D-PG10-10: refuses a shell-form command that names ${name}`, () => {
+      // arrange
+      const entry = {
+        ...execEntry(command, []),
+        handlerDecl: { type: "command", command },
+        options: resolveOptions(options),
+      } satisfies RoutingEntry;
+
+      // act & assert
+      assert.throws(
+        () => planSpawn(entry, PATH_VARS),
+        (error: unknown) => {
+          assert.ok(error instanceof ShellFormOptionReferenceError);
+          assert.deepStrictEqual(
+            { plugin: error.plugin, command: error.command },
+            { plugin: "exec-substitution@catalog", command },
+          );
+          return true;
+        },
+      );
+    });
+  }
+
+  test("D-PG10-10: runs a shell-form command that reads the option variable from its environment", () => {
+    // arrange
+    const entry = {
+      ...optionEntry("echo $CLAUDE_PLUGIN_OPTION_MODE", []),
+      handlerDecl: { type: "command", command: "echo $CLAUDE_PLUGIN_OPTION_MODE" },
+    } satisfies RoutingEntry;
+
+    // act
+    const spawnPlan = planSpawn(entry, PATH_VARS);
+
+    // assert
+    assert.deepStrictEqual(spawnPlan, {
+      command: "echo $CLAUDE_PLUGIN_OPTION_MODE",
       args: [],
       shell: true,
     });
