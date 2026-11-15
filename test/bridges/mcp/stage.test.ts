@@ -28,6 +28,14 @@ const TOKEN_REQUIRED_OPTIONS = resolveOptions({
   token: { type: "string", title: "Token", description: "The token.", required: true },
 });
 
+// D-PG10-20: the full option shape; `mode` has a default that no entry may hold.
+const MODE_OPTIONS = resolveOptions({
+  mode: { type: "string", title: "Mode", description: "The mode.", default: "fast-default" },
+});
+
+// The owned process variable of `mode` for the project-scope `acme@catalog`.
+const OWNED_MODE = "PI_CLAUDE_MARKETPLACE_OPTION_a0ba2c2ce4d56fd8";
+
 async function createProjectScope(
   t: TestContext,
   prefix: string,
@@ -3687,6 +3695,61 @@ describe("prepareStageMcpServers", () => {
         reason: "unset",
       },
     ]);
+  });
+
+  test("D-PG10-11: a staged entry whose argument names an option holds a reference and no option value", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-option-reference-");
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      env: {},
+      options: MODE_OPTIONS,
+      servers: { local: { command: "node", args: ["--mode", "${user_config.mode}"] } },
+    });
+
+    // assert
+    assert.ok(prepared.kind === "staged");
+    assert.deepStrictEqual(
+      {
+        reference: JSON.stringify(prepared._nextDoc).includes(
+          `"args":["--mode","\${${OWNED_MODE}}"]`,
+        ),
+        notices: prepared.result.notices,
+        holdsValue: JSON.stringify(prepared).includes("fast-default"),
+      },
+      { reference: true, notices: [], holdsValue: false },
+    );
+  });
+
+  test("D-PG10-23: two stages of a plugin that names an option give the same entry", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-option-stable-");
+    const stage = () =>
+      prepareStageMcpServers({
+        locations,
+        cwd,
+        marketplaceName: "catalog",
+        pluginName: "acme",
+        pluginRoot: path.join(cwd, "plugins", "acme"),
+        pluginData: path.join(cwd, "data", "acme"),
+        env: {},
+        options: MODE_OPTIONS,
+        servers: { local: { command: "node", args: ["${user_config.mode}"] } },
+      });
+
+    // act
+    const [first, second] = [await stage(), await stage()];
+
+    // assert
+    assert.ok(first.kind === "staged" && second.kind === "staged");
+    assert.strictEqual(JSON.stringify(second._nextDoc), JSON.stringify(first._nextDoc));
   });
 });
 

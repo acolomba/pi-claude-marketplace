@@ -67,6 +67,7 @@ import {
   type McpConfigDoc,
 } from "./adapter-doc.ts";
 import { inactiveOverrideFields, stampServers } from "./adapter-entry.ts";
+import { ownedOptionVariables } from "./adapter-escape.ts";
 import { walkMcpSources, type McpSourceWalk } from "./collision-slots.ts";
 import {
   leftoverNames,
@@ -77,8 +78,9 @@ import {
 } from "./legacy.ts";
 import { isOwnedBy, isPlainObject, pluginSetFieldsOf } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
+import { adapterFieldEncoder } from "./substitute.ts";
 
-import type { McpSubstitutionContext, VariableReport } from "./substitute.ts";
+import type { McpFieldEncoder, McpSubstitutionContext, VariableReport } from "./substitute.ts";
 import type {
   McpReplacement,
   PreparedMcpStaged,
@@ -492,6 +494,44 @@ function overStoredChoices(
 }
 
 /**
+ * The substitution and the encoder of one plugin's adapter entries. The
+ * CLAUDE_PROJECT_DIR arm is decided here, once (MENV-03): project scope
+ * resolves `${CLAUDE_PROJECT_DIR}` at install to the project root `cwd` (NOT
+ * scopeRoot); user scope carries `undefined`, so the reference stays in the
+ * entry for Pi's process to supply at runtime (AVAR-01). `env` is the
+ * caller's environment, which Claude's rule reads to decide which variables
+ * are set (AVAR-02, D-08-06).
+ *
+ * D-PG10-11 / D-PG10-23: each option becomes a reference to its owned process
+ * variable, and `env` gains each such variable with the escaped text Pi's
+ * process holds for it, so the `caFile` origin rule and the OAuth decision
+ * read an option as the adapter will. The name and the text come from the
+ * function the process variables use, so a restage of an unchanged plugin
+ * writes the same reference.
+ */
+function adapterSubstitution(input: StageMcpInput): {
+  readonly substitution: McpSubstitutionContext;
+  readonly encoder: McpFieldEncoder;
+} {
+  const { locations, cwd, options } = input;
+  const variables = ownedOptionVariables(
+    { scope: locations.scope, marketplace: input.marketplaceName, plugin: input.pluginName },
+    options?.mcpValues ?? new Map<string, string>(),
+  );
+  const owned = [...variables.values()];
+  return {
+    substitution: {
+      pluginRoot: input.pluginRoot,
+      pluginData: input.pluginData,
+      projectDir: locations.scope === "project" ? cwd : undefined,
+      env: { ...input.env, ...Object.fromEntries(owned.map(({ name, value }) => [name, value])) },
+      options,
+    },
+    encoder: adapterFieldEncoder(new Map([...variables].map(([key, { name }]) => [key, name]))),
+  };
+}
+
+/**
  * MC-6 prepare: in-memory only. Reads the scope's `mcp-adapter.json`,
  * partitions existing entries by marker across both server keys, checks each
  * new key against the full definitions in pi-mcp-adapter's nine config
@@ -520,7 +560,7 @@ function overStoredChoices(
  * source defines a new key in full.
  */
 export async function prepareStageMcpServers(input: StageMcpInput): Promise<PreparedMcpStaging> {
-  const { locations, cwd, marketplaceName, pluginName, pluginRoot, pluginData } = input;
+  const { locations, cwd, marketplaceName, pluginName } = input;
   const { servers, blocked } = partitionOptionBlocked(input);
   const blockedNotices = optionBlockedNotices(blocked, locations.scope, pluginName);
   // ANAME-01: entries, collisions and notices use the generated keys; the
@@ -587,19 +627,6 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
     (name) => !stubs.includes(name) || deadStubs.includes(name),
   );
 
-  // The CLAUDE_PROJECT_DIR arm is decided HERE, once (MENV-03): project scope
-  // resolves `${CLAUDE_PROJECT_DIR}` at install to the project root `cwd` (NOT
-  // scopeRoot); user scope carries `undefined`, so the reference stays in the
-  // entry for Pi's process to supply at runtime (AVAR-01). `env` is the
-  // caller's environment, which Claude's rule reads to decide which
-  // variables are set (AVAR-02, D-08-06).
-  const substitution: McpSubstitutionContext = {
-    pluginRoot,
-    pluginData,
-    projectDir: locations.scope === "project" ? cwd : undefined,
-    env: input.env,
-    options: input.options,
-  };
   // AFILE-06: each new entry carries the user's fields from the entry it
   // replaces. A marker-less override stub under the selected key wins over the
   // plugin's previous marked entry. The new entry keeps the absorbed stub, or
@@ -619,7 +646,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
     servers: keyed,
     pluginName,
     marketplaceName,
-    substitution,
+    ...adapterSubstitution(input),
     previous: { ...stored, ...ours, ...overStoredChoices(overlays, stored) },
     keptOverrides: { ...keptOverrides, ...overlays },
     description: input.description,

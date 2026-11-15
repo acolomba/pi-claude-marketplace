@@ -213,6 +213,73 @@ function segmentFor(inner: string, state: ScanState): Segment {
 }
 
 /**
+ * D-PG10-11: the option pass of one field. `reference` writes each option as
+ * a reference to the process variable `names` gives for its key, for
+ * pi-mcp-adapter to expand when it connects. `text` writes each option's MCP
+ * value. A key the form lacks keeps its `${user_config.KEY}` text.
+ */
+export type McpOptionPass =
+  | { readonly form: "reference"; readonly names: ReadonlyMap<string, string> }
+  | { readonly form: "text"; readonly mcpValues: ReadonlyMap<string, string> };
+
+function optionSegment(key: string, pass: McpOptionPass): Segment | undefined {
+  if (pass.form === "reference") {
+    const name = pass.names.get(key);
+    return name === undefined ? undefined : { kind: "ref", name };
+  }
+
+  const text = pass.mcpValues.get(key);
+  return text === undefined ? undefined : { kind: "text", text };
+}
+
+// D-PG10-11: Claude Code 2.1.323 fills options after the path variables and
+// before its environment scan, and that scan reads the filled value. Here the
+// option becomes its own segment and only the text around it is scanned: under
+// pi-mcp-adapter the value is not in the entry, so it cannot be scanned, and
+// the text form follows so that both implementations behave alike. A segment
+// never goes through `segmentFor`, so an option is never reported missing or
+// tested against the deny-list.
+function optionPieces(text: string, pass: McpOptionPass | undefined): Array<string | Segment> {
+  if (pass === undefined) {
+    return [text];
+  }
+
+  const pieces: Array<string | Segment> = [];
+  let start = 0;
+  replaceUserConfigReferences(text, (key, matched) => {
+    const segment = optionSegment(key, pass);
+    if (segment !== undefined) {
+      const at = text.indexOf(matched, start);
+      pieces.push(text.slice(start, at), segment);
+      start = at + matched.length;
+    }
+
+    return matched;
+  });
+  pieces.push(text.slice(start));
+  return pieces;
+}
+
+function scannedSegments(text: string, state: ScanState): Segment[] {
+  const segments: Segment[] = [];
+  let textStart = 0;
+  for (const match of text.matchAll(CLAUDE_VARIABLE)) {
+    if (match.index > textStart) {
+      segments.push({ kind: "text", text: text.slice(textStart, match.index) });
+    }
+
+    segments.push(segmentFor(match[0].slice(2, -1), state));
+    textStart = match.index + match[0].length;
+  }
+
+  if (textStart < text.length) {
+    segments.push({ kind: "text", text: text.slice(textStart) });
+  }
+
+  return segments;
+}
+
+/**
  * Expands one field value by Claude's rule. A set variable, the empty string
  * included, stays a reference. A `:-` default stays with its reference, set or
  * not, for the adapter to use when the variable is unset at connect time
@@ -222,31 +289,22 @@ function segmentFor(inner: string, state: ScanState): Segment {
  * with no default stays a reference and is reported missing. At user scope
  * `${CLAUDE_PROJECT_DIR}` stays a reference and is never reported missing. A
  * deny-listed reference follows Claude's deny arm for `fieldClass` (AVAR-05)
- * and is listed in `withheld` whenever it is written as `""`.
+ * and is listed in `withheld` whenever it is written as `""`. `options` is the
+ * option pass that runs between the path variables and the scan, or
+ * `undefined` for none, so `${user_config.KEY}` stays text (D-PG10-11,
+ * D-PG10-21).
  */
 export function expandClaudeValue(
   raw: string,
   fieldClass: FieldClass,
   env: ClaudeEnv,
   builtins: ClaudeBuiltins,
+  options: McpOptionPass | undefined,
 ): ExpandedValue {
-  const expanded = replaceBuiltins(raw, builtins);
-  const segments: Segment[] = [];
   const state: ScanState = { fieldClass, env, builtins, missing: [], withheld: [] };
-  let textStart = 0;
-  for (const match of expanded.matchAll(CLAUDE_VARIABLE)) {
-    if (match.index > textStart) {
-      segments.push({ kind: "text", text: expanded.slice(textStart, match.index) });
-    }
-
-    segments.push(segmentFor(match[0].slice(2, -1), state));
-    textStart = match.index + match[0].length;
-  }
-
-  if (textStart < expanded.length) {
-    segments.push({ kind: "text", text: expanded.slice(textStart) });
-  }
-
+  const segments = optionPieces(replaceBuiltins(raw, builtins), options).flatMap((piece) =>
+    typeof piece === "string" ? scannedSegments(piece, state) : [piece],
+  );
   return { segments, missing: state.missing, withheld: state.withheld };
 }
 
@@ -351,7 +409,7 @@ export function scanClaudeServerVariables(server: unknown, env: ClaudeEnv): Serv
   const unset = new Set<string>();
   const withheld = new Set<string>();
   for (const raw of fields.values) {
-    const expanded = expandClaudeValue(raw, fields.fieldClass, env, SCAN_BUILTINS);
+    const expanded = expandClaudeValue(raw, fields.fieldClass, env, SCAN_BUILTINS, undefined);
     for (const name of expanded.missing) {
       unset.add(name);
     }

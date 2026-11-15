@@ -8,7 +8,7 @@
 // `headers` values, which use the remote-sink deny-list. Each goes through
 // Claude's rule in `domain/claude-mcp-variables.ts`, and the `McpFieldEncoder`
 // of the implementation that runs the server writes the result in that
-// implementation's encoding: `ADAPTER_FIELD_ENCODER` below, over
+// implementation's encoding: `adapterFieldEncoder` below, over
 // `adapter-escape.ts`, for pi-mcp-adapter, and `builtin-escape.ts` for Pi's
 // built-in MCP. The `env` values under `CLAUDE_PLUGIN_ROOT` and
 // `CLAUDE_PLUGIN_DATA` and every `oauth` value go through the encoder as
@@ -26,9 +26,21 @@ import type {
   ClaudeBuiltins,
   ClaudeEnv,
   FieldClass,
+  McpOptionPass,
   Segment,
 } from "../../domain/claude-mcp-variables.ts";
 import type { ResolvedOptions } from "../../domain/user-config.ts";
+
+/**
+ * D-PG10-11: how an encoding fills `${user_config.KEY}`. `none` runs no option
+ * pass, so the reference stays as written. `reference` writes a reference to
+ * the option's process variable, which `names` gives by key for one plugin, so
+ * no option value is written. `text` writes the option's MCP value.
+ */
+export type McpOptionForm =
+  | { readonly kind: "none" }
+  | { readonly kind: "reference"; readonly names: ReadonlyMap<string, string> }
+  | { readonly kind: "text" };
 
 /**
  * How one MCP implementation writes the values of the expanded fields.
@@ -41,17 +53,23 @@ export interface McpFieldEncoder {
   readonly expanded: (segments: readonly Segment[], secret: boolean, env: ClaudeEnv) => string;
   /** Writes a value Claude leaves unexpanded. */
   readonly literal: (text: string, secret: boolean) => string;
+  /** How the encoding fills a plugin option (D-PG10-11). */
+  readonly optionForm: McpOptionForm;
 }
 
 /**
- * pi-mcp-adapter's encoder (AVAR-03). The adapter expands a kept `${NAME}`
- * reference itself at connect time, so the encoder writes each reference as
- * text and never reads the environment.
+ * pi-mcp-adapter's encoder for one plugin (AVAR-03, D-PG10-11). The adapter
+ * expands a kept `${NAME}` reference itself at connect time, so the encoder
+ * writes each reference as text and never reads the environment. An option
+ * becomes a reference to the process variable `names` gives for its key.
  */
-export const ADAPTER_FIELD_ENCODER: McpFieldEncoder = {
-  expanded: (segments, secret) => serializeSegments(segments, secret),
-  literal: (text, secret) => serializeLiteral(text, secret),
-};
+export function adapterFieldEncoder(names: ReadonlyMap<string, string>): McpFieldEncoder {
+  return {
+    expanded: (segments, secret) => serializeSegments(segments, secret),
+    literal: (text, secret) => serializeLiteral(text, secret),
+    optionForm: { kind: "reference", names },
+  };
+}
 
 /**
  * Resolution context for one staged entry. `pluginRoot` / `pluginData` are the
@@ -108,13 +126,33 @@ export interface SubstitutedEntry {
 // whether injected or declared.
 const LITERAL_ENV_KEYS: ReadonlySet<string> = new Set(["CLAUDE_PLUGIN_ROOT", "CLAUDE_PLUGIN_DATA"]);
 
+// D-PG10-21: a plugin that declares no `userConfig` gets no option pass.
+function optionPass(
+  form: McpOptionForm,
+  options: ResolvedOptions | undefined,
+): McpOptionPass | undefined {
+  if (options === undefined || form.kind === "none") {
+    return undefined;
+  }
+
+  return form.kind === "reference"
+    ? { form: "reference", names: form.names }
+    : { form: "text", mcpValues: options.mcpValues };
+}
+
 function expandedValue(
   raw: string,
   fieldClass: FieldClass,
   secret: boolean,
   { ctx, encoder, names }: WalkState,
 ): string {
-  const expanded = expandClaudeValue(raw, fieldClass, ctx.env, ctx);
+  const expanded = expandClaudeValue(
+    raw,
+    fieldClass,
+    ctx.env,
+    ctx,
+    optionPass(encoder.optionForm, ctx.options),
+  );
   names.missing.push(...expanded.missing);
   if (fieldClass === "remote") {
     names.blanked.push(...expanded.withheld.filter(({ set }) => set).map(({ name }) => name));

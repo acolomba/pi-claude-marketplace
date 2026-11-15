@@ -33,8 +33,8 @@ import {
 } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 import {
-  ADAPTER_FIELD_ENCODER,
   substituteAndInject,
+  type McpFieldEncoder,
   type McpSubstitutionContext,
   type SubstitutedEntry,
   type VariableReport,
@@ -88,6 +88,8 @@ export interface StampServersInput {
   readonly pluginName: string;
   readonly marketplaceName: string;
   readonly substitution: McpSubstitutionContext;
+  /** pi-mcp-adapter's encoder for the plugin, with its option names (D-PG10-11). */
+  readonly encoder: McpFieldEncoder;
   /**
    * The entry each server name replaces in the target file: a user override
    * stub or the plugin's previous marked entry. A name without one is absent.
@@ -184,8 +186,7 @@ function withOAuthDecision(substituted: SubstitutedEntry, env: ClaudeEnv): Subst
 function translatedEntry(
   name: string,
   entry: unknown,
-  substitution: McpSubstitutionContext,
-  description: string | undefined,
+  { substitution, encoder, description }: StampServersInput,
   warnings: string[],
 ): SubstitutedEntry {
   if (!isPlainObject(entry)) {
@@ -203,11 +204,7 @@ function translatedEntry(
   }
 
   return withOAuthDecision(
-    substituteAndInject(
-      translateMcpServer(entry, description),
-      substitution,
-      ADAPTER_FIELD_ENCODER,
-    ),
+    substituteAndInject(translateMcpServer(entry, description), substitution, encoder),
     substitution.env,
   );
 }
@@ -539,13 +536,7 @@ export function stampServers(input: StampServersInput): {
   const variableReports = new Map<string, VariableReport>();
   const caFileRemoved: Array<{ server: string; reason: McpCaFileRemovedReason }> = [];
   for (const [name, entry] of Object.entries(input.servers)) {
-    const { entry: translated, report } = translatedEntry(
-      name,
-      entry,
-      input.substitution,
-      input.description,
-      warnings,
-    );
+    const { entry: translated, report } = translatedEntry(name, entry, input, warnings);
     variableReports.set(name, report);
     const pluginSetFields = pluginSetFieldsIn(translated);
     const { carried, caFileRemoved: removed } = appliedCarriedFields(

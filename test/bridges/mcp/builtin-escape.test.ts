@@ -142,3 +142,16 @@ describe("BUILTIN_FIELD_ENCODER.literal", () => {
     assert.strictEqual(writtenValue, expectedWritten);
   });
 });
+
+describe("BUILTIN_FIELD_ENCODER.optionForm", () => {
+  test("D-PG10-11: the built-in encoder runs no option pass", () => {
+    // arrange
+    const expectedForm = { kind: "none" };
+
+    // act
+    const { optionForm } = BUILTIN_FIELD_ENCODER;
+
+    // assert
+    assert.deepStrictEqual(optionForm, expectedForm);
+  });
+});

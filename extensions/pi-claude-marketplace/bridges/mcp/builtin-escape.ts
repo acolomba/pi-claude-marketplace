@@ -38,11 +38,16 @@ function escapedForPi(value: string): string {
   return escaped.startsWith("!") ? `$${escaped}` : escaped;
 }
 
-/** Pi's built-in MCP field encoder: resolves each reference, then escapes a secret field for Pi. */
+/**
+ * Pi's built-in MCP field encoder: resolves each reference, then escapes a
+ * secret field for Pi. It runs no option pass, so `${user_config.KEY}` is
+ * written as Claude's rule leaves it (D-PG10-11).
+ */
 export const BUILTIN_FIELD_ENCODER: McpFieldEncoder = {
   expanded: (segments, secret, env) => {
     const value = segments.map((segment) => segmentValue(segment, env)).join("");
     return secret ? escapedForPi(value) : value;
   },
   literal: (text, secret) => (secret ? escapedForPi(text) : text),
+  optionForm: { kind: "none" },
 };

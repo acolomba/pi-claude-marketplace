@@ -215,3 +215,90 @@ Feature: MCP server options
       }
 
       """
+
+  @adapter-only
+  Scenario: The entry of a server that names a plugin option holds a reference and no option value (PG-CORE-03, D-PG10-11)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "tool": { "type": "string", "title": "Tool", "description": "The tool.", "default": "reverse" }
+        }
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"keyed": {"command": "pi-features-absent-mcp-server", "args": ["--tool", "${user_config.tool}"]}}}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    When the user runs "/claude:plugin install demo@fixtures --scope user"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_keyed_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [
+              "--tool",
+              "${PI_CLAUDE_MARKETPLACE_OPTION_8fd4b1ce5a5f54e0}"
+            ],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @adapter-only
+  Scenario: A plugin option reaches an argument of a stdio server (PG-CORE-03)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "tool": { "type": "string", "title": "Tool", "description": "The tool.", "default": "reverse" }
+        }
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "picker" whose tool name argument is "${user_config.tool}"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given pi runs with the scripted model and these companions:
+      | companion      |
+      | pi-mcp-adapter |
+    Given pi-mcp-adapter has listed the tools of the stub mcp server "picker" of the plugin "demo"
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                                              |
+      |       | mcp  | {"tool": "mcp__plugin_demo_picker__reverse", "args": {"text": "ping"}} |
+      | Done. |      |                                                                        |
+    When the user prompts "call the stub"
+    Then the model receives these calls:
+      | call | role        | text                                                                             |
+      | 1    | user        | call the stub                                                                    |
+      | 2    | user        | call the stub                                                                    |
+      | 2    | assistant   | tool call mcp {"tool":"mcp__plugin_demo_picker__reverse","args":{"text":"ping"}} |
+      | 2    | tool result | mcp returned: reverse:ping                                                       |

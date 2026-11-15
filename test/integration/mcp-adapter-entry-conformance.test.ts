@@ -26,6 +26,7 @@ import {
   readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { stampServers } from "../../extensions/pi-claude-marketplace/bridges/mcp/adapter-entry.ts";
+import { adapterFieldEncoder } from "../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
 import {
   createInstallOperation,
   createUninstallOperation,
@@ -79,6 +80,7 @@ function stampedSseEntry(headers: Readonly<Record<string, string>>): unknown {
       env: {},
       options: undefined,
     },
+    encoder: adapterFieldEncoder(new Map()),
     previous: {},
     keptOverrides: {},
   }).stamped.srv;

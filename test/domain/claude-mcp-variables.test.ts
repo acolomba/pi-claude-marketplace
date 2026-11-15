@@ -14,6 +14,7 @@ import type {
   ExpandedValue,
   FieldClass,
   McpOptionBlock,
+  McpOptionPass,
   ServerVariableScan,
 } from "../../extensions/pi-claude-marketplace/domain/claude-mcp-variables.ts";
 import type { ResolvedOptions } from "../../extensions/pi-claude-marketplace/domain/user-config.ts";
@@ -331,7 +332,7 @@ const ROWS: readonly ExpansionRow[] = [
   },
   ...["$PI_CM_V", "${1X}", "${A-B}", "${A:b}", "${user_config.KEY}", "$env:X", "{env:X}"].map(
     (raw): ExpansionRow => ({
-      title: `AVAR-02: ${raw} is outside Claude's grammar and stays text`,
+      title: `AVAR-02: ${raw} is outside Claude's grammar and stays text with no option pass`,
       raw,
       fieldClass: "plain",
       env: { PI_CM_V: "set", A: "set", X: "set" },
@@ -606,12 +607,193 @@ describe("expandClaudeValue", () => {
       const expectedValue = expanded;
 
       // act
-      const expandedValue = expandClaudeValue(raw, fieldClass, env, builtins);
+      const expandedValue = expandClaudeValue(raw, fieldClass, env, builtins, undefined);
 
       // assert
       assert.deepStrictEqual(expandedValue, expectedValue);
     });
   }
+});
+
+interface OptionPassRow {
+  readonly title: string;
+  readonly raw: string;
+  readonly fieldClass: FieldClass;
+  readonly env: ClaudeEnv;
+  readonly options: McpOptionPass;
+  readonly segments: ExpandedValue["segments"];
+}
+
+const OWNED_MODE = "PI_CLAUDE_MARKETPLACE_OPTION_0123456789abcdef";
+
+const REFERENCES: McpOptionPass = {
+  form: "reference",
+  names: new Map([
+    ["mode", OWNED_MODE],
+    ["a", "PI_CLAUDE_MARKETPLACE_OPTION_aaaaaaaaaaaaaaaa"],
+    ["b", "PI_CLAUDE_MARKETPLACE_OPTION_bbbbbbbbbbbbbbbb"],
+    ["ANTHROPIC_API_KEY", "PI_CLAUDE_MARKETPLACE_OPTION_cccccccccccccccc"],
+  ]),
+};
+
+const VALUES: McpOptionPass = {
+  form: "text",
+  mcpValues: new Map([
+    ["mode", "fast"],
+    ["empty", ""],
+    ["home", "${HOME}"],
+    ["marker", "{env:HOME}"],
+  ]),
+};
+
+const OPTION_PASS_ROWS: readonly OptionPassRow[] = [
+  {
+    title: "D-PG10-11: the reference form writes an option as a reference to its process variable",
+    raw: "--mode=${user_config.mode}",
+    fieldClass: "plain",
+    env: {},
+    options: REFERENCES,
+    segments: [
+      { kind: "text", text: "--mode=" },
+      { kind: "ref", name: OWNED_MODE },
+    ],
+  },
+  {
+    title: "D-PG10-11: the reference form writes two adjacent options as two references",
+    raw: "${user_config.a}${user_config.b}",
+    fieldClass: "plain",
+    env: {},
+    options: REFERENCES,
+    segments: [
+      { kind: "ref", name: "PI_CLAUDE_MARKETPLACE_OPTION_aaaaaaaaaaaaaaaa" },
+      { kind: "ref", name: "PI_CLAUDE_MARKETPLACE_OPTION_bbbbbbbbbbbbbbbb" },
+    ],
+  },
+  {
+    title: "D-PG10-11: an option named like a deny-listed variable is referenced, not withheld",
+    raw: "${user_config.ANTHROPIC_API_KEY}",
+    fieldClass: "remote",
+    env: { ANTHROPIC_API_KEY: "api-key-value" },
+    options: REFERENCES,
+    segments: [{ kind: "ref", name: "PI_CLAUDE_MARKETPLACE_OPTION_cccccccccccccccc" }],
+  },
+  {
+    title: "D-PG10-11: the text form writes an option's value as text",
+    raw: "--mode=${user_config.mode}",
+    fieldClass: "plain",
+    env: {},
+    options: VALUES,
+    segments: [
+      { kind: "text", text: "--mode=" },
+      { kind: "text", text: "fast" },
+    ],
+  },
+  {
+    title:
+      "D-PG10-21: the text form writes an option that is not required and has no default as the empty string",
+    raw: "${user_config.empty}",
+    fieldClass: "plain",
+    env: {},
+    options: VALUES,
+    segments: [{ kind: "text", text: "" }],
+  },
+  {
+    title: "D-PG10-11: an option's value is not scanned again for a variable",
+    raw: "${user_config.home}",
+    fieldClass: "plain",
+    env: { HOME: "/home/user" },
+    options: VALUES,
+    segments: [{ kind: "text", text: "${HOME}" }],
+  },
+  {
+    title: "D-PG10-11: an option's value that holds an adapter marker stays text",
+    raw: "${user_config.marker}",
+    fieldClass: "remote",
+    env: { HOME: "/home/user" },
+    options: VALUES,
+    segments: [{ kind: "text", text: "{env:HOME}" }],
+  },
+  {
+    title: "D-PG10-11: the option pass runs after the path variables",
+    raw: "${CLAUDE_PLUGIN_ROOT}/${user_config.mode}",
+    fieldClass: "plain",
+    env: {},
+    options: REFERENCES,
+    segments: [
+      { kind: "text", text: "/plugins/acme/" },
+      { kind: "ref", name: OWNED_MODE },
+    ],
+  },
+  {
+    title: "D-PG10-11: a key the text form lacks keeps its reference text",
+    raw: "${user_config.other}",
+    fieldClass: "plain",
+    env: {},
+    options: VALUES,
+    segments: [{ kind: "text", text: "${user_config.other}" }],
+  },
+  {
+    title: "D-PG10-11: a key the reference form lacks keeps its reference text",
+    raw: "${user_config.other}-${user_config.mode}",
+    fieldClass: "plain",
+    env: {},
+    options: REFERENCES,
+    segments: [
+      { kind: "text", text: "${user_config.other}-" },
+      { kind: "ref", name: OWNED_MODE },
+    ],
+  },
+];
+
+describe("expandClaudeValue option pass", () => {
+  for (const { title, raw, fieldClass, env, options, segments } of OPTION_PASS_ROWS) {
+    test(title, () => {
+      // arrange
+      const expectedValue: ExpandedValue = { segments, missing: [], withheld: [] };
+
+      // act
+      const expandedValue = expandClaudeValue(raw, fieldClass, env, PROJECT, options);
+
+      // assert
+      assert.deepStrictEqual(expandedValue, expectedValue);
+    });
+  }
+
+  test("D-PG10-11: the text around an option still goes through the variable scan", () => {
+    // arrange
+    const raw = "${PI_CM_V}-${user_config.mode}${ANTHROPIC_API_KEY}";
+    const env: ClaudeEnv = { ANTHROPIC_API_KEY: "api-key-value" };
+
+    // act
+    const expandedValue = expandClaudeValue(raw, "remote", env, PROJECT, REFERENCES);
+
+    // assert
+    assert.deepStrictEqual(expandedValue, {
+      segments: [
+        { kind: "ref", name: "PI_CM_V" },
+        { kind: "text", text: "-" },
+        { kind: "ref", name: OWNED_MODE },
+        { kind: "text", text: "" },
+      ],
+      missing: ["PI_CM_V"],
+      withheld: [{ name: "ANTHROPIC_API_KEY", set: true }],
+    });
+  });
+
+  test("D-PG10-11: with no option pass an option reference stays text", () => {
+    // arrange
+    const raw = "--mode=${user_config.mode}";
+
+    // act
+    const expandedValue = expandClaudeValue(raw, "plain", {}, PROJECT, undefined);
+
+    // assert
+    assert.deepStrictEqual(expandedValue, {
+      segments: [{ kind: "text", text: raw }],
+      missing: [],
+      withheld: [],
+    });
+  });
 });
 
 interface ScanRow {

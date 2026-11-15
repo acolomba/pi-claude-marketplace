@@ -8,6 +8,7 @@ import {
   stampServers,
   userCarriedFields,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/adapter-entry.ts";
+import { adapterFieldEncoder } from "../../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
 
 import type { McpSubstitutionContext } from "../../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
 
@@ -115,6 +116,9 @@ const PROJECT_CONTEXT: McpSubstitutionContext = {
   env: {},
   options: undefined,
 };
+
+// The adapter's encoder for a plugin that declares no options.
+const ADAPTER_ENCODER = adapterFieldEncoder(new Map());
 
 // ANAME-01 / ANAME-04: the fields every stamped entry carries by default.
 const OWNED = { directTools: "search", toolPrefix: "mcp" };
@@ -276,6 +280,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: {},
     });
@@ -319,6 +324,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: {},
     });
@@ -361,6 +367,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -388,6 +395,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -415,6 +423,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -444,6 +453,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: inherited },
       keptOverrides: {},
     });
@@ -477,6 +487,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -510,6 +521,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -546,6 +558,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -587,6 +600,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: { server: keptOverride },
     });
@@ -622,6 +636,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -656,6 +671,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -687,6 +703,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -714,6 +731,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -742,6 +760,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -773,6 +792,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: {},
     });
@@ -790,6 +810,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: {},
     };
@@ -812,6 +833,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: {},
     });
@@ -841,6 +863,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -868,6 +891,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -897,6 +921,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: previous },
       keptOverrides: {},
     });
@@ -924,6 +949,7 @@ describe("stampServers", () => {
         pluginName: "acme",
         marketplaceName: "catalog",
         substitution: PROJECT_CONTEXT,
+        encoder: ADAPTER_ENCODER,
         previous: { server: previous },
         keptOverrides: {},
       });
@@ -952,6 +978,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: previous },
       keptOverrides: {},
     });
@@ -984,6 +1011,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: previous },
       keptOverrides: {},
     });
@@ -1020,6 +1048,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -1055,6 +1084,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: {},
     });
@@ -1100,6 +1130,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: {},
     });
@@ -1137,6 +1168,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: fullEntry("previous") },
       keptOverrides: {},
     });
@@ -1161,6 +1193,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: previous },
       keptOverrides: {},
     });
@@ -1182,6 +1215,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: fullEntry("previous") },
       keptOverrides: {},
     });
@@ -1231,6 +1265,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: previous },
       keptOverrides: {},
     });
@@ -1267,6 +1302,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: previous },
       keptOverrides: {},
     });
@@ -1303,6 +1339,7 @@ describe("stampServers", () => {
         pluginName: "acme",
         marketplaceName: "catalog",
         substitution: PROJECT_CONTEXT,
+        encoder: ADAPTER_ENCODER,
         previous: { server: previous },
         keptOverrides: {},
       });
@@ -1333,6 +1370,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: previous },
       keptOverrides: {},
     });
@@ -1401,6 +1439,7 @@ describe("stampServers", () => {
         pluginName: "acme",
         marketplaceName: "catalog",
         substitution: { ...PROJECT_CONTEXT, env },
+        encoder: ADAPTER_ENCODER,
         previous: { server: previous },
         keptOverrides: {},
       });
@@ -1476,6 +1515,7 @@ describe("stampServers", () => {
         pluginName: "acme",
         marketplaceName: "catalog",
         substitution: { ...PROJECT_CONTEXT, env },
+        encoder: ADAPTER_ENCODER,
         previous: { server: previous },
         keptOverrides: {},
       });
@@ -1501,6 +1541,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: override },
       keptOverrides: { server: override },
     });
@@ -1525,6 +1566,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: override },
       keptOverrides: { server: override },
     });
@@ -1559,6 +1601,7 @@ describe("stampServers", () => {
         pluginName: "acme",
         marketplaceName: "catalog",
         substitution: PROJECT_CONTEXT,
+        encoder: ADAPTER_ENCODER,
         previous: { server: entry },
         keptOverrides: {},
       });
@@ -1588,6 +1631,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: previous },
       keptOverrides: {},
     });
@@ -1612,6 +1656,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: override },
       keptOverrides: { server: override },
     });
@@ -1645,6 +1690,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: { server: keptOverride },
     });
@@ -1676,6 +1722,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: override },
       keptOverrides: { server: override },
     });
@@ -1727,6 +1774,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: override },
       keptOverrides: { server: override },
     });
@@ -1767,6 +1815,7 @@ describe("stampServers", () => {
         env: {},
         options: undefined,
       },
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: {},
     });
@@ -1788,6 +1837,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides,
     });
@@ -1820,6 +1870,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: { disabled: true, directTools: "user", toolPrefix: "user" } },
       keptOverrides: {},
     });
@@ -1851,6 +1902,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: {},
     });
@@ -1902,6 +1954,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: {},
       description: "Acme tools",
@@ -1942,6 +1995,7 @@ describe("stampServers", () => {
         pluginName: "acme",
         marketplaceName: "catalog",
         substitution,
+        encoder: ADAPTER_ENCODER,
         previous: {},
         keptOverrides: {},
       });
@@ -1971,6 +2025,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: {},
       description: "Acme tools",
