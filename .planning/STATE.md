@@ -5,11 +5,11 @@ milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 11
 current_phase_name: Skills, Commands, and Records
 status: not_started
-stopped_at: merged features/gaps-mcp (Phases 9-10) into features/gaps; next the Phase 9 security re-check, then Phase 11
-last_updated: "2026-11-15T13:41:31.858Z"
+stopped_at: Phase 11 context gathered
+last_updated: "2026-11-15T22:18:48.410Z"
 last_activity: 2026-11-15
 last_activity_desc: Merged features/gaps-mcp (Phases 9 and 10 complete) into features/gaps and applied its parent records
-state_head: 4b3392d25ceab27186df3abaa1a39af564bcc377
+state_head: c4bcf962ea9a5004536212a49376282a27c97337
 progress:
   total_phases: 11
   completed_phases: 10
@@ -1190,9 +1190,9 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-15
-Stopped at: merged features/gaps-mcp; next Phase 9 security re-check, then Phase 11
-Resume file: .planning/HANDOFF.json
+Last session: 2026-11-15T22:18:43.110Z
+Stopped at: Phase 11 context gathered
+Resume file: .planning/phases/11-skills-commands-and-records/11-CONTEXT.md
 
 ### Phase 2 completion-helper notes
 
