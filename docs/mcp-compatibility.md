@@ -533,6 +533,33 @@ A user-scope entry keeps `${CLAUDE_PROJECT_DIR}`. This extension sets `CLAUDE_PR
 
 If the directory name holds `$env:` or `{env:`, this extension does not set the variable, because pi-mcp-adapter would expand that text again. The same applies if the directory name ends in `$`, `{`, or the start of `$env` or `{env`, such as `$en`. The plugin text after `${CLAUDE_PROJECT_DIR}` can complete such an ending into `$env:NAME` or `{env:NAME}`, and pi-mcp-adapter would then send the value of `NAME` to the server, even a withheld credential. The install now writes a split token after a kept reference wherever the text after it could do this, so this second check protects entries written before the install did so: legacy `mcp.json` entries that the move on `/reload` has not yet rewritten. In both cases this extension also removes any earlier value of the variable from the process of Pi, so a server does not get the wrong project. pi-mcp-adapter then refuses a `url` that references the variable, and it expands the reference to an empty value in the other fields. A debug-log line records the skip.
 
+### Plugin options
+
+A plugin can declare options in `userConfig`, and a server can reference an option as `${user_config.KEY}`. Claude Code fills the reference in the five fields of [Where variables expand](#where-variables-expand), after the plugin variables and before the environment variables. This extension does the same, under both implementations (D-PG10-11, D-PG10-12, D-PG10-21). The value of an option is its default. An option that is not required and has no default is the empty string, as in Claude Code. A plugin that declares no `userConfig` keeps the reference as written, as in Claude Code (`features/mcp-server/options.feature`, `features/mcp-server/builtin-options.feature`).
+
+Under pi-mcp-adapter, the entry holds no option value. It holds a reference to a process variable that this extension sets on Pi's process, and pi-mcp-adapter expands the reference when it starts the server (D-PG10-11). For the option `tool` of the user-scope plugin `demo` from `fixtures`, with the default `reverse`, the measured entry holds this argument and no `reverse`:
+
+```text
+"args": ["--tool", "${PI_CLAUDE_MARKETPLACE_OPTION_8fd4b1ce5a5f54e0}"]
+```
+
+The names of these variables, and when this extension sets them, are in [Pi-only plugin option variables](env-vars.md#pi-only-plugin-option-variables). The install decides the `caFile` origin and the OAuth header rule with the option values in its environment (D-PG10-23). Owner unit cases prove that rule, and no scenario does.
+
+Under Pi's built-in MCP, this extension fills the value in memory each time it registers the server. See [When the servers register](#when-the-servers-register). Only Pi's in-memory registry holds the value, and no file holds it (D-PG10-12). In `env` and `headers` values, the value gets the escape of [Variables under Pi's built-in MCP](#variables-under-pis-built-in-mcp). For example, a default of `!echo $HOME` is registered as `$!echo $$HOME` in `env`, and Pi turns it back into `!echo $HOME` and runs nothing. An owner unit case proves the escape, and no scenario does.
+
+The scenarios prove an option in `args` under both implementations. They prove an option in `command` and `env`, and in `url` and `headers`, with one scenario under each implementation. Under Pi's built-in MCP, a scenario also reads the registered config with the option's value in `args` and `env`. The empty string for an option with no default is proven by owner unit cases only. Two conformance tests run 14 option cases through the functions of pi-mcp-adapter 7.0.1 and through the resolver of Pi 1.5.0 (`test/integration/adapter-expansion-conformance.test.ts`, `test/integration/mcp-builtin-encoding-conformance.test.ts`).
+
+A server is left out, and the command shows the warning `MCP server left out.` with the server and the option keys, in two cases (D-PG10-21, D-PG10-11):
+
+- The server names an option with no value. This is a `required` option with no default, which only a `--partial` install reaches, or a key that the plugin does not declare. Claude Code also fails such a server and loads the other servers of the plugin (read in the Claude Code 2.1.323 binary).
+- The `command` of a stdio server, or an element of its `args`, starts with an option whose value is `~` or starts with `~/`. pi-mcp-adapter would turn that value into a path in your home directory, and Claude Code keeps the `~`. See [Syntax that only pi-mcp-adapter knows](#syntax-that-only-pi-mcp-adapter-knows).
+
+The install, update, reinstall, enable, and the move on `/reload` all check for these cases. For the exact text, see [MCP server left out](output-catalog.md#mcp-server-left-out-d-pg10-21-d-pg10-11). Under Pi's built-in MCP, such a server is not registered. The registration writes a debug line and shows no notice, because the command that staged the plugin already showed the warning.
+
+An installed plugin gets its option values at its next install, update to a new version, reinstall, or enable. Until then, its entry keeps the reference as written. Under Pi's built-in MCP, the registration reads the options from the install record, and a record written before this release holds none. pi-mcp-adapter approves a project server by a hash of its entry, so it asks for project server approval again once, after the first restage that writes such a reference. This was read in the source of pi-mcp-adapter and not measured.
+
+An option reference inside a default, such as `${FOO:-${user_config.x}}`, is filled as its own value, and the `${FOO:-` text and the closing `}` stay as written. Claude Code fills the option first and then reads `${FOO:-value}`. This is a known gap (BACKLOG MCPOPTFALLBACK-01).
+
 ### Withheld credentials
 
 Claude Code never gives some credentials to a plugin server. This extension applies the deny-list of Claude Code 2.1.291 (AVAR-05). It compares names without regard to case.
@@ -676,6 +703,8 @@ The behaviors below differ from Claude Code. Each item names its reason: a recor
 ### Variables
 
 - Bash and every MCP server inherit `CLAUDE_PROJECT_DIR` from the process of Pi. Claude Code does not set it for Bash. Reason: a project decision (AVAR-01). This is how a user-scope server gets the current project.
+- Bash and every other child of Pi inherit the pi-only option variables that a pi-mcp-adapter entry references. Claude Code gives Bash no plugin option. Reason: a project decision (D-PG10-11). pi-mcp-adapter reads only its configuration file and the process environment. See [Plugin options](#plugin-options).
+- A stdio server whose `command` or `args` element starts with a plugin option that holds a home path is left out. Claude Code runs it with the `~` as written. Reason: a Pi capability gap (D-PG10-11). pi-mcp-adapter replaces a leading `~` after it expands variables. See [Plugin options](#plugin-options).
 - The `MCP server credentials withheld.` warning shows to the user. Claude Code writes the same fact only to its debug log. Reason: a project decision (AVAR-04). A user learns each time that a credential was withheld from a remote server.
 - The deny-lists of Claude Code that depend on its mode are not used. These are the lists for a provider that a host manages, for a bridge child process, for the HIPAA tier, and for the scrub of subprocess variables. Reason: a project decision (AVAR-05). These lists depend on the state of a Claude Code process, and Pi does not run in these modes.
 - A provider base URL that holds no credential at install time is written as `${NAME}`. If its value holds a credential later, pi-mcp-adapter sends that credential to the server. Claude Code checks the value each time it loads the server. Reason: a project decision (AVAR-05). This extension writes no environment value, so it checks the value only at install time.
