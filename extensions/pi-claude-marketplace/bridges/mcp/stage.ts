@@ -57,6 +57,7 @@ import { hygieneWarning } from "../../shared/staging-warnings.ts";
 import {
   ADAPTER_SERVER_KEYS,
   assertOwnedMarkersReadable,
+  leavingCaFileServers,
   partitionServers,
   readMcpConfigDoc,
   restoredOverrideNames,
@@ -460,7 +461,8 @@ function overStoredChoices(
  * `headers` (AVAR-04, AVAR-05), then one `tool-rules-unenforced` notice per
  * server that declares tool permission rules (ANAME-07), then one
  * `ca-file-removed` notice per server whose entry leaves out the user's
- * `caFile` (D-PG9-14). AS-8 noop
+ * `caFile`, or that the stage removes with a `caFile` nothing keeps
+ * (D-PG9-14). AS-8 noop
  * short-circuits when there is nothing new, nothing previously-ours and no
  * marked entry in the legacy `mcp.json` (AMIG-01) -- in that case
  * `commitPreparedMcp` writes no file (PRD success criterion: AS-8 noop
@@ -605,7 +607,9 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   // writes back. AVAR-04 / AVAR-05: each server's missing-variable and
   // withheld-credential notices follow, then ANAME-07: each server's
   // unenforced tool-rule notice. AMIG-01: each dropped leftover follows.
-  // D-PG9-14: each server whose entry left out the user's caFile comes last.
+  // D-PG9-14: each server whose entry left out the user's caFile comes last,
+  // then each entry the stage removed with a caFile the stored choices do not
+  // keep.
   const notices = Object.freeze<McpConfigNotice[]>([
     ...commentsDroppedNotices(rewritesTarget && config.hadComments, locations.scope),
     ...overrideKeptNotices(stamped, overlays, locations.scope, pluginName),
@@ -617,7 +621,17 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
     ...variableNotices(variableReports, locations.scope, pluginName),
     ...toolRuleNotices(keyed, locations.scope, pluginName),
     ...leftoverNotices(leftovers, locations.scope, pluginName),
-    ...caFileRemovedNotices(caFileRemoved, locations.scope, pluginName),
+    ...caFileRemovedNotices(
+      [
+        ...caFileRemoved,
+        ...leavingCaFileServers(config, pluginName, marketplaceName, stamped).map((server) => ({
+          server,
+          reason: "entry-removed" as const,
+        })),
+      ],
+      locations.scope,
+      pluginName,
+    ),
   ]);
   const result: StageMcpCommitResult = {
     stagedNames: Object.freeze([...declaredNames]),

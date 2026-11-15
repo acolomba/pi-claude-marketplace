@@ -1404,11 +1404,17 @@ export interface McpLeftoverRemovedNotice {
  * entry. `not-https`: the entry is not an https server. `origin-changed`: its
  * https url is at another origin than the entry it replaced. `url-unresolved`:
  * its url changed, and the old or the new url names an unset variable or does
- * not parse, so the origins could not be compared.
+ * not parse, so the origins could not be compared. `entry-removed`: a stage or
+ * an unstage removed the entry, and the choices kept for its return hold no
+ * `caFile`.
  */
-export type McpCaFileRemovedReason = "not-https" | "origin-changed" | "url-unresolved";
+export type McpCaFileRemovedReason =
+  "not-https" | "origin-changed" | "url-unresolved" | "entry-removed";
 
-/** D-PG9-14: a stage left the user's `caFile` out of a plugin server's entry. */
+/**
+ * D-PG9-14: a stage left the user's `caFile` out of a plugin server's entry,
+ * or a stage or unstage removed an entry with the user's `caFile`.
+ */
 export interface McpCaFileRemovedNotice {
   readonly kind: "ca-file-removed";
   readonly scope: Scope;

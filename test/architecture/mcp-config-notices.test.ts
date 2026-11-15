@@ -127,6 +127,17 @@ const CATALOG_NOTICE_ROWS: readonly CatalogNoticeRow[] = [
       reason: "url-unresolved",
     },
   },
+  {
+    state: "mcp-ca-file-removed-entry-removed",
+    notice: {
+      kind: "ca-file-removed",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_srv_",
+      reason: "entry-removed",
+    },
+  },
 ];
 
 type NotifyArguments = [message: string, severity?: string];

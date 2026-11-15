@@ -2483,7 +2483,8 @@
                     "anyOf": [
                       { "type": "string", "const": "not-https" },
                       { "type": "string", "const": "origin-changed" },
-                      { "type": "string", "const": "url-unresolved" }
+                      { "type": "string", "const": "url-unresolved" },
+                      { "type": "string", "const": "entry-removed" }
                     ]
                   }
                 },
@@ -2726,7 +2727,8 @@
                     "anyOf": [
                       { "type": "string", "const": "not-https" },
                       { "type": "string", "const": "origin-changed" },
-                      { "type": "string", "const": "url-unresolved" }
+                      { "type": "string", "const": "url-unresolved" },
+                      { "type": "string", "const": "entry-removed" }
                     ]
                   }
                 },

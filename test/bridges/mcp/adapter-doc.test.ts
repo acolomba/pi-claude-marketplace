@@ -10,6 +10,7 @@ import {
   ADAPTER_SERVER_KEYS,
   assertOwnedMarkersReadable,
   isFullDefinition,
+  leavingCaFileServers,
   partitionServers,
   readMcpConfigDoc,
   restoredOverrideNames,
@@ -1218,6 +1219,39 @@ describe("withPluginServersKeepingChoices", () => {
         },
       }),
     );
+  });
+
+  test("D-PG9-14: only the plugin's leaving entries with a user caFile their written-back override lacks lose it", () => {
+    // arrange
+    const caFile = "/etc/pki/user/ca-bundle.pem";
+    const config = configOf({
+      mcpServers: {
+        lost: { url: "https://acme.example/mcp", caFile, _piClaudeMarketplace: ACME_MARKER },
+        restaged: { url: "https://acme.example/mcp", caFile, _piClaudeMarketplace: ACME_MARKER },
+        stubbed: {
+          url: "https://acme.example/mcp",
+          caFile,
+          _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: { caFile } },
+        },
+        pluginSet: {
+          url: "https://acme.example/mcp",
+          caFile,
+          _piClaudeMarketplace: { ...ACME_MARKER, pluginSetFields: ["caFile"] },
+        },
+        plain: { url: "https://acme.example/mcp", _piClaudeMarketplace: ACME_MARKER },
+        theirs: {
+          url: "https://acme.example/mcp",
+          caFile,
+          _piClaudeMarketplace: { plugin: "other", marketplace: "catalog" },
+        },
+      },
+    });
+
+    // act
+    const lost = leavingCaFileServers(config, "acme", "catalog", { restaged: {} });
+
+    // assert
+    assert.deepStrictEqual(lost, ["lost"]);
   });
 
   test("D-08-02: a leaving entry with no user carried field writes no store", () => {

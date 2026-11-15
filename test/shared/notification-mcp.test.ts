@@ -207,6 +207,11 @@ describe("composeMcpConfigNoticesText", () => {
       cause:
         "has a new url, and its old or new url names a variable that is not set or is not a valid url, so the two origins could not be compared and its entry no longer holds your caFile. Set it on the entry again if the server needs it.",
     },
+    {
+      reason: "entry-removed",
+      cause:
+        "was removed, and your caFile on it was not kept with your other fields: a caFile applies only to the url it was set for, and this extension keeps no url for a removed server. Set it on the entry again if the server comes back.",
+    },
   ] as const) {
     test(`D-PG9-14: a ${reason} ca-file-removed line names the server, its plugin, and only that cause, with control characters escaped`, () => {
       // act

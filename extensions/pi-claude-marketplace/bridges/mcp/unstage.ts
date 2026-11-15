@@ -24,7 +24,9 @@
 // (NFR-3). The writer drops JSONC comments, so each rewritten file whose
 // bytes held comments yields a `comments-dropped` notice (AFILE-04), followed
 // by one `override-restored` notice per kept override the file gets back
-// (AFILE-06). Each rewritten file is returned with the exact bytes written to
+// (AFILE-06). In the adapter file, one `ca-file-removed` notice follows per
+// removed entry whose user `caFile` nothing keeps, because the stored choices
+// hold none (D-PG9-14). Each rewritten file is returned with the exact bytes written to
 // it, so a prune rollback can tell its own rewrite from a later edit (NFR-3).
 // When the legacy write fails after the adapter file was rewritten, a typed
 // `McpUnstagePartialError` carries the adapter file's notices and written
@@ -57,6 +59,7 @@ import {
   ADAPTER_SERVER_KEYS,
   PI_MCP_SERVER_KEYS,
   assertOwnedMarkersReadable,
+  leavingCaFileServers,
   partitionServers,
   readMcpConfigDoc,
   restoredOverrideNames,
@@ -68,6 +71,7 @@ import {
 
 import type { UnstageMcpInput, UnstageMcpResult } from "./types.ts";
 import type {
+  McpCaFileRemovedNotice,
   McpConfigFileNotice,
   McpConfigNotice,
   McpOverrideRestoredNotice,
@@ -120,7 +124,9 @@ interface UnstageOwner {
 /**
  * The notices for one rewritten file: its `comments-dropped` notice when the
  * read bytes held comments (AFILE-04), then one `override-restored` notice per
- * kept override it gets back (AFILE-06).
+ * kept override it gets back (AFILE-06), then, in the adapter file, one
+ * `ca-file-removed` notice per removed entry whose user `caFile` nothing keeps
+ * (D-PG9-14).
  */
 function targetNotices(target: UnstageTarget, owner: UnstageOwner): McpConfigNotice[] {
   const { scope } = owner;
@@ -137,7 +143,20 @@ function targetNotices(target: UnstageTarget, owner: UnstageOwner): McpConfigNot
     file: target.file,
     server,
   }));
-  return [...commentsDropped, ...restored];
+  const caFileRemoved =
+    target.file === "mcp-adapter.json"
+      ? leavingCaFileServers(target.config, owner.pluginName, owner.marketplaceName, {}).map(
+          (server): McpCaFileRemovedNotice => ({
+            kind: "ca-file-removed",
+            scope,
+            file: "mcp-adapter.json",
+            plugin: owner.pluginName,
+            server,
+            reason: "entry-removed",
+          }),
+        )
+      : [];
+  return [...commentsDropped, ...restored, ...caFileRemoved];
 }
 
 function noticesOf(

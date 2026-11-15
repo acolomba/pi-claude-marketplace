@@ -567,6 +567,29 @@ function capturedChoices(
 }
 
 /**
+ * D-PG9-14: the names of the plugin's entries that leave the file with a user
+ * `caFile` nothing keeps: the store keeps none (`leavingChoice`), and the
+ * override the entry writes back holds none. A name in `entries` is restaged.
+ */
+export function leavingCaFileServers(
+  config: McpConfigDoc,
+  pluginName: string,
+  marketplaceName: string,
+  entries: Readonly<Record<string, unknown>>,
+): readonly string[] {
+  return Object.freeze(
+    Object.entries(ownedServers(config, pluginName, marketplaceName))
+      .filter(
+        ([name, entry]) =>
+          !Object.hasOwn(entries, name) &&
+          Object.hasOwn(userCarriedFields(entry), "caFile") &&
+          !Object.hasOwn(writtenBackOverride(entry) ?? {}, "caFile"),
+      )
+      .map(([name]) => name),
+  );
+}
+
+/**
  * A copy of `record` with `key` set to `value` in its position, appended when
  * absent, or removed when `value` is undefined.
  */

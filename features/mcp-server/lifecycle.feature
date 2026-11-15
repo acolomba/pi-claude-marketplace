@@ -800,6 +800,26 @@ Feature: MCP server lifecycle
       """
 
   @adapter-only
+  Scenario: A disable that removes a plugin server says that the caFile the user wrote is not kept (PG-MCP-09, D-08-02, D-PG9-14)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers":{"remote":{"type":"http","url":"https://example.invalid/mcp"}}}
+      """
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has written these fields on the mcp server "plugin_demo_remote_" in the mcp-adapter.json file of the user scope:
+      """
+      {"tasks":true,"caFile":"/etc/pki/user/ca-bundle.pem"}
+      """
+    When the user runs "/claude:plugin disable demo@fixtures --scope user"
+    Then the command reports these results:
+      | kind               | severity | needs reload | notices                                                                                                                                        |
+      | cascade            | info     | true         |                                                                                                                                                |
+      | mcp-config-notices | warning  | false        | [{"kind":"ca-file-removed","scope":"user","file":"mcp-adapter.json","plugin":"demo","server":"plugin_demo_remote_","reason":"entry-removed"}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status   | reasons | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | disabled |         | user  | 1.0.0   |
+
+  @adapter-only
   Scenario: An update that makes a plugin server a stdio server removes the caFile the user wrote and says so (PG-MCP-09, D-PG9-14)
     Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
       """

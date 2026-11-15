@@ -1133,6 +1133,42 @@ test("AFILE-06: each rewritten file reports its comments notice, then one overri
   });
 });
 
+test("D-PG9-14: an unstage reports each adapter entry it removes with a user caFile, after its override-restored facts", async (t) => {
+  // arrange
+  const { locations } = await createScope(t, "mcp-unstage-ca-file-removed-");
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    '{"mcpServers":{"remote":{"url":"https://acme.example/mcp","caFile":"/ca.pem","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}},"stub":{"command":"stub","disabled":true,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"official","keptOverride":{"disabled":true}}}}}\n',
+    "utf8",
+  );
+  await writeFile(
+    locations.mcpJsonPath,
+    '{"mcpServers":{"legacy":{"url":"https://acme.example/mcp","caFile":"/ca.pem","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}}}}\n',
+    "utf8",
+  );
+
+  // act
+  const unstage = await unstageMcpServers({
+    locations,
+    marketplaceName: "official",
+    pluginName: "acme",
+  });
+
+  // assert
+  assert.deepStrictEqual(unstage.notices, [
+    { kind: "override-restored", scope: "project", file: "mcp-adapter.json", server: "stub" },
+    {
+      kind: "ca-file-removed",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "acme",
+      server: "remote",
+      reason: "entry-removed",
+    },
+  ]);
+});
+
 test("AFILE-06: an unstage that removes an entry whose kept override the user's later enable emptied reports no override-restored fact", async (t) => {
   // arrange
   const { locations } = await createScope(t, "mcp-unstage-override-emptied-");

@@ -2660,6 +2660,53 @@ describe("prepareStageMcpServers", () => {
     ]);
   });
 
+  test("D-PG9-14: a server the plugin no longer declares reports its user caFile as removed with the entry", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-ca-file-entry-removed-");
+    const marker = { plugin: "hello", marketplace: "catalog" };
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      JSON.stringify({
+        mcpServers: {
+          plugin_hello_kept_: {
+            url: "https://k.example/mcp",
+            caFile: "/etc/pki/user/ca-bundle.pem",
+            _piClaudeMarketplace: marker,
+          },
+          plugin_hello_gone_: {
+            url: "https://g.example/mcp",
+            caFile: "/etc/pki/user/ca-bundle.pem",
+            _piClaudeMarketplace: marker,
+          },
+        },
+      }),
+    );
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "hello",
+      pluginRoot: path.join(cwd, "plugins", "hello"),
+      pluginData: path.join(cwd, "data", "hello"),
+      env: {},
+      servers: { kept: { type: "http", url: "https://k.example/v2/mcp" } },
+    });
+
+    // assert
+    assert.deepStrictEqual(prepared.result.notices, [
+      {
+        kind: "ca-file-removed",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_gone_",
+        reason: "entry-removed",
+      },
+    ]);
+  });
+
   test("ANAME-07: a server with tool permission rules is written without either rule field", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-tool-rules-entry-");

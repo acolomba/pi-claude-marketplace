@@ -957,7 +957,7 @@ The `McpServerStatus` tokens depend on the MCP implementation that Pi runs. pi-m
 
 `McpConfigNoticeKind`: `comments-dropped`, `left-unchanged`, `override-kept`, `variables-missing`, `credentials-blanked`, `tool-rules-unenforced`, `leftover-removed`, `ca-file-removed`.
 
-`McpCaFileRemovedReason`: `not-https`, `origin-changed`, `url-unresolved`.
+`McpCaFileRemovedReason`: `not-https`, `origin-changed`, `url-unresolved`, `entry-removed`.
 
 `McpMigrationRowKind`: `moved`, `removed`, `stopped`, `unowned`, `not-listed`, `source-unreadable`, `source-outdated`, `marketplace-unreadable`, `collision`, `file-unreadable`, `unfinished`.
 

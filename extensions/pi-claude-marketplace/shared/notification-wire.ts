@@ -772,6 +772,7 @@ const MCP_CONFIG_NOTICE = Type.Union([
         Type.Literal("not-https"),
         Type.Literal("origin-changed"),
         Type.Literal("url-unresolved"),
+        Type.Literal("entry-removed"),
       ]),
     },
     { additionalProperties: false },
