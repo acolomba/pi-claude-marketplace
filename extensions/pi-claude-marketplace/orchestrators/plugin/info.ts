@@ -70,6 +70,7 @@ import {
   type PathSource,
 } from "../../domain/source.ts";
 import { rowClaimsInstallDisabled } from "../../domain/unsupported-components.ts";
+import { resolveOptions, type UserConfigSchema } from "../../domain/user-config.ts";
 import { declaredVersionWithPin, shaVersion } from "../../domain/version.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import {
@@ -1061,6 +1062,8 @@ function parseLenientHooksJson(raw: string): unknown {
  * builder calls, so each row carries them once. They are recomputed at every
  * run and never stored.
  *
+ * D-PG10-06: the line that names the unset required options comes last.
+ *
  * SURF-01: object-literal field placement is documentation
  * only -- the renderer iterates `COMPONENT_KINDS` to enforce the
  * `["agents", "commands", "hooks", "mcp", "skills", "workflows"]` ordering.
@@ -1087,6 +1090,8 @@ async function composeResolvedComponents(
     readonly hooksConfigPath?: string;
     /** D-PG4-01: carried by the materializable arms only. */
     readonly refusedListedSkillPaths?: readonly RefusedListedSkillPath[];
+    /** D-PG10-06: carried by the materializable arms only. */
+    readonly declaredUserConfig?: UserConfigSchema;
   },
   pluginName: string,
 ): Promise<{
@@ -1173,9 +1178,30 @@ async function composeResolvedComponents(
       ),
       ...workflows.warnings,
       ...restrictionNotes,
+      ...unsetOptionNotes(resolved.declaredUserConfig),
     ],
     mcpDependency: mcpDependencyOf(Object.values(resolved.declaredMcpServers)),
   };
+}
+
+/**
+ * D-PG10-06: one line naming each required option with no default, in
+ * declaration order, so a `--partial` install leaves them unset. It names keys
+ * only, never a default or a value; a key passed the schema's identifier
+ * pattern at resolution.
+ */
+function unsetOptionNotes(schema: UserConfigSchema | undefined): readonly string[] {
+  const { unsetRequired } = resolveOptions(schema);
+  if (unsetRequired.length === 0) {
+    return [];
+  }
+
+  const keys = unsetRequired.map((key) => `"${key}"`).join(", ");
+  return [
+    unsetRequired.length === 1
+      ? `required option ${keys} has no default, so it is not set`
+      : `required options ${keys} have no default, so they are not set`,
+  ];
 }
 
 /**

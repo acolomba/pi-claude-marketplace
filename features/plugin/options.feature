@@ -91,3 +91,58 @@ Feature: Plugin options
       | marketplace name | marketplace scope | id            | name | status              | reasons         | hint            |
       | fixtures         | project           | demo@fixtures | demo | partially-available | options not set | partial-install |
     Then the project scope has no installed plugins
+
+  Scenario: A plugin with an unset required option installs with --partial as partially installed (D-PG10-06)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "token": { "type": "string", "title": "Token", "description": "The token.", "required": true },
+          "mode": { "type": "string", "title": "Mode", "description": "The mode.", "default": "fast" }
+        }
+      }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project --partial"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status              | reasons         | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | partially-installed | options not set | project | 1.0.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+
+  Scenario: Info names the required options of a plugin that are not set (D-PG10-06)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "token": { "type": "string", "title": "Token", "description": "The token.", "required": true },
+          "mode": { "type": "string", "title": "Mode", "description": "The mode.", "default": "fast" }
+        }
+      }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin info demo@fixtures"
+    Then the result has these fields:
+      | kind                           | plugin-info                                              |
+      | marketplace details autoupdate | false                                                    |
+      | marketplace name               | fixtures                                                 |
+      | marketplace scope              | project                                                  |
+      | needs reload                   | false                                                    |
+      | plugin components resolved     | true                                                     |
+      | plugin components skills       | demo-skill                                               |
+      | plugin id                      | demo@fixtures                                            |
+      | plugin name                    | demo                                                     |
+      | plugin notes                   | required option "token" has no default, so it is not set |
+      | plugin reasons                 | options not set                                          |
+      | plugin status                  | partially-available                                      |
+      | plugin version                 | 1.0.0                                                    |
+      | severity                       | info                                                     |

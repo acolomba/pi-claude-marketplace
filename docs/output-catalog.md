@@ -3471,7 +3471,7 @@ The plugin declares two MCP servers. The `live` server uses the `ws` transport, 
 
 ### Not installed -- a required option is not set (D-PG10-06)
 
-An option in the plugin's `userConfig` has `required: true` and no `default`, so the plugin is `(partially-available)` with the `{options not set}` reason, the token that install and `list` give for the same plugin. An install with `--partial` installs the plugin with that option unset. Severity `info`; no reload-hint (read-only surface).
+An option in the plugin's `userConfig` has `required: true` and no `default`, so the plugin is `(partially-available)` with the `{options not set}` reason, the token that install and `list` give for the same plugin. A reason token cannot hold a key, so one `note:` line names each unset option key, in the order the manifest declares them, after any other note. It names keys only, never a default or a value. An installed plugin shows the same line under `(partially-installed)`. An install with `--partial` installs the plugin with those options unset. Severity `info`; no reload-hint (read-only surface).
 
 <!-- catalog-state: partially-available-with-unset-options -->
 
@@ -3480,6 +3480,7 @@ An option in the plugin's `userConfig` has `required: true` and no `default`, so
   ⊖ deploy-tools v1.0.0 (partially-available) {options not set}
     Deployment tools for everyday releases.
     skills: deploy
+    note: required options "token", "region" have no default, so they are not set
 ```
 
 ### Installed -- an MCP server's variables (AVAR-04, AVAR-05)

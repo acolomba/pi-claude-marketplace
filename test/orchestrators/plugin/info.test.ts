@@ -2201,6 +2201,129 @@ test("D-PG4-01: info notes each listed path of a root-source entry that does not
   });
 });
 
+async function seedOptionsPlugin(
+  home: string,
+  cwd: string,
+  userConfig: Record<string, unknown> | undefined,
+  installed = false,
+): Promise<void> {
+  await seedPathMarketplace({
+    scope: "user",
+    scopeRoot: path.join(home, ".pi", "agent"),
+    cwd,
+    mpName: "mp",
+    manifest: {
+      name: "mp",
+      plugins: [
+        {
+          name: "p",
+          source: "./p",
+          version: "1.0.0",
+          ...(userConfig !== undefined && { userConfig }),
+        },
+      ],
+    },
+    ...(installed && { installed: { p: { version: "1.0.0" } } }),
+    componentFiles: { p: ["skills/a/SKILL.md"] },
+  });
+}
+
+function stringOption(title: string, extra: Record<string, unknown>): Record<string, unknown> {
+  return { type: "string", title, description: `The ${title.toLowerCase()}.`, ...extra };
+}
+
+test("D-PG10-06: info names each unset required option in declaration order", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedOptionsPlugin(home, cwd, {
+      token: stringOption("Token", { required: true }),
+      mode: stringOption("Mode", { default: "fast" }),
+      region: stringOption("Region", { required: true }),
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "p", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ⊖ p v1.0.0 (partially-available) {options not set}",
+          "    skills: a",
+          '    note: required options "token", "region" have no default, so they are not set',
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("D-PG10-06: info names the one unset required option of an installed plugin", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedOptionsPlugin(
+      home,
+      cwd,
+      {
+        token: stringOption("Token", { required: true, sensitive: true }),
+        mode: stringOption("Mode", { default: "fast" }),
+      },
+      true,
+    );
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "p", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◉ p v1.0.0 (partially-installed) {options not set}",
+          "    skills: a",
+          '    note: required option "token" has no default, so it is not set',
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+for (const { title, userConfig } of [
+  {
+    title: "options that all have a default",
+    userConfig: {
+      mode: stringOption("Mode", { default: "fast" }),
+      level: stringOption("Level", {}),
+    },
+  },
+  { title: "an empty userConfig", userConfig: {} },
+  { title: "no userConfig", userConfig: undefined },
+]) {
+  test(`D-PG10-06: info adds no option note for ${title}`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      await seedOptionsPlugin(home, cwd, userConfig);
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "p", scope: "user", cwd });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "● mp [user] <no autoupdate>",
+            "  ○ p v1.0.0 (available)",
+            "    skills: a",
+          ].join("\n"),
+        },
+      ]);
+    });
+  });
+}
+
 test("D-PG4-01: info lists a skill reached as a listed folder and through its parent once, sorted without case", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
