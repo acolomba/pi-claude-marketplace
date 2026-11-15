@@ -129,7 +129,7 @@ import {
   resolveGitPluginRootWithSubdir,
   resolvePluginPin,
 } from "./clone-cache.ts";
-import { workflowAgentRestrictionNotes } from "./discover-names.ts";
+import { workflowAgentNotes } from "./discover-names.ts";
 import { makePresenceProbe } from "./git-source-probe.ts";
 import { withMcpServerStatus } from "./info-mcp-status.ts";
 import { PLUGIN_INFO_CONTEXT, type PluginInfoCascadeMsg } from "./info.messaging.ts";
@@ -152,7 +152,7 @@ import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type { RestrictionWorkflow } from "./discover-names.ts";
+import type { WorkflowNoteScript } from "./discover-names.ts";
 import type { Dirent } from "node:fs";
 
 // INFO-05: BUCKET_A_EVENTS is a string[] tuple; rewrap as a Set for O(1)
@@ -1056,8 +1056,8 @@ function parseLenientHooksJson(raw: string): unknown {
  * D-PG4-01: the listed skills paths of a root-source entry that do not load
  * come first, with their absolute paths reduced as install reduces them.
  *
- * PG-SEC-01 / D-PG4-12 / D-PG4-13: the workflow agent restriction notes follow
- * the workflow advisories. They are added here, the one function every row
+ * PG-SEC-01 / D-PG4-12 / D-PG4-13 and PG-WF-02 / D-PG8-04: the workflow agent
+ * notes follow the workflow advisories. They are added here, the one function every row
  * builder calls, so each row carries them once. They are recomputed at every
  * run and never stored.
  *
@@ -1151,7 +1151,7 @@ async function composeResolvedComponents(
   const workflows = await previewWorkflows(pluginRoot, resolved.componentPaths.workflows, {
     pluginName,
   });
-  const restrictionNotes = await previewAgentRestrictionNotes(
+  const workflowNotes = await previewWorkflowAgentNotes(
     pluginName,
     pluginRoot,
     resolved.componentPaths.agents,
@@ -1172,7 +1172,7 @@ async function composeResolvedComponents(
         redactAbsolutePaths(message),
       ),
       ...workflows.warnings,
-      ...restrictionNotes,
+      ...workflowNotes,
     ],
     mcpDependency: mcpDependencyOf(Object.values(resolved.declaredMcpServers)),
   };
@@ -1233,8 +1233,8 @@ async function previewWorkflows(
 ): Promise<{
   readonly names: readonly string[];
   readonly warnings: readonly string[];
-  /** The discovered records, which the restriction notes read (PG-SEC-01). */
-  readonly discovered: readonly RestrictionWorkflow[];
+  /** The discovered records, which the workflow agent notes read (PG-SEC-01, PG-WF-02). */
+  readonly discovered: readonly WorkflowNoteScript[];
 }> {
   const { discovered, warnings } = await discoverPluginWorkflows({
     pluginName: opts.pluginName,
@@ -1256,8 +1256,9 @@ async function previewWorkflows(
 }
 
 /**
- * PG-SEC-01 / D-PG4-12: the restriction notes of this row, from the join that
- * install and update use. Nothing is read when no admitted script names an
+ * PG-SEC-01 / D-PG4-12 and PG-WF-02 / D-PG8-04: the workflow agent notes of
+ * this row, for an agent type that restricts its tools and for one the plugin
+ * does not install, from the join that install and update use. Nothing is read when no admitted script names an
  * agent type as a literal, so an unaffected row reads no agent file.
  *
  * NFR-10: each agents path must resolve inside the plugin root before any
@@ -1267,11 +1268,11 @@ async function previewWorkflows(
  * D-PG4-11: a note may cost itself and never the row, so a throw from the
  * agent read, such as an unsafe agent name, yields no notes.
  */
-async function previewAgentRestrictionNotes(
+async function previewWorkflowAgentNotes(
   pluginName: string,
   pluginRoot: string,
   agentPaths: readonly string[],
-  workflows: readonly RestrictionWorkflow[],
+  workflows: readonly WorkflowNoteScript[],
 ): Promise<readonly string[]> {
   const namesAgentTypes = workflows.some(
     ({ verdict }) => verdict.outcome === "named" && verdict.agentTypes !== undefined,
@@ -1287,11 +1288,11 @@ async function previewAgentRestrictionNotes(
     const agentsDirs = contained.flatMap((result) => (result.ok ? [result.absolutePath] : []));
     const { discovered } = await discoverPluginAgents({ pluginName, agentsDirs });
 
-    return workflowAgentRestrictionNotes(pluginName, discovered, workflows).map((note) =>
+    return workflowAgentNotes(pluginName, discovered, workflows).map((note) =>
       redactAbsolutePaths(note),
     );
   } catch (err) {
-    hookDebugLog(`info: agent restriction notes skipped for "${pluginName}": ${errorMessage(err)}`);
+    hookDebugLog(`info: workflow agent notes skipped for "${pluginName}": ${errorMessage(err)}`);
     return [];
   }
 }

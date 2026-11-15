@@ -1703,14 +1703,15 @@ export async function swapPluginUpdate(
     preflight.record.resources.workflows,
     handles.workflows.result.stagedNames,
   );
-  // PG-SEC-01: the workflow agent restriction notes join the folder warnings
-  // here and nowhere else in this file, so an update, a reinstall, and an
-  // apply move each print a note once, and so do the D-PG4-01 refused listed
-  // skills paths.
+  // PG-SEC-01 and PG-WF-02: the workflow agent notes, for an agent type that
+  // restricts its tools and for one the plugin does not install, join the
+  // folder warnings here and nowhere else in this file, so an update, a
+  // reinstall, and an apply move each print a note once, and so do the
+  // D-PG4-01 refused listed skills paths.
   const stagingWarnings = [
     ...shadowedFolderDiscoveryWarnings(installable.shadowedFolders),
     ...refusedListedSkillPathMessages(installable.refusedListedSkillPaths).map(discoveryWarning),
-    ...generatedNames.workflowAgentRestrictionNotes.map(discoveryWarning),
+    ...generatedNames.workflowAgentNotes.map(discoveryWarning),
     ...collectUpdateWarnings(handles),
   ];
   await dropPluginCompletionCache(args);
