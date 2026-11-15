@@ -21,6 +21,7 @@ import {
   readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { cascadeUnstagePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import { createSetPluginEnabled } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
@@ -215,6 +216,7 @@ async function populateRuntimeRoute(
     plugin,
     resolvedSource: asAbsolutePluginRoot(pluginRoot),
     scope,
+    options: resolveOptions(undefined),
   });
   hooksRouting.rebuildRoutingTables();
   return hooksRouting;
@@ -5539,6 +5541,7 @@ test("orchestrated partial disable folds a removed hook after MCP cleanup fails"
       plugin: "foo",
       resolvedSource: asAbsolutePluginRoot(cwd),
       scope: "user",
+      options: resolveOptions(undefined),
     });
     hooksRouting.rebuildRoutingTables();
     assert.deepStrictEqual(
@@ -5637,6 +5640,7 @@ test("a partial disable preserves its committed fold when route publication fail
       plugin: "foo",
       resolvedSource: asAbsolutePluginRoot(cwd),
       scope: "user",
+      options: resolveOptions(undefined),
     });
     hooksRouting.rebuildRoutingTables();
     const failingRouting: HooksRouting = {

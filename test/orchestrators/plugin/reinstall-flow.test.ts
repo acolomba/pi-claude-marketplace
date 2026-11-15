@@ -24,6 +24,7 @@ import {
 import { loadMarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { WORKFLOW_SCRIPT_MAX_BYTES } from "../../../extensions/pi-claude-marketplace/domain/workflow-script.ts";
 import {
   materializeOrRefreshPluginMirror,
@@ -4163,6 +4164,7 @@ test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries with
         hooksJsonPath: path.join(pluginRoot, "hooks", "hooks.json"),
         cwd,
         logPrefix: "reinstall-test",
+        options: resolveOptions(undefined),
       });
       hooksRouting.rebuildRoutingTables();
       const preBucket = ownerRuntime.getRoutingBucket("PreToolUse");

@@ -51,7 +51,6 @@ import path from "node:path";
 import { BUCKET_A_EVENTS, type BucketAEvent } from "../../domain/components/hook-events.ts";
 import { parseHooksConfig, parseMatcher, type HooksConfig } from "../../domain/components/hooks.ts";
 import { asAbsolutePluginRoot, type AbsolutePluginRoot } from "../../domain/plugin-root.ts";
-import { resolveOptions, type ResolvedOptions } from "../../domain/user-config.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import {
   DEFAULT_STATE,
@@ -100,6 +99,7 @@ import type {
 } from "./dispatch.ts";
 import type { FollowUpTurnEnd } from "./event-adapters.ts";
 import type { HooksRuntime } from "./runtime.ts";
+import type { ResolvedOptions } from "../../domain/user-config.ts";
 import type {
   BeforeAgentStartEvent,
   BeforeAgentStartEventResult,
@@ -181,6 +181,8 @@ export interface ReadAndCachePluginHooksOptions {
   readonly hooksJsonPath: string;
   readonly cwd: string;
   readonly logPrefix: string;
+  /** D-PG10-10: the options of the resolution the caller staged the hooks from. */
+  readonly options: ResolvedOptions;
 }
 
 async function readAndCachePluginHooksWith(
@@ -224,9 +226,7 @@ async function readAndCachePluginHooksWith(
     resolvedSource: opts.resolvedSource,
     config: parsed.value,
     ifPredicates: parsed.ifPredicates,
-    // D-PG10-10: this producer has no option input, so the entry holds no
-    // options until the next load builds it from the install record.
-    options: resolveOptions(undefined),
+    options: opts.options,
   });
 }
 

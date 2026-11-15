@@ -35,6 +35,7 @@ import {
   parsePluginSource,
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import {
   materializeOrRefreshPluginMirror,
   materializePluginClone,
@@ -8049,6 +8050,7 @@ test("WR-03: one update owner refreshes direct and cascade routes without leakin
         hooksJsonPath: path.join(pluginRoot, "hooks", "hooks.json"),
         cwd,
         logPrefix: "update-test",
+        options: resolveOptions(undefined),
       });
       hooksRouting.rebuildRoutingTables();
       assert.equal(runtime.getRoutingBucket("PreToolUse")[0]?.handlerDecl["command"], "echo OLD");

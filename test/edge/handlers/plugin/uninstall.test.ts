@@ -61,6 +61,7 @@ import {
   readHooksJson,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { makeUninstallHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/uninstall.ts";
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
@@ -201,6 +202,7 @@ async function populateRuntimeRoute(
     plugin,
     resolvedSource: asAbsolutePluginRoot(pluginRoot),
     scope: "project",
+    options: resolveOptions(undefined),
   });
   hooksRouting.rebuildRoutingTables();
   return hooksRouting;

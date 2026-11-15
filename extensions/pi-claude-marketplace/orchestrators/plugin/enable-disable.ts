@@ -60,6 +60,7 @@ import path from "node:path";
 import { resolveDependencyClosure } from "../../domain/dependency-closure.ts";
 import { findDependents } from "../../domain/dependency-orphans.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
+import { resolveOptions } from "../../domain/user-config.ts";
 import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
@@ -1932,6 +1933,7 @@ async function addCachedHooks(
       plugin: opts.plugin,
       resolvedSource: effect.resolvedSource,
       scope,
+      options: resolveOptions(undefined),
     });
     hooksRouting.rebuildRoutingTables();
   } catch (cacheErr) {
@@ -1992,6 +1994,7 @@ async function hydrateReEnabledMemberHooks(
         plugin: member.name,
         resolvedSource: asAbsolutePluginRoot(member.pluginRoot),
         scope,
+        options: resolveOptions(undefined),
       });
     } catch (cacheErr) {
       hookDebugLog(

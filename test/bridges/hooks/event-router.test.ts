@@ -1227,6 +1227,7 @@ test("readAndCachePluginHooks reads and parses one case-owned config", async (t)
     hooksJsonPath,
     cwd: root,
     logPrefix: "install",
+    options: resolveOptions(undefined),
   });
   const cache = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
     scope: entry.scope,
@@ -1247,10 +1248,53 @@ test("readAndCachePluginHooks reads and parses one case-owned config", async (t)
       resolvedSource: path.join(root, "plugin"),
       commands: ["echo read"],
       predicateKeys: ["PreToolUse|0|0"],
-      // D-PG10-10: the install-time entry holds no options until the next load.
       options: resolveOptions(undefined),
     },
   ]);
+});
+
+test("D-PG10-10 readAndCachePluginHooks gives the entry and each routing entry the options of its input", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const { root } = await createHermeticEnvironment(t, "hooks-router-options-");
+  const hooksJsonPath = path.join(root, "hooks.json");
+  await writeFile(
+    hooksJsonPath,
+    JSON.stringify({
+      PreToolUse: [{ hooks: [{ type: "command", command: "echo first" }] }],
+      Stop: [{ hooks: [{ type: "command", command: "echo second" }] }],
+    }),
+    "utf8",
+  );
+  const options = resolveOptions({
+    mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+    note: { type: "string", title: "Note", description: "A note.", required: false },
+  });
+  const routing = createHooksRouting(runtime, { readHooksJson });
+
+  // act
+  await routing.readAndCachePluginHooks({
+    scope: "user",
+    marketplace: "catalog",
+    plugin: "optioned",
+    resolvedSource: asAbsolutePluginRoot(path.join(root, "plugin")),
+    hooksJsonPath,
+    cwd: root,
+    logPrefix: "install",
+    options,
+  });
+  routing.rebuildRoutingTables();
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      cached: Array.from(runtime.parsedConfigEntries().values(), (entry) => entry.options),
+      routed: Array.from(runtime.routingTableEntries()).flatMap(([, entries]) =>
+        entries.map((entry) => entry.options),
+      ),
+    },
+    { cached: [options], routed: [options, options] },
+  );
 });
 
 test("runtime-bound routing mutations update only their supplied lifecycle owner", async (t) => {
@@ -1280,6 +1324,7 @@ test("runtime-bound routing mutations update only their supplied lifecycle owner
     hooksJsonPath,
     cwd: root,
     logPrefix: "owner-test",
+    options: resolveOptions(undefined),
   });
   routing.rebuildRoutingTables();
 
@@ -1314,6 +1359,7 @@ test("readAndCachePluginHooks leaves the cache unchanged after a read failure", 
     hooksJsonPath: path.join(root, "missing-hooks.json"),
     cwd: root,
     logPrefix: "reinstall",
+    options: resolveOptions(undefined),
   });
 
   // assert
@@ -1337,6 +1383,7 @@ test("readAndCachePluginHooks leaves the cache unchanged after a parse failure",
     hooksJsonPath,
     cwd: root,
     logPrefix: "update",
+    options: resolveOptions(undefined),
   });
 
   // assert
@@ -2910,6 +2957,7 @@ for (const { title, hydratedCwd, trusted } of [
       hooksJsonPath: fixture.hookPath,
       cwd: fixture.projectRoot,
       logPrefix: "install",
+      options: resolveOptions(undefined),
     });
 
     // assert
@@ -2935,6 +2983,7 @@ test("D-LOC-01 readAndCachePluginHooks caches a project config once the hydrate 
     hooksJsonPath: fixture.hookPath,
     cwd: fixture.projectRoot,
     logPrefix: "install",
+    options: resolveOptions(undefined),
   });
 
   // assert

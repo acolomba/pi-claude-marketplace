@@ -67,6 +67,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { createUninstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import {
   createApplyReconcile,
@@ -568,6 +569,7 @@ async function populateRuntimeRoute(
     plugin: opts.plugin,
     resolvedSource: asAbsolutePluginRoot(pluginRoot),
     scope: "project",
+    options: resolveOptions(undefined),
   });
   hooksRouting.rebuildRoutingTables();
   return hooksRouting;

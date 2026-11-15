@@ -30,6 +30,7 @@ import {
   pluginMirrorKey,
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { WORKFLOW_SCRIPT_MAX_BYTES } from "../../../extensions/pi-claude-marketplace/domain/workflow-script.ts";
 import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
@@ -3037,6 +3038,46 @@ test("T-102-01: the same hooks fixture installed ENABLED does get its routing en
       assert.equal(bucket.length, 1);
       assert.equal(bucket[0]?.pluginId, "hooky");
       assert.ok((await stat(path.join(locations.hooksDir, "hooky", "hooks.json"))).isFile());
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-PG10-10 an install gives its plugin's routing entries the options of the resolution it installed", async () => {
+  await withHermeticHome(async ({ hooksRuntime, installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-hook-options-"));
+    hooksRuntime.recordProjectTrust(cwd, true);
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+      const { pluginRoot } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hooky",
+        hooksJson: {
+          PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hello" }] }],
+        },
+      });
+      const userConfig = {
+        mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+      } as const;
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "hooky", version: "0.0.1", userConfig }),
+      );
+      const { ctx, run } = makeCtx();
+
+      // act
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hooky" });
+
+      // assert
+      assert.deepStrictEqual(
+        hooksRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.options),
+        [resolveOptions(userConfig)],
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
