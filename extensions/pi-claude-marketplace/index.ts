@@ -201,6 +201,15 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
       }
     }
 
+    // D-PG6-07: a plugin the load's autoapply installed or enabled names its
+    // MCP servers to the hooks in this session. NFR-2: a failure here skips
+    // only this stage.
+    try {
+      await hooksHydration.refreshMcpServers(event.cwd, projectTrusted);
+    } catch (err) {
+      hookDebugLog(`MCP server refresh skipped: ${errorMessage(err)}`, "hydrate");
+    }
+
     // D-MB-10: the built-in MCP registrations follow the records the load
     // reconcile left. NFR-2: a failure here skips only this stage.
     try {

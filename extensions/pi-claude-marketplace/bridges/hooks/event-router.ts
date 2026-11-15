@@ -85,7 +85,11 @@ import {
 } from "./event-adapters.ts";
 import { FILE_SYSTEM_SWEEP_OPS, sweepHookOutput } from "./hook-output-files.ts";
 import { compileIfPredicate, MATCH_ALL_IF } from "./if-field/index.ts";
-import { mcpServerEntries, type McpServerNamesReader } from "./mcp-server-table.ts";
+import {
+  mcpServerEntries,
+  type McpServerEntry,
+  type McpServerNamesReader,
+} from "./mcp-server-table.ts";
 import { createHookToolView } from "./mcp-tool-view.ts";
 import { claudeSessionEndReason } from "./payloads/session-end.ts";
 import { claudeSessionStartSource } from "./payloads/session-start.ts";
@@ -693,6 +697,14 @@ export interface RegisterHooksBridgeOptions {
 export interface HooksHydration {
   /** `projectTrusted` is Pi's answer for the project at `cwd` (`ctx.isProjectTrusted()`). */
   readonly hydrateProjectScopeForCwd: (cwd: string, projectTrusted: boolean) => Promise<void>;
+  /**
+   * D-PG6-07: re-reads both scopes' plugin MCP servers from their state, so a
+   * plugin that a load's autoapply installed or enabled after the hydrates
+   * names its servers in the same session. `projectTrusted` is Pi's answer for
+   * the project at `cwd`; an untrusted project names no server. It writes no
+   * state and reaches no network.
+   */
+  readonly refreshMcpServers: (cwd: string, projectTrusted: boolean) => Promise<void>;
   readonly registerHooksBridge: (
     pi: ExtensionAPI,
     opts: RegisterHooksBridgeOptions,
@@ -1007,6 +1019,66 @@ async function hydrateProjectScopeForCwdWith(
   }
 
   await hydrateScopeFromState(state, loc, cwd, reader, routingState, generationIsCurrent);
+}
+
+/** D-PG6-07: the plugin MCP servers of `loc`'s scope; a state that fails to load names none. */
+async function scopeMcpServers(
+  reader: HooksHydrationDeps,
+  loc: ScopedLocations,
+): Promise<McpServerEntry[]> {
+  let state: ExtensionState;
+  try {
+    state = await reader.loadState(loc.extensionRoot);
+  } catch (err) {
+    hookDebugLog(
+      `refresh-mcp-servers: loadState failed for scope=${loc.scope} extensionRoot=${loc.extensionRoot}: ${errorMessage(err)}`,
+    );
+    return [];
+  }
+
+  return mcpServerEntries(state, loc, reader.readMcpServerNames);
+}
+
+/**
+ * D-PG6-07: replaces both scopes' server tables with the servers their state
+ * names now. Nothing changes when the generation goes stale during the reads.
+ */
+async function refreshMcpServersWith(
+  reader: HooksHydrationDeps,
+  cwd: string,
+  projectTrusted: boolean,
+  routingState: EventRouterRoutingState,
+  generationIsCurrent: GenerationGuard,
+): Promise<void> {
+  const tables = await Promise.all(
+    SCOPES.map(async (scope) => ({
+      scope,
+      servers: await refreshedMcpServers(reader, scope, cwd, projectTrusted),
+    })),
+  );
+  if (!generationIsCurrent()) {
+    return;
+  }
+
+  for (const { scope, servers } of tables) {
+    routingState.setMcpServers(scope, servers);
+  }
+}
+
+/** The servers `scope` names now; a project Pi does not trust names none (D-LOC-01). */
+function refreshedMcpServers(
+  reader: HooksHydrationDeps,
+  scope: Scope,
+  cwd: string,
+  projectTrusted: boolean,
+): Promise<McpServerEntry[]> {
+  if (scope === "user") {
+    return scopeMcpServers(reader, locationsFor("user", homedir()));
+  }
+
+  return projectTrusted
+    ? scopeMcpServers(reader, locationsFor("project", cwd))
+    : Promise.resolve([]);
 }
 
 /**
@@ -1609,6 +1681,11 @@ export function createHooksHydration(
       if (!generationIsCurrent()) {
         return;
       }
+    },
+    async refreshMcpServers(cwd: string, projectTrusted: boolean): Promise<void> {
+      const capturedGeneration = runtime.currentGeneration();
+      const generationIsCurrent = (): boolean => runtime.currentGeneration() === capturedGeneration;
+      await refreshMcpServersWith(reader, cwd, projectTrusted, routingState, generationIsCurrent);
     },
     async registerHooksBridge(pi: ExtensionAPI, opts: RegisterHooksBridgeOptions): Promise<void> {
       await registerHooksBridgeWith(runtime, reader, pi, opts);

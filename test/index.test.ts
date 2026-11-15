@@ -64,6 +64,7 @@ import {
 import { createJsonCapture } from "./edge/json-capture.ts";
 import { createNotificationBoundary, expectSoftDepProbes } from "./edge/notification-boundary.ts";
 import { retryTree } from "./orchestrators/plugin/scope-tree-inventory.ts";
+import { captureDebugLog } from "./platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "./platform/hermetic-environment.ts";
 
 import type { Notification } from "./edge/notification-boundary.ts";
@@ -170,20 +171,21 @@ const EMPTY_DISCOVERY: ResourcesDiscoverResult = { skillPaths: [], promptPaths: 
  * Which `event.cwd` read each NFR-2 refusal case targets, and how many reads the
  * handler makes in all. The discover handler reads the event's working directory
  * once per stage, in this order: the deferred project-scope hydrate, the
- * reconcile, the plugin PATH recompute, and the project-scope half of the
- * resource aggregation. Naming the ordinals states which stage a case refuses;
+ * reconcile, the hooks' MCP server refresh, the plugin PATH recompute, and the
+ * project-scope half of the resource aggregation. Naming the ordinals states which stage a case refuses;
  * asserting the total states that the stage list itself has not moved.
  *
- * Each of the three named ordinals has its own case, and each case asserts an
+ * Each of the four named ordinals has its own case, and each case asserts an
  * observable only its own stage produces -- otherwise the ordinal is decoration
  * and the case's title is a claim about a stage it is not pinned to. The aggregate
- * discovery case counts all four reads across two calls while a real filesystem
- * fault targets the fourth stage without a synthetic event refusal.
+ * discovery case counts all five reads across two calls while a real filesystem
+ * fault targets the fifth stage without a synthetic event refusal.
  */
 const CWD_READ_DEFERRED_HYDRATE = 1;
 const CWD_READ_RECONCILE = 2;
-const CWD_READ_PLUGIN_PATH_RECOMPUTE = 3;
-const CWD_READS_PER_DISCOVER = 4;
+const CWD_READ_MCP_SERVER_REFRESH = 3;
+const CWD_READ_PLUGIN_PATH_RECOMPUTE = 4;
+const CWD_READS_PER_DISCOVER = 5;
 
 /**
  * Soft-dependency probes per `resources_discover` pass. The pass opens one
@@ -2153,6 +2155,42 @@ test("still answers when the reconcile fails (NFR-2)", async (t) => {
   assert.deepStrictEqual(notifications, expectedNotifications);
   assert.deepStrictEqual({ refused: refusal.refused(), reads: refusal.readCount() }, expectedReads);
   // The recompute is downstream of the reconcile, so it still ran.
+  assert.deepStrictEqual(process.env.PATH, `/usr/bin${path.delimiter}${binDir}`);
+  assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, binDir);
+  verifyBoundary();
+});
+
+test("still answers when the hooks' MCP server refresh fails (NFR-2)", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "mcp-refresh-refused");
+  const resolvedSource = path.join(scope.cwd, "vendored-plugin");
+  const binDir = path.join(resolvedSource, "bin");
+  await seedEnabledPlugin(scope.cwd, resolvedSource);
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
+    0,
+    PROBES_PER_DISCOVER,
+  );
+  process.env.PATH = "/usr/bin";
+  Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
+  const refusal = eventRefusingCwdRead(discoverEvent(scope.cwd), CWD_READ_MCP_SERVER_REFRESH);
+  const expectedReads = { refused: true, reads: CWD_READS_PER_DISCOVER };
+  const logged = captureDebugLog(t);
+
+  // act
+  const discovered = await discover(refusal.event, ctx);
+
+  // assert
+  assert.deepStrictEqual(discovered, EMPTY_DISCOVERY);
+  assert.deepStrictEqual(notifications, []);
+  assert.deepStrictEqual({ refused: refusal.refused(), reads: refusal.readCount() }, expectedReads);
+  // Only this stage words this line, so the refusal landed on it.
+  assert.deepStrictEqual(
+    logged.filter((line) => line.includes("MCP server refresh")),
+    [
+      `[hydrate] MCP server refresh skipped: working directory read ${String(CWD_READ_MCP_SERVER_REFRESH)} refused`,
+    ],
+  );
+  // The recompute is downstream of the refresh, so it still ran.
   assert.deepStrictEqual(process.env.PATH, `/usr/bin${path.delimiter}${binDir}`);
   assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, binDir);
   verifyBoundary();

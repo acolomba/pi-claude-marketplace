@@ -5700,6 +5700,86 @@ test("the project hydrate of a trusted project names its plugin MCP servers (D-P
   );
 });
 
+test("a refresh replaces both scopes' servers with the ones their state names now (D-PG6-07)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-mcp-refresh-");
+  const runtime = createHooksRuntime();
+  runtime.setMcpServers("user", [MCP_SERVER_ENTRY]);
+  const reader = mcpStateReader(
+    new Map([
+      [locationsFor("user", root).extensionRoot, mcpServerState("user", root, "installed")],
+      [locationsFor("project", root).extensionRoot, mcpServerState("project", root, "enabled")],
+    ]),
+  );
+
+  // act
+  await createHooksHydration(runtime, reader).refreshMcpServers(root, true);
+
+  // assert
+  assert.deepStrictEqual(
+    [
+      mcpServerOf(runtime, "seeded"),
+      mcpServerOf(runtime, "installed"),
+      mcpServerOf(runtime, "enabled"),
+    ],
+    [
+      undefined,
+      { name: "plugin:installed:stub", source: "plugin" },
+      { name: "plugin:enabled:stub", source: "plugin" },
+    ],
+  );
+});
+
+test("a refresh names no server of a project Pi does not trust, nor of a scope whose state fails to load (D-PG6-07)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-mcp-refresh-none-");
+  const runtime = createHooksRuntime();
+  runtime.setMcpServers("user", [MCP_SERVER_ENTRY]);
+  runtime.setMcpServers("project", [{ ...MCP_SERVER_ENTRY, adapterKey: "plugin_other_stub_" }]);
+  const reader = mcpStateReader(
+    new Map([
+      [locationsFor("project", root).extensionRoot, mcpServerState("project", root, "demo")],
+    ]),
+  );
+
+  // act
+  await createHooksHydration(runtime, reader).refreshMcpServers(root, false);
+
+  // assert
+  assert.deepStrictEqual(
+    [mcpServerOf(runtime, "seeded"), mcpServerOf(runtime, "other"), mcpServerOf(runtime, "demo")],
+    [undefined, undefined, undefined],
+  );
+});
+
+test("a refresh changes no server table when a server read advances the generation (D-PG6-07)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-mcp-refresh-stale-");
+  const runtime = createHooksRuntime();
+  runtime.setMcpServers("user", [MCP_SERVER_ENTRY]);
+  const reader: HooksHydrationDeps = {
+    ...mcpStateReader(
+      new Map([
+        [locationsFor("user", root).extensionRoot, mcpServerState("user", root, "demo")],
+        [locationsFor("project", root).extensionRoot, { schemaVersion: 2, marketplaces: {} }],
+      ]),
+    ),
+    readMcpServerNames(): Promise<readonly string[]> {
+      runtime.advanceGeneration();
+      return Promise.resolve(["stub"]);
+    },
+  };
+
+  // act
+  await createHooksHydration(runtime, reader).refreshMcpServers(root, true);
+
+  // assert
+  assert.deepStrictEqual(
+    [mcpServerOf(runtime, "seeded"), mcpServerOf(runtime, "demo")],
+    [{ name: "plugin:seeded:stub", source: "plugin" }, undefined],
+  );
+});
+
 const EXPANSION_LINE = {
   type: "input",
   text: "/demo:deploy staging",
