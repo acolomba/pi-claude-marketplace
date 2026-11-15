@@ -5,12 +5,16 @@ import { test } from "node:test";
 
 import { mock, verify, when } from "strong-mock";
 
-import { loadPluginAliases } from "../../extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts";
+import {
+  createPluginNamesCache,
+  loadPluginNames,
+} from "../../extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts";
 import { captureDebugLog } from "../platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type {
   PluginAliasTarget,
+  PluginNames,
   SkillAliasDependencies,
   SkillAliasState,
 } from "../../extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts";
@@ -21,6 +25,13 @@ type Command = ReturnType<ExtensionAPI["getCommands"]>[number];
 const AGENT_DIR = "/agent";
 const CWD = "/work";
 const PROJECT_ROOT = path.join(CWD, ".pi");
+
+/** The alias table of the plugin names that `loadPluginNames` gives. */
+async function loadPluginAliases(
+  ...args: Parameters<typeof loadPluginNames>
+): Promise<PluginNames["aliases"]> {
+  return (await loadPluginNames(...args)).aliases;
+}
 
 /** The staged `SKILL.md` path of `generatedName` under the scope root `root`. */
 function stagedPath(root: string, generatedName: string): string {
@@ -728,6 +739,177 @@ test("D-CF2-02: the plugin table keeps every skill alias and gives a command the
       ["demo:release", { kind: "command", name: "demo:deploy" }],
       ["release", { kind: "command", name: "demo:deploy" }],
     ],
+  );
+  verify(pi);
+});
+
+test("D-PG6-19: gives each loaded skill its stored identity, a skill with no record its legacy alias, and an unreadable skill no name", async () => {
+  // arrange
+  const recorded = stagedPath(AGENT_DIR, "demo-review");
+  const legacy = stagedPath(AGENT_DIR, "demo-status");
+  const unreadable = stagedPath(AGENT_DIR, "demo-broken");
+  const pi = piWith([
+    skillCommand("demo-review", recorded),
+    skillCommand("demo-status", legacy),
+    skillCommand("demo-broken", unreadable),
+  ]);
+
+  // act
+  const names = await loadPluginNames(
+    pi,
+    CWD,
+    false,
+    dependencies(
+      { [AGENT_DIR]: stateWith({ demo: ["demo-review", "demo-status", "demo-broken"] }) },
+      {
+        [recorded]: recordedSkill("demo-review", ["demo:review", "fancy"]),
+        [legacy]: unrecordedSkill("demo-status"),
+      },
+    ),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    [...names.skills],
+    [
+      ["demo-review", "demo:review"],
+      ["demo-status", "demo:status"],
+    ],
+  );
+  verify(pi);
+});
+
+test("D-PG6-19: a skill keeps its own name when another skill or a command of another source took it", async () => {
+  // arrange
+  const first = stagedPath(AGENT_DIR, "demo-first");
+  const second = stagedPath(AGENT_DIR, "demo-second");
+  const pi = piWith([
+    skillCommand("demo-first", first),
+    skillCommand("demo-second", second),
+    { ...promptCommand("demo:taken"), source: "extension" },
+  ]);
+
+  // act
+  const names = await loadPluginNames(
+    pi,
+    CWD,
+    false,
+    dependencies(
+      { [AGENT_DIR]: stateWith({ demo: ["demo-first", "demo-second"] }) },
+      {
+        [first]: recordedSkill("demo-first", ["demo:taken", "demo:second"]),
+        [second]: recordedSkill("demo-second", ["demo:second"]),
+      },
+    ),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    { aliases: [...names.aliases], skills: [...names.skills] },
+    {
+      aliases: [["demo:second", skill("demo-first")]],
+      skills: [
+        ["demo-first", "demo:taken"],
+        ["demo-second", "demo:second"],
+      ],
+    },
+  );
+  verify(pi);
+});
+
+test("D-PG6-19: lists each loaded bridged command, with or without a frontmatter name, and no command Pi did not load", async () => {
+  // arrange
+  const named = stagedCommandPath(AGENT_DIR, "demo:ship");
+  const plain = stagedCommandPath(AGENT_DIR, "demo:deploy");
+  const pi = piWith([
+    stagedPromptCommand("demo:ship", named),
+    stagedPromptCommand("demo:deploy", plain),
+  ]);
+
+  // act
+  const names = await loadPluginNames(
+    pi,
+    CWD,
+    false,
+    dependencies(
+      {
+        [AGENT_DIR]: stateWithCommands({
+          demo: { prompts: ["demo:ship", "demo:deploy", "demo:unloaded"] },
+        }),
+      },
+      { [named]: namedCommand("fancy"), [plain]: "Deploy.\n" },
+    ),
+  );
+
+  // assert
+  assert.deepStrictEqual([...names.commands], ["demo:ship", "demo:deploy"]);
+  verify(pi);
+});
+
+/** A plugin name table that holds the one alias `alias`. */
+function namesWith(alias: string): PluginNames {
+  return {
+    aliases: new Map([[alias, skill("demo-review")]]),
+    skills: new Map(),
+    commands: new Set(),
+  };
+}
+
+test("D-PG6-18: the name cache loads once for a directory and trust state, keeps trusted and untrusted apart, and loads again after clear", async () => {
+  // arrange
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+  const loads: string[] = [];
+  const cache = createPluginNamesCache(pi, (loadPi, cwd, projectTrusted) => {
+    assert.equal(loadPi, pi);
+    loads.push(`${cwd} ${projectTrusted}`);
+    return Promise.resolve(namesWith(`${cwd}:${loads.length}`));
+  });
+
+  // act
+  const trusted = await cache.get(CWD, true);
+  const again = await cache.get(CWD, true);
+  const untrusted = await cache.get(CWD, false);
+  cache.clear();
+  const reloaded = await cache.get(CWD, true);
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      loads,
+      same: again === trusted,
+      aliases: [trusted, untrusted, reloaded].map((names) => [...names.aliases.keys()]),
+    },
+    {
+      loads: [`${CWD} true`, `${CWD} false`, `${CWD} true`],
+      same: true,
+      aliases: [[`${CWD}:1`], [`${CWD}:2`], [`${CWD}:3`]],
+    },
+  );
+  verify(pi);
+});
+
+test("D-PG6-18: the name cache does not keep a rejected load", async () => {
+  // arrange
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+  let loads = 0;
+  const cache = createPluginNamesCache(pi, () => {
+    loads += 1;
+    return loads === 1
+      ? Promise.reject(new Error("state unreadable"))
+      : Promise.resolve(namesWith("demo:review"));
+  });
+
+  // act
+  const failed = await cache.get(CWD, true).then(
+    () => "loaded",
+    (err: unknown) => (err instanceof Error ? err.message : "not an error"),
+  );
+  const names = await cache.get(CWD, true);
+
+  // assert
+  assert.deepStrictEqual(
+    { failed, loads, aliases: [...names.aliases.keys()] },
+    { failed: "state unreadable", loads: 2, aliases: ["demo:review"] },
   );
   verify(pi);
 });

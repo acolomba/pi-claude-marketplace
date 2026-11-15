@@ -5,9 +5,13 @@ import { test } from "node:test";
 import { It, mock, verify, when } from "strong-mock";
 
 import { registerSkillAliases } from "../../extensions/pi-claude-marketplace/edge/skill-aliases.ts";
+import { createPluginNamesCache } from "../../extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts";
 import { captureDebugLog } from "../platform/debug-log-capture.ts";
 
-import type { PluginAliasTarget } from "../../extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts";
+import type {
+  PluginAliasTarget,
+  PluginNamesCache,
+} from "../../extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts";
 import type {
   SkillInvocationOutcome,
   SkillInvocationRequest,
@@ -49,6 +53,17 @@ type AliasLoader = (
   projectTrusted: boolean,
 ) => Promise<ReadonlyMap<string, PluginAliasTarget>>;
 
+/** A name cache over `loadAliases`, whose tables hold no skill or command name. */
+function aliasCache(pi: ExtensionAPI, loadAliases: AliasLoader): PluginNamesCache {
+  return createPluginNamesCache(pi, (loadPi, cwd, projectTrusted) =>
+    loadAliases(loadPi, cwd, projectTrusted).then((aliases) => ({
+      aliases,
+      skills: new Map(),
+      commands: new Set(),
+    })),
+  );
+}
+
 /** The alias target of the bridged skill `generatedName`. */
 function skillAlias(generatedName: string): PluginAliasTarget {
   return { kind: "skill", generatedName };
@@ -79,7 +94,7 @@ function registerWithInvoker(
   })
     .thenReturn()
     .times(1);
-  registerSkillAliases(pi, loadAliases, invokeSkill, createInvocationId);
+  registerSkillAliases(pi, aliasCache(pi, loadAliases), invokeSkill, createInvocationId);
   return { pi, input };
 }
 
@@ -464,9 +479,12 @@ test("leaves a command collision unchanged", () => {
     .times(2);
 
   // act
-  registerSkillAliases(pi, () => {
-    throw new Error("command input must not load skill state");
-  });
+  registerSkillAliases(
+    pi,
+    aliasCache(pi, () => {
+      throw new Error("command input must not load skill state");
+    }),
+  );
   const collision = input.value?.(
     { type: "input", text: "/skill-creator", source: "interactive" },
     ctx,
@@ -695,9 +713,12 @@ test("keeps Pi's native suggestions for a bare skill name", async () => {
   } satisfies AutocompleteProvider;
 
   // act
-  registerSkillAliases(pi, () => {
-    throw new Error("bare completion must not load skill aliases");
-  });
+  registerSkillAliases(
+    pi,
+    aliasCache(pi, () => {
+      throw new Error("bare completion must not load skill aliases");
+    }),
+  );
   session.value?.({ type: "session_start", reason: "startup" }, ctx);
   const suggestions = await factory
     .value?.(base)
@@ -753,7 +774,10 @@ test("offers plugin-qualified completion without replacing native commands", asy
   } satisfies AutocompleteProvider;
 
   // act
-  registerSkillAliases(pi, () => Promise.resolve(new Map([["foo:bar", skillAlias("foo-bar")]])));
+  registerSkillAliases(
+    pi,
+    aliasCache(pi, () => Promise.resolve(new Map([["foo:bar", skillAlias("foo-bar")]]))),
+  );
   session.value?.({ type: "session_start", reason: "startup" }, ctx);
   const suggestions = await factory
     .value?.(base)
@@ -825,7 +849,10 @@ test("creates a plugin-qualified completion when Pi has none", async () => {
   } satisfies AutocompleteProvider;
 
   // act
-  registerSkillAliases(pi, () => Promise.resolve(new Map([["foo:bar", skillAlias("foo-bar")]])));
+  registerSkillAliases(
+    pi,
+    aliasCache(pi, () => Promise.resolve(new Map([["foo:bar", skillAlias("foo-bar")]]))),
+  );
   session.value?.({ type: "session_start", reason: "startup" }, ctx);
   const provider = factory.value?.(base);
   const matched = await provider?.getSuggestions(["/foo:b"], 0, 6, {
@@ -953,9 +980,12 @@ test("keeps native suggestions outside qualified skill names", async () => {
   } satisfies AutocompleteProvider;
 
   // act
-  registerSkillAliases(pi, () => {
-    throw new Error("unqualified completion must not load skill aliases");
-  });
+  registerSkillAliases(
+    pi,
+    aliasCache(pi, () => {
+      throw new Error("unqualified completion must not load skill aliases");
+    }),
+  );
   session.value?.({ type: "session_start", reason: "startup" }, ctx);
   const provider = factory.value?.(base);
   const other = await provider?.getSuggestions(["/other"], 0, 6, {
@@ -1015,12 +1045,15 @@ test("DC-25: offers only plugin-qualified aliases in completion", async () => {
   } satisfies AutocompleteProvider;
 
   // act
-  registerSkillAliases(pi, () =>
-    Promise.resolve(
-      new Map([
-        ["demo:fancy", skillAlias("demo-review")],
-        ["fancy", skillAlias("demo-review")],
-      ]),
+  registerSkillAliases(
+    pi,
+    aliasCache(pi, () =>
+      Promise.resolve(
+        new Map([
+          ["demo:fancy", skillAlias("demo-review")],
+          ["fancy", skillAlias("demo-review")],
+        ]),
+      ),
     ),
   );
   session.value?.({ type: "session_start", reason: "startup" }, ctx);
@@ -1089,7 +1122,7 @@ test("keeps Pi's suggestions and logs when the alias table fails, then loads it 
       : Promise.resolve(new Map([["foo:bar", skillAlias("foo-bar")]]));
   };
 
-  registerSkillAliases(pi, loadAliases);
+  registerSkillAliases(pi, aliasCache(pi, loadAliases));
   session.value?.({ type: "session_start", reason: "startup" }, ctx);
   const provider = factory.value?.(base);
   const options = { signal: new AbortController().signal };

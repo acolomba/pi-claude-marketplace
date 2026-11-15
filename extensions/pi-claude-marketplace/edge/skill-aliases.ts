@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { loadPluginAliases } from "../orchestrators/skill-alias-state.ts";
+import { createPluginNamesCache, loadPluginNames } from "../orchestrators/skill-alias-state.ts";
 import { invokeBridgedSkill } from "../orchestrators/skill-invocation.ts";
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
@@ -9,7 +9,7 @@ import { openNotificationRun } from "../shared/notification-run.ts";
 
 import { finishedTransform } from "./input-transform.ts";
 
-import type { PluginAliasTarget } from "../orchestrators/skill-alias-state.ts";
+import type { PluginNamesCache } from "../orchestrators/skill-alias-state.ts";
 import type {
   SkillInvocationOutcome,
   SkillInvocationRequest,
@@ -23,9 +23,6 @@ import type {
 } from "../platform/pi-api.ts";
 
 type Suggestions = Awaited<ReturnType<AutocompleteProvider["getSuggestions"]>>;
-
-/** The plugin alias table of one directory and trust state. */
-type PluginAliases = ReadonlyMap<string, PluginAliasTarget>;
 
 /** Adds unclaimed skill aliases alongside Pi's native suggestions. */
 function appendAliasSuggestions(
@@ -52,7 +49,7 @@ function appendAliasSuggestions(
 function aliasProvider(
   ctx: ExtensionContext,
   current: AutocompleteProvider,
-  getQualifiedAliases: (cwd: string, projectTrusted: boolean) => Promise<PluginAliases>,
+  names: PluginNamesCache,
 ): AutocompleteProvider {
   return {
     getSuggestions: async (lines, line, col, options) => {
@@ -69,7 +66,7 @@ function aliasProvider(
 
       // A table that cannot be loaded adds no suggestion, so Pi's stay.
       try {
-        const aliases = await getQualifiedAliases(ctx.cwd, ctx.isProjectTrusted());
+        const { aliases } = await names.get(ctx.cwd, ctx.isProjectTrusted());
         return appendAliasSuggestions(typed, suggestions, aliases.keys());
       } catch (err) {
         hookDebugLog(`alias completion skipped: ${errorMessage(err)}`, "skills");
@@ -124,11 +121,7 @@ function commandAliasResult(name: string, token: string, event: InputEvent): Inp
  */
 export function registerSkillAliases(
   pi: ExtensionAPI,
-  loadAliases: (
-    pi: ExtensionAPI,
-    cwd: string,
-    projectTrusted: boolean,
-  ) => Promise<ReadonlyMap<string, PluginAliasTarget>> = loadPluginAliases,
+  names: PluginNamesCache = createPluginNamesCache(pi, loadPluginNames),
   invokeSkill: (
     request: SkillInvocationRequest,
   ) => Promise<SkillInvocationOutcome> = invokeBridgedSkill,
@@ -145,30 +138,9 @@ export function registerSkillAliases(
     notifyUsageError(ctx, run, { message, usage: "" });
   };
 
-  // T-02-17: the table of an untrusted project leaves out its project skills,
-  // so it is kept apart from the table of the same directory once trusted.
-  const cache = new Map<string, Promise<PluginAliases>>();
-  const getQualifiedAliases = (cwd: string, projectTrusted: boolean): Promise<PluginAliases> => {
-    const key = `${projectTrusted ? "trusted" : "untrusted"}\0${cwd}`;
-    let aliases = cache.get(key);
-    if (aliases === undefined) {
-      const loading = loadAliases(pi, cwd, projectTrusted);
-      aliases = loading;
-      cache.set(key, loading);
-      // A rejected load is not kept: the next lookup loads the table again.
-      loading.catch(() => {
-        if (cache.get(key) === loading) {
-          cache.delete(key);
-        }
-      });
-    }
-
-    return aliases;
-  };
-
   pi.on("session_start", (_event, ctx) => {
-    cache.clear();
-    ctx.ui.addAutocompleteProvider((current) => aliasProvider(ctx, current, getQualifiedAliases));
+    names.clear();
+    ctx.ui.addAutocompleteProvider((current) => aliasProvider(ctx, current, names));
   });
 
   // D-CF2-05: one path for a `/skill:` token and for every alias the table
@@ -226,8 +198,8 @@ export function registerSkillAliases(
     // D-CF2-02 residual: a bare alias that equals a Pi built-in command name is
     // not reserved here, because Pi does not export its built-in list.
     // A table that cannot be loaded holds no alias, so the token stays Pi's.
-    return getQualifiedAliases(ctx.cwd, ctx.isProjectTrusted()).then(
-      (aliases) => {
+    return names.get(ctx.cwd, ctx.isProjectTrusted()).then(
+      ({ aliases }) => {
         const target = aliases.get(token);
         if (target === undefined) {
           return { action: "continue" };

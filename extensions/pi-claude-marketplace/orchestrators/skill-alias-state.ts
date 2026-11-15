@@ -18,6 +18,11 @@
 // skill claims before any command, so a command alias never takes a name a
 // skill already answers to. SK-6: a name that a Pi command of another source
 // already has stays with that command.
+//
+// D-PG6-18 / D-PG6-19: the same read pass gives the typed-line resolver the
+// Claude-form name of each loaded bridged skill and the bridged commands Pi
+// loaded. One cache (`createPluginNamesCache`) holds the table of a directory
+// and trust state for a session, and the alias handler and the resolver share it.
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -223,20 +228,19 @@ async function readScopes(
   return scopes;
 }
 
-/**
- * D-CF2-02: maps each name that a loaded entry of `kind` claims to
- * the entry's own name. The first claim wins, and a name that a Pi command of
- * another source has is never mapped (SK-6).
- */
-async function kindAliases(
+/** The names that the staged file of one loaded entry claims. */
+interface EntryClaim {
+  readonly entry: LoadedEntry;
+  readonly names: readonly string[];
+}
+
+/** The claims of the loaded entries of `kind`, user root first, state order within a root. */
+async function kindClaims(
   kind: AliasKind,
   commands: ReturnType<ExtensionAPI["getCommands"]>,
   scopes: readonly ReadScope[],
   resolved: SkillAliasDependencies,
-): Promise<ReadonlyMap<string, string>> {
-  const reserved = new Set(
-    commands.filter((command) => command.source !== "skill").map((command) => command.name),
-  );
+): Promise<readonly EntryClaim[]> {
   const loadedPaths = new Set(
     commands
       .filter((command) => command.source === kind.source)
@@ -245,17 +249,25 @@ async function kindAliases(
   const entries = scopes.flatMap(({ root, state }) =>
     loadedEntries(kind, state, root, loadedPaths),
   );
-  const claims = await Promise.all(
-    entries.map(async (entry) => ({
-      name: entry.name,
-      names: await entryNames(kind, entry, resolved),
-    })),
+  return Promise.all(
+    entries.map(async (entry) => ({ entry, names: await entryNames(kind, entry, resolved) })),
   );
+}
+
+/**
+ * D-CF2-02: maps each name that a claim holds to the entry's own name. The
+ * first claim wins, and a name in `reserved`, which a Pi command of another
+ * source has, is never mapped (SK-6).
+ */
+function claimedAliases(
+  claims: readonly EntryClaim[],
+  reserved: ReadonlySet<string>,
+): ReadonlyMap<string, string> {
   const aliases = new Map<string, string>();
-  for (const { name, names } of claims) {
+  for (const { entry, names } of claims) {
     for (const alias of names) {
       if (!reserved.has(alias) && !aliases.has(alias)) {
-        aliases.set(alias, name);
+        aliases.set(alias, entry.name);
       }
     }
   }
@@ -264,35 +276,113 @@ async function kindAliases(
 }
 
 /**
- * D-CF2-02: the plugin alias table under the rules of
- * `kindAliases`: every name a loaded bridged skill stored, mapped to its
- * generated name, then each name that the frontmatter `name` of a loaded
- * bridged command gives it and no skill claimed, mapped to the command's Pi
- * name. A command alias never displaces a name a skill answers to.
+ * D-PG6-19: the Claude-form name of each loaded bridged skill, by its generated
+ * name: the first name it claims under its plugin's prefix, which is the stored
+ * identity `<plugin>:<directory>`, or the legacy alias of a skill staged with
+ * no record. It is the skill's own name even when another claimant took it as
+ * an alias.
  */
-export async function loadPluginAliases(
+function skillClaudeNames(claims: readonly EntryClaim[]): ReadonlyMap<string, string> {
+  const skills = new Map<string, string>();
+  for (const { entry, names } of claims) {
+    const own = names.find((name) => name.startsWith(`${entry.pluginName}:`));
+    if (own !== undefined) {
+      skills.set(entry.name, own);
+    }
+  }
+
+  return skills;
+}
+
+/** The names a user can type for the bridged skills and commands Pi has loaded. */
+export interface PluginNames {
+  /**
+   * D-CF2-02: every name a loaded bridged skill stored, mapped to its generated
+   * name, then each name that the frontmatter `name` of a loaded bridged
+   * command gives it and no skill claimed, mapped to the command's Pi name. A
+   * command alias never displaces a name a skill answers to.
+   */
+  readonly aliases: ReadonlyMap<string, PluginAliasTarget>;
+  /** D-PG6-19: the Claude-form name of each loaded bridged skill, by its generated name. */
+  readonly skills: ReadonlyMap<string, string>;
+  /** D-PG6-19: the Pi names of the loaded bridged commands. */
+  readonly commands: ReadonlySet<string>;
+}
+
+/** D-CF2-02 / D-PG6-18: the plugin name table of a directory and trust state, in one read pass. */
+export async function loadPluginNames(
   pi: ExtensionAPI,
   cwd: string,
   projectTrusted: boolean,
   dependencies: Partial<SkillAliasDependencies> = {},
-): Promise<ReadonlyMap<string, PluginAliasTarget>> {
+): Promise<PluginNames> {
   const resolved = { ...DEFAULT_DEPENDENCIES, ...dependencies };
   const commands = pi.getCommands();
+  const reserved = new Set(
+    commands.filter((command) => command.source !== "skill").map((command) => command.name),
+  );
   const scopes = await readScopes(cwd, projectTrusted, resolved);
-  const [skills, prompts] = await Promise.all([
-    kindAliases(SKILL_KIND, commands, scopes, resolved),
-    kindAliases(COMMAND_KIND, commands, scopes, resolved),
+  const [skillClaims, commandClaims] = await Promise.all([
+    kindClaims(SKILL_KIND, commands, scopes, resolved),
+    kindClaims(COMMAND_KIND, commands, scopes, resolved),
   ]);
   const aliases = new Map<string, PluginAliasTarget>();
-  for (const [alias, generatedName] of skills) {
+  for (const [alias, generatedName] of claimedAliases(skillClaims, reserved)) {
     aliases.set(alias, { kind: "skill", generatedName });
   }
 
-  for (const [alias, name] of prompts) {
+  for (const [alias, name] of claimedAliases(commandClaims, reserved)) {
     if (!aliases.has(alias)) {
       aliases.set(alias, { kind: "command", name });
     }
   }
 
-  return aliases;
+  return {
+    aliases,
+    skills: skillClaudeNames(skillClaims),
+    commands: new Set(commandClaims.map(({ entry }) => entry.name)),
+  };
+}
+
+/** The plugin name table of each directory and trust state, loaded once per session. */
+export interface PluginNamesCache {
+  readonly get: (cwd: string, projectTrusted: boolean) => Promise<PluginNames>;
+  /** Empties the cache; the `session_start` handler of the alias handler calls it. */
+  readonly clear: () => void;
+}
+
+/**
+ * D-PG6-18: the one cache of the plugin name table, which the alias handler and
+ * the typed-line resolver share; `load` is `loadPluginNames` in production.
+ * Creating it calls nothing on `pi`.
+ */
+export function createPluginNamesCache(
+  pi: ExtensionAPI,
+  load: (pi: ExtensionAPI, cwd: string, projectTrusted: boolean) => Promise<PluginNames>,
+): PluginNamesCache {
+  // T-02-17: the table of an untrusted project leaves out its project skills,
+  // so it is kept apart from the table of the same directory once trusted.
+  const cache = new Map<string, Promise<PluginNames>>();
+  return {
+    get: (cwd, projectTrusted) => {
+      const key = `${projectTrusted ? "trusted" : "untrusted"}\0${cwd}`;
+      let names = cache.get(key);
+      if (names === undefined) {
+        const loading = load(pi, cwd, projectTrusted);
+        names = loading;
+        cache.set(key, loading);
+        // A rejected load is not kept: the next lookup loads the table again.
+        loading.catch(() => {
+          if (cache.get(key) === loading) {
+            cache.delete(key);
+          }
+        });
+      }
+
+      return names;
+    },
+    clear: () => {
+      cache.clear();
+    },
+  };
 }
