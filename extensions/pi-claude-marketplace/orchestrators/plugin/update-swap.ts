@@ -103,6 +103,7 @@ import {
 } from "../../domain/mcp-implementation.ts";
 import { resolutionFor } from "../../domain/plugin-resolver.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
+import { declaredOptions, resolveOptions } from "../../domain/user-config.ts";
 import {
   mcpServerConfigsOf,
   replaceCompatibility,
@@ -415,7 +416,8 @@ async function prepareUpdateHandles(
       knownWorkflowNames: referenceNames.workflows,
       // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
       cwd,
-      options: undefined,
+      // D-PG10-13: the new version's options are written into skill content.
+      options: declaredOptions(resolveOptions(installable.declaredUserConfig)),
     });
     handles.commands = await prepareStageCommands(ops, {
       locations,

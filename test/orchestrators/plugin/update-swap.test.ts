@@ -865,6 +865,50 @@ test("D-PG10-15: a swap to a version that declares no options removes the record
   );
 });
 
+/** Swaps `hello` to 2.0.0, whose skill names `${user_config.mode}`, and returns the staged body. */
+async function swapOptionSkill(
+  cwd: string,
+  declared: Record<string, unknown> | undefined,
+): Promise<string | undefined> {
+  const args = await seedOptionsUpdate(
+    cwd,
+    { mode: { ...MODE_OPTION, default: "fast" } },
+    declared,
+  );
+  await writeFile(
+    path.join(cwd, "mp-src", "plugins", "hello", "skills", "tool", "SKILL.md"),
+    "---\nname: tool\n---\nMode ${user_config.mode}.\n",
+  );
+  await swapOptionsUpdate(args);
+  const staged = await readFile(
+    path.join(args.locations.skillsTargetDir, "hello-tool", "SKILL.md"),
+    "utf8",
+  );
+  return staged.split("---\n").at(-1);
+}
+
+test("D-PG10-13: a swap writes the options the new version declares into its skill", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-skill-options-");
+
+  // act
+  const body = await swapOptionSkill(cwd, { mode: { ...MODE_OPTION, default: "slow" } });
+
+  // assert
+  assert.strictEqual(body, "Mode slow.\n");
+});
+
+test("D-PG10-21: a swap to a version that declares no options keeps its skill's references", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-skill-no-options-");
+
+  // act
+  const body = await swapOptionSkill(cwd, undefined);
+
+  // assert
+  assert.strictEqual(body, "Mode ${user_config.mode}.\n");
+});
+
 test("D-PG10-23: a failed swap keeps the previous options beside the intent mark", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "update-swap-options-failure-");
