@@ -20,8 +20,9 @@
 // `ownSessionId`.
 //
 // The context carries the common envelope fields, the child identity, and
-// two session facts a translator may send: the active model's id and the
-// session's name (D-PG6-09). A new common field is read here once per
+// three session facts a translator may send: the active model's id and the
+// session's name (D-PG6-09), and the effort level of Pi's thinking level
+// (D-PG6-10). A new common field is read here once per
 // dispatch, and each translator that sends it still spreads it in, so the
 // translators stay pure functions of their event and this context.
 //
@@ -29,8 +30,13 @@
 // through `bridges/hooks/index.ts` (D-01 opaque-handle discipline -- the
 // dispatch contract stays internal to the hooks bridge).
 
+import { hookEffortLevel } from "../../domain/argument-substitution.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
+import { errorMessage } from "../../shared/errors.ts";
+
 import type { ChildRootSession } from "./child-root-session.ts";
 import type { ChildIdentity } from "./runtime.ts";
+import type { ClaudeEffort } from "../../domain/argument-substitution.ts";
 import type { ExtensionContext } from "../../platform/pi-api.ts";
 
 /** Child identity captured for one Pi session before hook translation. */
@@ -57,6 +63,8 @@ export interface TranslationContext {
   readonly model?: string;
   /** Pi's name of the session, absent when the session has none (D-PG6-09). */
   readonly sessionTitle?: string;
+  /** The effort level of Pi's thinking level, absent outside Claude's levels (D-PG6-10). */
+  readonly effort?: { readonly level: ClaudeEffort };
 }
 
 /** The translation context plus the own session id that keys internal state. */
@@ -80,6 +88,21 @@ export function childHookIdentityOf(identity: ChildIdentity): ChildHookIdentity 
     sessionId: identity.childId,
     ...(identity.root === undefined ? {} : { root: identity.root }),
   };
+}
+
+// Pi's context reads the thinking level through a getter on the session
+// runtime, so a read that throws gives no `effort` and the hook still runs.
+function dispatchEffort(ctx: ExtensionContext): TranslationContext["effort"] {
+  let thinkingLevel: string | undefined;
+  try {
+    thinkingLevel = ctx.thinkingLevel;
+  } catch (error) {
+    hookDebugLog(`translation-context: reading Pi's thinking level failed: ${errorMessage(error)}`);
+    return undefined;
+  }
+
+  const level = hookEffortLevel(thinkingLevel);
+  return level === undefined ? undefined : { level };
 }
 
 /**
@@ -113,6 +136,7 @@ export function buildTranslationContext(
   const kept = childIdentity?.sessionId === ownSessionId ? childIdentity : undefined;
   const model = ctx.model?.id;
   const sessionTitle = ctx.sessionManager.getSessionName();
+  const effort = dispatchEffort(ctx);
   return {
     sessionId: kept?.root?.sessionId ?? ownSessionId,
     transcriptPath: kept?.root?.transcriptPath ?? ctx.sessionManager.getSessionFile() ?? "",
@@ -123,5 +147,6 @@ export function buildTranslationContext(
       : { childIdentity: { agentType: kept.agentType, sessionId: ownSessionId } }),
     ...(model ? { model } : {}),
     ...(sessionTitle ? { sessionTitle } : {}),
+    ...(effort === undefined ? {} : { effort }),
   };
 }

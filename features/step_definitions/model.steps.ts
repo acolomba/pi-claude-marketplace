@@ -63,6 +63,29 @@ Given(
   },
 );
 
+// D-PG6-24: Pi holds a model that cannot reason at the thinking level `off`,
+// so a scenario that sets a level starts with a model that reasons.
+Given(
+  "pi runs with a scripted model that reasons",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    await this.usePiWithProfile({ companions: [], reasoningModel: true });
+  },
+);
+
+// Pi lowers a level the model cannot take to one it can, so the step reads
+// the level back and fails on one Pi changed.
+Given(
+  "the user has set the thinking level {string}",
+  async function (this: ScenarioWorld, level: string) {
+    const set = await this.pi.request({ type: "set_thinking_level", level });
+    assert.strictEqual(set.response.success, true, JSON.stringify(set.response));
+    const { response } = await this.pi.request({ type: "get_state" });
+    assert.strictEqual(response.success, true, JSON.stringify(response));
+    assert.strictEqual((response.data as { readonly thinkingLevel?: string }).thinkingLevel, level);
+  },
+);
+
 // Pi loads every extension twice in a project that needs a trust decision,
 // once to ask the extensions and once with the decision, so this start gets
 // two trusted starts' budget.

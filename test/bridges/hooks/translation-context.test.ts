@@ -26,6 +26,7 @@ import {
   buildTranslationContext,
   childHookIdentityOf,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
+import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 
 import type { TranslationContext } from "../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
 import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -35,6 +36,8 @@ interface SessionFacts {
   readonly sessionName?: string;
   /** A folder for a saved session, whose file Pi names before it writes it. */
   readonly sessionDir?: string;
+  /** What the context's `thinkingLevel` getter does, as Pi's runner defines one. */
+  readonly thinkingLevel?: () => NonNullable<ExtensionContext["thinkingLevel"]>;
 }
 
 function inMemoryContext(
@@ -50,7 +53,7 @@ function inMemoryContext(
     sessionManager.appendSessionInfo(facts.sessionName);
   }
 
-  return {
+  const context = {
     get ui(): ExtensionContext["ui"] {
       throw new Error("buildTranslationContext must not read ui");
     },
@@ -89,6 +92,11 @@ function inMemoryContext(
       throw new Error("buildTranslationContext must not call getSystemPrompt");
     },
   } satisfies ExtensionContext;
+  if (facts.thinkingLevel !== undefined) {
+    Object.defineProperty(context, "thinkingLevel", { get: facts.thinkingLevel });
+  }
+
+  return context;
 }
 
 const SONNET_MODEL = {
@@ -467,6 +475,77 @@ describe("buildTranslationContext", () => {
       cwd: "/workspace/child",
       ownSessionId: "current-session",
     });
+  });
+});
+
+describe("buildTranslationContext effort (D-PG6-10)", () => {
+  test("gives the effort level of a thinking level in Claude's set", () => {
+    // arrange
+    const context = inMemoryContext("effort-session", "/workspace/effort", {
+      thinkingLevel: () => "high",
+    });
+
+    // act
+    const translationContext = buildTranslationContext(context);
+
+    // assert
+    assert.deepStrictEqual(translationContext, {
+      sessionId: "effort-session",
+      transcriptPath: "",
+      cwd: "/workspace/effort",
+      ownSessionId: "effort-session",
+      effort: { level: "high" },
+    });
+  });
+
+  for (const thinkingLevel of ["minimal", "off"] as const) {
+    test(`leaves out the effort under the thinking level ${thinkingLevel}`, () => {
+      // arrange
+      const context = inMemoryContext("effort-session", "/workspace/effort", {
+        thinkingLevel: () => thinkingLevel,
+      });
+
+      // act
+      const translationContext = buildTranslationContext(context);
+
+      // assert
+      assert.strictEqual(Object.hasOwn(translationContext, "effort"), false);
+    });
+  }
+
+  test("leaves out the effort when Pi gives no thinking level", () => {
+    // arrange
+    const context = inMemoryContext("effort-session", "/workspace/effort");
+
+    // act
+    const translationContext = buildTranslationContext(context);
+
+    // assert
+    assert.strictEqual(Object.hasOwn(translationContext, "effort"), false);
+  });
+
+  test("builds the rest of the context and logs once when the thinking level read throws", (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const context = inMemoryContext("effort-session", "/workspace/effort", {
+      thinkingLevel: () => {
+        throw new Error("runtime not bound");
+      },
+    });
+
+    // act
+    const translationContext = buildTranslationContext(context);
+
+    // assert
+    assert.deepStrictEqual(translationContext, {
+      sessionId: "effort-session",
+      transcriptPath: "",
+      cwd: "/workspace/effort",
+      ownSessionId: "effort-session",
+    });
+    assert.deepStrictEqual(logged, [
+      "[hooks] translation-context: reading Pi's thinking level failed: runtime not bound",
+    ]);
   });
 });
 

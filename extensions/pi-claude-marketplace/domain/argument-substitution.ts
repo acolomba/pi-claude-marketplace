@@ -41,19 +41,19 @@ const VARIABLE_NAMES = [
   "CLAUDE_EFFORT",
 ] as const;
 
+// The effort levels Claude Code 2.1.316 gives `${CLAUDE_EFFORT}`, each also
+// a Pi thinking level of the same name.
+const CLAUDE_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+
 /** The effort levels Claude Code 2.1.316 gives `${CLAUDE_EFFORT}`. */
-export type ClaudeEffort = "low" | "medium" | "high" | "xhigh" | "max";
+export type ClaudeEffort = (typeof CLAUDE_EFFORTS)[number];
 
 // Pi thinking levels with no Claude counterpart (`off`, `minimal`) map to the
 // lowest effort (D-CF1-01).
 const EFFORT_BY_THINKING_LEVEL = new Map<string, ClaudeEffort>([
   ["off", "low"],
   ["minimal", "low"],
-  ["low", "low"],
-  ["medium", "medium"],
-  ["high", "high"],
-  ["xhigh", "xhigh"],
-  ["max", "max"],
+  ...CLAUDE_EFFORTS.map((effort) => [effort, effort] as const),
 ]);
 
 /**
@@ -285,4 +285,16 @@ export function parseArgumentNames(frontmatterArguments: unknown): readonly stri
  */
 export function claudeEffort(thinkingLevel: string | undefined): ClaudeEffort {
   return EFFORT_BY_THINKING_LEVEL.get(thinkingLevel ?? "") ?? "high";
+}
+
+/**
+ * The `effort` level a hook receives for Pi's session thinking level
+ * (D-PG6-10): `low`, `medium`, `high`, `xhigh`, and `max` map to themselves,
+ * and `off`, `minimal`, an unset level, and an unknown level give none, so
+ * the hook gets no `effort`. Unlike `claudeEffort`, which reads `off` and
+ * `minimal` as `low` and an unknown level as `high` (D-CF1-01), this rule
+ * sends a level only when Pi's level is one of Claude's.
+ */
+export function hookEffortLevel(thinkingLevel: string | undefined): ClaudeEffort | undefined {
+  return CLAUDE_EFFORTS.find((effort) => effort === thinkingLevel);
 }

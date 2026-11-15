@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   claudeEffort,
+  hookEffortLevel,
   InvocationTooLargeError,
   parseArgumentNames,
   substituteArguments,
@@ -685,6 +686,28 @@ describe("claudeEffort", () => {
 
       // assert
       assert.strictEqual(mappedEffort, expectedEffort);
+    });
+  }
+});
+
+describe("hookEffortLevel", () => {
+  for (const { thinkingLevel, level } of [
+    { thinkingLevel: "low", level: "low" },
+    { thinkingLevel: "medium", level: "medium" },
+    { thinkingLevel: "high", level: "high" },
+    { thinkingLevel: "xhigh", level: "xhigh" },
+    { thinkingLevel: "max", level: "max" },
+    { thinkingLevel: "off", level: undefined },
+    { thinkingLevel: "minimal", level: undefined },
+    { thinkingLevel: "turbo", level: undefined },
+    { thinkingLevel: undefined, level: undefined },
+  ] satisfies readonly { thinkingLevel: string | undefined; level: ClaudeEffort | undefined }[]) {
+    test(`D-PG6-10: gives the ${String(thinkingLevel)} thinking level the hook level ${String(level)}`, () => {
+      // act
+      const mappedLevel = hookEffortLevel(thinkingLevel);
+
+      // assert
+      assert.strictEqual(mappedLevel, level);
     });
   }
 });

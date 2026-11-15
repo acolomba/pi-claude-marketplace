@@ -32,9 +32,16 @@
  * context tokens of a reply exceed the context window minus `reserveTokens`:
  * 128000 - 16384 = 111616 for `faux-1`. Pi reads input above the context
  * window as an overflow instead.
+ *
+ * The faux models cannot reason, so Pi holds their thinking level at `off`.
+ * When the harness directory holds the reasoning-model file at registration,
+ * the provider registers each model as one that reasons, so a scenario can
+ * set a thinking level (D-PG6-24).
  */
 
+import { existsSync } from "node:fs";
 import { appendFile } from "node:fs/promises";
+import path from "node:path";
 
 import { createAssistantMessageEventStream } from "@earendil-works/pi-ai";
 import {
@@ -229,6 +236,11 @@ function withContextUsage(inner: AssistantMessageEventStream): AssistantMessageE
   return outer;
 }
 
+/** The file whose presence makes the scripted model's models reason (D-PG6-24). */
+export function reasoningModelPath(harness: string): string {
+  return path.join(harness, "reasoning-model");
+}
+
 async function playNextStep(messages: readonly Message[]): Promise<AssistantMessage> {
   const harness = harnessDirectory(process.env.HOME ?? "");
   const [script, calls] = await Promise.all([readModelScript(harness), readModelCalls(harness)]);
@@ -279,6 +291,7 @@ export default function scriptedModel(pi: ExtensionAPI): void {
   };
 
   faux.setResponses([player]);
+  const reasoning = existsSync(reasoningModelPath(harnessDirectory(process.env.HOME ?? "")));
   // A new session keeps the selected model only when Pi already counts its
   // provider as configured. A provider registered with a literal key counts
   // at once; one whose key only resolves at request time counts only after an
@@ -294,7 +307,7 @@ export default function scriptedModel(pi: ExtensionAPI): void {
       id: model.id,
       name: model.name,
       input: model.input,
-      reasoning: model.reasoning,
+      reasoning: reasoning || model.reasoning,
       cost: model.cost,
       contextWindow: model.contextWindow,
       maxTokens: model.maxTokens,

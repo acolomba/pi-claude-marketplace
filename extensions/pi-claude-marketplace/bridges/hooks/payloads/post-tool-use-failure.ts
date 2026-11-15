@@ -26,9 +26,10 @@ import { toHookToolInput } from "../tool-input.ts";
 
 import { toolFactFields } from "./tool-event-facts.ts";
 
+import type { HookMcpServer, HookToolFacts } from "./tool-event-facts.ts";
+import type { ClaudeEffort } from "../../../domain/argument-substitution.ts";
 import type { ToolResultEvent } from "../../../platform/pi-api.ts";
 import type { TranslationContext } from "../translation-context.ts";
-import type { HookMcpServer, HookToolFacts } from "./tool-event-facts.ts";
 
 export interface PostToolUseFailureStdin {
   readonly session_id: string;
@@ -44,6 +45,7 @@ export interface PostToolUseFailureStdin {
   readonly mcp_server?: HookMcpServer;
   readonly agent_type?: string;
   readonly agent_id?: string;
+  readonly effort?: { readonly level: ClaudeEffort };
 }
 
 // The text parts of a failed tool's content, one per line.
@@ -76,5 +78,6 @@ export function translatePostToolUseFailure(
     ...(ctx.childIdentity === undefined
       ? {}
       : { agent_type: ctx.childIdentity.agentType, agent_id: ctx.childIdentity.sessionId }),
+    ...(ctx.effort === undefined ? {} : { effort: ctx.effort }),
   };
 }

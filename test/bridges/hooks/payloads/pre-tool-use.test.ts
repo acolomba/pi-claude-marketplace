@@ -260,3 +260,58 @@ test("leaves out mcp_server for an event with no server (D-PG6-07)", () => {
   // assert
   assert.strictEqual(Object.hasOwn(payload, "mcp_server"), false);
 });
+
+test("sends the context's effort as the last member, after agent_id (D-PG6-10)", () => {
+  // arrange
+  const event = {
+    type: "tool_call",
+    toolCallId: "call-1",
+    toolName: "bash",
+    input: { command: "echo one" },
+  } satisfies ToolCallEvent;
+  const context = {
+    sessionId: "child-session",
+    transcriptPath: "",
+    cwd: "/workspace",
+    childIdentity: { agentType: "reviewer", sessionId: "child-session" },
+    effort: { level: "high" },
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translatePreToolUse(event, context);
+
+  // assert
+  assert.deepStrictEqual(Object.entries(payload), [
+    ["session_id", "child-session"],
+    ["transcript_path", ""],
+    ["cwd", "/workspace"],
+    ["hook_event_name", "PreToolUse"],
+    ["tool_name", "Bash"],
+    ["tool_input", { command: "echo one" }],
+    ["tool_use_id", "call-1"],
+    ["agent_type", "reviewer"],
+    ["agent_id", "child-session"],
+    ["effort", { level: "high" }],
+  ]);
+});
+
+test("leaves out effort for a context with none (D-PG6-10)", () => {
+  // arrange
+  const event = {
+    type: "tool_call",
+    toolCallId: "call-1",
+    toolName: "bash",
+    input: { command: "echo one" },
+  } satisfies ToolCallEvent;
+  const context = {
+    sessionId: "session",
+    transcriptPath: "",
+    cwd: "/workspace",
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translatePreToolUse(event, context);
+
+  // assert
+  assert.strictEqual(Object.hasOwn(payload, "effort"), false);
+});

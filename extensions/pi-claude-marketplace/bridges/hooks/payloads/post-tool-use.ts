@@ -28,9 +28,10 @@ import { searchShellToolResponse } from "../tool-result-search-shell.ts";
 
 import { toolFactFields } from "./tool-event-facts.ts";
 
+import type { HookMcpServer, HookToolFacts } from "./tool-event-facts.ts";
+import type { ClaudeEffort } from "../../../domain/argument-substitution.ts";
 import type { ToolResultEvent } from "../../../platform/pi-api.ts";
 import type { TranslationContext } from "../translation-context.ts";
-import type { HookMcpServer, HookToolFacts } from "./tool-event-facts.ts";
 
 export interface PostToolUseStdin {
   readonly session_id: string;
@@ -45,6 +46,7 @@ export interface PostToolUseStdin {
   readonly mcp_server?: HookMcpServer;
   readonly agent_type?: string;
   readonly agent_id?: string;
+  readonly effort?: { readonly level: ClaudeEffort };
 }
 
 function nativeToolResponse(event: ToolResultEvent): unknown {
@@ -80,5 +82,6 @@ export function translatePostToolUse(
     ...(ctx.childIdentity === undefined
       ? {}
       : { agent_type: ctx.childIdentity.agentType, agent_id: ctx.childIdentity.sessionId }),
+    ...(ctx.effort === undefined ? {} : { effort: ctx.effort }),
   };
 }

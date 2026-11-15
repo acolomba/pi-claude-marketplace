@@ -436,3 +436,66 @@ test("leaves out mcp_server for a result with no server (D-PG6-07)", () => {
   // assert
   assert.strictEqual(Object.hasOwn(payload, "mcp_server"), false);
 });
+
+test("sends the context's effort as the last member, after agent_id (D-PG6-10)", () => {
+  // arrange
+  const event = {
+    type: "tool_result",
+    toolCallId: "call-1",
+    toolName: "custom",
+    input: { query: "one" },
+    content: [{ type: "text", text: "lookup failed" }],
+    details: undefined,
+    isError: true,
+  } satisfies ToolResultEvent;
+  const context = {
+    sessionId: "child-session",
+    transcriptPath: "",
+    cwd: "/workspace",
+    childIdentity: { agentType: "reviewer", sessionId: "child-session" },
+    effort: { level: "high" },
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translatePostToolUseFailure(event, context);
+
+  // assert
+  assert.deepStrictEqual(Object.entries(payload), [
+    ["session_id", "child-session"],
+    ["transcript_path", ""],
+    ["cwd", "/workspace"],
+    ["hook_event_name", "PostToolUseFailure"],
+    ["tool_name", "custom"],
+    ["tool_input", { query: "one" }],
+    ["tool_use_id", "call-1"],
+    ["error", "lookup failed"],
+    ["is_interrupt", false],
+    ["agent_type", "reviewer"],
+    ["agent_id", "child-session"],
+    ["effort", { level: "high" }],
+  ]);
+});
+
+test("leaves out effort for a context with none (D-PG6-10)", () => {
+  // arrange
+  const event = {
+    type: "tool_result",
+    toolCallId: "call-1",
+    toolName: "custom",
+    input: { query: "one" },
+    content: [{ type: "text", text: "lookup failed" }],
+    details: undefined,
+    isError: true,
+  } satisfies ToolResultEvent;
+  const context = {
+    sessionId: "session",
+    transcriptPath: "",
+    cwd: "/workspace",
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translatePostToolUseFailure(event, context);
+
+  // assert
+  assert.strictEqual(Object.hasOwn(payload, "effort"), false);
+});

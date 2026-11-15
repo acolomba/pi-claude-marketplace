@@ -65,6 +65,7 @@ import { REGISTRY_PROBE_EXTENSION } from "../lib/pi-registry-probe/snapshot.ts";
 import { PiTuiSession } from "../lib/pi-tui.ts";
 import { rowArrays } from "../lib/result-rows.ts";
 import { latestSessionFile, sessionsFolder } from "../lib/saved-sessions.ts";
+import { reasoningModelPath } from "../lib/scripted-model/extension.ts";
 import { readModelCalls, readModelScript } from "../lib/scripted-model/script.ts";
 import { assertStandInsStopped, harnessDirectory } from "../lib/turn-records.ts";
 
@@ -175,6 +176,14 @@ export interface PiProfile {
    * removes that folder.
    */
   readonly session?: "saved";
+  /**
+   * The scripted model registers its models as ones that reason, so Pi keeps
+   * the thinking level a scenario sets. Without it Pi holds the level at
+   * `off`, and no existing table gains an `effort` column (D-PG6-24). The
+   * profile writes the scripted model's file into the harness directory
+   * before Pi starts, and the scenario's release removes it.
+   */
+  readonly reasoningModel?: true;
 }
 
 /**
@@ -728,6 +737,12 @@ export class ScenarioWorld extends World {
     await this.prepareTemporaryDirectory();
     if (profile.trust !== "untrusted") {
       await this.trustSandboxProject();
+    }
+
+    if (profile.reasoningModel === true) {
+      const marker = reasoningModelPath(harness);
+      await writeFile(marker, "");
+      this.onRelease(() => rm(marker, { force: true }));
     }
 
     this.profileHarnessDirectory = harness;

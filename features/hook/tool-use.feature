@@ -1905,3 +1905,73 @@ Feature: Hook tool use
       | event       | session | tool name | tool use id  | duration ms    | tool input                             | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE | tool response                                                                 |
       | PreToolUse  | first   | Bash      | {tool use 1} |                | {"command":"echo ready","timeout":500} | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |                                                                               |
       | PostToolUse | first   | Bash      | {tool use 1} | {milliseconds} | {"command":"echo ready","timeout":500} | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          | {"interrupted":false,"structuredContent":[{"type":"text","text":"ready\\n"}]} |
+
+  Scenario Outline: A tool hook receives the effort level <level> of the session
+    Given pi runs with a scripted model that reasons
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event            | matcher |
+      | prompt | UserPromptSubmit |         |
+      | pre    | PreToolUse       | Bash    |
+      | post   | PostToolUse      | Bash    |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the user has set the thinking level "<level>"
+    Given the scripted model plays these steps:
+      | reply | tool | arguments               |
+      |       | bash | {"command": "echo one"} |
+      | Done. |      |                         |
+    When the user prompts "run one echo"
+    Then the hooks record these runs:
+      | event            | session | prompt       | tool name | tool use id  | duration ms    | tool input             | tool response                                                               | cwd           | transcript path | effort   | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | UserPromptSubmit | first   | run one echo |           |              |                |                        |                                                                             | {project dir} |                 |          | prompt    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PreToolUse       | first   |              | Bash      | {tool use 1} |                | {"command":"echo one"} |                                                                             | {project dir} |                 | <effort> | pre       | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse      | first   |              | Bash      | {tool use 1} | {milliseconds} | {"command":"echo one"} | {"interrupted":false,"structuredContent":[{"type":"text","text":"one\\n"}]} | {project dir} |                 | <effort> | post      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the model receives these calls:
+      | call | role        | text                                  |
+      | 1    | user        | run one echo                          |
+      | 2    | user        | run one echo                          |
+      | 2    | assistant   | tool call bash {"command":"echo one"} |
+      | 2    | tool result | bash returned: one\n                  |
+
+    Examples:
+      | level  | effort             |
+      | low    | {"level":"low"}    |
+      | medium | {"level":"medium"} |
+      | high   | {"level":"high"}   |
+
+  Scenario: A tool hook under the thinking level minimal receives no effort
+    Given pi runs with a scripted model that reasons
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event            | matcher |
+      | prompt | UserPromptSubmit |         |
+      | pre    | PreToolUse       | Bash    |
+      | post   | PostToolUse      | Bash    |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the user has set the thinking level "minimal"
+    Given the scripted model plays these steps:
+      | reply | tool | arguments               |
+      |       | bash | {"command": "echo one"} |
+      | Done. |      |                         |
+    When the user prompts "run one echo"
+    Then the hooks record these runs:
+      | event            | session | prompt       | tool name | tool use id  | duration ms    | tool input             | tool response                                                               | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | UserPromptSubmit | first   | run one echo |           |              |                |                        |                                                                             | {project dir} |                 | prompt    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PreToolUse       | first   |              | Bash      | {tool use 1} |                | {"command":"echo one"} |                                                                             | {project dir} |                 | pre       | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse      | first   |              | Bash      | {tool use 1} | {milliseconds} | {"command":"echo one"} | {"interrupted":false,"structuredContent":[{"type":"text","text":"one\\n"}]} | {project dir} |                 | post      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the model receives these calls:
+      | call | role        | text                                  |
+      | 1    | user        | run one echo                          |
+      | 2    | user        | run one echo                          |
+      | 2    | assistant   | tool call bash {"command":"echo one"} |
+      | 2    | tool result | bash returned: one\n                  |
