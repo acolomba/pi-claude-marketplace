@@ -112,3 +112,4 @@ Audit run (hermetic): owner + catalog-uat tests 124/124 pass; adapter cucumber o
 | Gate | Commit | Node | Exit | Scenarios (adapter / builtin) | Log |
 |------|--------|------|------|-------------------------------|-----|
 | phase gate | f7360834 | v26.13.1 | 0 | 1972 / 185 | /tmp/pg8-phasegate.log |
+| phase gate (after review fixes) | a78def62 | v26.13.1 | 0 | 1974 / 185 | /tmp/pg8-phasegate2.log |
