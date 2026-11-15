@@ -98,7 +98,11 @@ import { asGroupLeader } from "./process-group.ts";
 import { planSpawn, serializeWithTruncation } from "./spawn-helpers.ts";
 import { ceilingBound, collectStreamText } from "./stream-text.ts";
 import { resolveTimeoutSeconds } from "./timeout.ts";
-import { buildTranslationContext, type TranslationContext } from "./translation-context.ts";
+import {
+  buildTranslationContext,
+  childHookIdentityOf,
+  type TranslationContext,
+} from "./translation-context.ts";
 import { parseHookStdout } from "./wire-protocol.ts";
 
 import type { SpawnDeps } from "./async-rewake/registry.ts";
@@ -222,12 +226,7 @@ export async function dispatchHookExec(
 
   try {
     const identity = runtime.childIdentityFor(ctx.sessionManager.getSessionId());
-    const transCtx = buildTranslationContext(
-      ctx,
-      identity.kind === "known"
-        ? { agentType: identity.agentType, sessionId: identity.childId }
-        : undefined,
-    );
+    const transCtx = buildTranslationContext(ctx, childHookIdentityOf(identity));
     const stdinPayload = buildPayload(entry.claudeEvent, event, transCtx);
     const stdinJson = serializeWithTruncation(stdinPayload);
     const loc = locationsFor(entry.scope, transCtx.cwd);

@@ -77,8 +77,8 @@ export function translatePostToolUse(
       searchShellToolResponse(event, ctx.cwd) ??
       nativeToolResponse(event),
     ...toolFactFields(event),
-    ...(ctx.childIdentity?.sessionId === ctx.sessionId
-      ? { agent_type: ctx.childIdentity.agentType, agent_id: ctx.childIdentity.sessionId }
-      : {}),
+    ...(ctx.childIdentity === undefined
+      ? {}
+      : { agent_type: ctx.childIdentity.agentType, agent_id: ctx.childIdentity.sessionId }),
   };
 }

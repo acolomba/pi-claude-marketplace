@@ -1184,6 +1184,91 @@ test(
   },
 );
 
+// D-PG6-03: two children of one launching session read one `session_id`, and
+// each keeps the journal owner of its own session id.
+test(
+  "keys the journal owners of two children of one launching session by their own sessions",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-rooted-owner-"));
+    const loc = locationsFor("project", root);
+    const runtime = createHooksRuntime();
+    const children = [createChild(29_121), createChild(29_122)];
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = "1";
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+      children.forEach(destroyChild);
+      await rm(root, { recursive: true, force: true });
+    });
+    const launching = {
+      sessionId: "launching-session",
+      transcriptPath: "/sessions/launching.jsonl",
+    };
+    const payloads: unknown[] = [];
+
+    // act
+    for (const [index, sessionId] of ["first-child", "second-child"].entries()) {
+      const harness = children[index];
+      assert.ok(harness !== undefined);
+      const chunks: Buffer[] = [];
+      harness.stdin?.on("data", (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+      const stdinEnd = once(harness.stdin!, "end");
+      runtime.captureChildIdentity(
+        {
+          type: "before_agent_start",
+          systemPromptOptions: { customPrompt: '<active_agent name="rooted-runner"/>\n\n' },
+        } as BeforeAgentStartEvent,
+        sessionId,
+      );
+      runtime.recordChildRoot(sessionId, launching);
+      await spawnAndRegister(
+        runtime,
+        createEntry(root),
+        {
+          type: "tool_call",
+          toolCallId: `${sessionId}-call`,
+          toolName: "bash",
+          input: { command: "printf rooted" },
+        } satisfies ToolCallEvent,
+        createContext(root, sessionId, true).context,
+        createPi().pi,
+        loc,
+        { spawnImpl: createSpawn(harness.child, []), dispatchId: () => `${sessionId}-dispatch` },
+      );
+      await stdinEnd;
+      payloads.push(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+    }
+
+    // assert
+    assert.deepStrictEqual(
+      runtime.persistenceOwners().map((owner) => owner.sessionId),
+      ["first-child", "second-child"],
+    );
+    assert.deepStrictEqual(
+      payloads,
+      ["first-child", "second-child"].map((sessionId) => ({
+        session_id: "launching-session",
+        transcript_path: "/sessions/launching.jsonl",
+        cwd: root,
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: { command: "printf rooted" },
+        tool_use_id: `${sessionId}-call`,
+        agent_type: "rooted-runner",
+        agent_id: sessionId,
+      })),
+    );
+  },
+);
+
 for (const { name, marker, handlerDecl } of [
   {
     name: "main plain async",

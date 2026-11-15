@@ -49,12 +49,21 @@ test("maps a failed built-in tool to the complete PostToolUseFailure envelope", 
   assert.notStrictEqual(payload.tool_input, toolInput);
 });
 
-for (const identity of [
-  { agentType: "reviewer", sessionId: "child-session" },
-  undefined,
-  { agentType: "reviewer", sessionId: "other-session" },
+// D-PG6-01: a child's identity stays with the launching session's id.
+for (const { name, sessionId, identity } of [
+  {
+    name: "own session",
+    sessionId: "child-session",
+    identity: { agentType: "reviewer", sessionId: "child-session" },
+  },
+  { name: "absent", sessionId: "child-session", identity: undefined },
+  {
+    name: "launching session",
+    sessionId: "main-session",
+    identity: { agentType: "reviewer", sessionId: "child-session" },
+  },
 ]) {
-  test(`includes only matching child identity in a failed result: ${identity?.sessionId ?? "absent"}`, () => {
+  test(`includes a present child identity in a failed result: ${name}`, () => {
     // arrange
     const event = {
       type: "tool_result",
@@ -66,7 +75,7 @@ for (const identity of [
       isError: true,
     } satisfies ToolResultEvent;
     const context = {
-      sessionId: "child-session",
+      sessionId,
       transcriptPath: "/sessions/child.jsonl",
       cwd: "/workspace",
       ...(identity === undefined ? {} : { childIdentity: identity }),
@@ -77,7 +86,7 @@ for (const identity of [
 
     // assert
     assert.deepStrictEqual(payload, {
-      session_id: "child-session",
+      session_id: sessionId,
       transcript_path: "/sessions/child.jsonl",
       cwd: "/workspace",
       hook_event_name: "PostToolUseFailure",
@@ -86,9 +95,7 @@ for (const identity of [
       tool_use_id: "child-failure",
       error: "lookup failed",
       is_interrupt: false,
-      ...(identity?.sessionId === context.sessionId
-        ? { agent_type: "reviewer", agent_id: "child-session" }
-        : {}),
+      ...(identity === undefined ? {} : { agent_type: "reviewer", agent_id: "child-session" }),
     });
   });
 }

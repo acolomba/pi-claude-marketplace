@@ -547,13 +547,13 @@ Feature: Plugin subagent child
       | demo:runner  | background | complete | recorded       | first   |
       | demo:granted | background | complete | recorded       | second  |
     Then the real children's hooks record these runs in any order, and no main-session run names a child:
-      | session | event              | tool name                   | agent type   | agent id | transcript path        | CLAUDE_CODE_SESSION_ID |
-      | first   | PreToolUse         | Bash                        | demo:runner  | first    | session file of first  | first                  |
-      | first   | PostToolUse        | Bash                        | demo:runner  | first    | session file of first  | first                  |
-      | first   | PreToolUse         | Read                        | demo:runner  | first    | session file of first  | first                  |
-      | first   | PostToolUseFailure | Read                        | demo:runner  | first    | session file of first  | first                  |
-      | second  | PreToolUse         | mcp__plugin_demo_stub__echo | demo:granted | second   | session file of second | second                 |
-      | second  | PostToolUse        | mcp__plugin_demo_stub__echo | demo:granted | second   | session file of second | second                 |
+      | session | event              | tool name                   | agent type   | agent id | transcript path      | CLAUDE_CODE_SESSION_ID |
+      | main    | PreToolUse         | Bash                        | demo:runner  | first    | session file of main | main                   |
+      | main    | PostToolUse        | Bash                        | demo:runner  | first    | session file of main | main                   |
+      | main    | PreToolUse         | Read                        | demo:runner  | first    | session file of main | main                   |
+      | main    | PostToolUseFailure | Read                        | demo:runner  | first    | session file of main | main                   |
+      | main    | PreToolUse         | mcp__plugin_demo_stub__echo | demo:granted | second   | session file of main | main                   |
+      | main    | PostToolUse        | mcp__plugin_demo_stub__echo | demo:granted | second   | session file of main | main                   |
     Then the main session's hooks record these runs for its control prompt:
       | event            | tool name | child identity |
       | SessionStart     |           | none           |

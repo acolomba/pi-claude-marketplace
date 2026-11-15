@@ -2,6 +2,8 @@
 //
 // Real pi-subagents children of an installed plugin carry their own identity
 // in every tool hook, and run no main-session hook (PG-HOOK-07a, D-PG3-09).
+// A detached child's hooks name the main session in `session_id`, and the
+// child in `agent_id` (D-PG6-01).
 // The installed companion launches each child through
 // `features/lib/real-subagent-child.ts`, which the behavioral steps share, so
 // no test writes the agent tag itself.
@@ -111,14 +113,26 @@ function runIdentity(run: HookRun): RunIdentity {
   };
 }
 
-function runsOf(runs: readonly HookRun[], sessionId: string): RunIdentity[] {
-  return runs.filter((run) => run.stdin.session_id === sessionId).map(runIdentity);
+// A child's runs are those whose agent id is the child's session id: a
+// child's `session_id` names the session that launched it, when the child
+// has a source for it (D-PG6-01, D-PG6-02).
+function childRuns(runs: readonly HookRun[], childId: string): RunIdentity[] {
+  return runs.filter((run) => run.stdin.agent_id === childId).map(runIdentity);
 }
 
-// The runs of every session that is not one of `children`: the main Pi's
-// sessions, whose hooks carry no identity and include the lifecycle events.
-function mainRuns(runs: readonly HookRun[], children: readonly string[]): RunIdentity[] {
-  return runs.filter((run) => !children.includes(String(run.stdin.session_id))).map(runIdentity);
+// The main Pi's runs, those with no agent id, which include the lifecycle
+// events. A run whose agent id names no launched child is in neither set.
+function mainRuns(runs: readonly HookRun[]): RunIdentity[] {
+  return runs.filter((run) => !Object.hasOwn(run.stdin, "agent_id")).map(runIdentity);
+}
+
+function strayRuns(runs: readonly HookRun[], children: readonly string[]): RunIdentity[] {
+  return runs
+    .filter(
+      (run) =>
+        Object.hasOwn(run.stdin, "agent_id") && !children.includes(String(run.stdin.agent_id)),
+    )
+    .map(runIdentity);
 }
 
 for (const mcpProfile of ["adapter", "builtin"] as const satisfies readonly McpProfile[]) {
@@ -162,33 +176,23 @@ for (const mcpProfile of ["adapter", "builtin"] as const satisfies readonly McpP
         3,
       );
       const runnerIdentity = { agent_type: "demo:runner", agent_id: runner.sessionId };
-      assert.deepStrictEqual(runsOf(observed.hookRuns, runner.sessionId), [
-        { event: "PreToolUse", session: runner.sessionId, tool: "Bash", identity: runnerIdentity },
-        { event: "PostToolUse", session: runner.sessionId, tool: "Bash", identity: runnerIdentity },
-        { event: "PreToolUse", session: runner.sessionId, tool: "Read", identity: runnerIdentity },
-        {
-          event: "PostToolUseFailure",
-          session: runner.sessionId,
-          tool: "Read",
-          identity: runnerIdentity,
-        },
+      const launcher = observed.mainSessionId;
+      assert.deepStrictEqual(childRuns(observed.hookRuns, runner.sessionId), [
+        { event: "PreToolUse", session: launcher, tool: "Bash", identity: runnerIdentity },
+        { event: "PostToolUse", session: launcher, tool: "Bash", identity: runnerIdentity },
+        { event: "PreToolUse", session: launcher, tool: "Read", identity: runnerIdentity },
+        { event: "PostToolUseFailure", session: launcher, tool: "Read", identity: runnerIdentity },
       ]);
       const grantedIdentity = { agent_type: "demo:granted", agent_id: granted.sessionId };
-      assert.deepStrictEqual(runsOf(observed.hookRuns, granted.sessionId), [
-        {
-          event: "PreToolUse",
-          session: granted.sessionId,
-          tool: MCP_TOOL,
-          identity: grantedIdentity,
-        },
-        {
-          event: "PostToolUse",
-          session: granted.sessionId,
-          tool: MCP_TOOL,
-          identity: grantedIdentity,
-        },
+      assert.deepStrictEqual(childRuns(observed.hookRuns, granted.sessionId), [
+        { event: "PreToolUse", session: launcher, tool: MCP_TOOL, identity: grantedIdentity },
+        { event: "PostToolUse", session: launcher, tool: MCP_TOOL, identity: grantedIdentity },
       ]);
-      const main = mainRuns(observed.hookRuns, [runner.sessionId, granted.sessionId]);
+      assert.deepStrictEqual(
+        strayRuns(observed.hookRuns, [runner.sessionId, granted.sessionId]),
+        [],
+      );
+      const main = mainRuns(observed.hookRuns);
       assert.deepStrictEqual(
         main.filter(({ identity }) => Object.keys(identity).length > 0),
         [],
@@ -248,13 +252,15 @@ for (const mcpProfile of ["adapter", "builtin"] as const satisfies readonly McpP
       assert.strictEqual(typeof plain.pid, "number");
       assert.notStrictEqual(plain.sessionId, observed.mainSessionId);
       const identity = { agent_type: "demo:plain", agent_id: plain.sessionId };
-      assert.deepStrictEqual(runsOf(observed.hookRuns, plain.sessionId), [
-        { event: "PreToolUse", session: plain.sessionId, tool: "Bash", identity },
-        { event: "PostToolUse", session: plain.sessionId, tool: "Bash", identity },
-        { event: "PreToolUse", session: plain.sessionId, tool: "Read", identity },
-        { event: "PostToolUseFailure", session: plain.sessionId, tool: "Read", identity },
+      const call = { session: observed.mainSessionId, identity };
+      assert.deepStrictEqual(childRuns(observed.hookRuns, plain.sessionId), [
+        { event: "PreToolUse", tool: "Bash", ...call },
+        { event: "PostToolUse", tool: "Bash", ...call },
+        { event: "PreToolUse", tool: "Read", ...call },
+        { event: "PostToolUseFailure", tool: "Read", ...call },
       ]);
-      const main = mainRuns(observed.hookRuns, [plain.sessionId]);
+      assert.deepStrictEqual(strayRuns(observed.hookRuns, [plain.sessionId]), []);
+      const main = mainRuns(observed.hookRuns);
       assert.deepStrictEqual(
         main.filter(({ identity: named }) => Object.keys(named).length > 0),
         [],
@@ -315,19 +321,22 @@ test(
         sessionId: undefined,
       },
     ]);
-    assert.deepStrictEqual(runsOf(observed.hookRuns, observed.mainSessionId), [
-      { event: "SessionStart", tool: undefined, ...main },
-      { event: "UserPromptSubmit", tool: undefined, ...main },
-      { event: "PreToolUse", tool: "Bash", ...main },
-      { event: "PostToolUse", tool: "Bash", ...main },
-      { event: "Stop", tool: undefined, ...main },
-      { event: "Stop", tool: undefined, ...main },
-      { event: "UserPromptSubmit", tool: undefined, ...main },
-      { event: "PreToolUse", tool: "subagent", ...main },
-      { event: "PostToolUse", tool: "subagent", ...main },
-      { event: "Stop", tool: undefined, ...main },
-      { event: "Stop", tool: undefined, ...main },
-    ]);
+    assert.deepStrictEqual(
+      mainRuns(observed.hookRuns).filter(({ session }) => session === observed.mainSessionId),
+      [
+        { event: "SessionStart", tool: undefined, ...main },
+        { event: "UserPromptSubmit", tool: undefined, ...main },
+        { event: "PreToolUse", tool: "Bash", ...main },
+        { event: "PostToolUse", tool: "Bash", ...main },
+        { event: "Stop", tool: undefined, ...main },
+        { event: "Stop", tool: undefined, ...main },
+        { event: "UserPromptSubmit", tool: undefined, ...main },
+        { event: "PreToolUse", tool: "subagent", ...main },
+        { event: "PostToolUse", tool: "subagent", ...main },
+        { event: "Stop", tool: undefined, ...main },
+        { event: "Stop", tool: undefined, ...main },
+      ],
+    );
     // The one other session is the one the install's new session ended.
     assert.deepStrictEqual(
       observed.hookRuns
@@ -389,10 +398,12 @@ test(
       new Set([observed.mainSessionId, ...sessions.map(({ sessionId }) => sessionId)]).size,
       5,
     );
+    // The runner gives its sessions no launching session, so each child's
+    // hooks keep its own session id (D-PG6-02).
     for (const { agent, sessionId } of sessions) {
       const identity = { agent_type: agent, agent_id: sessionId };
       const call = { session: sessionId, tool: "Bash", identity };
-      assert.deepStrictEqual(runsOf(observed.hookRuns, sessionId), [
+      assert.deepStrictEqual(childRuns(observed.hookRuns, sessionId), [
         { event: "PreToolUse", ...call },
         { event: "PostToolUse", ...call },
         { event: "PreToolUse", ...call },
@@ -400,10 +411,14 @@ test(
       ]);
     }
 
-    const main = mainRuns(
-      observed.hookRuns,
-      sessions.map(({ sessionId }) => sessionId),
+    assert.deepStrictEqual(
+      strayRuns(
+        observed.hookRuns,
+        sessions.map(({ sessionId }) => sessionId),
+      ),
+      [],
     );
+    const main = mainRuns(observed.hookRuns);
     assert.deepStrictEqual(
       main.filter(({ session }) => session === observed.mainSessionId),
       [

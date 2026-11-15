@@ -73,8 +73,8 @@ export function translatePostToolUseFailure(
     error: errorText(event.content),
     is_interrupt: false,
     ...toolFactFields(event),
-    ...(ctx.childIdentity?.sessionId === ctx.sessionId
-      ? { agent_type: ctx.childIdentity.agentType, agent_id: ctx.childIdentity.sessionId }
-      : {}),
+    ...(ctx.childIdentity === undefined
+      ? {}
+      : { agent_type: ctx.childIdentity.agentType, agent_id: ctx.childIdentity.sessionId }),
   };
 }

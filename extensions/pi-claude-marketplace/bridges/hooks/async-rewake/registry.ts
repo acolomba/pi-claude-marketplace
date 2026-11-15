@@ -81,7 +81,12 @@ import { asGroupLeader, type SignalGroup } from "../process-group.ts";
 import { planSpawn, serializeWithTruncation } from "../spawn-helpers.ts";
 import { ceilingBound, collectStreamText, type StreamTextBound } from "../stream-text.ts";
 import { resolveTimeoutSeconds } from "../timeout.ts";
-import { buildTranslationContext, type TranslationContext } from "../translation-context.ts";
+import {
+  buildTranslationContext,
+  childHookIdentityOf,
+  type HookDispatchContext,
+  type TranslationContext,
+} from "../translation-context.ts";
 
 import { asyncAnswerTexts } from "./async-answer.ts";
 import {
@@ -357,14 +362,9 @@ export async function spawnAndRegister(
     const dispatchId = makeDispatchId();
     const capturedGeneration = runtime.currentGeneration();
     const identity = runtime.childIdentityFor(ctx.sessionManager.getSessionId());
-    const transCtx = buildTranslationContext(
-      ctx,
-      identity.kind === "known"
-        ? { agentType: identity.agentType, sessionId: identity.childId }
-        : undefined,
-    );
+    const transCtx = buildTranslationContext(ctx, childHookIdentityOf(identity));
     const persistenceOwner = isSubagentChild(process.env)
-      ? runtime.persistenceOwner(loc, transCtx.sessionId, dispatchId)
+      ? runtime.persistenceOwner(loc, transCtx.ownSessionId, dispatchId)
       : undefined;
     const stdinPayload = TRANSLATORS[entry.claudeEvent](event as never, transCtx);
     const exit: RewakeExit = {
@@ -943,7 +943,7 @@ function killOrphanGroup(pid: number, probes: OrphanProbes): void {
  */
 async function prepareAsyncEnv(
   entry: RoutingEntry,
-  transCtx: TranslationContext,
+  transCtx: HookDispatchContext,
   loc: ScopedLocations,
   dispatchId: string,
 ): Promise<NodeJS.ProcessEnv> {

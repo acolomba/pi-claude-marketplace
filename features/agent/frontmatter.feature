@@ -338,9 +338,9 @@ Feature: Agent frontmatter
       | agent      | mode       | state    | runner process | session |
       | demo:plain | background | complete | recorded       | first   |
     Then the real children's hooks record these runs in any order, and no main-session run names a child:
-      | session | event       | tool name | agent type | agent id | transcript path       | CLAUDE_CODE_SESSION_ID |
-      | first   | PreToolUse  | Bash      | demo:plain | first    | session file of first | first                  |
-      | first   | PostToolUse | Bash      | demo:plain | first    | session file of first | first                  |
+      | session | event       | tool name | agent type | agent id | transcript path      | CLAUDE_CODE_SESSION_ID |
+      | main    | PreToolUse  | Bash      | demo:plain | first    | session file of main | main                   |
+      | main    | PostToolUse | Bash      | demo:plain | first    | session file of main | main                   |
 
   @mcp
   Scenario: Explicit background and MCP grants keep a child in the background
@@ -357,15 +357,15 @@ Feature: Agent frontmatter
       | demo:granted-false | background | complete | recorded       | third   |
       | demo:plain         | foreground |          | none           |         |
     Then the real children's hooks record these runs in any order, and no main-session run names a child:
-      | session | event              | tool name                   | agent type         | agent id | transcript path        | CLAUDE_CODE_SESSION_ID |
-      | first   | PreToolUse         | Bash                        | demo:runner        | first    | session file of first  | first                  |
-      | first   | PostToolUse        | Bash                        | demo:runner        | first    | session file of first  | first                  |
-      | first   | PreToolUse         | Read                        | demo:runner        | first    | session file of first  | first                  |
-      | first   | PostToolUseFailure | Read                        | demo:runner        | first    | session file of first  | first                  |
-      | second  | PreToolUse         | mcp__plugin_demo_stub__echo | demo:granted       | second   | session file of second | second                 |
-      | second  | PostToolUse        | mcp__plugin_demo_stub__echo | demo:granted       | second   | session file of second | second                 |
-      | third   | PreToolUse         | mcp__plugin_demo_stub__echo | demo:granted-false | third    | session file of third  | third                  |
-      | third   | PostToolUse        | mcp__plugin_demo_stub__echo | demo:granted-false | third    | session file of third  | third                  |
+      | session | event              | tool name                   | agent type         | agent id | transcript path      | CLAUDE_CODE_SESSION_ID |
+      | main    | PreToolUse         | Bash                        | demo:runner        | first    | session file of main | main                   |
+      | main    | PostToolUse        | Bash                        | demo:runner        | first    | session file of main | main                   |
+      | main    | PreToolUse         | Read                        | demo:runner        | first    | session file of main | main                   |
+      | main    | PostToolUseFailure | Read                        | demo:runner        | first    | session file of main | main                   |
+      | main    | PreToolUse         | mcp__plugin_demo_stub__echo | demo:granted       | second   | session file of main | main                   |
+      | main    | PostToolUse        | mcp__plugin_demo_stub__echo | demo:granted       | second   | session file of main | main                   |
+      | main    | PreToolUse         | mcp__plugin_demo_stub__echo | demo:granted-false | third    | session file of main | main                   |
+      | main    | PostToolUse        | mcp__plugin_demo_stub__echo | demo:granted-false | third    | session file of main | main                   |
 
   Scenario: Effort levels are listed as the thinking levels pi-subagents runs
     Given pi runs with the scripted model and these companions:

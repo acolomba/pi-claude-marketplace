@@ -21,7 +21,10 @@ import type { ClaudePluginVars } from "../../shared/vars.ts";
 /** The dispatch facts the env contract reads. */
 export interface HookEnvContext {
   readonly cwd: string;
+  /** The hook-facing session, which the session variables name (D-PG6-01). */
   readonly sessionId: string;
+  /** Pi's own session, which names the env file (D-60-06, D-PG6-03). */
+  readonly ownSessionId: string;
 }
 
 /**
@@ -63,7 +66,9 @@ export function hookPathVars(
  * That ordering is the race-window safety property.
  *
  * D-60-06: a `SessionStart` dispatch also gets `CLAUDE_ENV_FILE` under
- * `_shared/`, which is likewise containment-checked.
+ * `_shared/`, which is likewise containment-checked. Its name holds the own
+ * session id, so two children of one launching session get two files
+ * (D-PG6-03).
  *
  * HOOK-05: `CLAUDE_CODE_REMOTE` is intentionally NOT set. Pi runs locally, and
  * the documented absence is the upstream-parity contract.
@@ -95,7 +100,7 @@ export async function prepareHookEnv(
   };
 
   if (entry.claudeEvent === "SessionStart") {
-    const envFile = path.join(loc.dataRoot, "_shared", `claude-env-${transCtx.sessionId}.env`);
+    const envFile = path.join(loc.dataRoot, "_shared", `claude-env-${transCtx.ownSessionId}.env`);
     await assertPathInside(loc.dataRoot, envFile, "CLAUDE_ENV_FILE");
     env.CLAUDE_ENV_FILE = envFile;
   }

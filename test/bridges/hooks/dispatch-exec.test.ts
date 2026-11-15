@@ -1006,6 +1006,144 @@ test("omits stale child identity from synchronous stdin", { concurrency: false }
   assert.strictEqual(Object.hasOwn(payload, "agent_id"), false);
 });
 
+const LAUNCHING_SESSION = {
+  sessionId: "launching-session",
+  transcriptPath: "/sessions/launching-session.jsonl",
+};
+
+function markSubagentChild(t: import("node:test").TestContext): void {
+  const previousMarker = process.env.PI_SUBAGENT_CHILD;
+  process.env.PI_SUBAGENT_CHILD = "1";
+  t.after(() => {
+    if (previousMarker === undefined) {
+      delete process.env.PI_SUBAGENT_CHILD;
+    } else {
+      process.env.PI_SUBAGENT_CHILD = previousMarker;
+    }
+  });
+}
+
+// D-PG6-01: a known child with a root names the launching session in its tool
+// payload and its session variables, and itself in `agent_id`.
+for (const translatorCase of TRANSLATOR_CASES.filter(({ claudeEvent }) =>
+  ["PreToolUse", "PostToolUse", "PostToolUseFailure"].includes(claudeEvent),
+)) {
+  test(
+    `names the launching session in a child's synchronous ${translatorCase.claudeEvent} stdin and env (D-PG6-01)`,
+    { concurrency: false },
+    async (t) => {
+      // arrange
+      markSubagentChild(t);
+      const runtime = createHooksRuntime();
+      runtime.captureChildIdentity(
+        {
+          type: "before_agent_start",
+          systemPromptOptions: { customPrompt: '<active_agent name="rooted-runner"/>\n\n' },
+        } as BeforeAgentStartEvent,
+        "rooted-session",
+      );
+      runtime.recordChildRoot("rooted-session", LAUNCHING_SESSION);
+      const root = await makeCaseRoot(t, "dispatch-identity-root-");
+      const child = makeInjectedChild(t);
+      const boundary = observeSpawn(t, child);
+
+      // act
+      const pendingOutcome = dispatchHookExec(
+        makeEntry(root, { claudeEvent: translatorCase.claudeEvent }),
+        translatorCase.createEvent(),
+        makeContext(root, "rooted-session"),
+        undefined,
+        runtime,
+        { spawnImpl: boundary.spawnImpl },
+      );
+      const call = await boundary.spawned;
+      await child.close(0);
+      const outcome = await pendingOutcome;
+      const payload: unknown = JSON.parse(Buffer.concat(child.stdinChunks).toString("utf8"));
+
+      // assert
+      assert.deepStrictEqual(outcome, { kind: "noop" });
+      assert.deepStrictEqual(payload, {
+        session_id: "launching-session",
+        transcript_path: "/sessions/launching-session.jsonl",
+        cwd: root,
+        hook_event_name: translatorCase.claudeEvent,
+        ...translatorCase.eventFields,
+        agent_type: "rooted-runner",
+        agent_id: "rooted-session",
+      });
+      assert.deepStrictEqual(
+        {
+          CLAUDE_CODE_SESSION_ID: call.options.env?.CLAUDE_CODE_SESSION_ID,
+          CLAUDE_SESSION_ID: call.options.env?.CLAUDE_SESSION_ID,
+        },
+        { CLAUDE_CODE_SESSION_ID: "launching-session", CLAUDE_SESSION_ID: "launching-session" },
+      );
+    },
+  );
+}
+
+// D-PG6-02: a child with no agent tag sends no `agent_id`, so it keeps its
+// own session fields even when its session has a recorded root.
+test(
+  "keeps the own session of a child whose identity is unavailable (D-PG6-02)",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    markSubagentChild(t);
+    const runtime = createHooksRuntime();
+    runtime.captureChildIdentity(
+      {
+        type: "before_agent_start",
+        systemPromptOptions: { customPrompt: "Answer the task." },
+      } as BeforeAgentStartEvent,
+      "untagged-session",
+    );
+    runtime.recordChildRoot("untagged-session", LAUNCHING_SESSION);
+    const root = await makeCaseRoot(t, "dispatch-identity-untagged-");
+    const child = makeInjectedChild(t);
+    const boundary = observeSpawn(t, child);
+
+    // act
+    const pendingOutcome = dispatchHookExec(
+      makeEntry(root),
+      {
+        type: "tool_call",
+        toolCallId: "untagged-call",
+        toolName: "bash",
+        input: { command: "printf untagged" },
+      } satisfies ToolCallEvent,
+      makeContext(root, "untagged-session"),
+      undefined,
+      runtime,
+      { spawnImpl: boundary.spawnImpl },
+    );
+    const call = await boundary.spawned;
+    await child.close(0);
+    const outcome = await pendingOutcome;
+    const payload: unknown = JSON.parse(Buffer.concat(child.stdinChunks).toString("utf8"));
+
+    // assert
+    assert.deepStrictEqual(outcome, { kind: "noop" });
+    assert.deepStrictEqual(payload, {
+      session_id: "untagged-session",
+      transcript_path: "",
+      cwd: root,
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command: "printf untagged" },
+      tool_use_id: "untagged-call",
+    });
+    assert.deepStrictEqual(
+      {
+        CLAUDE_CODE_SESSION_ID: call.options.env?.CLAUDE_CODE_SESSION_ID,
+        CLAUDE_SESSION_ID: call.options.env?.CLAUDE_SESSION_ID,
+      },
+      { CLAUDE_CODE_SESSION_ID: "untagged-session", CLAUDE_SESSION_ID: "untagged-session" },
+    );
+  },
+);
+
 // D-PG3-07: the synchronous lane of each tool event a child dispatches. A real
 // hook process records its stdin; the runtime captures another session's
 // identity once the process runs, and the recorded payload keeps the identity
