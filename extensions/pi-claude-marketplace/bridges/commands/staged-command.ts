@@ -16,8 +16,8 @@
 // so no author value can open a new key or close the block early, and a
 // replaced `description` can never sit beside a second one (Pi's YAML parser
 // refuses a duplicate key). The text after the source's closing fence is kept
-// byte for byte. CM-3 substitution and the reference rewrite run on the source
-// text before the rebuild.
+// byte for byte. CM-3 substitution, with the plugin options (D-PG10-13), and the
+// reference rewrite run on the source text before the rebuild.
 //
 // The rebuilt frontmatter ends with the install-time record (D-CF3-06,
 // `command-record.ts`). It is added after the substitution and the reference
@@ -41,13 +41,14 @@ import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { stripBom } from "../../shared/bom.ts";
 import { BridgeStagingError } from "../../shared/errors-bridges.ts";
 import { errorMessage } from "../../shared/errors.ts";
-import { substituteClaudeVars } from "../../shared/vars.ts";
+import { substituteClaudeContent } from "../../shared/vars.ts";
 
 import { withCommandRecord } from "./command-record.ts";
 
 import type { CommandRecord } from "./command-record.ts";
 import type { CommandOverrides, DiscoveredCommand } from "./types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
+import type { ClaudeContentOptions } from "../../shared/vars.ts";
 
 /** What the writer needs besides the command: the install-time values. */
 export interface StagedCommandContext {
@@ -57,6 +58,8 @@ export interface StagedCommandContext {
   /** The install cwd at project scope; `undefined` keeps `${CLAUDE_PROJECT_DIR}` literal (SUB-02). */
   readonly projectDir: string | undefined;
   readonly referenceNames: InstalledReferenceNames;
+  /** The plugin's options; `undefined` for a plugin that declares no `userConfig` (D-PG10-21). */
+  readonly options: ClaudeContentOptions | undefined;
 }
 
 /** The staged text of one command, with what the install reports about its source. */
@@ -267,12 +270,18 @@ export async function buildStagedCommand(
   context: StagedCommandContext,
 ): Promise<StagedCommandText> {
   const source = await readCommandSource(command);
+  // D-PG10-13: Claude Code's commands are skills, so command content gets each
+  // `${user_config.KEY}` by the skills rule, in the same pass as the path variables.
   const substituted = rewriteMarkdownReferences(
-    substituteClaudeVars(source.content, {
-      pluginRoot: context.pluginRoot,
-      pluginData: context.pluginDataDir,
-      projectDir: context.projectDir,
-    }),
+    substituteClaudeContent(
+      source.content,
+      {
+        pluginRoot: context.pluginRoot,
+        pluginData: context.pluginDataDir,
+        projectDir: context.projectDir,
+      },
+      context.options,
+    ),
     context.pluginName,
     context.referenceNames,
   );

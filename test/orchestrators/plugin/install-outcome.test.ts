@@ -2293,11 +2293,19 @@ test("D-PG10-14: records no userConfig field for a plugin that declares no optio
   assert.strictEqual(Object.hasOwn(record ?? {}, "userConfig"), false);
 });
 
-/** Installs a plugin whose skill `opts` names options and returns the staged skill body. */
-async function stagedOptionSkillBody(
+/** The staged text after the last frontmatter fence. */
+function bodyOf(staged: string): string | undefined {
+  return staged.split("---\n").at(-1);
+}
+
+/**
+ * Installs a plugin whose skill `opts` and command `cmd` name options and
+ * returns their staged bodies.
+ */
+async function stagedOptionBodies(
   t: TestContext,
   pluginJson: Record<string, unknown>,
-): Promise<string | undefined> {
+): Promise<{ readonly skill: string | undefined; readonly command: string | undefined }> {
   const environment = await createHermeticEnvironment(t, "install-outcome-skill-options-");
   const seeded = await seedPlugin(environment.cwd, { pluginJson });
   const skillDir = path.join(seeded.pluginRoot, "skills", "opts");
@@ -2305,6 +2313,11 @@ async function stagedOptionSkillBody(
   await writeFile(
     path.join(skillDir, "SKILL.md"),
     "---\nname: opts\n---\nMode ${user_config.mode} retries ${user_config.retries}.\n",
+  );
+  await mkdir(path.join(seeded.pluginRoot, "commands"), { recursive: true });
+  await writeFile(
+    path.join(seeded.pluginRoot, "commands", "cmd.md"),
+    "Mode ${user_config.mode} retries ${user_config.retries}.\n",
   );
   const locations = locationsFor("project", environment.cwd);
   const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
@@ -2319,27 +2332,44 @@ async function stagedOptionSkillBody(
     env: {},
   });
   assert.ok(ledgerOutcome.kind === "installed");
-  const staged = await readFile(
-    path.join(locations.skillsTargetDir, "empty-opts", "SKILL.md"),
-    "utf8",
-  );
-  return staged.split("---\n").at(-1);
+  return {
+    skill: bodyOf(
+      await readFile(path.join(locations.skillsTargetDir, "empty-opts", "SKILL.md"), "utf8"),
+    ),
+    command: bodyOf(await readFile(path.join(locations.promptsTargetDir, "empty:cmd.md"), "utf8")),
+  };
 }
 
 test("D-PG10-13: the skills phase writes the declared options into skill content", async (t) => {
   // act
-  const body = await stagedOptionSkillBody(t, { userConfig: DECLARED_OPTIONS });
+  const { skill } = await stagedOptionBodies(t, { userConfig: DECLARED_OPTIONS });
 
   // assert
-  assert.strictEqual(body, "Mode fast retries 3.\n");
+  assert.strictEqual(skill, "Mode fast retries 3.\n");
 });
 
 test("D-PG10-21: the skills phase keeps the option references of a plugin with no userConfig", async (t) => {
   // act
-  const body = await stagedOptionSkillBody(t, {});
+  const { skill } = await stagedOptionBodies(t, {});
 
   // assert
-  assert.strictEqual(body, "Mode ${user_config.mode} retries ${user_config.retries}.\n");
+  assert.strictEqual(skill, "Mode ${user_config.mode} retries ${user_config.retries}.\n");
+});
+
+test("D-PG10-13: the commands phase writes the declared options into command content", async (t) => {
+  // act
+  const { command } = await stagedOptionBodies(t, { userConfig: DECLARED_OPTIONS });
+
+  // assert
+  assert.strictEqual(command, "Mode fast retries 3.\n");
+});
+
+test("D-PG10-21: the commands phase keeps the option references of a plugin with no userConfig", async (t) => {
+  // act
+  const { command } = await stagedOptionBodies(t, {});
+
+  // assert
+  assert.strictEqual(command, "Mode ${user_config.mode} retries ${user_config.retries}.\n");
 });
 
 /** Installs a plugin with a server that names `token` and a plain server, and returns the mcp summary. */

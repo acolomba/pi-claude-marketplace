@@ -20,6 +20,7 @@ const context = {
   pluginDataDir: "/data/acme",
   projectDir: undefined,
   referenceNames: { skills: [], commands: [], workflows: [] },
+  options: undefined,
 } satisfies StagedCommandContext;
 
 type FileCommand = Extract<DiscoveredCommand, { kind: "file" }>;
@@ -259,6 +260,52 @@ test("substitutes the plugin variables and rewrites references before the rebuil
       RECORD_LINE +
       "---\n" +
       "Use /skill:acme-helper with /data/acme in /work/project.\n",
+  });
+});
+
+test("D-PG10-09 writes an option's default, the sensitive-option text, and an unset reference as written", async (t) => {
+  // arrange
+  const command = await commandWithSource(
+    t,
+    "---\ndescription: Mode ${user_config.mode}\n---\n" +
+      "Token ${user_config.token}, note ${user_config.note}.\n",
+  );
+
+  // act
+  const staged = await buildStagedCommand(command, {
+    ...context,
+    options: {
+      values: new Map([
+        ["mode", "fast"],
+        ["token", "abc123"],
+      ]),
+      sensitive: new Set(["token"]),
+    },
+  });
+
+  // assert
+  assert.deepStrictEqual(staged, {
+    text:
+      '---\n"description": "Mode fast"\n' +
+      RECORD_LINE +
+      "---\n" +
+      "Token [sensitive option 'token' not available in skill content], note ${user_config.note}.\n",
+  });
+});
+
+test("D-PG10-21 keeps every option reference of a plugin that declares no options", async (t) => {
+  // arrange
+  const command = await commandWithSource(t, "Mode ${user_config.mode}.\n");
+
+  // act
+  const staged = await buildStagedCommand(command, context);
+
+  // assert
+  assert.deepStrictEqual(staged, {
+    text:
+      '---\n"description": "Mode ${user_config.mode}."\n' +
+      RECORD_LINE +
+      "---\nMode ${user_config.mode}.\n",
   });
 });
 

@@ -187,6 +187,7 @@ export async function prepareStageCommands(
     pluginDataDir,
     projectDir: locations.scope === "project" ? cwd : undefined,
     referenceNames,
+    options: input.options,
   };
 
   const stagingRoot = path.join(locations.commandsStagingDir, randomUUID());

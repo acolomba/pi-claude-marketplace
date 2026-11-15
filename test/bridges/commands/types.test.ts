@@ -56,6 +56,7 @@ const stageCommandsInput: StageCommandsInput = {
   resolved: undefined!,
   previousCommandNames: ["acme:old"],
   cwd: "/project",
+  options: undefined,
 } satisfies StageCommandsInput;
 void stageCommandsInput;
 

@@ -916,11 +916,14 @@ test("D-PG10-15: a swap to a version that declares no options gives its routing 
   assert.deepStrictEqual(options, [resolveOptions(undefined)]);
 });
 
-/** Swaps `hello` to 2.0.0, whose skill names `${user_config.mode}`, and returns the staged body. */
-async function swapOptionSkill(
+/**
+ * Swaps `hello` to 2.0.0, whose skill `tool` and command `opts` name
+ * `${user_config.mode}`, and returns their staged bodies.
+ */
+async function swapOptionContent(
   cwd: string,
   declared: Record<string, unknown> | undefined,
-): Promise<string | undefined> {
+): Promise<{ readonly skill: string | undefined; readonly command: string | undefined }> {
   const args = await seedOptionsUpdate(
     cwd,
     { mode: { ...MODE_OPTION, default: "fast" } },
@@ -930,12 +933,16 @@ async function swapOptionSkill(
     path.join(cwd, "mp-src", "plugins", "hello", "skills", "tool", "SKILL.md"),
     "---\nname: tool\n---\nMode ${user_config.mode}.\n",
   );
+  const commandsDir = path.join(cwd, "mp-src", "plugins", "hello", "commands");
+  await mkdir(commandsDir, { recursive: true });
+  await writeFile(path.join(commandsDir, "opts.md"), "Mode ${user_config.mode}.\n");
   await swapOptionsUpdate(args);
-  const staged = await readFile(
-    path.join(args.locations.skillsTargetDir, "hello-tool", "SKILL.md"),
-    "utf8",
-  );
-  return staged.split("---\n").at(-1);
+  const bodyOf = async (file: string): Promise<string | undefined> =>
+    (await readFile(file, "utf8")).split("---\n").at(-1);
+  return {
+    skill: await bodyOf(path.join(args.locations.skillsTargetDir, "hello-tool", "SKILL.md")),
+    command: await bodyOf(path.join(args.locations.promptsTargetDir, "hello:opts.md")),
+  };
 }
 
 test("D-PG10-13: a swap writes the options the new version declares into its skill", async (t) => {
@@ -943,10 +950,10 @@ test("D-PG10-13: a swap writes the options the new version declares into its ski
   const { cwd } = await createHermeticEnvironment(t, "update-swap-skill-options-");
 
   // act
-  const body = await swapOptionSkill(cwd, { mode: { ...MODE_OPTION, default: "slow" } });
+  const { skill } = await swapOptionContent(cwd, { mode: { ...MODE_OPTION, default: "slow" } });
 
   // assert
-  assert.strictEqual(body, "Mode slow.\n");
+  assert.strictEqual(skill, "Mode slow.\n");
 });
 
 test("D-PG10-21: a swap to a version that declares no options keeps its skill's references", async (t) => {
@@ -954,10 +961,32 @@ test("D-PG10-21: a swap to a version that declares no options keeps its skill's 
   const { cwd } = await createHermeticEnvironment(t, "update-swap-skill-no-options-");
 
   // act
-  const body = await swapOptionSkill(cwd, undefined);
+  const { skill } = await swapOptionContent(cwd, undefined);
 
   // assert
-  assert.strictEqual(body, "Mode ${user_config.mode}.\n");
+  assert.strictEqual(skill, "Mode ${user_config.mode}.\n");
+});
+
+test("D-PG10-13: a swap writes the options the new version declares into its command", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-command-options-");
+
+  // act
+  const { command } = await swapOptionContent(cwd, { mode: { ...MODE_OPTION, default: "slow" } });
+
+  // assert
+  assert.strictEqual(command, "Mode slow.\n");
+});
+
+test("D-PG10-21: a swap to a version that declares no options keeps its command's references", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-command-no-options-");
+
+  // act
+  const { command } = await swapOptionContent(cwd, undefined);
+
+  // assert
+  assert.strictEqual(command, "Mode ${user_config.mode}.\n");
 });
 
 /**

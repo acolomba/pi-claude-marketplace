@@ -1329,6 +1329,8 @@ async function runInstallLedgerBody(
         workflowNames: generatedNames.workflows,
         // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
         cwd: installCtx.cwd,
+        // D-PG10-13: the options are written into command content at staging.
+        options: declaredOptions(resolveOptions(installCtx.resolved.declaredUserConfig)),
       });
       installCtx.commandsPrep = prep;
       // Set before commit for the same reason as stagedSkillNames above.

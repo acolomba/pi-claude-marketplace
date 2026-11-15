@@ -432,6 +432,8 @@ async function prepareUpdateHandles(
       workflowNames: referenceNames.workflows,
       // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
       cwd,
+      // D-PG10-13: the new version's options are written into command content.
+      options,
     });
     handles.agents = await prepareUpdateAgents(ops, args, preflight, {
       pluginDataDir,
