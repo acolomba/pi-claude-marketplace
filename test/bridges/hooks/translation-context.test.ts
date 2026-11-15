@@ -1,13 +1,15 @@
-// Unit tests for `buildTranslationContext` (D-60-06 / PAYL-01).
+// Unit tests for `buildTranslationContext` (D-60-06 / PAYL-01, D-PG6-09).
 //
-// The factory snapshots three dispatch-time fields a translator needs
-// from a Pi `ExtensionContext`. Two cases pin the contract:
+// The factory snapshots the dispatch-time fields a translator needs
+// from a Pi `ExtensionContext`:
 //
 //   - `getSessionFile()` returns a string -> `transcriptPath` is that
 //     string verbatim;
 //   - `getSessionFile()` returns `undefined` -> `transcriptPath` is the
 //     empty string fallback (the first `SessionStart` may fire before
-//     Pi creates the session file).
+//     Pi creates the session file);
+//   - the active model's id and the session's name are copied when Pi has
+//     them and left out when it has none.
 
 import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -22,8 +24,21 @@ import { buildTranslationContext } from "../../../extensions/pi-claude-marketpla
 import type { TranslationContext } from "../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
 import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
-function inMemoryContext(sessionId: string, cwd: string): ExtensionContext {
+interface SessionFacts {
+  readonly model?: NonNullable<ExtensionContext["model"]>;
+  readonly sessionName?: string;
+}
+
+function inMemoryContext(
+  sessionId: string,
+  cwd: string,
+  facts: SessionFacts = {},
+): ExtensionContext {
   const sessionManager = SessionManager.inMemory(cwd, { id: sessionId });
+  if (facts.sessionName !== undefined) {
+    sessionManager.appendSessionInfo(facts.sessionName);
+  }
+
   return {
     get ui(): ExtensionContext["ui"] {
       throw new Error("buildTranslationContext must not read ui");
@@ -35,7 +50,7 @@ function inMemoryContext(sessionId: string, cwd: string): ExtensionContext {
     get modelRegistry(): ExtensionContext["modelRegistry"] {
       throw new Error("buildTranslationContext must not read modelRegistry");
     },
-    model: undefined,
+    model: facts.model,
     scopedModels: [],
     isIdle(): never {
       throw new Error("buildTranslationContext must not call isIdle");
@@ -64,6 +79,19 @@ function inMemoryContext(sessionId: string, cwd: string): ExtensionContext {
     },
   } satisfies ExtensionContext;
 }
+
+const SONNET_MODEL = {
+  id: "sonnet-5",
+  name: "Sonnet 5",
+  api: "anthropic-messages",
+  provider: "anthropic",
+  baseUrl: "https://models.example.invalid",
+  input: ["text"],
+  cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+  reasoning: false,
+  contextWindow: 200_000,
+  maxTokens: 8_192,
+} satisfies NonNullable<ExtensionContext["model"]>;
 
 const typedTranslationContext: TranslationContext = {
   sessionId: "session-type",
@@ -268,4 +296,61 @@ test("omits a child identity from another session", () => {
     cwd: "/workspace/child",
   });
   assert.strictEqual(Object.hasOwn(translationContext, "childIdentity"), false);
+});
+
+test("copies the active model's bare id and the session's name (D-PG6-09)", () => {
+  // arrange
+  const context = inMemoryContext("named-session", "/workspace/named", {
+    model: SONNET_MODEL,
+    sessionName: "Release prep",
+  });
+
+  // act
+  const translationContext = buildTranslationContext(context);
+
+  // assert
+  assert.deepStrictEqual(translationContext, {
+    sessionId: "named-session",
+    transcriptPath: "",
+    cwd: "/workspace/named",
+    model: "sonnet-5",
+    sessionTitle: "Release prep",
+  });
+});
+
+test("leaves out the model and the title when Pi has no model and no session name (D-PG6-09)", () => {
+  // arrange
+  const context = inMemoryContext("unnamed-session", "/workspace/unnamed");
+
+  // act
+  const translationContext = buildTranslationContext(context);
+
+  // assert
+  assert.deepStrictEqual(translationContext, {
+    sessionId: "unnamed-session",
+    transcriptPath: "",
+    cwd: "/workspace/unnamed",
+  });
+  assert.strictEqual(Object.hasOwn(translationContext, "model"), false);
+  assert.strictEqual(Object.hasOwn(translationContext, "sessionTitle"), false);
+});
+
+test("leaves out the title of a session whose name is empty (D-PG6-09)", () => {
+  // arrange
+  const context = inMemoryContext("cleared-session", "/workspace/cleared", {
+    model: SONNET_MODEL,
+    sessionName: "",
+  });
+
+  // act
+  const translationContext = buildTranslationContext(context);
+
+  // assert
+  assert.deepStrictEqual(translationContext, {
+    sessionId: "cleared-session",
+    transcriptPath: "",
+    cwd: "/workspace/cleared",
+    model: "sonnet-5",
+  });
+  assert.strictEqual(Object.hasOwn(translationContext, "sessionTitle"), false);
 });

@@ -395,6 +395,7 @@ test(
         sessionManager: {
           getSessionId: () => "child-session",
           getSessionFile: () => "/sessions/child-session.jsonl",
+          getSessionName: () => undefined,
         },
       } as unknown as ExtensionContext;
       const previousMarker = process.env.PI_SUBAGENT_CHILD;

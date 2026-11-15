@@ -324,6 +324,19 @@ Given(
   },
 );
 
+// RPC `set_session_name` names the session Pi is in, and Pi's state then
+// reports that name.
+Given(
+  "the user has named the session {string}",
+  async function (this: ScenarioWorld, name: string) {
+    const named = await this.pi.request({ type: "set_session_name", name });
+    assert.strictEqual(named.response.success, true, JSON.stringify(named.response));
+    const { response } = await this.pi.request({ type: "get_state" });
+    assert.strictEqual(response.success, true, JSON.stringify(response));
+    assert.strictEqual((response.data as { readonly sessionName?: string }).sessionName, name);
+  },
+);
+
 Given(
   "the user has released the hook {string}",
   async function (this: ScenarioWorld, hook: string) {

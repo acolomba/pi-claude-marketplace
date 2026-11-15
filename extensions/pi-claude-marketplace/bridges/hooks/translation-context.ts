@@ -13,10 +13,11 @@
 // here, so the env-var layer and the translator layer agree on a single
 // source of truth (`ctx.sessionManager.getSessionId()`).
 //
-// PAYL-01: the field surface is deliberately minimal -- adding more
-// runtime context (e.g. `permission_mode`, `effort`) is a v1.14+ scope
-// expansion and would require extending every translator's envelope in
-// lockstep.
+// The context carries the common envelope fields, the child identity, and
+// two session facts a translator may send: the active model's id and the
+// session's name (D-PG6-09). A new common field is read here once per
+// dispatch, and each translator that sends it still spreads it in, so the
+// translators stay pure functions of their event and this context.
 //
 // The module is bridge-internal and intentionally NOT re-exported
 // through `bridges/hooks/index.ts` (D-01 opaque-handle discipline -- the
@@ -42,6 +43,10 @@ export interface TranslationContext {
   readonly transcriptPath: string;
   readonly cwd: string;
   readonly childIdentity?: ChildHookIdentity;
+  /** The bare id of Pi's active model, absent when Pi has none (D-PG6-09). */
+  readonly model?: string;
+  /** Pi's name of the session, absent when the session has none (D-PG6-09). */
+  readonly sessionTitle?: string;
 }
 
 /**
@@ -67,6 +72,8 @@ export function buildTranslationContext(
   childIdentity?: ChildHookIdentity,
 ): TranslationContext {
   const sessionId = ctx.sessionManager.getSessionId();
+  const model = ctx.model?.id;
+  const sessionTitle = ctx.sessionManager.getSessionName();
   return {
     sessionId,
     transcriptPath: ctx.sessionManager.getSessionFile() ?? "",
@@ -74,5 +81,7 @@ export function buildTranslationContext(
     ...(childIdentity?.sessionId === sessionId
       ? { childIdentity: { agentType: childIdentity.agentType, sessionId } }
       : {}),
+    ...(model ? { model } : {}),
+    ...(sessionTitle ? { sessionTitle } : {}),
   };
 }

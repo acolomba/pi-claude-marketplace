@@ -1,4 +1,4 @@
-// Unit test for the UserPromptSubmit payload translator (PAYL-01 / D-60-04).
+// Unit test for the UserPromptSubmit payload translator (PAYL-01 / D-60-04, D-PG6-09).
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -171,4 +171,43 @@ test("preserves a multi-byte prompt in the complete UserPromptSubmit envelope", 
   assert.deepStrictEqual(Object.keys(promptPayload), expectedKeys);
   assert.deepStrictEqual(event, expectedEvent);
   assert.deepStrictEqual(context, expectedContext);
+});
+
+test("sends the session title after the prompt and no model (D-PG6-09)", () => {
+  // arrange
+  const event = {
+    type: "input",
+    text: "hello",
+    source: "interactive",
+  } satisfies InputEvent;
+  const context = {
+    sessionId: "session-named-prompt",
+    transcriptPath: "/sessions/session-named-prompt.jsonl",
+    cwd: "/workspace/named-prompt",
+    model: "sonnet-5",
+    sessionTitle: "Release prep",
+  } satisfies TranslationContext;
+  const expectedPayload = {
+    session_id: "session-named-prompt",
+    transcript_path: "/sessions/session-named-prompt.jsonl",
+    cwd: "/workspace/named-prompt",
+    hook_event_name: "UserPromptSubmit",
+    prompt: "hello",
+    session_title: "Release prep",
+  } satisfies UserPromptSubmitStdin;
+  const expectedKeys = [
+    "session_id",
+    "transcript_path",
+    "cwd",
+    "hook_event_name",
+    "prompt",
+    "session_title",
+  ];
+
+  // act
+  const promptPayload = translateUserPromptSubmit(event, context);
+
+  // assert
+  assert.deepStrictEqual(promptPayload, expectedPayload);
+  assert.deepStrictEqual(Object.keys(promptPayload), expectedKeys);
 });

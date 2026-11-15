@@ -187,6 +187,7 @@ echo '{}'
       sessionManager: {
         getSessionId: () => "hooks-spawn-e2e-session",
         getSessionFile: () => undefined,
+        getSessionName: () => undefined,
       },
     } as unknown as ExtensionContext;
     await hooksHydration.registerHooksBridge(pi, { cwd: extensionRoot });
@@ -327,6 +328,7 @@ echo '{}'
       sessionManager: {
         getSessionId: () => "hooks-spawn-pathsrc-session",
         getSessionFile: () => undefined,
+        getSessionName: () => undefined,
       },
     } as unknown as ExtensionContext;
     await hooksHydration.registerHooksBridge(pi, { cwd: extensionRoot });

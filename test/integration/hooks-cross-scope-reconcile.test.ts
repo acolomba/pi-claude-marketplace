@@ -174,6 +174,7 @@ test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hoo
       sessionManager: {
         getSessionId: () => "hooks-cross-scope-recon",
         getSessionFile: () => undefined,
+        getSessionName: () => undefined,
       },
     } as unknown as ExtensionContext;
     await hooksHydration.registerHooksBridge(makeMockPi(), {

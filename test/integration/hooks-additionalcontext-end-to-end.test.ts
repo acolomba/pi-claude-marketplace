@@ -178,6 +178,7 @@ JSON
     sessionManager: {
       getSessionId: () => sessionId,
       getSessionFile: () => undefined,
+      getSessionName: () => undefined,
     },
   } as unknown as ExtensionContext;
 }

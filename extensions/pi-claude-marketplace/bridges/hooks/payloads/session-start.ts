@@ -13,7 +13,9 @@
 // fork made by this launch is `fork`, a session that holds messages is
 // `resume`, and any other is `startup` (D-PG6-14, D-PG6-15). Pi `reload` runs
 // no SessionStart (D-CF5-03), so it is not an input here. The compaction
-// handler sends `compact` itself (D-CF5-04).
+// handler sends `compact` itself (D-CF5-04). The active model's id and the
+// session's name follow `source`, each left out when Pi has none, as Claude
+// Code marks both optional (D-PG6-09).
 
 import type { SessionStartSource } from "../../../domain/components/hook-events.ts";
 import type { SessionStartEvent } from "../../../platform/pi-api.ts";
@@ -31,6 +33,8 @@ export interface SessionStartStdin {
   readonly cwd: string;
   readonly hook_event_name: "SessionStart";
   readonly source: SessionStartSource;
+  readonly model?: string;
+  readonly session_title?: string;
 }
 
 /** What the session that Pi opened at `startup` shows about its launch (D-PG6-14, D-PG6-15). */
@@ -81,5 +85,7 @@ export function translateSessionStart(
     cwd: ctx.cwd,
     hook_event_name: "SessionStart",
     source: event.source,
+    ...(ctx.model === undefined ? {} : { model: ctx.model }),
+    ...(ctx.sessionTitle === undefined ? {} : { session_title: ctx.sessionTitle }),
   };
 }

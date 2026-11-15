@@ -1,5 +1,5 @@
 // Unit test for the SessionStart payload translator (PAYL-01) and its one
-// mapping site (D-CF5-01, D-CF1-10..12, D-PG6-14, D-PG6-15).
+// mapping site (D-CF5-01, D-CF1-10..12, D-PG6-09, D-PG6-14, D-PG6-15).
 
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
@@ -127,6 +127,56 @@ describe("translateSessionStart", () => {
       });
     });
   }
+
+  test("sends the model and the session title after the source (D-PG6-09)", () => {
+    // arrange
+    const context = {
+      sessionId: "session-start-named",
+      transcriptPath: "/sessions/session-start-named.jsonl",
+      cwd: "/workspaces/session-start-named",
+      model: "sonnet-5",
+      sessionTitle: "Release prep",
+    } satisfies TranslationContext;
+    const expectedPayload = {
+      session_id: "session-start-named",
+      transcript_path: "/sessions/session-start-named.jsonl",
+      cwd: "/workspaces/session-start-named",
+      hook_event_name: "SessionStart",
+      source: "compact",
+      model: "sonnet-5",
+      session_title: "Release prep",
+    };
+
+    // act
+    const payload = translateSessionStart({ source: "compact" }, context);
+
+    // assert
+    assert.deepStrictEqual(payload, expectedPayload);
+    assert.deepStrictEqual(Object.keys(payload), Object.keys(expectedPayload));
+  });
+
+  test("leaves out the model and the session title when the context has neither (D-PG6-09)", () => {
+    // arrange
+    const context = {
+      sessionId: "session-start-unnamed",
+      transcriptPath: "/sessions/session-start-unnamed.jsonl",
+      cwd: "/workspaces/session-start-unnamed",
+    } satisfies TranslationContext;
+
+    // act
+    const payload = translateSessionStart({ source: "resume" }, context);
+
+    // assert
+    assert.deepStrictEqual(payload, {
+      session_id: "session-start-unnamed",
+      transcript_path: "/sessions/session-start-unnamed.jsonl",
+      cwd: "/workspaces/session-start-unnamed",
+      hook_event_name: "SessionStart",
+      source: "resume",
+    });
+    assert.strictEqual(Object.hasOwn(payload, "model"), false);
+    assert.strictEqual(Object.hasOwn(payload, "session_title"), false);
+  });
 
   test("accepts empty session, transcript, and working-directory values", () => {
     // arrange

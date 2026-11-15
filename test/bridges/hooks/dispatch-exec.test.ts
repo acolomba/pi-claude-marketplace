@@ -545,8 +545,17 @@ function makeEntry(
   };
 }
 
-function makeContext(cwd: string, sessionId = "dispatch-session"): ExtensionContext {
+function makeContext(
+  cwd: string,
+  sessionId = "dispatch-session",
+  model?: NonNullable<ExtensionContext["model"]>,
+  sessionName?: string,
+): ExtensionContext {
   const sessionManager = SessionManager.inMemory(cwd, { id: sessionId });
+  if (sessionName !== undefined) {
+    sessionManager.appendSessionInfo(sessionName);
+  }
+
   return {
     get ui(): ExtensionContext["ui"] {
       throw new Error("dispatchHookExec must not read ui");
@@ -558,7 +567,7 @@ function makeContext(cwd: string, sessionId = "dispatch-session"): ExtensionCont
     get modelRegistry(): ExtensionContext["modelRegistry"] {
       throw new Error("dispatchHookExec must not read modelRegistry");
     },
-    model: undefined,
+    model,
     scopedModels: [],
     isIdle(): never {
       throw new Error("dispatchHookExec must not call isIdle");
@@ -856,6 +865,66 @@ for (const translatorCase of TRANSLATOR_CASES) {
       assert.deepStrictEqual(JSON.parse(stdin), expectedPayload);
       assert.deepStrictEqual(processChild.stdinOrder, ["error-listener", "finish"]);
       assert.deepStrictEqual(processChild.killSignals, []);
+    },
+  );
+}
+
+// Only SessionStart sends the model, and only it and UserPromptSubmit send the
+// session title (D-PG6-09).
+const SESSION_FACT_FIELDS: Partial<Record<DispatchableEvent, Readonly<Record<string, string>>>> = {
+  SessionStart: { model: "dispatch-model", session_title: "Release prep" },
+  UserPromptSubmit: { session_title: "Release prep" },
+};
+
+const DISPATCH_MODEL = {
+  provider: "dispatch-provider",
+  id: "dispatch-model",
+  name: "Dispatch model",
+  api: "openai-completions",
+  baseUrl: "http://localhost:0",
+  reasoning: true,
+  input: ["text", "image"],
+  contextWindow: 32_000,
+  maxTokens: 4_000,
+  cost: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4 },
+} satisfies NonNullable<ExtensionContext["model"]>;
+
+for (const translatorCase of TRANSLATOR_CASES) {
+  test(
+    "sends the " + translatorCase.claudeEvent + " stdin the model and the session name it takes",
+    async (t) => {
+      // arrange
+      const runtime = createHooksRuntime();
+      const caseRoot = await makeCaseRoot(t, "dispatch-session-facts-");
+      const processChild = makeInjectedChild(t);
+      const processBoundary = observeSpawn(t, processChild);
+      const entry = makeEntry(caseRoot, { claudeEvent: translatorCase.claudeEvent });
+      const context = makeContext(caseRoot, "dispatch-session", DISPATCH_MODEL, "Release prep");
+      const expectedPayload = {
+        session_id: "dispatch-session",
+        transcript_path: "",
+        cwd: caseRoot,
+        hook_event_name: translatorCase.claudeEvent,
+        ...translatorCase.eventFields,
+        ...SESSION_FACT_FIELDS[translatorCase.claudeEvent],
+      };
+
+      // act
+      const pendingOutcome = dispatchHookExec(
+        entry,
+        translatorCase.createEvent(),
+        context,
+        undefined,
+        runtime,
+        { spawnImpl: processBoundary.spawnImpl },
+      );
+      await processBoundary.spawned;
+      await processChild.close(0);
+      await pendingOutcome;
+      const stdin = Buffer.concat(processChild.stdinChunks).toString("utf8");
+
+      // assert
+      assert.strictEqual(stdin, JSON.stringify(expectedPayload));
     },
   );
 }
