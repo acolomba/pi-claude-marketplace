@@ -2,6 +2,7 @@ import { isSubagentChild } from "../../platform/subagent-child.ts";
 
 import { findMcpServer } from "./mcp-server-table.ts";
 
+import type { ChildRootSession } from "./child-root-session.ts";
 import type { ChildLike, TimerLadder } from "./exec-timer.ts";
 import type { McpServerEntry } from "./mcp-server-table.ts";
 import type { HookMcpServer } from "./payloads/tool-event-facts.ts";
@@ -45,6 +46,8 @@ export interface KnownChildIdentity {
   readonly kind: "known";
   readonly agentType: string;
   readonly childId: string;
+  /** D-PG6-02: the session that launched the child, once one was resolved for it. */
+  readonly root?: ChildRootSession;
 }
 
 export type ChildIdentity = MainChildIdentity | UnavailableChildIdentity | KnownChildIdentity;
@@ -239,6 +242,14 @@ export interface HooksRuntime {
   readonly resetChildIdentity: () => void;
   readonly captureChildIdentity: (event: BeforeAgentStartEvent, sessionId: string) => void;
   readonly childIdentityFor: (sessionId: string) => ChildIdentity;
+  /**
+   * D-PG6-02: keeps `root`, or no root, as the launching session of the
+   * session the identity was captured for; for another session it does
+   * nothing. A reset or a capture for another session drops it.
+   */
+  readonly recordChildRoot: (sessionId: string, root: ChildRootSession | undefined) => void;
+  /** D-PG6-02: whether a root, or no root, was recorded for `sessionId`. */
+  readonly childRootResolved: (sessionId: string) => boolean;
   readonly registerChild: (entry: HooksRuntimeChildEntry) => void;
   readonly takeChild: (dispatchId: string) => HooksRuntimeChildEntry | undefined;
   readonly persistenceOwner: (
@@ -331,6 +342,8 @@ export function createHooksRuntime(): HooksRuntime {
   let lastTopLevelMark = Number.NEGATIVE_INFINITY;
   let childIdentity: ChildIdentity = { kind: "unavailable" };
   let childIdentitySessionId: string | undefined;
+  let childRoot:
+    { readonly sessionId: string; readonly root: ChildRootSession | undefined } | undefined;
 
   function finishStopSequence(): void {
     consecutiveBlockCount = 0;
@@ -532,9 +545,14 @@ export function createHooksRuntime(): HooksRuntime {
     resetChildIdentity(): void {
       childIdentity = { kind: "unavailable" };
       childIdentitySessionId = undefined;
+      childRoot = undefined;
     },
 
     captureChildIdentity(event: BeforeAgentStartEvent, sessionId: string): void {
+      if (childRoot?.sessionId !== sessionId) {
+        childRoot = undefined;
+      }
+
       childIdentitySessionId = sessionId;
       if (!isSubagentChild(process.env)) {
         childIdentity = { kind: "main" };
@@ -564,7 +582,24 @@ export function createHooksRuntime(): HooksRuntime {
         return { kind: "main" };
       }
 
-      return childIdentitySessionId === sessionId ? childIdentity : { kind: "unavailable" };
+      if (childIdentitySessionId !== sessionId) {
+        return { kind: "unavailable" };
+      }
+
+      const root = childRoot?.root;
+      return childIdentity.kind === "known" && root !== undefined
+        ? { ...childIdentity, root }
+        : childIdentity;
+    },
+
+    recordChildRoot(sessionId: string, root: ChildRootSession | undefined): void {
+      if (childIdentitySessionId === sessionId) {
+        childRoot = { sessionId, root };
+      }
+    },
+
+    childRootResolved(sessionId: string): boolean {
+      return childRoot?.sessionId === sessionId;
     },
 
     registerChild(entry: HooksRuntimeChildEntry): void {

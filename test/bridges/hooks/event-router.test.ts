@@ -1409,6 +1409,250 @@ const PROMPT_TURN = {
   systemPromptOptions: {},
 } as BeforeAgentStartEvent;
 
+// The bridge's debug line for a child session whose launching session no source names (D-PG6-02).
+const CHILD_ROOT_LINE =
+  "[hooks] Child hook root session unavailable: neither the companion's launch variable nor the child's session header names its launching session";
+
+const RUNNER_TURN = {
+  ...PROMPT_TURN,
+  systemPromptOptions: { customPrompt: '<active_agent name="demo:runner"/>\n\nagent body' },
+} as BeforeAgentStartEvent;
+
+// Sets the process variable `name` to `value` for the case, or unsets it.
+function setVariable(t: TestContext, name: string, value: string | undefined): void {
+  const previous = process.env[name];
+  t.after(() => {
+    if (previous === undefined) {
+      Reflect.deleteProperty(process.env, name);
+    } else {
+      process.env[name] = previous;
+    }
+  });
+  if (value === undefined) {
+    Reflect.deleteProperty(process.env, name);
+  } else {
+    process.env[name] = value;
+  }
+}
+
+function setParentSessionVariable(t: TestContext, value: string | undefined): void {
+  setVariable(t, "PI_SUBAGENT_PARENT_SESSION", value);
+}
+
+// Marks this process as a pi-subagents child for the case, with `parentSession`
+// as its launch variable.
+function enterChild(t: TestContext, parentSession: string | undefined): void {
+  setVariable(t, "PI_SUBAGENT_CHILD", "1");
+  setParentSessionVariable(t, parentSession);
+}
+
+// A Pi context of the session `router-child`, whose header names
+// `parentSession`, and its session manager.
+function childSessionContext(
+  root: string,
+  parentSession: string | undefined,
+): {
+  readonly context: ExtensionContext;
+  readonly sessionManager: SessionManager;
+} {
+  const sessionManager = SessionManager.inMemory(root, {
+    id: "router-child",
+    ...(parentSession === undefined ? {} : { parentSession }),
+  });
+  return { context: Object.assign(makeContext(root, root), { sessionManager }), sessionManager };
+}
+
+// A launching session's file in `root` whose header holds `id`.
+async function launchingSessionFile(root: string, id: string): Promise<string> {
+  const file = path.join(root, "main.jsonl");
+  await writeFile(file, `${JSON.stringify({ type: "session", id, cwd: root })}\n`);
+  return file;
+}
+
+test(
+  "D-PG6-02: a child's first run keeps the launching session the variable and the header name",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const { runtime, handler, context: fixtureContext } = await beforeAgentStartFixture(t);
+    const file = await launchingSessionFile(fixtureContext.cwd, "main-session");
+    const { context } = childSessionContext(fixtureContext.cwd, file);
+    enterChild(t, "main-session");
+
+    // act
+    await handler(RUNNER_TURN, context);
+
+    // assert
+    assert.deepStrictEqual(runtime.childIdentityFor("router-child"), {
+      kind: "known",
+      agentType: "demo:runner",
+      childId: "router-child",
+      root: { sessionId: "main-session", transcriptPath: file },
+    });
+  },
+);
+
+test(
+  "D-PG6-02: a second run of a child session reads no header and no file",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const { runtime, handler, context: fixtureContext } = await beforeAgentStartFixture(t);
+    const file = await launchingSessionFile(fixtureContext.cwd, "main-session");
+    const { context, sessionManager } = childSessionContext(fixtureContext.cwd, file);
+    const getHeaderSpy = t.mock.method(sessionManager, "getHeader");
+    enterChild(t, undefined);
+    const readDiagnostics = observeRouterDebug(t);
+    await handler(RUNNER_TURN, context);
+    await rm(file);
+
+    // act
+    await handler(RUNNER_TURN, context);
+
+    // assert
+    assert.deepStrictEqual(runtime.childIdentityFor("router-child"), {
+      kind: "known",
+      agentType: "demo:runner",
+      childId: "router-child",
+      root: { sessionId: "main-session", transcriptPath: file },
+    });
+    assert.deepStrictEqual(readDiagnostics(), []);
+    assert.strictEqual(getHeaderSpy.mock.callCount(), 1);
+  },
+);
+
+test(
+  "D-PG6-02: a child with no root source writes the root diagnostic once for its session",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const { runtime, handler, context: fixtureContext } = await beforeAgentStartFixture(t);
+    const { context } = childSessionContext(fixtureContext.cwd, undefined);
+    enterChild(t, undefined);
+    const readDiagnostics = observeRouterDebug(t);
+
+    // act
+    await handler(RUNNER_TURN, context);
+    await handler(RUNNER_TURN, context);
+
+    // assert
+    assert.deepStrictEqual(runtime.childIdentityFor("router-child"), {
+      kind: "known",
+      agentType: "demo:runner",
+      childId: "router-child",
+    });
+    assert.deepStrictEqual(readDiagnostics(), [CHILD_ROOT_LINE]);
+  },
+);
+
+test(
+  "D-PG6-02: an unavailable child identity resolves no root",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const { runtime, handler, context: fixtureContext } = await beforeAgentStartFixture(t);
+    const { context, sessionManager } = childSessionContext(fixtureContext.cwd, undefined);
+    const getHeaderSpy = t.mock.method(sessionManager, "getHeader");
+    enterChild(t, "main-session");
+
+    // act
+    await handler(PROMPT_TURN, context);
+
+    // assert
+    assert.deepStrictEqual(runtime.childIdentityFor("router-child"), { kind: "unavailable" });
+    assert.strictEqual(runtime.childRootResolved("router-child"), false);
+    assert.strictEqual(getHeaderSpy.mock.callCount(), 0);
+  },
+);
+
+test(
+  "D-PG6-02: a failed header read leaves no root and the run still drains its context",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const { runtime, handler, context: fixtureContext } = await beforeAgentStartFixture(t);
+    const { context, sessionManager } = childSessionContext(fixtureContext.cwd, undefined);
+    t.mock.method(sessionManager, "getHeader", () => {
+      throw new Error("header unreadable");
+    });
+    runtime.appendPendingSessionStartContext({
+      context: "start context",
+      scope: "user",
+      marketplace: "catalog",
+      pluginId: "demo",
+    });
+    enterChild(t, "main-session");
+    const readDiagnostics = observeRouterDebug(t);
+
+    // act
+    const message = await handler(RUNNER_TURN, context);
+
+    // assert
+    assert.deepStrictEqual(message, {
+      message: {
+        customType: "claude-hook-additional-context",
+        content: [{ type: "text", text: "SessionStart hook additional context: start context" }],
+        display: false,
+      },
+    });
+    assert.deepStrictEqual(runtime.childIdentityFor("router-child"), {
+      kind: "known",
+      agentType: "demo:runner",
+      childId: "router-child",
+    });
+    assert.strictEqual(runtime.childRootResolved("router-child"), true);
+    assert.deepStrictEqual(readDiagnostics(), [
+      "[hooks] before_agent_start root session read failed: header unreadable",
+      CHILD_ROOT_LINE,
+    ]);
+  },
+);
+
+test("D-PG6-02: a main session reads no root", { concurrency: false }, async (t) => {
+  // arrange
+  const { runtime, handler, context: fixtureContext } = await beforeAgentStartFixture(t);
+  const { context, sessionManager } = childSessionContext(fixtureContext.cwd, undefined);
+  const getHeaderSpy = t.mock.method(sessionManager, "getHeader");
+  setVariable(t, "PI_SUBAGENT_CHILD", undefined);
+  setParentSessionVariable(t, "main-session");
+
+  // act
+  await handler(RUNNER_TURN, context);
+
+  // assert
+  assert.deepStrictEqual(runtime.childIdentityFor("router-child"), { kind: "main" });
+  assert.strictEqual(runtime.childRootResolved("router-child"), false);
+  assert.strictEqual(getHeaderSpy.mock.callCount(), 0);
+});
+
+test(
+  "D-PG6-02: a registration that went stale during the root read changes nothing more",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const { runtime, handler, context: fixtureContext } = await beforeAgentStartFixture(t);
+    const { context } = childSessionContext(fixtureContext.cwd, undefined);
+    const pending = {
+      context: "start context",
+      scope: "user",
+      marketplace: "catalog",
+      pluginId: "demo",
+    } as const;
+    runtime.appendPendingSessionStartContext(pending);
+    enterChild(t, "main-session");
+
+    // act
+    const started = handler(RUNNER_TURN, context);
+    runtime.advanceGeneration();
+    const message = await started;
+
+    // assert
+    assert.strictEqual(message, undefined);
+    assert.strictEqual(runtime.childRootResolved("router-child"), false);
+    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [pending]);
+  },
+);
+
 test(
   "before_agent_start captures the companion prefix while draining pending context",
   { concurrency: false },
@@ -1466,6 +1710,7 @@ test(
     const { runtime, handler, context } = await beforeAgentStartFixture(t);
     const readDiagnostics = observeRouterDebug(t);
     process.env.PI_SUBAGENT_CHILD = "1";
+    setParentSessionVariable(t, undefined);
     const valid = {
       ...PROMPT_TURN,
       systemPromptOptions: { appendSystemPrompt: '<active_agent name="demo:runner"/>\n\n' },
@@ -1483,6 +1728,7 @@ test(
       kind: "unavailable",
     });
     assert.deepStrictEqual(readDiagnostics(), [
+      CHILD_ROOT_LINE,
       "[hooks] Child hook identity unavailable: companion launch metadata is missing or malformed",
       "[hooks] Child hook identity unavailable: companion launch metadata is missing or malformed",
     ]);
@@ -1552,6 +1798,7 @@ test(
     const context = makeContext(root, root);
     await hydration.registerHooksBridge(pi, { cwd: root });
     process.env.PI_SUBAGENT_CHILD = "1";
+    setParentSessionVariable(t, undefined);
     const staleHandler = registeredHandler(registrations, "before_agent_start");
     const event = {
       ...PROMPT_TURN,
@@ -1586,7 +1833,7 @@ test(
       agentType: "demo:new",
       childId: context.sessionManager.getSessionId(),
     });
-    assert.deepStrictEqual(readDiagnostics(), []);
+    assert.deepStrictEqual(readDiagnostics(), [CHILD_ROOT_LINE]);
   },
 );
 

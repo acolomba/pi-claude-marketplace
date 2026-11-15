@@ -57,7 +57,7 @@ import {
   isRecordedButDisabled,
   type ExtensionState,
 } from "../../persistence/state-io.ts";
-import { isSubagentChild } from "../../platform/subagent-child.ts";
+import { isSubagentChild, subagentParentSessionId } from "../../platform/subagent-child.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -70,6 +70,7 @@ import {
   REWAKE_CUSTOM_TYPE,
   shutdownInMemoryChildren,
 } from "./async-rewake/registry.ts";
+import { resolveChildRootSession } from "./child-root-session.ts";
 import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
 import { HOOK_CONTEXT_MESSAGE_TYPE, sendDueFollowUpContext } from "./event-adapters.ts";
 import { FILE_SYSTEM_SWEEP_OPS, sweepHookOutput } from "./hook-output-files.ts";
@@ -92,6 +93,7 @@ import {
   settleHandlerFor,
 } from "./settle.ts";
 
+import type { ChildRootSession } from "./child-root-session.ts";
 import type {
   CompositeDispatchEvent,
   CompositeEventFor,
@@ -155,6 +157,10 @@ const CHILD_EVENT_POLICY = {
 
 const CHILD_IDENTITY_DIAGNOSTIC =
   "Child hook identity unavailable: companion launch metadata is missing or malformed";
+
+// D-PG6-02: the line for a child session whose launching session no source names.
+const CHILD_ROOT_DIAGNOSTIC =
+  "Child hook root session unavailable: neither the companion's launch variable nor the child's session header names its launching session";
 
 function dispatchesInCurrentSession(event: BucketAEvent): boolean {
   return !isSubagentChild(process.env) || CHILD_EVENT_POLICY[event] === "dispatch";
@@ -295,35 +301,74 @@ function contextPart(
  * started the run, which Pi tells by starting it with the rewake's own
  * custom message. The Stop hooks at the end of that run see
  * `stop_hook_active: true`; any other run start clears the mark.
+ *
+ * D-PG6-02: at the first run of a child session whose identity is known, the
+ * handler resolves the session that launched it, once, and keeps it in the
+ * runtime with the identity. A registration that went stale during that read
+ * changes nothing more.
  */
 function createBeforeAgentStartHandler(
   runtime: HooksRuntime,
+  capturedGeneration: number,
 ): (
   event: BeforeAgentStartEvent,
   ctx: ExtensionContext,
 ) => Promise<BeforeAgentStartEventResult | undefined> {
-  return (event, ctx) => {
+  return async (event, ctx) => {
     const sessionId = ctx.sessionManager.getSessionId();
     runtime.captureChildIdentity(event, sessionId);
-    if (runtime.childIdentityFor(sessionId).kind === "unavailable") {
+    const identity = runtime.childIdentityFor(sessionId);
+    if (identity.kind === "unavailable") {
       hookDebugLog(CHILD_IDENTITY_DIAGNOSTIC);
     }
 
-    runtime.recordRunStart(
-      event.messageType === "custom" && event.message.customType === REWAKE_CUSTOM_TYPE,
-    );
-    const content = [
-      contextPart("SessionStart", runtime.drainPendingSessionStartContext()),
-      contextPart("UserPromptSubmit", runtime.drainPendingPromptContext()),
-    ].filter((part) => part !== undefined);
-    if (content.length === 0) {
-      return Promise.resolve(undefined);
+    if (identity.kind === "known" && !runtime.childRootResolved(sessionId)) {
+      const root = await childRootSession(ctx);
+      if (runtime.currentGeneration() !== capturedGeneration) {
+        return undefined;
+      }
+
+      runtime.recordChildRoot(sessionId, root);
+      if (root === undefined) {
+        hookDebugLog(CHILD_ROOT_DIAGNOSTIC);
+      }
     }
 
-    return Promise.resolve({
-      message: { customType: HOOK_CONTEXT_MESSAGE_TYPE, content, display: false },
-    });
+    return startRun(runtime, event);
   };
+}
+
+// D-PG6-02: the launching session's id from pi-subagents' launch variable and
+// its file from the child's own session header. A failed read gives no root.
+async function childRootSession(ctx: ExtensionContext): Promise<ChildRootSession | undefined> {
+  try {
+    return await resolveChildRootSession({
+      sessionId: subagentParentSessionId(process.env),
+      sessionFile: ctx.sessionManager.getHeader()?.parentSession,
+    });
+  } catch (err) {
+    hookDebugLog(`before_agent_start root session read failed: ${errorMessage(err)}`);
+    return undefined;
+  }
+}
+
+// Records how the run started and drains both context buffers into one message.
+function startRun(
+  runtime: HooksRuntime,
+  event: BeforeAgentStartEvent,
+): BeforeAgentStartEventResult | undefined {
+  runtime.recordRunStart(
+    event.messageType === "custom" && event.message.customType === REWAKE_CUSTOM_TYPE,
+  );
+  const content = [
+    contextPart("SessionStart", runtime.drainPendingSessionStartContext()),
+    contextPart("UserPromptSubmit", runtime.drainPendingPromptContext()),
+  ].filter((part) => part !== undefined);
+  if (content.length === 0) {
+    return undefined;
+  }
+
+  return { message: { customType: HOOK_CONTEXT_MESSAGE_TYPE, content, display: false } };
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -1344,7 +1389,7 @@ async function registerHooksBridgeWith(
   // buffers are empty.
   pi.on(
     "before_agent_start",
-    bindWithMode(() => createBeforeAgentStartHandler(runtime)),
+    bindWithMode((generation) => createBeforeAgentStartHandler(runtime, generation)),
   );
   // The context of a queued follow-up goes out at the turn end after which
   // the agent reads that follow-up (D-CF5-13).

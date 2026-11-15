@@ -1148,6 +1148,159 @@ test(
   },
 );
 
+const RUNNER_TAG = '<active_agent name="demo:runner"/>\n\n';
+const LAUNCHER_ROOT = { sessionId: "main-session", transcriptPath: "/sessions/main.jsonl" };
+
+test(
+  "D-PG6-02: a recorded root travels with the child identity of its session",
+  { concurrency: false },
+  (t) => {
+    // arrange
+    setChildMarker(t, "1");
+    const runtime = createHooksRuntime();
+    runtime.captureChildIdentity(identityEvent(RUNNER_TAG), "child-session");
+
+    // act
+    runtime.recordChildRoot("child-session", LAUNCHER_ROOT);
+
+    // assert
+    assert.deepStrictEqual(runtime.childIdentityFor("child-session"), {
+      kind: "known",
+      agentType: "demo:runner",
+      childId: "child-session",
+      root: LAUNCHER_ROOT,
+    });
+    assert.strictEqual(runtime.childRootResolved("child-session"), true);
+  },
+);
+
+test(
+  "D-PG6-02: a recorded absence of a root leaves the identity without one",
+  { concurrency: false },
+  (t) => {
+    // arrange
+    setChildMarker(t, "1");
+    const runtime = createHooksRuntime();
+    runtime.captureChildIdentity(identityEvent(RUNNER_TAG), "child-session");
+
+    // act
+    runtime.recordChildRoot("child-session", undefined);
+
+    // assert
+    assert.deepStrictEqual(runtime.childIdentityFor("child-session"), {
+      kind: "known",
+      agentType: "demo:runner",
+      childId: "child-session",
+    });
+    assert.strictEqual(runtime.childRootResolved("child-session"), true);
+  },
+);
+
+test(
+  "D-PG6-02: a root recorded for another session changes nothing",
+  { concurrency: false },
+  (t) => {
+    // arrange
+    setChildMarker(t, "1");
+    const runtime = createHooksRuntime();
+    runtime.captureChildIdentity(identityEvent(RUNNER_TAG), "child-session");
+
+    // act
+    runtime.recordChildRoot("other-session", LAUNCHER_ROOT);
+
+    // assert
+    assert.deepStrictEqual(runtime.childIdentityFor("child-session"), {
+      kind: "known",
+      agentType: "demo:runner",
+      childId: "child-session",
+    });
+    assert.strictEqual(runtime.childRootResolved("child-session"), false);
+    assert.strictEqual(runtime.childRootResolved("other-session"), false);
+  },
+);
+
+test(
+  "D-PG6-02: a later capture for the same session keeps its root",
+  { concurrency: false },
+  (t) => {
+    // arrange
+    setChildMarker(t, "1");
+    const runtime = createHooksRuntime();
+    runtime.captureChildIdentity(identityEvent(RUNNER_TAG), "child-session");
+    runtime.recordChildRoot("child-session", LAUNCHER_ROOT);
+
+    // act
+    runtime.captureChildIdentity(identityEvent(RUNNER_TAG), "child-session");
+
+    // assert
+    assert.deepStrictEqual(runtime.childIdentityFor("child-session"), {
+      kind: "known",
+      agentType: "demo:runner",
+      childId: "child-session",
+      root: LAUNCHER_ROOT,
+    });
+    assert.strictEqual(runtime.childRootResolved("child-session"), true);
+  },
+);
+
+test(
+  "D-PG6-02: a root is not returned with an identity that became unavailable",
+  { concurrency: false },
+  (t) => {
+    // arrange
+    setChildMarker(t, "1");
+    const runtime = createHooksRuntime();
+    runtime.captureChildIdentity(identityEvent(RUNNER_TAG), "child-session");
+    runtime.recordChildRoot("child-session", LAUNCHER_ROOT);
+
+    // act
+    runtime.captureChildIdentity(identityEvent(), "child-session");
+
+    // assert
+    assert.deepStrictEqual(runtime.childIdentityFor("child-session"), { kind: "unavailable" });
+  },
+);
+
+test("D-PG6-02: a capture for a new session drops the root", { concurrency: false }, (t) => {
+  // arrange
+  setChildMarker(t, "1");
+  const runtime = createHooksRuntime();
+  runtime.captureChildIdentity(identityEvent(RUNNER_TAG), "child-session");
+  runtime.recordChildRoot("child-session", LAUNCHER_ROOT);
+
+  // act
+  runtime.captureChildIdentity(identityEvent(RUNNER_TAG), "next-session");
+  runtime.captureChildIdentity(identityEvent(RUNNER_TAG), "child-session");
+
+  // assert
+  assert.deepStrictEqual(runtime.childIdentityFor("child-session"), {
+    kind: "known",
+    agentType: "demo:runner",
+    childId: "child-session",
+  });
+  assert.strictEqual(runtime.childRootResolved("child-session"), false);
+});
+
+test("D-PG6-02: a reset drops the root", { concurrency: false }, (t) => {
+  // arrange
+  setChildMarker(t, "1");
+  const runtime = createHooksRuntime();
+  runtime.captureChildIdentity(identityEvent(RUNNER_TAG), "child-session");
+  runtime.recordChildRoot("child-session", LAUNCHER_ROOT);
+
+  // act
+  runtime.resetChildIdentity();
+  runtime.captureChildIdentity(identityEvent(RUNNER_TAG), "child-session");
+
+  // assert
+  assert.deepStrictEqual(runtime.childIdentityFor("child-session"), {
+    kind: "known",
+    agentType: "demo:runner",
+    childId: "child-session",
+  });
+  assert.strictEqual(runtime.childRootResolved("child-session"), false);
+});
+
 test("main session ignores structured active agent tags", { concurrency: false }, (t) => {
   setChildMarker(t, "0");
   const runtime = createHooksRuntime();
