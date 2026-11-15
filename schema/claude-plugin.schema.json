@@ -182,7 +182,8 @@
                           "network error",
                           "already added",
                           "requires mcp",
-                          "requires builtin mcp"
+                          "requires builtin mcp",
+                          "options not set"
                         ]
                       }
                     },
@@ -342,7 +343,8 @@
                     "network error",
                     "already added",
                     "requires mcp",
-                    "requires builtin mcp"
+                    "requires builtin mcp",
+                    "options not set"
                   ]
                 }
               }
@@ -543,7 +545,8 @@
                           "network error",
                           "already added",
                           "requires mcp",
-                          "requires builtin mcp"
+                          "requires builtin mcp",
+                          "options not set"
                         ]
                       }
                     },
@@ -703,7 +706,8 @@
                     "network error",
                     "already added",
                     "requires mcp",
-                    "requires builtin mcp"
+                    "requires builtin mcp",
+                    "options not set"
                   ]
                 }
               }
@@ -968,7 +972,8 @@
                       "network error",
                       "already added",
                       "requires mcp",
-                      "requires builtin mcp"
+                      "requires builtin mcp",
+                      "options not set"
                     ]
                   }
                 },
@@ -1169,7 +1174,8 @@
                       "network error",
                       "already added",
                       "requires mcp",
-                      "requires builtin mcp"
+                      "requires builtin mcp",
+                      "options not set"
                     ]
                   }
                 },
@@ -1445,7 +1451,8 @@
                             "network error",
                             "already added",
                             "requires mcp",
-                            "requires builtin mcp"
+                            "requires builtin mcp",
+                            "options not set"
                           ]
                         }
                       },
@@ -1652,7 +1659,8 @@
                             "network error",
                             "already added",
                             "requires mcp",
-                            "requires builtin mcp"
+                            "requires builtin mcp",
+                            "options not set"
                           ]
                         }
                       },
@@ -1795,7 +1803,8 @@
               "network error",
               "already added",
               "requires mcp",
-              "requires builtin mcp"
+              "requires builtin mcp",
+              "options not set"
             ]
           }
         }

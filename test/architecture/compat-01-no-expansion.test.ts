@@ -316,6 +316,8 @@ const EXPECTED_REASONS = [
   // D-MB-07: the MCP markers naming either implementation, or Pi's built-in MCP alone.
   "requires mcp",
   "requires builtin mcp",
+  // D-PG10-06: a required plugin option has no default.
+  "options not set",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

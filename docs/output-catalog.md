@@ -60,7 +60,7 @@ This 0 / 2 / 4 / 6 ladder is the byte-exact contract `notify()` emits at the `ct
 
 ### Reasons rendering
 
-Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The `Reason` union in `extensions/pi-claude-marketplace/shared/notification-types.ts` defines the closed set. `test/architecture/notify-closed-set-locks.test.ts` pins its size, and `test/architecture/compat-01-no-expansion.test.ts` pins its membership. `{unsupported mcp}` (ANAME-07) is the one aggregate reason for a plugin whose MCP server uses a Claude Code feature that the active MCP implementation cannot run. Like `{unsupported hooks}`, it comes from a typed kind (`mcpServers`), not from a resolver note. `workflows` carries no unsupported-kind carve-out: the kind is a fully supported bridge, not a probed carve-out like `lspServers`.
+Reasons render inside a single `{}` block, comma-space separated. Each reason is 1-3 words lowercase, hyphenated where natural (`{up-to-date}`, `{rollback partial}`, `{not in manifest}`). Typed-kind carve-outs render `{lsp}` for `lspServers`. HOOK-04 / D-58-02: `{unsupported hooks}` is a normal 2-word reason (no longer a manifest-field carve-out -- under v1.13 the `hooks` component kind is supported, and the reason is sourced through `shared/probe-classifiers.ts::narrowResolverNotes` against `parseHooksConfig` prefix tokens). The `Reason` union in `extensions/pi-claude-marketplace/shared/notification-types.ts` defines the closed set. `test/architecture/notify-closed-set-locks.test.ts` pins its size, and `test/architecture/compat-01-no-expansion.test.ts` pins its membership. `{unsupported mcp}` (ANAME-07) is the one aggregate reason for a plugin whose MCP server uses a Claude Code feature that the active MCP implementation cannot run. Like `{unsupported hooks}`, it comes from a typed kind (`mcpServers`), not from a resolver note. `{options not set}` (D-PG10-06) is the reason for a plugin with a required option that has no default. It comes from the typed kind `userConfig`, and the option keys ride the resolver note and the `info` surface, because a reason token cannot hold a key. `workflows` carries no unsupported-kind carve-out: the kind is a fully supported bridge, not a probed carve-out like `lspServers`.
 
 Structural `unavailable` rows derive reasons from resolver notes through `narrowResolverNotes`. Partial rows derive typed unsupported kinds through `narrowUnsupportedKinds`.
 
@@ -144,7 +144,7 @@ The table below holds ONE row per member of the 20-member `PLUGIN_STATUSES` tupl
 | `(uninstalled)`          | ○    | Plugin row -- uninstall single-plugin, marketplace-remove partial success rows. It admits up to two tokens: the data-disposition marker `{data kept}`, stamped by `uninstall --keep-data` (DATA-01 / WR-06) on any `(uninstalled)` row; and `{dependency pruned}` (D-05-11 / PRUNE-04), stamped only on a dependency record `uninstall --prune` swept out after the named plugin, ordered before `{data kept}` when both apply (`{dependency pruned, data kept}`). A bare row means the plugin's data directory went with it and, for the named plugin's own row, that no pruning happened. `marketplace remove` has no such opt-out, so its rows are always bare. |
 | `(available)`            | ○    | Plugin row -- `marketplace list` / plugin-list surface (no scope bracket per MSG-PL-6 / SNM-11). It admits exactly one entry-derived token, the author-declared `{installs disabled}` install-time-state marker, answered from the marketplace entry in the cached manifest and never from the plugin's own `plugin.json`, which this path declines to fetch (OUT-02 / OUT-05).                                                                                                                                                                                                                                                                                    |
 | `(remote)`               | ◌    | Plugin row -- list / info / install-completion surfaces for a not-installed git-source plugin whose clone/mirror is not yet materialized locally (RSTA-01 / D-80-03). No scope bracket (SNM-11), and no probe-derived or soft-dependency-derived reason brace -- no materialized tree exists to derive one from. It admits exactly one entry-derived token, the author-declared `{installs disabled}` install-time-state marker, which needs no tree because the marketplace entry is readable from the cached manifest (OUT-05 / RSTA-01).                                                                                                                        |
-| `(partially-available)`  | ⊖    | Plugin row -- list / info surfaces AND the install-failure surface (XSURF-01) for a partially-available plugin (resolver `partially-available`: LSP / hooks / unsupported component / an MCP server feature the active MCP implementation cannot run); carries `{unsupported hooks}` / `{lsp}` / `{unsupported component}` / `{unsupported mcp}`. A normal install rejects this arm. With `--partial`, the install materializes its supported subset (USTAT-01 / D-64-01); the install-failure row carries the `--partial` hint trailer.                                                                                                                           |
+| `(partially-available)`  | ⊖    | Plugin row -- list / info surfaces AND the install-failure surface (XSURF-01) for a partially-available plugin (resolver `partially-available`: LSP / hooks / unsupported component / an MCP server feature the active MCP implementation cannot run / a required option with no default); carries `{unsupported hooks}` / `{lsp}` / `{unsupported component}` / `{unsupported mcp}` / `{options not set}`. A normal install rejects this arm. With `--partial`, the install materializes its supported subset (USTAT-01 / D-64-01); the install-failure row carries the `--partial` hint trailer.                                                                 |
 | `(unavailable)`          | ⊘    | Plugin row -- install / reinstall / import / list / info surfaces for a STRUCTURALLY-unavailable plugin (malformed manifest / hooks.json, unreadable source, an `mcpServers` path that is absolute or leaves the plugin root, also through a symbolic link, or a server config written inline in `plugin.json` or the marketplace entry that Claude Code's schema rejects -> `{malformed mcp}`. A missing, unreadable, or unparseable MCP file, and a rejected server inside a file, are skipped silently (D-CF6-02)); carries the structural reasons.                                                                                                             |
 | `(upgradable)`           | ●    | Plugin row -- plugin-list surface only (advisory).                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | `(partially-upgradable)` | ●    | Plugin row -- list inventory surface AND the manual update-decline surface (XSURF-03) for a currently-clean installed plugin whose newer no-network cache candidate would NEWLY degrade it (FSTAT-04 / D-66-02). REUSES `●` rather than `◉` because the row is clean today -- only its candidate would degrade. The decline row carries the update-worded `--partial` hint trailer; the inventory row renders byte-frozen. `pending`, the load's block and `apply` show the same decline for a catalog move that needs consent (D-12), with the catalog hint naming `update --partial` (D-24).                                                                     |
@@ -520,6 +520,19 @@ Plugin list: 1 success
 
 A plugin installed with `--partial` while one of its servers needs a Claude Code MCP feature that the active MCP implementation cannot run. The record lists only the servers that were written, and it re-resolves `partially-available`, so the row is DERIVED as `partially-installed`. The typed `mcpServers` kind rides the single aggregate `{unsupported mcp}` brace through `narrowUnsupportedKinds`, however many servers were left out. The per-server breakdown lives on the `info` surface. Severity `info`; no reload-hint (inventory row).
 
+### Partially-installed inventory row -- required option not set (D-PG10-06)
+
+<!-- catalog-state: partially-installed-inventory-options -->
+
+```text
+● official [user] <autoupdate>
+  ◉ deploy-tools v1.0.0 (partially-installed) {options not set}
+
+Plugin list: 1 success
+```
+
+A plugin installed with `--partial` while a required option in its `userConfig` has no default. The install delivers every option that has a default and leaves the required one unset, so the record re-resolves `partially-available` and the row is DERIVED as `partially-installed`. The typed `userConfig` kind rides the `{options not set}` brace through `narrowUnsupportedKinds`. A reason token cannot hold an option key, so the keys of the unset options live on the `info` surface. Severity `info`; no reload-hint (inventory row).
+
 ### Partially-upgradable inventory row (FSTAT-04 / D-66-02 / D-66-03)
 
 <!-- catalog-state: partially-upgradable-inventory -->
@@ -734,6 +747,20 @@ A plugin operation has failed.
 ```
 
 A server of the plugin uses a Claude Code MCP feature that the active MCP implementation cannot run. Neither implementation runs a `ws` transport, the host-only types `sse-ide`, `ws-ide`, `sdk` and `claudeai-proxy`, `headersHelper`, a truthy `oauth.xaa`, or a leading `~`, `~/` or `~\` in a stdio server's `command` or in an `args` element. A leading `${NAME:-…}` reference whose default starts that way counts too. Claude Code passes such a value through literally, but both implementations replace a leading `~` with the home directory, and pi-mcp-adapter does so after it interpolates the value, so no written form keeps the value literal. `info` names such a server as `(unsupported command ~)` or `(unsupported args ~)`. Pi's built-in MCP cannot run an `sse` transport, and pi-mcp-adapter cannot run `bareElicitationCapability: true`. With no MCP implementation active, only a feature that neither implementation runs blocks a server. The resolver gives the partially-available arm, so a normal install refuses before any write. The row carries the one aggregate `{unsupported mcp}` token, however many servers are affected, and the `--partial` hint. With `--partial`, the install writes every other component and every other server. It leaves each affected server out whole, and the record then derives `(partially-installed)`. `info` names each server that was left out, with the feature that blocks it. A per-tool `permission_policy` or a non-empty `toolPermissions` does not block; the server installs and the command warns that the rules are not enforced. A server config that Claude Code's own schema rejects is a different case. Written inline in `plugin.json` or the marketplace entry, it is a structural defect, and the plugin is `(unavailable) {malformed mcp}`. Inside `.mcp.json` or a file that `mcpServers` names, it is skipped silently, and the other servers install (D-CF6-02).
+
+### Failure -- required option not set (partially-available, D-PG10-06)
+
+<!-- catalog-state: failure-options-not-set -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊖ helper (partially-available) {options not set}
+    Re-run with --partial to install the supported components.
+```
+
+An option in the plugin's `userConfig` has `required: true` and no `default`. The resolver gives the partially-available arm, so a normal install refuses before any write. The row carries the `{options not set}` token and the `--partial` hint. With `--partial`, the install delivers every option that has a default, leaves each required option without one unset, and the record then derives `(partially-installed)`. `info` names the keys of the unset options. Claude Code's own install does not refuse here; it reports the options that are not yet set. This refusal is the project's safety rule for a required option (D-PG10-06), not a parity claim.
 
 ### Workflow plus unsupported-kind rejection (WINV-04)
 
@@ -3413,7 +3440,7 @@ A structurally malformed plugin resolves to `unavailable`. Structural errors inc
 
 A partially available plugin has typed unsupported kinds. These kinds include `lspServers`, other unsupported components, supported subsets of `hooks.json`, and `mcpServers` when a server uses a Claude Code MCP feature that the active MCP implementation cannot run (with none active, a feature that neither implementation runs). The row uses the `⊖` glyph and the `(partially-available)` status (D-71-03 / PHOOK-03). After installation, the inventory row renders `(partially-installed)`.
 
-Each row has one closed-set reason block. The structural arm uses `narrowResolverNotes` for `{unsupported source}` or `{malformed mcp}`. The partial arm uses `narrowUnsupportedKinds` for `{unsupported hooks}`, `{lsp}`, `{unsupported mcp}`, or `{unsupported component}`.
+Each row has one closed-set reason block. The structural arm uses `narrowResolverNotes` for `{unsupported source}` or `{malformed mcp}`. The partial arm uses `narrowUnsupportedKinds` for `{unsupported hooks}`, `{lsp}`, `{unsupported mcp}`, `{options not set}`, or `{unsupported component}`.
 
 The example shows malformed `hooks.json`, so the row remains `⊘ (unavailable)`. Sources without a readable materialized tree use `componentsResolved: false`. Component-read failures also use that value. Then the renderer writes `components: not resolved` instead of the component list. For a path source or warm git source, the renderer tries to enumerate components for both non-installable states. It sets `componentsResolved` to `true` when that read succeeds.
 
@@ -3440,6 +3467,19 @@ The plugin declares two MCP servers. The `live` server uses the `ws` transport, 
     Database tools for everyday queries.
     mcp: plugin:db-tools:db, plugin:db-tools:live (unsupported ws)
     requires: mcp
+```
+
+### Not installed -- a required option is not set (D-PG10-06)
+
+An option in the plugin's `userConfig` has `required: true` and no `default`, so the plugin is `(partially-available)` with the `{options not set}` reason, the token that install and `list` give for the same plugin. An install with `--partial` installs the plugin with that option unset. Severity `info`; no reload-hint (read-only surface).
+
+<!-- catalog-state: partially-available-with-unset-options -->
+
+```text
+● community-mp [user] <no autoupdate>
+  ⊖ deploy-tools v1.0.0 (partially-available) {options not set}
+    Deployment tools for everyday releases.
+    skills: deploy
 ```
 
 ### Installed -- an MCP server's variables (AVAR-04, AVAR-05)

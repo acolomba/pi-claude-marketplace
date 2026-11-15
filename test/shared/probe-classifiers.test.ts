@@ -341,6 +341,29 @@ describe("narrowUnsupportedKinds", () => {
     assert.deepStrictEqual(reasons, ["unsupported mcp"]);
   });
 
+  test("D-PG10-06: classifies userConfig as options not set", () => {
+    // arrange
+    const kinds = ["userConfig"];
+    const expectedReasons = ["options not set"] satisfies readonly UnsupportedReason[];
+
+    // act
+    const reasons = narrowUnsupportedKinds(kinds);
+
+    // assert
+    assert.deepStrictEqual(reasons, expectedReasons);
+  });
+
+  test("D-PG10-06: classifies themes and userConfig in kind order", () => {
+    // arrange
+    const kinds = ["themes", "userConfig"];
+
+    // act
+    const reasons = narrowUnsupportedKinds(kinds);
+
+    // assert
+    assert.deepStrictEqual(reasons, ["unsupported component", "options not set"]);
+  });
+
   test("classifies hooks as unsupported hooks", () => {
     // arrange
     const kinds = ["hooks"];

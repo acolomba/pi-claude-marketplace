@@ -139,7 +139,7 @@ for (const { kind, note, reason } of [
   {
     kind: "userConfig",
     note: "required userConfig options have no default: lspServers, source",
-    reason: "unsupported component",
+    reason: "options not set",
   },
 ] as const) {
   test(`keeps the install, list, and info component surfaces equal for ${kind}`, () => {

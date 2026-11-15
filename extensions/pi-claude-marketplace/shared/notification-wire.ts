@@ -163,6 +163,7 @@ const REASONS = {
   "already added": true,
   "requires mcp": true,
   "requires builtin mcp": true,
+  "options not set": true,
 } as const satisfies Record<Reason, true>;
 
 const SEVERITIES = {

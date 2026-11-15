@@ -42,6 +42,8 @@ void ("cross-marketplace" satisfies FailureReason);
 void ("up-to-date" satisfies FailureReason);
 // @ts-expect-error unsupported reasons are not failure reasons
 void ("unsupported source" satisfies FailureReason);
+// @ts-expect-error D-PG10-06: an unset required option is an unsupported reason, not a failure
+void ("options not set" satisfies FailureReason);
 // @ts-expect-error declared-state reasons are not failure reasons
 void ("installs disabled" satisfies FailureReason);
 
@@ -113,6 +115,11 @@ const skipSeverityCases = [
   {
     title: "classifies an unsupported reason as an actionable skip",
     reasons: ["unsupported source"],
+    expectedSeverity: "warning",
+  },
+  {
+    title: "D-PG10-06: classifies options not set as an actionable skip",
+    reasons: ["options not set"],
     expectedSeverity: "warning",
   },
   {

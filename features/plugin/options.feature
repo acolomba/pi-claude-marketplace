@@ -67,3 +67,27 @@ Feature: Plugin options
       | marketplace name | marketplace scope | id            | name | status      | reasons          |
       | fixtures         | project           | demo@fixtures | demo | unavailable | invalid manifest |
     Then the project scope has no installed plugins
+
+  Scenario: A plugin with a required option that has no default is refused without --partial (PG-CORE-03)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "token": { "type": "string", "title": "Token", "description": "The token.", "required": true },
+          "mode": { "type": "string", "title": "Mode", "description": "The mode.", "default": "fast" }
+        }
+      }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status              | reasons         | hint            |
+      | fixtures         | project           | demo@fixtures | demo | partially-available | options not set | partial-install |
+    Then the project scope has no installed plugins

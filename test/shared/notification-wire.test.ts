@@ -695,6 +695,18 @@ for (const reason of ["requires mcp", "requires builtin mcp"]) {
   });
 }
 
+test("D-PG10-06: accepts the options not set reason on a partially-available row", () => {
+  // arrange
+  const payload = cascadePayloadWith({ ...failedRow(), reasons: ["options not set"] });
+  const validator = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
+
+  // act
+  const valid = validator.Check(payload);
+
+  // assert
+  assert.strictEqual(valid, true, JSON.stringify([...validator.Errors(payload)]));
+});
+
 for (const status of ["will add", "will remove"]) {
   test(`D-20: accepts a pending cascade whose marketplace status is ${status}`, () => {
     // arrange

@@ -70,11 +70,16 @@ export function narrowProbeError(
  * helpers below. The helpers accept two separate input axes.
  * `narrowResolverNotes` maps resolver notes to hooks, LSP, source, and
  * malformed-MCP reasons. `narrowUnsupportedKinds` maps typed kinds to hooks,
- * LSP, MCP, and generic component reasons. `kindToReason` owns the typed-kind
+ * LSP, MCP, option, and generic component reasons. `kindToReason` owns the typed-kind
  * mappings.
  */
 export type UnsupportedReason =
-  "unsupported hooks" | "lsp" | "unsupported source" | "unsupported component" | "unsupported mcp";
+  | "unsupported hooks"
+  | "lsp"
+  | "unsupported source"
+  | "unsupported component"
+  | "unsupported mcp"
+  | "options not set";
 
 /**
  * MCPR-03 / D-02 / SRC-01: the return-type envelope for `narrowResolverNotes`.
@@ -223,10 +228,11 @@ function classifyResolverNote(note: string): ResolverNoteReason {
  * byte-identical per-kind markers across every surface (SURF-01 cross-surface
  * parity), by construction rather than by three drift-prone copies.
  *
- * Mapping (HOOK-04 / D-58-02 / D-71-04 / D-90-05 / ANAME-07): `lspServers`
- * renders as `lsp`. A typed `hooks` kind renders the aggregate `unsupported
- * hooks` marker, and a typed `mcpServers` kind the aggregate `unsupported mcp`
- * marker. Every other typed kind renders `unsupported component` (D-90-05). This marker names the
+ * Mapping (HOOK-04 / D-58-02 / D-71-04 / D-90-05 / ANAME-07 / D-PG10-06):
+ * `lspServers` renders as `lsp`. A typed `hooks` kind renders the aggregate
+ * `unsupported hooks` marker, a typed `mcpServers` kind the aggregate
+ * `unsupported mcp` marker, and a typed `userConfig` kind `options not set`.
+ * Every other typed kind renders `unsupported component` (D-90-05). This marker names the
  * component axis, unlike the source-axis `unsupported source` marker.
  * First-wins dedup matches `narrowResolverNotes` semantics (WR-01), so a
  * multi-kind list never emits a duplicate token.
@@ -258,9 +264,10 @@ export function narrowUnsupportedKinds(
 // legitimately carries `hooks` and `mcpServers` (SUPPORTED kinds flagged as
 // dropped) alongside the `UnsupportedKind` literals, so no closed union spans
 // the real input.
-// D-90-05 / WINV-03 / ANAME-07: three kinds have dedicated mappings:
-// `lspServers` -> `lsp`, `hooks` -> `unsupported hooks` and `mcpServers` ->
-// `unsupported mcp`. A kind outside these carve-outs collapses to
+// D-90-05 / WINV-03 / ANAME-07 / D-PG10-06: four kinds have dedicated
+// mappings: `lspServers` -> `lsp`, `hooks` -> `unsupported hooks`,
+// `mcpServers` -> `unsupported mcp` and `userConfig` -> `options not set`
+// (a required option has no default). A kind outside these carve-outs collapses to
 // `unsupported component`. This result names the component axis instead of
 // borrowing the source-axis token.
 function kindToReason(kind: string): UnsupportedReason {
@@ -274,6 +281,10 @@ function kindToReason(kind: string): UnsupportedReason {
 
   if (kind === "mcpServers") {
     return "unsupported mcp";
+  }
+
+  if (kind === "userConfig") {
+    return "options not set";
   }
 
   return "unsupported component";

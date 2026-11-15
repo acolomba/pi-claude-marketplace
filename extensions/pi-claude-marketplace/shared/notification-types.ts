@@ -296,7 +296,12 @@ export type Reason =
   // `requires builtin mcp` when only Pi's built-in MCP would, and the existing
   // `requires pi-mcp-adapter` when only the adapter would.
   | "requires mcp"
-  | "requires builtin mcp";
+  | "requires builtin mcp"
+  // D-PG10-06: a required plugin option has no default, so `--partial`
+  // installs the plugin with that option unset. A typed kind, not a note, as
+  // `unsupported mcp` is: the token rides the row, and the option keys ride
+  // the resolver note and the info advisory line.
+  | "options not set";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<

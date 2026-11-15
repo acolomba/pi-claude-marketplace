@@ -1224,7 +1224,7 @@ describe("resolver reason narrowing through the install failure row", () => {
     });
   }
 
-  test("D-PG10-06: maps an unset userConfig note to the userConfig kind marker when partialable", () => {
+  test("D-PG10-06: maps an unset userConfig note to options not set when partialable", () => {
     // arrange
     const reasons = ["required userConfig options have no default: lspServers, source"];
 
@@ -1232,7 +1232,19 @@ describe("resolver reason narrowing through the install failure row", () => {
     const narrowedReasons = installFailureReasons(reasons, [], true);
 
     // assert
-    assert.deepStrictEqual(narrowedReasons, ["unsupported component"]);
+    assert.deepStrictEqual(narrowedReasons, ["options not set"]);
+  });
+
+  test("D-PG10-06: gives options not set once for the unset note and its userConfig kind", () => {
+    // arrange
+    const reasons = ["required userConfig options have no default: token"];
+    const unsupportedKinds = ["userConfig"];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons, unsupportedKinds, true);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["options not set"]);
   });
 
   test("D-PG10-06: maps an unset userConfig note to unsupported source on the structural arm", () => {
