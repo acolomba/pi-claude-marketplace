@@ -360,8 +360,6 @@ workflow wanted these shared-file edits; the parent decides.
    `reinstall` once for installed plugins); the workflow page says what a
    workflow subagent can reach.
 4. STATE.md: record the Phase 8 context and planning sessions.
-</content>
-</invoke>
 
 ## Amendments after research (2026-11-14)
 

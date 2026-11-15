@@ -100,5 +100,3 @@ Plan split, helper names, feature file placement, note wording within the style 
 ## Deferred Ideas
 
 PG-WF-03, PG-WF-06, decision 14, a `MODEL_NOT_FOUND` note for `--map-model` agent types, new engine requests, `Workflow` in the hook tool table.
-</content>
-</invoke>
