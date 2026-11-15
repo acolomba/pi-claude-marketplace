@@ -65,9 +65,7 @@ drafted request to pi-mcp-adapter, not a patch.
   (`domain/mcp-server-features.ts:72-86`): `type` absent or `"stdio"`. A
   remote server (`sse`, `http`, `streamable-http`) gets no `lifecycle`, so it
   stays `lazy`, which matches upstream's `cached` state for a remote server
-  used before. pi-mcp-adapter 7.0.1 has no global lifecycle setting (`config.ts:2093` is
-  a per-entry default of `lazy`), so a per-entry value overrides nothing the
-  user set elsewhere.
+  used before. pi-mcp-adapter 7.0.1 has no global lifecycle setting (`config.ts:2093` is a per-entry default of `lazy`). A written `lifecycle: "lazy-keep-alive"` does, however, override the user's global `settings.idleTimeout` for that server once it has started, because the adapter's idle check skips keep-alive servers (`lifecycle.ts:146`). D-PG9-15 lets a user `idleTimeout` on the entry replace the default.
 - **D-PG9-03:** Precedence and recompute follow D-PG1-11 and D-PG1-13. A
   `lifecycle` the user wrote on the entry is a carried field (it is already
   in `CARRIED_FIELDS`) and wins. The plugin cannot set `lifecycle` (no Claude
@@ -78,6 +76,15 @@ drafted request to pi-mcp-adapter, not a patch.
   `defaultFields` widens from numbers to JSON scalars (number, string,
   boolean); a marker an earlier release wrote, which holds only numbers, still
   reads.
+  A marker member of another shape than this extension writes
+  (`pluginSetFields`, `defaultFields`, or `keptOverride`) on an entry of the
+  plugin makes a stage or unstage refuse the scope's `mcp-adapter.json` with
+  `McpConfigFileError` (`marker-not-valid`), which names the entry's key and the
+  first malformed member. The file keeps its bytes, and a stage with no servers
+  reports it left unchanged (AFILE-02). An update's failed row reads
+  `{unreadable}` for this and every other MCP config refusal. The marker is this
+  extension's own record, so only a hand edit or corruption leaves such a
+  member, and the project refuses corrupt data rather than read past it.
 - **D-PG9-04 (existing installs):** An installed plugin's entry gets the new
   defaults at its next restage: `update`, `reinstall`, a disable then enable,
   and an `apply` move, the same path that gave entries the default timeout
@@ -86,21 +93,83 @@ drafted request to pi-mcp-adapter, not a patch.
   defaults. The research must confirm which restage paths exist when the
   version does not change (D-PG1-12 measured `reinstall`), and the plan must
   prove the earlier-release case with a reinstall scenario.
+- **D-PG9-15 (proposed during the code-review fix, pending maintainer review;
+  amends D-PG9-01 and D-PG9-03):** A carried user `idleTimeout` other than
+  `null` counts as the user's `lifecycle`. No `lifecycle` default is written
+  beside it, and a recorded one goes at the next restage, so the entry stays
+  `lazy` and the adapter uses the user's value in place of the global idle
+  time: it stops the server after that many idle minutes, a numeric string
+  included, and never stops it for idle time at `0` or less. A `null` value
+  falls back to the global idle time in the adapter, so the default stays.
+  Premise: pi-mcp-adapter 7.0.1 never stops a started `lazy-keep-alive` server
+  for idle time (`lifecycle.ts:146`, `docs/configuration.md:135`). It
+  registers `definition.idleTimeout ?? (keep-alive ? 0 : undefined)` with no
+  type check (`init.ts:351`, `index.ts:497`), and its idle check computes
+  `perServer * 60 * 1000` and stops a server only when that is above 0
+  (`lifecycle.ts:146-148`, `:412-415`); `init.ts:1031` serves only the startup
+  flag and a debug line. The iteration-2 premise ("reads a per-entry idle time
+  only when it is a number") is withdrawn.
+- **D-PG9-16 (proposed during the code-review fix, pending maintainer review;
+  records a divergence of D-PG9-01):** Under `lazy-keep-alive`, pi-mcp-adapter
+  7.0.1 health-checks a started stdio server every 30 seconds and starts it
+  again in the background after it exits, with a backoff of 30 s to 5 min
+  (`lifecycle.ts:19-20`, `:165-211`). Claude Code 2.1.323 marks a closed stdio
+  server failed until `/mcp` reconnects it; only a remote transport reconnects
+  by itself (binary: `if(Nr!=="stdio"&&Nr!=="sdk"){…automatic
+  reconnection…}else …type:"failed"`; U25). No adapter mode keeps a server
+  without restarting it, and every mode restarts a stopped server at its next
+  tool call (`lazyConnect`, `init.ts:978`). Licensed by a project decision
+  (D-PG9-01) plus a pi-mcp-adapter capability gap. Alternatives for the
+  maintainer: keep it; `eager`, which starts at Pi start as Claude Code does
+  and has no background restart but still restarts on use; or file an upstream
+  request for a no-restart keep-alive mode.
 
 ### Fields the user wrote (PG-MCP-09)
 
 - **D-PG9-05:** Add `protocolVersion`, `tasks`, `exposeResources`, and
   `caFile` to `CARRIED_FIELDS` (`bridges/mcp/adapter-entry.ts`). None has a
   Claude field, so the closed table never writes one, and each is the user's.
-  None carries a credential: `caFile` is a path to a PEM bundle that replaces
+  None carries a credential (withdrawn by D-PG9-14): `caFile` is a path to a PEM bundle that replaces
   the default roots for that entry (`types.ts:451-452`). A user's `caFile`
   survives a change of the plugin's `url`; with the new origin it can only
-  narrow trust, so a mismatch fails closed (the connection is refused), never
+  narrow trust (withdrawn by D-PG9-14), so a mismatch fails closed (the connection is refused), never
   open. The uninstall restore (`restoredOverride`) and the kept-override path
   follow from the carried set with no other change.
 - **D-PG9-06:** Do not write a `protocolVersion` default. Writing `"auto"` is
   an option the report raised (MCP-09 "Optionally"); for stdio each fresh
   `auto` connection adds one process spawn. Deferred (see Deferred Ideas).
+- **D-PG9-14 (proposed during the code-review fix, pending maintainer review;
+  amends D-PG9-05 and D-08-02):** A carried `caFile` is written only while the
+  new entry is an https server and, when the entry it replaces defines a
+  server, at that entry's origin. An https server has no `command` or
+  `socket`, and has a string url whose scheme is `https:`: the scheme of the
+  url read as below, or, when it cannot be read, the scheme written before the
+  url's first variable reference. The origin is the `URL.origin` of each url
+  read as pi-mcp-adapter's `resolveServerUrl` reads it, with the command's
+  environment: references without a default must name set variables, and three
+  interpolation passes follow (`utils.ts:146-165`, `:280-298`). When either
+  url names an unset variable or does not parse, the `caFile` stays only while
+  the url text is unchanged. An override stub defines no server, so only the
+  transport and the literal scheme decide for it. Otherwise the stage leaves
+  `caFile` out and emits the `ca-file-removed` MCP config notice with a closed
+  `reason`: `not-https`, `origin-changed` (another https origin, or a previous
+  entry with no url and a new url that reads as https), or `url-unresolved`
+  (the url changed and one of them cannot be read, or a previous entry with no
+  url and a new url that cannot be read). The D-08-02 choice store keeps no
+  `caFile`, because it records no url. So a disable, an uninstall, a
+  marketplace remove, or a stage that drops the server removes the entry's
+  user `caFile`, and the command emits `ca-file-removed` with reason
+  `entry-removed` for each such entry, unless the override that the entry
+  writes back holds the `caFile`. A kept override's `caFile` follows the live
+  entry on write-back like every other carried field. Premise: pi-mcp-adapter
+  7.0.1 refuses a `caFile` beside `command` or `socket` or a url that is not
+  https after interpolation (`validateCaFile`, `http-ca.ts:9-18`), scopes the
+  bundle to the url's `URL.origin` (`http-ca.ts:24`, `:42`), and treats
+  `caFile` as url-bound (`URL_BOUND_AUTH_FIELDS`, `config.ts:1070-1081`).
+  D-PG9-05's "None carries a credential" and "can only narrow trust" are
+  withdrawn: at its origin, the entry trusts exactly the bundle. Residual: a
+  stub that held only `{caFile}` is not written back once a restage removed
+  its `caFile`.
 
 ### Powers the adapter gives a plugin server (PG-SEC-03, decision 20)
 
@@ -203,6 +272,16 @@ restage drop a default it wrote.
   `settings.sampling` write.
 - D-PG9-04: existing installs get the defaults only at the next restage; no
   load-time rewrite.
+- D-PG9-14 (caFile kept only at the same `URL.origin` after the adapter's
+  variable reading, with a literal `http:` scheme deciding for an unread url;
+  a notice with its reason, `entry-removed` included for a removal; no caFile
+  in the choice store; the stub write-back residual).
+- D-PG9-15 (any user `idleTimeout` but `null` replaces the lifecycle default).
+- D-PG9-16 (the background restart of a crashed stdio server, recorded as a
+  divergence).
+- D-PG9-03 addition: a malformed marker member of the plugin's entry refuses
+  the file (fail closed), naming the entry and member, and an update reports
+  it as `{unreadable}`.
 
 ### the agent's Discretion
 
