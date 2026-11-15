@@ -120,9 +120,11 @@ function mcpCaFileRemovedLine(notice: McpCaFileRemovedNotice): string {
   return `Server "${printable(notice.server)}" from ${printable(notice.plugin)} in the ${notice.scope}-scope ${notice.file} ${CA_FILE_REMOVED_CAUSES[notice.reason]}`;
 }
 
-// D-PG10-21: why the line says the server was left out, for each reason.
+// D-PG10-21 / D-PG10-11: why the line says the server was left out, for each
+// reason.
 const OPTION_BLOCKED_CAUSES = {
   unset: "it names plugin options that have no value",
+  "home-path": "plugin options at the start of its command or arguments hold a home path",
 } as const satisfies Record<McpOptionBlockedNotice["reason"], string>;
 
 function mcpOptionBlockedLine(notice: McpOptionBlockedNotice): string {

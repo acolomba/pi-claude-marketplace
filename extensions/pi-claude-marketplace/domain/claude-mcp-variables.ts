@@ -27,6 +27,8 @@
 // `env`) writes `""` for a plain name that is set; when it is unset, the field
 // gets the `:-` default, or the literal `${NAME}` text and a missing report.
 
+import path from "node:path";
+
 import {
   CREDENTIAL_BASE_URL_NAMES,
   matchesPlainNamePattern,
@@ -259,10 +261,14 @@ export interface ServerVariableScan {
   readonly withheld: readonly string[];
 }
 
-/** The string values of one server's expanded fields and their deny-list. */
+/**
+ * The string values of one server's expanded fields and their deny-list, and
+ * the values pi-mcp-adapter expands a leading `~` in.
+ */
 interface ScannedFields {
   readonly fieldClass: FieldClass;
   readonly values: readonly string[];
+  readonly homeExpanded: readonly string[];
 }
 
 // A builtin never names a variable, so the scan gives each one the path `/`,
@@ -310,14 +316,12 @@ function scannedFields(server: unknown): ScannedFields | undefined {
 
   const { type } = server;
   if (type === undefined || type === "stdio") {
+    const command = stringsOf([server.command]);
     const args = Array.isArray(server.args) ? stringsOf(server.args) : [];
     return {
       fieldClass: "plain",
-      values: [
-        ...stringsOf([server.command]),
-        ...args,
-        ...recordStrings(server.env, LITERAL_ENV_KEYS),
-      ],
+      values: [...command, ...args, ...recordStrings(server.env, LITERAL_ENV_KEYS)],
+      homeExpanded: command,
     };
   }
 
@@ -325,6 +329,7 @@ function scannedFields(server: unknown): ScannedFields | undefined {
     return {
       fieldClass: "remote",
       values: [...stringsOf([server.url]), ...recordStrings(server.headers, NO_KEYS)],
+      homeExpanded: [],
     };
   }
 
@@ -361,9 +366,11 @@ export function scanClaudeServerVariables(server: unknown, env: ClaudeEnv): Serv
 
 /**
  * D-PG10-21: why a plugin MCP server is left out. `unset`: a field names an
- * option that has no value.
+ * option that has no value. `home-path` (D-PG10-11): `command` or an `args`
+ * element starts with an option whose value pi-mcp-adapter expands to a path
+ * under the user's home.
  */
-export type McpOptionBlockReason = "unset";
+export type McpOptionBlockReason = "unset" | "home-path";
 
 /** D-PG10-21: why a server is left out, and the option keys that cause it. */
 export interface McpOptionBlock {
@@ -391,10 +398,23 @@ export function mcpOptionBlock(
     return undefined;
   }
 
+  const unset = unsetOptionKeys(fields.values, options.mcpValues);
+  if (unset.length > 0) {
+    return { reason: "unset", keys: unset };
+  }
+
+  const home = homePathOptionKeys(fields.homeExpanded, options.mcpValues);
+  return home.length === 0 ? undefined : { reason: "home-path", keys: home };
+}
+
+function unsetOptionKeys(
+  values: readonly string[],
+  mcpValues: ReadonlyMap<string, string>,
+): string[] {
   const unset = new Set<string>();
-  for (const raw of fields.values) {
+  for (const raw of values) {
     replaceUserConfigReferences(raw, (key, matched) => {
-      if (!options.mcpValues.has(key)) {
+      if (!mcpValues.has(key)) {
         unset.add(key);
       }
 
@@ -402,5 +422,36 @@ export function mcpOptionBlock(
     });
   }
 
-  return unset.size === 0 ? undefined : { reason: "unset", keys: [...unset] };
+  return [...unset];
+}
+
+const LEADING_OPTION_REFERENCE = /^\$\{user_config\.([^}]+)\}/;
+
+// D-PG10-11: pi-mcp-adapter 7.0.1 fills variables in `command` and in each
+// `args` element and then expands a leading `~` (`resolveConfigPath`,
+// `expandHomePath` in its `utils.ts`). Claude Code 2.1.323 passes an option's
+// value as written, so an option at the start of such a field whose value the
+// adapter would expand would run a program under the user's home that the
+// plugin does not name. The value alone is read, so `~` followed by any text
+// counts.
+function adapterExpandsHome(value: string): boolean {
+  return value === "~" || value.startsWith("~/") || value.startsWith(`~${path.sep}`);
+}
+
+function homePathOptionKeys(
+  values: readonly string[],
+  mcpValues: ReadonlyMap<string, string>,
+): string[] {
+  const homeKeys = new Set(
+    [...mcpValues].filter(([, value]) => adapterExpandsHome(value)).map(([key]) => key),
+  );
+  const keys = new Set<string>();
+  for (const raw of values) {
+    const key = LEADING_OPTION_REFERENCE.exec(raw)?.[1];
+    if (key !== undefined && homeKeys.has(key)) {
+      keys.add(key);
+    }
+  }
+
+  return [...keys];
 }

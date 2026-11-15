@@ -1431,9 +1431,11 @@ export interface McpCaFileRemovedNotice {
 
 /**
  * D-PG10-21: why a stage left a plugin server out of `mcp-adapter.json`.
- * `unset`: a field names a plugin option that has no value.
+ * `unset`: a field names a plugin option that has no value. `home-path`
+ * (D-PG10-11): `command` or an `args` element starts with a plugin option
+ * whose value would be expanded to a path under the user's home.
  */
-export type McpOptionBlockedReason = "unset";
+export type McpOptionBlockedReason = "unset" | "home-path";
 
 /**
  * D-PG10-08 / D-PG10-21: a stage left a plugin server out of the file, because

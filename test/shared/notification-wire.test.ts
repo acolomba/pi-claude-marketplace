@@ -518,6 +518,21 @@ for (const { title, notices, expectedValid } of [
     expectedValid: true,
   },
   {
+    title: "accepts an option-blocked notice with the home-path reason (D-PG10-11)",
+    notices: [
+      {
+        kind: "option-blocked",
+        scope: "user",
+        file: "mcp-adapter.json",
+        plugin: "p",
+        server: "s",
+        names: ["tool"],
+        reason: "home-path",
+      },
+    ],
+    expectedValid: true,
+  },
+  {
     title: "rejects an option-blocked notice with a reason outside its closed set (D-PG10-21)",
     notices: [
       {

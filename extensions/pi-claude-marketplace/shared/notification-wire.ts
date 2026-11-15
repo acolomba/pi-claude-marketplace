@@ -784,7 +784,7 @@ const MCP_CONFIG_NOTICE = Type.Union([
       kind: Type.Literal("option-blocked"),
       ...MCP_NOTICE_SUBJECT_FIELDS,
       names: STRINGS,
-      reason: Type.Literal("unset"),
+      reason: Type.Union([Type.Literal("unset"), Type.Literal("home-path")]),
     },
     { additionalProperties: false },
   ),

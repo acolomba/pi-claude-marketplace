@@ -744,11 +744,16 @@ interface OptionBlockRow {
 
 // D-PG10-20: the full option shape. `token` is required with no default,
 // `mode` has a default, and `note` is neither required nor given a default.
+// `tool` and `home` hold defaults pi-mcp-adapter would expand to a home path,
+// and `named` one it would not (D-PG10-11).
 const OPTIONS = resolveOptions({
   token: { type: "string", title: "Token", description: "The token.", required: true },
   region: { type: "string", title: "Region", description: "The region.", required: true },
   mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
   note: { type: "string", title: "Note", description: "The note." },
+  tool: { type: "string", title: "Tool", description: "The tool.", default: "~/bin/tool" },
+  home: { type: "string", title: "Home", description: "The home.", default: "~" },
+  named: { type: "string", title: "Named", description: "The named.", default: "~user/bin" },
 });
 
 const UNSET_TOKEN: McpOptionBlock = { reason: "unset", keys: ["token"] };
@@ -839,6 +844,46 @@ const OPTION_BLOCK_ROWS: readonly OptionBlockRow[] = [
     server: { command: "${user_config.token}" },
     options: undefined,
     block: undefined,
+  },
+  {
+    title:
+      "D-PG10-11: a command that starts with an option holding a path under home blocks the server",
+    server: { command: "${user_config.tool}" },
+    options: OPTIONS,
+    block: { reason: "home-path", keys: ["tool"] },
+  },
+  {
+    title:
+      "D-PG10-11: a command that starts with an option holding the home marker alone blocks the server",
+    server: { command: "${user_config.home}/bin/tool" },
+    options: OPTIONS,
+    block: { reason: "home-path", keys: ["home"] },
+  },
+  {
+    title: "D-PG10-11: a command that names a home-path option after other text blocks nothing",
+    server: { command: "/opt${user_config.tool}" },
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title:
+      "D-PG10-11: a command that starts with an option the adapter would not expand blocks nothing",
+    server: { command: "${user_config.named}" },
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title:
+      "D-PG10-11: a home-path option in command blocks nothing for a plugin with no userConfig",
+    server: { command: "${user_config.tool}" },
+    options: undefined,
+    block: undefined,
+  },
+  {
+    title: "D-PG10-11: a server that also names an option with no value is reported as unset",
+    server: { command: "${user_config.tool}", env: { TOKEN: "${user_config.token}" } },
+    options: OPTIONS,
+    block: UNSET_TOKEN,
   },
 ];
 

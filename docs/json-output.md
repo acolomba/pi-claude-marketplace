@@ -959,7 +959,7 @@ The `McpServerStatus` tokens depend on the MCP implementation that Pi runs. pi-m
 
 `McpCaFileRemovedReason`: `not-https`, `origin-changed`, `url-unresolved`, `entry-removed`.
 
-`McpOptionBlockedReason`: `unset`.
+`McpOptionBlockedReason`: `unset`, `home-path`.
 
 `McpMigrationRowKind`: `moved`, `removed`, `stopped`, `unowned`, `not-listed`, `source-unreadable`, `source-outdated`, `marketplace-unreadable`, `collision`, `file-unreadable`, `unfinished`.
 

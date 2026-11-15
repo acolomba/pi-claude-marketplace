@@ -2509,7 +2509,12 @@
                   "plugin": { "type": "string" },
                   "server": { "type": "string" },
                   "names": { "type": "array", "items": { "type": "string" } },
-                  "reason": { "type": "string", "const": "unset" }
+                  "reason": {
+                    "anyOf": [
+                      { "type": "string", "const": "unset" },
+                      { "type": "string", "const": "home-path" }
+                    ]
+                  }
                 },
                 "additionalProperties": false
               }
@@ -2767,7 +2772,12 @@
                   "plugin": { "type": "string" },
                   "server": { "type": "string" },
                   "names": { "type": "array", "items": { "type": "string" } },
-                  "reason": { "type": "string", "const": "unset" }
+                  "reason": {
+                    "anyOf": [
+                      { "type": "string", "const": "unset" },
+                      { "type": "string", "const": "home-path" }
+                    ]
+                  }
                 },
                 "additionalProperties": false
               }

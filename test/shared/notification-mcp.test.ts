@@ -255,6 +255,27 @@ describe("composeMcpConfigNoticesText", () => {
     );
   });
 
+  test("D-PG10-11: a home-path option-blocked line names the server, its plugin, the file, and each key, with control characters escaped", () => {
+    // act
+    const text = composeMcpConfigNoticesText("option-blocked", [
+      {
+        kind: "option-blocked",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "he\u202ello",
+        server: "s\u001br",
+        names: ["tool", "a\u2028b"],
+        reason: "home-path",
+      },
+    ]);
+
+    // assert
+    assert.strictEqual(
+      text,
+      'MCP server left out.\n\nServer "s\\u001br" from he\\u202ello was left out of the project-scope mcp-adapter.json, because plugin options at the start of its command or arguments hold a home path: tool, a\\u2028b.',
+    );
+  });
+
   test("AMIG-01: control characters in a leftover's old name render as \\u escapes", () => {
     // act
     const text = composeMcpConfigNoticesText("leftover-removed", [
