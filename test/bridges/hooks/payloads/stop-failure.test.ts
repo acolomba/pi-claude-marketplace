@@ -594,3 +594,49 @@ test("does not match recognized statuses at the start of longer numbers", () => 
   assert.strictEqual(stopFailureError, expectedError);
   assert.strictEqual(CLOSED_VOCAB.has(stopFailureError), true);
 });
+
+test("D-PG6-10: sends the context's effort after the optional members", () => {
+  // arrange
+  const event = {
+    error: "rate_limit",
+    error_details: "429 from provider",
+    last_assistant_message: "Request failed",
+  } satisfies StopFailureEvent;
+  const context = {
+    sessionId: "session-effort",
+    transcriptPath: "/sessions/session-effort.jsonl",
+    cwd: "/workspace/effort",
+    effort: { level: "max" },
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translateStopFailure(event, context);
+
+  // assert
+  assert.deepStrictEqual(Object.entries(payload), [
+    ["session_id", "session-effort"],
+    ["transcript_path", "/sessions/session-effort.jsonl"],
+    ["cwd", "/workspace/effort"],
+    ["hook_event_name", "StopFailure"],
+    ["error", "rate_limit"],
+    ["error_details", "429 from provider"],
+    ["last_assistant_message", "Request failed"],
+    ["effort", { level: "max" }],
+  ]);
+});
+
+test("D-PG6-10: leaves out effort for a StopFailure context with none", () => {
+  // arrange
+  const event = { error: "unknown" } satisfies StopFailureEvent;
+  const context = {
+    sessionId: "session-effort",
+    transcriptPath: "/sessions/session-effort.jsonl",
+    cwd: "/workspace/effort",
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translateStopFailure(event, context);
+
+  // assert
+  assert.strictEqual(Object.hasOwn(payload, "effort"), false);
+});

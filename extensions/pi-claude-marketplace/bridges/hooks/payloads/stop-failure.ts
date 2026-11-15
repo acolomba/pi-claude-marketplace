@@ -9,6 +9,7 @@
 // as the in-vocabulary fallback and a deterministic `length ->
 // max_output_tokens` map.
 
+import type { ClaudeEffort } from "../../../domain/argument-substitution.ts";
 import type { StopFailureErrorType } from "../../../domain/components/hook-events.ts";
 import type { StopReason } from "../../../platform/pi-api.ts";
 import type { TranslationContext } from "../translation-context.ts";
@@ -21,6 +22,7 @@ export interface StopFailureStdin {
   readonly error: StopFailureErrorType;
   readonly error_details?: string;
   readonly last_assistant_message?: string;
+  readonly effort?: { readonly level: ClaudeEffort };
 }
 
 /**
@@ -50,6 +52,7 @@ export function translateStopFailure(
     ...(event.last_assistant_message !== undefined
       ? { last_assistant_message: event.last_assistant_message }
       : {}),
+    ...(ctx.effort === undefined ? {} : { effort: ctx.effort }),
   };
 }
 

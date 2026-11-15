@@ -135,3 +135,50 @@ test("preserves accepted empty Stop text and transcript path", () => {
   assert.deepStrictEqual(event, expectedEvent);
   assert.deepStrictEqual(context, expectedContext);
 });
+
+test("D-PG6-10: sends the context's effort as the last member", () => {
+  // arrange
+  const event = {
+    last_assistant_message: "Done.",
+    stop_hook_active: false,
+  } satisfies StopEvent;
+  const context = {
+    sessionId: "session-effort",
+    transcriptPath: "/sessions/session-effort.jsonl",
+    cwd: "/workspace/effort",
+    effort: { level: "max" },
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translateStop(event, context);
+
+  // assert
+  assert.deepStrictEqual(Object.entries(payload), [
+    ["session_id", "session-effort"],
+    ["transcript_path", "/sessions/session-effort.jsonl"],
+    ["cwd", "/workspace/effort"],
+    ["hook_event_name", "Stop"],
+    ["last_assistant_message", "Done."],
+    ["stop_hook_active", false],
+    ["effort", { level: "max" }],
+  ]);
+});
+
+test("D-PG6-10: leaves out effort for a context with none", () => {
+  // arrange
+  const event = {
+    last_assistant_message: "Done.",
+    stop_hook_active: false,
+  } satisfies StopEvent;
+  const context = {
+    sessionId: "session-effort",
+    transcriptPath: "/sessions/session-effort.jsonl",
+    cwd: "/workspace/effort",
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translateStop(event, context);
+
+  // assert
+  assert.strictEqual(Object.hasOwn(payload, "effort"), false);
+});

@@ -9,6 +9,7 @@
 // and emits the Claude `Stop` stdin envelope. `background_tasks` / `session_crons` are omitted --
 // Pi has no task registry, and the upstream contract admits their absence.
 
+import type { ClaudeEffort } from "../../../domain/argument-substitution.ts";
 import type { TranslationContext } from "../translation-context.ts";
 
 export interface StopStdin {
@@ -18,6 +19,7 @@ export interface StopStdin {
   readonly hook_event_name: "Stop";
   readonly last_assistant_message: string;
   readonly stop_hook_active: boolean;
+  readonly effort?: { readonly level: ClaudeEffort };
 }
 
 /**
@@ -38,5 +40,6 @@ export function translateStop(event: StopEvent, ctx: TranslationContext): StopSt
     hook_event_name: "Stop",
     last_assistant_message: event.last_assistant_message,
     stop_hook_active: event.stop_hook_active,
+    ...(ctx.effort === undefined ? {} : { effort: ctx.effort }),
   };
 }

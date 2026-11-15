@@ -248,3 +248,24 @@ Feature: Hook prompt and stop
       | after  | After 7  | true             |
       | after  | After 8  | true             |
       | after  | After 9  | true             |
+
+  Scenario: A Stop hook receives the effort level of the session
+    Given pi runs with a scripted model that reasons
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name | event | matcher |
+      | stop | Stop  |         |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the user has set the thinking level "high"
+    Given the scripted model plays these steps:
+      | reply |
+      | Done. |
+    When the user prompts "finish up"
+    Then the hooks record these runs:
+      | event | session | last assistant message | stop hook active | cwd           | transcript path | effort           | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | Stop  | first   | Done.                  | false            | {project dir} |                 | {"level":"high"} | stop      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |

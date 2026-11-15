@@ -202,3 +202,19 @@ test("sends null instructions for a manual compaction with empty instructions (D
   // assert
   assert.deepStrictEqual(payload, expectedPayload);
 });
+
+test("D-PG6-10: sends no effort from a context that holds one, as PreCompact carries none upstream", () => {
+  // arrange
+  const context = {
+    sessionId: "session-effort",
+    transcriptPath: "/sessions/session-effort.jsonl",
+    cwd: "/workspace/effort",
+    effort: { level: "max" },
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translatePreCompact(preCompactEvent("manual"), context);
+
+  // assert
+  assert.strictEqual(Object.hasOwn(payload, "effort"), false);
+});

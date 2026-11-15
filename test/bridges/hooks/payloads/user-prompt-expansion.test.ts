@@ -135,3 +135,19 @@ test("D-PG6-19: sends no session title, model, or permission mode from a full co
     prompt: "/demo:deploy staging",
   } satisfies UserPromptExpansionStdin);
 });
+
+test("D-PG6-10: sends no effort from a context that holds one, as UserPromptExpansion carries none upstream", () => {
+  // arrange
+  const context = {
+    sessionId: "session-effort",
+    transcriptPath: "/sessions/session-effort.jsonl",
+    cwd: "/workspace/effort",
+    effort: { level: "max" },
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translateUserPromptExpansion(expansionEvent("staging", "plugin"), context);
+
+  // assert
+  assert.strictEqual(Object.hasOwn(payload, "effort"), false);
+});

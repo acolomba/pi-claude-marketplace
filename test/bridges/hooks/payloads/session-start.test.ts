@@ -199,3 +199,19 @@ describe("translateSessionStart", () => {
     });
   });
 });
+
+test("D-PG6-10: sends no effort from a context that holds one, as SessionStart carries none upstream", () => {
+  // arrange
+  const context = {
+    sessionId: "session-effort",
+    transcriptPath: "/sessions/session-effort.jsonl",
+    cwd: "/workspace/effort",
+    effort: { level: "max" },
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translateSessionStart({ source: "startup" }, context);
+
+  // assert
+  assert.strictEqual(Object.hasOwn(payload, "effort"), false);
+});
