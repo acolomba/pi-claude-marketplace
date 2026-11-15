@@ -111,7 +111,7 @@ Commands use a colon (`:`) on POSIX and a dot (`.`) on Windows:
 | `foo`       | `foo-bar`    | `/foo:bar`      | `/foo.bar`        |
 | `foo`       | `foo`        | `/foo:foo`      | `/foo.foo`        |
 
-A command also has aliases in interactive sessions and over RPC. If the command's frontmatter sets `name`, the command also answers to `/<plugin>:<name>`, and to `/<name>` when the name has no colon. For example, `bar` with frontmatter `name: baz` in plugin `foo` also answers to `/foo:baz` and `/baz`. If two commands set the same `name`, the first command gets the alias. A skill keeps an alias that it already has. Command aliases use a colon on every platform.
+A command also has aliases in interactive sessions and over RPC. Claude Code names a command with the plugin name, a colon, and the path of the command file in `commands/` without `.md`, with each `/` changed to a colon. When that name is different from the Pi name, the command also answers to it. For example, `foo-bar` in plugin `foo` is listed as `/foo:bar` and also answers to `/foo:foo-bar`. If the command's frontmatter sets `name`, the command also answers to `/<plugin>:<name>`, and to `/<name>` when the name has no colon. For example, `bar` with frontmatter `name: baz` in plugin `foo` also answers to `/foo:baz` and `/baz`. If two commands set the same `name`, the first command gets the alias. An alias that is the Pi name of another command is not added. A skill keeps an alias that it already has. Command aliases use a colon on every platform.
 
 Skills use Pi's `/skill:` form and also have aliases in interactive sessions and over RPC:
 
