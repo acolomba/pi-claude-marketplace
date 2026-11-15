@@ -10,7 +10,9 @@
 // no shell command, so Pi reads no environment and runs nothing (PI-1, PI-2).
 // Pi's own `validateMcpServerConfig` accepts each config the table builds and
 // returns it with the same JSON, so a re-registration does not reconnect
-// (P2-DC-08).
+// (P2-DC-08). D-PG10-12: each option row runs through `builtinServerConfig`
+// with the option's default filled in, and comes out of Pi as Claude Code's
+// value, with no command run and no variable of Pi's environment read.
 //
 // Pi publishes neither module in its `exports` map, so the test imports both
 // by absolute file URL from the repository's devDependency. It changes no
@@ -21,9 +23,11 @@ import { test } from "node:test";
 import { pathToFileURL } from "node:url";
 
 import { builtinServerConfig } from "../../extensions/pi-claude-marketplace/bridges/mcp/builtin-entry.ts";
+import { resolveOptions } from "../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import {
   EXPANSION_BUILTINS,
   EXPANSION_CASES,
+  OPTION_FIELD_CASES,
   type ExpansionField,
 } from "../bridges/mcp/expansion-cases.ts";
 
@@ -291,3 +295,52 @@ test("BLT-02, P2-DC-08: Pi's validator refuses a url that keeps an unset ${NAME}
     ],
   );
 });
+
+// D-PG10-12: the option `opt` of one plugin, whose default is `value`.
+function optionContext(value: string): McpSubstitutionContext {
+  const options = resolveOptions({
+    opt: { type: "string", title: "Option", description: "The option.", default: value },
+  });
+  return { ...EXPANSION_BUILTINS, env: {}, options };
+}
+
+function optionWritten(row: (typeof OPTION_FIELD_CASES)[number]): unknown {
+  const shape = FIELD_SHAPES[row.field];
+  const config = builtinServerConfig(shape.server(row.raw), optionContext(row.value), undefined);
+  assert.ok(config !== undefined, `no config for ${row.raw}`);
+  return shape.written({ ...config });
+}
+
+for (const row of OPTION_FIELD_CASES.filter((candidate) => !FIELD_SHAPES[candidate.field].secret)) {
+  test(`D-PG10-12: ${row.title} is written as Claude Code's value`, () => {
+    // arrange
+    const expectedWritten = row.claudeOutput;
+
+    // act
+    const written = optionWritten(row);
+
+    // assert
+    assert.strictEqual(written, expectedWritten);
+  });
+}
+
+for (const row of OPTION_FIELD_CASES.filter((candidate) => FIELD_SHAPES[candidate.field].secret)) {
+  test(`D-PG10-12: ${row.title} comes out of Pi's resolver as Claude Code's value`, () => {
+    // arrange
+    const environment = { HOME: "/leaked" };
+
+    // act
+    const written = optionWritten(row);
+
+    // assert
+    assert.ok(typeof written === "string", `no written ${row.field}`);
+    assert.deepStrictEqual(
+      [
+        piConfigValues.getConfigValueEnvVarNames(written),
+        piConfigValues.isCommandConfigValue(written),
+        piConfigValues.resolveConfigValueOrThrow(written, "conformance value", environment),
+      ],
+      [[], false, row.claudeOutput],
+    );
+  });
+}

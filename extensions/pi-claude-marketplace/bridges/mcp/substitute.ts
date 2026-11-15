@@ -32,13 +32,12 @@ import type {
 import type { ResolvedOptions } from "../../domain/user-config.ts";
 
 /**
- * D-PG10-11: how an encoding fills `${user_config.KEY}`. `none` runs no option
- * pass, so the reference stays as written. `reference` writes a reference to
- * the option's process variable, which `names` gives by key for one plugin, so
- * no option value is written. `text` writes the option's MCP value.
+ * D-PG10-11: how an encoding fills `${user_config.KEY}`. `reference` writes a
+ * reference to the option's process variable, which `names` gives by key for
+ * one plugin, so no option value is written. `text` writes the option's MCP
+ * value (D-PG10-12).
  */
 export type McpOptionForm =
-  | { readonly kind: "none" }
   | { readonly kind: "reference"; readonly names: ReadonlyMap<string, string> }
   | { readonly kind: "text" };
 
@@ -131,7 +130,7 @@ function optionPass(
   form: McpOptionForm,
   options: ResolvedOptions | undefined,
 ): McpOptionPass | undefined {
-  if (options === undefined || form.kind === "none") {
+  if (options === undefined) {
     return undefined;
   }
 

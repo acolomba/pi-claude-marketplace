@@ -184,6 +184,40 @@ function stubConfig(fixture: Session, scope: ScopeName, pluginRoot: string): Mcp
   };
 }
 
+// D-PG10-20: the full option shape; the server names `tool` in args and env.
+function optionRecord(fixture: Session, toolDefault: string): PluginInstallRecord {
+  return {
+    ...installRecord(fixture.pluginRoot, [
+      {
+        name: "keyed",
+        config: {
+          command: "node",
+          args: ["${user_config.tool}"],
+          env: { TOOL: "${user_config.tool}" },
+        },
+      },
+    ]),
+    userConfig: {
+      tool: { type: "string", title: "Tool", description: "The tool.", default: toolDefault },
+    },
+  };
+}
+
+/** The config the server of `optionRecord` registers with when `tool` is `value`. */
+function keyedConfig(fixture: Session, value: string): McpServerConfig {
+  return {
+    command: "node",
+    args: [value],
+    env: {
+      CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
+      CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
+      TOOL: value,
+    },
+    timeout: 1800,
+    exposure: "deferred",
+  };
+}
+
 function sessionContext(fixture: Session, trusted: boolean): ExtensionContext {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
   when(() => ctx.cwd).thenReturn(fixture.environment.cwd);
@@ -1039,6 +1073,48 @@ describe("builtinRegistrationStep", () => {
 
     // act & assert
     await assert.doesNotReject(builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") }));
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("D-PG10-12: a record's option default reaches its registered server in args and env", async (t) => {
+    // arrange
+    const fixture = await session(t);
+    await writeState(fixture, "user", {
+      demo: optionRecord(fixture, "reverse"),
+    });
+    const ctx = sessionContext(fixture, false);
+    const pi = emptyRegistry();
+    when(() => {
+      pi.registerMcpServer("plugin_demo_keyed", keyedConfig(fixture, "reverse"));
+    }).thenReturn(undefined);
+
+    // act & assert
+    await assert.doesNotReject(builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") }));
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("D-PG10-12: each session reads the record's options, so a changed default registers at the next session", async (t) => {
+    // arrange
+    const fixture = await session(t);
+    await writeState(fixture, "user", { demo: optionRecord(fixture, "reverse") });
+    const firstCtx = sessionContext(fixture, false);
+    const firstPi = emptyRegistry();
+    when(() => {
+      firstPi.registerMcpServer("plugin_demo_keyed", keyedConfig(fixture, "reverse"));
+    }).thenReturn(undefined);
+    await builtinRegistrationStep({ pi: firstPi, ctx: firstCtx, snapshot: runOf("builtin") });
+    await writeState(fixture, "user", { demo: optionRecord(fixture, "upper") });
+    const ctx = sessionContext(fixture, false);
+    const pi = emptyRegistry();
+    when(() => {
+      pi.registerMcpServer("plugin_demo_keyed", keyedConfig(fixture, "upper"));
+    }).thenReturn(undefined);
+
+    // act & assert
+    await assert.doesNotReject(builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") }));
+    verify(firstPi);
     verify(pi);
     verify(ctx);
   });

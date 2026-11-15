@@ -1,26 +1,6 @@
 {
-  "entry": [
-    "extensions/pi-claude-marketplace/index.ts",
-    "extensions/pi-claude-marketplace/domain/user-config.ts"
-  ],
+  "entry": ["extensions/pi-claude-marketplace/index.ts"],
   "rulePacks": ["rule-packs/architecture.json"],
-  "ignoreExports": [
-    {
-      "file": "extensions/pi-claude-marketplace/domain/user-config.ts",
-      "exports": [
-        "UserConfigOption",
-        "UserConfigSchema",
-        "UserConfigParse",
-        "ResolvedOptions",
-        "OwnedOptionAddress",
-        "parseUserConfig",
-        "resolveOptions",
-        "replaceUserConfigReferences",
-        "hookOptionVariableName",
-        "ownedOptionVariableName"
-      ]
-    }
-  ],
   "ignorePatterns": [".pi/**", ".planning/**"],
   "production": {
     "deadCode": true,

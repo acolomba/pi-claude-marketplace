@@ -548,7 +548,7 @@ test("BLT-02: passes each field to the encoder with its secret flag and writes l
     expanded: (segments, secret, env) =>
       `expanded ${JSON.stringify(segments)} secret=${String(secret)} env=${String(env.PI_CM_MARK)}`,
     literal: (text, secret) => `literal ${text} secret=${String(secret)}`,
-    optionForm: { kind: "none" },
+    optionForm: { kind: "text" },
   };
   const context: McpSubstitutionContext = { ...PROJECT_CONTEXT, env: { PI_CM_MARK: "m" } };
   const stdio = { command: "c", args: ["a"], env: { K: "e" } };
@@ -648,19 +648,5 @@ test("D-PG10-11: a text-form encoder gets each option's MCP value as a text segm
   assert.deepStrictEqual(substituted.entry.args, [
     JSON.stringify([{ kind: "text", text: "abc" }]),
     JSON.stringify([{ kind: "text", text: "" }]),
-  ]);
-});
-
-test("D-PG10-11: an encoder whose form is none runs no option pass", () => {
-  // arrange
-  const context: McpSubstitutionContext = { ...PROJECT_CONTEXT, options: TOKEN_OPTIONS };
-  const server = { command: "node", args: ["${user_config.token}"] };
-
-  // act
-  const substituted = substituteAndInject(server, context, segmentsEncoder({ kind: "none" }));
-
-  // assert
-  assert.deepStrictEqual(substituted.entry.args, [
-    JSON.stringify([{ kind: "text", text: "${user_config.token}" }]),
   ]);
 });

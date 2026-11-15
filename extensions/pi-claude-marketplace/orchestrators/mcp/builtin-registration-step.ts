@@ -254,6 +254,8 @@ async function recordRegistrations(
       pin: source.record.resolvedSha,
     }),
   ]);
+  // D-PG10-12: the record's options are read at every session, and their
+  // values go into the config Pi holds in memory; nothing is written to a file.
   const ctx: McpSubstitutionContext = {
     pluginRoot: source.record.resolvedSource,
     pluginData,

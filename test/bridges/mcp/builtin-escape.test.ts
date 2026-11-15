@@ -144,9 +144,9 @@ describe("BUILTIN_FIELD_ENCODER.literal", () => {
 });
 
 describe("BUILTIN_FIELD_ENCODER.optionForm", () => {
-  test("D-PG10-11: the built-in encoder runs no option pass", () => {
+  test("D-PG10-12: the built-in encoder takes each option's value as text", () => {
     // arrange
-    const expectedForm = { kind: "none" };
+    const expectedForm = { kind: "text" };
 
     // act
     const { optionForm } = BUILTIN_FIELD_ENCODER;
