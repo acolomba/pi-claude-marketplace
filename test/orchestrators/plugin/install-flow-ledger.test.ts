@@ -30,6 +30,7 @@ import {
   pluginMirrorKey,
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { WORKFLOW_SCRIPT_MAX_BYTES } from "../../../extensions/pi-claude-marketplace/domain/workflow-script.ts";
 import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
@@ -202,10 +203,11 @@ for (const orchestrated of [false, true]) {
                 CLAUDE_PLUGIN_ROOT: path.join(marketplaceRoot, "plugins", "zzz"),
               },
               requestTimeoutMs: 1800000,
+              lifecycle: "lazy-keep-alive",
               _piClaudeMarketplace: {
                 marketplace: "mp",
                 plugin: "zzz",
-                defaultFields: { requestTimeoutMs: 1800000 },
+                defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
               },
             },
           },
@@ -3042,6 +3044,46 @@ test("T-102-01: the same hooks fixture installed ENABLED does get its routing en
   });
 });
 
+test("D-PG10-10 an install gives its plugin's routing entries the options of the resolution it installed", async () => {
+  await withHermeticHome(async ({ hooksRuntime, installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-hook-options-"));
+    hooksRuntime.recordProjectTrust(cwd, true);
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+      const { pluginRoot } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hooky",
+        hooksJson: {
+          PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hello" }] }],
+        },
+      });
+      const userConfig = {
+        mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+      } as const;
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "hooky", version: "0.0.1", userConfig }),
+      );
+      const { ctx, run } = makeCtx();
+
+      // act
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hooky" });
+
+      // assert
+      assert.deepStrictEqual(
+        hooksRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.options),
+        [resolveOptions(userConfig)],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ───────────────────────────────────────────────────────────────────────────
 // D-102-02 / NFR-3 -- the one failure window this composition creates: the
 // ledger succeeded, and the disable cascade then threw.
@@ -3393,11 +3435,13 @@ test("AFILE-01: install writes the plugin's marked entries into project mcp-adap
       "directTools": "search",
       "toolPrefix": "mcp",
       "requestTimeoutMs": 1800000,
+      "lifecycle": "lazy-keep-alive",
       "_piClaudeMarketplace": {
         "plugin": "hello",
         "marketplace": "mp",
         "defaultFields": {
-          "requestTimeoutMs": 1800000
+          "requestTimeoutMs": 1800000,
+          "lifecycle": "lazy-keep-alive"
         }
       }
     }
@@ -3466,11 +3510,13 @@ test("ANAME-01: install writes Claude Code server keys that the global toolPrefi
       "directTools": "search",
       "toolPrefix": "mcp",
       "requestTimeoutMs": 1800000,
+      "lifecycle": "lazy-keep-alive",
       "_piClaudeMarketplace": {
         "plugin": "my.plugin",
         "marketplace": "mp",
         "defaultFields": {
-          "requestTimeoutMs": 1800000
+          "requestTimeoutMs": 1800000,
+          "lifecycle": "lazy-keep-alive"
         }
       }
     },
@@ -3483,11 +3529,13 @@ test("ANAME-01: install writes Claude Code server keys that the global toolPrefi
       "directTools": true,
       "toolPrefix": "mcp",
       "requestTimeoutMs": 1800000,
+      "lifecycle": "lazy-keep-alive",
       "_piClaudeMarketplace": {
         "plugin": "my.plugin",
         "marketplace": "mp",
         "defaultFields": {
-          "requestTimeoutMs": 1800000
+          "requestTimeoutMs": 1800000,
+          "lifecycle": "lazy-keep-alive"
         }
       }
     }
@@ -3597,11 +3645,13 @@ test("ANAME-07 / D-08-04: install writes Claude servers through the closed adapt
       "directTools": "search",
       "toolPrefix": "mcp",
       "requestTimeoutMs": 1800000,
+      "lifecycle": "lazy-keep-alive",
       "_piClaudeMarketplace": {
         "plugin": "hello",
         "marketplace": "mp",
         "defaultFields": {
-          "requestTimeoutMs": 1800000
+          "requestTimeoutMs": 1800000,
+          "lifecycle": "lazy-keep-alive"
         }
       }
     }
@@ -3718,11 +3768,13 @@ test("ANAME-07: --partial installs every server except the blocked one", async (
       "directTools": "search",
       "toolPrefix": "mcp",
       "requestTimeoutMs": 1800000,
+      "lifecycle": "lazy-keep-alive",
       "_piClaudeMarketplace": {
         "plugin": "hello",
         "marketplace": "mp",
         "defaultFields": {
-          "requestTimeoutMs": 1800000
+          "requestTimeoutMs": 1800000,
+          "lifecycle": "lazy-keep-alive"
         }
       }
     }

@@ -130,7 +130,9 @@ type UnsupportedReason =
   | "unsupported component"
   | "no longer installable"
   // ANAME-07: a server needs a Claude Code MCP feature the adapter lacks.
-  | "unsupported mcp";
+  | "unsupported mcp"
+  // D-PG10-06: a required plugin option has no default.
+  | "options not set";
 
 /**
  * D-09: failure-class reasons -- an operation could not complete (permission /

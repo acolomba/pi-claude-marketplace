@@ -8,6 +8,8 @@ import {
   stampServers,
   userCarriedFields,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/adapter-entry.ts";
+import { adapterFieldEncoder } from "../../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 
 import type { McpSubstitutionContext } from "../../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
 
@@ -71,7 +73,7 @@ const OAUTH_CONFIG_KEYS = [
   "skipIssuerMetadataValidation",
 ] as const;
 
-// AFILE-06 / D-CF1-14: the user's fields a re-stage keeps, written
+// AFILE-06 / D-CF1-14 / D-PG9-05: the user's fields a re-stage keeps, written
 // independently of the production set.
 const CARRIED_KEYS: readonly string[] = [
   "disabled",
@@ -87,10 +89,23 @@ const CARRIED_KEYS: readonly string[] = [
   "trace",
   "appendStructuredContent",
   "roots",
+  "protocolVersion",
+  "tasks",
+  "exposeResources",
+  "caFile",
 ];
 
+// D-PG9-05: the four fields the closed table never writes, at values a user
+// could write.
+const USER_ADAPTER_FIELDS = {
+  protocolVersion: "auto",
+  tasks: true,
+  exposeResources: false,
+  caFile: "/etc/pki/user/ca-bundle.pem",
+};
+
 const MARKER = { plugin: "acme", marketplace: "catalog" };
-const STDIO_DEFAULT = { requestTimeoutMs: 1800000 };
+const STDIO_DEFAULT = { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" };
 const REMOTE_DEFAULT = { requestTimeoutMs: 300000 };
 const STDIO_MARKER = { ...MARKER, defaultFields: STDIO_DEFAULT };
 const REMOTE_MARKER = { ...MARKER, defaultFields: REMOTE_DEFAULT };
@@ -100,7 +115,41 @@ const PROJECT_CONTEXT: McpSubstitutionContext = {
   pluginData: "/plugin/data",
   projectDir: "/project/root",
   env: {},
+  options: undefined,
 };
+
+// The adapter's encoder for a plugin that declares no options.
+const ADAPTER_ENCODER = adapterFieldEncoder(new Map());
+
+// D-PG10-20: the full option shape, for the options a remote entry names.
+const REMOTE_OPTIONS = resolveOptions({
+  host: { type: "string", title: "Host", description: "The host.", default: "acme.example" },
+  url: { type: "string", title: "Url", description: "The url.", default: "https://acme.example" },
+  team: { type: "string", title: "Team", description: "The team.", default: "core" },
+});
+
+const OWNED_HOST = "PI_CLAUDE_MARKETPLACE_OPTION_1111111111111111";
+
+const OWNED_URL = "PI_CLAUDE_MARKETPLACE_OPTION_2222222222222222";
+
+const OWNED_TEAM = "PI_CLAUDE_MARKETPLACE_OPTION_3333333333333333";
+
+// The adapter's encoder for the plugin that declares `REMOTE_OPTIONS`.
+const REMOTE_OPTIONS_ENCODER = adapterFieldEncoder(
+  new Map([
+    ["host", OWNED_HOST],
+    ["url", OWNED_URL],
+    ["team", OWNED_TEAM],
+  ]),
+);
+
+/**
+ * The context of a stage whose environment holds each option variable with
+ * the text Pi's process holds, as the stage overlays it (D-PG10-23).
+ */
+function overlaidContext(env: Readonly<Record<string, string>>): McpSubstitutionContext {
+  return { ...PROJECT_CONTEXT, env, options: REMOTE_OPTIONS };
+}
 
 // ANAME-01 / ANAME-04: the fields every stamped entry carries by default.
 const OWNED = { directTools: "search", toolPrefix: "mcp" };
@@ -262,6 +311,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: {},
     });
@@ -305,6 +355,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: {},
     });
@@ -347,6 +398,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -374,6 +426,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -401,6 +454,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -430,6 +484,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: inherited },
       keptOverrides: {},
     });
@@ -463,6 +518,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -496,6 +552,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -532,6 +589,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -573,6 +631,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: { server: keptOverride },
     });
@@ -608,6 +667,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -626,7 +686,7 @@ describe("stampServers", () => {
     );
   });
 
-  test("D-PG1-13: recomputes a recorded stdio default when the server becomes remote", () => {
+  test("D-PG1-13 / D-PG9-03: recomputes the recorded stdio defaults when the server becomes remote, so the lifecycle is gone", () => {
     // arrange
     const previous = {
       server: {
@@ -642,6 +702,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -673,6 +734,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -700,6 +762,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -728,6 +791,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous,
       keptOverrides: {},
     });
@@ -739,7 +803,12 @@ describe("stampServers", () => {
         env: INJECTED_ENV,
         requestTimeoutMs: 2500,
         ...OWNED,
-        _piClaudeMarketplace: { ...MARKER, pluginSetFields: ["requestTimeoutMs"] },
+        lifecycle: "lazy-keep-alive",
+        _piClaudeMarketplace: {
+          ...MARKER,
+          pluginSetFields: ["requestTimeoutMs"],
+          defaultFields: { lifecycle: "lazy-keep-alive" },
+        },
       },
     });
   });
@@ -754,6 +823,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: {},
     });
@@ -771,6 +841,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: {},
     };
@@ -781,6 +852,252 @@ describe("stampServers", () => {
 
     // assert
     assert.strictEqual(JSON.stringify(second.stamped), JSON.stringify(first.stamped));
+  });
+
+  test("D-PG9-02 / D-PG9-07: a fresh http entry ends with the timeout and a marker recording it, with no lifecycle and no openUi", () => {
+    // arrange
+    const servers = { server: { type: "http", url: "https://acme.example/mcp" } };
+
+    // act
+    const stamping = stampServers({
+      servers,
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
+      previous: {},
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(stamping.stamped),
+      '{"server":{"url":"https://acme.example/mcp","directTools":"search","toolPrefix":"mcp","requestTimeoutMs":300000,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","defaultFields":{"requestTimeoutMs":300000}}}}',
+    );
+  });
+
+  test("D-PG9-03: the user's lifecycle and openUi carry in carried-set order and are not recorded, while the timeout default is computed again", () => {
+    // arrange
+    const previous = {
+      server: {
+        command: "old-command",
+        requestTimeoutMs: 1800000,
+        openUi: true,
+        lifecycle: "lazy",
+        _piClaudeMarketplace: { ...MARKER, defaultFields: { requestTimeoutMs: 1800000 } },
+      },
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { command: "plugin-command" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
+      previous,
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(stamping.stamped),
+      '{"server":{"command":"plugin-command","env":{"CLAUDE_PLUGIN_ROOT":"/plugin/root","CLAUDE_PLUGIN_DATA":"/plugin/data"},"directTools":"search","toolPrefix":"mcp","lifecycle":"lazy","openUi":true,"requestTimeoutMs":1800000,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","defaultFields":{"requestTimeoutMs":1800000}}}}',
+    );
+  });
+
+  test("D-PG9-03: a previous lifecycle equal to its recorded default is computed again in the default position", () => {
+    // arrange
+    const previous = {
+      server: {
+        command: "old-command",
+        lifecycle: "lazy-keep-alive",
+        _piClaudeMarketplace: { ...MARKER, defaultFields: { lifecycle: "lazy-keep-alive" } },
+      },
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { command: "plugin-command" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
+      previous,
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(stamping.stamped),
+      JSON.stringify({
+        server: {
+          command: "plugin-command",
+          env: INJECTED_ENV,
+          ...OWNED,
+          ...STDIO_DEFAULT,
+          _piClaudeMarketplace: STDIO_MARKER,
+        },
+      }),
+    );
+  });
+
+  test("D-PG9-15: a user idleTimeout on a stdio entry stands for its lifecycle, so only the timeout default is written", () => {
+    // arrange
+    const previous = { command: "old-command", idleTimeout: 5, _piClaudeMarketplace: MARKER };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { command: "plugin-command" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
+      previous: { server: previous },
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(stamping.stamped),
+      '{"server":{"command":"plugin-command","env":{"CLAUDE_PLUGIN_ROOT":"/plugin/root","CLAUDE_PLUGIN_DATA":"/plugin/data"},"directTools":"search","toolPrefix":"mcp","idleTimeout":5,"requestTimeoutMs":1800000,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","defaultFields":{"requestTimeoutMs":1800000}}}}',
+    );
+  });
+
+  // D-PG9-15: pi-mcp-adapter 7.0.1 registers each of these in place of the global idle time.
+  for (const [value, idleTimeout] of [
+    ["zero", 0],
+    ["a negative number", -5],
+    ["a numeric string", "5"],
+  ] as const) {
+    test(`D-PG9-15: a user idleTimeout of ${value} stands for the lifecycle`, () => {
+      // arrange
+      const previous = { command: "old-command", idleTimeout, _piClaudeMarketplace: MARKER };
+
+      // act
+      const stamping = stampServers({
+        servers: { server: { command: "plugin-command" } },
+        pluginName: "acme",
+        marketplaceName: "catalog",
+        substitution: PROJECT_CONTEXT,
+        encoder: ADAPTER_ENCODER,
+        previous: { server: previous },
+        keptOverrides: {},
+      });
+
+      // assert
+      assert.deepStrictEqual(stamping.stamped, {
+        server: {
+          command: "plugin-command",
+          env: INJECTED_ENV,
+          ...OWNED,
+          idleTimeout,
+          requestTimeoutMs: 1800000,
+          _piClaudeMarketplace: { ...MARKER, defaultFields: { requestTimeoutMs: 1800000 } },
+        },
+      });
+    });
+  }
+
+  test("D-PG9-15: a user idleTimeout of null keeps the lifecycle default", () => {
+    // arrange
+    const previous = { command: "old-command", idleTimeout: null, _piClaudeMarketplace: MARKER };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { command: "plugin-command" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
+      previous: { server: previous },
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.deepStrictEqual(stamping.stamped, {
+      server: {
+        command: "plugin-command",
+        env: INJECTED_ENV,
+        ...OWNED,
+        idleTimeout: null,
+        ...STDIO_DEFAULT,
+        _piClaudeMarketplace: STDIO_MARKER,
+      },
+    });
+  });
+
+  test("D-PG9-15: a recorded lifecycle default goes once the user sets an idleTimeout", () => {
+    // arrange
+    const previous = {
+      command: "old-command",
+      idleTimeout: 5,
+      ...STDIO_DEFAULT,
+      _piClaudeMarketplace: STDIO_MARKER,
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { command: "plugin-command" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
+      previous: { server: previous },
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.deepStrictEqual(stamping.stamped, {
+      server: {
+        command: "plugin-command",
+        env: INJECTED_ENV,
+        ...OWNED,
+        idleTimeout: 5,
+        ...{ requestTimeoutMs: 1800000 },
+        _piClaudeMarketplace: {
+          ...MARKER,
+          defaultFields: { requestTimeoutMs: 1800000 },
+        },
+      },
+    });
+  });
+
+  test("D-PG9-03: a recorded default of another type than the entry value leaves the value the user's", () => {
+    // arrange
+    const previous = {
+      server: {
+        command: "old-command",
+        requestTimeoutMs: 1800000,
+        _piClaudeMarketplace: { ...MARKER, defaultFields: { requestTimeoutMs: "1800000" } },
+      },
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { command: "plugin-command" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
+      previous,
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(stamping.stamped),
+      JSON.stringify({
+        server: {
+          command: "plugin-command",
+          env: INJECTED_ENV,
+          ...OWNED,
+          requestTimeoutMs: 1800000,
+          lifecycle: "lazy-keep-alive",
+          _piClaudeMarketplace: { ...MARKER, defaultFields: { lifecycle: "lazy-keep-alive" } },
+        },
+      }),
+    );
   });
 
   test("reports a non-object entry and a malformed stdio env as ordered warnings", () => {
@@ -798,6 +1115,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: {},
     });
@@ -834,6 +1152,7 @@ describe("stampServers", () => {
       pluginData: "/plugin/data",
       projectDir: undefined,
       env: {},
+      options: undefined,
     };
 
     // act
@@ -842,6 +1161,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: {},
     });
@@ -861,12 +1181,15 @@ describe("stampServers", () => {
   test("AFILE-06: of every ServerEntry key, only the carried keys take their previous values and the plugin's adapter-only values are dropped", () => {
     // arrange
     // ANAME-07: the plugin's string `args` is not an array, so the closed
-    // table keeps only its `command` and object `env`.
+    // table keeps only its `command` and object `env`. D-PG9-14: a stdio
+    // entry holds no caFile.
     const expectedEntry = {
       command: "plugin-command",
       env: { ...INJECTED_ENV, PLUGIN_ENV: "plugin-env" },
       ...OWNED,
-      ...Object.fromEntries(CARRIED_KEYS.map((key) => [key, `previous-${key}`])),
+      ...Object.fromEntries(
+        CARRIED_KEYS.filter((key) => key !== "caFile").map((key) => [key, `previous-${key}`]),
+      ),
       _piClaudeMarketplace: MARKER,
     };
 
@@ -876,6 +1199,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: fullEntry("previous") },
       keptOverrides: {},
     });
@@ -900,6 +1224,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: previous },
       keptOverrides: {},
     });
@@ -907,7 +1232,7 @@ describe("stampServers", () => {
     // assert
     assert.strictEqual(
       JSON.stringify(stamping.stamped),
-      '{"server":{"command":"plugin-command","env":{"CLAUDE_PLUGIN_ROOT":"/plugin/root","CLAUDE_PLUGIN_DATA":"/plugin/data"},"directTools":"search","toolPrefix":"mcp","disabled":true,"openUi":true,"trace":false,"requestTimeoutMs":1800000,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","defaultFields":{"requestTimeoutMs":1800000}}}}',
+      '{"server":{"command":"plugin-command","env":{"CLAUDE_PLUGIN_ROOT":"/plugin/root","CLAUDE_PLUGIN_DATA":"/plugin/data"},"directTools":"search","toolPrefix":"mcp","disabled":true,"openUi":true,"trace":false,"requestTimeoutMs":1800000,"lifecycle":"lazy-keep-alive","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","defaultFields":{"requestTimeoutMs":1800000,"lifecycle":"lazy-keep-alive"}}}}',
     );
   });
 
@@ -921,6 +1246,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: fullEntry("previous") },
       keptOverrides: {},
     });
@@ -947,6 +1273,9 @@ describe("stampServers", () => {
         trace: "previous-trace",
         appendStructuredContent: "previous-appendStructuredContent",
         roots: "previous-roots",
+        protocolVersion: "previous-protocolVersion",
+        tasks: "previous-tasks",
+        exposeResources: "previous-exposeResources",
         _piClaudeMarketplace: MARKER,
       },
     });
@@ -967,6 +1296,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: previous },
       keptOverrides: {},
     });
@@ -985,6 +1315,402 @@ describe("stampServers", () => {
     });
   });
 
+  test("D-PG9-05: a restage keeps the user's protocolVersion, tasks, exposeResources, and caFile after roots and records none of them", () => {
+    // arrange
+    const previous = {
+      url: "https://acme.example/v1/mcp",
+      caFile: "/etc/pki/user/ca-bundle.pem",
+      exposeResources: false,
+      tasks: true,
+      protocolVersion: "auto",
+      roots: false,
+      _piClaudeMarketplace: REMOTE_MARKER,
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { type: "http", url: "https://acme.example/v2/mcp" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
+      previous: { server: previous },
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(stamping.stamped),
+      '{"server":{"url":"https://acme.example/v2/mcp","directTools":"search","toolPrefix":"mcp","roots":false,"protocolVersion":"auto","tasks":true,"exposeResources":false,"caFile":"/etc/pki/user/ca-bundle.pem","requestTimeoutMs":300000,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","defaultFields":{"requestTimeoutMs":300000}}}}',
+    );
+  });
+
+  // D-PG9-14: each plugin entry a previous https entry's caFile cannot apply to.
+  for (const [change, server, reason] of [
+    ["a stdio server", { command: "plugin-command" }, "not-https"],
+    ["a plain http server", { type: "http", url: "http://acme.example/mcp" }, "not-https"],
+    [
+      "an https server at another origin",
+      { type: "http", url: "https://other.example/mcp" },
+      "origin-changed",
+    ],
+  ] as const) {
+    test(`D-PG9-14: an update that makes the server ${change} leaves the user's caFile out and reports it`, () => {
+      // arrange
+      const previous = {
+        url: "https://acme.example/v1/mcp",
+        caFile: "/etc/pki/user/ca-bundle.pem",
+        tasks: true,
+        _piClaudeMarketplace: REMOTE_MARKER,
+      };
+
+      // act
+      const stamping = stampServers({
+        servers: { server },
+        pluginName: "acme",
+        marketplaceName: "catalog",
+        substitution: PROJECT_CONTEXT,
+        encoder: ADAPTER_ENCODER,
+        previous: { server: previous },
+        keptOverrides: {},
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          caFile: Object.hasOwn(stamping.stamped.server as object, "caFile"),
+          tasks: (stamping.stamped.server as Record<string, unknown>).tasks,
+          caFileRemoved: stamping.caFileRemoved,
+        },
+        { caFile: false, tasks: true, caFileRemoved: [{ server: "server", reason }] },
+      );
+    });
+  }
+
+  test("D-PG9-14: a caFile survives a url change at the same https origin, whatever the case of the origin", () => {
+    // arrange
+    const previous = {
+      url: "HTTPS://Acme.Example/v1/mcp",
+      caFile: "/etc/pki/user/ca-bundle.pem",
+      _piClaudeMarketplace: REMOTE_MARKER,
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { type: "http", url: "https://acme.example/v2/mcp" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
+      previous: { server: previous },
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      { stamped: JSON.stringify(stamping.stamped), caFileRemoved: stamping.caFileRemoved },
+      {
+        stamped:
+          '{"server":{"url":"https://acme.example/v2/mcp","directTools":"search","toolPrefix":"mcp","caFile":"/etc/pki/user/ca-bundle.pem","requestTimeoutMs":300000,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","defaultFields":{"requestTimeoutMs":300000}}}}',
+        caFileRemoved: [],
+      },
+    );
+  });
+
+  // D-PG9-14: url pairs at one `URL.origin` once each url is read as
+  // pi-mcp-adapter 7.0.1 reads it, and pairs whose url text is unchanged.
+  for (const [pair, previousUrl, url, env] of [
+    ["an explicit default port", "https://acme.example/mcp", "https://acme.example:443/mcp", {}],
+    ["userinfo", "https://acme.example/mcp", "https://user@acme.example/mcp", {}],
+    ["a punycode host", "https://bücher.example/mcp", "https://xn--bcher-kva.example/mcp", {}],
+    ["a leading space", "https://acme.example/mcp", " https://acme.example/mcp", {}],
+    [
+      "a variable scheme and host",
+      "${ACME_BASE}/v1/mcp",
+      "${ACME_BASE}/v2/mcp",
+      { ACME_BASE: "https://acme.example" },
+    ],
+    [
+      "a default for an unset variable",
+      "${ACME_BASE:-https://acme.example}/v1/mcp",
+      "https://acme.example/v2/mcp",
+      {},
+    ],
+    [
+      "the split token",
+      "https://acme.example/v1/mcp",
+      "https://acme.example/{env:PI_CLAUDE_MARKETPLACE_EMPTY}v2/mcp",
+      {},
+    ],
+    ["an unchanged url that names an unset variable", "${ACME_BASE}/mcp", "${ACME_BASE}/mcp", {}],
+    [
+      "an unchanged url with an upper-case https scheme that names an unset variable",
+      "HTTPS://${ACME_HOST}/mcp",
+      "HTTPS://${ACME_HOST}/mcp",
+      {},
+    ],
+    [
+      "an unchanged url that does not parse",
+      "https://acme example/mcp",
+      "https://acme example/mcp",
+      {},
+    ],
+  ] as const) {
+    test(`D-PG9-14: a caFile survives an update across ${pair}`, () => {
+      // arrange
+      const previous = {
+        url: previousUrl,
+        caFile: "/etc/pki/user/ca-bundle.pem",
+        _piClaudeMarketplace: REMOTE_MARKER,
+      };
+
+      // act
+      const stamping = stampServers({
+        servers: { server: { type: "http", url } },
+        pluginName: "acme",
+        marketplaceName: "catalog",
+        substitution: { ...PROJECT_CONTEXT, env },
+        encoder: ADAPTER_ENCODER,
+        previous: { server: previous },
+        keptOverrides: {},
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          caFile: (stamping.stamped.server as Record<string, unknown>).caFile,
+          caFileRemoved: stamping.caFileRemoved,
+        },
+        { caFile: "/etc/pki/user/ca-bundle.pem", caFileRemoved: [] },
+      );
+    });
+  }
+
+  // D-PG9-14: url pairs pi-mcp-adapter 7.0.1 reads at two origins, or whose
+  // changed url it cannot read yet.
+  for (const [pair, previousUrl, url, env, reason] of [
+    [
+      "variable names that differ only in case",
+      "https://${ACME_HOST}/mcp",
+      "https://${acme_host}/mcp",
+      { ACME_HOST: "acme.example", acme_host: "other.example" },
+      "origin-changed",
+    ],
+    [
+      "a changed url that names an unset variable",
+      "https://${ACME_HOST}/v1/mcp",
+      "https://${ACME_HOST}/v2/mcp",
+      {},
+      "url-unresolved",
+    ],
+    [
+      "a variable whose value names an unset variable",
+      "https://acme.example/mcp",
+      "${ACME_BASE}/mcp",
+      { ACME_BASE: "https://$env:ACME_UNSET{env:ACME_UNSET}other.example" },
+      "origin-changed",
+    ],
+    [
+      "a changed url that does not parse",
+      "https://acme.example/mcp",
+      "https://acme example/mcp",
+      {},
+      "url-unresolved",
+    ],
+    [
+      "a plain http url that names an unset variable",
+      "https://acme.example/mcp",
+      "http://${ACME_HOST}/mcp",
+      {},
+      "not-https",
+    ],
+    [
+      "a variable that resolves to plain http",
+      "${ACME_BASE}/mcp",
+      "${ACME_BASE}/mcp",
+      { ACME_BASE: "http://acme.example" },
+      "not-https",
+    ],
+  ] as const) {
+    test(`D-PG9-14: an update across ${pair} leaves the user's caFile out and reports it`, () => {
+      // arrange
+      const previous = {
+        url: previousUrl,
+        caFile: "/etc/pki/user/ca-bundle.pem",
+        _piClaudeMarketplace: REMOTE_MARKER,
+      };
+
+      // act
+      const stamping = stampServers({
+        servers: { server: { type: "http", url } },
+        pluginName: "acme",
+        marketplaceName: "catalog",
+        substitution: { ...PROJECT_CONTEXT, env },
+        encoder: ADAPTER_ENCODER,
+        previous: { server: previous },
+        keptOverrides: {},
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          caFile: Object.hasOwn(stamping.stamped.server as object, "caFile"),
+          caFileRemoved: stamping.caFileRemoved,
+        },
+        { caFile: false, caFileRemoved: [{ server: "server", reason }] },
+      );
+    });
+  }
+
+  test("D-PG9-14: an override stub's caFile applies to an entry whose url names an unset variable", () => {
+    // arrange
+    const override = { caFile: "/etc/pki/user/ca-bundle.pem" };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { type: "http", url: "${ACME_BASE}/mcp" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
+      previous: { server: override },
+      keptOverrides: { server: override },
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        caFile: (stamping.stamped.server as Record<string, unknown>).caFile,
+        caFileRemoved: stamping.caFileRemoved,
+      },
+      { caFile: "/etc/pki/user/ca-bundle.pem", caFileRemoved: [] },
+    );
+  });
+
+  test("D-PG9-14: an override stub's caFile stays out of a plain http entry whose url names an unset variable", () => {
+    // arrange
+    const override = { caFile: "/etc/pki/user/ca-bundle.pem" };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { type: "http", url: "http://${ACME_HOST}/mcp" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
+      previous: { server: override },
+      keptOverrides: { server: override },
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        caFile: Object.hasOwn(stamping.stamped.server as object, "caFile"),
+        caFileRemoved: stamping.caFileRemoved,
+      },
+      { caFile: false, caFileRemoved: [{ server: "server", reason: "not-https" }] },
+    );
+  });
+
+  // D-PG9-14: a previous entry that defines a server pi-mcp-adapter gives no
+  // https origin.
+  for (const [shape, previous] of [
+    ["a socket", { socket: "/run/acme.sock" }],
+    ["a url that is not a string", { url: 42 }],
+  ] as const) {
+    test(`D-PG9-14: a caFile beside ${shape} is left out of an https entry`, () => {
+      // arrange
+      const entry = {
+        ...previous,
+        caFile: "/etc/pki/user/ca-bundle.pem",
+        _piClaudeMarketplace: MARKER,
+      };
+
+      // act
+      const stamping = stampServers({
+        servers: { server: { type: "http", url: "https://acme.example/mcp" } },
+        pluginName: "acme",
+        marketplaceName: "catalog",
+        substitution: PROJECT_CONTEXT,
+        encoder: ADAPTER_ENCODER,
+        previous: { server: entry },
+        keptOverrides: {},
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          caFile: Object.hasOwn(stamping.stamped.server as object, "caFile"),
+          caFileRemoved: stamping.caFileRemoved,
+        },
+        { caFile: false, caFileRemoved: [{ server: "server", reason: "origin-changed" }] },
+      );
+    });
+  }
+
+  test("D-PG9-14: a stdio entry's caFile left out of an entry whose url names an unset variable reports the unread url", () => {
+    // arrange
+    const previous = {
+      command: "old-command",
+      caFile: "/etc/pki/user/ca-bundle.pem",
+      _piClaudeMarketplace: MARKER,
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { type: "http", url: "${ACME_BASE}/mcp" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
+      previous: { server: previous },
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        caFile: Object.hasOwn(stamping.stamped.server as object, "caFile"),
+        caFileRemoved: stamping.caFileRemoved,
+      },
+      { caFile: false, caFileRemoved: [{ server: "server", reason: "url-unresolved" }] },
+    );
+  });
+
+  test("D-PG9-14: an absorbed override's caFile stays out of a stdio entry and inside the kept override", () => {
+    // arrange
+    const override = { caFile: "/etc/pki/user/ca-bundle.pem", disabled: true };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { command: "plugin-command" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
+      previous: { server: override },
+      keptOverrides: { server: override },
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      { stamped: stamping.stamped, caFileRemoved: stamping.caFileRemoved },
+      {
+        stamped: {
+          server: {
+            command: "plugin-command",
+            env: INJECTED_ENV,
+            ...OWNED,
+            disabled: true,
+            ...STDIO_DEFAULT,
+            _piClaudeMarketplace: { ...STDIO_MARKER, keptOverride: override },
+          },
+        },
+        caFileRemoved: [{ server: "server", reason: "not-https" }],
+      },
+    );
+  });
+
   test("AFILE-06: the marker keeps the server's override as its last member", () => {
     // arrange
     const keptOverride = { disabled: true, env: { STUB_TOKEN: "stub-secret" } };
@@ -995,6 +1721,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: { server: keptOverride },
     });
@@ -1018,7 +1745,6 @@ describe("stampServers", () => {
       oauth: { clientId: "stub-client" },
       auth: "bearer",
       requestHeadersCommand: "stub-headers",
-      caFile: "/stub/ca.pem",
     };
 
     // act
@@ -1027,6 +1753,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: override },
       keptOverrides: { server: override },
     });
@@ -1053,8 +1780,48 @@ describe("stampServers", () => {
             oauth: { clientId: "stub-client" },
             auth: "bearer",
             requestHeadersCommand: "stub-headers",
-            caFile: "/stub/ca.pem",
           },
+        },
+      },
+    });
+  });
+
+  test("D-PG9-05: an absorbed override's protocolVersion, tasks, exposeResources, and caFile become active while its credentials stay inside the marker", () => {
+    // arrange
+    const override = {
+      env: { STUB_TOKEN: "stub-secret" },
+      headers: { Authorization: "stub-header" },
+      bearerToken: "!echo stub",
+      bearerTokenEnv: "STUB_ENV",
+      bearerTokenStore: "stub-store",
+      oauth: { clientId: "stub-client" },
+      auth: "bearer",
+      ...USER_ADAPTER_FIELDS,
+    };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { type: "http", url: "https://acme.example/mcp" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
+      previous: { server: override },
+      keptOverrides: { server: override },
+    });
+
+    // assert
+    assert.deepStrictEqual(stamping.stamped, {
+      server: {
+        url: "https://acme.example/mcp",
+        ...OWNED,
+        ...USER_ADAPTER_FIELDS,
+        ...REMOTE_DEFAULT,
+        _piClaudeMarketplace: {
+          plugin: "acme",
+          marketplace: "catalog",
+          defaultFields: REMOTE_DEFAULT,
+          keptOverride: override,
         },
       },
     });
@@ -1077,7 +1844,9 @@ describe("stampServers", () => {
         pluginData: "/plugin/data",
         projectDir: undefined,
         env: {},
+        options: undefined,
       },
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: {},
     });
@@ -1085,7 +1854,7 @@ describe("stampServers", () => {
     // assert
     assert.strictEqual(
       JSON.stringify(stamping.stamped),
-      '{"__proto__":{"command":"plugin-command","env":{"CLAUDE_PLUGIN_ROOT":"/plugin/root","CLAUDE_PLUGIN_DATA":"/plugin/data"},"directTools":"search","toolPrefix":"mcp","requestTimeoutMs":1800000,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","defaultFields":{"requestTimeoutMs":1800000}}}}',
+      '{"__proto__":{"command":"plugin-command","env":{"CLAUDE_PLUGIN_ROOT":"/plugin/root","CLAUDE_PLUGIN_DATA":"/plugin/data"},"directTools":"search","toolPrefix":"mcp","requestTimeoutMs":1800000,"lifecycle":"lazy-keep-alive","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog","defaultFields":{"requestTimeoutMs":1800000,"lifecycle":"lazy-keep-alive"}}}}',
     );
   });
 
@@ -1099,6 +1868,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides,
     });
@@ -1131,6 +1901,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: { server: { disabled: true, directTools: "user", toolPrefix: "user" } },
       keptOverrides: {},
     });
@@ -1162,6 +1933,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: {},
     });
@@ -1213,6 +1985,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: {},
       description: "Acme tools",
@@ -1242,6 +2015,97 @@ describe("stampServers", () => {
     );
   });
 
+  test("D-PG10-11: a header that names an option keeps auth, as a literal header does", () => {
+    // arrange
+    const substitution = overlaidContext({ [OWNED_TEAM]: "core" });
+
+    // act
+    const stamping = stampServers({
+      servers: {
+        server: {
+          type: "http",
+          url: "https://mcp.example.test",
+          headers: { "X-Team": "${user_config.team}" },
+        },
+      },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution,
+      encoder: REMOTE_OPTIONS_ENCODER,
+      previous: {},
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(stamping.stamped),
+      JSON.stringify({
+        server: {
+          url: "https://mcp.example.test",
+          headers: { "X-Team": `\${${OWNED_TEAM}}` },
+          auth: "oauth",
+          ...OWNED,
+          ...REMOTE_DEFAULT,
+          _piClaudeMarketplace: REMOTE_MARKER,
+        },
+      }),
+    );
+  });
+
+  // D-PG10-23: the url's origin, read with the option variables the stage
+  // overlays, decides the user's caFile as for a literal url.
+  for (const [title, url, env, caFileRemoved] of [
+    [
+      "a url with an option in its host keeps the user's caFile at the same origin",
+      "https://${user_config.host}/v2/mcp",
+      { [OWNED_HOST]: "acme.example" },
+      [],
+    ],
+    [
+      "a url given whole as an option keeps the user's caFile at the same origin",
+      "${user_config.url}/v2/mcp",
+      { [OWNED_URL]: "https://acme.example" },
+      [],
+    ],
+    [
+      "a url whose option names another origin leaves the user's caFile out and reports it",
+      "https://${user_config.host}/v2/mcp",
+      { [OWNED_HOST]: "other.example" },
+      [{ server: "server", reason: "origin-changed" }],
+    ],
+  ] as const) {
+    test(`D-PG10-23: ${title}`, () => {
+      // arrange
+      const previous = {
+        url: "https://acme.example/v1/mcp",
+        caFile: "/etc/pki/user/ca-bundle.pem",
+        _piClaudeMarketplace: REMOTE_MARKER,
+      };
+
+      // act
+      const stamping = stampServers({
+        servers: { server: { type: "http", url } },
+        pluginName: "acme",
+        marketplaceName: "catalog",
+        substitution: overlaidContext(env),
+        encoder: REMOTE_OPTIONS_ENCODER,
+        previous: { server: previous },
+        keptOverrides: {},
+      });
+
+      // assert
+      const stamped = stamping.stamped.server as Record<string, unknown>;
+      assert.deepStrictEqual(
+        {
+          referencesOption: String(stamped.url).includes("${PI_CLAUDE_MARKETPLACE_OPTION_"),
+          caFile: Object.hasOwn(stamped, "caFile"),
+          caFileRemoved: stamping.caFileRemoved,
+        },
+        { referencesOption: true, caFile: caFileRemoved.length === 0, caFileRemoved },
+      );
+    });
+  }
+
   for (const { title, headers, env, expectedEntry } of OAUTH_HEADER_ROWS) {
     test(`D-08-04: ${title}`, () => {
       // arrange
@@ -1253,6 +2117,7 @@ describe("stampServers", () => {
         pluginName: "acme",
         marketplaceName: "catalog",
         substitution,
+        encoder: ADAPTER_ENCODER,
         previous: {},
         keptOverrides: {},
       });
@@ -1282,6 +2147,7 @@ describe("stampServers", () => {
       pluginName: "acme",
       marketplaceName: "catalog",
       substitution: PROJECT_CONTEXT,
+      encoder: ADAPTER_ENCODER,
       previous: {},
       keptOverrides: {},
       description: "Acme tools",
@@ -1319,6 +2185,11 @@ describe("inactiveOverrideFields", () => {
       description: "an override holding the entry-owned directTools and toolPrefix",
       override: { toolPrefix: "user", disabled: true, directTools: true },
       fields: ["toolPrefix", "directTools"],
+    },
+    {
+      description: "an override of the D-PG9-05 fields beside a credential",
+      override: { ...USER_ADAPTER_FIELDS, bearerTokenEnv: "STUB_ENV" },
+      fields: ["bearerTokenEnv"],
     },
     { description: "an empty override", override: {}, fields: [] },
   ]) {
@@ -1368,6 +2239,23 @@ describe("restoredOverride", () => {
 
     // assert
     assert.deepStrictEqual(restored, {});
+  });
+
+  test("D-PG9-03: the recorded lifecycle default never reaches the restored override", () => {
+    // arrange
+    const kept = { lifecycle: "eager", disabled: true };
+    const live = {
+      command: "plugin-command",
+      disabled: false,
+      ...STDIO_DEFAULT,
+      _piClaudeMarketplace: STDIO_MARKER,
+    };
+
+    // act
+    const restored = restoredOverride(kept, live);
+
+    // assert
+    assert.deepStrictEqual(restored, { disabled: false });
   });
 
   test("ANAME-07: a carried field the live marker lists as plugin-set comes back with the kept value", () => {
@@ -1459,6 +2347,43 @@ describe("restoredOverride", () => {
     assert.strictEqual(JSON.stringify(restored), '{"disabled":true}');
   });
 
+  test("D-PG9-05: each kept protocolVersion, tasks, exposeResources, and caFile takes the live value, and one the live entry lacks is left out", () => {
+    // arrange
+    const kept = { ...USER_ADAPTER_FIELDS, headers: { Authorization: "Bearer stub" } };
+    const live = {
+      url: "https://acme.example/mcp",
+      protocolVersion: "2026-07-28",
+      tasks: false,
+      exposeResources: true,
+      _piClaudeMarketplace: { ...REMOTE_MARKER, keptOverride: kept },
+    };
+
+    // act
+    const restored = restoredOverride(kept, live);
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(restored),
+      '{"protocolVersion":"2026-07-28","tasks":false,"exposeResources":true,"headers":{"Authorization":"Bearer stub"}}',
+    );
+  });
+
+  test("D-PG9-14: a kept caFile that a restage left out of the plugin's stdio entry is left out", () => {
+    // arrange
+    const kept = { caFile: "/etc/pki/user/ca-bundle.pem", disabled: true };
+    const live = {
+      command: "plugin-command",
+      disabled: false,
+      _piClaudeMarketplace: { ...STDIO_MARKER, keptOverride: kept },
+    };
+
+    // act
+    const restored = restoredOverride(kept, live);
+
+    // assert
+    assert.strictEqual(JSON.stringify(restored), '{"disabled":false}');
+  });
+
   test("AFILE-05: each kept carried field takes the live value and every other field comes from the kept override", () => {
     // arrange
     const kept = {
@@ -1476,7 +2401,7 @@ describe("restoredOverride", () => {
     // assert
     assert.strictEqual(
       JSON.stringify(restored),
-      '{"env":{"STUB_TOKEN":"stub-secret"},"disabled":"live-disabled","approveTools":"live-approveTools","includeTools":"live-includeTools","excludeTools":"live-excludeTools","lifecycle":"live-lifecycle","idleTimeout":"live-idleTimeout","requestTimeoutMs":"live-requestTimeoutMs","debug":"live-debug","searchKeywords":"live-searchKeywords","openUi":"live-openUi","trace":"live-trace","appendStructuredContent":"live-appendStructuredContent","roots":"live-roots"}',
+      '{"env":{"STUB_TOKEN":"stub-secret"},"disabled":"live-disabled","approveTools":"live-approveTools","includeTools":"live-includeTools","excludeTools":"live-excludeTools","lifecycle":"live-lifecycle","idleTimeout":"live-idleTimeout","requestTimeoutMs":"live-requestTimeoutMs","debug":"live-debug","searchKeywords":"live-searchKeywords","openUi":"live-openUi","trace":"live-trace","appendStructuredContent":"live-appendStructuredContent","roots":"live-roots","protocolVersion":"live-protocolVersion","tasks":"live-tasks","exposeResources":"live-exposeResources","caFile":"live-caFile"}',
     );
   });
 });
@@ -1547,6 +2472,25 @@ describe("userCarriedFields", () => {
 
     // assert
     assert.deepStrictEqual(fields, { appendStructuredContent: true, roots: false });
+  });
+
+  test("D-PG9-05: returns the user's protocolVersion, tasks, exposeResources, and caFile in carried-set order", () => {
+    // arrange
+    const entry = {
+      url: "https://acme.example/mcp",
+      caFile: "/etc/pki/user/ca-bundle.pem",
+      exposeResources: false,
+      tasks: true,
+      protocolVersion: "auto",
+      ...REMOTE_DEFAULT,
+      _piClaudeMarketplace: REMOTE_MARKER,
+    };
+
+    // act
+    const fields = userCarriedFields(entry);
+
+    // assert
+    assert.strictEqual(JSON.stringify(fields), JSON.stringify(USER_ADAPTER_FIELDS));
   });
 
   test("D-08-02: leaves out the carried fields the entry's marker lists as plugin-set", () => {

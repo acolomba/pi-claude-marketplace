@@ -3,6 +3,7 @@ import { test, type TestContext } from "node:test";
 
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 import type {
@@ -41,6 +42,7 @@ function cacheEntry(pluginId: string): CacheEntry {
       ],
     },
     ifPredicates: new Map([["PreToolUse|0|0", { kind: "match-all" }]]),
+    options: resolveOptions(undefined),
   };
 }
 
@@ -56,6 +58,7 @@ function routingEntry(pluginId: string, declarationIndex: number): RoutingEntry 
     handlerDecl: { type: "command", command: `echo ${pluginId}` },
     declarationIndex,
     ifPredicate: { kind: "match-all" },
+    options: resolveOptions(undefined),
   };
 }
 

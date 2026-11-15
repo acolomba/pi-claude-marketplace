@@ -503,6 +503,65 @@ for (const { title, notices, expectedValid } of [
     expectedValid: false,
   },
   {
+    title: "accepts an option-blocked notice with its keys and reason (D-PG10-21)",
+    notices: [
+      {
+        kind: "option-blocked",
+        scope: "user",
+        file: "mcp-adapter.json",
+        plugin: "p",
+        server: "s",
+        names: ["token"],
+        reason: "unset",
+      },
+    ],
+    expectedValid: true,
+  },
+  {
+    title: "accepts an option-blocked notice with the home-path reason (D-PG10-11)",
+    notices: [
+      {
+        kind: "option-blocked",
+        scope: "user",
+        file: "mcp-adapter.json",
+        plugin: "p",
+        server: "s",
+        names: ["tool"],
+        reason: "home-path",
+      },
+    ],
+    expectedValid: true,
+  },
+  {
+    title: "rejects an option-blocked notice with a reason outside its closed set (D-PG10-21)",
+    notices: [
+      {
+        kind: "option-blocked",
+        scope: "user",
+        file: "mcp-adapter.json",
+        plugin: "p",
+        server: "s",
+        names: ["token"],
+        reason: "not-https",
+      },
+    ],
+    expectedValid: false,
+  },
+  {
+    title: "rejects an option-blocked notice with no keys (D-PG10-21)",
+    notices: [
+      {
+        kind: "option-blocked",
+        scope: "user",
+        file: "mcp-adapter.json",
+        plugin: "p",
+        server: "s",
+        reason: "unset",
+      },
+    ],
+    expectedValid: false,
+  },
+  {
     title: "rejects an override-kept notice that names mcp.json",
     notices: [
       {
@@ -694,6 +753,18 @@ for (const reason of ["requires mcp", "requires builtin mcp"]) {
     assert.strictEqual(valid, true, JSON.stringify([...validator.Errors(payload)]));
   });
 }
+
+test("D-PG10-06: accepts the options not set reason on a partially-available row", () => {
+  // arrange
+  const payload = cascadePayloadWith({ ...failedRow(), reasons: ["options not set"] });
+  const validator = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
+
+  // act
+  const valid = validator.Check(payload);
+
+  // assert
+  assert.strictEqual(valid, true, JSON.stringify([...validator.Errors(payload)]));
+});
 
 for (const status of ["will add", "will remove"]) {
   test(`D-20: accepts a pending cascade whose marketplace status is ${status}`, () => {

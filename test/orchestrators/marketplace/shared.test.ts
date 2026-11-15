@@ -1145,7 +1145,7 @@ test("cascadeUnstagePlugin raises a typed workflows failure naming every unremov
   await assert.rejects(() => stat(removablePath), { code: "ENOENT" });
 });
 
-test("AVAR-04 / ANAME-07: foldUnstageNotices drops the variable and tool-rule notices of the removed servers and appends the unstage's notices", () => {
+test("AVAR-04 / ANAME-07 / D-PG9-14: foldUnstageNotices drops the variable, tool-rule and caFile notices of the removed servers and appends the unstage's notices", () => {
   // arrange
   const notices: McpConfigNotice[] = [
     { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
@@ -1172,6 +1172,14 @@ test("AVAR-04 / ANAME-07: foldUnstageNotices drops the variable and tool-rule no
       plugin: "hello",
       server: "plugin_hello_api_",
       fields: ["toolPermissions"],
+    },
+    {
+      kind: "ca-file-removed",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_api_",
+      reason: "not-https",
     },
     {
       kind: "override-kept",
@@ -1204,6 +1212,14 @@ test("AVAR-04 / ANAME-07: foldUnstageNotices drops the variable and tool-rule no
       plugin: "hello",
       server: "plugin_hello_docs_",
       fields: ["tools[].permission_policy"],
+    },
+    {
+      kind: "ca-file-removed",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_docs_",
+      reason: "not-https",
     },
   ];
 
@@ -1258,11 +1274,52 @@ test("AVAR-04 / ANAME-07: foldUnstageNotices drops the variable and tool-rule no
       fields: ["tools[].permission_policy"],
     },
     {
+      kind: "ca-file-removed",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "plugin_hello_docs_",
+      reason: "not-https",
+    },
+    {
       kind: "override-restored",
       scope: "project",
       file: "mcp-adapter.json",
       server: "plugin_hello_api_",
     },
+  ]);
+});
+
+test("D-PG10-21: foldUnstageNotices drops every option-blocked notice of the unstaged plugin and scope", () => {
+  // arrange
+  const blocked = (scope: "user" | "project", plugin: string, server: string): McpConfigNotice => ({
+    kind: "option-blocked",
+    scope,
+    file: "mcp-adapter.json",
+    plugin,
+    server,
+    names: ["region"],
+    reason: "unset",
+  });
+  const notices: McpConfigNotice[] = [
+    blocked("project", "hello", "keyed"),
+    blocked("project", "hello", "other"),
+    blocked("user", "hello", "keyed"),
+    blocked("project", "world", "keyed"),
+  ];
+
+  // act
+  foldUnstageNotices(notices, {
+    scope: "project",
+    plugin: "hello",
+    droppedServers: [],
+    notices: [],
+  });
+
+  // assert
+  assert.deepStrictEqual(notices, [
+    blocked("user", "hello", "keyed"),
+    blocked("project", "world", "keyed"),
   ]);
 });
 

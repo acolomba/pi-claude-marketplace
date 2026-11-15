@@ -296,7 +296,12 @@ export type Reason =
   // `requires builtin mcp` when only Pi's built-in MCP would, and the existing
   // `requires pi-mcp-adapter` when only the adapter would.
   | "requires mcp"
-  | "requires builtin mcp";
+  | "requires builtin mcp"
+  // D-PG10-06: a required plugin option has no default, so `--partial`
+  // installs the plugin with that option unset. A typed kind, not a note, as
+  // `unsupported mcp` is: the token rides the row, and the option keys ride
+  // the resolver note and the info advisory line.
+  | "options not set";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<
@@ -1400,8 +1405,57 @@ export interface McpLeftoverRemovedNotice {
 }
 
 /**
- * AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01: one MCP config fact a
- * command routes to `notifyMcpConfigNotices`.
+ * D-PG9-14: why a stage left the user's `caFile` out of a plugin server's
+ * entry. `not-https`: the entry is not an https server. `origin-changed`: its
+ * https url is at another origin than the entry it replaced. `url-unresolved`:
+ * its url changed, and the old or the new url names an unset variable or does
+ * not parse, so the origins could not be compared. `entry-removed`: a stage or
+ * an unstage removed the entry, and the choices kept for its return hold no
+ * `caFile`.
+ */
+export type McpCaFileRemovedReason =
+  "not-https" | "origin-changed" | "url-unresolved" | "entry-removed";
+
+/**
+ * D-PG9-14: a stage left the user's `caFile` out of a plugin server's entry,
+ * or a stage or unstage removed an entry with the user's `caFile`.
+ */
+export interface McpCaFileRemovedNotice {
+  readonly kind: "ca-file-removed";
+  readonly scope: Scope;
+  readonly file: "mcp-adapter.json";
+  readonly plugin: string;
+  readonly server: string;
+  readonly reason: McpCaFileRemovedReason;
+}
+
+/**
+ * D-PG10-21: why a stage left a plugin server out of `mcp-adapter.json`.
+ * `unset`: a field names a plugin option that has no value. `home-path`
+ * (D-PG10-11): `command` or an `args` element starts with a plugin option
+ * whose value would be expanded to a path under the user's home.
+ */
+export type McpOptionBlockedReason = "unset" | "home-path";
+
+/**
+ * D-PG10-08 / D-PG10-21: a stage left a plugin server out of the file, because
+ * its fields name plugin options. `server` is the declared name, since the
+ * file holds no entry for it. `names` lists the option keys once each, in
+ * first-seen order. It names keys, never values.
+ */
+export interface McpOptionBlockedNotice {
+  readonly kind: "option-blocked";
+  readonly scope: Scope;
+  readonly file: "mcp-adapter.json";
+  readonly plugin: string;
+  readonly server: string;
+  readonly names: readonly string[];
+  readonly reason: McpOptionBlockedReason;
+}
+
+/**
+ * AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01 / D-PG9-14 / D-PG10-21:
+ * one MCP config fact a command routes to `notifyMcpConfigNotices`.
  */
 export type McpConfigNotice =
   | McpConfigFileNotice
@@ -1410,7 +1464,9 @@ export type McpConfigNotice =
   | McpVariablesMissingNotice
   | McpCredentialsBlankedNotice
   | McpToolRulesUnenforcedNotice
-  | McpLeftoverRemovedNotice;
+  | McpLeftoverRemovedNotice
+  | McpCaFileRemovedNotice
+  | McpOptionBlockedNotice;
 
 /** AMIG-01 / AMIG-03: a server the reload moved from `mcp.json` to `mcp-adapter.json`. */
 export interface McpMigrationMovedRow {

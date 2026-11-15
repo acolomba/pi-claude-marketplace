@@ -61,6 +61,7 @@ import { locationsFor, type ScopedLocations } from "../../persistence/locations.
 import {
   DEFAULT_STATE,
   isRecordedButDisabled,
+  recordedOptionsOf,
   type ExtensionState,
 } from "../../persistence/state-io.ts";
 import { isSubagentChild, subagentParentSessionId } from "../../platform/subagent-child.ts";
@@ -120,6 +121,7 @@ import type {
 import type { FollowUpTurnEnd } from "./event-adapters.ts";
 import type { SessionLaunchFacts } from "./payloads/session-start.ts";
 import type { HooksRuntime } from "./runtime.ts";
+import type { ResolvedOptions } from "../../domain/user-config.ts";
 import type {
   BeforeAgentStartEvent,
   BeforeAgentStartEventResult,
@@ -234,6 +236,8 @@ export interface ReadAndCachePluginHooksOptions {
   readonly hooksJsonPath: string;
   readonly cwd: string;
   readonly logPrefix: string;
+  /** D-PG10-10: the options of the resolution the caller staged the hooks from. */
+  readonly options: ResolvedOptions;
 }
 
 async function readAndCachePluginHooksWith(
@@ -277,6 +281,7 @@ async function readAndCachePluginHooksWith(
     resolvedSource: opts.resolvedSource,
     config: parsed.value,
     ifPredicates: parsed.ifPredicates,
+    options: opts.options,
   });
 }
 
@@ -558,6 +563,7 @@ function pushGroupHandlers(
       handlerDecl,
       declarationIndex,
       ifPredicate: cacheEntry.ifPredicates.get(key) ?? MATCH_ALL_IF,
+      options: cacheEntry.options,
     });
 
     declarationIndex += 1;
@@ -840,6 +846,7 @@ function hydrateTargets(
           marketplace: mpName,
           pluginId,
           resolvedSource: pluginRecord.resolvedSource,
+          options: recordedOptionsOf(pluginRecord),
           hooksJsonPath: path.join(loc.hooksDir, slug, "hooks.json"),
           hooksDir: loc.hooksDir,
           cwd,
@@ -861,6 +868,7 @@ interface HydrateOnePluginTarget {
   readonly marketplace: string;
   readonly pluginId: string;
   readonly resolvedSource: string;
+  readonly options: ResolvedOptions;
   readonly hooksJsonPath: string;
   readonly hooksDir: string;
   readonly cwd: string;
@@ -872,7 +880,8 @@ async function tryHydrateOnePlugin(
   generationIsCurrent: GenerationGuard,
   target: HydrateOnePluginTarget,
 ): Promise<void> {
-  const { scope, marketplace, pluginId, resolvedSource, hooksJsonPath, hooksDir, cwd } = target;
+  const { scope, marketplace, pluginId, resolvedSource, options, hooksJsonPath, hooksDir, cwd } =
+    target;
   // Defense-in-depth (NFR-10): state.json is normally written only by this
   // extension, but the slug component (`pluginRecord.resources.hooks[i]`) is
   // state-supplied data. A corrupted state record (third-party tampering or
@@ -936,6 +945,7 @@ async function tryHydrateOnePlugin(
     resolvedSource: branded,
     config: result.value,
     ifPredicates: result.ifPredicates,
+    options,
   });
 }
 

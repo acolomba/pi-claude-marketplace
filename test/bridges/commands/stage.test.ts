@@ -112,6 +112,7 @@ test("stages recursive commands with exact names, records, substitutions, and pr
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir,
@@ -168,6 +169,39 @@ test("stages recursive commands with exact names, records, substitutions, and pr
   assert.strictEqual(statusBytes, expectedStatus);
 });
 
+test("D-PG10-13 writes the options of its input into each staged command", async (t) => {
+  // arrange
+  const locations = await createProjectLocations(t, "commands-stage-options-");
+  const pluginRoot = await createPluginRoot(t, "commands-source-options-");
+  const pluginDataDir = path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME);
+  await mkdir(path.join(pluginRoot, "commands"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, "commands", "opts.md"),
+    "---\ndescription: Options\n---\nMode ${user_config.mode}, token ${user_config.token}.\n",
+  );
+
+  // act
+  const prepared = await prepareStageCommands(createRemovalOps(), {
+    locations,
+    cwd: locations.scopeRoot,
+    options: { values: new Map([["mode", "fast"]]), sensitive: new Set(["token"]) },
+    pluginName: PLUGIN_NAME,
+    pluginRoot,
+    pluginDataDir,
+    resolved: resolvedFor(pluginRoot),
+  });
+  await commitPreparedCommands(createRemovalOps(), prepared);
+  const staged = await readFile(path.join(locations.promptsTargetDir, "acme:opts.md"), "utf8");
+
+  // assert
+  assert.strictEqual(
+    staged,
+    '---\n"description": "Options"\n' +
+      recordLine(pluginRoot, pluginDataDir) +
+      "---\nMode fast, token [sensitive option 'token' not available in skill content].\n",
+  );
+});
+
 test("rewrites skill and command references in staged command Markdown", async (t) => {
   // arrange
   const locations = await createProjectLocations(t, "commands-cross-references-");
@@ -183,6 +217,7 @@ test("rewrites skill and command references in staged command Markdown", async (
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data"),
@@ -227,6 +262,7 @@ test("stages a source led by a byte-order mark without the marker or a duplicate
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir,
@@ -264,6 +300,7 @@ test("returns a complete no-op and materializes no command directories", async (
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -303,6 +340,7 @@ test("refuses an outside previous command before changing its complete target tr
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot: path.join(locations.scopeRoot, "plugin"),
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -372,6 +410,7 @@ test("refuses an intermediate symlink before changing its complete target tree",
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot: path.join(locations.scopeRoot, "plugin"),
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -429,6 +468,7 @@ test("aborts staged commands without creating target prompts", async (t) => {
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -468,6 +508,7 @@ test("removes prior owned prompts and tolerates a missing prior prompt during co
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -515,6 +556,7 @@ test("neutralizes malformed frontmatter and preserves exact substituted body byt
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -561,6 +603,7 @@ test("substitutes project variables and retains command-inapplicable skill varia
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir,
@@ -598,6 +641,7 @@ test("retains the project variable for user scope and restores the user director
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir,
@@ -630,6 +674,7 @@ test("D-CF3-06 records the same plugin root and data at user and project scope",
       const prepared = await prepareStageCommands(createRemovalOps(), {
         locations,
         cwd: locations.scopeRoot,
+        options: undefined,
         pluginName: PLUGIN_NAME,
         pluginRoot,
         pluginDataDir,
@@ -658,6 +703,7 @@ test("preserves first-wins discovery warnings on a staged result", async (t) => 
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -691,6 +737,7 @@ test("skips a command that a workflow of its plugin names and stages the others"
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -739,6 +786,7 @@ test("returns a no-op with the warning when a workflow names the only command", 
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -787,6 +835,7 @@ test("D-CF3-09 returns the discover warnings, then each dropped-fields line in c
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -824,6 +873,7 @@ test("rolls back a partial command commit and removes the staging tree", async (
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -860,6 +910,7 @@ test("reports a commit rollback leak without promoting it to manual recovery", a
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -915,6 +966,7 @@ test("propagates a non-missing previous-prompt removal failure", async (t) => {
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -952,6 +1004,7 @@ test("names the plugin and generated command when an overlong target cannot be s
   const error = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -1006,6 +1059,7 @@ test("passes through a non-filesystem staging error and cleans staging", async (
   const error = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -1046,6 +1100,7 @@ test("normalizes lone-CR and repeated malformed blocks to exact body bytes", asy
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -1118,6 +1173,7 @@ test("cleans staging when a repeated malformed block reaches the no-opening safe
   const error = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -1175,6 +1231,7 @@ test("cleans staging when a repeated malformed block reaches the no-close safegu
   const error = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir: path.join(locations.scopeRoot, "plugin-data", PLUGIN_NAME),
@@ -1221,6 +1278,7 @@ test("D-CF3-03 stages an inline command map entry and records it under the plugi
   const prepared = await prepareStageCommands(createRemovalOps(), {
     locations,
     cwd: locations.scopeRoot,
+    options: undefined,
     pluginName: PLUGIN_NAME,
     pluginRoot,
     pluginDataDir,

@@ -9,9 +9,9 @@
  * tool, which takes a string `text`, and answers a `tools/call` with
  * `<tool>:<text>`. Calls for `redact`, `image`, and `fail` return distinct
  * fixture payloads. When started for a plugin, it writes the same request and
- * process records as the plugin stub so listing waits and cleanup remain
- * deterministic. A direct Pi server needs neither record. The server exits
- * when Pi closes its stdin.
+ * process records as the plugin stub, each request record naming its tool,
+ * so listing waits and cleanup remain deterministic. A direct Pi server needs
+ * neither record. The server exits when Pi closes its stdin.
  */
 
 import { appendFileSync, rmSync, writeFileSync } from "node:fs";
@@ -136,7 +136,7 @@ function serve(tool: string, plugin?: string, server?: string): void {
         const message = fieldsOf(JSON.parse(line));
         appendFileSync(
           path.join(harness, "mcp-stub-requests.jsonl"),
-          `${JSON.stringify({ plugin, server, notification: !Object.hasOwn(message, "id"), method: message.method, params: message.params })}\n`,
+          `${JSON.stringify({ plugin, server, tool, notification: !Object.hasOwn(message, "id"), method: message.method, params: message.params })}\n`,
         );
       }
     }

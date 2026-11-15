@@ -8,7 +8,9 @@ import stripJsonComments from "strip-json-comments";
 
 import {
   ADAPTER_SERVER_KEYS,
+  assertOwnedMarkersReadable,
   isFullDefinition,
+  leavingCaFileServers,
   partitionServers,
   readMcpConfigDoc,
   restoredOverrideNames,
@@ -481,6 +483,58 @@ describe("partitionServers", () => {
         scalar: 5,
       },
       keptOverrides: {},
+    });
+  });
+});
+
+describe("assertOwnedMarkersReadable", () => {
+  test("D-PG9-03: refuses a file in which the plugin's entry under either server key holds a malformed marker member", () => {
+    // arrange
+    const config = configOf({
+      mcpServers: { srv: { command: "plugin-command", _piClaudeMarketplace: ACME_MARKER } },
+      "mcp-servers": {
+        old: {
+          command: "plugin-command",
+          _piClaudeMarketplace: { ...ACME_MARKER, defaultFields: { lifecycle: ["eager"] } },
+        },
+      },
+    });
+
+    // act & assert
+    assert.throws(
+      () => {
+        assertOwnedMarkersReadable(config, "/scope/mcp-adapter.json", "acme", "catalog");
+      },
+      (error: unknown) => {
+        assert.ok(error instanceof McpConfigFileError);
+        assert.deepStrictEqual(
+          { filePath: error.filePath, defect: error.defect, marker: error.marker },
+          {
+            filePath: "/scope/mcp-adapter.json",
+            defect: "marker-not-valid",
+            marker: { server: "old", member: "defaultFields" },
+          },
+        );
+        return true;
+      },
+    );
+  });
+
+  test("D-PG9-03: accepts a file in which only another plugin's entry holds a malformed marker member", () => {
+    // arrange
+    const config = configOf({
+      mcpServers: {
+        srv: { command: "plugin-command", _piClaudeMarketplace: ACME_MARKER },
+        other: {
+          command: "other-command",
+          _piClaudeMarketplace: { ...OTHER_MARKER, keptOverride: [] },
+        },
+      },
+    });
+
+    // act & assert
+    assert.doesNotThrow(() => {
+      assertOwnedMarkersReadable(config, "/scope/mcp-adapter.json", "acme", "catalog");
     });
   });
 });
@@ -1139,6 +1193,69 @@ describe("withPluginServersKeepingChoices", () => {
         },
       }),
     );
+  });
+
+  test("D-PG9-14: a leaving entry stores its user carried fields but not its caFile", () => {
+    // arrange
+    const config = configOf({
+      mcpServers: {
+        srv: {
+          url: "https://acme.example/mcp",
+          caFile: "/etc/pki/user/ca-bundle.pem",
+          tasks: true,
+          _piClaudeMarketplace: ACME_MARKER,
+        },
+      },
+    });
+
+    // act
+    const next = withPluginServersKeepingChoices(config, "acme", "catalog", {});
+
+    // assert
+    assert.strictEqual(
+      JSON.stringify(next),
+      JSON.stringify({
+        mcpServers: {},
+        _piClaudeMarketplace: {
+          serverChoices: {
+            srv: { plugin: "acme", marketplace: "catalog", fields: { tasks: true } },
+          },
+        },
+      }),
+    );
+  });
+
+  test("D-PG9-14: only the plugin's leaving entries with a user caFile their written-back override lacks lose it", () => {
+    // arrange
+    const caFile = "/etc/pki/user/ca-bundle.pem";
+    const config = configOf({
+      mcpServers: {
+        lost: { url: "https://acme.example/mcp", caFile, _piClaudeMarketplace: ACME_MARKER },
+        restaged: { url: "https://acme.example/mcp", caFile, _piClaudeMarketplace: ACME_MARKER },
+        stubbed: {
+          url: "https://acme.example/mcp",
+          caFile,
+          _piClaudeMarketplace: { ...ACME_MARKER, keptOverride: { caFile } },
+        },
+        pluginSet: {
+          url: "https://acme.example/mcp",
+          caFile,
+          _piClaudeMarketplace: { ...ACME_MARKER, pluginSetFields: ["caFile"] },
+        },
+        plain: { url: "https://acme.example/mcp", _piClaudeMarketplace: ACME_MARKER },
+        theirs: {
+          url: "https://acme.example/mcp",
+          caFile,
+          _piClaudeMarketplace: { plugin: "other", marketplace: "catalog" },
+        },
+      },
+    });
+
+    // act
+    const lost = leavingCaFileServers(config, "acme", "catalog", { restaged: {} });
+
+    // assert
+    assert.deepStrictEqual(lost, ["lost"]);
   });
 
   test("D-08-02: a leaving entry with no user carried field writes no store", () => {

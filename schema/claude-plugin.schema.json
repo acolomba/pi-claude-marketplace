@@ -182,7 +182,8 @@
                           "network error",
                           "already added",
                           "requires mcp",
-                          "requires builtin mcp"
+                          "requires builtin mcp",
+                          "options not set"
                         ]
                       }
                     },
@@ -342,7 +343,8 @@
                     "network error",
                     "already added",
                     "requires mcp",
-                    "requires builtin mcp"
+                    "requires builtin mcp",
+                    "options not set"
                   ]
                 }
               }
@@ -543,7 +545,8 @@
                           "network error",
                           "already added",
                           "requires mcp",
-                          "requires builtin mcp"
+                          "requires builtin mcp",
+                          "options not set"
                         ]
                       }
                     },
@@ -703,7 +706,8 @@
                     "network error",
                     "already added",
                     "requires mcp",
-                    "requires builtin mcp"
+                    "requires builtin mcp",
+                    "options not set"
                   ]
                 }
               }
@@ -968,7 +972,8 @@
                       "network error",
                       "already added",
                       "requires mcp",
-                      "requires builtin mcp"
+                      "requires builtin mcp",
+                      "options not set"
                     ]
                   }
                 },
@@ -1169,7 +1174,8 @@
                       "network error",
                       "already added",
                       "requires mcp",
-                      "requires builtin mcp"
+                      "requires builtin mcp",
+                      "options not set"
                     ]
                   }
                 },
@@ -1445,7 +1451,8 @@
                             "network error",
                             "already added",
                             "requires mcp",
-                            "requires builtin mcp"
+                            "requires builtin mcp",
+                            "options not set"
                           ]
                         }
                       },
@@ -1652,7 +1659,8 @@
                             "network error",
                             "already added",
                             "requires mcp",
-                            "requires builtin mcp"
+                            "requires builtin mcp",
+                            "options not set"
                           ]
                         }
                       },
@@ -1795,7 +1803,8 @@
               "network error",
               "already added",
               "requires mcp",
-              "requires builtin mcp"
+              "requires builtin mcp",
+              "options not set"
             ]
           }
         }
@@ -2469,6 +2478,45 @@
                   "server": { "type": "string" }
                 },
                 "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "scope", "file", "plugin", "server", "reason"],
+                "properties": {
+                  "kind": { "type": "string", "const": "ca-file-removed" },
+                  "scope": { "enum": ["user", "project"] },
+                  "file": { "type": "string", "const": "mcp-adapter.json" },
+                  "plugin": { "type": "string" },
+                  "server": { "type": "string" },
+                  "reason": {
+                    "anyOf": [
+                      { "type": "string", "const": "not-https" },
+                      { "type": "string", "const": "origin-changed" },
+                      { "type": "string", "const": "url-unresolved" },
+                      { "type": "string", "const": "entry-removed" }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "scope", "file", "plugin", "server", "names", "reason"],
+                "properties": {
+                  "kind": { "type": "string", "const": "option-blocked" },
+                  "scope": { "enum": ["user", "project"] },
+                  "file": { "type": "string", "const": "mcp-adapter.json" },
+                  "plugin": { "type": "string" },
+                  "server": { "type": "string" },
+                  "names": { "type": "array", "items": { "type": "string" } },
+                  "reason": {
+                    "anyOf": [
+                      { "type": "string", "const": "unset" },
+                      { "type": "string", "const": "home-path" }
+                    ]
+                  }
+                },
+                "additionalProperties": false
               }
             ]
           },
@@ -2691,6 +2739,45 @@
                   "file": { "type": "string", "const": "mcp-adapter.json" },
                   "plugin": { "type": "string" },
                   "server": { "type": "string" }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "scope", "file", "plugin", "server", "reason"],
+                "properties": {
+                  "kind": { "type": "string", "const": "ca-file-removed" },
+                  "scope": { "enum": ["user", "project"] },
+                  "file": { "type": "string", "const": "mcp-adapter.json" },
+                  "plugin": { "type": "string" },
+                  "server": { "type": "string" },
+                  "reason": {
+                    "anyOf": [
+                      { "type": "string", "const": "not-https" },
+                      { "type": "string", "const": "origin-changed" },
+                      { "type": "string", "const": "url-unresolved" },
+                      { "type": "string", "const": "entry-removed" }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "required": ["kind", "scope", "file", "plugin", "server", "names", "reason"],
+                "properties": {
+                  "kind": { "type": "string", "const": "option-blocked" },
+                  "scope": { "enum": ["user", "project"] },
+                  "file": { "type": "string", "const": "mcp-adapter.json" },
+                  "plugin": { "type": "string" },
+                  "server": { "type": "string" },
+                  "names": { "type": "array", "items": { "type": "string" } },
+                  "reason": {
+                    "anyOf": [
+                      { "type": "string", "const": "unset" },
+                      { "type": "string", "const": "home-path" }
+                    ]
+                  }
                 },
                 "additionalProperties": false
               }

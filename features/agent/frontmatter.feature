@@ -104,6 +104,43 @@ Feature: Agent frontmatter
       | 2    | assistant   | tool call subagent {"action":"get","agent":"demo:doubled"}                                                                                                                                                                                                                                             |
       | 2    | tool result | subagent returned: agent demo:doubled\npath {agent dir}/agents/pi-claude-marketplace-demo-doubled.md\ndescription Quotes its quote marks.\naliases pi-claude-marketplace-demo-doubled\nsystem prompt mode replace\ninherit project context true\ninherit skills true\nsystem prompt:\nAnswer the task. |
 
+  Scenario: A user-scope agent's staged body keeps the project directory variable as written (PG-CORE-05)
+    Given pi runs with the scripted model and these companions:
+      | companion    |
+      | pi-subagents |
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the agent "helper" described as "Helps with the task." with this body:
+      """
+      project ${CLAUDE_PROJECT_DIR}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Then the agents folder of the user scope holds the file "pi-claude-marketplace-demo-helper.md" with this text:
+      """
+      ---
+      name: demo:helper
+      description: Helps with the task.
+      aliases: pi-claude-marketplace-demo-helper
+      systemPromptMode: replace
+      inheritProjectContext: true
+      inheritSkills: true
+      advertise: true
+      provenance:
+        generatedBy: pi-claude-marketplace
+        sourcePlugin: demo
+        sourceAgent: helper
+        sourcePath: {home}/marketplaces/fixtures/plugins/demo/agents/helper.md
+        droppedFields: []
+        droppedTools: []
+        warnings: []
+      ---
+
+      project ${CLAUDE_PROJECT_DIR}
+      """
+
   Scenario: An installed ordinary agent adopts the delegated preference on update
     Given pi runs with the scripted model and these companions:
       | companion    |

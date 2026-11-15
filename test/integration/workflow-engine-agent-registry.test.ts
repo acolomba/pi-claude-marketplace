@@ -48,6 +48,7 @@ async function engineDefinition(
     pluginRoot: "/root",
     pluginDataDir: "/data",
     knownSkills: [],
+    options: undefined,
     discovered: {
       sourceName,
       generatedName: `pi-claude-marketplace-demo-${sourceName}`,

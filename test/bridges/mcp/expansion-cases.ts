@@ -580,3 +580,117 @@ export const EXPANSION_CASES: readonly ExpansionCase[] = [
     claudeOutput: "https://mcp.example.test/mcp",
   },
 ];
+
+/** One option field: the raw value naming the option `opt`, its default, and Claude Code's output. */
+export interface OptionFieldCase {
+  readonly title: string;
+  readonly field: Extract<ExpansionField, "command" | "args" | "env" | "url" | "headers">;
+  readonly raw: string;
+  readonly value: string;
+  readonly claudeOutput: string;
+}
+
+// D-PG10-11: Claude Code passes an option's value as written, so a value that
+// holds a variable or an adapter marker reaches the server as that text. Both
+// conformance tests run every row: pi-mcp-adapter through the reference it
+// expands, and Pi's built-in MCP through the value it holds (D-PG10-12).
+export const OPTION_FIELD_CASES: readonly OptionFieldCase[] = [
+  {
+    title: "an args element that names an option",
+    field: "args",
+    raw: "--tool=${user_config.opt}",
+    value: "reverse",
+    claudeOutput: "--tool=reverse",
+  },
+  {
+    title: "an args element whose option holds a variable",
+    field: "args",
+    raw: "${user_config.opt}",
+    value: "${HOME}",
+    claudeOutput: "${HOME}",
+  },
+  {
+    title: "an args element whose option holds an adapter marker",
+    field: "args",
+    raw: "${user_config.opt}/x",
+    value: "{env:HOME}",
+    claudeOutput: "{env:HOME}/x",
+  },
+  {
+    title: "a command given whole as an option",
+    field: "command",
+    raw: "${user_config.opt}",
+    value: "/opt/tool/bin/server",
+    claudeOutput: "/opt/tool/bin/server",
+  },
+  {
+    title: "an env value that names an option",
+    field: "env",
+    raw: "--team=${user_config.opt}",
+    value: "core",
+    claudeOutput: "--team=core",
+  },
+  {
+    title: "an env value given whole as an option that starts with !",
+    field: "env",
+    raw: "${user_config.opt}",
+    value: "!echo pwned",
+    claudeOutput: "!echo pwned",
+  },
+  {
+    title: "an env value whose option holds a variable",
+    field: "env",
+    raw: "${user_config.opt}",
+    value: "${HOME}",
+    claudeOutput: "${HOME}",
+  },
+  {
+    title: "an env value whose option holds $HOME text",
+    field: "env",
+    raw: "${user_config.opt}",
+    value: "$HOME",
+    claudeOutput: "$HOME",
+  },
+  {
+    title: "a url with an option in its host",
+    field: "url",
+    raw: "https://${user_config.opt}/mcp",
+    value: "acme.example",
+    claudeOutput: "https://acme.example/mcp",
+  },
+  {
+    title: "a url given whole as an option",
+    field: "url",
+    raw: "${user_config.opt}",
+    value: "https://acme.example/mcp",
+    claudeOutput: "https://acme.example/mcp",
+  },
+  {
+    title: "a header value that names an option",
+    field: "headers",
+    raw: "Bearer ${user_config.opt}",
+    value: "t0k3n",
+    claudeOutput: "Bearer t0k3n",
+  },
+  {
+    title: "a header value given whole as an option that starts with !",
+    field: "headers",
+    raw: "${user_config.opt}",
+    value: "!echo pwned",
+    claudeOutput: "!echo pwned",
+  },
+  {
+    title: "a header value whose option holds $HOME text",
+    field: "headers",
+    raw: "${user_config.opt}",
+    value: "$HOME",
+    claudeOutput: "$HOME",
+  },
+  {
+    title: "a header value whose option holds an adapter marker",
+    field: "headers",
+    raw: "${user_config.opt}",
+    value: "{env:HOME}",
+    claudeOutput: "{env:HOME}",
+  },
+];

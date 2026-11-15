@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: parity-gaps
 milestone_name: Claude Code Parity Gaps and Defects
-current_phase: 10
-current_phase_name: Plugin Options, Variables, and Trust
-status: executing
-stopped_at: features/gaps-agents (Phases 7-8) merged into features/gaps; next Phase 10 continues on features/gaps-mcp, then the merge of features/gaps-mcp, then the security re-checks for Phases 7 and 9, then Phase 11
+current_phase: 11
+current_phase_name: Skills, Commands, and Records
+status: not_started
+stopped_at: merged features/gaps-mcp (Phases 9-10) into features/gaps; next the Phase 9 security re-check, then Phase 11
 last_updated: "2026-11-15T13:41:31.858Z"
 last_activity: 2026-11-15
-last_activity_desc: Merged features/gaps-agents (Phases 7 and 8 complete) into features/gaps and applied its parent records
+last_activity_desc: Merged features/gaps-mcp (Phases 9 and 10 complete) into features/gaps and applied its parent records
 state_head: 4b3392d25ceab27186df3abaa1a39af564bcc377
 progress:
   total_phases: 11
-  completed_phases: 8
-  total_plans: 67
-  completed_plans: 67
-  percent: 73
+  completed_phases: 10
+  total_plans: 94
+  completed_plans: 94
+  percent: 91
 ---
 
 # Project State
@@ -27,23 +27,64 @@ See: `.planning/PROJECT.md` (updated 2026-11-13 after parity-gaps Phase 2)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 10 — Plugin Options, Variables, and Trust (on features/gaps-mcp), then the merge of features/gaps-mcp, then the security re-checks for Phases 7 and 9, then Phase 11
+**Current focus:** the Phase 9 security re-check, then Phase 11 — Skills, Commands, and Records
 
 ## Current Position
 
-Phase: 10 — Plugin Options, Variables, and Trust (executing on features/gaps-mcp)
-Plan: see that branch
-Status: Phases 1–8 complete on features/gaps (7–8 merged from features/gaps-agents); Phase 9 complete on features/gaps-mcp, Phase 10 executing there
-Last activity: 2026-11-15 — merged features/gaps-agents (Phases 7 and 8, head 98aaf822) and applied its parent records (PROJECT D-PG7-01..19 and D-PG8-01..17, BACKLOG, CHANGELOG, STACK.md, ROADMAP Phase 8 criterion 5 and PG-WF-05 to option A)
+Phase: 11 — Skills, Commands, and Records (not started)
+Plan: none yet
+Status: Phases 1–10 complete on features/gaps (7–8 merged from features/gaps-agents, 9–10 merged from features/gaps-mcp)
+Last activity: 2026-11-15 — merged features/gaps-mcp (Phases 9 and 10, head 711af3f5) and applied its parent records (STATE decisions D-PG10-*, REQUIREMENTS PG-CORE-03/-05/-06/-07 complete and PG-SEC-02 Pending, BACKLOG, CHANGELOG, PROJECT D-PG9-* and D-PG10-* rows)
 
-Progress: [███████░░░] 73% (this branch: Phases 1–8 of 11; features/gaps-mcp holds Phase 9 and Phase 10 in progress)
+Progress: [█████████░] 91% (this branch: Phases 1–10 of 11)
 
 Next, in order:
 
-1. Phase 10 continues on features/gaps-mcp (`~/src/pi-claude-marketplace-gaps-mcp`).
-2. Merge features/gaps-mcp into features/gaps, run the combined `npm run check`, and apply its parent lines (D-PG9-*, D-PG10-*, the CHANGELOG lines of 10-20).
-3. Security re-checks for Phases 7 and 9: both audits predate their review-fix rounds.
-4. Phase 11 — Skills, Commands, and Records.
+1. Security re-check for Phase 9: its audit predates its review-fix round. (Phase 7 was re-audited at 24de427b.)
+2. Phase 11 — Skills, Commands, and Records.
+
+### parity-gaps merge of features/gaps-mcp (Phases 9 and 10)
+
+Phase 9 (Adapter Entries and MCP Features, 6/6 plans) and Phase 10 (Plugin
+Options, Variables, and Trust, 21/21 plans) are complete.
+
+- Phase 10 complete 2026-11-15: 6/6 truths, PG-SEC-02 by override, PG-SEC-02 Pending; gate exit 0 at 16ef48af (adapter 1983, builtin 199).
+- Phase 10 security: 52/52 closed, threats_open 0.
+- Phase 07 security re-audited at 24de427b: 21/21 closed, threats_open 0; UF-07-02 open for maintainer decision. (3a59a8fd)
+
+Decisions (Phase 10):
+
+- A required option with no default gives the reason `options not set` on install, list, and info; info names the unset keys in one note (D-PG10-06).
+- The install record holds the declared userConfig schema in an optional field with no schemaVersion bump, written through userConfigFieldsOf at install and at each restage (D-PG10-23).
+- A hook's environment holds CLAUDE_PLUGIN_OPTION_<KEY> for each option with a default, read from the record's userConfig through recordedOptionsOf at load (D-PG10-10, D-PG10-23).
+- Skill content gets each ${user_config.KEY} at staging through substituteClaudeContent: the sensitive-option text for a sensitive key, the default for a key with one, the reference as written otherwise, and no option pass for a plugin that declares no userConfig (D-PG10-08, D-PG10-09, D-PG10-13, D-PG10-21).
+- Each option of an enabled plugin's MCP value map gets PI_CLAUDE_MARKETPLACE_OPTION_<16 hex>, valued with the split-token escape and owned through the scope-tagged ledger PI_CLAUDE_MARKETPLACE_OPTIONS; the factory sets the user scope, a load sets the project scope only when trusted and removes it otherwise, and every command applies again with the last load's answer (D-PG10-11, D-PG10-23).
+- A scope whose state cannot be read keeps its option variables; an empty option ledger is deleted.
+- An exec-form hook's command and string arguments get each ${user_config.KEY} filled from the routing entry's option values after the path variables; a key with no value fails the run with UnsetPluginOptionError, for every plugin (D-PG10-08, D-PG10-10, D-PG10-21).
+- A shell-form hook command that names any ${user_config.KEY}, set or not, is refused with ShellFormOptionReferenceError before the spawn on both lanes (D-PG10-10).
+- An MCP server whose command, args, env, url, or headers name ${user_config.KEY} for a key the MCP value map lacks is left out of mcp-adapter.json and the record, and the command reports it with an option-blocked notice (reason unset) that names the keys; a plugin with no userConfig blocks nothing (D-PG10-08, D-PG10-21).
+- The option-blocked notice names the server by its declared name, because the file holds no entry for it.
+- An update, a reinstall, and the load-time MCP move stage a plugin's servers with the options of the resolution they stage from, so a server that names an option with no value is left out and reported at every staging (D-PG10-08, D-PG10-21).
+- foldUnstageNotices drops an option-blocked notice by plugin and scope, whatever its server, because a blocked server is in no recorded list and so is never among the dropped servers (D-PG10-21).
+- Under Pi's built-in MCP, a plugin server whose fields name ${user_config.KEY} for an option with no value is not registered; the registration step debug-logs it and adds no notice, because the command that staged the plugin already reported it (D-PG10-08, D-PG10-21).
+- McpSubstitutionContext carries the plugin's options as a required member, undefined for a plugin that declares no userConfig (D-PG10-21).
+- A stdio server whose command, or an args element, starts with ${user_config.KEY} for an option whose MCP value pi-mcp-adapter 7.0.1 would expand to a home path is left out and reported with the option-blocked reason home-path; the same option later in a field, or in env, url, or headers, blocks nothing; a server that also names an option with no value is reported as unset (D-PG10-11, D-PG10-21).
+- A command that stages a plugin's hooks caches them with the options of the resolution it staged from, so a hook gets CLAUDE_PLUGIN_OPTION_<KEY> in that session with no /reload (D-PG10-10, D-PG10-15).
+- Under pi-mcp-adapter, ${user_config.KEY} in command, args, env, url, and headers is written as ${PI_CLAUDE_MARKETPLACE_OPTION_<16 hex>}, with no :- fallback, so mcp-adapter.json holds no option value; the stage overlays each option variable, with the escaped text the process holds, on the environment it decides the caFile origin and the OAuth header rule with (D-PG10-11, D-PG10-23).
+- The option pass runs after the path variables and before the environment scan; the option becomes its own segment and is never sent through the deny-list or the missing-variable report, and its value is not scanned again (D-PG10-11).
+- Command content, agent bodies, and the skills an agent preloads get each ${user_config.KEY} at staging through substituteClaudeContent, by the skills rule: the sensitive-option text for a sensitive key, the default for a key with one, the reference as written otherwise, and no option pass for a plugin that declares no userConfig (D-PG10-08, D-PG10-09, D-PG10-13, D-PG10-21).
+- Under Pi's built-in MCP, ${user_config.KEY} in command, args, env, url, and headers is filled with the option's MCP value when the registration step builds the config at each session; the value is held in Pi's in-memory registry only, and env and headers values get Pi's escape ($ doubled, a leading ! behind a $) (D-PG10-12, D-PG10-21).
+- The project trust gap of D-LOC-01 is confirmed for Pi 1.5.0 and 1.5.2, pending maintainer review: option A taken, option B (an extension-kept consent record) recorded as the safer posture, the gap stays open until Pi lets an extension register a trust path (D-PG10-01).
+- An unreadable stored userConfig reads as declared with no values, so the built-in MCP skips servers that name an option; no notice (D-PG10-25).
+- The load-time MCP move writes the staged options to the record whatever its verdict (D-PG10-23).
+
+Open for the maintainer:
+
+- Phase 7: UF-07-02 anchor-on-repeated-key deny loss (design choice); AR-07-04; the quoted-deny change 5d985107; the D-PG7-02 retry residual.
+- Phase 10: D-PG10-01 option A or B (security; PG-SEC-02 stays Pending until answered); D-PG10-19; D-PG10-04 "Open /plugin manage" (IN-04); D-PG10-23 timing; D-PG10-24 reinstall vs apply; D-PG10-25 (IN-09); D-PG10-06, D-PG10-11, D-PG10-16; AR-10-01 and AR-10-02; the WR-01 residual; the `features/lib/mcp-configuration.ts` fixture edit; IN-01..IN-08 open (IN-07: unguarded mode check in `index.ts`).
+- Parity question (BACKLOG HOOKOPTFAIL-01): an option failure before a hook starts shows `Failed to run:`; Claude Code 2.1.323 may show `Failed with non-blocking status code: <message>` (10-RESEARCH E3; unconfirmed; `dispatch-exec.ts`, `hook-labels.ts`).
+- Review note: `${user_config.KEY}foo` with a `~` value blocks conservatively (home-path rule). Known gap: `${FOO:-${user_config.x}}` stays partly literal (BACKLOG MCPOPTFALLBACK-01).
+- CHANGELOG note: the first restage of a plugin whose entry held a literal `${user_config.KEY}` changes the entry's bytes, so pi-mcp-adapter asks for project approval again once.
 
 ### parity-gaps merge of features/gaps-agents (Phases 7 and 8)
 
@@ -1149,7 +1190,7 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 ## Session Continuity
 
 Last session: 2026-11-15
-Stopped at: Phase 6 complete; next: Phase 10 on features/gaps-mcp, then the merge, then Phase 11
+Stopped at: merged features/gaps-mcp; next Phase 9 security re-check, then Phase 11
 Resume file: .planning/HANDOFF.json
 
 ### Phase 2 completion-helper notes

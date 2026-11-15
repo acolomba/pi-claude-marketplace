@@ -1,0 +1,93 @@
+---
+phase: "09"
+slug: "adapter-entries-and-mcp-features"
+status: verified
+threats_open: 0
+threats_open_nonblocking: 0
+threats_total: 23
+threats_closed: 23
+threats_accepted: 5
+asvs_level: 1
+block_on: high
+created: "2026-11-14"
+---
+
+# Phase 09 — Security
+
+All 23 declared threats are closed: 5 high, 10 medium and 8 low. Eighteen close on implementation, test or record evidence. Five close as accepted risks. Four were declared `accept` in the plans. The fifth, T-09-09 (high), was declared `mitigate`, but its planned control, an `openUi: false` default, was withheld under the D-PG9-07 amendment. It is now an accepted residual that waits for maintainer review (BACKLOG MCPOPENUI-01). If the maintainer rejects that amendment, T-09-09 reopens as a high, blocking threat.
+
+The auditor read the current source and tests at `d987142a`, and the pi-mcp-adapter 7.0.1 and pi-subagents 0.88.1 sources under `node_modules/.cache/optional-peers/node_modules/`. It ran one probe of the marker parse in a scratch home and ran no test suite. The combined-tree gates are recorded in `09-VALIDATION.md`.
+
+## Trust Boundaries
+
+| Boundary | Description | Data crossing |
+| --- | --- | --- |
+| Plugin `.mcp.json` to the adapter entry | Third-party plugin content passes through the closed table into `mcp-adapter.json` | Server fields; a plugin must not set an adapter-only power |
+| User's `mcp-adapter.json` to the entry builder | A user-editable file, read at every restage | Carried fields, the marker's `defaultFields`, the kept override |
+| This extension's entry to pi-mcp-adapter's client capabilities | Entry fields decide what powers and process lifetime a plugin server gets | `lifecycle`, `openUi`, and the `sampling`, UI and `roots` declarations |
+| Test harness to the committed tree and the host | Temporary product edits, the listing wait, and stub resources in sandbox homes | Working-tree files, scenario logs |
+| Project records to the user, the maintainer and later phases | Decision rows, the compatibility page, the CHANGELOG and the upstream draft | Claims about what is measured, settled or filed |
+
+## Threat Register
+
+Paths without a prefix are relative to `extensions/pi-claude-marketplace/`. `adapter:` is relative to the pi-mcp-adapter 7.0.1 package and `subagents:` to the pi-subagents 0.88.1 package, both under `node_modules/.cache/optional-peers/node_modules/`. Test, feature, doc and `.planning/` paths are repository-relative.
+
+| Threat ID | Category | Component | Severity | Disposition | Mitigation evidence | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| T-09-01 | Tampering | harness listing wait | medium | mitigate | `listingDone` waits for a logged `tools/list` (features/lib/mcp-implementation.ts:501-504). It ends early only under the adapter with no stub running (506-508), and otherwise needs a registered tool of that server (`hasStubTool`, 469-484, 510). 09-01-SUMMARY.md:59-64: 20 listing feature files passed under both profiles on the unchanged product. :71-100: the resident-stub run had 0 listing-wait failures. | closed |
+| T-09-02 | Tampering | temporary `lifecycle` edit | high | mitigate | No 09-01 commit (`f0e8979c`, `012c23bc`, `975cead0`) touches `extensions/`. The only product commits in `deaa35c4..d987142a` are `bd2643fd`, `581c2f5e`, `7b7bf951` and `4640737a`. `extensions features test` is clean at `d987142a`. The restore is recorded in 09-01-SUMMARY.md:71-80. | closed |
+| T-09-03 | Repudiation | resource guard reporting | low | mitigate | 09-01-SUMMARY.md:134-147 and 09-VALIDATION.md record features/mcp-server/resources.feature:8 and :33 as PG-MCP-08 regression guards, not red-green proofs. The titles name PG-MCP-08, and the feature description (:3) cites D-PG9-10. | closed |
+| T-09-04 | Information disclosure | stub resource | low | accept | The stub serves one static string, `stub <name>`, built from its env, and reads no file (features/lib/mcp-stub-server.ts:41, 143-149). It runs in the scenario's hermetic sandbox. See AR-09-01. | closed |
+| T-09-05 | Tampering | marker `defaultFields` read | medium | mitigate | The member is read only as an own key (bridges/mcp/marker.ts:97). It is kept only as a plain object whose every value is a number, string or boolean; otherwise the whole member is dropped (60-66, 103). Its only consumer, `isRecordedDefault`, reads fixed carried-field names behind `Object.hasOwn` with `===` (bridges/mcp/adapter-entry.ts:226-233, 241-253). Owner cases: test/bridges/mcp/marker.test.ts:189-213 and :237; test/bridges/mcp/adapter-entry.test.ts:889-923. Scratch-home probe: an own `__proto__` or `constructor` scalar stays an own key, is never read back, and `Object.prototype` is unchanged. | closed |
+| T-09-06 | Repudiation | release 0.23.0 fixture | low | mitigate | The doc comment of `writeRelease0230McpAdapterEntry` cites the `[0.23.0]` section (features/lib/mcp-server-files.ts:337-342). The step names the release (features/step_definitions/mcp-server/lifecycle.steps.ts:64; features/mcp-server/lifecycle.feature:537-543). | closed |
+| T-09-07 | Tampering | `defaultFieldsFor` overwriting a user value | medium | mitigate | A default fills only a field that neither the translated entry nor the carried fields hold (bridges/mcp/adapter-entry.ts:335-349). A previous value is recomputed only when it strictly equals the recorded default (226-233). Owner cases: test/bridges/mcp/adapter-entry.test.ts:825-923. Scenario: features/mcp-server/lifecycle.feature:657. | closed |
+| T-09-08 | Elevation of privilege | plugin-set `lifecycle` or `openUi` | high | mitigate | The closed table maps only the transport fields, `auth`, `oauth`, `requestTimeoutMs`, `description`, `directTools` and `toolPrefix` (domain/mcp-server-features.ts:129-158, 245-281). Defaults come from the fixed `ADAPTER_ENTRY_DEFAULTS`, never from input (83-86, 114-119). `pluginSetFieldsIn` reads only the translated entry, before defaults (bridges/mcp/adapter-entry.ts:212-214, 382-384). Proven by test/domain/mcp-server-features.test.ts:125 and the hostile every-key case test/bridges/mcp/adapter-entry.test.ts:1395. | closed |
+| T-09-09 | Elevation of privilege | MCP Apps UI extension declared to plugin servers | high | accept (amended from mitigate; D-PG9-07 amendment) | The planned mitigation is absent. No `openUi: false` default is written (domain/mcp-server-features.ts:102-112; test/domain/mcp-server-features.test.ts:111), and the adapter `initialize` rows of seven feature files still hold `io.modelcontextprotocol/ui`. Reason: `openUi` is the only key that adapter:metadata-cache.ts:143-175 hashes and subagents:src/runs/shared/mcp-direct-tool-allowlist.js `computeMcpServerHash` does not, so the default broke agent MCP grants (test/integration/pi-subagents-child-identity.test.ts:126). A user's `openUi: false` is carried and survives an update (bridges/mcp/adapter-entry.ts:68; features/mcp-server/lifecycle.feature:657). Documented in docs/mcp-compatibility.md:172, :658, .planning/PROJECT.md:2397, 09-CONTEXT.md:107 and 09-VALIDATION.md. Trigger: BACKLOG MCPOPENUI-01. See AR-09-02. | closed (accepted residual, pending maintainer review) |
+| T-09-10 | Elevation of privilege | `sampling` declared to plugin servers | medium | accept | D-PG9-08: nothing is written for `sampling`. Adapter guard, read in source: sampling is declared only when `settings.sampling !== false` and the session has UI or `samplingAutoApprove` (adapter:init.ts:184-185). Each request needs two confirmations unless auto-approve is set (adapter:sampling-handler.ts:62-66, 90-94, 168-177). Sampling with tool use is refused (49-50). Documented in .planning/PROJECT.md:2398, docs/mcp-compatibility.md:164, :657, .planning/upstream/pi-mcp-adapter-per-server-sampling.md and BACKLOG MCPSAMPLING-01. See AR-09-03. | closed |
+| T-09-11 | Tampering | load-time rewrite (APL-D1) | medium | mitigate | No file under `orchestrators/`, `edge/` or `index.ts` changed in `deaa35c4..d987142a`. The entry builder's callers are orchestrators/plugin/install-outcome.ts, orchestrators/plugin/update-swap.ts and the AMIG-01 move orchestrators/reconcile/mcp-migration.ts:489, which called it before this phase. | closed |
+| T-09-12 | Denial of service | stdio plugin servers kept for the session | low | accept | `lazy-keep-alive` is written for stdio servers only (domain/mcp-server-features.ts:83-86). The adapter keeps a started server for the session with no idle timeout (adapter:init.ts:349-351, 680-686). A `lifecycle` the user sets wins (bridges/mcp/adapter-entry.ts:63; features/mcp-server/lifecycle.feature:657). The page states the default (docs/mcp-compatibility.md:143-153, :656). See AR-09-04. | closed |
+| T-09-13 | Repudiation | project server asks for approval again | low | mitigate | 09-03-SUMMARY.md:279-295 records the effect: the adapter hashes the whole entry for approval (adapter:project-server-trust.ts:101-102). Carried to docs/mcp-compatibility.md:183 and .planning/PROJECT.md:2396. | closed |
+| T-09-14 | Information disclosure | credential reaching the entry through the carried set | high | mitigate | `CARRIED_FIELDS` gains only `protocolVersion`, `tasks`, `exposeResources` and `caFile`, and holds no `env`, `headers`, `auth`, `oauth`, `bearerToken*` or `requestHeadersCommand` (bridges/mcp/adapter-entry.ts:58-76). test/bridges/mcp/adapter-entry.test.ts:1233-1271 asserts that all seven credential fields appear only in `keptOverride`. `caFile` is a local path, read only for TLS verification and never sent (adapter:http-ca.ts:21-36). | closed |
+| T-09-15 | Spoofing | carried `caFile` across a url change | low | accept | The bundle replaces the default roots for the entry's current origin only; other origins use the global fetch, and redirects are refused (adapter:http-ca.ts:24, 36-40, 71). After a plugin url change, the new origin must chain to the user's bundle or the connection fails. Measured in features/mcp-server/lifecycle.feature:574; stated in docs/mcp-compatibility.md:381. See AR-09-05 and Advisory 1. | closed |
+| T-09-16 | Elevation of privilege | plugin-set `protocolVersion`, `tasks`, `exposeResources`, `caFile` | medium | mitigate | The closed table names none of them (domain/mcp-server-features.ts:129-158, 245-281). The hostile every-key case test/bridges/mcp/adapter-entry.test.ts:1395 covers all four and keeps none. `pluginSetFieldsIn` reads only the translated entry (bridges/mcp/adapter-entry.ts:212-214). | closed |
+| T-09-17 | Tampering | temporary wrong-precedence edit | medium | mitigate | Of the 09-04 commits, only `4640737a` touches `extensions/`, and its product diff is the four carried names plus a comment. `eab79782` touches only lifecycle.feature. The tree is clean at `d987142a`. | closed |
+| T-09-18 | Repudiation | compatibility page claims | medium | mitigate | Every cell of "Features beyond tools" names a scenario or a source, and each unmeasured cell says unmeasured (docs/mcp-compatibility.md:155-172). The cited measurements exist in features/mcp-server/invocation.feature:29, 59, 159, 190, 218 and resources.feature:8, :33. | closed |
+| T-09-19 | Elevation of privilege | page implying that sampling is withheld | medium | mitigate | The sampling row (docs/mcp-compatibility.md:164) and the Loading bullet (:657) say that adapter 7.0.1 declares `sampling` to every plugin server, cite D-PG9-08, and state the per-request confirmation. No page, README or CHANGELOG text says sampling is withheld. | closed |
+| T-09-20 | Repudiation | decision rows read as settled | medium | mitigate | .planning/PROJECT.md:2396-2398: each first cell says pending maintainer review, each outcome is "Pending maintainer review", and each row separates measured facts from facts read in source. | closed |
+| T-09-21 | Tampering | edits of shared files outside this phase's lines | low | mitigate | `git diff --numstat deaa35c4..d987142a`: .planning/BACKLOG.md 8/0, .planning/PROJECT.md 5/0, CHANGELOG.md 1/0. Additions only. | closed |
+| T-09-22 | Information disclosure | upstream draft | low | mitigate | .planning/upstream/pi-mcp-adapter-per-server-sampling.md cites package-relative paths and the repository URL from adapter:package.json:61-63, holds no local path, user name or credential, and says it is not filed (:3). | closed |
+| T-09-SC | Tampering | npm/pip/cargo installs | high | mitigate | No change to package.json, package-lock.json, scripts/, test/integration/optional-peer-suite-versions.json, sonar-project.properties or .github/ in `deaa35c4..d987142a`. | closed |
+
+## Accepted Risks Log
+
+| Risk ID | Threat Ref | Rationale | Accepted By | Date |
+| --- | --- | --- | --- | --- |
+| AR-09-01 | T-09-04 | The stub serves one static string from its own process, reads no file, and runs in the scenario's hermetic sandbox. | 09-01 threat model (autonomous run) | 2026-11-14 |
+| AR-09-02 | T-09-09 | Under pi-mcp-adapter 7.0.1, a plugin server that ships an MCP App UI resource can have its HTML opened in the user's browser or a native window when the model calls that tool. The UI can call MCP tools after a consent prompt, once per server by default (adapter:init.ts:225, adapter:consent-manager.ts), and can send messages to the agent (adapter:docs/prompts-and-ui.md:49-56, 92). Claude Code's CLI declares no UI extension. The default that would withhold it breaks agent MCP grants under pi-subagents 0.88.1, a gap in a Pi companion. User controls: `openUi: false` per entry (carried, survives an update), and `MCP_UI_VIEWER=none`, which only hides the window. Closes when MCPOPENUI-01 fires. | Orchestrator, autonomous run (D-PG9-07 amendment); pending maintainer review | 2026-11-14 |
+| AR-09-03 | T-09-10 | pi-mcp-adapter 7.0.1 has no per-server sampling switch, and its global `settings.sampling` would also remove the power from the user's own servers. The adapter asks the user to confirm each request and each reply, and refuses without UI unless the user set `samplingAutoApprove`. Closes when MCPSAMPLING-01 fires. | 09-03 threat model, D-PG9-08; pending maintainer review | 2026-11-14 |
+| AR-09-04 | T-09-12 | A kept stdio server lives only as long as the session. The user can set `lifecycle` on the entry, and the page states the default. Residual: see Advisory 2. | 09-03 threat model, D-PG9-01; pending maintainer review | 2026-11-14 |
+| AR-09-05 | T-09-15 | A mismatch fails closed: a new origin that does not chain to the user's bundle is refused. The file and the bundle are the user's own. Precision: see Advisory 1. | 09-04 threat model | 2026-11-14 |
+
+Advisories outside the register (not threats; nothing blocks on them; routed to the code-review fix pass where they overlap review findings):
+
+1. **`caFile` wording.** bridges/mcp/adapter-entry.ts:55-57 and docs/mcp-compatibility.md:381 say that `caFile` "can only narrow" which servers the entry trusts. The adapter replaces the roots with the bundle (adapter:http-ca.ts:36), so the entry trusts exactly the bundle; a private CA in the bundle becomes trusted for the new origin after a plugin url change. pi-mcp-adapter 7.0.1 treats `caFile` as url-bound: it drops a lower-precedence `caFile` when a higher-precedence config changes the url (adapter:config.ts:1064-1071, 1105, 1121). Overlaps review CR-01.
+2. **Keep-alive restart.** Under `lazy-keep-alive`, the adapter's 30-second health check reconnects a keep-alive server that has exited, with a backoff from 30 seconds to 5 minutes (adapter:lifecycle.ts:19-20, 98-124, 155-200, 388-404). docs/mcp-compatibility.md:145 says only that the server stays running for the session. `lifecycle` is outside the adapter's tool-cache hash (adapter:metadata-cache.ts:144-146), so the default does not repeat the `openUi` grant breakage. Overlaps review WR-02.
+3. **Project-scope override stubs.** A marker-less override in `<project>/.pi/mcp-adapter.json` is taken in as the user's (AFILE-06), and a cloned repository can write that file. D-PG9-05 widens what such a stub makes active to include `caFile`, `protocolVersion`, `tasks` and `exposeResources`. This class predates the phase (`approveTools`, `includeTools` and `openUi` were already carried). It is gated by Pi's project trust and by the adapter's approval of the whole entry (adapter:project-server-trust.ts:101-102).
+4. The CHANGELOG line does not mention the one-time project re-approval or the sampling and UI divergences. The page covers them. Overlaps review IN-02.
+
+No unregistered threat flags: all six SUMMARY `## Threat Flags` sections say None. 09-03 lists T-09-09 as not mitigated, which this register re-dispositions.
+
+## Security Audit Trail
+
+| Audit date | Threats total | Closed | Open blocking | Open nonblocking | Run by |
+| --- | --- | --- | --- | --- | --- |
+| 2026-11-14 | 23 | 23 (5 accepted) | 0 | 0 | gsd-security-auditor: current-source read at d987142a; pi-mcp-adapter 7.0.1 and pi-subagents 0.88.1 sources read; one scratch-home probe of the marker parse |
+
+## Sign-Off
+
+- [x] Every threat has a disposition and evidence in implementation, tests or records.
+- [x] Accepted risks are in the Accepted Risks Log. T-09-09 is re-dispositioned under the D-PG9-07 amendment and waits for maintainer review (MCPOPENUI-01).
+- [x] No blocking or nonblocking threat remains open.
+- [x] `status: verified`; `threats_open: 0`.
+
+**Approval:** verified 2026-11-14 at d987142a. T-09-09 and T-09-10 rest on decisions that wait for maintainer review. If D-PG9-07 is rejected, T-09-09 reopens as high and blocking. The auditor reran no test suite; the parent owns the combined-tree gate.

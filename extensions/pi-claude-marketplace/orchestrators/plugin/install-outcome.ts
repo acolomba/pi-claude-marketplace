@@ -122,7 +122,8 @@ import {
   resolveStrict,
 } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource, type ParsedSource, type PathSource } from "../../domain/source.ts";
-import { mcpServerConfigsOf } from "../../persistence/state-io.ts";
+import { declaredOptions, resolveOptions } from "../../domain/user-config.ts";
+import { mcpServerConfigsOf, userConfigFieldsOf } from "../../persistence/state-io.ts";
 import { WorkflowsUnstageRefusedError } from "../../shared/errors-bridges.ts";
 import {
   ConcurrentInstallError,
@@ -1278,6 +1279,8 @@ async function runInstallLedgerBody(
         knownWorkflowNames: generatedNames.workflows,
         // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
         cwd: installCtx.cwd,
+        // D-PG10-13: the options are written into skill content at staging.
+        options: declaredOptions(resolveOptions(installCtx.resolved.declaredUserConfig)),
       });
       installCtx.skillsPrep = prep;
       // Set before commit so undo can remove any dirs that were placed if
@@ -1328,6 +1331,8 @@ async function runInstallLedgerBody(
         workflowNames: generatedNames.workflows,
         // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
         cwd: installCtx.cwd,
+        // D-PG10-13: the options are written into command content at staging.
+        options: declaredOptions(resolveOptions(installCtx.resolved.declaredUserConfig)),
       });
       installCtx.commandsPrep = prep;
       // Set before commit for the same reason as stagedSkillNames above.
@@ -1385,6 +1390,8 @@ async function runInstallLedgerBody(
         },
         // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
         cwd: installCtx.cwd,
+        // D-PG10-13: the options are written into agent content at staging.
+        options: declaredOptions(resolveOptions(installCtx.resolved.declaredUserConfig)),
       });
       installCtx.agentsPrep = prep;
       // The agents bridge tags its D-07 duplicate-name skips discovery and
@@ -1484,6 +1491,8 @@ async function runInstallLedgerBody(
         sourcePath: `${installCtx.resolved.pluginRoot}#mcpServers`,
         description: installCtx.resolved.description,
         env: opts.env,
+        // D-PG10-21: a server that names an option with no value is left out.
+        options: declaredOptions(resolveOptions(installCtx.resolved.declaredUserConfig)),
       });
       installCtx.mcpReplacement = await replacePreparedMcp(prep);
       const result = prep.result;
@@ -1669,6 +1678,8 @@ async function runInstallLedgerBody(
         // substituted entries. Each config is a deep copy, so no later
         // in-memory change reaches the saved record.
         mcpServerConfigs: mcpServerConfigsOf(installCtx.resolved.declaredMcpServers),
+        // D-PG10-23: the declared options, absent when the plugin declares none.
+        ...userConfigFieldsOf(installCtx.resolved.declaredUserConfig),
         ...(installCtx.resolved.mcpBundle === true && { mcpBundle: true }),
         compatibility: {
           // INV-1 / D-66-01 / BFILL-01: record the REAL compatibility from the

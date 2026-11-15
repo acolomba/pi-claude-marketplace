@@ -1,6 +1,7 @@
 // orchestrators/plugin/install-flow-results.ts
 //
 // Typed install outcome, promotion, declaration, and warning projection.
+import { resolveOptions } from "../../domain/user-config.ts";
 import { writePluginConfigEntry } from "../../persistence/config-write-back.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
@@ -82,7 +83,7 @@ export interface ResultInstallOptions extends CascadeInstallOptions {
 
 export type HydratableMember = Pick<
   CascadeMemberOutcome,
-  "key" | "name" | "marketplace" | "pluginRoot" | "hooksConfigPath"
+  "key" | "name" | "marketplace" | "pluginRoot" | "hooksConfigPath" | "options"
 >;
 
 /**
@@ -401,6 +402,7 @@ export async function promoteDependencyRecord(
         marketplace,
         pluginRoot: summary.resolved.pluginRoot,
         hooksConfigPath: summary.resolved.hooksConfigPath,
+        options: resolveOptions(summary.resolved.declaredUserConfig),
       },
     ],
     mcpConfigNotices: summary.mcpConfigNotices,

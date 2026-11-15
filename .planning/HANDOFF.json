@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "timestamp": "2026-11-15T14:00:00.000Z",
+  "timestamp": "2026-11-15T18:00:00.000Z",
   "phase": "6",
   "phase_name": "Hook Inputs and Events",
   "phase_dir": ".planning/phases/06-hook-inputs-and-events",
@@ -30,18 +30,8 @@
       "commit": "see git log after 392e6ea2"
     },
     {
-      "id": 15,
-      "name": "Phase 10 (features/gaps-mcp worktree): wave 2 gate at 8c993ecd, then plans 10-06..10-21, then close (revert STATE after phase complete)",
-      "status": "not_started"
-    },
-    {
-      "id": 16,
-      "name": "Merge features/gaps-mcp into features/gaps, combined npm run check, apply its parent lines (features/gaps-agents merged 2026-11-15)",
-      "status": "not_started"
-    },
-    {
       "id": 17,
-      "name": "Security re-checks for Phases 7 and 9; Phase 11; milestone audit/complete/cleanup",
+      "name": "Security re-check for Phase 9 (Phase 7 re-audited at 3a59a8fd); Phase 11; milestone audit/complete/cleanup",
       "status": "not_started"
     }
   ],
@@ -77,6 +67,6 @@
     }
   ],
   "uncommitted_files": [],
-  "next_action": "Phases 1-8 are complete on features/gaps (features/gaps-agents merged). Continue Phase 10 in ~/src/pi-claude-marketplace-gaps-mcp, then merge features/gaps-mcp into features/gaps, then the security re-checks for Phases 7 and 9, then Phase 11.",
-  "context_notes": "Full detail in .planning/phases/06-hook-inputs-and-events/HANDOFF-parity-gaps-session.md. Worktrees: features/gaps (this; Phases 1-8), features/gaps-mcp (Phase 9 complete, Phase 10 in progress). features/gaps-agents is merged. Side branches keep stale STATE.md on purpose."
+  "next_action": "Phases 1-10 are complete on features/gaps (features/gaps-agents and features/gaps-mcp merged). Next: the Phase 9 security re-check, then Phase 11.",
+  "context_notes": "Full detail in .planning/phases/06-hook-inputs-and-events/HANDOFF-parity-gaps-session.md. Worktree: features/gaps (this; Phases 1-10). features/gaps-agents and features/gaps-mcp are merged."
 }

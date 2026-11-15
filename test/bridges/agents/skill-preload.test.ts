@@ -61,6 +61,7 @@ function preloadInput(
       commands: [],
       workflows: [],
     },
+    options: undefined,
     ...overrides,
   };
 }
@@ -260,6 +261,40 @@ test("rewrites a same-plugin skill reference as the skills bridge does", async (
         {
           kind: "inline",
           text: `Base directory for this skill: ${TARGET_ROOT}/acme-rules\n\nThen run /skill:acme-helper.`,
+        },
+      ],
+    ]),
+  );
+});
+
+test("D-PG10-13: fills a preloaded skill's option references as the skill's own staging does", async (t) => {
+  // arrange
+  const root = await createPluginTree(t);
+  const rules = await writeSkill(
+    root,
+    "rules",
+    "---\ndescription: The rules.\n---\nMode ${user_config.mode}, token ${user_config.token}.\n",
+  );
+  const options = {
+    values: new Map([
+      ["mode", "fast"],
+      ["token", "abc123"],
+    ]),
+    sensitive: new Set(["token"]),
+  };
+
+  // act
+  const preloads = await readSkillPreloads(preloadInput(root, [rules], { options }));
+
+  // assert
+  assert.deepStrictEqual(
+    preloads,
+    new Map<string, SkillPreload>([
+      [
+        "acme-rules",
+        {
+          kind: "inline",
+          text: `Base directory for this skill: ${TARGET_ROOT}/acme-rules\n\nMode fast, token [sensitive option 'token' not available in skill content].`,
         },
       ],
     ]),

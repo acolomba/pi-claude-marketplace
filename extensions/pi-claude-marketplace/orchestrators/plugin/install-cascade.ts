@@ -101,6 +101,7 @@ import {
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
+import { resolveOptions } from "../../domain/user-config.ts";
 import { isPluginDirectoryMarketplace } from "../../domain/version.ts";
 import {
   isRecordedButDisabled,
@@ -141,6 +142,7 @@ import type {
 import type { DependencyRangeIntersection } from "../../domain/dependency-range.ts";
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
+import type { ResolvedOptions } from "../../domain/user-config.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { RemoteTag } from "../../platform/git.ts";
@@ -456,8 +458,9 @@ export interface CascadeMemberOutcome extends Pick<
   readonly declaresMcp: McpDependency | false;
   readonly declaresWorkflows: boolean;
   /**
-   * Where the member materialized, and the hooks config it declared relative to
-   * that root -- `undefined` when it declared none.
+   * Where the member materialized, the hooks config it declared relative to
+   * that root -- `undefined` when it declared none -- and the options of its
+   * resolution (D-PG10-10).
    *
    * Carried so the caller can hydrate a member's hooks into the routing table
    * the way it already hydrates the requesting plugin's: a dependency whose
@@ -465,10 +468,12 @@ export interface CascadeMemberOutcome extends Pick<
    * entry, leaving its hooks inert until the next `/reload`.
    *
    * Never rendered. The row composer reads a structural subset of this type
-   * that declares neither field, so no cascade row can interpolate the path.
+   * that declares none of these fields, so no cascade row can interpolate the
+   * path or an option value.
    */
   readonly pluginRoot: string;
   readonly hooksConfigPath: string | undefined;
+  readonly options: ResolvedOptions;
   /** D-PL10-16: the member's own discovery notes, omitted when it raised none. */
   readonly discoveryWarnings?: readonly DiscoveryWarning[];
   /**
@@ -1272,6 +1277,7 @@ function recordMaterializedMember(
     declaresWorkflows: summary.stagedWorkflowNames.length > 0,
     pluginRoot: summary.resolved.pluginRoot,
     hooksConfigPath: summary.resolved.hooksConfigPath,
+    options: resolveOptions(summary.resolved.declaredUserConfig),
     ...(summary.discoveryWarnings.length > 0 && {
       discoveryWarnings: summary.discoveryWarnings,
     }),

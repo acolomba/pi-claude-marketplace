@@ -20,6 +20,7 @@ import { createRemovalOpsFake } from "../../platform/removal-ops-fake.ts";
 import type {
   PreparedSkillsStaging,
   StageSkillsCommitResult,
+  StageSkillsInput,
 } from "../../../extensions/pi-claude-marketplace/bridges/skills/types.ts";
 import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
@@ -100,6 +101,7 @@ async function stageSingleSkill(
   t: TestContext,
   directory: string,
   source: string,
+  options?: StageSkillsInput["options"],
 ): Promise<{ stagedBytes: string; pluginRoot: string; pluginDataDir: string }> {
   const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
     t,
@@ -113,6 +115,7 @@ async function stageSingleSkill(
     locations,
     cwd: scopeRoot,
     knownWorkflowNames: [],
+    options,
     pluginName: "acme",
     pluginRoot,
     pluginDataDir,
@@ -161,6 +164,7 @@ async function stageWrittenSkills(
     locations: paths.locations,
     cwd: paths.scopeRoot,
     knownWorkflowNames: [],
+    options: undefined,
     pluginName: "acme",
     pluginRoot: paths.pluginRoot,
     pluginDataDir: paths.pluginDataDir,
@@ -215,6 +219,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -275,6 +280,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -343,6 +349,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -398,6 +405,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -630,6 +638,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -665,6 +674,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: ["acme:audit"],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -708,6 +718,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -761,6 +772,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -833,6 +845,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -886,6 +899,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -948,6 +962,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -991,6 +1006,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1061,6 +1077,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1226,6 +1243,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1286,6 +1304,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1364,6 +1383,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1445,6 +1465,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot: windowsRoot,
       pluginDataDir,
@@ -1459,6 +1480,60 @@ describe("prepareStageSkills", () => {
     // assert
     assert.strictEqual(stagedBytes, expectedBytes);
     assert.deepStrictEqual(prepared.result.degraded, []);
+  });
+
+  test("writes each option into the staged description and body (D-PG10-08, D-PG10-09, D-PG10-13)", async (t) => {
+    // arrange
+    const source =
+      "---\nname: opts\ndescription: Mode ${user_config.mode}.\n---\n" +
+      "Mode ${user_config.mode} token ${user_config.token} note ${user_config.note}.\n";
+    const options = {
+      values: new Map([
+        ["mode", "fast"],
+        ["token", "abc123"],
+      ]),
+      sensitive: new Set(["token"]),
+    };
+
+    // act
+    const { stagedBytes, pluginRoot, pluginDataDir } = await stageSingleSkill(
+      t,
+      "opts",
+      source,
+      options,
+    );
+
+    // assert
+    assert.strictEqual(
+      stagedBytes,
+      '---\nname: acme-opts\ndescription: "Mode fast."\n' +
+        recordLine(["acme:opts", "opts"], pluginRoot, pluginDataDir) +
+        "---\nMode fast token [sensitive option 'token' not available in skill content] " +
+        "note ${user_config.note}.\n",
+    );
+  });
+
+  test("keeps every option reference as written for a plugin with no options (D-PG10-21)", async (t) => {
+    // arrange
+    const source =
+      "---\nname: opts\ndescription: Mode ${user_config.mode}.\n---\n" +
+      "Mode ${user_config.mode} token ${user_config.token}.\n";
+
+    // act
+    const { stagedBytes, pluginRoot, pluginDataDir } = await stageSingleSkill(
+      t,
+      "opts",
+      source,
+      undefined,
+    );
+
+    // assert
+    assert.strictEqual(
+      stagedBytes,
+      "---\nname: acme-opts\ndescription: Mode ${user_config.mode}.\n" +
+        recordLine(["acme:opts", "opts"], pluginRoot, pluginDataDir) +
+        "---\nMode ${user_config.mode} token ${user_config.token}.\n",
+    );
   });
 
   test("keeps the project token literal for a user-scope install", async (t) => {
@@ -1494,6 +1569,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: path.join(scopeRoot, "ignored-project"),
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1539,6 +1615,7 @@ describe("prepareStageSkills", () => {
         locations,
         cwd: scopeRoot,
         knownWorkflowNames: [],
+        options: undefined,
         pluginName: "acme",
         pluginRoot: "/plugin",
         pluginDataDir: "[unterminated",
@@ -1592,6 +1669,7 @@ describe("prepareStageSkills", () => {
         locations,
         cwd: scopeRoot,
         knownWorkflowNames: [],
+        options: undefined,
         pluginName: "acme",
         pluginRoot,
         pluginDataDir,
@@ -1637,6 +1715,7 @@ describe("prepareStageSkills", () => {
         locations,
         cwd: scopeRoot,
         knownWorkflowNames: [],
+        options: undefined,
         pluginName: "acme",
         pluginRoot,
         pluginDataDir,
@@ -1684,6 +1763,7 @@ describe("commitPreparedSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1734,6 +1814,7 @@ describe("commitPreparedSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1772,6 +1853,7 @@ describe("commitPreparedSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1831,6 +1913,7 @@ describe("commitPreparedSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1895,6 +1978,7 @@ describe("commitPreparedSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1958,6 +2042,7 @@ describe("commitPreparedSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -2010,6 +2095,7 @@ describe("commitPreparedSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -2061,6 +2147,7 @@ describe("abortPreparedSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -2093,6 +2180,7 @@ describe("abortPreparedSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,

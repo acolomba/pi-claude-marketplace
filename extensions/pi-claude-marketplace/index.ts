@@ -26,6 +26,7 @@ import { recordedMcpServerNames } from "./orchestrators/mcp/recorded-servers.ts"
 import { createMcpSessionMaterializer } from "./orchestrators/mcp/session-materialize.ts";
 import { createUpdateOperations } from "./orchestrators/plugin/operations.ts";
 import { composePackageInstallAbortScope } from "./orchestrators/plugin/package-install.ts";
+import { createPluginOptionVariables } from "./orchestrators/plugin-options.ts";
 import { recomputePluginPath } from "./orchestrators/plugin-path.ts";
 import {
   createApplyReconcile,
@@ -70,6 +71,18 @@ function applyMcpAdapterEnvFrom(readCwd: () => string): void {
 }
 
 /**
+ * D-PG10-23: runs one apply of the plugin option variables. A throw is
+ * debug-logged and never escapes (NFR-2).
+ */
+async function applyOptionVariablesWith(apply: () => Promise<void>): Promise<void> {
+  try {
+    await apply();
+  } catch (err) {
+    hookDebugLog(`plugin option variables skipped: ${errorMessage(err)}`, "env");
+  }
+}
+
+/**
  * Registers the extension's Pi hooks, tools, and slash command surface.
  */
 // DISP-01: async factory; Pi's loader awaits this Promise (loader.d.ts
@@ -92,6 +105,10 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   // own `session_start`, so the values must exist before this extension's
   // handlers run.
   applyMcpAdapterEnvFrom(() => process.cwd());
+  // D-PG10-23: the user scope's option variables are set here, awaited, for
+  // the same reason. The project scope waits for the load's trust answer.
+  const optionVariables = createPluginOptionVariables({ loadState, env: process.env });
+  await applyOptionVariablesWith(optionVariables.applyUserScope);
   const hooksRuntime = createHooksRuntime();
   const hooksRouting = createHooksRouting(hooksRuntime, { readHooksJson });
   const completionCache = createCompletionCache();
@@ -174,8 +191,9 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   ): Promise<void> {
     requireNotificationMode(ctx.mode);
     const run = openNotificationRun(pi, { kind: "load" });
-    // D-LOC-01: an untrusted project's hooks are not routed, and a load with
-    // autoapply on does not apply its scope.
+    // D-LOC-01: an untrusted project's hooks are not routed, a load with
+    // autoapply on does not apply its scope, its plugins' bin folders stay
+    // off PATH (D-PG10-02), and its option variables are not set (D-PG10-23).
     const projectTrusted = ctx.isProjectTrusted();
     try {
       await hooksHydration.hydrateProjectScopeForCwd(event.cwd, projectTrusted);
@@ -221,7 +239,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
 
     requireNotificationMode(ctx.mode);
     try {
-      const pathResult = await recomputePluginPath(event.cwd);
+      const pathResult = await recomputePluginPath(event.cwd, projectTrusted);
       for (const skip of pathResult.skipped) {
         try {
           notifyPluginPathSkipped(ctx, run, skip.scope, skip.reason);
@@ -232,6 +250,10 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     } catch (err) {
       hookDebugLog(`plugin PATH recompute skipped: ${errorMessage(err)}`, "env");
     }
+
+    // D-PG10-23: the project scope's option variables follow the load's trust
+    // answer; the constant above is the only trust read.
+    await applyOptionVariablesWith(() => optionVariables.applyForLoad(event.cwd, projectTrusted));
   }
 
   // The peer's own `ExtensionAPI.on("resources_discover", ...)` overload checks
@@ -343,7 +365,19 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     },
     hooksRouting,
     pluginUpdateOperations.updatePlugins,
-    { runForeground: backgroundGate.runForeground },
+    {
+      // D-PG10-11: after every command, whatever its outcome, the option
+      // variables are applied again with the last load's working directory and
+      // trust answer, so an install is usable before the next `/reload`.
+      runForeground: (command) =>
+        backgroundGate.runForeground(async () => {
+          try {
+            await command();
+          } finally {
+            await applyOptionVariablesWith(optionVariables.applyAgain);
+          }
+        }),
+    },
   );
   registerClaudeMarketplaceTools(pi);
   registerSkillAliases(pi, pluginNames);

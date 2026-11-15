@@ -10,7 +10,9 @@ import {
   McpServerCollisionError,
   McpServerKeyCollisionError,
   McpUnstagePartialError,
+  ShellFormOptionReferenceError,
   SkillFrontmatterNodeError,
+  UnsetPluginOptionError,
   WorkflowsUnstageRefusedError,
   WorkflowTargetOccupiedError,
 } from "../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
@@ -474,6 +476,11 @@ describe("McpConfigFileError", () => {
       message:
         'MCP config /scope/mcp-adapter.json has an "mcp-servers" value that is not an object; it was left unchanged.',
     },
+    {
+      defect: "marker-not-valid",
+      message:
+        'MCP config /scope/mcp-adapter.json has a plugin entry whose "_piClaudeMarketplace" marker is not valid; it was left unchanged.',
+    },
   ] as const) {
     test(`AFILE-02: names the file and the ${defect} defect without a cause`, () => {
       // arrange
@@ -496,6 +503,24 @@ describe("McpConfigFileError", () => {
       );
     });
   }
+
+  test("D-PG9-03: a marker-not-valid refusal names the entry and the marker member, escaped", () => {
+    // arrange
+    const marker = { server: "s\u001br", member: "defaultFields" };
+
+    // act
+    const error = new McpConfigFileError("/scope/mcp-adapter.json", "marker-not-valid", marker);
+
+    // assert
+    assert.deepStrictEqual(
+      { message: error.message, marker: error.marker },
+      {
+        message:
+          'MCP config /scope/mcp-adapter.json has the entry "s\\u001br" whose "_piClaudeMarketplace.defaultFields" is not valid; it was left unchanged.',
+        marker,
+      },
+    );
+  });
 });
 
 describe("McpUnstagePartialError", () => {
@@ -812,4 +837,51 @@ describe("SkillFrontmatterNodeError", () => {
       );
     });
   }
+});
+
+describe("UnsetPluginOptionError", () => {
+  test("D-PG10-08: states Claude Code's message with the key in both places and keeps the key", () => {
+    // act
+    const error = new UnsetPluginOptionError("token");
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, key: error.key },
+      {
+        name: "UnsetPluginOptionError",
+        message:
+          `Plugin option "token" isn't set. Open /plugin manage to configure it, or check ` +
+          `that the plugin's userConfig schema declares "token".`,
+        key: "token",
+      },
+    );
+  });
+});
+
+describe("ShellFormOptionReferenceError", () => {
+  test("D-PG10-10: states Claude Code's refusal with the plugin and the command, and keeps both", () => {
+    // arrange
+    const command = "${CLAUDE_PLUGIN_ROOT}/hooks/run.sh ${user_config.mode}";
+
+    // act
+    const error = new ShellFormOptionReferenceError("demo@fixtures", command);
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, plugin: error.plugin, command: error.command },
+      {
+        name: "ShellFormOptionReferenceError",
+        message:
+          "Hook from plugin demo@fixtures references ${user_config.*} in a shell-form command. " +
+          "The substituted value would be re-parsed by the shell. Use exec form instead \u2014 " +
+          '{"command": "<executable>", "args": ["${user_config.KEY}", ...]} \u2014 or read ' +
+          "$CLAUDE_PLUGIN_OPTION_<KEY> from the hook's environment. Command: " +
+          "${CLAUDE_PLUGIN_ROOT}/hooks/run.sh ${user_config.mode}",
+        plugin: "demo@fixtures",
+        command,
+      },
+    );
+  });
 });

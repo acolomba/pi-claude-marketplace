@@ -1,8 +1,9 @@
 // bridges/agents/convert.ts
 //
 // AG-7 conversion pipeline. Notable details:
-//   1. substituteClaudeVars from ../../shared/vars.ts (D-08 / PI-10) handles
-//      body substitution per the PI-10 contract.
+//   1. substituteClaudeContent from ../../shared/vars.ts (D-08 / PI-10) handles
+//      body substitution per the PI-10 contract, plugin options included
+//      (D-PG10-13).
 //   2. resolveSkillReference from ../../domain/skill-tokens.ts maps skill
 //      preloads and body references to the names staged by the skills bridge.
 //      Agent name generation happens in ./discover.ts.
@@ -15,7 +16,7 @@ import { profileFor } from "../../domain/mcp-implementation.ts";
 import { declaredAgentName, generatedMcpServerKey } from "../../domain/name.ts";
 import { resolveSkillReference, rewriteMarkdownReferences } from "../../domain/skill-tokens.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { substituteClaudeVars } from "../../shared/vars.ts";
+import { substituteClaudeContent } from "../../shared/vars.ts";
 
 import { emitGeneratedAgentFile, emitGeneratedAgentFrontmatter } from "./frontmatter.ts";
 import { mcpAsyncWarning } from "./mcp-async-warning.ts";
@@ -32,6 +33,7 @@ import type {
   InstalledReferenceNames,
   SkillReferenceResolution,
 } from "../../domain/skill-tokens.ts";
+import type { ClaudeContentOptions } from "../../shared/vars.ts";
 
 /**
  * Source frontmatter fields the converter actively consumes. Anything else
@@ -892,6 +894,12 @@ export interface ConvertAgentInput {
    */
   projectDir?: string | undefined;
   /**
+   * D-PG10-13: the plugin's options, written into the body where it names
+   * `${user_config.KEY}`; `undefined` for a plugin that declares no
+   * `userConfig` (D-PG10-21).
+   */
+  options: ClaudeContentOptions | undefined;
+  /**
    * ANAME-02 / MGRT-01: the declared names of the MCP servers the rendered
    * form maps, the servers its implementation runs. An agent's Claude-form MCP
    * names of these servers map to pi-subagents `mcp:` entries; every other
@@ -965,6 +973,7 @@ function convertAgentOrEmpty(input: ConvertAgentInput): AgentConversion {
     sourceHash,
     mapModel: mapModelFlag,
     projectDir,
+    options,
     mcpServerNames,
     mcpImplementation = "adapter",
   } = input;
@@ -1044,11 +1053,17 @@ function convertAgentOrEmpty(input: ConvertAgentInput): AgentConversion {
   // SUB-02: projectDir is scope-gated upstream (agents/stage.ts). Agents are
   // not skill-scoped, so no skillDir is supplied and ${CLAUDE_SKILL_DIR} stays
   // literal via the helper's pass-through.
-  const substitutedBody = substituteClaudeVars(body, {
-    pluginRoot,
-    pluginData: pluginDataDir,
-    projectDir,
-  });
+  // D-PG10-13: pi-subagents reads the agent file itself, so no later pass of
+  // this extension sees the body, and the options are written here.
+  const substitutedBody = substituteClaudeContent(
+    body,
+    {
+      pluginRoot,
+      pluginData: pluginDataDir,
+      projectDir,
+    },
+    options,
+  );
 
   // Resolve references against the names that this install stages.
   const convertedBody = rewriteMarkdownReferences(

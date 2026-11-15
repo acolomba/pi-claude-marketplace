@@ -5,6 +5,7 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 
+import { resolveOptions } from "../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   atCatalogVersion,
@@ -16,10 +17,14 @@ import {
   loadState,
   mcpServerConfigsOf,
   rangeVersionOf,
+  recordedOptionsOf,
   replaceCompatibility,
+  replaceUserConfig,
   saveState,
   toDisabledRecord,
+  userConfigFieldsOf,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { captureDebugLog } from "../platform/debug-log-capture.ts";
 
 interface HooksOnlyResources {
   readonly skills: [];
@@ -562,6 +567,15 @@ for (const { name, extra, accepted } of [
     extra: { mcpServerConfigs: [{ name: "srv" }] },
     accepted: false,
   },
+  {
+    name: "D-PG10-23 a record holding the options its plugin declares",
+    extra: {
+      userConfig: {
+        mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+      },
+    },
+    accepted: true,
+  },
   { name: "MREC-01 a record flagging a bundle", extra: { mcpBundle: true }, accepted: true },
   { name: "MREC-01 a false bundle flag", extra: { mcpBundle: false }, accepted: false },
   {
@@ -666,6 +680,219 @@ test("MREC-01: records no entry for a plugin declaring no MCP server", () => {
 
   // assert
   assert.deepStrictEqual(mcpServerConfigs, []);
+});
+
+test("D-PG10-23: loads a record's declared options unchanged at the same schema version", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-user-config-");
+  const storedState = storedStateWithPluginKeys({
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+    userConfig: {
+      mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+      retries: { type: "number", title: "Retries", description: "The retries.", default: 3 },
+    },
+  });
+  await writeFile(path.join(extensionRoot, "state.json"), JSON.stringify(storedState));
+
+  // act
+  const loadedState = await loadState(extensionRoot);
+
+  // assert
+  assert.deepStrictEqual(loadedState, storedState);
+});
+
+test("D-PG10-23: gives a declared schema as the userConfig field to write", () => {
+  // arrange
+  const declared = {
+    mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+    hosts: {
+      type: "string",
+      title: "Hosts",
+      description: "The hosts.",
+      multiple: true,
+      default: ["a", "b"],
+    },
+  } satisfies Parameters<typeof userConfigFieldsOf>[0];
+
+  // act
+  const fields = userConfigFieldsOf(declared);
+
+  // assert
+  assert.deepStrictEqual(fields, { userConfig: declared });
+});
+
+test("D-PG10-23: gives a deep copy that a later change to the declared schema does not reach", () => {
+  // arrange
+  const declared = {
+    hosts: {
+      type: "string" as const,
+      title: "Hosts",
+      description: "The hosts.",
+      multiple: true,
+      default: ["a"],
+    },
+  };
+  const fields = userConfigFieldsOf(declared);
+
+  // act
+  declared.hosts.default.push("changed");
+  declared.hosts.title = "Changed";
+
+  // assert
+  assert.deepStrictEqual(fields, {
+    userConfig: {
+      hosts: {
+        type: "string",
+        title: "Hosts",
+        description: "The hosts.",
+        multiple: true,
+        default: ["a"],
+      },
+    },
+  });
+});
+
+test("D-PG10-23: gives a declared empty schema as an empty object", () => {
+  // act
+  const fields = userConfigFieldsOf({});
+
+  // assert
+  assert.deepStrictEqual(fields, { userConfig: {} });
+});
+
+test("D-PG10-14: gives no field for a plugin that declares no options", () => {
+  // act
+  const fields = userConfigFieldsOf(undefined);
+
+  // assert
+  assert.deepStrictEqual(fields, {});
+});
+
+test("D-PG10-23: keeps an option named __proto__ as an own key of the stored schema", () => {
+  // arrange
+  const declared = JSON.parse(
+    '{"__proto__":{"type":"string","title":"Proto","description":"The proto.","default":"x"}}',
+  ) as Parameters<typeof userConfigFieldsOf>[0];
+
+  // act
+  const stored = userConfigFieldsOf(declared).userConfig;
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      own: Object.hasOwn(stored as object, "__proto__"),
+      prototype: Object.getPrototypeOf(stored) === Object.prototype,
+      text: JSON.stringify(stored),
+    },
+    {
+      own: true,
+      prototype: true,
+      text: '{"__proto__":{"type":"string","title":"Proto","description":"The proto.","default":"x"}}',
+    },
+  );
+});
+
+test("D-PG10-15: replaces a record's recorded options with the fields given", () => {
+  // arrange
+  const record: Pick<PluginInstallRecord, "userConfig"> = {
+    userConfig: {
+      mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+    },
+  };
+
+  // act
+  replaceUserConfig(record, {
+    userConfig: {
+      mode: { type: "string", title: "Mode", description: "The mode.", default: "slow" },
+    },
+  });
+
+  // assert
+  assert.deepStrictEqual(record, {
+    userConfig: {
+      mode: { type: "string", title: "Mode", description: "The mode.", default: "slow" },
+    },
+  });
+});
+
+test("D-PG10-15: removes a record's recorded options when the fields given hold none", () => {
+  // arrange
+  const record: Pick<PluginInstallRecord, "userConfig"> = { userConfig: {} };
+
+  // act
+  replaceUserConfig(record, {});
+
+  // assert
+  assert.strictEqual(Object.hasOwn(record, "userConfig"), false);
+});
+
+test("D-PG10-23: reads a record's stored options as the resolved options of its schema", (t) => {
+  // arrange
+  const schema = {
+    mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+    note: { type: "string", title: "Note", description: "A note." },
+  } as const;
+  const debugLines = captureDebugLog(t);
+
+  // act
+  const options = recordedOptionsOf({ userConfig: schema });
+
+  // assert
+  assert.deepStrictEqual(options, resolveOptions(schema));
+  assert.deepStrictEqual(debugLines, []);
+});
+
+test("D-PG10-15: reads a record with no stored options as a plugin that declares none", (t) => {
+  // arrange
+  const debugLines = captureDebugLog(t);
+
+  // act
+  const options = recordedOptionsOf({});
+
+  // assert
+  assert.deepStrictEqual(options, resolveOptions(undefined));
+  assert.deepStrictEqual(debugLines, []);
+});
+
+for (const { label, stored, logged } of [
+  { label: "a string", stored: "mode=fast", logged: "userConfig is not an object" },
+  {
+    label: "an option with no title",
+    stored: { mode: { type: "string", description: "The mode.", default: "fast" } },
+    logged: 'userConfig option "mode": field "title" is missing',
+  },
+]) {
+  test(`D-PG10-25: reads ${label} stored as the options as declared options with no values and logs it`, (t) => {
+    // arrange
+    const debugLines = captureDebugLog(t);
+
+    // act
+    const options = recordedOptionsOf({ userConfig: stored });
+
+    // assert
+    assert.deepStrictEqual(options, resolveOptions({}));
+    assert.deepStrictEqual(debugLines, [`[state] recorded userConfig ignored: ${logged}`]);
+  });
+}
+
+test("D-PG10-23: reads a stored option named __proto__ as an option", () => {
+  // arrange
+  const stored: unknown = JSON.parse(
+    '{"__proto__":{"type":"string","title":"Proto","description":"The proto.","default":"x"}}',
+  );
+
+  // act
+  const options = recordedOptionsOf({ userConfig: stored });
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      values: [...options.values],
+      prototype: Object.getPrototypeOf({}) === Object.prototype,
+      polluted: Object.hasOwn(Object.prototype, "type"),
+    },
+    { values: [["__proto__", "x"]], prototype: true, polluted: false },
+  );
 });
 
 test("returns the exact default for a missing state file", async (t) => {

@@ -408,6 +408,7 @@ export async function hydrateInstalledHooks(args: {
         hooksJsonPath,
         cwd: args.cwd,
         logPrefix: "install",
+        options: member.options,
       });
     } catch (cacheErr) {
       hookDebugLog(

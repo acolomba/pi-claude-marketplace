@@ -111,6 +111,9 @@ function isMarkedFor(entry: unknown, plugin: string, marketplace: string): boole
   );
 }
 
+// The variables release 0.19.2's MCP stage substituted.
+const SUBSTITUTED_VARIABLE = /\$\{(?:CLAUDE_PLUGIN_ROOT|CLAUDE_PLUGIN_DATA|CLAUDE_PROJECT_DIR)\}/;
+
 // The entry release 0.19.2 wrote for the declared server `entry`: the declared
 // members, the injected env of a stdio server, and the marker.
 function legacyEntry(
@@ -120,7 +123,7 @@ function legacyEntry(
   marker: Readonly<Record<string, string>>,
 ): Record<string, unknown> {
   const declared = jsonObject(entry, `the declared server ${name}`);
-  if (JSON.stringify(declared).includes("${")) {
+  if (SUBSTITUTED_VARIABLE.test(JSON.stringify(declared))) {
     throw new Error(`the declared server ${name} names a variable, which is not substituted`);
   }
 
@@ -147,8 +150,9 @@ function legacyEntry(
  * The user's server, which carries no marker, comes first. The entries
  * today's install wrote into `<scopeRoot>/mcp-adapter.json` under their
  * generated keys are removed. Every other member of both files stays. A
- * declared server that names a variable fails the write, because 0.19.2's
- * substitution is not reproduced.
+ * declared server that names a variable 0.19.2 substituted fails the write,
+ * because that substitution is not reproduced. Any other reference, such as a
+ * plugin option, stays as written, as 0.19.2 left it.
  *
  * The installation record keeps today's shape unless the scenario also
  * rewrites it.

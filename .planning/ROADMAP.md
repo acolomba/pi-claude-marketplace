@@ -105,8 +105,8 @@ run against them. Phase 4 depends on Phase 1 alone, so it can move earlier.
 - [x] **Phase 6: Hook Inputs and Events** - Hooks receive `tool_use_id` and the other missing stdin fields, `UserPromptExpansion` hooks run before an expansion, and a continued session reports `resume` (completed 2026-11-15)
 - [x] **Phase 7: Agent Frontmatter and Grants** - Agent frontmatter is read as YAML, `Agent` and `Task` grants let an agent delegate, `model: inherit` is passed on, and both tool lists restrict an agent (completed 2026-11-14)
 - [x] **Phase 8: Workflow Agents and Run Paths** - A workflow runs the plugin's own agents and notes a missing one, an agent with a `Workflow` grant starts its plugin's workflow, and the uncovered run paths and the limits of a workflow subagent are proven or documented (completed 2026-11-15)
-- [ ] **Phase 9: Adapter Entries and MCP Features** - Under the adapter a stdio server stays alive and user-written fields survive updates, the sampling and UI question is settled, and resources, prompts, and elicitation are documented and tested
-- [ ] **Phase 10: Plugin Options, Variables, and Trust** - `userConfig` defaults reach hooks, servers, and content, user-scope skills and commands get the project directory, a plugin `bin` joins `PATH` only when it exists and the project is trusted, and the trust gap is decided
+- [x] **Phase 9: Adapter Entries and MCP Features** - Under the adapter a stdio server stays alive and user-written fields survive updates, the sampling and UI question is settled, and resources, prompts, and elicitation are documented and tested (completed 2026-11-14)
+- [x] **Phase 10: Plugin Options, Variables, and Trust** - `userConfig` defaults reach hooks, servers, and content, user-scope skills and commands get the project directory, a plugin `bin` joins `PATH` only when it exists and the project is trusted, and the trust gap is decided (completed 2026-11-15)
 - [ ] **Phase 11: Skills, Commands, and Records** - Typed commands and skills attach `@file` references, commands answer to their Claude Code names, alias suggestions show descriptions, and the compatibility page and the record corrections land
 
 <details>
@@ -460,7 +460,24 @@ Plans:
   4. `docs/mcp-compatibility.md` states, for each implementation, whether a plugin server can use resources, prompts, elicitation, sampling, roots, and output limits, and says that `@server:uri` mentions do not exist on Pi (PG-MCP-08).
   5. Under the adapter, a plugin server's entry holds the fields that withhold `sampling` and the MCP UI extension, or the compatibility page cites the recorded decision that accepts the divergence (PG-SEC-03).
 
-**Plans**: TBD
+**Plans**: 6/6 plans complete
+
+Plans:
+**Wave 1**
+- [x] 09-01-PLAN.md -- Wave 1: end the adapter listing wait on Pi's registry so a stub the adapter keeps connected no longer stalls it, and guard a plugin server's resource read under each implementation
+- [x] 09-02-PLAN.md -- Wave 1: let the entry marker record a string or boolean default, and model an adapter entry as release 0.23.0 wrote it
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 09-03-PLAN.md -- Wave 2: write `lifecycle: "lazy-keep-alive"` for stdio plugin servers and `openUi: false` for every plugin server, recorded in the marker, and bring every pinned entry, stub message table, and status row to what the adapter now does
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 09-04-PLAN.md -- Wave 3: keep a user's `protocolVersion`, `tasks`, `exposeResources`, and `caFile` across an update and a reinstall, and pin a user's lifecycle and openUi across an update
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 09-06-PLAN.md -- Wave 4: record D-PG9-01, D-PG9-07, and D-PG9-08, draft the per-server sampling request with BACKLOG MCPSAMPLING-01, and add the CHANGELOG line
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [x] 09-05-PLAN.md -- Wave 5: correct the MCP compatibility page and the output catalog, and add the features-beyond-tools section, citing the D-PG9 records
 
 ### Phase 10: Plugin Options, Variables, and Trust
 
@@ -477,7 +494,49 @@ Plans:
   4. In a project the user marked "Do not trust", with an enabled project-scope plugin that has `bin/hello`, the bash tool does not find `hello`; in a trusted project it does. With two enabled plugins, one of them with `bin/`, the bash tool's `PATH` holds one plugin entry (PG-CORE-06, PG-CORE-07).
   5. The decision on the trust gap of D-LOC-01 is in `PROJECT.md` with its premise and the Pi version it was checked against (PG-SEC-02).
 
-**Plans**: TBD
+**Closeout (2026-11-15):** 6/6 truths, one by override: the maintainer's PG-SEC-02 answer to D-PG10-01 (option A, pending maintainer review) is carried, and PG-SEC-02 stays Pending. PG-CORE-03, -05, -06, and -07 are complete. `npm run check` passed (exit 0) at 16ef48af: 1983 adapter-profile and 199 builtin-profile scenarios. The review loop added D-PG10-25, pending maintainer review. See `10-VERIFICATION.md`.
+
+**Plans**: 21/21 plans complete
+
+Plans:
+**Wave 1**
+- [x] 10-01-PLAN.md -- Wave 1: let a scenario publish an executable plugin file and start Pi in a project the user marked "Do not trust", with two guard scenarios for a plugin `bin` on `PATH`
+- [x] 10-02-PLAN.md -- Wave 1: parse and resolve a plugin's `userConfig` in one pure module, and prove against pi-mcp-adapter that an escaped option value comes out as the raw default
+- [x] 10-03-PLAN.md -- Wave 1: fill `${CLAUDE_PROJECT_DIR}` for a user-scope skill or command when it is invoked, when the model reads it, and through `run_plugin_command`
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 10-04-PLAN.md -- Wave 2: keep an untrusted project's plugin `bin` off `PATH`, and add a plugin's `bin` only when the folder exists
+- [x] 10-05-PLAN.md -- Wave 2: install a plugin whose options all have a default without `--partial`, make a malformed `userConfig` unavailable, and keep a required option with no default partially available
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 10-06-PLAN.md -- Wave 3: give the required-option arm the reason `options not set` on every surface, and list the unset option keys in `info`
+- [x] 10-07-PLAN.md -- Wave 3: keep the option schema on the install record, at install and at every restage
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 10-08-PLAN.md -- Wave 4: export each option default to hooks as `CLAUDE_PLUGIN_OPTION_<KEY>` at every load, from the install record and through one reader that validates it again
+- [x] 10-09-PLAN.md -- Wave 4: write plugin option defaults into skill content at staging, with the sensitive-option text for a sensitive option
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [x] 10-10-PLAN.md -- Wave 5: set an escaped process variable for each plugin option, owned through a ledger, with the project scope only in a trusted project
+- [x] 10-11-PLAN.md -- Wave 5: fill plugin options in exec-form hook commands and arguments, fail a run that names an unset option, and refuse a shell-form command that names one
+- [x] 10-12-PLAN.md -- Wave 5: leave an MCP server that names an option with no value out of `mcp-adapter.json` at install, and report it with the `option-blocked` notice
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [x] 10-13-PLAN.md -- Wave 6: leave such a server out at update, reinstall, and the load-time MCP move, and drop its notice when the command unstages the plugin
+- [x] 10-14-PLAN.md -- Wave 6: do not register with Pi's built-in MCP a server that names an option with no value
+- [x] 10-15-PLAN.md -- Wave 6: leave out and report a stdio server whose command or argument starts with an option that holds a home path
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [x] 10-16-PLAN.md -- Wave 7: give hooks their option variables in the session that installed, enabled, updated, or reinstalled the plugin
+- [x] 10-17-PLAN.md -- Wave 7: fill plugin options in the five MCP fields under pi-mcp-adapter, as a reference in `mcp-adapter.json` and never as a value
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [x] 10-18-PLAN.md -- Wave 8: write plugin option defaults into command and agent content at staging, preloaded skills included
+- [x] 10-19-PLAN.md -- Wave 8: fill plugin options in the five MCP fields under Pi's built-in MCP, in memory, and run the field scenarios under both profiles
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [x] 10-20-PLAN.md -- Wave 9: record D-PG10-01 and the seven other pending decisions, amend D-LOC-01, PENV-01, D-CF5-15, and BACKLOG USRCFG-01, draft the Pi trust-paths request, and add the CHANGELOG lines
+- [x] 10-21-PLAN.md -- Wave 9: correct `docs/env-vars.md`, the hooks compatibility page, and the MCP compatibility page for plugin options, the project directory, and the `PATH` rule
 
 ### Phase 11: Skills, Commands, and Records
 
@@ -509,8 +568,8 @@ Plans:
 | 6. Hook Inputs and Events | 13/13 | Complete    | 2026-11-15 |
 | 7. Agent Frontmatter and Grants | 6/6 | Complete    | 2026-11-14 |
 | 8. Workflow Agents and Run Paths | 7/7 | Complete    | 2026-11-15 |
-| 9. Adapter Entries and MCP Features | 0/0 | Not started | - |
-| 10. Plugin Options, Variables, and Trust | 0/0 | Not started | - |
+| 9. Adapter Entries and MCP Features | 6/6 | Complete    | 2026-11-14 |
+| 10. Plugin Options, Variables, and Trust | 21/21 | Complete    | 2026-11-15 |
 | 11. Skills, Commands, and Records | 0/0 | Not started | - |
 
 ## Carried Forward

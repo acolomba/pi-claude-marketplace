@@ -164,6 +164,7 @@ test("refuses a foreign index claim with no target file in both preview and stag
       pluginRoot,
       pluginDataDir: path.join(locations.dataRoot, "catalog", "acme"),
       agentsDirs: [agentsDir],
+      options: undefined,
     }),
     assertOwnershipRefusal,
   );

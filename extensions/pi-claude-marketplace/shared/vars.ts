@@ -41,12 +41,28 @@ const TOKEN_TO_FIELD = {
   CLAUDE_PROJECT_DIR: "projectDir",
 } as const satisfies Record<string, keyof ClaudePluginVars>;
 
-const CLAUDE_VAR_PATTERN = new RegExp(
-  String.raw`\$\{(${Object.keys(TOKEN_TO_FIELD)
-    .map((key) => key.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`))
-    .join("|")})\}`,
+type PathToken = keyof typeof TOKEN_TO_FIELD;
+
+const PATH_TOKEN_ALTERNATION = Object.keys(TOKEN_TO_FIELD)
+  .map((key) => key.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`))
+  .join("|");
+
+const CLAUDE_VAR_PATTERN = new RegExp(String.raw`\$\{(${PATH_TOKEN_ALTERNATION})\}`, "g");
+
+// The option reference `user_config\.([^}]+)` is Claude Code 2.1.323's pattern.
+const CLAUDE_CONTENT_PATTERN = new RegExp(
+  String.raw`\$\{(?:(${PATH_TOKEN_ALTERNATION})|user_config\.([^}]+))\}`,
   "g",
 );
+
+/**
+ * The option data a content pass reads (D-PG10-13). `ResolvedOptions` of
+ * `domain/user-config.ts` has this shape; `shared/` cannot import `domain/`.
+ */
+export interface ClaudeContentOptions {
+  readonly values: ReadonlyMap<string, string>;
+  readonly sensitive: ReadonlySet<string>;
+}
 
 /**
  * Replace every literal `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`,
@@ -66,8 +82,45 @@ const CLAUDE_VAR_PATTERN = new RegExp(
  *     match, so they are left exactly as authored.
  */
 export function substituteClaudeVars(content: string, vars: ClaudePluginVars): string {
-  return content.replaceAll(CLAUDE_VAR_PATTERN, (matched, name: keyof typeof TOKEN_TO_FIELD) => {
-    const value = vars[TOKEN_TO_FIELD[name]];
-    return value ?? matched;
-  });
+  return content.replaceAll(CLAUDE_VAR_PATTERN, (matched, name: PathToken) =>
+    pathValue(vars, name, matched),
+  );
+}
+
+function pathValue(vars: ClaudePluginVars, name: PathToken, matched: string): string {
+  return vars[TOKEN_TO_FIELD[name]] ?? matched;
+}
+
+// Claude Code 2.1.323 checks the sensitive set before it looks up a value
+// (D-PG10-09) and keeps a reference with no value as written (D-PG10-08).
+function optionText(options: ClaudeContentOptions, key: string, matched: string): string {
+  if (options.sensitive.has(key)) {
+    return `[sensitive option '${key}' not available in skill content]`;
+  }
+
+  return options.values.get(key) ?? matched;
+}
+
+/**
+ * `substituteClaudeVars` for skill, command, and agent content, which also
+ * fills each `${user_config.KEY}` when the content is staged (D-PG10-13). The
+ * option reference joins the same alternation, so the three properties of
+ * `substituteClaudeVars` hold for both kinds of reference: a spliced value is never
+ * scanned again. `options` is `undefined` for a plugin that declares no
+ * `userConfig`, and then every option reference stays as written (D-PG10-21).
+ */
+export function substituteClaudeContent(
+  content: string,
+  vars: ClaudePluginVars,
+  options: ClaudeContentOptions | undefined,
+): string {
+  if (options === undefined) {
+    return substituteClaudeVars(content, vars);
+  }
+
+  return content.replaceAll(
+    CLAUDE_CONTENT_PATTERN,
+    (matched, name: PathToken | undefined, key: string) =>
+      name === undefined ? optionText(options, key, matched) : pathValue(vars, name, matched),
+  );
 }

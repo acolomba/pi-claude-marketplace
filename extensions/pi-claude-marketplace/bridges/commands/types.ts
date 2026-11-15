@@ -22,6 +22,7 @@ import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
+import type { ClaudeContentOptions } from "../../shared/vars.ts";
 
 /**
  * D-CF3-03: the fields a command map entry writes over its command's own
@@ -90,6 +91,12 @@ export interface StageCommandsInput {
    * substitution only.
    */
   readonly cwd: string;
+  /**
+   * D-PG10-13: the plugin's options, written into command content where it
+   * names `${user_config.KEY}`. Required, like `cwd`; a caller passes
+   * `undefined` for a plugin that declares no `userConfig` (D-PG10-21).
+   */
+  readonly options: ClaudeContentOptions | undefined;
 }
 
 /** Per-command record returned for `state.json` population (W-05). */

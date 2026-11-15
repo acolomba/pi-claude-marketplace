@@ -25,16 +25,25 @@ import path from "node:path";
 import { test } from "node:test";
 
 import {
+  ownedOptionVariables,
   serializeLiteral,
   serializeSegments,
 } from "../../extensions/pi-claude-marketplace/bridges/mcp/adapter-escape.ts";
 import {
-  ADAPTER_FIELD_ENCODER,
+  adapterFieldEncoder,
   substituteAndInject,
 } from "../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
 import { expandClaudeValue } from "../../extensions/pi-claude-marketplace/domain/claude-mcp-variables.ts";
+import {
+  ownedOptionVariableName,
+  resolveOptions,
+} from "../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { applyMcpAdapterEnv } from "../../extensions/pi-claude-marketplace/shared/session-env.ts";
-import { EXPANSION_BUILTINS, EXPANSION_CASES } from "../bridges/mcp/expansion-cases.ts";
+import {
+  EXPANSION_BUILTINS,
+  EXPANSION_CASES,
+  OPTION_FIELD_CASES,
+} from "../bridges/mcp/expansion-cases.ts";
 
 import {
   findPiMcpAdapterPackage,
@@ -53,7 +62,7 @@ import type {
   ClaudeBuiltins,
   Segment,
 } from "../../extensions/pi-claude-marketplace/domain/claude-mcp-variables.ts";
-import type { ExpansionField } from "../bridges/mcp/expansion-cases.ts";
+import type { ExpansionField, OptionFieldCase } from "../bridges/mcp/expansion-cases.ts";
 
 const EMPTY_ENV_NAME = "PI_CLAUDE_MARKETPLACE_EMPTY";
 
@@ -319,7 +328,13 @@ function mismatchFor(
   raw: string,
   variant: string | undefined,
 ): Mismatch | undefined {
-  const { segments } = expandClaudeValue(raw, "plain", PROPERTY_INSTALL_ENV, PROPERTY_BUILTINS);
+  const { segments } = expandClaudeValue(
+    raw,
+    "plain",
+    PROPERTY_INSTALL_ENV,
+    PROPERTY_BUILTINS,
+    undefined,
+  );
   const written = serializeSegments(segments, false);
   const runtime = runtimeFor(segments, variant);
   const want = rendered(segments, runtime);
@@ -494,7 +509,13 @@ function defaultMismatchFor(
   raw: string,
   referenceValue: string,
 ): Mismatch | undefined {
-  const { segments } = expandClaudeValue(raw, "plain", PROPERTY_INSTALL_ENV, PROPERTY_BUILTINS);
+  const { segments } = expandClaudeValue(
+    raw,
+    "plain",
+    PROPERTY_INSTALL_ENV,
+    PROPERTY_BUILTINS,
+    undefined,
+  );
   const written = serializeSegments(segments, false);
   const runtime = { R: referenceValue, K: "S" };
   const want = rendered(segments, runtime);
@@ -587,11 +608,15 @@ function installEnvironments(credential: Credential): Environment[] {
 }
 
 function writtenRemoteValues(form: string, installEnv: Environment): [string, string] {
-  const ctx: McpSubstitutionContext = { ...EXPANSION_BUILTINS, env: installEnv };
+  const ctx: McpSubstitutionContext = {
+    ...EXPANSION_BUILTINS,
+    env: installEnv,
+    options: undefined,
+  };
   const { entry } = substituteAndInject(
     { url: `https://mcp.example.test/?k=${form}`, headers: { Value: form } },
     ctx,
-    ADAPTER_FIELD_ENCODER,
+    adapterFieldEncoder(new Map()),
   );
   const { url, headers } = entry;
   const header: unknown =
@@ -672,11 +697,12 @@ function userScopeHeader(raw: string): string {
     ...EXPANSION_BUILTINS,
     projectDir: undefined,
     env: PROJECT_DIR_CREDENTIAL,
+    options: undefined,
   };
   const { entry } = substituteAndInject(
     { url: "https://mcp.example.test/", headers: { Value: raw } },
     ctx,
-    ADAPTER_FIELD_ENCODER,
+    adapterFieldEncoder(new Map()),
   );
   const header: unknown =
     typeof entry.headers === "object" && entry.headers !== null && "Value" in entry.headers
@@ -810,3 +836,199 @@ test("AVAR-03: pi-mcp-adapter home-expands a leading ~/ after interpolation, so 
   // assert
   assert.strictEqual(output, path.join(os.homedir(), "x"));
 });
+
+// D-PG10-23: an option default is exported into Pi's process under its owned
+// name as `serializeLiteral(value, false)`, and the entry holds a reference to
+// that name. The adapter's second and third passes read the inserted value, so
+// each default must come out raw, and none may pull in another variable.
+const OPTION_DEFAULTS: readonly string[] = [
+  "fast",
+  "",
+  "{env:PI_CM_SECRET}",
+  "$env:PI_CM_SECRET",
+  "${PI_CM_SECRET}",
+  "${PI_CM_SECRET:-x}",
+  "a{env:PI_CM_SECRET}b",
+  "!echo pwned",
+  "~/bin/tool",
+  "$",
+  "{",
+  "$e",
+  "{en",
+];
+
+const OPTION_CONTEXTS: readonly (readonly [string, string])[] = [
+  ["", ""],
+  ["--mode=", ""],
+  ["", "/x"],
+];
+
+const SECRET_VALUE = "leak";
+
+interface OptionRun {
+  readonly written: string;
+  readonly expected: string;
+  readonly output: string;
+}
+
+function optionRuns(utils: PiMcpAdapterUtils, owned: string): OptionRun[] {
+  return OPTION_DEFAULTS.flatMap((value) =>
+    OPTION_CONTEXTS.map(([before, after]) => {
+      const written = serializeSegments(
+        [
+          { kind: "text", text: before },
+          { kind: "ref", name: owned },
+          { kind: "text", text: after },
+        ],
+        false,
+      );
+      const environment = {
+        [owned]: serializeLiteral(value, false),
+        [EMPTY_ENV_NAME]: "",
+        PI_CM_SECRET: SECRET_VALUE,
+      };
+      return {
+        written,
+        expected: `${before}${value}${after}`,
+        output: utils.interpolateEnvVars(written, environment),
+      };
+    }),
+  );
+}
+
+test("D-PG10-23: pi-mcp-adapter turns a reference to an exported option default into the raw default", async () => {
+  // arrange
+  const adapter = await loadAdapter();
+  const owned = ownedOptionVariableName({
+    scope: "project",
+    marketplace: "mp",
+    plugin: "plug",
+    key: "mode",
+  });
+
+  // act
+  const runs = optionRuns(adapter.utils, owned);
+
+  // assert
+  assert.match(owned, /^\w+$/);
+  assert.strictEqual(runs.length, OPTION_DEFAULTS.length * OPTION_CONTEXTS.length);
+  assert.deepStrictEqual(
+    runs.filter((run) => run.output !== run.expected),
+    [],
+  );
+  assert.deepStrictEqual(
+    runs.filter((run) => run.output.includes(SECRET_VALUE)),
+    [],
+  );
+  assert.strictEqual(runs[0]?.written, `\${${owned}}`);
+});
+
+test("D-PG10-23: pi-mcp-adapter home-expands an exported option default that starts with ~/ in command", async () => {
+  // arrange
+  const adapter = await loadAdapter();
+  const owned = ownedOptionVariableName({
+    scope: "user",
+    marketplace: "mp",
+    plugin: "plug",
+    key: "tool",
+  });
+  const environment = {
+    [owned]: serializeLiteral("~/bin/tool", false),
+    [EMPTY_ENV_NAME]: "",
+  };
+
+  // act
+  const output = adapter.utils.resolveConfigPath(`\${${owned}}`, environment);
+
+  // assert
+  assert.strictEqual(output, path.join(os.homedir(), "bin/tool"));
+});
+
+// A translated entry that holds `raw` in `field`.
+function optionEntry(field: OptionFieldCase["field"], raw: string): Record<string, unknown> {
+  switch (field) {
+    case "command":
+      return { command: raw };
+    case "args":
+      return { command: "node", args: [raw] };
+    case "env":
+      return { command: "node", env: { K: raw } };
+    case "url":
+      return { type: "http", url: raw };
+    case "headers":
+      return { type: "http", url: "https://acme.example/mcp", headers: { H: raw } };
+  }
+}
+
+function writtenOptionField(
+  field: OptionFieldCase["field"],
+  entry: Record<string, unknown>,
+): string {
+  const value: unknown = {
+    command: entry.command,
+    args: Array.isArray(entry.args) ? (entry.args as unknown[]).at(-1) : undefined,
+    env: (entry.env as Record<string, unknown> | undefined)?.K,
+    url: entry.url,
+    headers: (entry.headers as Record<string, unknown> | undefined)?.H,
+  }[field];
+  if (typeof value !== "string") {
+    throw new Error(`substituteAndInject wrote no ${field}`);
+  }
+
+  return value;
+}
+
+/**
+ * The stage's chain for one option field: the option's owned name and
+ * exported value from `ownedOptionVariables`, the entry written through the
+ * adapter's encoder for the plugin, and the adapter's connect-time chain for
+ * the field with that value in its environment and `HOME` set to a value no
+ * case may receive.
+ */
+function optionFieldRun(
+  adapter: Adapter,
+  row: OptionFieldCase,
+): { written: string; output: string } {
+  const options = resolveOptions({
+    opt: { type: "string", title: "Option", description: "The option.", default: row.value },
+  });
+  const variables = ownedOptionVariables(
+    { scope: "user", marketplace: "mp", plugin: "plug" },
+    options.mcpValues,
+  );
+  const names = new Map([...variables].map(([key, { name }]) => [key, name]));
+  const context: McpSubstitutionContext = { ...EXPANSION_BUILTINS, env: {}, options };
+  const { entry } = substituteAndInject(
+    optionEntry(row.field, row.raw),
+    context,
+    adapterFieldEncoder(names),
+  );
+  const written = writtenOptionField(row.field, entry);
+  const runtime = Object.fromEntries(
+    [...variables.values()].map(({ name, value }) => [name, value]),
+  );
+  return {
+    written,
+    output: adapterOutput(adapter, row.field, written, { ...runtime, HOME: "/leaked" }),
+  };
+}
+
+for (const row of OPTION_FIELD_CASES) {
+  test(`D-PG10-11: ${row.title} comes out of pi-mcp-adapter as Claude Code's value`, async () => {
+    // arrange
+    const adapter = await loadAdapter();
+
+    // act
+    const { written, output } = optionFieldRun(adapter, row);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        holdsValue: row.value !== "" && written.includes(row.value),
+        startsWithBang: written.startsWith("!"),
+        output,
+      },
+      { holdsValue: false, startsWithBang: false, output: row.claudeOutput },
+    );
+  });
+}

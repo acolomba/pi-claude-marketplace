@@ -13,6 +13,8 @@ import {
   loadState,
   mcpServerConfigsOf,
   replaceCompatibility,
+  replaceUserConfig,
+  userConfigFieldsOf,
 } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
@@ -792,7 +794,8 @@ function widensPartialGate(record: PluginStateRecord): boolean {
  * The record fields a disabled-plugin update writes, besides `updatedAt`.
  * MREC-01: the declared MCP servers and the bundle flag are among them, so a
  * declaration-only change writes, and a legacy record without
- * `mcpServerConfigs` reads as changed and gains the field. `apply` restores
+ * `mcpServerConfigs` reads as changed and gains the field. D-PG10-15: so are
+ * the declared options, so a change of them alone writes. `apply` restores
  * the same fields when a deferred enable fails (`reconcile/apply.ts`).
  */
 export const DISABLED_PIN_FIELDS = [
@@ -804,6 +807,7 @@ export const DISABLED_PIN_FIELDS = [
   "compatibilityBasis",
   "mcpServerConfigs",
   "mcpBundle",
+  "userConfig",
 ] as const satisfies readonly (keyof PluginStateRecord)[];
 
 type DisabledPin = Pick<PluginStateRecord, (typeof DISABLED_PIN_FIELDS)[number]>;
@@ -821,6 +825,7 @@ function disabledPinProjection(pin: DisabledPin): string {
     pin.compatibilityBasis ?? null,
     pin.mcpServerConfigs ?? null,
     pin.mcpBundle === true,
+    pin.userConfig ?? null,
   ]);
 }
 
@@ -828,6 +833,7 @@ function nextDisabledPin(preflight: PreparedPluginUpdate): {
   readonly compatibility: PluginStateRecord["compatibility"];
   readonly mcpServerConfigs: NonNullable<PluginStateRecord["mcpServerConfigs"]>;
   readonly mcpBundle: boolean;
+  readonly userConfig: Pick<PluginStateRecord, "userConfig">;
   readonly projection: string;
 } {
   const compatibility = {
@@ -840,10 +846,13 @@ function nextDisabledPin(preflight: PreparedPluginUpdate): {
   // substitution.
   const mcpServerConfigs = mcpServerConfigsOf(preflight.installable.declaredMcpServers);
   const mcpBundle = preflight.installable.mcpBundle === true;
+  // D-PG10-15: the options `toVersion` declares.
+  const userConfig = userConfigFieldsOf(preflight.installable.declaredUserConfig);
   return {
     compatibility,
     mcpServerConfigs,
     mcpBundle,
+    userConfig,
     // No `?? shaFallback`: a re-resolution that produced no pin PROJECTS no
     // pin, so a record still carrying one reads as changed and gets it
     // cleared.
@@ -860,6 +869,7 @@ function nextDisabledPin(preflight: PreparedPluginUpdate): {
       compatibilityBasis: "neutral",
       mcpServerConfigs,
       ...(mcpBundle && { mcpBundle: true }),
+      ...userConfig,
     }),
   };
 }
@@ -931,6 +941,7 @@ async function refreshDisabledRecord(
         delete record.mcpBundle;
       }
 
+      replaceUserConfig(record, next.userConfig);
       record.updatedAt = new Date().toISOString();
       await transaction.save();
       return true;

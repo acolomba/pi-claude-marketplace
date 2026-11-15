@@ -32,16 +32,104 @@ Feature: MCP server configuration
             "directTools": "search",
             "toolPrefix": "mcp",
             "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
             "_piClaudeMarketplace": {
               "plugin": "demo",
               "marketplace": "fixtures",
               "defaultFields": {
-                "requestTimeoutMs": 1800000
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
               }
             }
           },
           "plugin_demo_remote_": {
             "url": "http://127.0.0.1:9/mcp",
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 300000,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 300000
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @adapter-only
+  Scenario: An install writes the lifecycle that keeps a stdio plugin server for the session, and no lifecycle for a remote server (PG-MCP-06, D-PG9-01, D-PG9-02)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"plain": {"command": "pi-features-absent-mcp-server"}, "typed": {"type": "stdio", "command": "pi-features-absent-mcp-server"}, "events": {"type": "sse", "url": "https://example.invalid/sse"}, "stream": {"type": "streamable-http", "url": "https://example.invalid/mcp"}}}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    When the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_plain_": {
+            "command": "pi-features-absent-mcp-server",
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              }
+            }
+          },
+          "plugin_demo_typed_": {
+            "command": "pi-features-absent-mcp-server",
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              }
+            }
+          },
+          "plugin_demo_events_": {
+            "url": "https://example.invalid/sse",
+            "httpTransport": "sse",
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 300000,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 300000
+              }
+            }
+          },
+          "plugin_demo_stream_": {
+            "url": "https://example.invalid/mcp",
             "directTools": "search",
             "toolPrefix": "mcp",
             "requestTimeoutMs": 300000,
@@ -476,9 +564,6 @@ Feature: MCP server configuration
     When the user prompts "call the stub"
     Then the stub mcp server "root" of the plugin "{home}/marketplaces/fixtures/plugins/demo" receives these messages:
       | kind         | method                    | params                                                                                                                                                                                                                                                          |
-      | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"extensions":{"io.modelcontextprotocol/ui":{"mimeTypes":["text/html;profile=mcp-app"]}},"sampling":{},"roots":{},"elicitation":{"form":{}}},"clientInfo":{"name":"pi-mcp-plugin_demo_root_","version":"1.0.0"}} |
-      | notification | notifications/initialized |                                                                                                                                                                                                                                                                 |
-      | request      | tools/list                |                                                                                                                                                                                                                                                                 |
       | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"extensions":{"io.modelcontextprotocol/ui":{"mimeTypes":["text/html;profile=mcp-app"]}},"sampling":{},"roots":{},"elicitation":{"form":{}}},"clientInfo":{"name":"pi-mcp-plugin_demo_root_","version":"1.0.0"}} |
       | notification | notifications/initialized |                                                                                                                                                                                                                                                                 |
       | request      | tools/list                |                                                                                                                                                                                                                                                                 |

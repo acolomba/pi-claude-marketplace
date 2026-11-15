@@ -1386,6 +1386,14 @@ list-time surfacing is later decided).
 
 ## USRCFG-01: no equivalent to Claude Code's `userConfig` plugin settings
 
+Amended 2026-11-15 (parity-gaps, Phase 10, D-PG10-04). Step 1 shipped: each declared `default` reaches hooks (as `CLAUDE_PLUGIN_OPTION_<KEY>` and in exec-form `${user_config.KEY}`), MCP servers, and skill, command, and agent content, and `userConfig` is no longer an unsupported component. Hooks and content get a default as if the user had saved it, which is more than Claude Code 2.1.323 does (D-PG10-19). Steps 2 and 3, values that a user sets and the dialog, stay open behind PRD decision 30. Correction: the text below says that sensitive values need OS secret custody. That is wrong. Claude Code keeps them in `~/.claude/.credentials.json` where there is no keychain (`docs/research/parity-gaps/core.md` W4).
+
+Step 2 must settle these points first:
+
+- Content is filled at staging, and the invocation passes run later. A value that a user sets can hold `$ARGUMENTS`, `$1`, or `` !`cmd` ``, and the invocation then expands it. Move the fill to invocation, or guard the value against the argument passes.
+- The option variables `PI_CLAUDE_MARKETPLACE_OPTION_*` are visible to every hook, to the bash tool, and to another plugin's MCP entry that names one. Decide whether to withhold a reference that another plugin's entry makes.
+- `apply` does not restage a record installed with `--partial` because of `userConfig` (D-PG10-24).
+
 Surfaced 2026-08-13 reviewing `docs/competitive-analysis/` against
 `.planning/BACKLOG.md` for coverage gaps, then researching Claude Code's
 official `userConfig` spec and `@nklisch/pi-plugins`' implementation of it
@@ -4858,7 +4866,7 @@ Added 2026-11-03 (user request). Every `/claude:plugin` verb and every component
 No scenario at all:
 
 1. GitHub sign-in (Device Flow) and credential prompts: the interactive sign-in that `install`, `apply` and `marketplace add` run for a private GitHub repo, and the rule that a load with `autoapply` on uses stored credentials only and never prompts (D-13). Unit tests only. Needs a stand-in for GitHub's device-code endpoints.
-2. A plugin's `bin/` on `PATH` (PENV-01): at load each enabled plugin's `bin/` is appended to `PATH` and recorded in `PI_CLAUDE_MARKETPLACE_PATH`, and Pi's bash tool inherits it. No scenario shows a bash call finding a plugin executable, or the entry leaving after uninstall and `/reload`.
+2. A plugin's `bin/` on `PATH` (PENV-01): at load each enabled plugin's `bin/` is appended to `PATH` and recorded in `PI_CLAUDE_MARKETPLACE_PATH`, and Pi's bash tool inherits it. Covered by `features/plugin/executables.feature` (parity-gaps, Phase 10): a bash call finds a plugin executable, a project plugin's executable is not found in a project the user marked "do not trust", and two plugins add one entry. Still no scenario: the entry leaving after uninstall and `/reload`.
 3. Background hooks (`asyncRewake`) and the `StopFailure` event: both are supported and appear in no feature file.
 4. Upgrades from old data: the first-load migration of old `state.json` and config formats is unit-tested only. Part of it needs a harness change first, because the harness cannot record an installed plugin without `install` writing the base config (LCTEST-01).
 5. Background agent runs: an `async: true` agent, including one that calls a plugin MCP tool, and with it the working end-to-end proof of MCP-07. Blocked on the pi-subagents fixes on the user's fork (`acolomba/pi-subagents`, `fix/mcp-direct-tools-adapter-7`); see AGTASYNC-01 and MCPBG-01.
@@ -5450,3 +5458,31 @@ Noted 2026-11-15 (parity-gaps, Phase 8, 08-REVIEW.md IN3-01 and IN3-02).
 
 - IN3-01: `docs/mcp-compatibility.md` says AG-11 licenses refusing a plugin install that holds an agent with zero tools. AG-11's stated reason (pi-subagents could not express "no tools") no longer holds, and Claude Code refuses only that agent's launch, not the install. Reword it to say so and point at PRD decision 15 (AGENT-10), which proposes to skip such an agent, pending the maintainer's decision.
 - IN3-02: `docs/workflows-compatibility.md` says a repository's `keywordTriggerEnabled` turns on workflows mode, which is already the engine's default. Name `keywordTriggerWord` (a repository can set the trigger to an ordinary word) and `defaultAgentTimeoutMs` (`null` removes the user's own timeout) instead.
+
+## MCPSAMPLING-01: withhold sampling from plugin servers once pi-mcp-adapter has a per-server switch
+
+Noted 2026-11-14 (parity-gaps, Phase 9, D-PG9-08). Trigger: a published pi-mcp-adapter release with a per-server sampling switch. The request is drafted in `.planning/upstream/pi-mcp-adapter-per-server-sampling.md`, and the maintainer has not filed it yet. Under 7.0.1 every plugin server gets `sampling: {}` whenever the global `settings.sampling` allows it. The work it unlocks: raise or gate the pi-mcp-adapter floor on that release, write the switch on every plugin entry as a recorded default, as the stdio `lifecycle` default is written, and drop the sampling divergence from `docs/mcp-compatibility.md`.
+
+## MCPOPENUI-01: write the `openUi: false` default once pi-subagents hashes `openUi`
+
+Noted 2026-11-14 (parity-gaps, Phase 9, D-PG9-07 amendment). Trigger: a pi-subagents release whose `computeMcpServerHash` includes `openUi`, as pi-mcp-adapter 7.0.1's `computeServerHash` does, and a floor raised to it. pi-subagents 0.88.1 omits it, so an entry with `openUi: false` makes background MCP grants fail (`test/integration/pi-subagents-child-identity.test.ts`). The upstream request is the maintainer's to file. The work it unlocks: write `openUi: false` on every plugin entry as a recorded default and drop the UI-extension divergence from `docs/mcp-compatibility.md`.
+
+## PITRUSTPATHS-01: gate project plugins on a trust-requiring path once Pi lets an extension register one
+
+Noted 2026-11-15 (parity-gaps, Phase 10, D-PG10-01). Trigger: a Pi release that lets an extension register a trust-requiring path, or that emits `project_trust` for every project. The request is drafted in `.planning/upstream/pi-extension-trust-paths.md`, and the maintainer has not filed it yet. Under Pi 1.5.0 and 1.5.2, a project that holds only this extension's files is trusted without a prompt unless the user saved "Do not trust". The work it unlocks: register `.pi/claude-plugins.json`, `.pi/pi-claude-marketplace/`, and `.pi/mcp-adapter.json`, so that Pi asks before a project-scope plugin is used. That closes the gap D-PG10-01 accepts.
+
+## HOOKOPTFAIL-01: an option failure before a hook starts shows `Failed to run:`
+
+Noted 2026-11-15 (parity-gaps, Phase 10, D-PG10-08). A hook that names an unset plugin option, or a shell-form hook that names `${user_config.`, fails before its process starts. The bridge records the `run` failure kind and shows `Failed to run: <message>` (D-PG5-11, `bridges/hooks/dispatch-exec.ts`, `hook-labels.ts`), and `features/hook/failures.feature` states that text. Claude Code 2.1.323, read in the binary on 2026-11-15 and not run: the hook runner's caller turns such a throw into status 1 with `spawnFailed` and the message as stderr (`BIN@312883290`). The result loop then shows `Failed with non-blocking status code: <message>` (`BIN@312955146`), and `H9n` decides whether a repeat start failure shows nothing (`BIN@312955093`). Confidence medium: a static read. Decide whether a failure before the start shows Claude Code's prefix and follows its repeat rule. Relates to HOOKERRNOTE-01.
+
+## REDACTHOOKPATH-01: a hook start-failure cause loses part of a plugin path
+
+Noted 2026-11-15 (parity-gaps, Phase 10). `redactAbsolutePaths` reads `/hooks/x.sh` in `${CLAUDE_PLUGIN_ROOT}/hooks/x.sh` as an absolute path, so a hook start-failure cause shows `${CLAUDE_PLUGIN_ROOT}x.sh`. The shell-form option refusal quotes the command, but its 200-character cut drops the `Command:` part, so no scenario shows the bug. A shorter cause can. The redaction predates Phase 10. Fix option: do not read a path that directly follows a `${...}` reference as absolute, with a scenario that shows the full text.
+
+## CMDSKILLNAME-01: a plugin command with the same name as a skill keeps the skill from staging
+
+Noted 2026-11-15 (parity-gaps, Phase 10). A plugin with a command `opts` and a skill `opts` stages the command and not the skill. This predates Phase 10. Claude Code: the skills page says that when a skill and a file in `.claude/commands/` share a name, the skill runs (the table "Resolve skills that share a name", code.claude.com/docs/en/skills, fetched 2026-11-15). The table covers the `.claude/` locations, and the plugin case is inferred, not confirmed. Grep the binary for the plugin rule, then make the skill win if upstream does, with a scenario.
+
+## MCPOPTFALLBACK-01: an option reference inside a `${NAME:-default}` default stays partly literal
+
+Noted 2026-11-15 (parity-gaps, Phase 10, D-PG10-11). In an MCP field, `${FOO:-${user_config.x}}` is split: the option becomes its own segment, and the `${FOO:-` text and the closing `}` stay as written. Claude Code 2.1.323 fills the option first and then reads `${FOO:-value}` (read in the binary). Under pi-mcp-adapter the value is not in the entry, so that read cannot run, and Pi's built-in MCP does the same for one behavior. pi-mcp-adapter 7.0.1's `interpolateEnvVars` cannot nest a reference in a fallback, because its fallback pattern stops at the first `}`. A fix needs a design for each implementation.

@@ -94,11 +94,13 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
       "directTools": "search",
       "toolPrefix": "mcp",
       "requestTimeoutMs": 1800000,
+      "lifecycle": "lazy-keep-alive",
       "_piClaudeMarketplace": {
         "plugin": "acme",
         "marketplace": "catalog",
         "defaultFields": {
-          "requestTimeoutMs": 1800000
+          "requestTimeoutMs": 1800000,
+          "lifecycle": "lazy-keep-alive"
         }
       }
     }
@@ -121,6 +123,7 @@ test("MCP-only staging materializes no agent, command, or skill target", async (
     pluginData,
     sourcePath: path.join(pluginRoot, ".mcp.json"),
     env: {},
+    options: undefined,
     servers: resolution.mcpServers,
     description: resolution.description,
   });

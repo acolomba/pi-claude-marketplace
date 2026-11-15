@@ -106,6 +106,7 @@ function convertedFile(raw: RawAgentFrontmatter, mcpServerNames?: readonly strin
   return convertAgent({
     pluginName: "demo",
     pluginRoot: "/root",
+    options: undefined,
     pluginDataDir: "/data",
     knownSkills: [],
     discovered: {

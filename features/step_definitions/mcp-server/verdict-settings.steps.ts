@@ -29,8 +29,9 @@ const TURNED_OFF_USER_SETTINGS = JSON.stringify(
 );
 
 // A restart has no `Given` after it, so this waits as the listing `Given`
-// does: until the stub logged a tools/list and the adapter closed the
-// listing connection, so a later prompt's connection is the only one open.
+// does: until the stub logged a tools/list and either the adapter closed the
+// listing connection or Pi registered the tools of the stdio server it keeps
+// connected for the session (D-PG9-01).
 When(
   "pi-mcp-adapter finishes listing the tools of the stub mcp server {string} of the plugin {string}",
   async function (this: ScenarioWorld, server: string, plugin: string) {

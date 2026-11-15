@@ -13,6 +13,7 @@ import { dispatchHookExec } from "../../../extensions/pi-claude-marketplace/brid
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
@@ -179,6 +180,7 @@ test("executes a blocking hook through the portable process boundary", async (t)
     },
     declarationIndex: 0,
     ifPredicate: MATCH_ALL_IF,
+    options: resolveOptions(undefined),
   } satisfies RoutingEntry;
   const event = {
     type: "tool_call",
@@ -543,6 +545,7 @@ function makeEntry(
     handlerDecl,
     declarationIndex: 4,
     ifPredicate: MATCH_ALL_IF,
+    options: resolveOptions(undefined),
   };
 }
 
@@ -2028,7 +2031,7 @@ test("spawns an exec-form hook with Claude's path variables filled in", async (t
   const processBoundary = observeSpawn(t, processChild);
   const entry = makeEntry(caseRoot, {
     command: "${CLAUDE_PLUGIN_ROOT}/bin/hook",
-    args: ["--data=${CLAUDE_PLUGIN_DATA}", "${CLAUDE_PROJECT_DIR}", "${user_config.token}"],
+    args: ["--data=${CLAUDE_PLUGIN_DATA}", "${CLAUDE_PROJECT_DIR}"],
   });
 
   // act
@@ -2053,10 +2056,46 @@ test("spawns an exec-form hook with Claude's path variables filled in", async (t
       args: [
         `--data=${path.join(caseRoot, ".pi", "pi-claude-marketplace", "data", "dispatch-marketplace", "dispatch-plugin")}`,
         caseRoot,
-        "${user_config.token}",
       ],
       shell: false,
     },
+  );
+});
+
+test("D-PG10-10: spawns an exec-form hook with its plugin options filled in", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const caseRoot = await makeCaseRoot(t, "dispatch-exec-options-");
+  const processChild = makeInjectedChild(t);
+  const processBoundary = observeSpawn(t, processChild);
+  const entry = {
+    ...makeEntry(caseRoot, {
+      command: "/usr/bin/${user_config.mode}",
+      args: ["--mode=${user_config.mode}"],
+    }),
+    options: resolveOptions({
+      mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+    }),
+  } satisfies RoutingEntry;
+
+  // act
+  const pendingOutcome = dispatchHookExec(
+    entry,
+    { toolName: "bash", input: {} },
+    makeContext(caseRoot),
+    undefined,
+    runtime,
+    { spawnImpl: processBoundary.spawnImpl },
+  );
+  const call = await processBoundary.spawned;
+  await processChild.close(0);
+  const hookOutcome = await pendingOutcome;
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+  assert.deepStrictEqual(
+    { command: call.command, args: call.args, shell: call.options.shell },
+    { command: "/usr/bin/fast", args: ["--mode=fast"], shell: false },
   );
 });
 
@@ -2098,6 +2137,114 @@ test("blocks a hook that cannot start when onFailure is block", async (t) => {
   // assert
   assert.deepStrictEqual(hookOutcome, { kind: "block", reason: ON_FAILURE_HEAD });
 });
+
+const UNSET_TOKEN_MESSAGE =
+  `Plugin option "token" isn't set. Open /plugin manage to configure it, or check that ` +
+  `the plugin's userConfig schema declares "token".`;
+
+test("D-PG10-08: fails an exec-form hook that names an unset option without spawning it", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const caseRoot = await makeCaseRoot(t, "dispatch-exec-unset-option-");
+  const processChild = makeInjectedChild(t);
+  const processBoundary = observeSpawn(t, processChild);
+  const entry = makeEntry(caseRoot, { command: "guard", args: ["${user_config.token}"] });
+
+  // act
+  const hookOutcome = await dispatchHookExec(
+    entry,
+    { toolName: "bash", input: {} },
+    makeContext(caseRoot),
+    undefined,
+    runtime,
+    { spawnImpl: processBoundary.spawnImpl },
+  );
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "run", error: UNSET_TOKEN_MESSAGE },
+  });
+  assert.deepStrictEqual(processBoundary.calls, []);
+});
+
+test("D-PG10-08: blocks an exec-form hook that names an unset option when onFailure is block", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const caseRoot = await makeCaseRoot(t, "dispatch-exec-unset-option-block-");
+  const processChild = makeInjectedChild(t);
+  const processBoundary = observeSpawn(t, processChild);
+  const entry = makeEntry(caseRoot, {
+    command: "guard",
+    args: ["${user_config.token}"],
+    onFailure: "block",
+  });
+
+  // act
+  const hookOutcome = await dispatchHookExec(
+    entry,
+    { toolName: "bash", input: {} },
+    makeContext(caseRoot),
+    undefined,
+    runtime,
+    { spawnImpl: processBoundary.spawnImpl },
+  );
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "block",
+    reason: `${ON_FAILURE_HEAD}\n${UNSET_TOKEN_MESSAGE}`,
+  });
+  assert.deepStrictEqual(processBoundary.calls, []);
+});
+
+const SHELL_REFUSAL_MESSAGE =
+  "Hook from plugin dispatch-plugin@dispatch-marketplace references ${user_config.*} in a " +
+  "shell-form command. The substituted value would be re-parsed by the shell. Use exec form " +
+  'instead \u2014 {"command": "<executable>", "args": ["${user_config.KEY}", ...]} \u2014 or ' +
+  "read $CLAUDE_PLUGIN_OPTION_<KEY> from the hook's environment. Command: guard ${user_config.mode}";
+
+for (const { onFailure, outcome } of [
+  {
+    onFailure: undefined,
+    outcome: { kind: "noop", failure: { kind: "run", error: SHELL_REFUSAL_MESSAGE } },
+  },
+  {
+    onFailure: "block",
+    outcome: {
+      kind: "block",
+      reason:
+        '[guard ${user_config.mode}]: failed; blocking because onFailure is "block"\n' +
+        SHELL_REFUSAL_MESSAGE,
+    },
+  },
+] satisfies readonly { onFailure: string | undefined; outcome: HookExecResult }[]) {
+  test(`D-PG10-10: refuses a shell-form hook that names an option without spawning it (onFailure ${String(onFailure)})`, async (t) => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const caseRoot = await makeCaseRoot(t, "dispatch-exec-shell-option-");
+    const processChild = makeInjectedChild(t);
+    const processBoundary = observeSpawn(t, processChild);
+    const entry = makeEntry(caseRoot, {
+      command: "guard ${user_config.mode}",
+      ...(onFailure === undefined ? {} : { onFailure }),
+    });
+
+    // act
+    const hookOutcome = await dispatchHookExec(
+      entry,
+      { toolName: "bash", input: {} },
+      makeContext(caseRoot),
+      undefined,
+      runtime,
+      { spawnImpl: processBoundary.spawnImpl },
+    );
+
+    // assert
+    assert.deepStrictEqual(hookOutcome, outcome);
+    assert.deepStrictEqual(processBoundary.calls, []);
+  });
+}
 
 test("blocks a hook that exits 1 when onFailure is block", async (t) => {
   // act

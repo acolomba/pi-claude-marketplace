@@ -3,16 +3,21 @@ import { describe, test } from "node:test";
 
 import {
   expandClaudeValue,
+  mcpOptionBlock,
   scanClaudeServerVariables,
 } from "../../extensions/pi-claude-marketplace/domain/claude-mcp-variables.ts";
+import { resolveOptions } from "../../extensions/pi-claude-marketplace/domain/user-config.ts";
 
 import type {
   ClaudeBuiltins,
   ClaudeEnv,
   ExpandedValue,
   FieldClass,
+  McpOptionBlock,
+  McpOptionPass,
   ServerVariableScan,
 } from "../../extensions/pi-claude-marketplace/domain/claude-mcp-variables.ts";
+import type { ResolvedOptions } from "../../extensions/pi-claude-marketplace/domain/user-config.ts";
 
 interface ExpansionRow {
   readonly title: string;
@@ -327,7 +332,7 @@ const ROWS: readonly ExpansionRow[] = [
   },
   ...["$PI_CM_V", "${1X}", "${A-B}", "${A:b}", "${user_config.KEY}", "$env:X", "{env:X}"].map(
     (raw): ExpansionRow => ({
-      title: `AVAR-02: ${raw} is outside Claude's grammar and stays text`,
+      title: `AVAR-02: ${raw} is outside Claude's grammar and stays text with no option pass`,
       raw,
       fieldClass: "plain",
       env: { PI_CM_V: "set", A: "set", X: "set" },
@@ -602,12 +607,193 @@ describe("expandClaudeValue", () => {
       const expectedValue = expanded;
 
       // act
-      const expandedValue = expandClaudeValue(raw, fieldClass, env, builtins);
+      const expandedValue = expandClaudeValue(raw, fieldClass, env, builtins, undefined);
 
       // assert
       assert.deepStrictEqual(expandedValue, expectedValue);
     });
   }
+});
+
+interface OptionPassRow {
+  readonly title: string;
+  readonly raw: string;
+  readonly fieldClass: FieldClass;
+  readonly env: ClaudeEnv;
+  readonly options: McpOptionPass;
+  readonly segments: ExpandedValue["segments"];
+}
+
+const OWNED_MODE = "PI_CLAUDE_MARKETPLACE_OPTION_0123456789abcdef";
+
+const REFERENCES: McpOptionPass = {
+  form: "reference",
+  names: new Map([
+    ["mode", OWNED_MODE],
+    ["a", "PI_CLAUDE_MARKETPLACE_OPTION_aaaaaaaaaaaaaaaa"],
+    ["b", "PI_CLAUDE_MARKETPLACE_OPTION_bbbbbbbbbbbbbbbb"],
+    ["ANTHROPIC_API_KEY", "PI_CLAUDE_MARKETPLACE_OPTION_cccccccccccccccc"],
+  ]),
+};
+
+const VALUES: McpOptionPass = {
+  form: "text",
+  mcpValues: new Map([
+    ["mode", "fast"],
+    ["empty", ""],
+    ["home", "${HOME}"],
+    ["marker", "{env:HOME}"],
+  ]),
+};
+
+const OPTION_PASS_ROWS: readonly OptionPassRow[] = [
+  {
+    title: "D-PG10-11: the reference form writes an option as a reference to its process variable",
+    raw: "--mode=${user_config.mode}",
+    fieldClass: "plain",
+    env: {},
+    options: REFERENCES,
+    segments: [
+      { kind: "text", text: "--mode=" },
+      { kind: "ref", name: OWNED_MODE },
+    ],
+  },
+  {
+    title: "D-PG10-11: the reference form writes two adjacent options as two references",
+    raw: "${user_config.a}${user_config.b}",
+    fieldClass: "plain",
+    env: {},
+    options: REFERENCES,
+    segments: [
+      { kind: "ref", name: "PI_CLAUDE_MARKETPLACE_OPTION_aaaaaaaaaaaaaaaa" },
+      { kind: "ref", name: "PI_CLAUDE_MARKETPLACE_OPTION_bbbbbbbbbbbbbbbb" },
+    ],
+  },
+  {
+    title: "D-PG10-11: an option named like a deny-listed variable is referenced, not withheld",
+    raw: "${user_config.ANTHROPIC_API_KEY}",
+    fieldClass: "remote",
+    env: { ANTHROPIC_API_KEY: "api-key-value" },
+    options: REFERENCES,
+    segments: [{ kind: "ref", name: "PI_CLAUDE_MARKETPLACE_OPTION_cccccccccccccccc" }],
+  },
+  {
+    title: "D-PG10-11: the text form writes an option's value as text",
+    raw: "--mode=${user_config.mode}",
+    fieldClass: "plain",
+    env: {},
+    options: VALUES,
+    segments: [
+      { kind: "text", text: "--mode=" },
+      { kind: "text", text: "fast" },
+    ],
+  },
+  {
+    title:
+      "D-PG10-21: the text form writes an option that is not required and has no default as the empty string",
+    raw: "${user_config.empty}",
+    fieldClass: "plain",
+    env: {},
+    options: VALUES,
+    segments: [{ kind: "text", text: "" }],
+  },
+  {
+    title: "D-PG10-11: an option's value is not scanned again for a variable",
+    raw: "${user_config.home}",
+    fieldClass: "plain",
+    env: { HOME: "/home/user" },
+    options: VALUES,
+    segments: [{ kind: "text", text: "${HOME}" }],
+  },
+  {
+    title: "D-PG10-11: an option's value that holds an adapter marker stays text",
+    raw: "${user_config.marker}",
+    fieldClass: "remote",
+    env: { HOME: "/home/user" },
+    options: VALUES,
+    segments: [{ kind: "text", text: "{env:HOME}" }],
+  },
+  {
+    title: "D-PG10-11: the option pass runs after the path variables",
+    raw: "${CLAUDE_PLUGIN_ROOT}/${user_config.mode}",
+    fieldClass: "plain",
+    env: {},
+    options: REFERENCES,
+    segments: [
+      { kind: "text", text: "/plugins/acme/" },
+      { kind: "ref", name: OWNED_MODE },
+    ],
+  },
+  {
+    title: "D-PG10-11: a key the text form lacks keeps its reference text",
+    raw: "${user_config.other}",
+    fieldClass: "plain",
+    env: {},
+    options: VALUES,
+    segments: [{ kind: "text", text: "${user_config.other}" }],
+  },
+  {
+    title: "D-PG10-11: a key the reference form lacks keeps its reference text",
+    raw: "${user_config.other}-${user_config.mode}",
+    fieldClass: "plain",
+    env: {},
+    options: REFERENCES,
+    segments: [
+      { kind: "text", text: "${user_config.other}-" },
+      { kind: "ref", name: OWNED_MODE },
+    ],
+  },
+];
+
+describe("expandClaudeValue option pass", () => {
+  for (const { title, raw, fieldClass, env, options, segments } of OPTION_PASS_ROWS) {
+    test(title, () => {
+      // arrange
+      const expectedValue: ExpandedValue = { segments, missing: [], withheld: [] };
+
+      // act
+      const expandedValue = expandClaudeValue(raw, fieldClass, env, PROJECT, options);
+
+      // assert
+      assert.deepStrictEqual(expandedValue, expectedValue);
+    });
+  }
+
+  test("D-PG10-11: the text around an option still goes through the variable scan", () => {
+    // arrange
+    const raw = "${PI_CM_V}-${user_config.mode}${ANTHROPIC_API_KEY}";
+    const env: ClaudeEnv = { ANTHROPIC_API_KEY: "api-key-value" };
+
+    // act
+    const expandedValue = expandClaudeValue(raw, "remote", env, PROJECT, REFERENCES);
+
+    // assert
+    assert.deepStrictEqual(expandedValue, {
+      segments: [
+        { kind: "ref", name: "PI_CM_V" },
+        { kind: "text", text: "-" },
+        { kind: "ref", name: OWNED_MODE },
+        { kind: "text", text: "" },
+      ],
+      missing: ["PI_CM_V"],
+      withheld: [{ name: "ANTHROPIC_API_KEY", set: true }],
+    });
+  });
+
+  test("D-PG10-11: with no option pass an option reference stays text", () => {
+    // arrange
+    const raw = "--mode=${user_config.mode}";
+
+    // act
+    const expandedValue = expandClaudeValue(raw, "plain", {}, PROJECT, undefined);
+
+    // assert
+    assert.deepStrictEqual(expandedValue, {
+      segments: [{ kind: "text", text: raw }],
+      missing: [],
+      withheld: [],
+    });
+  });
 });
 
 interface ScanRow {
@@ -727,6 +913,224 @@ describe("scanClaudeServerVariables", () => {
 
       // assert
       assert.deepStrictEqual(serverScan, expectedScan);
+    });
+  }
+});
+
+interface OptionBlockRow {
+  readonly title: string;
+  readonly server: unknown;
+  readonly options: ResolvedOptions | undefined;
+  readonly block: McpOptionBlock | undefined;
+}
+
+// D-PG10-20: the full option shape. `token` is required with no default,
+// `mode` has a default, and `note` is neither required nor given a default.
+// `tool` and `home` hold defaults pi-mcp-adapter would expand to a home path,
+// and `named` one it would not (D-PG10-11).
+const OPTIONS = resolveOptions({
+  token: { type: "string", title: "Token", description: "The token.", required: true },
+  region: { type: "string", title: "Region", description: "The region.", required: true },
+  mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+  note: { type: "string", title: "Note", description: "The note." },
+  tool: { type: "string", title: "Tool", description: "The tool.", default: "~/bin/tool" },
+  home: { type: "string", title: "Home", description: "The home.", default: "~" },
+  named: { type: "string", title: "Named", description: "The named.", default: "~user/bin" },
+});
+
+const UNSET_TOKEN: McpOptionBlock = { reason: "unset", keys: ["token"] };
+
+const OPTION_BLOCK_ROWS: readonly OptionBlockRow[] = [
+  {
+    title: "D-PG10-21: a required option with no default in command blocks the server",
+    server: { command: "${user_config.token}" },
+    options: OPTIONS,
+    block: UNSET_TOKEN,
+  },
+  {
+    title: "D-PG10-21: a required option with no default in an args element blocks the server",
+    server: { command: "node", args: ["--token=${user_config.token}"] },
+    options: OPTIONS,
+    block: UNSET_TOKEN,
+  },
+  {
+    title: "D-PG10-21: a required option with no default in an env value blocks the server",
+    server: { command: "node", env: { TOKEN: "${user_config.token}" } },
+    options: OPTIONS,
+    block: UNSET_TOKEN,
+  },
+  {
+    title: "D-PG10-21: a required option with no default in url blocks the server",
+    server: { type: "http", url: "https://${user_config.token}.example/mcp" },
+    options: OPTIONS,
+    block: UNSET_TOKEN,
+  },
+  {
+    title: "D-PG10-21: a required option with no default in a headers value blocks the server",
+    server: {
+      type: "sse",
+      url: "https://x.example/sse",
+      headers: { Authorization: "Bearer ${user_config.token}" },
+    },
+    options: OPTIONS,
+    block: UNSET_TOKEN,
+  },
+  {
+    title: "D-PG10-08: a key the manifest does not declare blocks the server",
+    server: { command: "node", args: ["${user_config.missing}"] },
+    options: OPTIONS,
+    block: { reason: "unset", keys: ["missing"] },
+  },
+  {
+    title: "D-PG10-21: lists each key once, in first-seen field order",
+    server: {
+      command: "${user_config.region}",
+      args: ["${user_config.token}", "${user_config.region}"],
+      env: { TOKEN: "${user_config.token}" },
+    },
+    options: OPTIONS,
+    block: { reason: "unset", keys: ["region", "token"] },
+  },
+  {
+    title: "D-PG10-21: an option with a default blocks nothing",
+    server: { command: "node", args: ["${user_config.mode}"] },
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title: "D-PG10-21: an option that is not required and has no default blocks nothing",
+    server: { type: "http", url: "https://x.example/mcp", headers: { N: "${user_config.note}" } },
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title: "D-PG10-21: a server with no option reference blocks nothing",
+    server: { command: "node", args: ["${CLAUDE_PLUGIN_ROOT}/server.js", "${HOME}"] },
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title: "D-PG10-21: a reference under an env key Claude writes as is blocks nothing",
+    server: { command: "node", env: { CLAUDE_PLUGIN_DATA: "${user_config.token}" } },
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title: "D-PG10-21: a server that is not an object blocks nothing",
+    server: "${user_config.token}",
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title: "D-PG10-21: a plugin that declares no userConfig blocks nothing",
+    server: { command: "${user_config.token}" },
+    options: undefined,
+    block: undefined,
+  },
+  {
+    title:
+      "D-PG10-11: a command that starts with an option holding a path under home blocks the server",
+    server: { command: "${user_config.tool}" },
+    options: OPTIONS,
+    block: { reason: "home-path", keys: ["tool"] },
+  },
+  {
+    title:
+      "D-PG10-11: a command that starts with an option holding the home marker alone blocks the server",
+    server: { command: "${user_config.home}/bin/tool" },
+    options: OPTIONS,
+    block: { reason: "home-path", keys: ["home"] },
+  },
+  {
+    title: "D-PG10-11: a command that names a home-path option after other text blocks nothing",
+    server: { command: "/opt${user_config.tool}" },
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title:
+      "D-PG10-11: a command that starts with an option the adapter would not expand blocks nothing",
+    server: { command: "${user_config.named}" },
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title:
+      "D-PG10-11: a home-path option in command blocks nothing for a plugin with no userConfig",
+    server: { command: "${user_config.tool}" },
+    options: undefined,
+    block: undefined,
+  },
+  {
+    title: "D-PG10-11: a server that also names an option with no value is reported as unset",
+    server: { command: "${user_config.tool}", env: { TOKEN: "${user_config.token}" } },
+    options: OPTIONS,
+    block: UNSET_TOKEN,
+  },
+  {
+    title: "D-PG10-11: an args element that starts with a home-path option blocks the server",
+    server: { command: "node", args: ["--tool", "${user_config.tool}"] },
+    options: OPTIONS,
+    block: { reason: "home-path", keys: ["tool"] },
+  },
+  {
+    title: "D-PG10-11: lists each home-path key once, command first and then the args in order",
+    server: {
+      command: "${user_config.home}",
+      args: ["${user_config.tool}", "${user_config.home}", "${user_config.tool}/x"],
+    },
+    options: OPTIONS,
+    block: { reason: "home-path", keys: ["home", "tool"] },
+  },
+  {
+    title: "D-PG10-11: a home-path option after other text in an args element blocks nothing",
+    server: { command: "node", args: ["--tool=${user_config.tool}"] },
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title: "D-PG10-11: a home-path option at the start of an env value blocks nothing",
+    server: { command: "node", env: { TOOL: "${user_config.tool}" } },
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title: "D-PG10-11: a home-path option at the start of url blocks nothing",
+    server: { type: "http", url: "${user_config.tool}" },
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title: "D-PG10-11: a home-path option at the start of a headers value blocks nothing",
+    server: { type: "sse", url: "https://x.example/sse", headers: { T: "${user_config.tool}" } },
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title: "D-PG10-11: an args element that is not a string blocks nothing",
+    server: { command: "node", args: [7, { a: "${user_config.tool}" }] },
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title: "D-PG10-11: args that is not an array blocks nothing",
+    server: { command: "node", args: "${user_config.tool}" },
+    options: OPTIONS,
+    block: undefined,
+  },
+];
+
+describe("mcpOptionBlock", () => {
+  for (const { title, server, options, block } of OPTION_BLOCK_ROWS) {
+    test(title, () => {
+      // arrange
+      const expectedBlock = block;
+
+      // act
+      const optionBlock = mcpOptionBlock(server, options);
+
+      // assert
+      assert.deepStrictEqual(optionBlock, expectedBlock);
     });
   }
 });

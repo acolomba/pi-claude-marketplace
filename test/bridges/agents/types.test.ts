@@ -73,6 +73,7 @@ const stageAgentsInput: StageAgentsInput = {
   knownSkills: ["pi-claude-marketplace-acme-testing"],
   mapModel: true,
   cwd: "/project",
+  options: undefined,
 } satisfies StageAgentsInput;
 void stageAgentsInput;
 

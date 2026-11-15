@@ -14,6 +14,7 @@ import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 
@@ -47,6 +48,7 @@ function guardEntry(): RoutingEntry {
     handlerDecl: { type: "command", command: GUARD_COMMAND },
     declarationIndex: 0,
     ifPredicate: MATCH_ALL_IF,
+    options: resolveOptions(undefined),
   };
 }
 

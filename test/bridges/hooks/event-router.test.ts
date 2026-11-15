@@ -38,6 +38,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -457,6 +458,7 @@ test(
       handlerDecl: { type: "command", command: "router-child", asyncRewake: true },
       declarationIndex: 0,
       ifPredicate: MATCH_ALL_IF,
+      options: resolveOptions(undefined),
     } satisfies RoutingEntry;
     const toolCall = {
       type: "tool_call",
@@ -1151,6 +1153,7 @@ function seedPluginConfig(
   resolvedSource: ReturnType<typeof asAbsolutePluginRoot>,
   config: HooksConfig,
   ifPredicates: ReadonlyMap<string, RoutingEntry["ifPredicate"]>,
+  options: RoutingEntry["options"] = resolveOptions(undefined),
 ): void {
   const routingState = createRoutingStateOperations(runtime);
   routingState.setParsedConfig(`${scope}\u0000${marketplace}\u0000${pluginId}`, {
@@ -1160,6 +1163,7 @@ function seedPluginConfig(
     resolvedSource,
     config,
     ifPredicates,
+    options,
   });
 }
 
@@ -1246,6 +1250,7 @@ test("readAndCachePluginHooks reads and parses one case-owned config", async (t)
     hooksJsonPath,
     cwd: root,
     logPrefix: "install",
+    options: resolveOptions(undefined),
   });
   const cache = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
     scope: entry.scope,
@@ -1254,6 +1259,7 @@ test("readAndCachePluginHooks reads and parses one case-owned config", async (t)
     resolvedSource: entry.resolvedSource,
     commands: entry.config.PreToolUse?.[0]?.hooks.map((handler) => handler.command),
     predicateKeys: [...entry.ifPredicates.keys()],
+    options: entry.options,
   }));
 
   // assert
@@ -1265,8 +1271,53 @@ test("readAndCachePluginHooks reads and parses one case-owned config", async (t)
       resolvedSource: path.join(root, "plugin"),
       commands: ["echo read"],
       predicateKeys: ["PreToolUse|0|0"],
+      options: resolveOptions(undefined),
     },
   ]);
+});
+
+test("D-PG10-10 readAndCachePluginHooks gives the entry and each routing entry the options of its input", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const { root } = await createHermeticEnvironment(t, "hooks-router-options-");
+  const hooksJsonPath = path.join(root, "hooks.json");
+  await writeFile(
+    hooksJsonPath,
+    JSON.stringify({
+      PreToolUse: [{ hooks: [{ type: "command", command: "echo first" }] }],
+      Stop: [{ hooks: [{ type: "command", command: "echo second" }] }],
+    }),
+    "utf8",
+  );
+  const options = resolveOptions({
+    mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+    note: { type: "string", title: "Note", description: "A note.", required: false },
+  });
+  const routing = createHooksRouting(runtime, { readHooksJson });
+
+  // act
+  await routing.readAndCachePluginHooks({
+    scope: "user",
+    marketplace: "catalog",
+    plugin: "optioned",
+    resolvedSource: asAbsolutePluginRoot(path.join(root, "plugin")),
+    hooksJsonPath,
+    cwd: root,
+    logPrefix: "install",
+    options,
+  });
+  routing.rebuildRoutingTables();
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      cached: Array.from(runtime.parsedConfigEntries().values(), (entry) => entry.options),
+      routed: Array.from(runtime.routingTableEntries()).flatMap(([, entries]) =>
+        entries.map((entry) => entry.options),
+      ),
+    },
+    { cached: [options], routed: [options, options] },
+  );
 });
 
 test("runtime-bound routing mutations update only their supplied lifecycle owner", async (t) => {
@@ -1296,6 +1347,7 @@ test("runtime-bound routing mutations update only their supplied lifecycle owner
     hooksJsonPath,
     cwd: root,
     logPrefix: "owner-test",
+    options: resolveOptions(undefined),
   });
   routing.rebuildRoutingTables();
 
@@ -1330,6 +1382,7 @@ test("readAndCachePluginHooks leaves the cache unchanged after a read failure", 
     hooksJsonPath: path.join(root, "missing-hooks.json"),
     cwd: root,
     logPrefix: "reinstall",
+    options: resolveOptions(undefined),
   });
 
   // assert
@@ -1353,6 +1406,7 @@ test("readAndCachePluginHooks leaves the cache unchanged after a parse failure",
     hooksJsonPath,
     cwd: root,
     logPrefix: "update",
+    options: resolveOptions(undefined),
   });
 
   // assert
@@ -2150,6 +2204,7 @@ test("registered handlers give stop_hook_active to the Stop hooks of the woken r
       handlerDecl: { type: "command", command: "stop-hook" },
       declarationIndex: 0,
       ifPredicate: MATCH_ALL_IF,
+      options: resolveOptions(undefined),
     },
   ]);
   const startRun = registeredHandler(registrations, "before_agent_start");
@@ -2456,6 +2511,36 @@ test("D-PG6-19: rebuildRoutingTables parses a UserPromptExpansion matcher as a c
   ]);
 });
 
+test("D-PG10-10 rebuildRoutingTables gives every routing entry of a plugin its options", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const options = resolveOptions({
+    mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+  });
+  seedPluginConfig(
+    runtime,
+    "user",
+    "catalog",
+    "optioned",
+    asAbsolutePluginRoot("/router/user/optioned"),
+    makeConfig([
+      { event: "PreToolUse", handlers: 2 },
+      { event: "SessionStart", handlers: 1 },
+    ]),
+    new Map(),
+    options,
+  );
+
+  // act
+  createHooksRouting(runtime, { readHooksJson }).rebuildRoutingTables();
+  const routed = Array.from(runtime.routingTableEntries()).flatMap(([, entries]) =>
+    entries.map((entry) => entry.options),
+  );
+
+  // assert
+  assert.deepStrictEqual(routed, [options, options, options]);
+});
+
 test("rebuildRoutingTables tolerates valid record keys and sparse arrays defensively", () => {
   // arrange
   const runtime = createHooksRuntime();
@@ -2665,6 +2750,7 @@ test(
       resolvedSource: asAbsolutePluginRoot(path.join(root, "old", "first")),
       config,
       ifPredicates: new Map(),
+      options: resolveOptions(undefined),
     });
     runtime.setParsedConfig("project\x00beta\x00second", {
       scope: "project",
@@ -2673,6 +2759,7 @@ test(
       resolvedSource: asAbsolutePluginRoot(path.join(root, "old", "second")),
       config,
       ifPredicates: new Map(),
+      options: resolveOptions(undefined),
     });
     runtime.setParsedConfig("user\x00alpha\x00first", {
       scope: "user",
@@ -2681,6 +2768,7 @@ test(
       resolvedSource: asAbsolutePluginRoot(path.join(root, "user", "first")),
       config,
       ifPredicates: new Map(),
+      options: resolveOptions(undefined),
     });
     seedPluginConfig(
       runtime,
@@ -3094,6 +3182,46 @@ test("project hydration parses a plugin's hooks.json into the parsed-config cach
   assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
 });
 
+test("D-PG10-23 project hydration caches the options its record holds", async (t) => {
+  // arrange
+  const fixture = await makeProjectHookFixture(t, "options-project-hydration", "PreToolUse");
+  const userConfig = {
+    mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+  } as const;
+  const state = makeScopeState({
+    scope: "project",
+    cwd: fixture.projectRoot,
+    plugins: {
+      owner: {
+        ...makeStoredPlugin({
+          root: path.join(fixture.root, "plugins", "owner"),
+          hooks: ["owner-hooks"],
+        }),
+        userConfig,
+      },
+    },
+  });
+  const runtime = createHooksRuntime();
+
+  // act
+  await createHooksHydration(runtime, {
+    loadState: (extensionRoot) =>
+      Promise.resolve(
+        extensionRoot === fixture.locations.extensionRoot
+          ? state
+          : { schemaVersion: 2, marketplaces: {} },
+      ),
+    readHooksJson,
+    readMcpServerNames: readStoredServerNames,
+  }).hydrateProjectScopeForCwd(fixture.projectRoot, true);
+
+  // assert
+  assert.deepStrictEqual(
+    Array.from(runtime.parsedConfigEntries().values(), (entry) => entry.options),
+    [resolveOptions(userConfig)],
+  );
+});
+
 /** A hydration reader that serves `fixture.state` for its project and no plugins elsewhere. */
 function fixtureStateReader(fixture: ProjectHookFixture): HooksHydrationDeps {
   return {
@@ -3164,6 +3292,7 @@ for (const { title, hydratedCwd, trusted } of [
       hooksJsonPath: fixture.hookPath,
       cwd: fixture.projectRoot,
       logPrefix: "install",
+      options: resolveOptions(undefined),
     });
 
     // assert
@@ -3190,6 +3319,7 @@ test("D-LOC-01 readAndCachePluginHooks caches a project config once the hydrate 
     hooksJsonPath: fixture.hookPath,
     cwd: fixture.projectRoot,
     logPrefix: "install",
+    options: resolveOptions(undefined),
   });
 
   // assert
@@ -3382,6 +3512,7 @@ test("separate runtimes keep their current callbacks live and route through thei
     handlerDecl: { type: "command", command: `run-${pluginId}` },
     declarationIndex: 0,
     ifPredicate: MATCH_ALL_IF,
+    options: resolveOptions(undefined),
   });
   firstRuntime.setRoutingBucket("PreToolUse", [entryFor("first-plugin", firstCwd)]);
   secondRuntime.setRoutingBucket("PreToolUse", [entryFor("second-plugin", secondCwd)]);
@@ -3458,6 +3589,7 @@ function setMatchAllToolBuckets(runtime: HooksRuntime, cwd: string): void {
         handlerDecl: { type: "command", command: "guard" },
         declarationIndex: 0,
         ifPredicate: MATCH_ALL_IF,
+        options: resolveOptions(undefined),
       },
     ]);
   }
@@ -4905,6 +5037,7 @@ function preToolUseEntry(pluginId: string, cwd: string): RoutingEntry {
     handlerDecl: { type: "command", command: `run-${pluginId}` },
     declarationIndex: 0,
     ifPredicate: MATCH_ALL_IF,
+    options: resolveOptions(undefined),
   };
 }
 

@@ -24,6 +24,7 @@ import {
   createHooksRuntime,
   readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { preparePluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import {
   assertUpdateNamesFree,
@@ -58,6 +59,7 @@ import type {
   ThreePhaseArgs,
   ThreePhaseArgsBase,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
+import type { PluginInstallRecord } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { TestContext } from "node:test";
 
@@ -776,6 +778,351 @@ test("MREC-01: a failed swap keeps the previous MCP servers beside the intent ma
       notes: ["update-in-progress"],
       mcpServerConfigs: PREVIOUS_MCP_SERVER_CONFIGS,
       mcpBundle: true,
+    },
+  );
+});
+
+const MODE_OPTION = { type: "string", title: "Mode", description: "The mode." } as const;
+
+/**
+ * D-PG10-15: seeds `hello` 1.0.0 -> 2.0.0, gives the 1.0.0 record the
+ * `previous` options, and writes the 2.0.0 manifest with the `declared` ones.
+ */
+async function seedOptionsUpdate(
+  cwd: string,
+  previous: Record<string, unknown>,
+  declared: Record<string, unknown> | undefined,
+): Promise<ThreePhaseArgsBase & { readonly cascade: true }> {
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "2.0.0", hasSkill: true } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  await writeFile(
+    path.join(marketplaceRoot, "plugins", "hello", ".claude-plugin", "plugin.json"),
+    JSON.stringify({
+      name: "hello",
+      version: "2.0.0",
+      ...(declared !== undefined && { userConfig: declared }),
+    }),
+  );
+  const args = cascadeSwapArgs(cwd);
+  const state = await loadState(args.locations.extensionRoot);
+  const record = state.marketplaces.mp?.plugins.hello;
+  assert.ok(record !== undefined);
+  record.userConfig = previous;
+  await saveState(args.locations.extensionRoot, state);
+  return args;
+}
+
+async function swapOptionsUpdate(
+  args: ThreePhaseArgsBase & { readonly cascade: true },
+): Promise<{ readonly partition: string; readonly record: PluginInstallRecord | undefined }> {
+  const preflight = await preparePluginUpdate({ policy: UPDATE_POLICY, ...args });
+  assert.ok(!("partition" in preflight));
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+  const record = (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  return { partition: outcome.partition, record };
+}
+
+test("D-PG10-15: an all-success swap records the options the new version declares", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-options-");
+  const args = await seedOptionsUpdate(
+    cwd,
+    { mode: { ...MODE_OPTION, default: "fast" } },
+    { mode: { ...MODE_OPTION, default: "slow" } },
+  );
+
+  // act
+  const { partition, record } = await swapOptionsUpdate(args);
+
+  // assert
+  assert.deepStrictEqual(
+    { partition, userConfig: record?.userConfig },
+    { partition: "updated", userConfig: { mode: { ...MODE_OPTION, default: "slow" } } },
+  );
+});
+
+test("D-PG10-15: a swap to a version that declares no options removes the recorded options", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-options-drop-");
+  const args = await seedOptionsUpdate(
+    cwd,
+    { mode: { ...MODE_OPTION, default: "fast" } },
+    undefined,
+  );
+
+  // act
+  const { partition, record } = await swapOptionsUpdate(args);
+
+  // assert
+  assert.deepStrictEqual(
+    { partition, hasUserConfig: record !== undefined && Object.hasOwn(record, "userConfig") },
+    { partition: "updated", hasUserConfig: false },
+  );
+});
+
+/** Swaps `hello` to 2.0.0, which ships a hook, and returns the options of its routing entries. */
+async function swapOptionHooks(
+  cwd: string,
+  declared: Record<string, unknown> | undefined,
+): Promise<readonly unknown[]> {
+  const args = await seedOptionsUpdate(
+    cwd,
+    { mode: { ...MODE_OPTION, default: "fast" } },
+    declared,
+  );
+  const hooksDir = path.join(cwd, "mp-src", "plugins", "hello", "hooks");
+  await mkdir(hooksDir, { recursive: true });
+  await writeFile(
+    path.join(hooksDir, "hooks.json"),
+    JSON.stringify({
+      PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hook" }] }],
+    }),
+  );
+  const runtime = createHooksRuntime();
+  runtime.recordProjectTrust(cwd, true);
+  await swapOptionsUpdate({
+    ...args,
+    hooksRouting: createHooksRouting(runtime, { readHooksJson }),
+  });
+  return runtime.getRoutingBucket("PreToolUse").map((entry) => entry.options);
+}
+
+test("D-PG10-15: a swap gives the plugin's routing entries the options the new version declares", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-hook-options-");
+  const declared = { mode: { ...MODE_OPTION, default: "slow" } };
+
+  // act
+  const options = await swapOptionHooks(cwd, declared);
+
+  // assert
+  assert.deepStrictEqual(options, [resolveOptions(declared)]);
+});
+
+test("D-PG10-15: a swap to a version that declares no options gives its routing entries none", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-hook-options-drop-");
+
+  // act
+  const options = await swapOptionHooks(cwd, undefined);
+
+  // assert
+  assert.deepStrictEqual(options, [resolveOptions(undefined)]);
+});
+
+/**
+ * Swaps `hello` to 2.0.0, whose skill `tool`, command `opts`, and agent
+ * `opts` name `${user_config.mode}`, and returns their staged bodies.
+ */
+async function swapOptionContent(
+  cwd: string,
+  declared: Record<string, unknown> | undefined,
+): Promise<{
+  readonly skill: string | undefined;
+  readonly command: string | undefined;
+  readonly agent: string | undefined;
+}> {
+  const args = await seedOptionsUpdate(
+    cwd,
+    { mode: { ...MODE_OPTION, default: "fast" } },
+    declared,
+  );
+  await writeFile(
+    path.join(cwd, "mp-src", "plugins", "hello", "skills", "tool", "SKILL.md"),
+    "---\nname: tool\n---\nMode ${user_config.mode}.\n",
+  );
+  const commandsDir = path.join(cwd, "mp-src", "plugins", "hello", "commands");
+  await mkdir(commandsDir, { recursive: true });
+  await writeFile(path.join(commandsDir, "opts.md"), "Mode ${user_config.mode}.\n");
+  const agentsDir = path.join(cwd, "mp-src", "plugins", "hello", "agents");
+  await mkdir(agentsDir, { recursive: true });
+  await writeFile(
+    path.join(agentsDir, "opts.md"),
+    "---\nname: opts\ndescription: Opts\n---\nMode ${user_config.mode}.\n",
+  );
+  await swapOptionsUpdate(args);
+  const bodyOf = async (file: string): Promise<string | undefined> =>
+    (await readFile(file, "utf8")).split("---\n").at(-1);
+  return {
+    skill: await bodyOf(path.join(args.locations.skillsTargetDir, "hello-tool", "SKILL.md")),
+    command: await bodyOf(path.join(args.locations.promptsTargetDir, "hello:opts.md")),
+    agent: await bodyOf(path.join(args.locations.agentsDir, "pi-claude-marketplace-hello-opts.md")),
+  };
+}
+
+test("D-PG10-13: a swap writes the options the new version declares into its skill", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-skill-options-");
+
+  // act
+  const { skill } = await swapOptionContent(cwd, { mode: { ...MODE_OPTION, default: "slow" } });
+
+  // assert
+  assert.strictEqual(skill, "Mode slow.\n");
+});
+
+test("D-PG10-21: a swap to a version that declares no options keeps its skill's references", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-skill-no-options-");
+
+  // act
+  const { skill } = await swapOptionContent(cwd, undefined);
+
+  // assert
+  assert.strictEqual(skill, "Mode ${user_config.mode}.\n");
+});
+
+test("D-PG10-13: a swap writes the options the new version declares into its command", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-command-options-");
+
+  // act
+  const { command } = await swapOptionContent(cwd, { mode: { ...MODE_OPTION, default: "slow" } });
+
+  // assert
+  assert.strictEqual(command, "Mode slow.\n");
+});
+
+test("D-PG10-21: a swap to a version that declares no options keeps its command's references", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-command-no-options-");
+
+  // act
+  const { command } = await swapOptionContent(cwd, undefined);
+
+  // assert
+  assert.strictEqual(command, "Mode ${user_config.mode}.\n");
+});
+
+test("D-PG10-13: a swap writes the options the new version declares into its agent", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-agent-options-");
+
+  // act
+  const { agent } = await swapOptionContent(cwd, { mode: { ...MODE_OPTION, default: "slow" } });
+
+  // assert
+  assert.strictEqual(agent, "\nMode slow.\n");
+});
+
+test("D-PG10-21: a swap to a version that declares no options keeps its agent's references", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-agent-no-options-");
+
+  // act
+  const { agent } = await swapOptionContent(cwd, undefined);
+
+  // assert
+  assert.strictEqual(agent, "\nMode ${user_config.mode}.\n");
+});
+
+/**
+ * Swaps `hello` to 2.0.0, whose `keyed` server names `${user_config.region}`
+ * beside a `plain` one, and returns what the swap staged, reported, and wrote.
+ */
+async function swapOptionServers(
+  cwd: string,
+  declared: Record<string, unknown> | undefined,
+): Promise<{
+  readonly staged: readonly string[] | undefined;
+  readonly notices: unknown;
+  readonly entries: readonly string[];
+}> {
+  const args = await seedOptionsUpdate(
+    cwd,
+    { mode: { ...MODE_OPTION, default: "fast" } },
+    declared,
+  );
+  await writeFile(
+    path.join(cwd, "mp-src", "plugins", "hello", ".mcp.json"),
+    JSON.stringify({
+      mcpServers: {
+        keyed: { command: "srv", args: ["--region", "${user_config.region}"] },
+        plain: { command: "srv" },
+      },
+    }),
+  );
+  const preflight = await preparePluginUpdate({ policy: UPDATE_POLICY, ...args });
+  assert.ok(!("partition" in preflight));
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+  assert.strictEqual(outcome.partition, "updated");
+  const file = JSON.parse(await readFile(args.locations.mcpAdapterJsonPath, "utf8")) as {
+    readonly mcpServers: Record<string, unknown>;
+  };
+  return {
+    staged: outcome.stagedMcpServerNames,
+    notices: outcome.mcpConfigNotices,
+    entries: Object.keys(file.mcpServers),
+  };
+}
+
+test("D-PG10-21: a swap leaves out a server that names an option the new version does not set, and reports it", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-mcp-options-");
+
+  // act
+  const swapped = await swapOptionServers(cwd, { mode: { ...MODE_OPTION, default: "slow" } });
+
+  // assert
+  assert.deepStrictEqual(swapped, {
+    staged: ["plain"],
+    notices: [
+      {
+        kind: "option-blocked",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "keyed",
+        names: ["region"],
+        reason: "unset",
+      },
+    ],
+    entries: ["plugin_hello_plain_"],
+  });
+});
+
+test("D-PG10-21: a swap to a version that declares no options stages a server that names an option", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-mcp-no-options-");
+
+  // act
+  const swapped = await swapOptionServers(cwd, undefined);
+
+  // assert
+  assert.deepStrictEqual(swapped, {
+    staged: ["keyed", "plain"],
+    notices: undefined,
+    entries: ["plugin_hello_keyed_", "plugin_hello_plain_"],
+  });
+});
+
+test("D-PG10-23: a failed swap keeps the previous options beside the intent mark", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-options-failure-");
+  const args = await seedOptionsUpdate(
+    cwd,
+    { mode: { ...MODE_OPTION, default: "fast" } },
+    { mode: { ...MODE_OPTION, default: "slow" } },
+  );
+  await mkdir(args.locations.skillsTargetDir, { recursive: true });
+  await writeFile(path.join(args.locations.skillsTargetDir, "hello-tool"), "old-resource-tree");
+
+  // act
+  const { partition, record } = await swapOptionsUpdate(args);
+
+  // assert
+  assert.deepStrictEqual(
+    { partition, notes: record?.compatibility.notes, userConfig: record?.userConfig },
+    {
+      partition: "failed",
+      notes: ["update-in-progress"],
+      userConfig: { mode: { ...MODE_OPTION, default: "fast" } },
     },
   );
 });
@@ -2457,10 +2804,11 @@ test("AMIG-02: a legacy removal that fails records an mcp phase failure and keep
             directTools: "search",
             toolPrefix: "mcp",
             requestTimeoutMs: 1800000,
+            lifecycle: "lazy-keep-alive",
             _piClaudeMarketplace: {
               plugin: "hello",
               marketplace: "mp",
-              defaultFields: { requestTimeoutMs: 1800000 },
+              defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
             },
           },
         },

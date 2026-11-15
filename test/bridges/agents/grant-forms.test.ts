@@ -34,6 +34,7 @@ function agentInput(raw: RawAgentFrontmatter): GrantFormInput {
     },
     sourceHash: "abc",
     mapModel: false,
+    options: undefined,
   };
 }
 
@@ -150,6 +151,50 @@ for (const active of ["adapter", "none"] as const) {
         },
       },
     });
+  });
+}
+
+for (const { label, options, body } of [
+  {
+    label: "D-PG10-13: the file's form holds the filled body after the block the swap replaces",
+    options: { values: new Map([["mode", "fast"]]), sensitive: new Set<string>() },
+    body: "\nMode fast.\n",
+  },
+  {
+    label: "D-PG10-21: a plugin with no options keeps the reference after either form's block",
+    options: undefined,
+    body: "\nMode ${user_config.mode}.\n",
+  },
+]) {
+  test(label, () => {
+    // arrange
+    const base = agentInput({ description: "d", tools: "Read, mcp__plugin_acme_db__query" });
+    const input: GrantFormInput = {
+      ...base,
+      discovered: { ...base.discovered, body: "Mode ${user_config.mode}.\n" },
+      options,
+    };
+
+    // act
+    const { agent, recorded } = convertAgentGrantForms(input, {
+      active: "builtin",
+      declaredMcpServers: { db: { command: "node" } },
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        fileContent: agent.fileContent,
+        recordedBlocks: [
+          recorded.mcpForms?.builtin?.frontmatter,
+          recorded.mcpForms?.adapter?.frontmatter,
+        ],
+      },
+      {
+        fileContent: BUILTIN_QUERY_FRONTMATTER + body,
+        recordedBlocks: [BUILTIN_QUERY_FRONTMATTER, ADAPTER_QUERY_FRONTMATTER],
+      },
+    );
   });
 }
 

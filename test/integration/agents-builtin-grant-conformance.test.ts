@@ -102,6 +102,7 @@ function grantSelectors(mcpImplementation: McpImplementationId): string[] {
     },
     sourceHash: "abc",
     mapModel: false,
+    options: undefined,
     mcpServerNames: ["db", "my-db", "warehouse"],
     mcpImplementation,
   });
@@ -125,6 +126,7 @@ function excludingAgentLines(mcpImplementation: McpImplementationId): {
     pluginName: "demo",
     pluginRoot: "/root",
     pluginDataDir: "/data",
+    options: undefined,
     knownSkills: [],
     discovered: {
       sourceName: "runner",

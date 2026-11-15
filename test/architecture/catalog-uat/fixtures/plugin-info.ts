@@ -565,6 +565,29 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
       },
     },
 
+    // D-PG10-06: a required option has no default, so the not-installed row
+    // reads `{options not set}`, the same token install and list give. The
+    // token cannot hold a key, so the advisory line names the unset keys.
+    "partially-available-with-unset-options": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "partially-available",
+          name: "deploy-tools",
+          version: "1.0.0",
+          description: "Deployment tools for everyday releases.",
+          reasons: ["options not set"],
+          notes: ['required options "token", "region" have no default, so they are not set'],
+          componentsResolved: true,
+          components: { skills: ["deploy"] },
+        },
+      },
+    },
+
     // AVAR-04 / AVAR-05: a written server names its unset and withheld
     // variables in one pair of parentheses.
     "installed-with-mcp-variables": {

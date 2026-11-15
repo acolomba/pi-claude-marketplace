@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import {
   cascadeStagingDiagnostics,
   collectPostCommitWarnings,
@@ -106,6 +107,7 @@ function cascadeMember(overrides: Partial<CascadeMemberOutcome> = {}): CascadeMe
     declaresWorkflows: false,
     pluginRoot: "/market/plugins/dep",
     hooksConfigPath: undefined,
+    options: resolveOptions(undefined),
     fellBackToCurrentCopy: false,
     reEnabledFromRecord: false,
     ...overrides,
@@ -361,6 +363,7 @@ describe("row outcomes", () => {
           marketplace: "mp",
           pluginRoot: "/market/plugins/app",
           hooksConfigPath: undefined,
+          options: resolveOptions(undefined),
         },
       ],
       resourcesChanged: true,
@@ -593,7 +596,7 @@ describe("promotion", () => {
     assert.match(await readFile(locations.baseConfigJsonPath, "utf8"), /"app@mp": \{\}/u);
   });
 
-  test("re-materializes a disabled dependency and carries its resolved version", async (t) => {
+  test("D-PG10-10: re-materializes a disabled dependency and carries its resolved version and options", async (t) => {
     // arrange
     const { cwd, locations } = await tempLocations(t, "install-results-promotion-disabled-");
     const { ctx, run } = makeCtx();
@@ -610,6 +613,13 @@ describe("promotion", () => {
       plugins: { app: record },
       scope: "project",
     });
+    const userConfig = {
+      mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+    } as const;
+    await writeFile(
+      path.join(record.resolvedSource, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "app", version: "1.2.3", userConfig }),
+    );
     const state: ExtensionState = {
       schemaVersion: 3,
       marketplaces: { mp: { ...marketplace, name: "mp" } },
@@ -643,7 +653,10 @@ describe("promotion", () => {
     });
 
     // assert
-    assert.strictEqual(promotion?.materialized.length, 1);
+    assert.deepStrictEqual(
+      promotion?.materialized.map(({ key, options }) => ({ key, options })),
+      [{ key: "app@mp", options: resolveOptions(userConfig) }],
+    );
     assert.strictEqual(promotion?.version, "1.2.3");
     assert.deepStrictEqual(sink.mcpConfigNotices, []);
   });
@@ -772,6 +785,29 @@ describe("cascade projections", () => {
         },
       ],
     });
+  });
+
+  test("D-PG10-10: a member's options leave its dependency row unchanged", () => {
+    // arrange
+    const softDeps = {
+      piSubagentsLoaded: false,
+      mcpImplementation: "none",
+      workflowEngineLoaded: false,
+    } satisfies SoftDepStatus;
+    const root = installedRow({ key: "app@mp" });
+    const optioned = cascadeMember({
+      options: resolveOptions({
+        token: { type: "string", title: "Token", description: "The token.", default: "abc" },
+      }),
+    });
+    const { options: _options, ...plain } = optioned;
+
+    // act
+    const withOptions = dependencyInstallsMember([], [root, optioned], "app@mp", softDeps);
+    const withoutOptions = dependencyInstallsMember([], [root, plain], "app@mp", softDeps);
+
+    // assert
+    assert.deepStrictEqual(withOptions, withoutOptions);
   });
 
   test("orders root and member diagnostics by their row names and keeps their headers", () => {

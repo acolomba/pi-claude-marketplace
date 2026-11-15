@@ -61,7 +61,11 @@ function makeMockPi(): { pi: ExtensionAPI; registrations: CapturedRegistration[]
   return { pi, registrations };
 }
 
-function buildStateWithHooksPlugin(scope: "user" | "project", pluginId: string): ExtensionState {
+function buildStateWithHooksPlugin(
+  scope: "user" | "project",
+  pluginId: string,
+  userConfig?: unknown,
+): ExtensionState {
   return {
     schemaVersion: 2,
     marketplaces: {
@@ -94,6 +98,7 @@ function buildStateWithHooksPlugin(scope: "user" | "project", pluginId: string):
             provenance: "explicit",
             installedAt: "2026-06-17T00:00:00Z",
             updatedAt: "2026-06-17T00:00:00Z",
+            ...(userConfig === undefined ? {} : { userConfig }),
           },
         },
       },
@@ -139,10 +144,11 @@ async function seedHooksPlugin(
   extensionRoot: string,
   scope: "user" | "project",
   pluginId: string,
+  userConfig?: unknown,
 ): Promise<void> {
   const hooksDir = path.join(extensionRoot, "hooks", pluginId);
   await mkdir(hooksDir, { recursive: true });
-  await saveState(extensionRoot, buildStateWithHooksPlugin(scope, pluginId));
+  await saveState(extensionRoot, buildStateWithHooksPlugin(scope, pluginId, userConfig));
   await writeFile(path.join(hooksDir, "hooks.json"), HOOKS_JSON_BYTES, "utf8");
 }
 
@@ -227,6 +233,71 @@ test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and 
       [{ pluginId: "learning-output-style", claudeEvent: "SessionStart", scope: "user" }],
       "executor must be invoked exactly once for the user-scope plugin's SessionStart entry",
     );
+  });
+});
+
+/**
+ * Boots the bridge over a user-scope plugin whose record holds `userConfig`,
+ * fires SessionStart, and returns the options of each routed entry and the
+ * executor calls.
+ */
+async function bootWithRecordedOptions(userConfig: unknown): Promise<{
+  readonly options: { readonly declared: boolean; readonly values: [string, string][] }[];
+  readonly calls: readonly ExecutorCall[];
+}> {
+  const runtime = createHooksRuntime();
+  const hooksHydration = createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: recordedMcpServerNames,
+  });
+  const { calls, executor } = recordingExecutor();
+  return withHermeticPiHome(async ({ agentDir, projectCwd }) => {
+    await seedHooksPlugin(
+      path.join(agentDir, "pi-claude-marketplace"),
+      "user",
+      "optioned",
+      userConfig,
+    );
+    const { pi, registrations } = makeMockPi();
+    const placeholderCtx = {
+      cwd: projectCwd,
+      mode: "print",
+      isProjectTrusted: () => true,
+      sessionManager: E2E_SESSION,
+    } as unknown as ExtensionContext;
+
+    await hooksHydration.registerHooksBridge(pi, { cwd: projectCwd, executor });
+    const options = (runtime.routingTableEntries().get("SessionStart") ?? []).map((entry) => ({
+      declared: entry.options.declared,
+      values: [...entry.options.values],
+    }));
+    await findSessionStartHandler(registrations)(SESSION_START_EVENT, placeholderCtx);
+    return { options, calls };
+  });
+}
+
+test("D-PG10-23 a booted hook entry holds the options its record holds", async () => {
+  // act
+  const booted = await bootWithRecordedOptions({
+    mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+  });
+
+  // assert
+  assert.deepStrictEqual(booted, {
+    options: [{ declared: true, values: [["mode", "fast"]] }],
+    calls: [{ pluginId: "optioned", claudeEvent: "SessionStart", scope: "user" }],
+  });
+});
+
+test("D-PG10-25 a record whose userConfig is a string boots with declared options and no values, and dispatches", async () => {
+  // act
+  const booted = await bootWithRecordedOptions("mode=fast");
+
+  // assert
+  assert.deepStrictEqual(booted, {
+    options: [{ declared: true, values: [] }],
+    calls: [{ pluginId: "optioned", claudeEvent: "SessionStart", scope: "user" }],
   });
 });
 

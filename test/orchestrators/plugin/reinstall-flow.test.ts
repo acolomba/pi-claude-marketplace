@@ -24,6 +24,7 @@ import {
 import { loadMarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { WORKFLOW_SCRIPT_MAX_BYTES } from "../../../extensions/pi-claude-marketplace/domain/workflow-script.ts";
 import {
   materializeOrRefreshPluginMirror,
@@ -4132,6 +4133,49 @@ test("CFG-03: a named flagless reinstall whose local layer cannot be read is ref
 // to install/uninstall; the shared swap wires the cache lifecycle, and this
 // section verifies it end-to-end.
 
+test("D-PG10-15: a reinstall gives the plugin's routing entries the options its manifest declares then", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-hook-options-"));
+    try {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.recordProjectTrust(cwd, true);
+      const { pluginRoot } = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        install: true,
+        resources: {
+          hooksJson: {
+            PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hi" }] }],
+          },
+        },
+      });
+      const userConfig = {
+        mode: { type: "string", title: "Mode", description: "The mode.", default: "slow" },
+      } as const;
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "hello", userConfig }),
+      );
+      const { ctx, run } = makeCtx();
+
+      // act
+      await createReinstallPlugin(
+        createHooksRouting(runtime, { readHooksJson }),
+        createCompletionCache(),
+      )({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(
+        runtime.getRoutingBucket("PreToolUse").map((entry) => entry.options),
+        [resolveOptions(userConfig)],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries without /reload", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-wr03-"));
@@ -4163,6 +4207,7 @@ test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries with
         hooksJsonPath: path.join(pluginRoot, "hooks", "hooks.json"),
         cwd,
         logPrefix: "reinstall-test",
+        options: resolveOptions(undefined),
       });
       hooksRouting.rebuildRoutingTables();
       const preBucket = ownerRuntime.getRoutingBucket("PreToolUse");
@@ -8649,10 +8694,11 @@ test("retry proof: reinstall: a refused finalize save after every commit fails r
             directTools: "search",
             toolPrefix: "mcp",
             requestTimeoutMs: 1800000,
+            lifecycle: "lazy-keep-alive",
             _piClaudeMarketplace: {
               plugin: "hello",
               marketplace: "mp",
-              defaultFields: { requestTimeoutMs: 1800000 },
+              defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
             },
           },
         },
@@ -10193,10 +10239,11 @@ test("AFILE-06: a disabled plugin MCP server stays disabled through reinstall", 
             toolPrefix: "mcp",
             disabled: true,
             requestTimeoutMs: 1800000,
+            lifecycle: "lazy-keep-alive",
             _piClaudeMarketplace: {
               plugin: "hello",
               marketplace: "mp",
-              defaultFields: { requestTimeoutMs: 1800000 },
+              defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
             },
           },
         },

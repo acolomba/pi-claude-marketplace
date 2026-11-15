@@ -6,6 +6,7 @@ import {
   type HookExitFacts,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/on-failure.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
@@ -40,6 +41,7 @@ function guardEntry(
     handlerDecl: { type: "command", command: COMMAND, ...handler },
     declarationIndex: 0,
     ifPredicate: { kind: "match-all" },
+    options: resolveOptions(undefined),
   };
 }
 

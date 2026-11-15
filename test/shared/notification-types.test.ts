@@ -173,6 +173,7 @@ const EXPECTED_REASONS = [
   "already added",
   "requires mcp",
   "requires builtin mcp",
+  "options not set",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

@@ -57,10 +57,12 @@ import {
   readBuiltinServerDescription,
   syncBuiltinRegistrations,
 } from "../../bridges/mcp/index.ts";
+import { mcpOptionBlock } from "../../domain/claude-mcp-variables.ts";
 import { profileFor } from "../../domain/mcp-implementation.ts";
 import { foldedMcpServerKey } from "../../domain/name.ts";
+import { declaredOptions } from "../../domain/user-config.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
+import { isRecordedButDisabled, loadState, recordedOptionsOf } from "../../persistence/state-io.ts";
 import {
   builtinServerOwner,
   noteBuiltinServerOwners,
@@ -174,12 +176,22 @@ function enabledRecords(state: ExtensionState): RecordSource[] {
   return sources;
 }
 
+// D-PG10-21: the command that staged the plugin already reported a server
+// its options leave out, so the skip is logged and gets no notice.
+function skipCause(config: unknown, ctx: McpSubstitutionContext): string {
+  const block = mcpOptionBlock(config, ctx.options);
+  return block === undefined
+    ? "Pi would not run it as Claude Code does"
+    : `it names plugin options (${block.reason}): ${block.keys.join(", ")}`;
+}
+
 /**
  * The servers of one plugin that the built-in profile runs, named and built in
  * the record's server order. The install-time verdict does not filter: a
  * server only pi-mcp-adapter blocks registers here (P2-DC-06). A server whose
  * resolved config Pi would run differently, such as a variable that resolved
- * to a leading `~`, is skipped and logged.
+ * to a leading `~`, or that names a plugin option with no value, is skipped
+ * and logged.
  */
 function serverRegistrations(
   pluginName: string,
@@ -194,9 +206,7 @@ function serverRegistrations(
       const serverName = BUILTIN_PROFILE.serverName(pluginName, name);
       const built = builtinServerConfig(config, ctx, description);
       if (built === undefined) {
-        debugLog(
-          `MCP server ${serverName} not registered: Pi would not run it as Claude Code does`,
-        );
+        debugLog(`MCP server ${serverName} not registered: ${skipCause(config, ctx)}`);
         return [];
       }
 
@@ -244,11 +254,14 @@ async function recordRegistrations(
       pin: source.record.resolvedSha,
     }),
   ]);
+  // D-PG10-12: the record's options are read at every session, and their
+  // values go into the config Pi holds in memory; nothing is written to a file.
   const ctx: McpSubstitutionContext = {
     pluginRoot: source.record.resolvedSource,
     pluginData,
     projectDir: session.cwd,
     env: session.env,
+    options: declaredOptions(recordedOptionsOf(source.record)),
   };
   return serverRegistrations(source.pluginName, recorded.servers, ctx, description, {
     scope: locations.scope,

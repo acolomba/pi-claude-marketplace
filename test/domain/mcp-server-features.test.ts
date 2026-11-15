@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  adapterEntryDefaults,
   checkClaudeShape,
   classifyMcpServer,
   defaultRequestTimeoutMs,
@@ -55,6 +56,114 @@ describe("defaultRequestTimeoutMs", () => {
       assert.strictEqual(requestTimeoutMs, expectedMilliseconds);
     });
   }
+});
+
+describe("adapterEntryDefaults", () => {
+  const stdioDefaults = [
+    ["requestTimeoutMs", 1_800_000],
+    ["lifecycle", "lazy-keep-alive"],
+  ];
+  const remoteDefaults = [["requestTimeoutMs", 300_000]];
+  for (const { title, server, defaults } of [
+    {
+      title: "D-PG9-01: a server without a type stays for the session",
+      server: {},
+      defaults: stdioDefaults,
+    },
+    {
+      title: "D-PG9-01: a stdio server stays for the session",
+      server: { type: "stdio" },
+      defaults: stdioDefaults,
+    },
+    {
+      title: "D-PG9-02: an sse server keeps the adapter's lifecycle",
+      server: { type: "sse" },
+      defaults: remoteDefaults,
+    },
+    {
+      title: "D-PG9-02: an http server keeps the adapter's lifecycle",
+      server: { type: "http" },
+      defaults: remoteDefaults,
+    },
+    {
+      title: "D-PG9-02: a streamable-http server keeps the adapter's lifecycle",
+      server: { type: "streamable-http" },
+      defaults: remoteDefaults,
+    },
+    { title: "D-PG9-02: a ws server gets no default", server: { type: "ws" }, defaults: [] },
+    { title: "D-PG9-02: an unknown type gets no default", server: { type: "ftp" }, defaults: [] },
+  ]) {
+    test(title, () => {
+      // arrange
+      const expectedDefaults = defaults;
+
+      // act
+      const entryDefaults = adapterEntryDefaults(server);
+
+      // assert
+      assert.deepStrictEqual(Object.entries(entryDefaults), expectedDefaults);
+    });
+  }
+
+  test("D-PG9-03: a caller cannot change the defaults that later entries get", () => {
+    // arrange
+    const servers = [{}, { type: "http" }];
+
+    // act
+    const defaults = servers.map((server) => adapterEntryDefaults(server));
+
+    // assert
+    assert.deepStrictEqual(
+      defaults.map((entryDefaults) => Object.isFrozen(entryDefaults)),
+      [true, true],
+    );
+  });
+
+  // pi-mcp-adapter 7.0.1 hashes `openUi: false` into its tool cache key and
+  // pi-subagents 0.88.1's copy of that hash does not, so an entry holding it
+  // leaves an agent granted the server's tools unable to launch (D-CF6-10).
+  test("D-PG9-07: no transport's defaults hold openUi", () => {
+    // arrange
+    const servers = [
+      {},
+      { type: "stdio" },
+      { type: "sse" },
+      { type: "http" },
+      { type: "streamable-http" },
+    ];
+
+    // act
+    const defaults = servers.map((server) => adapterEntryDefaults(server));
+
+    // assert
+    assert.deepStrictEqual(
+      defaults.map((entryDefaults) => Object.hasOwn(entryDefaults, "openUi")),
+      [false, false, false, false, false],
+    );
+  });
+
+  test("ANAME-07 / D-PG9-01: the closed table writes no lifecycle and no openUi, even when the plugin declares them", () => {
+    // arrange
+    const servers = [
+      { command: "plugin-command", lifecycle: "eager", openUi: true },
+      { type: "http", url: "https://mcp.example.com/mcp", lifecycle: "eager", openUi: true },
+    ];
+
+    // act
+    const translated = servers.map((server) => translateMcpServer(server, undefined));
+
+    // assert
+    assert.deepStrictEqual(
+      translated.map((entry) => [
+        Object.hasOwn(entry, "lifecycle"),
+        Object.hasOwn(entry, "openUi"),
+      ]),
+      [
+        [false, false],
+        [false, false],
+      ],
+    );
+  });
 });
 
 const ROWS: readonly TranslationRow[] = [

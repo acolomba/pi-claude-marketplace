@@ -1069,6 +1069,83 @@ test("MREC-01: a disabled update writes a declaration-only MCP change at an unch
   );
 });
 
+const MODE_OPTION = { type: "string", title: "Mode", description: "The mode." } as const;
+
+async function writeHelloOptions(
+  pluginRoot: string,
+  userConfig: Record<string, unknown> | undefined,
+): Promise<void> {
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({
+      name: "hello",
+      version: "2.0.0",
+      ...(userConfig !== undefined && { userConfig }),
+    }),
+  );
+}
+
+test("D-PG10-15: a disabled update writes a change of the declared options alone, then writes nothing", async (t) => {
+  // arrange
+  const seed = await seedUpdate({
+    installed: (pluginRoot) => ({ ...pluginRecord("2.0.0", false), resolvedSource: pluginRoot }),
+    pluginJson: { userConfig: { mode: { ...MODE_OPTION, default: "fast" } } },
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  await prepare(seed);
+  const converged = (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  await writeHelloOptions(seed.pluginRoot, { mode: { ...MODE_OPTION, default: "slow" } });
+
+  // act
+  const changedOutcome = await prepare(seed);
+  const changedBytes = await readFile(seed.locations.stateJsonPath, "utf8");
+  const settledOutcome = await prepare(seed);
+  const settledBytes = await readFile(seed.locations.stateJsonPath, "utf8");
+
+  // assert
+  const refreshed = JSON.parse(changedBytes) as {
+    marketplaces: { mp: { plugins: { hello: { updatedAt: string } } } };
+  };
+  assert.deepStrictEqual(
+    {
+      convergedOptions: converged?.userConfig,
+      changedPartition: "partition" in changedOutcome ? changedOutcome.partition : undefined,
+      settledPartition: "partition" in settledOutcome ? settledOutcome.partition : undefined,
+      record: refreshed.marketplaces.mp.plugins.hello,
+      settledUnchanged: settledBytes === changedBytes,
+    },
+    {
+      convergedOptions: { mode: { ...MODE_OPTION, default: "fast" } },
+      changedPartition: "unchanged",
+      settledPartition: "unchanged",
+      record: {
+        ...converged,
+        userConfig: { mode: { ...MODE_OPTION, default: "slow" } },
+        updatedAt: refreshed.marketplaces.mp.plugins.hello.updatedAt,
+      },
+      settledUnchanged: true,
+    },
+  );
+});
+
+test("D-PG10-15: a disabled update removes the recorded options when the plugin declares none", async (t) => {
+  // arrange
+  const seed = await seedUpdate({
+    installed: (pluginRoot) => ({ ...pluginRecord("2.0.0", false), resolvedSource: pluginRoot }),
+    pluginJson: { userConfig: { mode: { ...MODE_OPTION, default: "fast" } } },
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  await prepare(seed);
+  await writeHelloOptions(seed.pluginRoot, undefined);
+
+  // act
+  await prepare(seed);
+
+  // assert
+  const refreshed = (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  assert.strictEqual(refreshed !== undefined && Object.hasOwn(refreshed, "userConfig"), false);
+});
+
 test("MREC-01: a disabled update records a bundle flag and drops it when the bundle goes", async (t) => {
   // arrange
   const seed = await seedUpdate({

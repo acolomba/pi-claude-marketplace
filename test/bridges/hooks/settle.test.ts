@@ -13,6 +13,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/settle.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 
 import type { HookExecutor } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
@@ -100,6 +101,7 @@ function stopEntry(pluginId: string, asyncRewake = false): RoutingEntry {
     },
     declarationIndex: 0,
     ifPredicate: MATCH_ALL_IF,
+    options: resolveOptions(undefined),
   };
 }
 

@@ -60,6 +60,7 @@ import path from "node:path";
 import { resolveDependencyClosure } from "../../domain/dependency-closure.ts";
 import { findDependents } from "../../domain/dependency-orphans.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
+import { resolveOptions } from "../../domain/user-config.ts";
 import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
@@ -132,6 +133,7 @@ import type {
   DependencyClosureResult,
 } from "../../domain/dependency-closure.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
+import type { ResolvedOptions } from "../../domain/user-config.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { DisabledPluginRecord, ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.ts";
@@ -317,6 +319,8 @@ export type EnableDisableHooksRouting = Pick<
 interface EnableRouteEffect {
   readonly hooksJsonPath: string;
   readonly resolvedSource: ReturnType<typeof asAbsolutePluginRoot>;
+  /** D-PG10-10: the options of the resolution the enable materialized. */
+  readonly options: ResolvedOptions;
 }
 
 /** Outcome sentinel populated by the withStateGuard closure. */
@@ -478,6 +482,7 @@ async function materializeEnableRoot(
       addRoutesAfterSave: {
         hooksJsonPath: path.join(resolved.pluginRoot, resolved.hooksConfigPath),
         resolvedSource: asAbsolutePluginRoot(resolved.pluginRoot),
+        options: resolveOptions(resolved.declaredUserConfig),
       },
     }),
     version: recordedVersion,
@@ -910,6 +915,8 @@ interface EnableCascadeHydratableMember {
   readonly marketplace: string;
   readonly pluginRoot: string;
   readonly hooksConfigPath: string | undefined;
+  /** D-PG10-10: the options of the resolution the member re-enabled from. */
+  readonly options: ResolvedOptions;
 }
 
 /**
@@ -1055,6 +1062,7 @@ function buildEnableCascadeMemberPhase(
         marketplace: member.marketplace,
         pluginRoot: summary.resolved.pluginRoot,
         hooksConfigPath: summary.resolved.hooksConfigPath,
+        options: resolveOptions(summary.resolved.declaredUserConfig),
       });
       run.rows.push({
         status: "installed",
@@ -1932,6 +1940,7 @@ async function addCachedHooks(
       plugin: opts.plugin,
       resolvedSource: effect.resolvedSource,
       scope,
+      options: effect.options,
     });
     hooksRouting.rebuildRoutingTables();
   } catch (cacheErr) {
@@ -1992,6 +2001,7 @@ async function hydrateReEnabledMemberHooks(
         plugin: member.name,
         resolvedSource: asAbsolutePluginRoot(member.pluginRoot),
         scope,
+        options: member.options,
       });
     } catch (cacheErr) {
       hookDebugLog(

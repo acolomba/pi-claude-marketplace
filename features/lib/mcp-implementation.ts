@@ -41,7 +41,7 @@ import { profileFor } from "../../extensions/pi-claude-marketplace/domain/mcp-im
 import { softDepStatus } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 import { BUILTIN_MCP_STAND_IN_EXTENSION } from "./builtin-mcp-stand-in/servers.ts";
-import { listedTools, readStubRequests, STUB_TOOL_NAMES, stubPidFiles } from "./mcp-stub-server.ts";
+import { listedTools, readStubRequests, stubPidFiles } from "./mcp-stub-server.ts";
 import { readRegistrySnapshot, REGISTRY_PROBE_COMMAND } from "./pi-registry-probe/snapshot.ts";
 import { isRunning } from "./turn-records.ts";
 
@@ -460,31 +460,37 @@ export async function settledRegistry(pi: PiProcess): Promise<RegistrySnapshot> 
   }
 }
 
-// Whether `name` is a tool that `implementation` names for the stub `server`
-// of `plugin`: one that starts with the server's tool prefix, or, when the
-// implementation cannot promise a prefix, the full name of a stub tool.
-function isStubTool(
+// Whether the registry of `snapshot` holds a tool that `implementation` names
+// for the stub `server` of `plugin`: one that starts with the server's tool
+// prefix, or, when the implementation cannot promise a prefix, the full name
+// it gives one of `tools`, the tools the stub logged. A stub logs the plugin
+// argument it started with, and the last segment of that argument is the
+// plugin's name.
+function hasStubTool(
   implementation: McpProfile,
-  name: string,
+  snapshot: RegistrySnapshot,
   plugin: string,
   server: string,
+  tools: readonly string[],
 ): boolean {
   const profile = profileFor(implementation);
-  const prefix = profile.toolNamePrefix(plugin, server);
-  return prefix === undefined
-    ? STUB_TOOL_NAMES.some((tool) => profile.toolName(plugin, server, tool) === name)
-    : name.startsWith(prefix);
+  const name = path.basename(plugin);
+  const prefix = profile.toolNamePrefix(name, server);
+  return snapshot.allTools.some((entry) =>
+    prefix === undefined
+      ? tools.some((tool) => profile.toolName(name, server, tool) === entry.name)
+      : entry.name.startsWith(prefix),
+  );
 }
 
-// Whether `implementation` finished listing the tools of the stub. The
-// adapter lists them over a connection that it closes, so it is done once the
-// stub logged a tools/list and no stub runs. Pi's built-in MCP keeps the
-// connection, so it is done once the stub logged a tools/list and Pi has a
-// tool of the server: one in the server's built-in namespace, or, when the
-// namespace is too long to be a prefix of a cut tool name, one with the full
-// name of a stub tool. `plugin` is the argument the stub logs: a stub started
-// with the plugin root is named by that path, whose last segment is the
-// plugin's name.
+// Whether `implementation` finished listing the tools of the stub: the stub
+// logged a tools/list for the server, and either no stub runs or Pi has a tool
+// of the server. pi-mcp-adapter closes the listing connection of a `lazy`
+// server, so for it no running stub ends the wait. It keeps the connection of
+// a server whose lifecycle keeps it alive (D-PG9-01), and Pi's built-in MCP
+// always keeps it, so then the wait ends once the implementation registered a
+// tool of the server with Pi. `plugin` is the argument the stub logs: a stub
+// started with the plugin root is named by that path.
 async function listingDone(
   implementation: McpProfile,
   pi: PiProcess,
@@ -492,16 +498,16 @@ async function listingDone(
   plugin: string,
   server: string,
 ): Promise<boolean> {
-  if (!listedTools(await readStubRequests(harness), plugin, server)) {
+  const tools = listedTools(await readStubRequests(harness), plugin, server);
+  if (tools.length === 0) {
     return false;
   }
 
-  if (implementation === "adapter") {
-    return (await stubPidFiles(harness)).length === 0;
+  if (implementation === "adapter" && (await stubPidFiles(harness)).length === 0) {
+    return true;
   }
 
-  const { allTools } = await probedRegistry(pi);
-  return allTools.some((tool) => isStubTool("builtin", tool.name, path.basename(plugin), server));
+  return hasStubTool(implementation, await probedRegistry(pi), plugin, server, tools);
 }
 
 /**
@@ -546,9 +552,7 @@ function reportedImplementation(snapshot: RegistrySnapshot): McpImplementation {
 }
 
 // Whether the Pi of `snapshot` runs pi-mcp-adapter and has no tool of some
-// stub server whose tools/list a stub logged in `harness`. A stub logs the
-// plugin argument it started with, and the last segment of that argument is
-// the plugin's name.
+// stub server whose tools/list a stub logged in `harness`.
 async function adapterToolMissing(snapshot: RegistrySnapshot, harness: string): Promise<boolean> {
   if (reportedImplementation(snapshot) !== "adapter") {
     return false;
@@ -558,10 +562,7 @@ async function adapterToolMissing(snapshot: RegistrySnapshot, harness: string): 
     (request) => request.method === "tools/list",
   );
   return listings.some(
-    ({ plugin, server }) =>
-      !snapshot.allTools.some((tool) =>
-        isStubTool("adapter", tool.name, path.basename(plugin), server),
-      ),
+    ({ plugin, server, tool }) => !hasStubTool("adapter", snapshot, plugin, server, [tool]),
   );
 }
 

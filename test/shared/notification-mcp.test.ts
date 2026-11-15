@@ -191,6 +191,91 @@ describe("composeMcpConfigNoticesText", () => {
     );
   });
 
+  for (const { reason, cause } of [
+    {
+      reason: "not-https",
+      cause:
+        "is not an https server, so its entry no longer holds your caFile: pi-mcp-adapter accepts a caFile only on an https server.",
+    },
+    {
+      reason: "origin-changed",
+      cause:
+        "is now an https server, but your caFile was set for another origin or for a server with no url, so its entry no longer holds it: pi-mcp-adapter uses a caFile only for the origin of the server's url. Set it on the entry again if the server at the new origin needs it.",
+    },
+    {
+      reason: "url-unresolved",
+      cause:
+        "has a new url, and its old or new url names a variable that is not set or does not read as a url, so the two origins could not be compared and its entry no longer holds your caFile. Set it on the entry again if the server needs it.",
+    },
+    {
+      reason: "entry-removed",
+      cause:
+        "was removed, and your caFile on it was not kept with your other fields: a caFile applies only to the url it was set for, and this extension keeps no url for a removed server. Set it on the entry again if the server comes back.",
+    },
+  ] as const) {
+    test(`D-PG9-14: a ${reason} ca-file-removed line names the server, its plugin, and only that cause, with control characters escaped`, () => {
+      // act
+      const text = composeMcpConfigNoticesText("ca-file-removed", [
+        {
+          kind: "ca-file-removed",
+          scope: "project",
+          file: "mcp-adapter.json",
+          plugin: "he\u202ello",
+          server: "s\u001br",
+          reason,
+        },
+      ]);
+
+      // assert
+      assert.strictEqual(
+        text,
+        `MCP server caFile removed.\n\nServer "s\\u001br" from he\\u202ello in the project-scope mcp-adapter.json ${cause}`,
+      );
+    });
+  }
+
+  test("D-PG10-21: an option-blocked line names the server, its plugin, the file, and each key, with control characters escaped", () => {
+    // act
+    const text = composeMcpConfigNoticesText("option-blocked", [
+      {
+        kind: "option-blocked",
+        scope: "user",
+        file: "mcp-adapter.json",
+        plugin: "he\u202ello",
+        server: "s\u001br",
+        names: ["token", "a\u2028b"],
+        reason: "unset",
+      },
+    ]);
+
+    // assert
+    assert.strictEqual(
+      text,
+      'MCP server left out.\n\nServer "s\\u001br" from he\\u202ello was left out of the user-scope mcp-adapter.json, because it names plugin options that have no value: token, a\\u2028b.',
+    );
+  });
+
+  test("D-PG10-11: a home-path option-blocked line names the server, its plugin, the file, and each key, with control characters escaped", () => {
+    // act
+    const text = composeMcpConfigNoticesText("option-blocked", [
+      {
+        kind: "option-blocked",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "he\u202ello",
+        server: "s\u001br",
+        names: ["tool", "a\u2028b"],
+        reason: "home-path",
+      },
+    ]);
+
+    // assert
+    assert.strictEqual(
+      text,
+      'MCP server left out.\n\nServer "s\\u001br" from he\\u202ello was left out of the project-scope mcp-adapter.json, because plugin options at the start of its command or arguments hold a home path: tool, a\\u2028b.',
+    );
+  });
+
   test("AMIG-01: control characters in a leftover's old name render as \\u escapes", () => {
     // act
     const text = composeMcpConfigNoticesText("leftover-removed", [

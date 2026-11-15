@@ -10,6 +10,7 @@
 
 import path from "node:path";
 
+import { mcpOptionBlock } from "../../domain/claude-mcp-variables.ts";
 import { translateBuiltinMcpServer } from "../../domain/mcp-builtin-translation.ts";
 
 import { BUILTIN_FIELD_ENCODER } from "./builtin-escape.ts";
@@ -47,7 +48,12 @@ function startsWithHome(config: McpServerConfig): boolean {
  * server that is not an object, has neither a string `command` nor a string
  * `url`, or is a stdio server whose resolved `command` or an `args` element
  * starts with a `~` that Pi would expand. The built-in profile blocks a
- * literal leading `~`; this catches one that a variable resolved to.
+ * literal leading `~`; this catches one that a variable or a plugin option
+ * resolved to.
+ * D-PG10-21: a server that `mcpOptionBlock` leaves out under `ctx.options`
+ * gets no config either, so it is not registered, as the adapter stage
+ * leaves it out of `mcp-adapter.json`. D-PG10-12: every other server gets
+ * each option's value in its fields, and the config holds it in memory only.
  * `ctx.projectDir` is the session's working directory for both scopes,
  * because the registration happens per session.
  */
@@ -56,7 +62,7 @@ export function builtinServerConfig(
   ctx: McpSubstitutionContext,
   description: string | undefined,
 ): McpServerConfig | undefined {
-  if (!isPlainObject(server)) {
+  if (!isPlainObject(server) || mcpOptionBlock(server, ctx.options) !== undefined) {
     return undefined;
   }
 

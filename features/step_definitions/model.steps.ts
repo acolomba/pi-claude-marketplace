@@ -9,7 +9,7 @@
  */
 
 import assert from "node:assert/strict";
-import { access } from "node:fs/promises";
+import { access, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
@@ -100,6 +100,21 @@ Given(
     await this.usePiWithProfile({ companions: [], trust: "untrusted" });
     await assert.rejects(access(path.join(this.tokens.agentDir, "trust.json")), {
       code: "ENOENT",
+    });
+  },
+);
+
+// D-PG10-17: the profile Pi starts with `false` saved for the project in Pi's
+// trust store, which is what Pi's "Do not trust" option saves. A saved `false`
+// wins even in a folder that holds none of Pi's trust-requiring resources.
+Given(
+  'pi runs with the scripted model in a project the user marked "do not trust"',
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    await this.usePiWithProfile({ companions: [], trust: "refused" });
+    const { agentDir, projectDir } = this.tokens;
+    assert.deepStrictEqual(JSON.parse(await readFile(path.join(agentDir, "trust.json"), "utf8")), {
+      [await realpath(projectDir)]: false,
     });
   },
 );

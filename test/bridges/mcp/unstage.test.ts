@@ -270,6 +270,40 @@ test("rethrows an ordinary document read failure unchanged", async (t) => {
   );
 });
 
+test("D-PG9-03: rejects a file whose entry of the plugin holds a malformed marker member", async (t) => {
+  // arrange
+  const { locations } = await createScope(t, "mcp-unstage-malformed-marker-");
+  const storedBytes = `${JSON.stringify({
+    mcpServers: {
+      plugin_acme_server_: {
+        command: "plugin-command",
+        _piClaudeMarketplace: { plugin: "acme", marketplace: "official", pluginSetFields: "x" },
+      },
+    },
+  })}\n`;
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(locations.mcpAdapterJsonPath, storedBytes, "utf8");
+
+  // act & assert
+  await assert.rejects(
+    () =>
+      unstageMcpServers({
+        locations,
+        marketplaceName: "official",
+        pluginName: "acme",
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof McpConfigFileError);
+      assert.deepStrictEqual(
+        { filePath: error.filePath, defect: error.defect, cause: error.cause },
+        { filePath: locations.mcpAdapterJsonPath, defect: "marker-not-valid", cause: undefined },
+      );
+      return true;
+    },
+  );
+  assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), storedBytes);
+});
+
 test("AFILE-02: rejects invalid JSONC with a typed error and no cause", async (t) => {
   // arrange
   const { locations } = await createScope(t, "mcp-unstage-malformed-");
@@ -1097,6 +1131,42 @@ test("AFILE-06: each rewritten file reports its comments notice, then one overri
       },
     ],
   });
+});
+
+test("D-PG9-14: an unstage reports each adapter entry it removes with a user caFile, after its override-restored facts", async (t) => {
+  // arrange
+  const { locations } = await createScope(t, "mcp-unstage-ca-file-removed-");
+  await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+  await writeFile(
+    locations.mcpAdapterJsonPath,
+    '{"mcpServers":{"remote":{"url":"https://acme.example/mcp","caFile":"/ca.pem","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}},"stub":{"command":"stub","disabled":true,"_piClaudeMarketplace":{"plugin":"acme","marketplace":"official","keptOverride":{"disabled":true}}}}}\n',
+    "utf8",
+  );
+  await writeFile(
+    locations.mcpJsonPath,
+    '{"mcpServers":{"legacy":{"url":"https://acme.example/mcp","caFile":"/ca.pem","_piClaudeMarketplace":{"plugin":"acme","marketplace":"official"}}}}\n',
+    "utf8",
+  );
+
+  // act
+  const unstage = await unstageMcpServers({
+    locations,
+    marketplaceName: "official",
+    pluginName: "acme",
+  });
+
+  // assert
+  assert.deepStrictEqual(unstage.notices, [
+    { kind: "override-restored", scope: "project", file: "mcp-adapter.json", server: "stub" },
+    {
+      kind: "ca-file-removed",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "acme",
+      server: "remote",
+      reason: "entry-removed",
+    },
+  ]);
 });
 
 test("AFILE-06: an unstage that removes an entry whose kept override the user's later enable emptied reports no override-restored fact", async (t) => {

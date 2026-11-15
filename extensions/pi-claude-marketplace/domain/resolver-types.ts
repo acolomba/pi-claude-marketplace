@@ -1,6 +1,7 @@
 import type { DroppedHook } from "./components/hooks.ts";
 import type { DroppedMcpServer } from "./mcp-server-features.ts";
 import type { GitHubSource, GitSubdirSource, PathSource, UrlSource } from "./source.ts";
+import type { UserConfigSchema } from "./user-config.ts";
 import type Type from "typebox";
 
 // D-CF3-03: the fields every command map entry may carry beside its body.
@@ -191,6 +192,9 @@ interface MaterializableFields {
         : never
     >
   >;
+  // D-PG10-23: the parsed option schema as declared, present only when the
+  // plugin declares `userConfig`. It holds no value a user typed.
+  declaredUserConfig: Type.TOptional<Type.TUnsafe<UserConfigSchema>>;
   defaultEnabled: Type.TBoolean;
   // ANAME-06: written on every MCP server entry of the plugin.
   description: Type.TOptional<Type.TString>;

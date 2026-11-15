@@ -40,7 +40,7 @@ test("hydrates every supported plugin status and retains exact cache bytes", asy
   t.after(() => rm(directory, { recursive: true, force: true }));
   const cachePath = path.join(directory, "plugin-index.json");
   const bytes =
-    '{"schemaVersion": 7, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": "row-1", "status": "installed", "version": "1.0"}, {"name": "row-2", "status": "upgradable", "version": "1.0"}, {"name": "row-3", "status": "partially-installed", "version": "1.0"}, {"name": "row-4", "status": "partially-installed-upgradable", "version": "1.0"}, {"name": "row-5", "status": "partially-upgradable", "version": "1.0"}, {"name": "row-6", "status": "available", "version": "1.0"}, {"name": "row-7", "status": "partially-available", "version": "1.0"}, {"name": "row-8", "status": "unavailable", "version": "1.0"}, {"name": "row-9", "status": "remote", "version": "1.0"}]}';
+    '{"schemaVersion": 8, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": "row-1", "status": "installed", "version": "1.0"}, {"name": "row-2", "status": "upgradable", "version": "1.0"}, {"name": "row-3", "status": "partially-installed", "version": "1.0"}, {"name": "row-4", "status": "partially-installed-upgradable", "version": "1.0"}, {"name": "row-5", "status": "partially-upgradable", "version": "1.0"}, {"name": "row-6", "status": "available", "version": "1.0"}, {"name": "row-7", "status": "partially-available", "version": "1.0"}, {"name": "row-8", "status": "unavailable", "version": "1.0"}, {"name": "row-9", "status": "remote", "version": "1.0"}]}';
   await writeFile(cachePath, bytes);
   const cache = createCompletionCache();
 
@@ -77,52 +77,52 @@ for (const { name, bytes } of [
   {
     name: "missing lastRefreshedAt",
     bytes:
-      '{"schemaVersion": 7, "manifestRef": "main", "plugins": [{"name": "valid", "status": "installed", "version": "1"}], "_loadError": "error"}',
+      '{"schemaVersion": 8, "manifestRef": "main", "plugins": [{"name": "valid", "status": "installed", "version": "1"}], "_loadError": "error"}',
   },
   {
     name: "missing plugins",
     bytes:
-      '{"schemaVersion": 7, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "_loadError": "error"}',
+      '{"schemaVersion": 8, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "_loadError": "error"}',
   },
   {
     name: "invalid lastRefreshedAt",
     bytes:
-      '{"schemaVersion": 7, "lastRefreshedAt": 5, "manifestRef": "main", "plugins": [{"name": "valid", "status": "installed", "version": "1"}], "_loadError": "error"}',
+      '{"schemaVersion": 8, "lastRefreshedAt": 5, "manifestRef": "main", "plugins": [{"name": "valid", "status": "installed", "version": "1"}], "_loadError": "error"}',
   },
   {
     name: "invalid manifestRef",
     bytes:
-      '{"schemaVersion": 7, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": 5, "plugins": [{"name": "valid", "status": "installed", "version": "1"}], "_loadError": "error"}',
+      '{"schemaVersion": 8, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": 5, "plugins": [{"name": "valid", "status": "installed", "version": "1"}], "_loadError": "error"}',
   },
   {
     name: "invalid _loadError",
     bytes:
-      '{"schemaVersion": 7, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": "valid", "status": "installed", "version": "1"}], "_loadError": 5}',
+      '{"schemaVersion": 8, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": "valid", "status": "installed", "version": "1"}], "_loadError": 5}',
   },
   {
     name: "invalid plugins",
     bytes:
-      '{"schemaVersion": 7, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": {}, "_loadError": "error"}',
+      '{"schemaVersion": 8, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": {}, "_loadError": "error"}',
   },
   {
     name: "missing row name",
     bytes:
-      '{"schemaVersion": 7, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"status": "installed", "version": "1"}], "_loadError": "error"}',
+      '{"schemaVersion": 8, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"status": "installed", "version": "1"}], "_loadError": "error"}',
   },
   {
     name: "missing row status",
     bytes:
-      '{"schemaVersion": 7, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": "valid", "version": "1"}], "_loadError": "error"}',
+      '{"schemaVersion": 8, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": "valid", "version": "1"}], "_loadError": "error"}',
   },
   {
     name: "invalid row name",
     bytes:
-      '{"schemaVersion": 7, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": 7, "status": "installed", "version": "1"}], "_loadError": "error"}',
+      '{"schemaVersion": 8, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": 7, "status": "installed", "version": "1"}], "_loadError": "error"}',
   },
   {
     name: "invalid row version",
     bytes:
-      '{"schemaVersion": 7, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": "valid", "status": "installed", "version": 7}], "_loadError": "error"}',
+      '{"schemaVersion": 8, "lastRefreshedAt": "2026-08-29T12:00:00.000Z", "manifestRef": "main", "plugins": [{"name": "valid", "status": "installed", "version": 7}], "_loadError": "error"}',
   },
 ]) {
   test(`rebuilds a cache with ${name} into complete current bytes`, async (t) => {
@@ -149,7 +149,7 @@ for (const { name, bytes } of [
     assert.strictEqual(
       await readFile(cachePath, "utf8"),
       `{
-  "schemaVersion": 7,
+  "schemaVersion": 8,
   "lastRefreshedAt": "2026-08-29T12:00:00.000Z",
   "plugins": [
     {
@@ -269,7 +269,7 @@ describe("getPluginIndex", () => {
         plugins: persisted.plugins,
       },
       {
-        schemaVersion: 7,
+        schemaVersion: 8,
         plugins: [
           { name: "alpha", status: "installed", version: "1.0.0" },
           { name: "beta", status: "available" },
@@ -377,7 +377,7 @@ describe("getPluginIndex", () => {
     });
     await writeFile(
       cachePath,
-      '{"schemaVersion":7,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","manifestRef":"main","plugins":[{"name":"disk-row","status":"upgradable","version":"2.0.0"}]}',
+      '{"schemaVersion":8,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","manifestRef":"main","plugins":[{"name":"disk-row","status":"upgradable","version":"2.0.0"}]}',
       "utf8",
     );
 
@@ -426,7 +426,7 @@ describe("getPluginIndex", () => {
         loadError: persisted._loadError,
       },
       {
-        schemaVersion: 7,
+        schemaVersion: 8,
         plugins: [],
         loadError: "manifest missing",
       },
@@ -453,8 +453,8 @@ describe("getPluginIndex", () => {
     );
   });
 
-  for (const { schemaVersion } of [{ schemaVersion: 6 }, { schemaVersion: 8 }]) {
-    test(`rejects adjacent plugin schema version ${schemaVersion}`, async (t) => {
+  for (const { schemaVersion } of [{ schemaVersion: 7 }, { schemaVersion: 9 }]) {
+    test(`D-PG10-24: rejects adjacent plugin schema version ${schemaVersion}`, async (t) => {
       // arrange
       const directory = await mkdtemp(path.join(os.tmpdir(), "completion-plugin-schema-"));
       const cachePath = path.join(directory, "plugin-index.json");
@@ -493,7 +493,7 @@ describe("getPluginIndex", () => {
       assert.deepStrictEqual(
         { schemaVersion: persisted.schemaVersion, plugins: persisted.plugins },
         {
-          schemaVersion: 7,
+          schemaVersion: 8,
           plugins: [{ name: "rebuilt-row", status: "partially-installed" }],
         },
       );
@@ -505,7 +505,7 @@ describe("getPluginIndex", () => {
     {
       name: "malformed plugin cache",
       bytes:
-        '{"schemaVersion":7,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","plugins":[{"name":"bad-row","status":"unknown"}]}',
+        '{"schemaVersion":8,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","plugins":[{"name":"bad-row","status":"unknown"}]}',
     },
   ]) {
     test(`rebuilds a ${name}`, async (t) => {
@@ -544,13 +544,13 @@ describe("getPluginIndex", () => {
   for (const { name, bytes, expectedRows } of [
     {
       name: "empty plugin cache",
-      bytes: '{"schemaVersion":7,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","plugins":[]}',
+      bytes: '{"schemaVersion":8,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","plugins":[]}',
       expectedRows: [] satisfies PluginIndexRow[],
     },
     {
       name: "single-row plugin cache",
       bytes:
-        '{"schemaVersion":7,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","plugins":[{"name":"only-row","status":"partially-available"}]}',
+        '{"schemaVersion":8,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","plugins":[{"name":"only-row","status":"partially-available"}]}',
       expectedRows: [
         { name: "only-row", status: "partially-available" },
       ] satisfies PluginIndexRow[],
@@ -656,7 +656,7 @@ describe("getPluginIndex", () => {
     });
     await writeFile(
       cachePath,
-      '{"schemaVersion":7,"lastRefreshedAt":"2026-08-29T12:00:00.123Z","plugins":[{"name":"precise-row","status":"remote"}]}',
+      '{"schemaVersion":8,"lastRefreshedAt":"2026-08-29T12:00:00.123Z","plugins":[{"name":"precise-row","status":"remote"}]}',
       "utf8",
     );
 
@@ -689,7 +689,7 @@ describe("getPluginIndex", () => {
     });
     await writeFile(
       cachePath,
-      '{"schemaVersion":7,"lastRefreshedAt":"2026-08-29T12:00:00.123Z","plugins":[{"name":"stale-row","status":"installed"}]}',
+      '{"schemaVersion":8,"lastRefreshedAt":"2026-08-29T12:00:00.123Z","plugins":[{"name":"stale-row","status":"installed"}]}',
       "utf8",
     );
 
@@ -784,7 +784,7 @@ describe("getPluginIndex MCP implementation stamp (D-P6-22)", () => {
     t.after(() => rm(directory, { recursive: true, force: true }));
     await writeFile(
       cachePath,
-      '{"schemaVersion":7,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","mcpImplementation":"adapter","plugins":[{"name":"adapter-row","status":"available"}]}',
+      '{"schemaVersion":8,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","mcpImplementation":"adapter","plugins":[{"name":"adapter-row","status":"available"}]}',
       "utf8",
     );
 
@@ -819,7 +819,7 @@ describe("getPluginIndex MCP implementation stamp (D-P6-22)", () => {
     t.after(() => rm(directory, { recursive: true, force: true }));
     await writeFile(
       cachePath,
-      '{"schemaVersion":7,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","mcpImplementation":"none","plugins":[{"name":"none-row","status":"available"}]}',
+      '{"schemaVersion":8,"lastRefreshedAt":"2026-08-29T12:00:00.000Z","mcpImplementation":"none","plugins":[{"name":"none-row","status":"available"}]}',
       "utf8",
     );
 
@@ -917,7 +917,7 @@ describe("getPluginIndex MCP implementation stamp (D-P6-22)", () => {
     );
     await writeFile(
       cachePath,
-      `{"schemaVersion":7,"lastRefreshedAt":"${new Date().toISOString()}","mcpImplementation":"builtin","plugins":[{"name":"on-disk","status":"installed"}]}`,
+      `{"schemaVersion":8,"lastRefreshedAt":"${new Date().toISOString()}","mcpImplementation":"builtin","plugins":[{"name":"on-disk","status":"installed"}]}`,
       "utf8",
     );
 

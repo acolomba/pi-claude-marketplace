@@ -21,6 +21,7 @@ import {
   readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { cascadeUnstagePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import { createSetPluginEnabled } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/enable-disable.ts";
 import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
@@ -215,6 +216,7 @@ async function populateRuntimeRoute(
     plugin,
     resolvedSource: asAbsolutePluginRoot(pluginRoot),
     scope,
+    options: resolveOptions(undefined),
   });
   hooksRouting.rebuildRoutingTables();
   return hooksRouting;
@@ -2103,6 +2105,46 @@ test("publishes a freshly enabled hook only to the supplied runtime after durabl
       [{ command: "echo enabled", marketplace: "mp", pluginId: "foo", scope: "user" }],
     );
     assert.deepStrictEqual(peerRuntime.getRoutingBucket("PreToolUse"), []);
+  });
+});
+
+test("D-PG10-10: an enable gives its plugin's routing entries the options of the resolution it enabled", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { mpRoot } = await seedRealDisabledMarketplace(home, {
+      hooksJson: {
+        PreToolUse: [{ hooks: [{ command: "echo enabled", type: "command" }], matcher: "" }],
+      },
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    const userConfig = {
+      mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+    } as const;
+    await writeFile(
+      path.join(mpRoot, "plugins", "foo", ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "foo", version: "1.2.3", userConfig }),
+    );
+    const runtime = createHooksRuntime();
+    const { ctx } = makeCtx(cwd);
+
+    // act
+    await createEnableOperation(createHooksRouting(runtime, { readHooksJson }))({
+      ctx,
+      cwd,
+      enable: true,
+      marketplace: "mp",
+      run: runWithNothingLoaded(),
+      plugin: "foo",
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      runtime.getRoutingBucket("PreToolUse").map((entry) => entry.options),
+      [resolveOptions(userConfig)],
+    );
   });
 });
 
@@ -5539,6 +5581,7 @@ test("orchestrated partial disable folds a removed hook after MCP cleanup fails"
       plugin: "foo",
       resolvedSource: asAbsolutePluginRoot(cwd),
       scope: "user",
+      options: resolveOptions(undefined),
     });
     hooksRouting.rebuildRoutingTables();
     assert.deepStrictEqual(
@@ -5637,6 +5680,7 @@ test("a partial disable preserves its committed fold when route publication fail
       plugin: "foo",
       resolvedSource: asAbsolutePluginRoot(cwd),
       scope: "user",
+      options: resolveOptions(undefined),
     });
     hooksRouting.rebuildRoutingTables();
     const failingRouting: HooksRouting = {
@@ -7808,6 +7852,52 @@ test("WR-02: a re-enabled member's hooks are hydrated into the routing cache wit
     assert.deepStrictEqual(
       runtime.getRoutingBucket("PreToolUse").map((entry) => entry.handlerDecl.command),
       ["echo b-hook"],
+    );
+  });
+});
+
+test("D-PG10-10: a re-enabled member's routing entries hold the options of the resolution it enabled", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { mpRoot } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      { name: "b", version: "1.0.0", enabled: false },
+    ]);
+    const userConfig = {
+      mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+    } as const;
+    await writeFile(
+      path.join(mpRoot, "plugins", "b", ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "b", version: "1.0.0", userConfig }),
+    );
+    await mkdir(path.join(mpRoot, "plugins", "b", "hooks"), { recursive: true });
+    await writeFile(
+      path.join(mpRoot, "plugins", "b", "hooks", "hooks.json"),
+      JSON.stringify({
+        PreToolUse: [{ hooks: [{ command: "echo b-hook", type: "command" }], matcher: "" }],
+      }),
+    );
+    const runtime = createHooksRuntime();
+    const { ctx } = makeCtx(cwd);
+
+    // act
+    await createSetPluginEnabled(
+      REAL_ENABLE_DISABLE_TRANSACTION,
+      createHooksRouting(runtime, { readHooksJson }),
+    )({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      runtime.getRoutingBucket("PreToolUse").map((entry) => entry.options),
+      [resolveOptions(userConfig)],
     );
   });
 });

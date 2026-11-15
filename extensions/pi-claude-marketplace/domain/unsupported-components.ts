@@ -13,7 +13,7 @@ import type { StatKindReader } from "./resolver-types.ts";
  *
  * SECURITY (T-02-25): The list is closed. A new kind upstream that is in
  * neither closed set would be silently ignored. Re-audit when Claude Code adds
- * component kinds. The last audit, on 2026-10-06, read the Claude Code 2.1.291
+ * component kinds. The last audit read the Claude Code 2.1.323
  * binary and https://code.claude.com/docs/en/plugins/mods/reference.
  *
  * `mod` is a hooks module. A hooks file declares one with a
@@ -34,6 +34,10 @@ import type { StatKindReader } from "./resolver-types.ts";
  * D-90-06: `bin` is intentionally absent. A plugin's `<pluginRoot>/bin` is
  * runtime-honored through the PENV-01 PATH ledger, so a bin-shipping plugin
  * installs by default at Claude Code parity.
+ *
+ * D-PG10-04: `userConfig` is intentionally absent. A plugin's options are an
+ * input that the resolver parses, not a component kind, so a plugin whose
+ * options all have a default installs by default at Claude Code parity.
  */
 const UNSUPPORTED_COMPONENT_KINDS = [
   "lspServers",
@@ -41,7 +45,6 @@ const UNSUPPORTED_COMPONENT_KINDS = [
   "themes",
   "outputStyles",
   "channels",
-  "userConfig",
   "settings",
   "syntaxHighlighting",
   "mod",

@@ -102,9 +102,6 @@ Feature: MCP server companion missing
       | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"extensions":{"io.modelcontextprotocol/ui":{"mimeTypes":["text/html;profile=mcp-app"]}},"sampling":{},"roots":{},"elicitation":{"form":{}}},"clientInfo":{"name":"pi-mcp-plugin_demo_stub_","version":"1.0.0"}} |
       | notification | notifications/initialized |                                                                                                                                                                                                                                                                 |
       | request      | tools/list                |                                                                                                                                                                                                                                                                 |
-      | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"extensions":{"io.modelcontextprotocol/ui":{"mimeTypes":["text/html;profile=mcp-app"]}},"sampling":{},"roots":{},"elicitation":{"form":{}}},"clientInfo":{"name":"pi-mcp-plugin_demo_stub_","version":"1.0.0"}} |
-      | notification | notifications/initialized |                                                                                                                                                                                                                                                                 |
-      | request      | tools/list                |                                                                                                                                                                                                                                                                 |
       | request      | tools/call                | {"name":"echo","arguments":{"text":"ping"},"_meta":{"pi-mcp-adapter/toolCallId":"{tool call 1}","progressToken":2}}                                                                                                                                             |
     Then the model receives these calls:
       | call | role        | text                                                                        |
@@ -160,19 +157,19 @@ Feature: MCP server companion missing
     Given pi-mcp-adapter has reported the mcp servers of the plugin "demo@fixtures" of the user scope
     When the user runs "/claude:plugin info demo@fixtures --scope user"
     Then the result has these fields:
-      | kind                           | plugin-info                                                            |
-      | marketplace details autoupdate | false                                                                  |
-      | marketplace name               | fixtures                                                               |
-      | marketplace scope              | user                                                                   |
-      | needs reload                   | false                                                                  |
-      | plugin components mcp          | [{"name":"plugin:demo:stub","status":"cached, connects on first use"}] |
-      | plugin components resolved     | true                                                                   |
-      | plugin components skills       | demo-skill                                                             |
-      | plugin id                      | demo@fixtures                                                          |
-      | plugin name                    | demo                                                                   |
-      | plugin reasons                 |                                                                        |
-      | plugin requires                | [{"companion":"mcp","missing":false}]                                  |
-      | plugin scope                   | user                                                                   |
-      | plugin status                  | installed                                                              |
-      | plugin version                 | 1.0.0                                                                  |
-      | severity                       | info                                                                   |
+      | kind                           | plugin-info                                        |
+      | marketplace details autoupdate | false                                              |
+      | marketplace name               | fixtures                                           |
+      | marketplace scope              | user                                               |
+      | needs reload                   | false                                              |
+      | plugin components mcp          | [{"name":"plugin:demo:stub","status":"connected"}] |
+      | plugin components resolved     | true                                               |
+      | plugin components skills       | demo-skill                                         |
+      | plugin id                      | demo@fixtures                                      |
+      | plugin name                    | demo                                               |
+      | plugin reasons                 |                                                    |
+      | plugin requires                | [{"companion":"mcp","missing":false}]              |
+      | plugin scope                   | user                                               |
+      | plugin status                  | installed                                          |
+      | plugin version                 | 1.0.0                                              |
+      | severity                       | info                                               |

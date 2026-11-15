@@ -10,6 +10,7 @@ import {
   replacePreparedMcp,
   rollbackMcpReplacement,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/stage.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   McpConfigFileError,
@@ -21,6 +22,25 @@ import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { PreparedMcpStaging } from "../../../extensions/pi-claude-marketplace/bridges/mcp/types.ts";
+
+// D-PG10-20: the full option shape; `token` is required and has no default.
+const TOKEN_REQUIRED_OPTIONS = resolveOptions({
+  token: { type: "string", title: "Token", description: "The token.", required: true },
+});
+
+// D-PG10-20: the full option shape; `mode` has a default that no entry may hold.
+const MODE_OPTIONS = resolveOptions({
+  mode: { type: "string", title: "Mode", description: "The mode.", default: "fast-default" },
+});
+
+// D-PG10-20: the full option shape; the options a remote server names.
+const REMOTE_OPTIONS = resolveOptions({
+  host: { type: "string", title: "Host", description: "The host.", default: "acme.example" },
+  team: { type: "string", title: "Team", description: "The team.", default: "core" },
+});
+
+// The owned process variable of `mode` for the project-scope `acme@catalog`.
+const OWNED_MODE = "PI_CLAUDE_MARKETPLACE_OPTION_a0ba2c2ce4d56fd8";
 
 async function createProjectScope(
   t: TestContext,
@@ -117,6 +137,7 @@ function prepareAcme(
     pluginRoot: path.join(cwd, "plugins", "acme"),
     pluginData: path.join(cwd, "data", "acme"),
     env: {},
+    options: undefined,
     servers: { server: { type: "http", url: "https://acme.example/mcp" } },
   });
 }
@@ -136,6 +157,7 @@ function preparePlugin(
     pluginRoot: path.join(cwd, "plugins", pluginName),
     pluginData: path.join(cwd, "data", pluginName),
     env: {},
+    options: undefined,
     servers: Object.fromEntries(
       serverNames.map((serverName) => [serverName, { type: "http", url: "https://x.example/mcp" }]),
     ),
@@ -261,6 +283,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "empty-plugin"),
       pluginData: path.join(cwd, "data", "empty-plugin"),
       env: {},
+      options: undefined,
       servers: {},
     });
 
@@ -304,10 +327,11 @@ describe("prepareStageMcpServers", () => {
           directTools: "search",
           toolPrefix: "mcp",
           requestTimeoutMs: 1800000,
+          lifecycle: "lazy-keep-alive",
           _piClaudeMarketplace: {
             plugin: "acme",
             marketplace: "catalog",
-            defaultFields: { requestTimeoutMs: 1800000 },
+            defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
           },
         },
       },
@@ -323,6 +347,7 @@ describe("prepareStageMcpServers", () => {
       pluginData,
       sourcePath: path.join(pluginRoot, ".mcp.json"),
       env: {},
+      options: undefined,
       servers: {
         current: {
           command: "${CLAUDE_PLUGIN_ROOT}/bin/server",
@@ -371,6 +396,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: {},
     });
 
@@ -450,6 +476,7 @@ describe("prepareStageMcpServers", () => {
             pluginRoot: path.join(cwd, "plugins", "acme"),
             pluginData: path.join(cwd, "data", "acme"),
             env: {},
+            options: undefined,
             servers: { server: { type: "http", url: "https://mcp.example.test" } },
           }),
         (error: unknown) => {
@@ -481,6 +508,92 @@ describe("prepareStageMcpServers", () => {
     });
   }
 
+  test("D-PG9-03: an MCP install over the plugin's entry with a malformed marker member rejects and keeps the bytes", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-marker-refusal-");
+    const storedBytes = `${JSON.stringify({
+      mcpServers: {
+        plugin_acme_server_: {
+          command: "plugin-command",
+          lifecycle: "lazy-keep-alive",
+          _piClaudeMarketplace: {
+            plugin: "acme",
+            marketplace: "catalog",
+            defaultFields: { lifecycle: ["lazy-keep-alive"] },
+          },
+        },
+      },
+    })}\n`;
+    await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+    await writeFile(locations.mcpAdapterJsonPath, storedBytes, "utf8");
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        prepareStageMcpServers({
+          locations,
+          cwd,
+          marketplaceName: "catalog",
+          pluginName: "acme",
+          pluginRoot: path.join(cwd, "plugins", "acme"),
+          pluginData: path.join(cwd, "data", "acme"),
+          env: {},
+          options: undefined,
+          servers: { server: { type: "http", url: "https://mcp.example.test" } },
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof McpConfigFileError);
+        assert.deepStrictEqual(
+          { filePath: error.filePath, defect: error.defect, cause: error.cause },
+          { filePath: locations.mcpAdapterJsonPath, defect: "marker-not-valid", cause: undefined },
+        );
+        return true;
+      },
+    );
+    assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), storedBytes);
+  });
+
+  test("D-PG9-03: an empty staged set over the plugin's entry with a malformed marker member reports the file left unchanged", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-marker-noop-");
+    const storedBytes = `${JSON.stringify({
+      mcpServers: {
+        plugin_acme_server_: {
+          command: "plugin-command",
+          _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog", keptOverride: [] },
+        },
+      },
+    })}\n`;
+    await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+    await writeFile(locations.mcpAdapterJsonPath, storedBytes, "utf8");
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      env: {},
+      options: undefined,
+      servers: {},
+    });
+    await commitPreparedMcp(prepared);
+
+    // assert
+    assert.deepStrictEqual(prepared, {
+      kind: "noop",
+      result: {
+        stagedNames: [],
+        recorded: [],
+        warnings: [],
+        notices: [{ kind: "left-unchanged", scope: "project", file: "mcp-adapter.json" }],
+      },
+    });
+    assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), storedBytes);
+  });
+
   test("AFILE-02: an empty staged set over an unparseable file is a noop that reports it left unchanged", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-unparseable-noop-");
@@ -496,6 +609,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: {},
     });
     await commitPreparedMcp(prepared);
@@ -543,6 +657,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: { server: { type: "http", url: "https://mcp.example.test" } },
     });
 
@@ -606,6 +721,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: { server: { type: "http", url: "https://mcp.example.test" } },
     });
 
@@ -643,6 +759,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: { server: { type: "http", url: "https://mcp.example.test" } },
     });
 
@@ -677,6 +794,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: {},
     });
     await commitPreparedMcp(prepared);
@@ -707,6 +825,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: { server: { type: "http", url: "https://mcp.example.test" } },
     });
 
@@ -761,6 +880,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: { server: { type: "http", url: "https://mcp.example.test" } },
     });
 
@@ -800,6 +920,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: { server: { type: "http", url: "https://mcp.example.test" } },
     });
 
@@ -829,6 +950,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: { scalar: "invalid" },
     });
 
@@ -867,6 +989,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "empty-plugin"),
       pluginData: path.join(cwd, "data", "empty-plugin"),
       env: {},
+      options: undefined,
       servers: {},
     });
 
@@ -893,6 +1016,7 @@ describe("prepareStageMcpServers", () => {
           pluginRoot: path.join(cwd, "plugins", "acme"),
           pluginData: path.join(cwd, "data", "acme"),
           env: {},
+          options: undefined,
           servers: { server: { command: "node" } },
         }),
       (error: unknown) => {
@@ -1223,11 +1347,13 @@ describe("prepareStageMcpServers", () => {
       "toolPrefix": "mcp",
       "disabled": true,
       "requestTimeoutMs": 1800000,
+      "lifecycle": "lazy-keep-alive",
       "_piClaudeMarketplace": {
         "plugin": "acme",
         "marketplace": "catalog",
         "defaultFields": {
-          "requestTimeoutMs": 1800000
+          "requestTimeoutMs": 1800000,
+          "lifecycle": "lazy-keep-alive"
         },
         "keptOverride": {
           "disabled": true,
@@ -1255,6 +1381,7 @@ describe("prepareStageMcpServers", () => {
         pluginRoot,
         pluginData,
         env: {},
+        options: undefined,
         servers: { server: { command: "acme", env: { PLUGIN_TOKEN: "plugin-env" } } },
       }),
     );
@@ -1704,6 +1831,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: { server: { type: "http", url: "https://acme.example/mcp", timeout: 60000 } },
     });
     await commitPreparedMcp(prepared);
@@ -1740,6 +1868,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: {
         beta: { type: "http", url: "https://beta.example/mcp" },
         alpha: { type: "http", url: "https://alpha.example/mcp" },
@@ -1958,6 +2087,7 @@ describe("prepareStageMcpServers", () => {
         pluginRoot: path.join(cwd, "plugins", "acme"),
         pluginData: path.join(cwd, "data", "acme"),
         env: {},
+        options: undefined,
         servers: {},
       }),
     );
@@ -1984,6 +2114,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot,
       pluginData,
       env: {},
+      options: undefined,
       servers: { server: { command: "${CLAUDE_PROJECT_DIR}/server" } },
     });
 
@@ -2004,10 +2135,11 @@ describe("prepareStageMcpServers", () => {
           directTools: "search",
           toolPrefix: "mcp",
           requestTimeoutMs: 1800000,
+          lifecycle: "lazy-keep-alive",
           _piClaudeMarketplace: {
             plugin: "acme",
             marketplace: "catalog",
-            defaultFields: { requestTimeoutMs: 1800000 },
+            defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
           },
         },
       },
@@ -2027,6 +2159,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot,
       pluginData,
       env: { PI_CM_AVAR_TOKEN: "avar-sentinel-04-01" },
+      options: undefined,
       servers: {
         srv: {
           command: "${CLAUDE_PLUGIN_ROOT}/bin/server",
@@ -2072,10 +2205,11 @@ describe("prepareStageMcpServers", () => {
           directTools: "search",
           toolPrefix: "mcp",
           requestTimeoutMs: 1800000,
+          lifecycle: "lazy-keep-alive",
           _piClaudeMarketplace: {
             plugin: "hello",
             marketplace: "catalog",
-            defaultFields: { requestTimeoutMs: 1800000 },
+            defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
           },
         },
       },
@@ -2103,6 +2237,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "hello"),
       pluginData: path.join(cwd, "data", "hello"),
       env: sentinels,
+      options: undefined,
       servers: {
         local: {
           command: "${PI_CM_AVAR_COMMAND}",
@@ -2140,6 +2275,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "hello"),
       pluginData: path.join(cwd, "data", "hello"),
       env: {},
+      options: undefined,
       servers: { local: { command: "server", args: ["${PI_CM_AVAR_PROCESS}"] } },
     });
 
@@ -2170,6 +2306,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "hello"),
       pluginData: path.join(cwd, "data", "hello"),
       env: { PI_CM_AVAR_PROCESS: "x" },
+      options: undefined,
       servers: { local: { command: "server", args: ["${PI_CM_AVAR_PROCESS}"] } },
     });
 
@@ -2194,6 +2331,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "hello"),
       pluginData: path.join(cwd, "data", "hello"),
       env: {},
+      options: undefined,
       servers: { srv: { command: "server", args: ["--site", "${DD_SITE}"] } },
     });
 
@@ -2231,6 +2369,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "hello"),
       pluginData: path.join(cwd, "data", "hello"),
       env: { ALPHA_SET: "alpha-value" },
+      options: undefined,
       servers: {
         beta: {
           command: "${BETA_BIN}/server",
@@ -2279,6 +2418,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "hello"),
       pluginData: path.join(cwd, "data", "hello"),
       env: sentinels,
+      options: undefined,
       servers: {
         srv: {
           command: "server",
@@ -2330,6 +2470,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "hello"),
       pluginData: path.join(cwd, "data", "hello"),
       env: sentinels,
+      options: undefined,
       servers: {
         local: {
           command: "${CLAUDE_CODE_OAUTH_TOKEN}",
@@ -2401,6 +2542,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "hello"),
       pluginData: path.join(cwd, "data", "hello"),
       env: { ANTHROPIC_API_KEY: "api-key-value" },
+      options: undefined,
       servers: {
         srv: {
           type: "http",
@@ -2444,6 +2586,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "hello"),
       pluginData: path.join(cwd, "data", "hello"),
       env: {},
+      options: undefined,
       servers: {},
     });
 
@@ -2464,6 +2607,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "hello"),
       pluginData: path.join(cwd, "data", "hello"),
       env: {},
+      options: undefined,
       servers: {
         alpha: {
           type: "http",
@@ -2509,6 +2653,117 @@ describe("prepareStageMcpServers", () => {
     ]);
   });
 
+  test("D-PG9-14: a server whose entry leaves out the user's caFile reports one ca-file-removed notice after the tool-rule notices", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-ca-file-removed-");
+    const marker = { plugin: "hello", marketplace: "catalog" };
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      JSON.stringify({
+        mcpServers: {
+          plugin_hello_local_: {
+            url: "https://l.example/mcp",
+            caFile: "/etc/pki/user/ca-bundle.pem",
+            _piClaudeMarketplace: marker,
+          },
+          plugin_hello_remote_: {
+            url: "https://r.example/mcp",
+            caFile: "/etc/pki/user/ca-bundle.pem",
+            _piClaudeMarketplace: marker,
+          },
+        },
+      }),
+    );
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "hello",
+      pluginRoot: path.join(cwd, "plugins", "hello"),
+      pluginData: path.join(cwd, "data", "hello"),
+      env: {},
+      options: undefined,
+      servers: {
+        local: { command: "node" },
+        remote: {
+          type: "http",
+          url: "https://r.example/v2/mcp",
+          toolPermissions: { drop: "blocked" },
+        },
+      },
+    });
+
+    // assert
+    assert.deepStrictEqual(prepared.result.notices, [
+      {
+        kind: "tool-rules-unenforced",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_remote_",
+        fields: ["toolPermissions"],
+      },
+      {
+        kind: "ca-file-removed",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_local_",
+        reason: "not-https",
+      },
+    ]);
+  });
+
+  test("D-PG9-14: a server the plugin no longer declares reports its user caFile as removed with the entry", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-ca-file-entry-removed-");
+    const marker = { plugin: "hello", marketplace: "catalog" };
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      JSON.stringify({
+        mcpServers: {
+          plugin_hello_kept_: {
+            url: "https://k.example/mcp",
+            caFile: "/etc/pki/user/ca-bundle.pem",
+            _piClaudeMarketplace: marker,
+          },
+          plugin_hello_gone_: {
+            url: "https://g.example/mcp",
+            caFile: "/etc/pki/user/ca-bundle.pem",
+            _piClaudeMarketplace: marker,
+          },
+        },
+      }),
+    );
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "hello",
+      pluginRoot: path.join(cwd, "plugins", "hello"),
+      pluginData: path.join(cwd, "data", "hello"),
+      env: {},
+      options: undefined,
+      servers: { kept: { type: "http", url: "https://k.example/v2/mcp" } },
+    });
+
+    // assert
+    assert.deepStrictEqual(prepared.result.notices, [
+      {
+        kind: "ca-file-removed",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_gone_",
+        reason: "entry-removed",
+      },
+    ]);
+  });
+
   test("ANAME-07: a server with tool permission rules is written without either rule field", async (t) => {
     // arrange
     const { cwd, locations } = await createProjectScope(t, "mcp-stage-tool-rules-entry-");
@@ -2520,6 +2775,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "hello"),
       pluginData: path.join(cwd, "data", "hello"),
       env: {},
+      options: undefined,
       servers: {
         srv: {
           type: "http",
@@ -2565,6 +2821,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "hello"),
       pluginData: path.join(cwd, "data", "hello"),
       env: {},
+      options: undefined,
       servers: {
         remote: { type: "http", url: "https://r.example/mcp", toolPermissions: {} },
         local: { command: "node", toolPermissions: { drop: "blocked" } },
@@ -2618,6 +2875,7 @@ describe("prepareStageMcpServers", () => {
         pluginRoot: path.join(cwd, "plugins", "acme"),
         pluginData: path.join(cwd, "data", "acme"),
         env: {},
+        options: undefined,
         servers: {
           db: { type: "http", url: "https://db.example/mcp" },
           "my.api": { type: "http", url: "https://api.example/mcp" },
@@ -2671,6 +2929,7 @@ describe("prepareStageMcpServers", () => {
         pluginRoot: path.join(cwd, "plugins", "acme"),
         pluginData: path.join(cwd, "data", "acme"),
         env: {},
+        options: undefined,
         servers: { db: { type: "http", url: "https://db.example/mcp" } },
       }),
     );
@@ -2730,6 +2989,7 @@ describe("prepareStageMcpServers", () => {
         pluginRoot: path.join(cwd, "plugins", "acme"),
         pluginData: path.join(cwd, "data", "acme"),
         env: {},
+        options: undefined,
         servers: { db: { type: "http", url: "https://db.example/mcp" } },
       }),
     );
@@ -3003,6 +3263,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: {
         server: { type: "http", url: "https://acme.example/mcp", toolPermissions: { drop: "ask" } },
       },
@@ -3181,6 +3442,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: {},
     });
 
@@ -3212,6 +3474,7 @@ describe("prepareStageMcpServers", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: {},
     });
 
@@ -3234,6 +3497,333 @@ describe("prepareStageMcpServers", () => {
       },
     );
   });
+
+  test("D-PG10-21: leaves out a server that names an option with no value, and stages, records, and reports the others", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-option-blocked-");
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      env: {},
+      options: TOKEN_REQUIRED_OPTIONS,
+      servers: {
+        keyed: { command: "node", args: ["--token", "${user_config.token}"] },
+        plain: { type: "http", url: "https://plain.example/mcp" },
+      },
+    });
+
+    // assert
+    assert.ok(prepared.kind === "staged");
+    assert.deepStrictEqual(
+      {
+        keys: Object.keys(prepared._nextDoc?.mcpServers ?? {}),
+        stagedNames: prepared.result.stagedNames,
+        recorded: prepared.result.recorded.map(({ generatedName }) => generatedName),
+        notices: prepared.result.notices,
+      },
+      {
+        keys: ["plugin_acme_plain_"],
+        stagedNames: ["plain"],
+        recorded: ["plain"],
+        notices: [
+          {
+            kind: "option-blocked",
+            scope: "project",
+            file: "mcp-adapter.json",
+            plugin: "acme",
+            server: "keyed",
+            names: ["token"],
+            reason: "unset",
+          },
+        ],
+      },
+    );
+  });
+
+  test("D-PG10-21: a stage whose every server is left out removes the plugin's earlier entries", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-option-blocked-drop-");
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      '{"mcpServers":{"plugin_acme_keyed_":{"command":"old","_piClaudeMarketplace":{"plugin":"acme","marketplace":"catalog"}}}}',
+    );
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      env: {},
+      options: TOKEN_REQUIRED_OPTIONS,
+      servers: { keyed: { command: "${user_config.token}" } },
+    });
+
+    // assert
+    assert.ok(prepared.kind === "staged");
+    assert.deepStrictEqual(
+      { nextDoc: prepared._nextDoc, result: prepared.result },
+      {
+        nextDoc: { mcpServers: {} },
+        result: {
+          stagedNames: [],
+          recorded: [],
+          warnings: [],
+          notices: [
+            {
+              kind: "option-blocked",
+              scope: "project",
+              file: "mcp-adapter.json",
+              plugin: "acme",
+              server: "keyed",
+              names: ["token"],
+              reason: "unset",
+            },
+          ],
+        },
+      },
+    );
+  });
+
+  test("D-PG10-21: a stage whose every server is left out, with no earlier entry, writes no file and reports it", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-option-blocked-noop-");
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      env: {},
+      options: TOKEN_REQUIRED_OPTIONS,
+      servers: { keyed: { type: "http", url: "https://${user_config.token}.example/mcp" } },
+    });
+    await commitPreparedMcp(prepared);
+
+    // assert
+    assert.deepStrictEqual(prepared, {
+      kind: "noop",
+      result: {
+        stagedNames: [],
+        recorded: [],
+        warnings: [],
+        notices: [
+          {
+            kind: "option-blocked",
+            scope: "project",
+            file: "mcp-adapter.json",
+            plugin: "acme",
+            server: "keyed",
+            names: ["token"],
+            reason: "unset",
+          },
+        ],
+      },
+    });
+    assert.strictEqual(await pathExists(locations.mcpAdapterJsonPath), false);
+  });
+
+  test("D-PG10-21: a left-out server's key takes no part in the collision check", async (t) => {
+    // arrange
+    const { cwd, home } = await createHermeticEnvironment(t, "mcp-stage-option-blocked-collision-");
+    const locations = locationsFor("user", cwd);
+    await writeSource(
+      path.join(home, ".agents", "mcp.json"),
+      '{"mcpServers":{"plugin_acme_keyed_":{"command":"user"}}}',
+    );
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      env: {},
+      options: TOKEN_REQUIRED_OPTIONS,
+      servers: {
+        keyed: { command: "node", env: { TOKEN: "${user_config.token}" } },
+        plain: { command: "node" },
+      },
+    });
+
+    // assert
+    assert.ok(prepared.kind === "staged");
+    assert.deepStrictEqual(
+      {
+        stagedNames: prepared.result.stagedNames,
+        notices: prepared.result.notices.map(({ kind }) => kind),
+      },
+      { stagedNames: ["plain"], notices: ["option-blocked"] },
+    );
+  });
+
+  test("D-PG10-21: an unreadable file with every server left out is left unchanged and the servers are reported", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-option-blocked-unreadable-");
+    await writeSource(locations.mcpAdapterJsonPath, "[]\n");
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      env: {},
+      options: TOKEN_REQUIRED_OPTIONS,
+      servers: { keyed: { command: "${user_config.token}" } },
+    });
+
+    // assert
+    assert.deepStrictEqual(prepared.result.notices, [
+      { kind: "left-unchanged", scope: "project", file: "mcp-adapter.json" },
+      {
+        kind: "option-blocked",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "acme",
+        server: "keyed",
+        names: ["token"],
+        reason: "unset",
+      },
+    ]);
+  });
+
+  test("D-PG10-11: a staged entry whose argument names an option holds a reference and no option value", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-option-reference-");
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      env: {},
+      options: MODE_OPTIONS,
+      servers: { local: { command: "node", args: ["--mode", "${user_config.mode}"] } },
+    });
+
+    // assert
+    assert.ok(prepared.kind === "staged");
+    assert.deepStrictEqual(
+      {
+        reference: JSON.stringify(prepared._nextDoc).includes(
+          `"args":["--mode","\${${OWNED_MODE}}"]`,
+        ),
+        notices: prepared.result.notices,
+        holdsValue: JSON.stringify(prepared).includes("fast-default"),
+      },
+      { reference: true, notices: [], holdsValue: false },
+    );
+  });
+
+  test("D-PG10-23: two stages of a plugin that names an option give the same entry", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-option-stable-");
+    const stage = () =>
+      prepareStageMcpServers({
+        locations,
+        cwd,
+        marketplaceName: "catalog",
+        pluginName: "acme",
+        pluginRoot: path.join(cwd, "plugins", "acme"),
+        pluginData: path.join(cwd, "data", "acme"),
+        env: {},
+        options: MODE_OPTIONS,
+        servers: { local: { command: "node", args: ["${user_config.mode}"] } },
+      });
+
+    // act
+    const [first, second] = [await stage(), await stage()];
+
+    // assert
+    assert.ok(first.kind === "staged" && second.kind === "staged");
+    assert.strictEqual(JSON.stringify(second._nextDoc), JSON.stringify(first._nextDoc));
+  });
+
+  test("D-PG10-23: a restage keeps the user's caFile for a url whose host is an option at the same origin", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-option-ca-file-");
+    await writeSource(
+      locations.mcpAdapterJsonPath,
+      JSON.stringify({
+        mcpServers: {
+          plugin_acme_remote_: {
+            url: "https://acme.example/v1/mcp",
+            caFile: "/etc/pki/user/ca-bundle.pem",
+            _piClaudeMarketplace: { plugin: "acme", marketplace: "catalog" },
+          },
+        },
+      }),
+    );
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      env: {},
+      options: REMOTE_OPTIONS,
+      servers: { remote: { type: "http", url: "https://${user_config.host}/v2/mcp" } },
+    });
+
+    // assert
+    assert.ok(prepared.kind === "staged");
+    const servers = prepared._nextDoc?.mcpServers as Record<string, Record<string, unknown>>;
+    assert.deepStrictEqual(
+      { caFile: servers.plugin_acme_remote_?.caFile, notices: prepared.result.notices },
+      { caFile: "/etc/pki/user/ca-bundle.pem", notices: [] },
+    );
+  });
+
+  test("D-PG10-23: a header that names an option keeps the entry's auth", async (t) => {
+    // arrange
+    const { cwd, locations } = await createProjectScope(t, "mcp-stage-option-auth-");
+
+    // act
+    const prepared = await prepareStageMcpServers({
+      locations,
+      cwd,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: path.join(cwd, "plugins", "acme"),
+      pluginData: path.join(cwd, "data", "acme"),
+      env: {},
+      options: REMOTE_OPTIONS,
+      servers: {
+        remote: {
+          type: "http",
+          url: "https://acme.example/mcp",
+          headers: { "X-Team": "${user_config.team}" },
+        },
+      },
+    });
+
+    // assert
+    assert.ok(prepared.kind === "staged");
+    const servers = prepared._nextDoc?.mcpServers as Record<string, Record<string, unknown>>;
+    assert.strictEqual(servers.plugin_acme_remote_?.auth, "oauth");
+  });
 });
 
 describe("commitPreparedMcp", () => {
@@ -3252,6 +3842,7 @@ describe("commitPreparedMcp", () => {
       pluginData,
       sourcePath,
       env: {},
+      options: undefined,
       servers: {
         local: {
           command: "${CLAUDE_PLUGIN_ROOT}/bin/server",
@@ -3274,11 +3865,13 @@ describe("commitPreparedMcp", () => {
       "directTools": "search",
       "toolPrefix": "mcp",
       "requestTimeoutMs": 1800000,
+      "lifecycle": "lazy-keep-alive",
       "_piClaudeMarketplace": {
         "plugin": "acme",
         "marketplace": "catalog",
         "defaultFields": {
-          "requestTimeoutMs": 1800000
+          "requestTimeoutMs": 1800000,
+          "lifecycle": "lazy-keep-alive"
         }
       }
     }
@@ -3311,6 +3904,7 @@ describe("commitPreparedMcp", () => {
       pluginRoot: path.join(cwd, "plugins", "empty-plugin"),
       pluginData: path.join(cwd, "data", "empty-plugin"),
       env: {},
+      options: undefined,
       servers: {},
     });
 
@@ -3365,6 +3959,7 @@ describe("abortPreparedMcp", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: { server: { command: "node" } },
     });
 
@@ -3387,6 +3982,7 @@ describe("abortPreparedMcp", () => {
       pluginRoot: path.join(cwd, "plugins", "empty-plugin"),
       pluginData: path.join(cwd, "data", "empty-plugin"),
       env: {},
+      options: undefined,
       servers: {},
     });
 
@@ -3411,6 +4007,7 @@ describe("replacePreparedMcp", () => {
       pluginRoot: path.join(cwd, "plugins", "empty-plugin"),
       pluginData: path.join(cwd, "data", "empty-plugin"),
       env: {},
+      options: undefined,
       servers: {},
     });
 
@@ -3439,6 +4036,7 @@ describe("replacePreparedMcp", () => {
       pluginRoot,
       pluginData,
       env: {},
+      options: undefined,
       servers: { owned: { command: "node" } },
     });
     const expectedBytes = `{
@@ -3456,11 +4054,13 @@ describe("replacePreparedMcp", () => {
       "directTools": "search",
       "toolPrefix": "mcp",
       "requestTimeoutMs": 1800000,
+      "lifecycle": "lazy-keep-alive",
       "_piClaudeMarketplace": {
         "plugin": "acme",
         "marketplace": "catalog",
         "defaultFields": {
-          "requestTimeoutMs": 1800000
+          "requestTimeoutMs": 1800000,
+          "lifecycle": "lazy-keep-alive"
         }
       }
     }
@@ -3492,6 +4092,7 @@ describe("replacePreparedMcp", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: { server: { command: "node" } },
     });
     await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
@@ -3557,6 +4158,7 @@ describe("replacePreparedMcp", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: {},
     });
 
@@ -3634,6 +4236,7 @@ describe("rollbackMcpReplacement", () => {
       pluginRoot: path.join(cwd, "plugins", "empty-plugin"),
       pluginData: path.join(cwd, "data", "empty-plugin"),
       env: {},
+      options: undefined,
       servers: {},
     });
     const replacement = await replacePreparedMcp(prepared);
@@ -3657,6 +4260,7 @@ describe("rollbackMcpReplacement", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: { server: { command: "node" } },
     });
     const replacement = await replacePreparedMcp(prepared);
@@ -3685,6 +4289,7 @@ describe("rollbackMcpReplacement", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: { owned: { command: "node" } },
     });
     const replacement = await replacePreparedMcp(prepared);
@@ -3717,6 +4322,7 @@ describe("rollbackMcpReplacement", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: { owned: { command: "node" } },
     });
     const replacement = await replacePreparedMcp(prepared);
@@ -3744,6 +4350,7 @@ describe("rollbackMcpReplacement", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: { owned: { command: "node" } },
     });
     const replacement = await replacePreparedMcp(prepared);
@@ -3815,6 +4422,7 @@ describe("rollbackMcpReplacement", () => {
       pluginRoot: path.join(cwd, "plugins", "acme"),
       pluginData: path.join(cwd, "data", "acme"),
       env: {},
+      options: undefined,
       servers: { server: { command: "node" } },
     });
     const replacement = await replacePreparedMcp(prepared);
