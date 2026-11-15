@@ -19,3 +19,14 @@ Scope: Critical and Warning findings of `10-REVIEW.md` (0 Critical, 3 Warning). 
 | WR-03 | resolved as parity, comment corrected: Claude Code 2.1.323 runs the exec-form hook option pass (`Frn`) after the path variables (10-RESEARCH, `BIN@312871364`), so the two passes stay; T-10-24 covers the content pass of `shared/vars.ts`, which is one pass | 75805061 | new owner case pins the order |
 
 Residual (WR-01): when a path-source catalog has moved past the record's version, the hooks hydrate reads the newer version's option defaults.
+
+## Iteration 2
+
+The re-review (`10-REVIEW.md`, iteration 2) found 0 Critical, 0 Warning, and 3 new Info items. It confirmed that the three fixes are correct and that each test or scenario fails without its fix. The loop stops here because only Info findings remain.
+
+| Finding | Disposition | Commit |
+|---------|-------------|--------|
+| IN-09 | fixed (text only): the state-io comment and the D-PG10-25 row now say that pi-mcp-adapter still starts a stdio server with an empty value. This is a maintainer-review point for D-PG10-25. | 669f0645 |
+| IN-10 | fixed: the first-pass sentence in `planSpawn` now says that path values are not rescanned for path variables | 669f0645 |
+| IN-11 | fixed: the `mcp-migration.ts` comments now say the move writes `userConfig` | 669f0645 |
+| IN-01 to IN-08 | carried forward and left open (Info) | — |

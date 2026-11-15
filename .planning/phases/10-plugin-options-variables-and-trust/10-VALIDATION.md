@@ -102,3 +102,17 @@ Runtime State Inventory (10-RESEARCH), "Secrets and env vars" row: closed. `PI_C
 | Gaps found | 0 |
 | Resolved | 0 |
 | Escalated | 0 |
+
+## Phase Gate 2026-11-15
+
+`npm run check` on the final tree at 16ef48af, run in a hermetic home (`PI_CODING_AGENT_DIR` set to a scratch directory). Log: `/tmp/pg10-phasegate2.log`, `exit=0`.
+
+| Check | Result |
+|---|---|
+| check:static (typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, check:features) | passed |
+| test:unpaired, test:integration | passed |
+| test:cucumber, adapter profile | 1983 scenarios, 24345 steps passed |
+| test:cucumber, builtin profile | 199 scenarios, 2685 steps passed |
+| test:coverage:direct:all | passed, `coverage/direct.lcov` 364 records |
+
+An earlier run at 669f0645 (`/tmp/pg10-phasegate.log`, `exit=1`) failed one integration case. That case still expected the shape an unreadable record had before D-PG10-25. Commit 16ef48af updated the case, and this run passed.
