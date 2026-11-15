@@ -666,7 +666,7 @@ test("keeps the shown start failure notices of one runtime from another (D-PG5-1
 test("takes a call's duration once, from its mark (D-PG6-06)", () => {
   // arrange
   const runtime = createHooksRuntime();
-  runtime.recordToolCallPrepared("a", 100);
+  runtime.recordToolCallPrepared("a", undefined, 100);
 
   // act
   const first = runtime.takeToolDuration("a", 250);
@@ -680,8 +680,8 @@ test("takes a call's duration once, from its mark (D-PG6-06)", () => {
 test("gives a duration in whole milliseconds and never below zero (D-PG6-06)", () => {
   // arrange
   const runtime = createHooksRuntime();
-  runtime.recordToolCallPrepared("a", 100.4);
-  runtime.recordToolCallPrepared("b", 100);
+  runtime.recordToolCallPrepared("a", undefined, 100.4);
+  runtime.recordToolCallPrepared("b", undefined, 100);
 
   // act
   const rounded = runtime.takeToolDuration("a", 250.9);
@@ -708,8 +708,8 @@ for (const { name, clear } of [
   test(`drops every call's mark at ${name} (D-PG6-06)`, () => {
     // arrange
     const runtime = createHooksRuntime();
-    runtime.recordToolCallPrepared("a", 100);
-    runtime.recordToolCallPrepared("b", 110);
+    runtime.recordToolCallPrepared("a", undefined, 100);
+    runtime.recordToolCallPrepared("b", undefined, 110);
 
     // act
     clear(runtime);
@@ -720,7 +720,50 @@ for (const { name, clear } of [
       [undefined, undefined],
     );
   });
+
+  test(`drops the last top-level mark at ${name} (D-PG6-06)`, () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.recordToolCallPrepared("a", undefined, 100);
+
+    // act
+    clear(runtime);
+    runtime.recordToolCallPrepared("a/1", "a", 50);
+
+    // assert
+    assert.strictEqual(runtime.takeToolDuration("a/1", 80), 30);
+  });
 }
+
+test("counts each call of a parallel batch from the batch's last top-level mark (D-PG6-06)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.recordToolCallPrepared("a", undefined, 100);
+  runtime.recordToolCallPrepared("b", undefined, 160);
+
+  // act
+  const first = runtime.takeToolDuration("a", 300);
+  const second = runtime.takeToolDuration("b", 310);
+
+  // assert
+  assert.deepStrictEqual([first, second], [140, 150]);
+});
+
+test("counts a call another tool issued from its own mark (D-PG6-06)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.recordToolCallPrepared("a", undefined, 100);
+  runtime.recordToolCallPrepared("a/1", "a", 200);
+
+  // act
+  const nested = runtime.takeToolDuration("a/1", 230);
+  const parent = runtime.takeToolDuration("a", 400);
+  runtime.recordToolCallPrepared("c", undefined, 500);
+  const next = runtime.takeToolDuration("c", 520);
+
+  // assert
+  assert.deepStrictEqual([nested, parent, next], [30, 300, 20]);
+});
 
 test("owns child removal, PID snapshots, and shutdown per runtime", () => {
   // arrange

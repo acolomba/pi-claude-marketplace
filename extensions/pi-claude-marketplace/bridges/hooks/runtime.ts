@@ -187,16 +187,28 @@ export interface HooksRuntime {
   readonly recordToolCall: () => void;
   /**
    * D-PG6-06: keeps `now`, in milliseconds, as the mark of the call
-   * `toolCallId` at the end of its PreToolUse dispatch.
+   * `toolCallId` at the end of its PreToolUse dispatch. A call with no
+   * `parentToolCallId` also becomes the last top-level mark: Pi prepares
+   * every call of a parallel batch before it runs any of them.
    */
-  readonly recordToolCallPrepared: (toolCallId: string, now: number) => void;
+  readonly recordToolCallPrepared: (
+    toolCallId: string,
+    parentToolCallId: string | undefined,
+    now: number,
+  ) => void;
   /**
    * D-PG6-06: removes the mark of the call `toolCallId` and returns the whole
-   * milliseconds from it to `now`, never negative, or `undefined` when the
-   * call has no mark.
+   * milliseconds to `now` from the later of its mark and the last top-level
+   * mark, never negative, or `undefined` when the call has no mark. So the
+   * PreToolUse hooks of the calls prepared after it are not in it, and a
+   * call that another tool issued, prepared after every top-level call,
+   * counts from its own mark.
    */
   readonly takeToolDuration: (toolCallId: string, now: number) => number | undefined;
-  /** D-PG6-06: drops the mark of every call, so a call that never ends keeps none. */
+  /**
+   * D-PG6-06: drops the mark of every call and the last top-level mark, so a
+   * call that never ends keeps none.
+   */
   readonly clearToolCallMarks: () => void;
   readonly recordUserInput: () => void;
   /**
@@ -299,12 +311,18 @@ export function createHooksRuntime(): HooksRuntime {
   let capNotifiedThisSession = false;
   const shownStartFailures = new Set<string>();
   const toolCallMarks = new Map<string, number>();
+  let lastTopLevelMark = Number.NEGATIVE_INFINITY;
   let childIdentity: ChildIdentity = { kind: "unavailable" };
   let childIdentitySessionId: string | undefined;
 
   function finishStopSequence(): void {
     consecutiveBlockCount = 0;
     capNotifiedThisSession = false;
+  }
+
+  function clearToolCallMarks(): void {
+    toolCallMarks.clear();
+    lastTopLevelMark = Number.NEGATIVE_INFINITY;
   }
 
   function prepareSettleForRegistration(): void {
@@ -314,7 +332,7 @@ export function createHooksRuntime(): HooksRuntime {
     stopBoundaryOpen = false;
     heldStopReason = undefined;
     shownStartFailures.clear();
-    toolCallMarks.clear();
+    clearToolCallMarks();
     finishStopSequence();
   }
 
@@ -454,8 +472,15 @@ export function createHooksRuntime(): HooksRuntime {
 
     recordToolCall: finishStopSequence,
 
-    recordToolCallPrepared(toolCallId: string, now: number): void {
+    recordToolCallPrepared(
+      toolCallId: string,
+      parentToolCallId: string | undefined,
+      now: number,
+    ): void {
       toolCallMarks.set(toolCallId, now);
+      if (parentToolCallId === undefined) {
+        lastTopLevelMark = now;
+      }
     },
 
     takeToolDuration(toolCallId: string, now: number): number | undefined {
@@ -465,12 +490,10 @@ export function createHooksRuntime(): HooksRuntime {
       }
 
       toolCallMarks.delete(toolCallId);
-      return Math.max(0, Math.round(now - mark));
+      return Math.max(0, Math.round(now - Math.max(mark, lastTopLevelMark)));
     },
 
-    clearToolCallMarks(): void {
-      toolCallMarks.clear();
-    },
+    clearToolCallMarks,
 
     recordUserInput(): void {
       stopHookActive = false;

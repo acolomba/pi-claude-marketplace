@@ -7327,6 +7327,34 @@ describe("duration marks (D-PG6-06)", () => {
     });
   }
 
+  test("marks a call another tool issued with its parent's id", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.recordToolCallPrepared("a", undefined, 100);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor({}, []),
+      createHookToolView(undefined),
+      () => 200,
+    );
+
+    // act
+    await handler(
+      { ...createToolCallEvent(), toolCallId: "a/1", parentToolCallId: "a" },
+      createExtensionContext("/workspace/marks"),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      [runtime.takeToolDuration("a/1", 230), runtime.takeToolDuration("a", 400)],
+      [30, 300],
+    );
+  });
+
   test("keeps no mark for a PreToolUse handler of a stale generation", async () => {
     // arrange
     const runtime = createHooksRuntime();
@@ -7358,7 +7386,7 @@ describe("duration marks (D-PG6-06)", () => {
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
     runtime.setRoutingBucket("PostToolUse", routedEntries("PostToolUse", ["first", "second"]));
-    runtime.recordToolCallPrepared("dispatch-call", 100);
+    runtime.recordToolCallPrepared("dispatch-call", undefined, 100);
     const calls: RecordedCall[] = [];
     const executor = createRecordingExecutor(
       { first: { kind: "noop" }, second: { kind: "noop" } },
@@ -7399,7 +7427,7 @@ describe("duration marks (D-PG6-06)", () => {
         declarationIndex: 0,
       }),
     ]);
-    runtime.recordToolCallPrepared("dispatch-call", 100);
+    runtime.recordToolCallPrepared("dispatch-call", undefined, 100);
     const received: unknown[] = [];
     const executor: HookExecutor = (_entry, event) => {
       received.push(event);
@@ -7438,7 +7466,7 @@ describe("duration marks (D-PG6-06)", () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
-    runtime.recordToolCallPrepared("dispatch-call", 100);
+    runtime.recordToolCallPrepared("dispatch-call", undefined, 100);
     const handler = toolResultCompositeHandler(
       runtime,
       runtime.currentGeneration(),
@@ -7464,7 +7492,7 @@ describe("duration marks (D-PG6-06)", () => {
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
     runtime.setRoutingBucket("PostToolUseFailure", routedEntries("PostToolUseFailure", ["fail"]));
-    runtime.recordToolCallPrepared("dispatch-call", 100);
+    runtime.recordToolCallPrepared("dispatch-call", undefined, 100);
     const calls: RecordedCall[] = [];
     const context = createExtensionContext("/workspace/marks");
     context.signal = AbortSignal.abort();

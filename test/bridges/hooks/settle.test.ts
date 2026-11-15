@@ -555,8 +555,8 @@ test("an agent end drops the mark of every tool call (D-PG6-06)", () => {
   // arrange
   const runtime = createHooksRuntime();
   runtime.advanceGeneration();
-  runtime.recordToolCallPrepared("a", 100);
-  runtime.recordToolCallPrepared("b", 110);
+  runtime.recordToolCallPrepared("a", undefined, 100);
+  runtime.recordToolCallPrepared("b", undefined, 110);
 
   // act
   agentEndCacheHandler(runtime, runtime.currentGeneration())(agentEnd("stop"));
@@ -574,7 +574,7 @@ test("a stale agent end keeps the tool call marks (D-PG6-06)", () => {
   runtime.advanceGeneration();
   const stale = runtime.currentGeneration();
   runtime.advanceGeneration();
-  runtime.recordToolCallPrepared("a", 100);
+  runtime.recordToolCallPrepared("a", undefined, 100);
 
   // act
   agentEndCacheHandler(runtime, stale)(agentEnd("stop"));

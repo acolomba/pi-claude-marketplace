@@ -1062,7 +1062,8 @@ function markedOnExit<V, R>(
       return await handler(event, ctx);
     } finally {
       if (capturedGeneration === runtime.currentGeneration()) {
-        runtime.recordToolCallPrepared((event as ToolCallEvent).toolCallId, now());
+        const call = event as ToolCallEvent;
+        runtime.recordToolCallPrepared(call.toolCallId, call.parentToolCallId, now());
       }
     }
   };
