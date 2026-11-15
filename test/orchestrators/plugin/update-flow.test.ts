@@ -52,6 +52,7 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import { AgentTargetOccupiedError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
   BridgeStagingError,
+  McpConfigFileError,
   McpServerCollisionError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
@@ -4807,6 +4808,69 @@ test("prepare-handles-fail / GLK-02 / D-PL7-12: MCP collision aborts partial han
     }
   });
 });
+
+// AFILE-02: each mcp-adapter.json defect the stage refuses.
+for (const [defect, text] of [
+  ["invalid-jsonc", "{"],
+  [
+    "marker-not-valid",
+    JSON.stringify({
+      mcpServers: {
+        plugin_hello_srv_: {
+          command: "node",
+          _piClaudeMarketplace: { plugin: "hello", marketplace: "mp", defaultFields: [] },
+        },
+      },
+    }),
+  ],
+] as const) {
+  test(`AFILE-02: an update the stage refuses for a ${defect} MCP config fails as unreadable with its cause`, async () => {
+    await withHermeticHome(async () => {
+      // arrange
+      const cwd = await createCaseDir("update-mcp-config-refused-");
+      try {
+        const marketplaceRoot = path.join(cwd, "mp-src");
+        await seedPathMarketplace({
+          cwd,
+          marketplaceRoot,
+          marketplaceName: "mp",
+          manifestPlugins: { hello: { version: "1.0.1", hasSkill: true, hasMcp: true } },
+          installedVersions: { hello: "1.0.0" },
+        });
+        await writeFile(
+          path.join(marketplaceRoot, "plugins", "hello", ".mcp.json"),
+          JSON.stringify({ mcpServers: { srv: { command: "node" } } }),
+        );
+        const locations = locationsFor("project", cwd);
+        await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+        await writeFile(locations.mcpAdapterJsonPath, text);
+        const prevCwd = process.cwd();
+        process.chdir(cwd);
+
+        // act
+        let outcome: Awaited<ReturnType<typeof updateSinglePlugin>>;
+        try {
+          outcome = await updateSinglePlugin("hello", "mp", "project");
+        } finally {
+          process.chdir(prevCwd);
+        }
+
+        // assert
+        assert.ok(outcome.partition === "failed");
+        assert.deepStrictEqual(
+          {
+            reasons: outcome.reasons,
+            defect: outcome.cause instanceof McpConfigFileError ? outcome.cause.defect : undefined,
+            bytes: await readFile(locations.mcpAdapterJsonPath, "utf8"),
+          },
+          { reasons: ["unreadable"], defect, bytes: text },
+        );
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
 
 // ─── bare form: enumerates both user and project scopes ───────────────────────
 

@@ -527,7 +527,7 @@ Feature: MCP server lifecycle
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status | reasons    | scope | from  | version | cause chain | cause truncated | leaks | rollback partial |
-      | fixtures         | user              | demo@fixtures | demo | failed | unreadable manifest | user  | 1.0.0 | 1.1.0   | MCP config {agent dir}/mcp-adapter.json has a plugin entry whose "_piClaudeMarketplace" marker is not valid; it was left unchanged. | false           |       |                  |
+      | fixtures         | user              | demo@fixtures | demo | failed | unreadable | user  | 1.0.0 | 1.1.0   | MCP config {agent dir}/mcp-adapter.json has a plugin entry whose "_piClaudeMarketplace" marker is not valid; it was left unchanged. | false           |       |                  |
     Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
       """
       {
