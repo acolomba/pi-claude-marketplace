@@ -300,6 +300,77 @@ matrix column of PG-DOC-02 (Phase 11).
   skill). These shared-file edits are append-style and limited to this phase's
   rows.
 
+### Amendments after research (10-RESEARCH.md "Findings that change decisions")
+
+Research read the 2.1.323 binary further. Where a finding contradicts a
+decision above, this section wins.
+
+- **D-PG10-19 (pending maintainer review; amends the premise of D-PG10-04,
+  D-PG10-06, D-PG10-10, D-PG10-13; F1):** Claude Code 2.1.323 applies a
+  `default` only to MCP and LSP config (`Jgt`); hooks, skills, commands, and
+  agents read saved values only (`QH`). With nothing saved, an upstream hook
+  gets no `CLAUDE_PLUGIN_OPTION_<KEY>` and content keeps the reference literal.
+  PG-CORE-03 and success criteria 1 and 2 are locked and require the default on
+  hooks and content, so step 1 treats each declared `default` as if the user
+  had saved it. This is **more than upstream**, licensed by this recorded
+  decision; no doc may call it parity. `domain/user-config.ts` keeps the saved
+  map and the default map as separate values, so strict parity (defaults on
+  MCP only) is a one-line switch. Maintainer question: keep defaults on hooks
+  and content, or follow upstream exactly (which leaves criteria 1 and 2
+  unmet).
+- **D-PG10-20 (F2, F3; amends D-PG10-05 and the D-PG10-17 fixtures):** `title`
+  and `description` are required, as upstream. Every fixture uses the full
+  shape, for example
+  `{"mode": {"type": "string", "title": "Mode", "description": "The mode.", "default": "fast"}}`;
+  the abbreviated ROADMAP text stands for that shape. A `default` whose type
+  differs from `type` is accepted (upstream's default is a type-agnostic
+  union); its text is `String(default)`.
+- **D-PG10-21 (F4, F5; amends D-PG10-06 and D-PG10-08):** In MCP fields, follow
+  `Jgt` exactly: a non-required option with no default is the empty string;
+  only a `required` option with no default reaches the "isn't set" failure. A
+  plugin that declares no `userConfig` keeps an MCP, skill, command, or agent
+  reference literal (upstream substitutes only when the manifest declares
+  options), but an exec-form hook reference fails as a hook error and a
+  shell-form one is refused, as upstream's hook runner does for every plugin.
+  `features/hook/process.feature:8-28`,
+  `test/bridges/hooks/spawn-helpers.test.ts:41-57`, and
+  `test/bridges/hooks/dispatch-exec.test.ts:1797-1822`, which pin the literal,
+  change, and a scenario proves the failure. An MCP server that names an
+  option with no value is dropped at the bridge with a notice in the Phase 9
+  `ca-file-removed` style (research open question 2).
+- **D-PG10-22 (F6, F7; amends D-PG10-02 and D-PG10-03):** `recomputePluginPath`
+  has one production caller (`index.ts:199`). The metacharacter set includes
+  `\r`; the filter is skipped on Windows; a stat failure other than `ENOENT` or
+  `ENOTDIR` keeps the path (upstream E6).
+- **D-PG10-23 (F8; refines D-PG10-11 and D-PG10-14):** The option schema is
+  stored on the install record as an additive `userConfig` field with no
+  `schemaVersion` bump, following `mcpServerConfigs`. Variable names are
+  `PI_CLAUDE_MARKETPLACE_OPTION_<16 hex of sha256(scope, marketplace, plugin, key)>`,
+  owned through the ledger `PI_CLAUDE_MARKETPLACE_OPTIONS`. The value is
+  exported through the existing split-token escape, so the adapter's later
+  `{env:` and `$env:` passes cannot expand a default (AVAR-05). The stage
+  overlays the variables on its environment, so the Phase 9 `caFile` origin
+  rule reads them. **Security choice (pending maintainer review; research open
+  question 1):** user-scope variables are set in the awaited factory;
+  project-scope variables are set only once the load's trust answer is true,
+  and removed when it is false, so an untrusted project's `state.json` never
+  feeds the process environment. Residual: a project-scope stdio server that the
+  adapter starts before the load reads an unset variable. The faster option
+  (set from the project's `state.json` in the factory, remove at
+  `session_start` if untrusted) is recorded and not taken.
+- **D-PG10-24 (F9, F10; amends D-PG10-15):** Bump the completion cache
+  `schemaVersion` from 7 to 8. `apply` does not restage a record installed with
+  `--partial` only because of `userConfig` (its growth move needs `supported`
+  to grow), so "an `apply` move" leaves D-PG10-15's list and its CHANGELOG
+  instruction to run `reinstall` once stands. Alternative for the maintainer:
+  add `userConfig` to `supported` so the BFILL-01 growth move restages at
+  `apply`.
+- **Pi 1.5.2 (E7):** `trust-manager.js` and `project-trust.js` are
+  byte-identical to 1.5.0, and no API registers a trust path; D-PG10-01's
+  record names both versions.
+- **Correction:** the `docs/env-vars.md` PATH text is at line 55, not near 180;
+  10-RESEARCH.md's table of records lists the real lines.
+
 ### Decided autonomously
 
 Reversible technical choices: D-PG10-02, D-PG10-03, D-PG10-05 to D-PG10-10,
@@ -319,6 +390,9 @@ D-PG10-12 to D-PG10-15, D-PG10-17, D-PG10-18.
   user-scope skills and commands; amends SUB-02.
 - D-PG10-06: the partial arm for a required option with no default (PRD
   safety rule, not parity).
+- D-PG10-19: defaults on hooks and content are more than upstream (F1).
+- D-PG10-23: project-scope option variables wait for the trust answer.
+- D-PG10-24: `reinstall`, not `apply`, refreshes an old partial install.
 
 ### the agent's Discretion
 
