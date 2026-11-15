@@ -127,17 +127,19 @@ export function hookSaysText(label: string, text: string): string {
 }
 
 /**
- * D-CF5-11 / D-CF5-24: the notice a blocked prompt shows the user,
- * `UserPromptSubmit operation blocked by hook:\n<message>`, the message as
- * `hookErrorText` writes it. Claude Code adds a third line,
- * `Original prompt: <prompt>`, which this notice leaves out (D-CF5-24).
+ * D-CF5-11 / D-CF5-24 / D-PG6-20: the notice a blocked prompt or expansion
+ * shows the user, `<event> operation blocked by hook:\n<message>`, the
+ * message as `hookErrorText` writes it. Claude Code 2.1.323 adds a blank line
+ * and `Original prompt: <prompt>` on both events, which this notice leaves
+ * out (D-CF5-24).
  */
 export function promptBlockedText(
+  claudeEvent: "UserPromptSubmit" | "UserPromptExpansion",
   reason: string | undefined,
   command: string,
   fromStderr: boolean,
 ): string {
-  return `UserPromptSubmit operation blocked by hook:\n${blockMessage(reason, command, fromStderr)}`;
+  return `${claudeEvent} operation blocked by hook:\n${blockMessage(reason, command, fromStderr)}`;
 }
 
 /**

@@ -102,6 +102,7 @@ import type { HookToolView } from "./mcp-tool-view.ts";
 import type { ClaudeSessionEndEvent } from "./payloads/session-end.ts";
 import type { ClaudeSessionStartEvent } from "./payloads/session-start.ts";
 import type { HookToolFacts } from "./payloads/tool-event-facts.ts";
+import type { UserPromptExpansionEvent } from "./payloads/user-prompt-expansion.ts";
 import type { RoutingEntry } from "./routing-state.ts";
 import type { HooksRuntime } from "./runtime.ts";
 import type { BucketAEvent, DispatchableEvent } from "../../domain/components/hook-events.ts";
@@ -163,6 +164,27 @@ function matcherFiresOnToolEvent(matcher: ParsedMatcher, tool: McpToolIdentity):
     case "regex":
       return matcher.pattern.test(mapPiToClaudeToolName(claudeFormToolName(tool)));
     case "name-set":
+    case "invalid-pattern":
+    case "unmapped":
+      return false;
+  }
+}
+
+/**
+ * D-PG6-19 / D-PG2-10: a UserPromptExpansion matcher selects the command
+ * name: an exact-list member equals it, a regular expression is tested
+ * against it unanchored and case-sensitive, and an empty matcher or `*`
+ * selects every command.
+ */
+function matcherFiresOnCommandName(matcher: ParsedMatcher, commandName: string): boolean {
+  switch (matcher.kind) {
+    case "match-all":
+      return true;
+    case "name-set":
+      return matcher.names.has(commandName);
+    case "regex":
+      return matcher.pattern.test(commandName);
+    case "tool-set":
     case "invalid-pattern":
     case "unmapped":
       return false;
@@ -506,6 +528,7 @@ function showsSystemMessages(claudeEvent: NoticeEvent): boolean {
     case "PostToolUse":
     case "PostToolUseFailure":
     case "UserPromptSubmit":
+    case "UserPromptExpansion":
     case "SessionStart":
       return true;
     case "SessionEnd":
@@ -536,7 +559,8 @@ function systemMessageNotices(
 
 /**
  * D-CF5-11 / D-CF5-18 / D-CF5-24: the notices a block shows the user. A
- * blocked prompt shows why once, with the first block in routing order. A
+ * blocked prompt or expansion shows why once, with the first block in routing
+ * order (D-PG6-20). A
  * SessionStart or SessionEnd block changes nothing, so each one shows as the
  * event's hook error, as Claude Code shows exit-2 stderr there. A PostCompact
  * block shows in its hook's line after a manual compaction (D-BG-501).
@@ -547,11 +571,12 @@ function systemMessageNotices(
 function blockNotices(claudeEvent: NoticeEvent, label: string, folded: FoldedBucket): string[] {
   switch (claudeEvent) {
     case "UserPromptSubmit":
+    case "UserPromptExpansion":
       return folded.result.kind === "block"
         ? blocks(folded.outcomes)
             .slice(0, 1)
             .map(({ reason, command, fromStderr }) =>
-              promptBlockedText(reason, command, fromStderr),
+              promptBlockedText(claudeEvent, reason, command, fromStderr),
             )
         : [];
     case "SessionStart":
@@ -651,6 +676,7 @@ function showsFailures(claudeEvent: FailureNoticeEvent): boolean {
     case "PostToolUse":
     case "PostToolUseFailure":
     case "UserPromptSubmit":
+    case "UserPromptExpansion":
     case "SessionStart":
     case "PreCompact":
       return true;
@@ -909,14 +935,12 @@ function isMcpProxyCall(event: { readonly toolName: string; readonly input: obje
  * The event domain served by `compositeHandlerFor`: every dispatchable
  * event except the two `tool_result`-routed events (handled by
  * `toolResultCompositeHandler`), the two settle-routed events (handled
- * in `settle.ts`), and UserPromptExpansion, which is admitted and routed but
- * has no handler yet, so no registration dispatches it (D-PG6-18). Declared
- * once so the exclusion set cannot drift between the factory constraint and
- * its private helpers.
+ * in `settle.ts`). Declared once so the exclusion set cannot drift between
+ * the factory constraint and its private helpers.
  */
 export type CompositeDispatchEvent = Exclude<
   DispatchableEvent,
-  "PostToolUse" | "PostToolUseFailure" | "Stop" | "StopFailure" | "UserPromptExpansion"
+  "PostToolUse" | "PostToolUseFailure" | "Stop" | "StopFailure"
 >;
 
 /**
@@ -1407,7 +1431,15 @@ async function adaptForEvent(
       // D-CF5-11: an ask may wait on the user's answer in the terminal.
       return await adaptToolCallResult(result, event as ToolCallEvent, context);
     case "UserPromptSubmit":
-      return adaptInputResult(result, event as InputEvent, context, "UserPromptSubmit");
+      return adaptInputResult(result, event as InputEvent, context, claudeEvent);
+    case "UserPromptExpansion":
+      // D-PG6-20: the expansion's context joins the buffer of its line's prompt.
+      return adaptInputResult(
+        result,
+        (event as UserPromptExpansionEvent).input,
+        context,
+        claudeEvent,
+      );
     case "PreCompact":
       return adaptPreCompactResult(folded.outcomes.map((outcome) => outcome.result));
     case "SessionStart":
@@ -1427,8 +1459,9 @@ async function adaptForEvent(
  * composite handler receives, so the factory's closure signature narrows
  * appropriately. SessionStart and SessionEnd receive the Claude-side event
  * the router maps from Pi's reason once (D-CF5-01 / D-CF5-02), so the filter
- * and the translator read one value; the other events receive their Pi
- * event.
+ * and the translator read one value; UserPromptExpansion receives the
+ * synthetic event of its translator (D-PG6-19); the other events receive
+ * their Pi event.
  */
 export type CompositeEventFor<E extends BucketAEvent> = E extends "SessionStart"
   ? ClaudeSessionStartEvent
@@ -1440,21 +1473,23 @@ export type CompositeEventFor<E extends BucketAEvent> = E extends "SessionStart"
         ? SessionCompactEvent
         : E extends "UserPromptSubmit"
           ? InputEvent
-          : E extends "PreToolUse"
-            ? ToolCallEvent
-            : never;
+          : E extends "UserPromptExpansion"
+            ? UserPromptExpansionEvent
+            : E extends "PreToolUse"
+              ? ToolCallEvent
+              : never;
 
 /**
  * D-60-03: per-event return type bridge mapping each composite-handler
  * `claudeEvent` to the Pi-side handler return shape its registered
  * closure must produce. PreToolUse -> ToolCallEventResult;
- * UserPromptSubmit -> InputEventResult; PreCompact -> a cancel of the
+ * UserPromptSubmit and UserPromptExpansion -> InputEventResult; PreCompact -> a cancel of the
  * compaction (D-CF5-18); the other observation events -> undefined (Pi
  * handler return slot is void for those).
  */
 export type CompositeReturnFor<E extends BucketAEvent> = E extends "PreToolUse"
   ? ToolCallEventResult | undefined
-  : E extends "UserPromptSubmit"
+  : E extends "UserPromptSubmit" | "UserPromptExpansion"
     ? InputEventResult | undefined
     : E extends "PreCompact"
       ? CompactionCancel | undefined
@@ -1466,7 +1501,9 @@ export type CompositeReturnFor<E extends BucketAEvent> = E extends "PreToolUse"
  * `reason` (D-CF5-01 / D-CF5-02), the PreToolUse tool name as the hooks see
  * it (D-P5-03), and the Claude compaction `trigger` the translators also send
  * (D-CF5-04). UserPromptSubmit has none, because the parser rejects a
- * non-empty matcher on it.
+ * non-empty matcher on it. UserPromptExpansion has none: its matcher selects
+ * on the command name (`matcherFiresOnCommandName`), and Claude Code 2.1.323
+ * names its hooks by the event alone.
  */
 function matchValue(claudeEvent: CompositeDispatchEvent, event: unknown): string | undefined {
   switch (claudeEvent) {
@@ -1481,6 +1518,7 @@ function matchValue(claudeEvent: CompositeDispatchEvent, event: unknown): string
     case "PostCompact":
       return compactTrigger((event as SessionCompactEvent).reason);
     case "UserPromptSubmit":
+    case "UserPromptExpansion":
       return undefined;
   }
 }
@@ -1574,8 +1612,8 @@ function hookEventView(
 
 /**
  * Per-event filter dispatch: a PreToolUse matcher compares the event's tool,
- * every other matcher the closed-set match value. UserPromptSubmit fires
- * unconditionally.
+ * a UserPromptExpansion matcher the command name, every other matcher the
+ * closed-set match value. UserPromptSubmit fires unconditionally.
  */
 function entryFires(
   claudeEvent: CompositeDispatchEvent,
@@ -1584,6 +1622,13 @@ function entryFires(
 ): boolean {
   if (view.tool !== undefined) {
     return matcherFiresOnToolEvent(entry.matcher, view.tool);
+  }
+
+  if (claudeEvent === "UserPromptExpansion") {
+    return matcherFiresOnCommandName(
+      entry.matcher,
+      (view.event as UserPromptExpansionEvent).command_name,
+    );
   }
 
   const value = matchValue(claudeEvent, view.event);

@@ -78,7 +78,7 @@ test("names the prompt events whose context the buffer carries, in the order of 
   const events = [...PROMPT_CONTEXT_EVENTS];
 
   // assert
-  assert.deepStrictEqual(events, ["UserPromptSubmit"]);
+  assert.deepStrictEqual(events, ["UserPromptSubmit", "UserPromptExpansion"]);
 });
 
 test("the pending context clear also empties the runtime's prompt context (D-CF5-13)", () => {

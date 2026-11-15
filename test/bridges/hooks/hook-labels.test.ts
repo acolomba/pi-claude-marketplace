@@ -173,29 +173,46 @@ describe("hookMatchLabel", () => {
 });
 
 describe("promptBlockedText", () => {
-  for (const { name, reason, fromStderr, text } of [
+  for (const { name, claudeEvent, reason, fromStderr, text } of [
     {
       name: "an exit-2 stderr reason after the bracketed command",
+      claudeEvent: "UserPromptSubmit",
       reason: "no prompts today",
       fromStderr: true,
       text: `UserPromptSubmit operation blocked by hook:\n[${GUARD_COMMAND}]: no prompts today`,
     },
     {
       name: "a decision reason alone",
+      claudeEvent: "UserPromptSubmit",
       reason: "not now",
       fromStderr: false,
       text: "UserPromptSubmit operation blocked by hook:\nnot now",
     },
     {
       name: "Claude Code's default for a decision without a reason",
+      claudeEvent: "UserPromptSubmit",
       reason: undefined,
       fromStderr: false,
       text: "UserPromptSubmit operation blocked by hook:\nBlocked by hook",
     },
-  ]) {
+    {
+      name: "the expansion event's name before an exit-2 stderr reason (D-PG6-20)",
+      claudeEvent: "UserPromptExpansion",
+      reason: "not this command",
+      fromStderr: true,
+      text: `UserPromptExpansion operation blocked by hook:\n[${GUARD_COMMAND}]: not this command`,
+    },
+    {
+      name: "the expansion event's name before a decision reason (D-PG6-20)",
+      claudeEvent: "UserPromptExpansion",
+      reason: "not now",
+      fromStderr: false,
+      text: "UserPromptExpansion operation blocked by hook:\nnot now",
+    },
+  ] as const) {
     test(`writes ${name} (D-CF5-24)`, () => {
       // act
-      const notice = promptBlockedText(reason, GUARD_COMMAND, fromStderr);
+      const notice = promptBlockedText(claudeEvent, reason, GUARD_COMMAND, fromStderr);
 
       // assert
       assert.strictEqual(notice, text);

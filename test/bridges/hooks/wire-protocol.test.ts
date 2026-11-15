@@ -344,7 +344,7 @@ test("carries the failure of a signal-kill exit, ignoring its JSON, and reports 
   );
 });
 
-for (const claudeEvent of ["UserPromptSubmit", "SessionStart"] as const) {
+for (const claudeEvent of ["UserPromptSubmit", "SessionStart", "UserPromptExpansion"] as const) {
   test(`reads plain stdout on exit 0 as ${claudeEvent} additional context (D-CF5-13)`, () => {
     // act
     const hookOutcome = parseHookStdout(0, "  plain words\n", "ignored stderr", claudeEvent);

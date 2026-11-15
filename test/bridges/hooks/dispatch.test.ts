@@ -32,6 +32,7 @@ import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/b
 import type { HookToolView } from "../../../extensions/pi-claude-marketplace/bridges/hooks/mcp-tool-view.ts";
 import type { ClaudeSessionEndEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts";
 import type { ClaudeSessionStartEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts";
+import type { UserPromptExpansionEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-expansion.ts";
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type { BucketAEvent } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
@@ -53,6 +54,7 @@ void ([
   "SessionEnd",
   "PreCompact",
   "PostCompact",
+  "UserPromptExpansion",
 ] satisfies readonly CompositeDispatchEvent[]);
 // @ts-expect-error PostToolUse belongs to toolResultCompositeHandler
 void ("PostToolUse" satisfies CompositeDispatchEvent);
@@ -62,8 +64,6 @@ void ("PostToolUseFailure" satisfies CompositeDispatchEvent);
 void ("Stop" satisfies CompositeDispatchEvent);
 // @ts-expect-error StopFailure belongs to settle dispatch
 void ("StopFailure" satisfies CompositeDispatchEvent);
-// @ts-expect-error UserPromptExpansion has no handler yet (D-PG6-18)
-void ("UserPromptExpansion" satisfies CompositeDispatchEvent);
 
 interface ExecutorCall {
   readonly entry: {
@@ -7707,4 +7707,283 @@ describe("MCP server facts (D-PG6-07)", () => {
     assert.strictEqual(received[0]?.event, callEvent);
     assert.strictEqual(received[1]?.event, resultEvent);
   });
+});
+
+const EXPANSION_INPUT = {
+  type: "input",
+  text: "/demo:deploy staging",
+  source: "interactive",
+} satisfies InputEvent;
+
+function expansionEvent(commandName: string): UserPromptExpansionEvent {
+  return {
+    command_name: commandName,
+    command_args: "staging",
+    command_source: "plugin",
+    input: EXPANSION_INPUT,
+  };
+}
+
+function expansionEntry(pluginId: string, rawMatcher: string, declarationIndex = 0): RoutingEntry {
+  return {
+    ...createRoutingEntry({
+      pluginId,
+      claudeEvent: "UserPromptExpansion",
+      rawMatcher,
+      declarationIndex,
+    }),
+    matcher: parseNameMatcher(rawMatcher),
+  };
+}
+
+describe("UserPromptExpansion dispatch (D-PG6-19 / D-PG6-20)", () => {
+  const MATCHED = ["listed", "pattern", "every", "unlisted"] as const;
+
+  for (const { commandName, ran } of [
+    { commandName: "demo:deploy", ran: ["pattern", "every"] },
+    { commandName: "ship", ran: ["listed", "every"] },
+    { commandName: "Demo:Deploy", ran: ["every"] },
+  ]) {
+    test(`runs the hooks whose matcher selects the command ${commandName} (D-PG6-19)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket("UserPromptExpansion", [
+        expansionEntry("listed", "deploy, ship", 0),
+        expansionEntry("pattern", "^demo:", 1),
+        expansionEntry("every", "*", 2),
+        expansionEntry("unlisted", "build", 3),
+      ]);
+      const calls: RecordedCall[] = [];
+      const handler = compositeHandlerFor(
+        runtime,
+        "UserPromptExpansion",
+        runtime.currentGeneration(),
+        undefined,
+        createRecordingExecutor(
+          Object.fromEntries(MATCHED.map((pluginId) => [pluginId, { kind: "noop" } as const])),
+          calls,
+        ),
+      );
+
+      // act
+      const output = await handler(
+        expansionEvent(commandName),
+        createExtensionContext("/workspace/expansion"),
+      );
+
+      // assert
+      assert.strictEqual(output, undefined);
+      assert.deepStrictEqual(
+        calls,
+        ran.map((pluginId) => ({ pluginId, event: expansionEvent(commandName) })),
+      );
+    });
+  }
+
+  test("runs no hook whose matcher is a tool matcher (D-PG6-19)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptExpansion", [
+      createRoutingEntry({
+        pluginId: "tool",
+        claudeEvent: "UserPromptExpansion",
+        rawMatcher: "Bash",
+        declarationIndex: 0,
+      }),
+    ]);
+    const calls: RecordedCall[] = [];
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptExpansion",
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor({ tool: { kind: "noop" } }, calls),
+    );
+
+    // act
+    const output = await handler(
+      expansionEvent("Bash"),
+      createExtensionContext("/workspace/expansion"),
+    );
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(calls, []);
+  });
+
+  test("answers nothing and runs no hook for an empty bucket or a stale generation", async () => {
+    // arrange
+    const empty = createHooksRuntime();
+    empty.advanceGeneration();
+    const stale = createHooksRuntime();
+    const capturedGeneration = stale.advanceGeneration();
+    stale.setRoutingBucket("UserPromptExpansion", [expansionEntry("every", "")]);
+    stale.advanceGeneration();
+    const calls: RecordedCall[] = [];
+    const executor = createRecordingExecutor({ every: { kind: "noop" } }, calls);
+    const context = createExtensionContext("/workspace/expansion");
+
+    // act
+    const outputs = [
+      await compositeHandlerFor(
+        empty,
+        "UserPromptExpansion",
+        empty.currentGeneration(),
+        undefined,
+        executor,
+      )(expansionEvent("demo:deploy"), context),
+      await compositeHandlerFor(
+        stale,
+        "UserPromptExpansion",
+        capturedGeneration,
+        undefined,
+        executor,
+      )(expansionEvent("demo:deploy"), context),
+    ];
+
+    // assert
+    assert.deepStrictEqual(outputs, [undefined, undefined]);
+    assert.deepStrictEqual(calls, []);
+  });
+
+  for (const { name, results, output, notices } of [
+    {
+      name: "the event's block notice with a decision reason",
+      results: { guard: { kind: "block", reason: "not now" } },
+      output: { action: "handled" },
+      notices: ["UserPromptExpansion operation blocked by hook:\nnot now"],
+    },
+    {
+      name: "the event's block notice with an exit-2 stderr",
+      results: { guard: { kind: "block", reason: "denied", fromStderr: true } },
+      output: { action: "handled" },
+      notices: ["UserPromptExpansion operation blocked by hook:\n[printf guard]: denied"],
+    },
+    {
+      name: "Claude Code's default reason for a block without one",
+      results: { guard: { kind: "block" } },
+      output: { action: "handled" },
+      notices: ["UserPromptExpansion operation blocked by hook:\nBlocked by hook"],
+    },
+    {
+      name: "the default text of an exit 2 without stderr",
+      results: { guard: { kind: "block", fromStderr: true } },
+      output: { action: "handled" },
+      notices: ["UserPromptExpansion operation blocked by hook:\n[printf guard]: No stderr output"],
+    },
+    {
+      name: "only the first block in routing order",
+      results: {
+        first: { kind: "block", reason: "r1" },
+        second: { kind: "block", reason: "r2", fromStderr: true },
+      },
+      output: { action: "handled" },
+      notices: ["UserPromptExpansion operation blocked by hook:\nr1"],
+    },
+    {
+      name: "the stop notice with its reason",
+      results: { stopper: { kind: "stop", stopReason: "enough" } },
+      output: { action: "handled" },
+      notices: ["Operation stopped by hook: enough"],
+    },
+    {
+      name: "the stop notice without a reason",
+      results: { stopper: { kind: "stop" } },
+      output: { action: "handled" },
+      notices: ["Operation stopped by hook"],
+    },
+    {
+      name: "a system message after the event's name",
+      results: { speaker: { kind: "noop", systemMessage: "said" } },
+      output: undefined,
+      notices: ["UserPromptExpansion says: said"],
+    },
+    {
+      name: "the failure of a hook that exited with an error, and lets the expansion run",
+      results: { failer: EXIT_FAILURE },
+      output: undefined,
+      notices: ["UserPromptExpansion hook error: Failed with non-blocking status code: boom"],
+    },
+  ] satisfies ReadonlyArray<{
+    readonly name: string;
+    readonly results: Readonly<Record<string, HookExecResult>>;
+    readonly output: unknown;
+    readonly notices: readonly string[];
+  }>) {
+    test(`shows ${name} (D-PG6-20)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket(
+        "UserPromptExpansion",
+        routedEntries("UserPromptExpansion", Object.keys(results)),
+      );
+      const host = createNoticeHost("/workspace/expansion-notices");
+      const handler = compositeHandlerFor(
+        runtime,
+        "UserPromptExpansion",
+        runtime.currentGeneration(),
+        host.pi,
+        createRecordingExecutor(results, []),
+      );
+
+      // act
+      const answer = await handler(expansionEvent("demo:deploy"), host.context);
+
+      // assert
+      assert.deepStrictEqual(
+        { answer, entries: host.capture.entries },
+        { answer: output, entries: notices.map((text) => hookNoticeEntry(text)) },
+      );
+      host.capture.assertValid();
+    });
+  }
+
+  for (const { name, additionalContext, added } of [
+    { name: "a context", additionalContext: "expansion context", added: ["expansion context"] },
+    { name: "an empty context", additionalContext: "", added: [] },
+  ]) {
+    test(`buffers ${name} under the event and keeps the prompt's context of the line (D-PG6-20)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const promptContext = {
+        context: "prompt context",
+        scope: "project",
+        marketplace: "dispatch-catalog",
+        pluginId: "prompter",
+        event: "UserPromptSubmit",
+      } as const;
+      runtime.appendPendingPromptContext(promptContext);
+      runtime.setRoutingBucket("UserPromptExpansion", [expansionEntry("adder", "")]);
+      const handler = compositeHandlerFor(
+        runtime,
+        "UserPromptExpansion",
+        runtime.currentGeneration(),
+        undefined,
+        createRecordingExecutor({ adder: { kind: "mutate", additionalContext } }, []),
+      );
+
+      // act
+      const output = await handler(
+        expansionEvent("demo:deploy"),
+        createExtensionContext("/workspace/expansion-context"),
+      );
+
+      // assert
+      assert.strictEqual(output, undefined);
+      assert.deepStrictEqual(runtime.pendingPromptContextEntries(), [
+        promptContext,
+        ...added.map((context) => ({
+          context,
+          scope: "user",
+          marketplace: "dispatch-catalog",
+          pluginId: "adder",
+          event: "UserPromptExpansion",
+        })),
+      ]);
+    });
+  }
 });

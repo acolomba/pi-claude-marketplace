@@ -147,6 +147,7 @@ export interface PendingSessionStartContext {
  */
 export const PROMPT_CONTEXT_EVENTS = [
   "UserPromptSubmit",
+  "UserPromptExpansion",
 ] as const satisfies readonly BucketAEvent[];
 
 export type PromptContextEvent = (typeof PROMPT_CONTEXT_EVENTS)[number];

@@ -45,10 +45,12 @@ import { hookDebugLog } from "../../shared/debug-log.ts";
 import type { HookExecResult } from "./exec-result.ts";
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 
-// D-CF5-13: the events on which Claude Code adds plain stdout as context.
+// D-CF5-13 / D-PG6-20: the events on which Claude Code adds plain stdout as
+// context.
 const PLAIN_CONTEXT_EVENTS: ReadonlySet<BucketAEvent> = new Set([
   "SessionStart",
   "UserPromptSubmit",
+  "UserPromptExpansion",
 ]);
 
 // D-PG5-08: Claude Code 2.1.323 reads an exit 2 of a hook on these events as
