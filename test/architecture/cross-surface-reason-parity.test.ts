@@ -81,6 +81,22 @@ for (const { note, reason } of [
     reason: "source missing",
   },
   { note: "plugin manifest resolves outside the plugin directory", reason: "unreadable manifest" },
+  {
+    note: 'malformed userConfig: userConfig option "mode": field "title" is missing',
+    reason: "invalid manifest",
+  },
+  {
+    note: 'malformed userConfig: userConfig option "lspServers" is not an object',
+    reason: "invalid manifest",
+  },
+  {
+    note: 'malformed userConfig: userConfig key "source" is not valid',
+    reason: "invalid manifest",
+  },
+  {
+    note: "required userConfig options have no default: lspServers, source",
+    reason: "unsupported source",
+  },
   { note: "some other unsupported source detail", reason: "unsupported source" },
   {
     note: "its marketplace entry path does not stay inside the marketplace directory (an absolute, climbing, network-shaped, backslash-containing or link-traversing entry, an entry of a fetched marketplace that resolves or opens outside its tree \u2014 or a relative entry in a url-catalog marketplace, which has no local directory)",
@@ -120,6 +136,11 @@ for (const { kind, note, reason } of [
   { kind: "lspServers", note: "contains lspServers", reason: "lsp" },
   { kind: "monitors", note: "contains monitors", reason: "unsupported component" },
   { kind: "themes", note: "contains themes", reason: "unsupported component" },
+  {
+    kind: "userConfig",
+    note: "required userConfig options have no default: lspServers, source",
+    reason: "unsupported component",
+  },
 ] as const) {
   test(`keeps the install, list, and info component surfaces equal for ${kind}`, () => {
     // arrange

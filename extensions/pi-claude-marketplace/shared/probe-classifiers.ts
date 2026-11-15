@@ -82,7 +82,11 @@ export type UnsupportedReason =
  * `source missing` tokens. The sibling typed-kind helpers never emit either.
  */
 export type ResolverNoteReason =
-  UnsupportedReason | "malformed mcp" | "source missing" | "unreadable manifest";
+  | UnsupportedReason
+  | "malformed mcp"
+  | "source missing"
+  | "unreadable manifest"
+  | "invalid manifest";
 
 /**
  * Narrow resolver `notes` strings to closed-set REASONS members.
@@ -135,6 +139,13 @@ export const SOURCE_DIR_MISSING_NOTE = "source dir does not exist";
 export const MANIFEST_ESCAPE_NOTE = "plugin manifest resolves outside the";
 
 /**
+ * D-PG10-05: the prefix of `domain/plugin-resolver.ts`'s note for a
+ * `userConfig` that fails Claude Code 2.1.323's schema. The note ends with the
+ * parser's detail, which names an option key the author chose.
+ */
+export const USER_CONFIG_MALFORMED_NOTE = "malformed userConfig";
+
+/**
  * D-PG10-06: the prefix of `domain/plugin-resolver.ts`'s note for required
  * options with no default. The note ends with their keys, in declaration order.
  */
@@ -148,7 +159,8 @@ export const USER_CONFIG_UNSET_NOTE = "required userConfig options have no defau
  * the inline `malformed mcpServers` note and silently reroute it away from
  * `unsupported source`. The `source dir does not exist` prefix arm (SRC-01)
  * also runs before the `lspServers` substring arm, because the note embeds the
- * plugin path. Any note matching no specific arm falls through to the
+ * plugin path, and so do the two `userConfig` prefix arms, because their notes
+ * embed option keys. Any note matching no specific arm falls through to the
  * permissive `unsupported source` bucket.
  */
 function classifyResolverNote(note: string): ResolverNoteReason {
@@ -181,6 +193,17 @@ function classifyResolverNote(note: string): ResolverNoteReason {
 
   if (note.startsWith(MANIFEST_ESCAPE_NOTE)) {
     return "unreadable manifest";
+  }
+
+  // D-PG10-05 / D-PG10-06: both option notes embed option keys, which are
+  // author text, so they too must run before the `lspServers` arm. The unset
+  // note reads as a `contains <kind>` note does on the structural arm.
+  if (note.startsWith(USER_CONFIG_MALFORMED_NOTE)) {
+    return "invalid manifest";
+  }
+
+  if (note.startsWith(USER_CONFIG_UNSET_NOTE)) {
+    return "unsupported source";
   }
 
   if (note.includes("lspServers")) {

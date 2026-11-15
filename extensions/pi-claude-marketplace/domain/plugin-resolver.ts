@@ -41,6 +41,7 @@ import {
   MANIFEST_ESCAPE_NOTE,
   narrowUnsupportedKinds,
   SOURCE_DIR_MISSING_NOTE,
+  USER_CONFIG_MALFORMED_NOTE,
   USER_CONFIG_UNSET_NOTE,
 } from "../shared/probe-classifiers.ts";
 
@@ -731,23 +732,24 @@ async function addUnsupportedKindNotes(
 /**
  * D-PG10-05 / D-PG10-06: the plugin's options. As for `mcpServers`, they come
  * from `plugin.json` when one exists and from the marketplace entry otherwise.
- * Required options with no default keep the plugin partially available.
+ * A malformed declaration is structural and returns true, so the plugin is
+ * unavailable and `--partial` cannot admit it. Required options with no
+ * default keep the plugin partially available.
  */
 function resolveUserConfig(
   entry: PluginEntry,
   manifest: Record<string, unknown> | null,
   partial: PartialResolution,
-): void {
+): boolean {
   const declared = manifest === null ? entry.userConfig : manifest.userConfig;
   if (declared === undefined) {
-    return;
+    return false;
   }
 
   const parsed = parseUserConfig(declared);
   if (parsed.kind === "malformed") {
-    partial.notes.push("contains userConfig");
-    partial.unsupported.push("userConfig");
-    return;
+    partial.notes.push(`${USER_CONFIG_MALFORMED_NOTE}: ${parsed.detail}`);
+    return true;
   }
 
   partial.declaredUserConfig = parsed.schema;
@@ -756,6 +758,8 @@ function resolveUserConfig(
     partial.notes.push(`${USER_CONFIG_UNSET_NOTE}: ${unsetRequired.join(", ")}`);
     partial.unsupported.push("userConfig");
   }
+
+  return false;
 }
 
 /**
@@ -774,7 +778,7 @@ export async function resolveStrict(
 
   const { pluginRoot, manifest, partial, metadata } = pre;
   const dirty = await runStructuralStages({ entry, ctx, pluginRoot, manifest, partial });
-  resolveUserConfig(entry, manifest, partial);
+  const optionsDirty = resolveUserConfig(entry, manifest, partial);
 
   // Step 9 (PR-3 / PR-4): unsupported components declared explicitly or via
   // Claude Code default locations (.lsp.json, monitors/monitors.json, etc.).
@@ -785,7 +789,7 @@ export async function resolveStrict(
   // in the decision below.
   await addUnsupportedKindNotes(entry, manifest, pluginRoot, ctx, partial);
 
-  return decideResolution(entry.name, pluginRoot, partial, dirty, metadata);
+  return decideResolution(entry.name, pluginRoot, partial, dirty || optionsDirty, metadata);
 }
 
 /**

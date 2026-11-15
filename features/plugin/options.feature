@@ -33,3 +33,37 @@ Feature: Plugin options
     Then the installation record of the project scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
+
+  Scenario: A plugin whose option has no title is unavailable (PG-CORE-03, D-PG10-20)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      { "name": "demo", "version": "1.0.0", "userConfig": { "mode": { "type": "string", "default": "fast" } } }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons          |
+      | fixtures         | project           | demo@fixtures | demo | unavailable | invalid manifest |
+    Then the project scope has no installed plugins
+
+  Scenario: Installing a plugin with a malformed option with --partial is refused too (D-PG10-05)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      { "name": "demo", "version": "1.0.0", "userConfig": { "mode": { "type": "string", "default": "fast" } } }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project --partial"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons          |
+      | fixtures         | project           | demo@fixtures | demo | unavailable | invalid manifest |
+    Then the project scope has no installed plugins

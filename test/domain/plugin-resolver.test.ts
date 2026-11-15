@@ -5382,17 +5382,65 @@ describe("resolveStrict userConfig", () => {
     assert.deepStrictEqual(resolved.unsupported, ["themes"]);
   });
 
-  test("D-PG10-05: a malformed userConfig never resolves installable", async () => {
+  for (const { shape, userConfig, detail } of [
+    {
+      shape: "the abbreviated option shape",
+      userConfig: { mode: { type: "string", default: "fast" } },
+      detail: 'userConfig option "mode": field "title" is missing, field "description" is missing',
+    },
+    { shape: "null", userConfig: null, detail: "userConfig is not an object" },
+    { shape: "false", userConfig: false, detail: "userConfig is not an object" },
+    {
+      shape: "an unknown option field",
+      userConfig: { mode: { ...modeOption, colour: "red" } },
+      detail: 'userConfig option "mode": field "colour" is not a known field',
+    },
+  ]) {
+    test(`D-PG10-05 / D-PG10-20: ${shape} makes the plugin unavailable`, async () => {
+      // arrange
+      const context = withManifest({ userConfig });
+
+      // act
+      const resolved = await resolveStrict(pluginEntry(), context);
+
+      // assert
+      assert.deepStrictEqual(resolved, {
+        state: "unavailable",
+        installable: false,
+        name: "p1",
+        notes: [`malformed userConfig: ${detail}`],
+      });
+    });
+  }
+
+  test("D-PG10-05: a malformed option wins over a required option with no default", async () => {
     // arrange
-    const context = withManifest({ userConfig: { mode: { type: "string", default: "fast" } } });
+    const context = withManifest({
+      userConfig: { token: requiredOption("Token"), mode: { type: "string", default: "fast" } },
+    });
 
     // act
     const resolved = await resolveStrict(pluginEntry(), context);
 
     // assert
+    assert.strictEqual(resolved.state, "unavailable");
+    assert.deepStrictEqual(resolved.notes, [
+      'malformed userConfig: userConfig option "mode": field "title" is missing, field "description" is missing',
+    ]);
     assert.throws(() => {
-      requireInstallable(resolved);
+      requirePartialInstallable(resolved);
     }, PluginShapeError);
+  });
+
+  test("D-PG10-05: with a plugin.json a malformed entry userConfig is ignored", async () => {
+    // arrange
+    const context = withManifest({});
+
+    // act
+    const resolved = await resolveStrict(pluginEntry({ userConfig: null }), context);
+
+    // assert
+    assert.strictEqual(resolved.state, "installable", resolved.notes.join(" / "));
   });
 
   test("D-PG10-05: with a plugin.json the entry's userConfig is ignored", async () => {
