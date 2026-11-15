@@ -28,6 +28,7 @@ import {
   type ParsedMatcher,
 } from "../../domain/components/hooks.ts";
 import { type AbsolutePluginRoot } from "../../domain/plugin-root.ts";
+import { type ResolvedOptions } from "../../domain/user-config.ts";
 import { type Scope } from "../../shared/types.ts";
 
 import { type IfPredicate } from "./if-field/index.ts";
@@ -81,6 +82,11 @@ export interface RoutingEntry {
    * time (mirrors the registration-time-translation stance).
    */
   readonly ifPredicate: IfPredicate;
+  /**
+   * D-PG10-10: the plugin's options, copied from its `CacheEntry`, which
+   * `prepareHookEnv` exports as `CLAUDE_PLUGIN_OPTION_<KEY>`.
+   */
+  readonly options: ResolvedOptions;
 }
 
 /**
@@ -107,6 +113,11 @@ export interface CacheEntry {
    * each `RoutingEntry.ifPredicate` field without re-parsing.
    */
   readonly ifPredicates: ReadonlyMap<string, IfPredicate>;
+  /**
+   * D-PG10-10: the plugin's options, read from its install record at load,
+   * so dispatch reads no manifest and no state.json on an event.
+   */
+  readonly options: ResolvedOptions;
 }
 
 /**

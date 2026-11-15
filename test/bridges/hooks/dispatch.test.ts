@@ -16,6 +16,7 @@ import {
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 
 import type {
@@ -181,6 +182,7 @@ function createRoutingEntry(input: {
     },
     declarationIndex: input.declarationIndex,
     ifPredicate: input.ifPredicate ?? MATCH_ALL_IF,
+    options: resolveOptions(undefined),
   };
 }
 
@@ -317,6 +319,7 @@ describe("compositeHandlerFor", () => {
       },
       declarationIndex: 0,
       ifPredicate: compileIfPredicate("Bash(git status)", "PreToolUse", compileContext),
+      options: resolveOptions(undefined),
     } satisfies RoutingEntry;
     const ifSkippedEntry = {
       scope: "user",
@@ -335,6 +338,7 @@ describe("compositeHandlerFor", () => {
       },
       declarationIndex: 1,
       ifPredicate: compileIfPredicate("Bash(npm test)", "PreToolUse", compileContext),
+      options: resolveOptions(undefined),
     } satisfies RoutingEntry;
     const firstMutationEntry = {
       scope: "user",
@@ -353,6 +357,7 @@ describe("compositeHandlerFor", () => {
       },
       declarationIndex: 2,
       ifPredicate: compileIfPredicate("Bash(git status)", "PreToolUse", compileContext),
+      options: resolveOptions(undefined),
     } satisfies RoutingEntry;
     const secondMutationEntry = {
       scope: "user",
@@ -371,6 +376,7 @@ describe("compositeHandlerFor", () => {
       },
       declarationIndex: 3,
       ifPredicate: compileIfPredicate("Bash(git status)", "PreToolUse", compileContext),
+      options: resolveOptions(undefined),
     } satisfies RoutingEntry;
     const routingBucket = [
       matcherSkippedEntry,

@@ -24,6 +24,7 @@ import {
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import { createHooksRuntime } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createJsonCapture } from "../../../edge/json-capture.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
@@ -696,6 +697,7 @@ function createEntry(root: string, overrides: EntryOverrides = {}): RoutingEntry
       } satisfies RoutingEntry["handlerDecl"]),
     declarationIndex: 3,
     ifPredicate: { kind: "match-all" },
+    options: resolveOptions(undefined),
   } satisfies RoutingEntry;
 }
 

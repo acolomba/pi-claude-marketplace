@@ -11,6 +11,7 @@
 
 import path from "node:path";
 
+import { hookOptionVariableName } from "../../domain/user-config.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { claudeSessionEnvFor } from "../../shared/session-env.ts";
 
@@ -68,6 +69,12 @@ export function hookPathVars(
  * HOOK-05: `CLAUDE_CODE_REMOTE` is intentionally NOT set. Pi runs locally, and
  * the documented absence is the upstream-parity contract.
  *
+ * D-PG10-10: each option value of the entry is exported as
+ * `CLAUDE_PLUGIN_OPTION_<KEY>`, after the three path variables and before the
+ * lane's additions and the session env, so no option can replace a lane
+ * marker or a session var. Two keys that name one variable leave the later
+ * key's value. A declared default counts as a saved value here (D-PG10-19).
+ *
  * `extra` carries per-lane additions -- the async-rewake lane stamps its
  * dispatch marker through it. It is spread BEFORE the session env, so a lane
  * addition can never override a session var (D-91-02).
@@ -88,6 +95,9 @@ export async function prepareHookEnv(
     CLAUDE_PROJECT_DIR: vars.projectDir,
     CLAUDE_PLUGIN_ROOT: vars.pluginRoot,
     CLAUDE_PLUGIN_DATA: vars.pluginData,
+    ...Object.fromEntries(
+      Array.from(entry.options.values, ([key, value]) => [hookOptionVariableName(key), value]),
+    ),
     ...extra,
     // D-91-02: the session env spreads LAST so the authoritative per-dispatch
     // snapshot wins over both the live `process.env` and any per-lane `extra`.

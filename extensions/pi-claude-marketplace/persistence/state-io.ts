@@ -30,8 +30,10 @@ import Type from "typebox";
 import { Compile } from "typebox/compile";
 
 import { githubSource, parsePluginSource, pathSource } from "../domain/source.ts";
+import { parseUserConfig, resolveOptions, type ResolvedOptions } from "../domain/user-config.ts";
 import { withoutTagCommit } from "../domain/version.ts";
 import { atomicWriteJson } from "../shared/atomic-json.ts";
+import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
 
 import { migrateLegacyMarketplaceRecords, persistMigratedState } from "./migrate.ts";
@@ -338,6 +340,28 @@ export function userConfigFieldsOf(
       Object.entries(declared).map(([key, option]) => [key, structuredClone(option)]),
     ),
   };
+}
+
+/**
+ * D-PG10-23: the one reader of a record's `userConfig`. It parses the stored
+ * value again with the manifest parser, because a project record is a file a
+ * repository can commit, and a stored value that does not parse reads as no
+ * options, so a hand-edited record never stops a load.
+ */
+export function recordedOptionsOf(
+  record: Pick<PluginInstallRecord, "userConfig">,
+): ResolvedOptions {
+  if (record.userConfig === undefined) {
+    return resolveOptions(undefined);
+  }
+
+  const parsed = parseUserConfig(record.userConfig);
+  if (parsed.kind === "malformed") {
+    hookDebugLog(`recorded userConfig ignored: ${parsed.detail}`, "state");
+    return resolveOptions(undefined);
+  }
+
+  return resolveOptions(parsed.schema);
 }
 
 /**

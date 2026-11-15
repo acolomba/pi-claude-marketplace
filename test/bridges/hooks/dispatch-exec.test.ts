@@ -13,6 +13,7 @@ import { dispatchHookExec } from "../../../extensions/pi-claude-marketplace/brid
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
@@ -178,6 +179,7 @@ test("executes a blocking hook through the portable process boundary", async (t)
     },
     declarationIndex: 0,
     ifPredicate: MATCH_ALL_IF,
+    options: resolveOptions(undefined),
   } satisfies RoutingEntry;
   const event = {
     type: "tool_call",
@@ -541,6 +543,7 @@ function makeEntry(
     handlerDecl,
     declarationIndex: 4,
     ifPredicate: MATCH_ALL_IF,
+    options: resolveOptions(undefined),
   };
 }
 

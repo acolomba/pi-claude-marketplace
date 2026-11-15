@@ -11,6 +11,7 @@ import { createRoutingStateOperations } from "../../extensions/pi-claude-marketp
 import { createHooksRuntime } from "../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { parseHooksConfig } from "../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../extensions/pi-claude-marketplace/domain/user-config.ts";
 
 test("parseHooksConfig side-map flows into RoutingEntry predicates in declaration order", () => {
   // arrange
@@ -105,6 +106,7 @@ test("parseHooksConfig side-map flows into RoutingEntry predicates in declaratio
     resolvedSource,
     config: parsed.value,
     ifPredicates: parsed.ifPredicates,
+    options: resolveOptions(undefined),
   });
   hooksRouting.rebuildRoutingTables();
   const rows = runtime.getRoutingBucket("PreToolUse");
@@ -169,6 +171,7 @@ test("D-CF5-23: an if condition on a session event reaches its routing entry as 
     resolvedSource: asAbsolutePluginRoot("/workspace/plugin"),
     config: parsed.value,
     ifPredicates: parsed.ifPredicates,
+    options: resolveOptions(undefined),
   });
   hooksRouting.rebuildRoutingTables();
   const rows = runtime.getRoutingBucket("SessionStart").map((row) => ({

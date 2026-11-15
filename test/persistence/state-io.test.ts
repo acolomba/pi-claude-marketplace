@@ -5,6 +5,7 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 
+import { resolveOptions } from "../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   atCatalogVersion,
@@ -16,12 +17,14 @@ import {
   loadState,
   mcpServerConfigsOf,
   rangeVersionOf,
+  recordedOptionsOf,
   replaceCompatibility,
   replaceUserConfig,
   saveState,
   toDisabledRecord,
   userConfigFieldsOf,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { captureDebugLog } from "../platform/debug-log-capture.ts";
 
 interface HooksOnlyResources {
   readonly skills: [];
@@ -821,6 +824,75 @@ test("D-PG10-15: removes a record's recorded options when the fields given hold 
 
   // assert
   assert.strictEqual(Object.hasOwn(record, "userConfig"), false);
+});
+
+test("D-PG10-23: reads a record's stored options as the resolved options of its schema", (t) => {
+  // arrange
+  const schema = {
+    mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+    note: { type: "string", title: "Note", description: "A note." },
+  } as const;
+  const debugLines = captureDebugLog(t);
+
+  // act
+  const options = recordedOptionsOf({ userConfig: schema });
+
+  // assert
+  assert.deepStrictEqual(options, resolveOptions(schema));
+  assert.deepStrictEqual(debugLines, []);
+});
+
+test("D-PG10-15: reads a record with no stored options as a plugin that declares none", (t) => {
+  // arrange
+  const debugLines = captureDebugLog(t);
+
+  // act
+  const options = recordedOptionsOf({});
+
+  // assert
+  assert.deepStrictEqual(options, resolveOptions(undefined));
+  assert.deepStrictEqual(debugLines, []);
+});
+
+for (const { label, stored, logged } of [
+  { label: "a string", stored: "mode=fast", logged: "userConfig is not an object" },
+  {
+    label: "an option with no title",
+    stored: { mode: { type: "string", description: "The mode.", default: "fast" } },
+    logged: 'userConfig option "mode": field "title" is missing',
+  },
+]) {
+  test(`D-PG10-23: reads ${label} stored as the options as no options and logs it`, (t) => {
+    // arrange
+    const debugLines = captureDebugLog(t);
+
+    // act
+    const options = recordedOptionsOf({ userConfig: stored });
+
+    // assert
+    assert.deepStrictEqual(options, resolveOptions(undefined));
+    assert.deepStrictEqual(debugLines, [`[state] recorded userConfig ignored: ${logged}`]);
+  });
+}
+
+test("D-PG10-23: reads a stored option named __proto__ as an option", () => {
+  // arrange
+  const stored: unknown = JSON.parse(
+    '{"__proto__":{"type":"string","title":"Proto","description":"The proto.","default":"x"}}',
+  );
+
+  // act
+  const options = recordedOptionsOf({ userConfig: stored });
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      values: [...options.values],
+      prototype: Object.getPrototypeOf({}) === Object.prototype,
+      polluted: Object.hasOwn(Object.prototype, "type"),
+    },
+    { values: [["__proto__", "x"]], prototype: true, polluted: false },
+  );
 });
 
 test("returns the exact default for a missing state file", async (t) => {

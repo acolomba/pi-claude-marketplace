@@ -6,6 +6,7 @@ import {
   serializeWithTruncation,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { ClaudePluginVars } from "../../../extensions/pi-claude-marketplace/shared/vars.ts";
@@ -28,6 +29,7 @@ function execEntry(command: string, args: readonly unknown[]): RoutingEntry {
     handlerDecl: { type: "command", command, args: [...args] },
     declarationIndex: 0,
     ifPredicate: { kind: "match-all" },
+    options: resolveOptions(undefined),
   };
 }
 
@@ -133,6 +135,7 @@ describe("planSpawn", () => {
       },
       declarationIndex: 4,
       ifPredicate: { kind: "match-all" },
+      options: resolveOptions(undefined),
     } satisfies RoutingEntry;
 
     // act
@@ -163,6 +166,7 @@ describe("planSpawn", () => {
       },
       declarationIndex: 0,
       ifPredicate: { kind: "match-all" },
+      options: resolveOptions(undefined),
     } satisfies RoutingEntry;
 
     // act
@@ -192,6 +196,7 @@ describe("planSpawn", () => {
       },
       declarationIndex: 2,
       ifPredicate: { kind: "match-all" },
+      options: resolveOptions(undefined),
     } satisfies RoutingEntry;
 
     // act
@@ -222,6 +227,7 @@ describe("planSpawn", () => {
       },
       declarationIndex: 7,
       ifPredicate: { kind: "match-all" },
+      options: resolveOptions(undefined),
     } satisfies RoutingEntry;
 
     // act
@@ -250,6 +256,7 @@ describe("planSpawn", () => {
       },
       declarationIndex: 1,
       ifPredicate: { kind: "match-all" },
+      options: resolveOptions(undefined),
     } satisfies RoutingEntry;
 
     // act
@@ -280,6 +287,7 @@ describe("planSpawn", () => {
       },
       declarationIndex: 9,
       ifPredicate: { kind: "match-all" },
+      options: resolveOptions(undefined),
     } satisfies RoutingEntry;
 
     // act

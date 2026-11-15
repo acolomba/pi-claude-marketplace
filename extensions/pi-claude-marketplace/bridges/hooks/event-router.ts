@@ -51,10 +51,12 @@ import path from "node:path";
 import { BUCKET_A_EVENTS, type BucketAEvent } from "../../domain/components/hook-events.ts";
 import { parseHooksConfig, parseMatcher, type HooksConfig } from "../../domain/components/hooks.ts";
 import { asAbsolutePluginRoot, type AbsolutePluginRoot } from "../../domain/plugin-root.ts";
+import { resolveOptions, type ResolvedOptions } from "../../domain/user-config.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import {
   DEFAULT_STATE,
   isRecordedButDisabled,
+  recordedOptionsOf,
   type ExtensionState,
 } from "../../persistence/state-io.ts";
 import { isSubagentChild } from "../../platform/subagent-child.ts";
@@ -222,6 +224,9 @@ async function readAndCachePluginHooksWith(
     resolvedSource: opts.resolvedSource,
     config: parsed.value,
     ifPredicates: parsed.ifPredicates,
+    // D-PG10-10: this producer has no option input, so the entry holds no
+    // options until the next load builds it from the install record.
+    options: resolveOptions(undefined),
   });
 }
 
@@ -449,6 +454,7 @@ function pushGroupHandlers(
       handlerDecl,
       declarationIndex,
       ifPredicate: cacheEntry.ifPredicates.get(key) ?? MATCH_ALL_IF,
+      options: cacheEntry.options,
     });
 
     declarationIndex += 1;
@@ -687,6 +693,7 @@ function hydrateTargets(
           marketplace: mpName,
           pluginId,
           resolvedSource: pluginRecord.resolvedSource,
+          options: recordedOptionsOf(pluginRecord),
           hooksJsonPath: path.join(loc.hooksDir, slug, "hooks.json"),
           hooksDir: loc.hooksDir,
           cwd,
@@ -708,6 +715,7 @@ interface HydrateOnePluginTarget {
   readonly marketplace: string;
   readonly pluginId: string;
   readonly resolvedSource: string;
+  readonly options: ResolvedOptions;
   readonly hooksJsonPath: string;
   readonly hooksDir: string;
   readonly cwd: string;
@@ -719,7 +727,8 @@ async function tryHydrateOnePlugin(
   generationIsCurrent: GenerationGuard,
   target: HydrateOnePluginTarget,
 ): Promise<void> {
-  const { scope, marketplace, pluginId, resolvedSource, hooksJsonPath, hooksDir, cwd } = target;
+  const { scope, marketplace, pluginId, resolvedSource, options, hooksJsonPath, hooksDir, cwd } =
+    target;
   // Defense-in-depth (NFR-10): state.json is normally written only by this
   // extension, but the slug component (`pluginRecord.resources.hooks[i]`) is
   // state-supplied data. A corrupted state record (third-party tampering or
@@ -783,6 +792,7 @@ async function tryHydrateOnePlugin(
     resolvedSource: branded,
     config: result.value,
     ifPredicates: result.ifPredicates,
+    options,
   });
 }
 

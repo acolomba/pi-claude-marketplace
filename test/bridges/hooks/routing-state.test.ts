@@ -12,6 +12,7 @@ import { test } from "node:test";
 import { createRoutingStateOperations } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 
 import type {
   CacheEntry,
@@ -195,10 +196,13 @@ test("reads a missing parsed config without creating a cache entry", () => {
   );
 });
 
-test("sets and stably reads a complete parsed config", () => {
+test("D-PG10-10 sets and stably reads a complete parsed config with its options", () => {
   // arrange
   const routingState = createRoutingStateOperations(createHooksRuntime());
   const cacheKey = "user\u0000catalog-alpha\u0000plugin-alpha";
+  const options = resolveOptions({
+    mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+  });
   const cacheEntry = {
     scope: "user",
     marketplace: "catalog-alpha",
@@ -213,6 +217,7 @@ test("sets and stably reads a complete parsed config", () => {
       ],
     },
     ifPredicates: new Map([["PreToolUse|0|0", { kind: "match-all" }]]),
+    options,
   } satisfies CacheEntry;
   const expectedEntry = {
     scope: "user",
@@ -228,6 +233,9 @@ test("sets and stably reads a complete parsed config", () => {
       ],
     },
     ifPredicates: new Map([["PreToolUse|0|0", { kind: "match-all" }]]),
+    options: resolveOptions({
+      mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+    }),
   } satisfies CacheEntry;
 
   // act
@@ -260,6 +268,7 @@ test("overwrites a parsed config under the same cache key", () => {
       ],
     },
     ifPredicates: new Map([["SessionStart|0|0", { kind: "match-all" }]]),
+    options: resolveOptions(undefined),
   } satisfies CacheEntry;
   const replacementEntry = {
     scope: "project",
@@ -274,6 +283,7 @@ test("overwrites a parsed config under the same cache key", () => {
       ],
     },
     ifPredicates: new Map([["SessionEnd|0|0", { kind: "match-all" }]]),
+    options: resolveOptions(undefined),
   } satisfies CacheEntry;
   const expectedEntry = {
     scope: "project",
@@ -288,6 +298,7 @@ test("overwrites a parsed config under the same cache key", () => {
       ],
     },
     ifPredicates: new Map([["SessionEnd|0|0", { kind: "match-all" }]]),
+    options: resolveOptions(undefined),
   } satisfies CacheEntry;
 
   // act
@@ -316,6 +327,7 @@ test("deletes a parsed config and keeps it absent after a repeated delete", () =
       ],
     },
     ifPredicates: new Map([["PostCompact|0|0", { kind: "match-all" }]]),
+    options: resolveOptions(undefined),
   } satisfies CacheEntry;
 
   routingState.setParsedConfig(cacheKey, cacheEntry);
@@ -363,6 +375,7 @@ test("sets and stably reads routing entries in per-bucket order", () => {
     handlerDecl: { type: "command", command: "echo alpha" },
     declarationIndex: 0,
     ifPredicate: { kind: "match-all" },
+    options: resolveOptions(undefined),
   } satisfies RoutingEntry;
   const secondEntry = {
     scope: "project",
@@ -375,6 +388,7 @@ test("sets and stably reads routing entries in per-bucket order", () => {
     handlerDecl: { type: "command", command: "echo beta" },
     declarationIndex: 1,
     ifPredicate: { kind: "match-all" },
+    options: resolveOptions(undefined),
   } satisfies RoutingEntry;
   const expectedEntries = [
     {
@@ -388,6 +402,7 @@ test("sets and stably reads routing entries in per-bucket order", () => {
       handlerDecl: { type: "command", command: "echo alpha" },
       declarationIndex: 0,
       ifPredicate: { kind: "match-all" },
+      options: resolveOptions(undefined),
     },
     {
       scope: "project",
@@ -400,6 +415,7 @@ test("sets and stably reads routing entries in per-bucket order", () => {
       handlerDecl: { type: "command", command: "echo beta" },
       declarationIndex: 1,
       ifPredicate: { kind: "match-all" },
+      options: resolveOptions(undefined),
     },
   ] satisfies ReadonlyArray<RoutingEntry>;
 
@@ -427,6 +443,7 @@ test("replaces a routing bucket without retaining earlier entries", () => {
     handlerDecl: { type: "command", command: "echo initial" },
     declarationIndex: 0,
     ifPredicate: { kind: "match-all" },
+    options: resolveOptions(undefined),
   } satisfies RoutingEntry;
   const replacementEntry = {
     scope: "project",
@@ -439,6 +456,7 @@ test("replaces a routing bucket without retaining earlier entries", () => {
     handlerDecl: { type: "command", command: "echo replacement" },
     declarationIndex: 4,
     ifPredicate: { kind: "match-all" },
+    options: resolveOptions(undefined),
   } satisfies RoutingEntry;
   const expectedEntries = [
     {
@@ -452,6 +470,7 @@ test("replaces a routing bucket without retaining earlier entries", () => {
       handlerDecl: { type: "command", command: "echo replacement" },
       declarationIndex: 4,
       ifPredicate: { kind: "match-all" },
+      options: resolveOptions(undefined),
     },
   ] satisfies ReadonlyArray<RoutingEntry>;
 
@@ -480,6 +499,7 @@ test("reads all routing buckets while preserving each bucket's order", () => {
     handlerDecl: { type: "command", command: "echo session" },
     declarationIndex: 0,
     ifPredicate: { kind: "match-all" },
+    options: resolveOptions(undefined),
   } satisfies RoutingEntry;
   const firstPreToolEntry = {
     scope: "user",
@@ -492,6 +512,7 @@ test("reads all routing buckets while preserving each bucket's order", () => {
     handlerDecl: { type: "command", command: "echo tool-one" },
     declarationIndex: 2,
     ifPredicate: { kind: "match-all" },
+    options: resolveOptions(undefined),
   } satisfies RoutingEntry;
   const secondPreToolEntry = {
     scope: "project",
@@ -504,6 +525,7 @@ test("reads all routing buckets while preserving each bucket's order", () => {
     handlerDecl: { type: "command", command: "echo tool-two" },
     declarationIndex: 3,
     ifPredicate: { kind: "match-all" },
+    options: resolveOptions(undefined),
   } satisfies RoutingEntry;
   const expectedRoutingEntries = new Map<"SessionEnd" | "PreToolUse", ReadonlyArray<RoutingEntry>>([
     [
@@ -520,6 +542,7 @@ test("reads all routing buckets while preserving each bucket's order", () => {
           handlerDecl: { type: "command", command: "echo session" },
           declarationIndex: 0,
           ifPredicate: { kind: "match-all" },
+          options: resolveOptions(undefined),
         },
       ],
     ],
@@ -537,6 +560,7 @@ test("reads all routing buckets while preserving each bucket's order", () => {
           handlerDecl: { type: "command", command: "echo tool-one" },
           declarationIndex: 2,
           ifPredicate: { kind: "match-all" },
+          options: resolveOptions(undefined),
         },
         {
           scope: "project",
@@ -549,6 +573,7 @@ test("reads all routing buckets while preserving each bucket's order", () => {
           handlerDecl: { type: "command", command: "echo tool-two" },
           declarationIndex: 3,
           ifPredicate: { kind: "match-all" },
+          options: resolveOptions(undefined),
         },
       ],
     ],
@@ -582,6 +607,7 @@ test("a fresh runtime starts empty without clearing a populated peer", () => {
       ],
     },
     ifPredicates: new Map([["PreToolUse|0|0", { kind: "match-all" }]]),
+    options: resolveOptions(undefined),
   } satisfies CacheEntry;
   const routingEntry = {
     scope: "project",
@@ -594,6 +620,7 @@ test("a fresh runtime starts empty without clearing a populated peer", () => {
     handlerDecl: { type: "command", command: "echo reset" },
     declarationIndex: 0,
     ifPredicate: { kind: "match-all" },
+    options: resolveOptions(undefined),
   } satisfies RoutingEntry;
   const pendingEntry = {
     context: "reset context",
@@ -660,6 +687,7 @@ test("binds routing operations to one required runtime instance", () => {
       ],
     },
     ifPredicates: new Map([["PreToolUse|0|0", { kind: "match-all" }]]),
+    options: resolveOptions(undefined),
   } satisfies CacheEntry;
   const route = {
     scope: "project",
@@ -672,6 +700,7 @@ test("binds routing operations to one required runtime instance", () => {
     handlerDecl: { type: "command", command: "echo bound" },
     declarationIndex: 0,
     ifPredicate: { kind: "match-all" },
+    options: resolveOptions(undefined),
   } satisfies RoutingEntry;
   const pendingEntry = {
     context: "bound context",
@@ -732,6 +761,7 @@ test("advancing generation preserves the runtime's other routing state", () => {
     resolvedSource: asAbsolutePluginRoot("/plugins/catalog-preserved/plugin-preserved"),
     config: {},
     ifPredicates: new Map(),
+    options: resolveOptions(undefined),
   } satisfies CacheEntry;
   const pendingEntry = {
     context: "preserved context",
