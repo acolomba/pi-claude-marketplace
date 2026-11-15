@@ -1,10 +1,10 @@
 ---
 phase: 09-adapter-entries-and-mcp-features
-fixed_at: 2026-11-15T00:08:12Z
+fixed_at: 2026-11-15T01:06:51Z
 review_path: .planning/phases/09-adapter-entries-and-mcp-features/09-REVIEW.md
-iteration: 2
-findings_in_scope: 9
-fixed: 9
+iteration: 3
+findings_in_scope: 8
+fixed: 8
 skipped: 0
 status: all_fixed
 ---
@@ -277,3 +277,122 @@ ______________________________________________________________________
 _Fixed: 2026-11-15T00:08:12Z_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 2_
+
+# Iteration 3
+
+**Fixed at:** 2026-11-15T01:06:51Z
+**Source review:** .planning/phases/09-adapter-entries-and-mcp-features/09-REVIEW.md (iteration 3, committed f5a4d166)
+**Iteration:** 3 (the last; the review cap of 3 is reached)
+
+**Summary:**
+
+- Findings in scope: 8 (4 warning, 4 info; fix scope `all`, as the orchestrator asked)
+- Fixed: 8
+- Skipped: 0
+
+Every fix ran in the `features/gaps-mcp` checkout itself, `/home/acolomba/src/pi-claude-marketplace-gaps-mcp`, with no isolated review-fix worktree, as the orchestrator directed. So the verification below ran in that main checkout and can be reproduced from it. All test runs used the hermetic test homes (`test/platform/isolated-pi-home.ts` and the cucumber world). `npm run check` was not run, as directed. The commit hook ran `npm run check:commit` on each commit and it passed. The parent-line texts at the end of this section replace the iteration-2 texts for D-PG9-14, D-PG9-15, the D-PG9-03 addition and the pending-review list. No shared planning file was edited.
+
+**Verification (main checkout, after the last fix commit):**
+
+- Owner and caller unit tests: `test/architecture/**` (which holds `mcp-config-notices`, `json-output-docs`, `wire-schema`, and the catalog tests), `test/shared/**`, `test/bridges/**`, `test/orchestrators/**`, and `test/domain/mcp-*`: 13148 tests, 0 failures.
+- `npm run test:integration`: passed.
+- Cucumber `features/mcp-server`: adapter profile 149 scenarios passed, builtin profile 130 scenarios passed. `npm run check:features` passed.
+- Direct coverage of each touched source-test pair ran in the commit hook (`check:commit`) and passed.
+
+## Fixed Issues (iteration 3)
+
+### WR3-01 + IN3-03: The finite-positive `idleTimeout` rule misread the adapter's idle loop
+
+**Status:** fixed: requires human verification (logic change, D-PG9-15 pending maintainer review)
+**Files modified:** `extensions/pi-claude-marketplace/bridges/mcp/adapter-entry.ts`, `test/bridges/mcp/adapter-entry.test.ts`, `features/mcp-server/lifecycle.feature`, `docs/mcp-compatibility.md`, `CHANGELOG.md`
+**Commit:** e00f40f3
+**Applied fix:** `userHolds` now follows pi-mcp-adapter 7.0.1 exactly: a carried `idleTimeout` other than `null` stands for the user's `lifecycle` (`carried.idleTimeout != null`). The adapter registers `definition.idleTimeout ?? ...` with no type check (`init.ts:351`, `index.ts:497`) and coerces it in `getIdleTimeout` (`lifecycle.ts:412-415`), so `0`, a negative number, and a numeric string all replace the global idle time, and only `null` falls back to it. The finite-positive rule is reverted. The doc paragraph at `docs/mcp-compatibility.md:145` is rewritten (IN3-03): the "entry then stays `lazy`" sentence now follows the case it describes, it says that `0` or less never stops the server for idle time, that a numeric string such as `"5"` counts as 5 minutes, and that only `null` keeps the default. The defaults paragraph and the CHANGELOG bullet drop "positive".
+**Tests:** the four-value loop is split: `0`, `-5` and `"5"` now expect no `lifecycle` default, and `null` keeps it.
+**Scenario:** the zero scenario is replaced by "An idleTimeout of zero the user wrote for a stdio plugin server replaces the lifecycle default (PG-MCP-06, D-PG9-15)", which expects no `lifecycle` on the entry and only `requestTimeoutMs` in `defaultFields`.
+**Negative control:** with `adapter-entry.ts` at f5a4d166, the 3 new unit cases and the scenario failed.
+
+### WR3-02: A disable, an uninstall, or an update that drops the server discarded the user's `caFile` with no notice
+
+**Status:** fixed: requires human verification (new notice reason, D-PG9-14 pending maintainer review)
+**Files modified:** `extensions/pi-claude-marketplace/bridges/mcp/{adapter-doc,stage,unstage}.ts`, `shared/notification-{types,wire,mcp}.ts`, `schema/claude-plugin.schema.json` (regenerated), `docs/{json-output,output-catalog,mcp-compatibility}.md`, `CHANGELOG.md`, `features/mcp-server/lifecycle.feature`, `test/architecture/mcp-config-notices.test.ts`, `test/bridges/mcp/{adapter-doc,stage,unstage}.test.ts`, `test/shared/notification-mcp.test.ts`
+**Commits:** faa14977, 3d744f0b
+**Applied fix:** The `ca-file-removed` notice gets a fourth closed reason, `entry-removed`. A new `leavingCaFileServers` (adapter-doc) names the plugin's entries that leave the file with a user `caFile` that nothing keeps: the choice store keeps none, and the override the entry writes back does not hold one. A `caFile` set by the plugin (`pluginSetFields`) or kept in a written-back stub is not reported. The unstage reports one notice per such entry of the adapter file, after its `override-restored` facts (not for the legacy `mcp.json`). The stage reports one per such entry of a server the plugin no longer declares, after the other `ca-file-removed` notices. The line reads "was removed, and your caFile on it was not kept with your other fields: a caFile applies only to the url it was set for, and this extension keeps no url for a removed server. Set it on the entry again if the server comes back." The type, the TypeBox member, both generated schema copies, the enum list, a fourth catalog block (`mcp-ca-file-removed-entry-removed`) with its lock entry, and the catalog paragraph carry the reason. The existing `foldUnstageNotices` drops stage notices of removed servers before it appends the unstage's, so a removed entry's notice is kept.
+**Tests:** an adapter-doc case (one lost entry among a restaged one, a written-back stub, a plugin-set `caFile`, an entry with no `caFile`, and another plugin's entry), an unstage case (adapter entry reported after its `override-restored` fact; legacy entry not reported), a stage case (a dropped server), and a renderer case.
+**Scenario:** "A disable that removes a plugin server says that the caFile the user wrote is not kept (PG-MCP-09, D-08-02, D-PG9-14)" asserts the `mcp-config-notices` result with `"reason":"entry-removed"`. 3d744f0b changes the setup step of the install-after-uninstall `caFile` scenario to "which did not fail", because the uninstall now warns.
+**Negative control:** with `unstage.ts` and `stage.ts` at f5a4d166, the scenario and the stage and unstage cases failed.
+
+### WR3-03: An unresolved url whose literal scheme is `http:` kept the `caFile`
+
+**Status:** fixed: requires human verification (logic change, D-PG9-14)
+**Files modified:** `extensions/pi-claude-marketplace/bridges/mcp/adapter-entry.ts`, `test/bridges/mcp/adapter-entry.test.ts`, `docs/mcp-compatibility.md`
+**Commit:** ede88fe6
+**Applied fix:** `schemeOf` returns the resolved url's `protocol`, or, when the url gives none, the scheme written before the first reference (`/^\s*([a-z][a-z\d+.-]*):/i`, lowercased). `caFileRemovalReason` returns `not-https` when that scheme exists and is not `https:`, for a stub and for a previous entry alike. A url that starts with a reference, such as `${BASE}/mcp`, still has no scheme and keeps the earlier rule. The doc sentence names the new case.
+**Tests:** `http://${ACME_HOST}/mcp` with the variable unset against an https previous entry (`not-https`, where it read `url-unresolved`), the same url on an override stub (`not-https`, where it kept the `caFile`), and an unchanged `HTTPS://${ACME_HOST}/mcp` that keeps the `caFile` (case of the literal scheme).
+**Negative control:** with `adapter-entry.ts` at e00f40f3, the two drop cases failed.
+
+### WR3-04: The marker refusal's failed update row read `unreadable manifest`
+
+**Status:** fixed
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts`, `test/orchestrators/plugin/update-flow.test.ts`, `features/mcp-server/lifecycle.feature`
+**Commit:** cc8e8feb
+**Applied fix:** `untypedUpdateFailReason` maps an `McpConfigFileError` to `unreadable` before the git and errno arms, as the `EISDIR`/`EIO`/`EBADF` arm for the same file does, so every defect (JSONC, top level, server key, marker) reads `unreadable` in the update row and the cascades that share the ladder (autoupdate, apply's converge). The row keeps its cause. The scenario row now reads `unreadable`. The other classifiers were checked and need no change: reinstall falls back to `narrowReason`'s `unreadable`, disable's `narrowDisableFailure` returns `unreadable`, and enable's `narrowEnableFailure` returns no reason and shows the cause.
+**Tests:** a two-case loop (`invalid-jsonc`, `marker-not-valid`) through `updateSinglePlugin` asserts `["unreadable"]`, the error's defect as the cause, and unchanged file bytes.
+**Negative control:** with `update-flow.ts` at ede88fe6, both cases and the scenario failed (`unreadable manifest`).
+
+### IN3-01 + IN3-02: The `origin-changed` and `url-unresolved` lines named the wrong cause or misread
+
+**Status:** fixed (IN3-01 has a small logic change)
+**Files modified:** `extensions/pi-claude-marketplace/bridges/mcp/adapter-entry.ts`, `shared/notification-mcp.ts`, `test/bridges/mcp/adapter-entry.test.ts`, `test/shared/notification-mcp.test.ts`, `docs/output-catalog.md`
+**Commit:** 6632845d (both findings change the same two sentences)
+**Applied fix:** For a previous entry with no url (stdio, socket, or a non-string url), `caFileRemovalReason` returns `url-unresolved` when the new url cannot be read yet, and `origin-changed` only when it reads as https. The `origin-changed` line now reads "is now an https server, but your caFile was set for another origin or for a server with no url, so its entry no longer holds it: pi-mcp-adapter uses a caFile only for the origin of the server's url. …". The `url-unresolved` line reads "… names a variable that is not set or does not read as a url …" (IN3-02). The catalog blocks and the reason paragraph match.
+**Tests:** a stdio previous entry and `${ACME_BASE}/mcp` with the variable unset expect `url-unresolved`. The renderer cases carry the new sentences, and the catalog lock reads the blocks.
+**Negative control:** with `adapter-entry.ts` at faa14977, the new case failed. With `notification-mcp.ts` at faa14977, 4 renderer and lock cases failed.
+
+### IN3-04: The `marker-not-valid` refusal did not name the entry or the member
+
+**Status:** fixed
+**Files modified:** `extensions/pi-claude-marketplace/bridges/mcp/{adapter-doc,marker}.ts`, `shared/errors-bridges.ts`, `test/bridges/mcp/{adapter-doc,marker}.test.ts`, `test/shared/errors-bridges.test.ts`, `features/mcp-server/lifecycle.feature`
+**Commit:** 88227374
+**Applied fix:** `hasMalformedMarkerMember` becomes `malformedMarkerMember`, which returns the first malformed member (`pluginSetFields`, `defaultFields`, `keptOverride`, in that order) or none. `assertOwnedMarkersReadable` passes the entry's key and that member to `McpConfigFileError(filePath, "marker-not-valid", { server, member })`, which keeps them as `marker` and renders `has the entry "<key>" whose "_piClaudeMarketplace.<member>" is not valid; it was left unchanged.` The key goes through `printable`, as a notice name does; the member is one of three fixed names. The file path is redacted at render as before.
+**Tests:** the marker predicate cases now expect the member name (plus a case with two malformed members), the adapter-doc refusal expects `marker: { server: "old", member: "defaultFields" }`, and an errors-bridges case checks the message with an escaped control character.
+**Scenario:** the update refusal scenario's cause column names `"plugin_demo_srv_"` and `"_piClaudeMarketplace.defaultFields"`.
+**Negative control:** with the three sources at 6632845d, the scenario and the errors-bridges case failed.
+
+## Parent-line texts (iteration 3; for the orchestrator; not applied)
+
+These replace the iteration-2 texts of the same items above.
+
+**09-CONTEXT.md, append under "Fields the user wrote (PG-MCP-09)" (replaces the iteration-2 D-PG9-14 bullet):**
+
+> - **D-PG9-14 (proposed during the code-review fix, pending maintainer review; amends D-PG9-05 and D-08-02):** A carried `caFile` is written only while the new entry is an https server and, when the entry it replaces defines a server, at that entry's origin. An https server has no `command` or `socket`, and has a string url whose scheme is `https:`: the scheme of the url read as below, or, when it cannot be read, the scheme written before the url's first variable reference. The origin is the `URL.origin` of each url read as pi-mcp-adapter's `resolveServerUrl` reads it, with the command's environment: references without a default must name set variables, and three interpolation passes follow (`utils.ts:146-165`, `:280-298`). When either url names an unset variable or does not parse, the `caFile` stays only while the url text is unchanged. An override stub defines no server, so only the transport and the literal scheme decide for it. Otherwise the stage leaves `caFile` out and emits the `ca-file-removed` MCP config notice with a closed `reason`: `not-https`, `origin-changed` (another https origin, or a previous entry with no url and a new url that reads as https), or `url-unresolved` (the url changed and one of them cannot be read, or a previous entry with no url and a new url that cannot be read). The D-08-02 choice store keeps no `caFile`, because it records no url. So a disable, an uninstall, a marketplace remove, or a stage that drops the server removes the entry's user `caFile`, and the command emits `ca-file-removed` with reason `entry-removed` for each such entry, unless the override that the entry writes back holds the `caFile`. A kept override's `caFile` follows the live entry on write-back like every other carried field. Premise: pi-mcp-adapter 7.0.1 refuses a `caFile` beside `command` or `socket` or a url that is not https after interpolation (`validateCaFile`, `http-ca.ts:9-18`), scopes the bundle to the url's `URL.origin` (`http-ca.ts:24`, `:42`), and treats `caFile` as url-bound (`URL_BOUND_AUTH_FIELDS`, `config.ts:1070-1081`). D-PG9-05's "None carries a credential" and "can only narrow trust" are withdrawn: at its origin, the entry trusts exactly the bundle. Residual: a stub that held only `{caFile}` is not written back once a restage removed its `caFile`.
+
+**09-CONTEXT.md, append under "Stdio lifecycle (PG-MCP-06, decision 5)" (replaces the iteration-2 D-PG9-15 bullet; D-PG9-16 stays as written in iteration 1):**
+
+> - **D-PG9-15 (proposed during the code-review fix, pending maintainer review; amends D-PG9-01 and D-PG9-03):** A carried user `idleTimeout` other than `null` counts as the user's `lifecycle`. No `lifecycle` default is written beside it, and a recorded one goes at the next restage, so the entry stays `lazy` and the adapter uses the user's value in place of the global idle time: it stops the server after that many idle minutes, a numeric string included, and never stops it for idle time at `0` or less. A `null` value falls back to the global idle time in the adapter, so the default stays. Premise: pi-mcp-adapter 7.0.1 never stops a started `lazy-keep-alive` server for idle time (`lifecycle.ts:146`, `docs/configuration.md:135`). It registers `definition.idleTimeout ?? (keep-alive ? 0 : undefined)` with no type check (`init.ts:351`, `index.ts:497`), and its idle check computes `perServer * 60 * 1000` and stops a server only when that is above 0 (`lifecycle.ts:146-148`, `:412-415`); `init.ts:1031` serves only the startup flag and a debug line. The iteration-2 premise ("reads a per-entry idle time only when it is a number") is withdrawn.
+
+**09-CONTEXT.md, D-PG9-03, append (replaces the iteration-2 addition):**
+
+> A marker member of another shape than this extension writes (`pluginSetFields`, `defaultFields`, or `keptOverride`) on an entry of the plugin makes a stage or unstage refuse the scope's `mcp-adapter.json` with `McpConfigFileError` (`marker-not-valid`), which names the entry's key and the first malformed member. The file keeps its bytes, and a stage with no servers reports it left unchanged (AFILE-02). An update's failed row reads `{unreadable}` for this and every other MCP config refusal. The marker is this extension's own record, so only a hand edit or corruption leaves such a member, and the project refuses corrupt data rather than read past it.
+
+**09-CONTEXT.md, "Pending maintainer review" list (replaces the iteration-2 additions):**
+
+> - D-PG9-14 (caFile kept only at the same `URL.origin` after the adapter's variable reading, with a literal `http:` scheme deciding for an unread url; a notice with its reason, `entry-removed` included for a removal; no caFile in the choice store; the stub write-back residual).
+> - D-PG9-15 (any user `idleTimeout` but `null` replaces the lifecycle default).
+> - D-PG9-16 (the background restart of a crashed stdio server, recorded as a divergence).
+> - D-PG9-03 addition: a malformed marker member of the plugin's entry refuses the file (fail closed), naming the entry and member, and an update reports it as `{unreadable}`.
+
+**PROJECT.md Key Decisions, D-PG9-14 row (replaces the iteration-2 row text):**
+
+> | **D-PG9-14 (parity-gaps, Phase 9, proposed in the code-review fix of 2026-11-14, revised 2026-11-15, pending maintainer review; amends D-PG9-05 and D-08-02): a user `caFile` stays only at the same https origin**: A restage writes a carried `caFile` only while the entry stays an https server at the `URL.origin` of the entry it replaces, with each url read as pi-mcp-adapter reads it, and a literal scheme deciding when it cannot be read. An unreadable url otherwise keeps it only while the url text is unchanged. Otherwise the restage leaves it out with the `ca-file-removed` notice and its reason. The choice store keeps no `caFile` across an uninstall or a disable, and those commands say so with the reason `entry-removed`. Premise: pi-mcp-adapter 7.0.1 refuses a `caFile` beside `command`, `socket` or a non-https url and binds it to the url's origin (`http-ca.ts`, `utils.ts`, `config.ts`, read in source). Measured: `features/mcp-server/lifecycle.feature`. | See `phases/09-adapter-entries-and-mcp-features/09-REVIEW-FIX.md`. | Pending maintainer review |
+
+**PROJECT.md Key Decisions, D-PG9-15 row (replaces the iteration-2 row text):**
+
+> | **D-PG9-15 (parity-gaps, Phase 9, proposed in the code-review fix of 2026-11-14, revised twice on 2026-11-15, pending maintainer review; amends D-PG9-01): a user `idleTimeout` replaces the lifecycle default**: No `lifecycle` default is written beside a carried `idleTimeout` other than `null`. Premise: pi-mcp-adapter 7.0.1 never stops a started `lazy-keep-alive` server for idle time, and it registers every entry `idleTimeout` but `null` in place of the global idle time, with no type check (`init.ts`, `index.ts`, `lifecycle.ts`, read in source). Measured: `features/mcp-server/lifecycle.feature`. | See `phases/09-adapter-entries-and-mcp-features/09-REVIEW-FIX.md`. | Pending maintainer review |
+
+**09-SECURITY.md (optional, for the next audit):** T-09-15 and AR-09-05 can cite the `entry-removed` notice: a `caFile` lost at a removal is now reported, and no path of the bundle reaches the notice or the refusal message.
+
+______________________________________________________________________
+
+_Fixed: 2026-11-15T01:06:51Z_
+_Fixer: Claude (gsd-code-fixer)_
+_Iteration: 3_
