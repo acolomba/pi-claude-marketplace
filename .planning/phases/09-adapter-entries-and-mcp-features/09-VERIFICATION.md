@@ -24,7 +24,7 @@ overrides:
     reason: "Review fix WR2-03/IN3-04 (D-PG9-03 addition, proposed): a malformed marker member of the staging plugin's entry now refuses mcp-adapter.json with McpConfigFileError marker-not-valid and leaves the bytes unchanged (fail closed on corrupt data, the project rule). The marker parse itself still never throws. Scenario lifecycle.feature:505."
     accepted_by: "orchestrator (autonomous run, pending maintainer review)"
     accepted_at: "2026-11-15T02:10:00Z"
-gaps:
+gaps_closed:
   - truth: "Every decision ID that the shipped docs, the output catalog, and the source cite as licensing a behavior or a divergence is recorded in the decision register (09-CONTEXT.md and the PROJECT.md Key Decisions table), and recorded decision text does not contradict the shipped behavior"
     status: failed
     reason: "D-PG9-14, D-PG9-15, and D-PG9-16 exist only as proposed parent-line texts in 09-REVIEW-FIX.md ('for the orchestrator; not applied'). Neither 09-CONTEXT.md nor PROJECT.md records them (PROJECT.md holds only D-PG9-01/07/08 at :2396-2398), yet docs/mcp-compatibility.md:145, :147, :381, :385, :659, docs/output-catalog.md:5313 (a section heading), and bridges/mcp/{adapter-entry,adapter-doc,stage,unstage,types}.ts cite them. D-PG9-16 is cited as the license of an upstream divergence (stdio background restart), and AGENTS.md admits a divergence only under a recorded project decision with an ID. 09-CONTEXT.md D-PG9-02 still says a per-entry lifecycle 'overrides nothing the user set elsewhere', which the review found false and the shipped docs contradict (docs/mcp-compatibility.md:145); D-PG9-05 still says caFile 'can only narrow trust'; the D-PG9-03 marker-not-valid addition is unrecorded."
