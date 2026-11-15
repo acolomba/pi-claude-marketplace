@@ -76,6 +76,7 @@ The two PG-MCP-08 resource scenarios (one per profile) change no behavior. They 
 | 3 (09-04) | b131df8e | v26.13.1 | 0 | 1931 / 185 passed | 362 records; `/tmp/pg9-wave3.log` |
 | 4 (09-06) | b131df8e (reused) | v26.13.1 | 0 (reused) | 1931 / 185 passed | only non-build-input docs changed, so the wave 3 result is reused |
 | 5 (09-05) | d987142a | v26.13.1 | 0 | 1931 / 185 passed | 362 records; `/tmp/pg9-wave5.log` |
+| phase gate | bea13012 | v26.13.1 | 0 | 1938 / 185 passed | after three review-fix rounds; 362 records; `/tmp/pg9-phasegate.log` |
 
 ---
 
