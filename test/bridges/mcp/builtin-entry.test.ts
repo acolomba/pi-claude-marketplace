@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { builtinServerConfig } from "../../../extensions/pi-claude-marketplace/bridges/mcp/builtin-entry.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 
 import type { McpSubstitutionContext } from "../../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
 
@@ -10,6 +11,7 @@ const CONTEXT: McpSubstitutionContext = {
   pluginData: "/data/mp/a",
   projectDir: "/work/project",
   env: { PI_CM_TOKEN: "t$1", PI_CM_HOST: "mcp.example.test" },
+  options: undefined,
 };
 
 test("BLT-02: a stdio server gets the plugin variables in its env and deferred exposure", () => {
@@ -112,6 +114,61 @@ test("BLT-02: a ~ that is not leading, or that names a user, is kept as Pi keeps
     command: "node",
     args: ["a~/b", "~user"],
     env: { CLAUDE_PLUGIN_ROOT: "/plugins/a$$b", CLAUDE_PLUGIN_DATA: "/data/mp/a" },
+    timeout: 1800,
+    exposure: "deferred",
+  });
+});
+
+// D-PG10-20: the full option shape; `token` is required and has no default.
+const TOKEN_REQUIRED_CONTEXT: McpSubstitutionContext = {
+  ...CONTEXT,
+  options: resolveOptions({
+    token: { type: "string", title: "Token", description: "The token.", required: true },
+  }),
+};
+
+test("D-PG10-21: a server that names a plugin option with no value gives no config", () => {
+  // arrange
+  const server = { command: "node", env: { TOKEN: "${user_config.token}" } };
+
+  // act
+  const config = builtinServerConfig(server, TOKEN_REQUIRED_CONTEXT, undefined);
+
+  // assert
+  assert.strictEqual(config, undefined);
+});
+
+test("D-PG10-21: a server that names no option gives a config under declared options", () => {
+  // arrange
+  const server = { command: "node" };
+
+  // act
+  const config = builtinServerConfig(server, TOKEN_REQUIRED_CONTEXT, undefined);
+
+  // assert
+  assert.deepStrictEqual(config, {
+    command: "node",
+    env: { CLAUDE_PLUGIN_ROOT: "/plugins/a$$b", CLAUDE_PLUGIN_DATA: "/data/mp/a" },
+    timeout: 1800,
+    exposure: "deferred",
+  });
+});
+
+test("D-PG10-21: a plugin that declares no options keeps an option reference as written", () => {
+  // arrange
+  const server = { command: "node", env: { TOKEN: "${user_config.token}" } };
+
+  // act
+  const config = builtinServerConfig(server, CONTEXT, undefined);
+
+  // assert
+  assert.deepStrictEqual(config, {
+    command: "node",
+    env: {
+      CLAUDE_PLUGIN_ROOT: "/plugins/a$$b",
+      CLAUDE_PLUGIN_DATA: "/data/mp/a",
+      TOKEN: "$${user_config.token}",
+    },
     timeout: 1800,
     exposure: "deferred",
   });

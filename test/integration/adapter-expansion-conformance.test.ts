@@ -588,7 +588,11 @@ function installEnvironments(credential: Credential): Environment[] {
 }
 
 function writtenRemoteValues(form: string, installEnv: Environment): [string, string] {
-  const ctx: McpSubstitutionContext = { ...EXPANSION_BUILTINS, env: installEnv };
+  const ctx: McpSubstitutionContext = {
+    ...EXPANSION_BUILTINS,
+    env: installEnv,
+    options: undefined,
+  };
   const { entry } = substituteAndInject(
     { url: `https://mcp.example.test/?k=${form}`, headers: { Value: form } },
     ctx,
@@ -673,6 +677,7 @@ function userScopeHeader(raw: string): string {
     ...EXPANSION_BUILTINS,
     projectDir: undefined,
     env: PROJECT_DIR_CREDENTIAL,
+    options: undefined,
   };
   const { entry } = substituteAndInject(
     { url: "https://mcp.example.test/", headers: { Value: raw } },

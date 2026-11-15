@@ -130,7 +130,7 @@ const FIELD_SHAPES: Readonly<Record<ExpansionField, FieldShape>> = {
 // The built-in path registers per session, so `projectDir` is the session's
 // working directory at both scopes (P2-DC-03).
 function sessionContext(env: Environment): McpSubstitutionContext {
-  return { ...EXPANSION_BUILTINS, env };
+  return { ...EXPANSION_BUILTINS, env, options: undefined };
 }
 
 function builtinConfig(server: Record<string, unknown>, env: Environment): Record<string, unknown> {

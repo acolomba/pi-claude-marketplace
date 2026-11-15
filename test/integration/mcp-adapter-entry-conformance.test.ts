@@ -77,6 +77,7 @@ function stampedSseEntry(headers: Readonly<Record<string, string>>): unknown {
       pluginData: "/plugin/data",
       projectDir: undefined,
       env: {},
+      options: undefined,
     },
     previous: {},
     keptOverrides: {},

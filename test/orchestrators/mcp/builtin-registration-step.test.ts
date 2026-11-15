@@ -974,6 +974,75 @@ describe("builtinRegistrationStep", () => {
     verify(ctx);
   });
 
+  test("D-PG10-21: a server that names a plugin option with no value is skipped and logged, and the plugin's other server registers", async (t) => {
+    // arrange
+    const fixture = await session(t);
+    const logged = captureDebugLog(t);
+    await writeState(fixture, "user", {
+      demo: {
+        ...installRecord(fixture.pluginRoot, [
+          { name: "keyed", config: { command: "node", env: { TOKEN: "${user_config.token}" } } },
+          { name: "plain", config: { command: "node" } },
+        ]),
+        userConfig: {
+          token: { type: "string", title: "Token", description: "The token.", required: true },
+        },
+      },
+    });
+    const ctx = sessionContext(fixture, false);
+    const pi = emptyRegistry();
+    when(() => {
+      pi.registerMcpServer("plugin_demo_plain", {
+        command: "node",
+        env: {
+          CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
+          CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
+        },
+        timeout: 1800,
+        exposure: "deferred",
+      });
+    }).thenReturn(undefined);
+
+    // act
+    await builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") });
+
+    // assert
+    assert.deepStrictEqual(logged, [
+      "[mcp] MCP server plugin_demo_keyed not registered: it names plugin options (unset): token",
+    ]);
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("D-PG10-21: a record with no userConfig registers a server that names an option, with the reference as written", async (t) => {
+    // arrange
+    const fixture = await session(t);
+    await writeState(fixture, "user", {
+      demo: installRecord(fixture.pluginRoot, [
+        { name: "keyed", config: { command: "node", env: { TOKEN: "${user_config.token}" } } },
+      ]),
+    });
+    const ctx = sessionContext(fixture, false);
+    const pi = emptyRegistry();
+    when(() => {
+      pi.registerMcpServer("plugin_demo_keyed", {
+        command: "node",
+        env: {
+          CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
+          CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
+          TOKEN: "$${user_config.token}",
+        },
+        timeout: 1800,
+        exposure: "deferred",
+      });
+    }).thenReturn(undefined);
+
+    // act & assert
+    await assert.doesNotReject(builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") }));
+    verify(pi);
+    verify(ctx);
+  });
+
   test("ANAME-06: the plugin's description reaches its registered server", async (t) => {
     // arrange
     const fixture = await session(t);

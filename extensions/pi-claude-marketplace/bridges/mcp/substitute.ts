@@ -28,6 +28,7 @@ import type {
   FieldClass,
   Segment,
 } from "../../domain/claude-mcp-variables.ts";
+import type { ResolvedOptions } from "../../domain/user-config.ts";
 
 /**
  * How one MCP implementation writes the values of the expanded fields.
@@ -62,9 +63,13 @@ export const ADAPTER_FIELD_ENCODER: McpFieldEncoder = {
  * field is required (not optional) so every construction site states the
  * decision explicitly. `env` is the environment Claude's rule reads to decide
  * whether a variable is set (AVAR-02); no value from it is ever written.
+ * `options` are the plugin's resolved options, or `undefined` for a plugin
+ * that declares no `userConfig`, whose option references stay as written
+ * (D-PG10-21).
  */
 export interface McpSubstitutionContext extends ClaudeBuiltins {
   readonly env: ClaudeEnv;
+  readonly options: ResolvedOptions | undefined;
 }
 
 /** One server's variable facts for the user-facing warnings (AVAR-02, AVAR-04). */

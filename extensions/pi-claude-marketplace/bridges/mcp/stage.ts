@@ -598,6 +598,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
     pluginData,
     projectDir: locations.scope === "project" ? cwd : undefined,
     env: input.env,
+    options: input.options,
   };
   // AFILE-06: each new entry carries the user's fields from the entry it
   // replaces. A marker-less override stub under the selected key wins over the

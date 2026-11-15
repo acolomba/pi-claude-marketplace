@@ -113,6 +113,7 @@ const PROJECT_CONTEXT: McpSubstitutionContext = {
   pluginData: "/plugin/data",
   projectDir: "/project/root",
   env: {},
+  options: undefined,
 };
 
 // ANAME-01 / ANAME-04: the fields every stamped entry carries by default.
@@ -1090,6 +1091,7 @@ describe("stampServers", () => {
       pluginData: "/plugin/data",
       projectDir: undefined,
       env: {},
+      options: undefined,
     };
 
     // act
@@ -1763,6 +1765,7 @@ describe("stampServers", () => {
         pluginData: "/plugin/data",
         projectDir: undefined,
         env: {},
+        options: undefined,
       },
       previous: {},
       keptOverrides: {},

@@ -7,6 +7,7 @@ import {
   type McpFieldEncoder,
   type McpSubstitutionContext,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 
 import { EXPANSION_BUILTINS, EXPANSION_CASES, type ExpansionField } from "./expansion-cases.ts";
 
@@ -66,7 +67,11 @@ const INJECTED_ENV = {
   CLAUDE_PLUGIN_DATA: "/data/mp/acme",
 } as const;
 
-const PROJECT_CONTEXT: McpSubstitutionContext = { ...EXPANSION_BUILTINS, env: {} };
+const PROJECT_CONTEXT: McpSubstitutionContext = {
+  ...EXPANSION_BUILTINS,
+  env: {},
+  options: undefined,
+};
 
 for (const {
   title,
@@ -81,7 +86,11 @@ for (const {
   test(title, () => {
     // arrange
     const shape = FIELD_SHAPES[field];
-    const context: McpSubstitutionContext = { ...SCOPE_BUILTINS[scope], env: installEnv };
+    const context: McpSubstitutionContext = {
+      ...SCOPE_BUILTINS[scope],
+      env: installEnv,
+      options: undefined,
+    };
 
     // act
     const substituted = substituteAndInject(shape.entry(raw), context, ADAPTER_FIELD_ENCODER);
@@ -221,7 +230,11 @@ test("MENV-02: injects the env first and in place, lets declared keys win and ke
 for (const scope of ["project", "user"] as const) {
   test(`AVAR-01: the injected stdio env is exactly CLAUDE_PLUGIN_ROOT and CLAUDE_PLUGIN_DATA at ${scope} scope`, () => {
     // arrange
-    const context: McpSubstitutionContext = { ...SCOPE_BUILTINS[scope], env: {} };
+    const context: McpSubstitutionContext = {
+      ...SCOPE_BUILTINS[scope],
+      env: {},
+      options: undefined,
+    };
 
     // act
     const { entry } = substituteAndInject({ command: "server" }, context, ADAPTER_FIELD_ENCODER);
@@ -556,4 +569,22 @@ test("BLT-02: passes each field to the encoder with its secret flag and writes l
     headers: { H: 'expanded [{"kind":"text","text":"h"}] secret=true env=m' },
     oauth: { clientId: "literal o secret=false" },
   });
+});
+
+test("D-PG10-21: the options on the context leave the adapter entry as the context without them", () => {
+  // arrange
+  const withOptions: McpSubstitutionContext = {
+    ...PROJECT_CONTEXT,
+    options: resolveOptions({
+      token: { type: "string", title: "Token", description: "The token.", default: "abc" },
+    }),
+  };
+  const server = { command: "node", args: ["${user_config.token}"] };
+  const expected = substituteAndInject(server, PROJECT_CONTEXT, ADAPTER_FIELD_ENCODER);
+
+  // act
+  const substituted = substituteAndInject(server, withOptions, ADAPTER_FIELD_ENCODER);
+
+  // assert
+  assert.deepStrictEqual(substituted, expected);
 });
