@@ -33,6 +33,11 @@ const SUPPORTED_COMPONENT_PATH_FIELDS = {
   workflows: Type.Optional(Type.Unknown()),
 };
 
+// D-PG10-04: plugin options; `domain/user-config.ts` validates the value.
+const USER_CONFIG_FIELD = {
+  userConfig: Type.Optional(Type.Unknown()),
+};
+
 const UNSUPPORTED_COMPONENT_FIELDS = {
   hooks: Type.Optional(Type.Unknown()),
   lspServers: Type.Optional(Type.Unknown()),
@@ -40,7 +45,6 @@ const UNSUPPORTED_COMPONENT_FIELDS = {
   themes: Type.Optional(Type.Unknown()),
   outputStyles: Type.Optional(Type.Unknown()),
   channels: Type.Optional(Type.Unknown()),
-  userConfig: Type.Optional(Type.Unknown()),
   bin: Type.Optional(Type.Unknown()),
   settings: Type.Optional(Type.Unknown()),
 };
@@ -75,6 +79,7 @@ export const PLUGIN_ENTRY_SCHEMA = Type.Object({
 
   // optional opaque "unsupported component" declarations (MM-2 / PR-3)
   ...UNSUPPORTED_COMPONENT_FIELDS,
+  ...USER_CONFIG_FIELD,
 
   // optional mcpServers: string reference OR inline map OR an array of both
   // (MM-2 / MC-1 / MCPR-01 / D-CF6-01)
@@ -100,6 +105,7 @@ const PLUGIN_MANIFEST_SCHEMA = Type.Object({
   ...PLUGIN_METADATA_FIELDS,
   ...SUPPORTED_COMPONENT_PATH_FIELDS,
   ...UNSUPPORTED_COMPONENT_FIELDS,
+  ...USER_CONFIG_FIELD,
 
   // MCPR-02 / D-CF6-01: string reference OR inline map OR an array of both
   mcpServers: Type.Optional(McpServersField),

@@ -1,0 +1,35 @@
+Feature: Plugin options
+
+  A plugin's userConfig options take their declared default. A plugin whose options all have
+  one installs without --partial, and one with a required option that has no default stays
+  partially available (PG-CORE-03). A local marketplace stands in for a published one.
+
+  Background:
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+
+  Scenario: A plugin whose options all have a default installs without --partial (PG-CORE-03)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "mode": { "type": "string", "title": "Mode", "description": "The mode.", "default": "fast" }
+        }
+      }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |

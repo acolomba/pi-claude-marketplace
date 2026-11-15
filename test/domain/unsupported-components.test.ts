@@ -94,6 +94,28 @@ test("rowClaimsInstallDisabled treats an invalid entry default as silent", async
   assert.strictEqual(claimedDisabled, false);
 });
 
+test("D-PG10-04: a declared userConfig is not an unsupported kind, so themes alone counts", async () => {
+  // arrange
+  const { collectUnsupportedKinds } =
+    await import("../../extensions/pi-claude-marketplace/domain/unsupported-components.ts");
+  const option = { type: "string", title: "Mode", description: "The mode.", default: "fast" };
+
+  // act
+  const kinds = await collectUnsupportedKinds(
+    {
+      entry: { userConfig: { mode: option } },
+      manifest: { userConfig: { mode: option }, themes: "./themes" },
+      pluginRoot: "/plugins/alpha",
+      declaresHookModule: false,
+      marketplaceName: "third-party",
+    },
+    () => Promise.resolve(null),
+  );
+
+  // assert
+  assert.deepStrictEqual(kinds, ["themes"]);
+});
+
 test("collectUnsupportedKinds reads direct and experimental declarations in tuple order", async () => {
   // arrange
   const { collectUnsupportedKinds } =
@@ -125,7 +147,6 @@ test("collectUnsupportedKinds reads direct and experimental declarations in tupl
     "themes",
     "outputStyles",
     "channels",
-    "userConfig",
     "settings",
     "syntaxHighlighting",
     "mod",

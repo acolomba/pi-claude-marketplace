@@ -87,9 +87,10 @@ import type { ActiveMcpImplementation } from "../platform/pi-api.ts";
 // `pluginCacheFile` path. The cost is a shared file: Pi processes that read it
 // under different implementations, such as two projects that differ on
 // `builtin:mcp` and complete from one user-scope marketplace, rebuild and
-// rewrite it in turn on each lookup.
+// rewrite it in turn on each lookup. D-PG10-24: the 7 -> 8 bump drops caches
+// written before a plugin whose options all have a default classified `available`.
 const PLUGIN_INDEX_CACHE_SCHEMA = Type.Object({
-  schemaVersion: Type.Literal(7),
+  schemaVersion: Type.Literal(8),
   lastRefreshedAt: Type.String(),
   manifestRef: Type.Optional(Type.String()),
   mcpImplementation: Type.Optional(
@@ -328,7 +329,7 @@ async function getPluginIndexWithMemory(
   } catch (err) {
     if (err instanceof ManifestSoftFailError) {
       const poison = {
-        schemaVersion: 7 as const,
+        schemaVersion: 8 as const,
         lastRefreshedAt: new Date().toISOString(),
         ...stampField(mcpImplementation),
         plugins: [] as PluginIndexRow[],
@@ -347,7 +348,7 @@ async function getPluginIndexWithMemory(
   }
 
   await atomicWriteJson(pluginCachePath, {
-    schemaVersion: 7 as const,
+    schemaVersion: 8 as const,
     lastRefreshedAt: new Date().toISOString(),
     ...stampField(mcpImplementation),
     plugins: rows.map((r) => {

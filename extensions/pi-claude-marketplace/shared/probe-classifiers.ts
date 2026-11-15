@@ -135,6 +135,12 @@ export const SOURCE_DIR_MISSING_NOTE = "source dir does not exist";
 export const MANIFEST_ESCAPE_NOTE = "plugin manifest resolves outside the";
 
 /**
+ * D-PG10-06: the prefix of `domain/plugin-resolver.ts`'s note for required
+ * options with no default. The note ends with their keys, in declaration order.
+ */
+export const USER_CONFIG_UNSET_NOTE = "required userConfig options have no default";
+
+/**
  * Classify a single resolver note into exactly one closed-set bucket. The arm
  * order is significant -- the `malformed mcp reference` and `malformed mcp
  * server ` arms match their FULL prefixes BEFORE the permissive catch-all

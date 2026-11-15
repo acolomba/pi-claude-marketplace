@@ -140,6 +140,24 @@ void partialExample;
 void ({ ...installableExample, mcpBundle: true } satisfies ResolvedPlugin);
 // @ts-expect-error the bundle flag is absent when no bundle was read.
 void ({ ...installableExample, mcpBundle: false } satisfies ResolvedPlugin);
+// D-PG10-23: a materializable arm may carry the declared option schema, and
+// the unavailable arm never does.
+void ({
+  ...installableExample,
+  declaredUserConfig: {
+    mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+  },
+} satisfies ResolvedPlugin);
+void ({
+  ...installableExample,
+  // @ts-expect-error an option holds a known type.
+  declaredUserConfig: { mode: { type: "text", title: "Mode", description: "The mode." } },
+} satisfies ResolvedPlugin);
+function unavailableHasNoDeclaredUserConfig(): void {
+  // @ts-expect-error -- the unavailable arm carries no option schema.
+  void unavailablePluginContract.declaredUserConfig;
+}
+
 // MREC-01: a materializable arm always carries its declared MCP servers.
 const { declaredMcpServers: _declaredMcpServers, ...withoutDeclaredMcpServers } =
   installableExample;
@@ -223,5 +241,6 @@ void materializableAdmitsPartiallyAvailable;
 void materializableExposesFields;
 void materializableExcludesUnavailable;
 void unavailableHasNoDefaultEnabled;
+void unavailableHasNoDeclaredUserConfig;
 void resolveContextContract;
 void commandMapEntryContract;
