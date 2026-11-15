@@ -501,6 +501,24 @@ describe("McpConfigFileError", () => {
       );
     });
   }
+
+  test("D-PG9-03: a marker-not-valid refusal names the entry and the marker member, escaped", () => {
+    // arrange
+    const marker = { server: "s\u001br", member: "defaultFields" };
+
+    // act
+    const error = new McpConfigFileError("/scope/mcp-adapter.json", "marker-not-valid", marker);
+
+    // assert
+    assert.deepStrictEqual(
+      { message: error.message, marker: error.marker },
+      {
+        message:
+          'MCP config /scope/mcp-adapter.json has the entry "s\\u001br" whose "_piClaudeMarketplace.defaultFields" is not valid; it was left unchanged.',
+        marker,
+      },
+    );
+  });
 });
 
 describe("McpUnstagePartialError", () => {

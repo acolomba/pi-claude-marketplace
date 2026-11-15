@@ -508,8 +508,12 @@ describe("assertOwnedMarkersReadable", () => {
       (error: unknown) => {
         assert.ok(error instanceof McpConfigFileError);
         assert.deepStrictEqual(
-          { filePath: error.filePath, defect: error.defect },
-          { filePath: "/scope/mcp-adapter.json", defect: "marker-not-valid" },
+          { filePath: error.filePath, defect: error.defect, marker: error.marker },
+          {
+            filePath: "/scope/mcp-adapter.json",
+            defect: "marker-not-valid",
+            marker: { server: "old", member: "defaultFields" },
+          },
         );
         return true;
       },

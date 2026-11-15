@@ -5,7 +5,7 @@ import {
   CLAUDE_MARKETPLACE_MARKER_KEY,
   buildMarker,
   defaultFieldsOf,
-  hasMalformedMarkerMember,
+  malformedMarkerMember,
   isOwnedBy,
   keptOverrideOf,
   markerOwnerOf,
@@ -414,21 +414,44 @@ describe("keptOverrideOf", () => {
   }
 });
 
-describe("hasMalformedMarkerMember", () => {
-  for (const { description, members } of [
+describe("malformedMarkerMember", () => {
+  for (const { description, members, member } of [
     {
       description: "a pluginSetFields that is not an array",
       members: { pluginSetFields: "tasks" },
+      member: "pluginSetFields",
     },
-    { description: "a pluginSetFields with a number", members: { pluginSetFields: ["tasks", 1] } },
-    { description: "a defaultFields that is an array", members: { defaultFields: [] } },
+    {
+      description: "a pluginSetFields with a number",
+      members: { pluginSetFields: ["tasks", 1] },
+      member: "pluginSetFields",
+    },
+    {
+      description: "a defaultFields that is an array",
+      members: { defaultFields: [] },
+      member: "defaultFields",
+    },
     {
       description: "a defaultFields member that is an array",
       members: { defaultFields: { requestTimeoutMs: 1800000, lifecycle: ["lazy-keep-alive"] } },
+      member: "defaultFields",
     },
-    { description: "a keptOverride that is null", members: { keptOverride: null } },
-  ] satisfies ReadonlyArray<{ description: string; members: Record<string, unknown> }>) {
-    test(`D-PG9-03: names a marker with ${description}`, () => {
+    {
+      description: "a keptOverride that is null",
+      members: { keptOverride: null },
+      member: "keptOverride",
+    },
+    {
+      description: "a malformed defaultFields and keptOverride, the first of them",
+      members: { keptOverride: null, defaultFields: [] },
+      member: "defaultFields",
+    },
+  ] satisfies ReadonlyArray<{
+    description: string;
+    members: Record<string, unknown>;
+    member: string;
+  }>) {
+    test(`D-PG9-03: names ${description}`, () => {
       // arrange
       const entry = {
         command: "plugin-command",
@@ -436,10 +459,10 @@ describe("hasMalformedMarkerMember", () => {
       };
 
       // act
-      const malformed = hasMalformedMarkerMember(entry);
+      const malformed = malformedMarkerMember(entry);
 
       // assert
-      assert.strictEqual(malformed, true);
+      assert.strictEqual(malformed, member);
     });
   }
 
@@ -466,12 +489,12 @@ describe("hasMalformedMarkerMember", () => {
     },
     { description: "an entry with no marker", entry: { command: "plugin-command" } },
   ] satisfies ReadonlyArray<{ description: string; entry: unknown }>) {
-    test(`D-PG9-03: does not name ${description}`, () => {
+    test(`D-PG9-03: names no member of ${description}`, () => {
       // act
-      const malformed = hasMalformedMarkerMember(entry);
+      const malformed = malformedMarkerMember(entry);
 
       // assert
-      assert.strictEqual(malformed, false);
+      assert.strictEqual(malformed, undefined);
     });
   }
 });

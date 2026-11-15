@@ -74,8 +74,8 @@ function isDefaultRecord(
  * own array of strings, `defaultFields` only when it is an own plain object
  * whose every value is a number, a string, or a boolean (D-PG9-03), and
  * `keptOverride` only when it is an own plain-object member; any other value
- * parses as a marker without that member, and `hasMalformedMarkerMember`
- * names such a marker.
+ * parses as a marker without that member, and `malformedMarkerMember`
+ * names such a member.
  */
 function readMarker(value: unknown): ClaudeMarketplaceMarker | null {
   const obj = markerObjectOf(value);
@@ -125,22 +125,31 @@ function ownMember(obj: Readonly<Record<string, unknown>>, key: string): unknown
   return Object.hasOwn(obj, key) ? obj[key] : undefined;
 }
 
+// The marker members past the owner, each with the shape this extension writes.
+const MARKER_MEMBERS = ["pluginSetFields", "defaultFields", "keptOverride"] as const;
+const MARKER_MEMBER_SHAPES: Readonly<
+  Record<(typeof MARKER_MEMBERS)[number], (value: unknown) => boolean>
+> = {
+  pluginSetFields: isStringArray,
+  defaultFields: isDefaultRecord,
+  keptOverride: isPlainObject,
+};
+
 /**
- * Whether `value`'s marker names its owner but holds a `pluginSetFields`,
- * `defaultFields`, or `keptOverride` member of another shape than this
- * extension writes. Only a hand edit or corruption leaves one. Reading past
- * it would take the plugin's values or the recorded defaults for the user's,
- * or lose the user's override, for good, so a stage or an unstage refuses
- * the file instead.
+ * The first member of `value`'s marker, which names its owner, that holds a
+ * `pluginSetFields`, `defaultFields`, or `keptOverride` of another shape than
+ * this extension writes, or none. Only a hand edit or corruption leaves one.
+ * Reading past it would take the plugin's values or the recorded defaults for
+ * the user's, or lose the user's override, for good, so a stage or an unstage
+ * refuses the file instead.
  */
-export function hasMalformedMarkerMember(value: unknown): boolean {
+export function malformedMarkerMember(value: unknown): (typeof MARKER_MEMBERS)[number] | undefined {
   const obj = markerObjectOf(value);
-  return (
-    obj !== undefined &&
-    ((Object.hasOwn(obj, "pluginSetFields") && !isStringArray(obj.pluginSetFields)) ||
-      (Object.hasOwn(obj, "defaultFields") && !isDefaultRecord(obj.defaultFields)) ||
-      (Object.hasOwn(obj, "keptOverride") && !isPlainObject(obj.keptOverride)))
-  );
+  return obj === undefined
+    ? undefined
+    : MARKER_MEMBERS.find(
+        (member) => Object.hasOwn(obj, member) && !MARKER_MEMBER_SHAPES[member](obj[member]),
+      );
 }
 
 /**

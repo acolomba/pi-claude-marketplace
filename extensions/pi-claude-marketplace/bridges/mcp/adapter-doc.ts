@@ -30,7 +30,7 @@ import { ownValue } from "../../shared/own-key.ts";
 import { restoredOverride, userCarriedFields } from "./adapter-entry.ts";
 import {
   CLAUDE_MARKETPLACE_MARKER_KEY,
-  hasMalformedMarkerMember,
+  malformedMarkerMember,
   isOwnedBy,
   isPlainObject,
   keptOverrideOf,
@@ -248,9 +248,12 @@ export function assertOwnedMarkersReadable(
   marketplaceName: string,
 ): void {
   for (const servers of config.serverMaps.values()) {
-    for (const entry of Object.values(servers)) {
-      if (isOwnedBy(entry, pluginName, marketplaceName) && hasMalformedMarkerMember(entry)) {
-        throw new McpConfigFileError(filePath, "marker-not-valid");
+    for (const [server, entry] of Object.entries(servers)) {
+      const member = isOwnedBy(entry, pluginName, marketplaceName)
+        ? malformedMarkerMember(entry)
+        : undefined;
+      if (member !== undefined) {
+        throw new McpConfigFileError(filePath, "marker-not-valid", { server, member });
       }
     }
   }

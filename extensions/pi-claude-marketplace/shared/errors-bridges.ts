@@ -5,6 +5,7 @@
 // refusal categories via instanceof and so user-visible error messages are
 // uniform.
 
+import { printable } from "./notification-mcp.ts";
 import { redactAbsolutePaths } from "./redact-absolute-paths.ts";
 
 import type { McpConfigNotice } from "./notification-types.ts";
@@ -144,7 +145,8 @@ const MCP_CONFIG_DEFECT_TEXT: Readonly<Record<McpConfigFileError["defect"], stri
  *
  * The message names the file and the defect only, and the error carries no
  * `cause`: Node's `JSON.parse` message can quote file content, and MCP
- * configs hold tokens.
+ * configs hold tokens. A `marker-not-valid` refusal also names the entry's key
+ * and the marker member to fix, escaped as a notice escapes a name.
  */
 export class McpConfigFileError extends Error {
   readonly filePath: string;
@@ -154,13 +156,27 @@ export class McpConfigFileError extends Error {
     | "mcpServers-not-object"
     | "mcp-servers-not-object"
     | "marker-not-valid";
+  readonly marker?: McpMarkerDefect;
 
-  constructor(filePath: string, defect: McpConfigFileError["defect"]) {
-    super(`MCP config ${filePath} ${MCP_CONFIG_DEFECT_TEXT[defect]}; it was left unchanged.`);
+  constructor(filePath: string, defect: McpConfigFileError["defect"], marker?: McpMarkerDefect) {
+    const text =
+      marker === undefined
+        ? MCP_CONFIG_DEFECT_TEXT[defect]
+        : `has the entry "${printable(marker.server)}" whose "_piClaudeMarketplace.${marker.member}" is not valid`;
+    super(`MCP config ${filePath} ${text}; it was left unchanged.`);
     this.name = "McpConfigFileError";
     this.filePath = filePath;
     this.defect = defect;
+    if (marker !== undefined) {
+      this.marker = marker;
+    }
   }
+}
+
+/** The entry and the marker member a `marker-not-valid` refusal names. */
+export interface McpMarkerDefect {
+  readonly server: string;
+  readonly member: string;
 }
 
 /**
