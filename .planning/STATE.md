@@ -5,16 +5,16 @@ milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 6
 current_phase_name: Hook Inputs and Events
 status: ready_to_execute
-stopped_at: Phase 6 planned (13 plans, 8 waves); execution next
-last_updated: "2026-11-14T18:59:18.171Z"
+stopped_at: context exhaustion at 76% (2026-11-15)
+last_updated: "2026-11-15T07:51:49.559Z"
 last_activity: 2026-11-14
 last_activity_desc: Phase 5 complete, transitioned to Phase 6
-state_head: c7370035f4712e1721e8836b07542b55c76c5d08
+state_head: 3312c94a92b422ed82d0a744ed9c200c16334914
 progress:
   total_phases: 11
   completed_phases: 5
-  total_plans: 41
-  completed_plans: 41
+  total_plans: 54
+  completed_plans: 53
   percent: 45
 ---
 
@@ -1131,9 +1131,9 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-14T08:13:18.875Z
-Stopped at: Phase 6 planned (13 plans, 8 waves); execution next
-Resume file: None
+Last session: 2026-11-15T07:51:47.029Z
+Stopped at: context exhaustion at 76% (2026-11-15)
+Resume file: .planning/phases/06-hook-inputs-and-events/.continue-here.md
 
 ### Phase 2 completion-helper notes
 

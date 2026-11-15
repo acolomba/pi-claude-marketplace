@@ -1,0 +1,35 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-11-15T10:58:37.698Z",
+  "phase": "6",
+  "phase_name": "Hook Inputs and Events",
+  "phase_dir": ".planning/phases/06-hook-inputs-and-events",
+  "plan": 13,
+  "task": 1,
+  "total_tasks": 13,
+  "status": "paused",
+  "completed_tasks": [
+    {"id": 12, "name": "06-12 typed UserPromptExpansion", "status": "done", "commit": "3312c94a"}
+  ],
+  "remaining_tasks": [
+    {"id": 13, "name": "06-13 docs, CHANGELOG, consolidated D-PG6 records", "status": "not_started"},
+    {"id": 14, "name": "Phase 6 close: validate, secure, review loop (max 3), phase gate, verifier, fingerprint, phase complete 6", "status": "not_started"},
+    {"id": 15, "name": "Phase 10 (features/gaps-mcp worktree): wave 2 gate at 8c993ecd, then plans 10-06..10-21, then close (revert STATE after phase complete)", "status": "not_started"},
+    {"id": 16, "name": "Merge features/gaps-agents and features/gaps-mcp into features/gaps, combined npm run check, apply parent lines", "status": "not_started"},
+    {"id": 17, "name": "Security re-checks for Phases 7 and 9; Phase 11; milestone audit/complete/cleanup", "status": "not_started"}
+  ],
+  "blockers": [],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {"action": "Review autonomous decisions D-PG7-04, D-PG10-01, D-PG10-19, T-08-13, D-PG8-11, D-PG9-07 and the 8 verification overrides", "context": "reversible defaults taken during the autonomous run", "blocking": false},
+    {"action": "Approve PR / merge to main / version bump", "context": "outward-facing; never done autonomously", "blocking": true}
+  ],
+  "decisions": [
+    {"decision": "Dispatch every gsd-executor from the features/gaps checkout", "rationale": "isolation hook reads its sentinel from this checkout", "phase": "6"},
+    {"decision": "Withhold openUi:false default (D-PG9-07)", "rationale": "breaks pi-subagents 0.88.1 MCP grants", "phase": "9"},
+    {"decision": "Workflow grant stays dropped (D-PG8-11 option A)", "rationale": "Claude Code gives Workflow to no subagent", "phase": "8"}
+  ],
+  "uncommitted_files": [" M .planning/STATE.md"],
+  "next_action": "In ~/src/pi-claude-marketplace-gaps-mcp run the Phase 10 wave 2 gate (npm run check > /tmp/pg10-wave2.log 2>&1; echo exit=$? >> log); in parallel execute plan 06-13 here.",
+  "context_notes": "Full detail in .planning/phases/06-hook-inputs-and-events/HANDOFF-parity-gaps-session.md. Three worktrees: features/gaps (this), features/gaps-agents (Phases 7-8 complete), features/gaps-mcp (Phase 9 complete, Phase 10 at 10-05). Side branches keep stale STATE.md on purpose."
+}
