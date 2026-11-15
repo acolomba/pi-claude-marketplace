@@ -862,7 +862,7 @@ for (const { label, stored, logged } of [
     logged: 'userConfig option "mode": field "title" is missing',
   },
 ]) {
-  test(`D-PG10-23: reads ${label} stored as the options as no options and logs it`, (t) => {
+  test(`D-PG10-25: reads ${label} stored as the options as declared options with no values and logs it`, (t) => {
     // arrange
     const debugLines = captureDebugLog(t);
 
@@ -870,7 +870,7 @@ for (const { label, stored, logged } of [
     const options = recordedOptionsOf({ userConfig: stored });
 
     // assert
-    assert.deepStrictEqual(options, resolveOptions(undefined));
+    assert.deepStrictEqual(options, resolveOptions({}));
     assert.deepStrictEqual(debugLines, [`[state] recorded userConfig ignored: ${logged}`]);
   });
 }

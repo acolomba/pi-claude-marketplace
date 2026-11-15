@@ -34,6 +34,30 @@ Feature: MCP server builtin options
       | name              | config                                                                                                                                                                                      |
       | plugin_demo_plain | {"env":{"CLAUDE_PLUGIN_ROOT":"{home}/marketplaces/fixtures/plugins/demo","CLAUDE_PLUGIN_DATA":"{agent dir}/pi-claude-marketplace/data/fixtures/demo"},"timeout":1800,"exposure":"deferred"} |
 
+  Scenario: Pi's built-in MCP does not register a server that names a plugin option when the plugin's recorded options do not parse (D-PG10-25)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "token": { "type": "string", "title": "Token", "description": "The token.", "default": "abc" }
+        }
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"keyed": {"command": "pi-features-absent-mcp-server", "env": {"TOKEN": "${user_config.token}"}}, "plain": {"command": "pi-features-absent-mcp-server"}}}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the installation record of the plugin "demo@fixtures" in the user scope holds plugin options that do not parse
+    Given pi runs with the scripted model and a probe of the mcp servers registered with pi's built-in mcp
+    When the user asks pi for the configs of the mcp servers registered with it
+    Then pi holds these mcp server configs, apart from each stdio server's command and arguments:
+      | name              | config                                                                                                                                                                                      |
+      | plugin_demo_plain | {"env":{"CLAUDE_PLUGIN_ROOT":"{home}/marketplaces/fixtures/plugins/demo","CLAUDE_PLUGIN_DATA":"{agent dir}/pi-claude-marketplace/data/fixtures/demo"},"timeout":1800,"exposure":"deferred"} |
+
   Scenario: Pi's built-in MCP registers a server of a plugin with no options with its option reference as written (D-PG10-21)
     Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
       """

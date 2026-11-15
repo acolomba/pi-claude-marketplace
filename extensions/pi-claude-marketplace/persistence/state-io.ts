@@ -345,8 +345,11 @@ export function userConfigFieldsOf(
 /**
  * D-PG10-23: the one reader of a record's `userConfig`. It parses the stored
  * value again with the manifest parser, because a project record is a file a
- * repository can commit, and a stored value that does not parse reads as no
- * options, so a hand-edited record never stops a load.
+ * repository can commit. D-PG10-25: a stored value that does not parse is
+ * logged and reads as declared options with no values, so a hand-edited
+ * record never stops a load and every reader fails closed: the built-in MCP
+ * leaves out each server that names an option, no option variable is set,
+ * and an exec-form hook that names an option is refused as unset.
  */
 export function recordedOptionsOf(
   record: Pick<PluginInstallRecord, "userConfig">,
@@ -358,7 +361,7 @@ export function recordedOptionsOf(
   const parsed = parseUserConfig(record.userConfig);
   if (parsed.kind === "malformed") {
     hookDebugLog(`recorded userConfig ignored: ${parsed.detail}`, "state");
-    return resolveOptions(undefined);
+    return resolveOptions({});
   }
 
   return resolveOptions(parsed.schema);

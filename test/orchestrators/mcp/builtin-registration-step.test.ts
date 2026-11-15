@@ -1048,6 +1048,45 @@ describe("builtinRegistrationStep", () => {
     verify(ctx);
   });
 
+  test("D-PG10-25: a record whose userConfig does not parse skips each server that names an option, and the plugin's other server registers", async (t) => {
+    // arrange
+    const fixture = await session(t);
+    const logged = captureDebugLog(t);
+    await writeState(fixture, "user", {
+      demo: {
+        ...installRecord(fixture.pluginRoot, [
+          { name: "keyed", config: { command: "node", env: { TOKEN: "${user_config.token}" } } },
+          { name: "plain", config: { command: "node" } },
+        ]),
+        userConfig: "token=secret",
+      },
+    });
+    const ctx = sessionContext(fixture, false);
+    const pi = emptyRegistry();
+    when(() => {
+      pi.registerMcpServer("plugin_demo_plain", {
+        command: "node",
+        env: {
+          CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
+          CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
+        },
+        timeout: 1800,
+        exposure: "deferred",
+      });
+    }).thenReturn(undefined);
+
+    // act
+    await builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") });
+
+    // assert
+    assert.deepStrictEqual(logged, [
+      "[state] recorded userConfig ignored: userConfig is not an object",
+      "[mcp] MCP server plugin_demo_keyed not registered: it names plugin options (unset): token",
+    ]);
+    verify(pi);
+    verify(ctx);
+  });
+
   test("D-PG10-21: a record with no userConfig registers a server that names an option, with the reference as written", async (t) => {
     // arrange
     const fixture = await session(t);
