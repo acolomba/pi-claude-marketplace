@@ -81,3 +81,31 @@ Feature: Plugin executables
       | 2    | user        | run hello                                                                                     |
       | 2    | assistant   | tool call bash {"command":"if command -v hello >/dev/null; then hello; else echo absent; fi"} |
       | 2    | tool result | bash returned: absent\n                                                                       |
+
+  Scenario: Two enabled plugins, one with a bin folder, add one entry to PATH (PG-CORE-07)
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name  | version |
+      | demo  | 1.0.0   |
+      | plain | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the executable file "bin/hello" with this text:
+      """
+      #!/bin/sh
+      echo greeted
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin install plain@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                               |
+      |       | bash | {"command": "printf %s \"$PI_CLAUDE_MARKETPLACE_PATH\""} |
+      | Done. |      |                                                         |
+    When the user prompts "show the plugin path"
+    Then the model receives these calls:
+      | call | role        | text                                                                   |
+      | 1    | user        | show the plugin path                                                   |
+      | 2    | user        | show the plugin path                                                   |
+      | 2    | assistant   | tool call bash {"command":"printf %s \"$PI_CLAUDE_MARKETPLACE_PATH\""} |
+      | 2    | tool result | bash returned: {home}/marketplaces/fixtures/plugins/demo/bin           |

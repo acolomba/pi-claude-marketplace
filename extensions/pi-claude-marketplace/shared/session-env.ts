@@ -142,8 +142,9 @@ export function applyMcpAdapterEnv(readCwd: () => string): boolean {
  * Remove exactly the prior-ledger entries from PATH (never touch a non-owned
  * entry), then append each fresh dir not already present (dedupe against the
  * surviving base and against itself). Append never prepends -- a plugin binary
- * cannot shadow a system/Pi binary (T-90-01). Adds a dir even if it does not
- * exist on disk (no fs stat; Claude Code parity). The new ledger holds exactly
+ * cannot shadow a system/Pi binary (T-90-01). The core appends what it is
+ * given, with no fs stat; the caller keeps only an existing directory
+ * (D-PG10-03). The new ledger holds exactly
  * the dirs actually appended, so a repeated recompute is idempotent and a
  * plugin dropped between loads leaves no stale entry (D-90-01).
  *

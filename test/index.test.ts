@@ -905,6 +905,14 @@ async function seedPrompt(root: string, fileName: string): Promise<string> {
 }
 
 /** Record one enabled project-scope plugin whose binaries live under `root`. */
+// D-PG10-03: a plugin's bin joins PATH only when it is a directory, so a case
+// that expects an entry gives the plugin a real one.
+async function seedPluginBinDirectory(resolvedSource: string): Promise<string> {
+  const binDir = path.join(resolvedSource, "bin");
+  await mkdir(binDir, { recursive: true });
+  return binDir;
+}
+
 async function seedEnabledPlugin(cwd: string, resolvedSource: string): Promise<void> {
   const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
   const marketplaceRoot = path.join(cwd, "mp-src");
@@ -1335,7 +1343,7 @@ test("NFR-2 / D-MB-10: a live mode that fails before the built-in MCP resync ski
       return capture.ui;
     },
   };
-  const binDir = path.join(resolvedSource, "bin");
+  const binDir = await seedPluginBinDirectory(resolvedSource);
   process.env.PATH = "/usr/bin";
   Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
 
@@ -1387,7 +1395,7 @@ test("a refused load append leaves install state untouched and still runs the in
       return capture.ui;
     },
   };
-  const binDir = path.join(resolvedSource, "bin");
+  const binDir = await seedPluginBinDirectory(resolvedSource);
   process.env.PATH = "/usr/bin";
   Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
 
@@ -1880,7 +1888,7 @@ test("appends the recorded plugin's binaries to the process PATH and records the
   // arrange
   const scope = await createHermeticScope(t, "plugin-path");
   const resolvedSource = path.join(scope.cwd, "vendored-plugin");
-  const binDir = path.join(resolvedSource, "bin");
+  const binDir = await seedPluginBinDirectory(resolvedSource);
   await seedEnabledPlugin(scope.cwd, resolvedSource);
   const { discover, ctx, verifyBoundary } = await loadExtension(0, PROBES_PER_DISCOVER);
   process.env.PATH = "/usr/bin";
@@ -1900,7 +1908,7 @@ test("D-PG10-02: leaves the project plugin's binaries off PATH when Pi does not 
   // arrange
   const scope = await createHermeticScope(t, "untrusted-plugin-path");
   const resolvedSource = path.join(scope.cwd, "vendored-plugin");
-  await mkdir(path.join(resolvedSource, "bin"), { recursive: true });
+  await seedPluginBinDirectory(resolvedSource);
   await seedEnabledPlugin(scope.cwd, resolvedSource);
   // The case's own proxy answers the trust reads, so the mock promises none.
   const loaded = await loadExtension(0, PROBES_PER_DISCOVER, undefined, undefined, undefined, 0);
@@ -1938,7 +1946,7 @@ test(
     // arrange
     const scope = await createHermeticScope(t, "discovery-recovery");
     const resolvedSource = path.join(scope.cwd, "vendored-plugin");
-    const binDir = path.join(resolvedSource, "bin");
+    const binDir = await seedPluginBinDirectory(resolvedSource);
     await seedEnabledPlugin(scope.cwd, resolvedSource);
     const promptPath = await seedPrompt(scope.cwd, "recovered.md");
     const skillPath = path.join(
@@ -2113,7 +2121,7 @@ test("still answers when the deferred project-scope hydrate fails (NFR-2)", asyn
   // arrange
   const scope = await createHermeticScope(t, "hydrate-refused");
   const resolvedSource = path.join(scope.cwd, "vendored-plugin");
-  const binDir = path.join(resolvedSource, "bin");
+  const binDir = await seedPluginBinDirectory(resolvedSource);
   await seedEnabledPlugin(scope.cwd, resolvedSource);
   // Seeded so the reconcile has something of its own to say. Without it this
   // case passes with the refusal retargeted at the reconcile read, because a
@@ -2152,7 +2160,7 @@ test("still answers when the reconcile fails (NFR-2)", async (t) => {
   // arrange
   const scope = await createHermeticScope(t, "reconcile-refused");
   const resolvedSource = path.join(scope.cwd, "vendored-plugin");
-  const binDir = path.join(resolvedSource, "bin");
+  const binDir = await seedPluginBinDirectory(resolvedSource);
   await seedEnabledPlugin(scope.cwd, resolvedSource);
   const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
     1,
@@ -2189,6 +2197,7 @@ test("still answers when the plugin PATH recompute fails (NFR-2)", async (t) => 
   // arrange
   const scope = await createHermeticScope(t, "recompute-refused");
   const resolvedSource = path.join(scope.cwd, "vendored-plugin");
+  await seedPluginBinDirectory(resolvedSource);
   await seedEnabledPlugin(scope.cwd, resolvedSource);
   const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
     0,
