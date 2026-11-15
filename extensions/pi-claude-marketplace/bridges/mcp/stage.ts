@@ -43,6 +43,7 @@ import path from "node:path";
 
 import writeFileAtomic from "write-file-atomic";
 
+import { mcpOptionBlock } from "../../domain/claude-mcp-variables.ts";
 import { unenforcedToolRules } from "../../domain/mcp-server-features.ts";
 import { foldedMcpServerKey, generatedMcpServerKey } from "../../domain/name.ts";
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
@@ -94,6 +95,7 @@ import type {
   McpConfigNotice,
   McpCredentialsBlankedNotice,
   McpLeftoverRemovedNotice,
+  McpOptionBlockedNotice,
   McpOverrideKeptNotice,
   McpOverrideRestoredNotice,
   McpToolRulesUnenforcedNotice,
@@ -259,6 +261,49 @@ function caFileRemovedNotices(
     file: "mcp-adapter.json",
     plugin: pluginName,
     server,
+    reason,
+  }));
+}
+
+/** A server the stage leaves out for its options, by its declared name (D-PG10-21). */
+type OptionBlockedServer = Pick<McpOptionBlockedNotice, "server" | "names" | "reason">;
+
+/**
+ * D-PG10-21: the servers the stage writes, and those it leaves out because
+ * their fields name options with no value, each in declared order. A left-out
+ * server takes no part in the keys, the collision check, or the record.
+ */
+function partitionOptionBlocked(input: StageMcpInput): {
+  readonly servers: Record<string, unknown>;
+  readonly blocked: readonly OptionBlockedServer[];
+} {
+  const servers: Record<string, unknown> = {};
+  const blocked: OptionBlockedServer[] = [];
+  for (const [server, config] of Object.entries(input.servers)) {
+    const block = mcpOptionBlock(config, input.options);
+    if (block === undefined) {
+      safeSet(servers, server, config);
+    } else {
+      blocked.push({ server, names: block.keys, reason: block.reason });
+    }
+  }
+
+  return { servers, blocked };
+}
+
+/** D-PG10-21: one notice per server the stage left out for its options. */
+function optionBlockedNotices(
+  blocked: readonly OptionBlockedServer[],
+  scope: Scope,
+  pluginName: string,
+): McpOptionBlockedNotice[] {
+  return blocked.map(({ server, names, reason }) => ({
+    kind: "option-blocked",
+    scope,
+    file: "mcp-adapter.json",
+    plugin: pluginName,
+    server,
+    names,
     reason,
   }));
 }
@@ -462,7 +507,9 @@ function overStoredChoices(
  * server that declares tool permission rules (ANAME-07), then one
  * `ca-file-removed` notice per server whose entry leaves out the user's
  * `caFile`, or that the stage removes with a `caFile` nothing keeps
- * (D-PG9-14). AS-8 noop
+ * (D-PG9-14), then one `option-blocked` notice per server left out because
+ * its fields name a plugin option with no value; such a server is in no
+ * entry, collision check, or record (D-PG10-21). AS-8 noop
  * short-circuits when there is nothing new, nothing previously-ours and no
  * marked entry in the legacy `mcp.json` (AMIG-01) -- in that case
  * `commitPreparedMcp` writes no file (PRD success criterion: AS-8 noop
@@ -473,7 +520,9 @@ function overStoredChoices(
  * source defines a new key in full.
  */
 export async function prepareStageMcpServers(input: StageMcpInput): Promise<PreparedMcpStaging> {
-  const { locations, cwd, marketplaceName, pluginName, servers, pluginRoot, pluginData } = input;
+  const { locations, cwd, marketplaceName, pluginName, pluginRoot, pluginData } = input;
+  const { servers, blocked } = partitionOptionBlocked(input);
+  const blockedNotices = optionBlockedNotices(blocked, locations.scope, pluginName);
   // ANAME-01: entries, collisions and notices use the generated keys; the
   // record keeps the declared names.
   const declaredNames = Object.keys(servers);
@@ -492,7 +541,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
       scope: locations.scope,
       file: "mcp-adapter.json",
     };
-    return noopStaging([leftUnchanged]);
+    return noopStaging([leftUnchanged, ...blockedNotices]);
   }
 
   // Partition existing into ours-vs-theirs by marker (MC-5).
@@ -521,7 +570,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   // materialize the file; commit returns the noop result without touching
   // disk. A leftover sits under a legacy name, so none can exist here.
   if (newKeys.length === 0 && Object.keys(ours).length === 0 && legacyNames.length === 0) {
-    return noopStaging([]);
+    return noopStaging(blockedNotices);
   }
 
   // AMIG-01: an override stub under a name another source still defines
@@ -607,9 +656,9 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   // writes back. AVAR-04 / AVAR-05: each server's missing-variable and
   // withheld-credential notices follow, then ANAME-07: each server's
   // unenforced tool-rule notice. AMIG-01: each dropped leftover follows.
-  // D-PG9-14: each server whose entry left out the user's caFile comes last,
+  // D-PG9-14: each server whose entry left out the user's caFile follows,
   // then each entry the stage removed with a caFile the stored choices do not
-  // keep.
+  // keep. D-PG10-21: each server left out for its options comes last.
   const notices = Object.freeze<McpConfigNotice[]>([
     ...commentsDroppedNotices(rewritesTarget && config.hadComments, locations.scope),
     ...overrideKeptNotices(stamped, overlays, locations.scope, pluginName),
@@ -632,6 +681,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
       locations.scope,
       pluginName,
     ),
+    ...blockedNotices,
   ]);
   const result: StageMcpCommitResult = {
     stagedNames: Object.freeze([...declaredNames]),

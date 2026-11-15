@@ -6,6 +6,7 @@
 // `UnstageMcpInput` records cannot drift apart across modules.
 
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
+import type { ResolvedOptions } from "../../domain/user-config.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { McpWrittenFile } from "../../shared/errors-bridges.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
@@ -43,6 +44,12 @@ export interface StageMcpInput {
    * The operation's entry point supplies it (D-08-06).
    */
   readonly env: ClaudeEnv;
+  /**
+   * The plugin's resolved options, or `undefined` for a plugin that declares
+   * no `userConfig`. A server whose fields name an option with no value is
+   * left out (D-PG10-21).
+   */
+  readonly options: ResolvedOptions | undefined;
 }
 
 /**
@@ -88,7 +95,9 @@ export interface StageMcpCommitResult {
    * declared server order (ANAME-07), then one `leftover-removed` notice per
    * old-name leftover the stage drops from the target (AMIG-01), then one
    * `ca-file-removed` notice per server whose entry leaves out the user's
-   * `caFile` (D-PG9-14). Distinct from `warnings`, which are hygiene notes
+   * `caFile` (D-PG9-14), then one `option-blocked` notice per server the
+   * stage left out for its options, in declared server order (D-PG10-21).
+   * Distinct from `warnings`, which are hygiene notes
    * standalone commands do not show.
    */
   readonly notices: readonly McpConfigNotice[];

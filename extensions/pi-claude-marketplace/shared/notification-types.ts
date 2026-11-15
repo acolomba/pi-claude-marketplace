@@ -1430,8 +1430,30 @@ export interface McpCaFileRemovedNotice {
 }
 
 /**
- * AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01 / D-PG9-14: one MCP config
- * fact a command routes to `notifyMcpConfigNotices`.
+ * D-PG10-21: why a stage left a plugin server out of `mcp-adapter.json`.
+ * `unset`: a field names a plugin option that has no value.
+ */
+export type McpOptionBlockedReason = "unset";
+
+/**
+ * D-PG10-08 / D-PG10-21: a stage left a plugin server out of the file, because
+ * its fields name plugin options. `server` is the declared name, since the
+ * file holds no entry for it. `names` lists the option keys once each, in
+ * first-seen order. It names keys, never values.
+ */
+export interface McpOptionBlockedNotice {
+  readonly kind: "option-blocked";
+  readonly scope: Scope;
+  readonly file: "mcp-adapter.json";
+  readonly plugin: string;
+  readonly server: string;
+  readonly names: readonly string[];
+  readonly reason: McpOptionBlockedReason;
+}
+
+/**
+ * AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01 / D-PG9-14 / D-PG10-21:
+ * one MCP config fact a command routes to `notifyMcpConfigNotices`.
  */
 export type McpConfigNotice =
   | McpConfigFileNotice
@@ -1441,7 +1463,8 @@ export type McpConfigNotice =
   | McpCredentialsBlankedNotice
   | McpToolRulesUnenforcedNotice
   | McpLeftoverRemovedNotice
-  | McpCaFileRemovedNotice;
+  | McpCaFileRemovedNotice
+  | McpOptionBlockedNotice;
 
 /** AMIG-01 / AMIG-03: a server the reload moved from `mcp.json` to `mcp-adapter.json`. */
 export interface McpMigrationMovedRow {

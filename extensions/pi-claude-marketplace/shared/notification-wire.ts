@@ -737,8 +737,9 @@ const MCP_NOTICE_SUBJECT_FIELDS = {
 };
 
 /**
- * AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01: one MCP config notice. It
- * names fields and variables, never their values (AVAR-05).
+ * AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01 / D-PG10-21: one MCP config
+ * notice. It names fields, variables, and option keys, never their values
+ * (AVAR-05).
  */
 const MCP_CONFIG_NOTICE = Type.Union([
   Type.Object(
@@ -775,6 +776,15 @@ const MCP_CONFIG_NOTICE = Type.Union([
         Type.Literal("url-unresolved"),
         Type.Literal("entry-removed"),
       ]),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      kind: Type.Literal("option-blocked"),
+      ...MCP_NOTICE_SUBJECT_FIELDS,
+      names: STRINGS,
+      reason: Type.Literal("unset"),
     },
     { additionalProperties: false },
   ),

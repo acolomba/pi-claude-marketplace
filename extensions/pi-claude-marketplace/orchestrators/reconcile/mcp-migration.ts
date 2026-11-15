@@ -502,6 +502,7 @@ async function stageOwner(
       sourcePath: `${pluginRoot}#mcpServers`,
       description,
       env,
+      options: undefined,
     });
     const result = await operations.commitPreparedMcp(prepared);
     input.notices.push(...result.notices);

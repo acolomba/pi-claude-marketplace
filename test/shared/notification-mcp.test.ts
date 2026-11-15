@@ -234,6 +234,27 @@ describe("composeMcpConfigNoticesText", () => {
     });
   }
 
+  test("D-PG10-21: an option-blocked line names the server, its plugin, the file, and each key, with control characters escaped", () => {
+    // act
+    const text = composeMcpConfigNoticesText("option-blocked", [
+      {
+        kind: "option-blocked",
+        scope: "user",
+        file: "mcp-adapter.json",
+        plugin: "he\u202ello",
+        server: "s\u001br",
+        names: ["token", "a\u2028b"],
+        reason: "unset",
+      },
+    ]);
+
+    // assert
+    assert.strictEqual(
+      text,
+      'MCP server left out.\n\nServer "s\\u001br" from he\\u202ello was left out of the user-scope mcp-adapter.json, because it names plugin options that have no value: token, a\\u2028b.',
+    );
+  });
+
   test("AMIG-01: control characters in a leftover's old name render as \\u escapes", () => {
     // act
     const text = composeMcpConfigNoticesText("leftover-removed", [

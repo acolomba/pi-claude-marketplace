@@ -35,6 +35,9 @@ import {
   REMOTE_SINK_DENIED_NAMES,
   valueCarriesCredential,
 } from "./claude-credential-denylist.ts";
+import { replaceUserConfigReferences } from "./user-config.ts";
+
+import type { ResolvedOptions } from "./user-config.ts";
 
 /** The environment Claude's rule reads at install time. */
 export type ClaudeEnv = Readonly<Record<string, string | undefined>>;
@@ -354,4 +357,50 @@ export function scanClaudeServerVariables(server: unknown, env: ClaudeEnv): Serv
   }
 
   return { unset: [...unset], withheld: [...withheld] };
+}
+
+/**
+ * D-PG10-21: why a plugin MCP server is left out. `unset`: a field names an
+ * option that has no value.
+ */
+export type McpOptionBlockReason = "unset";
+
+/** D-PG10-21: why a server is left out, and the option keys that cause it. */
+export interface McpOptionBlock {
+  readonly reason: McpOptionBlockReason;
+  readonly keys: readonly string[];
+}
+
+/**
+ * D-PG10-08 / D-PG10-21: whether a raw plugin MCP server config is left out
+ * for the options its fields name, and why. Claude Code 2.1.323 fills
+ * `${user_config.KEY}` in the five fields from its MCP value map, which holds
+ * each declared default and the empty string for an option that is not
+ * required, and throws for a key the map lacks: a required option with no
+ * default, or a key the manifest does not declare. It catches the throw per
+ * server, so that one server does not load. The keys come once each, in
+ * first-seen field order. `undefined` options, for a plugin that declares no
+ * `userConfig`, block nothing: Claude runs no option pass for it.
+ */
+export function mcpOptionBlock(
+  server: unknown,
+  options: Pick<ResolvedOptions, "mcpValues"> | undefined,
+): McpOptionBlock | undefined {
+  const fields = scannedFields(server);
+  if (options === undefined || fields === undefined) {
+    return undefined;
+  }
+
+  const unset = new Set<string>();
+  for (const raw of fields.values) {
+    replaceUserConfigReferences(raw, (key, matched) => {
+      if (!options.mcpValues.has(key)) {
+        unset.add(key);
+      }
+
+      return matched;
+    });
+  }
+
+  return unset.size === 0 ? undefined : { reason: "unset", keys: [...unset] };
 }

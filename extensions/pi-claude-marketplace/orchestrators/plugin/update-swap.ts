@@ -449,6 +449,7 @@ async function prepareUpdateHandles(
       sourcePath: `${installable.pluginRoot}#mcpServers`,
       description: installable.description,
       env: args.env,
+      options: undefined,
     });
     handles.workflows = await prepareStageWorkflows({
       locations,

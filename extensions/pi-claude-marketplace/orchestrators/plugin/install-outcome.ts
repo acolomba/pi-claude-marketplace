@@ -1485,6 +1485,8 @@ async function runInstallLedgerBody(
         sourcePath: `${installCtx.resolved.pluginRoot}#mcpServers`,
         description: installCtx.resolved.description,
         env: opts.env,
+        // D-PG10-21: a server that names an option with no value is left out.
+        options: declaredOptions(resolveOptions(installCtx.resolved.declaredUserConfig)),
       });
       installCtx.mcpReplacement = await replacePreparedMcp(prep);
       const result = prep.result;

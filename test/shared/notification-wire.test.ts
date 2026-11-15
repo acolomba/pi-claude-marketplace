@@ -503,6 +503,50 @@ for (const { title, notices, expectedValid } of [
     expectedValid: false,
   },
   {
+    title: "accepts an option-blocked notice with its keys and reason (D-PG10-21)",
+    notices: [
+      {
+        kind: "option-blocked",
+        scope: "user",
+        file: "mcp-adapter.json",
+        plugin: "p",
+        server: "s",
+        names: ["token"],
+        reason: "unset",
+      },
+    ],
+    expectedValid: true,
+  },
+  {
+    title: "rejects an option-blocked notice with a reason outside its closed set (D-PG10-21)",
+    notices: [
+      {
+        kind: "option-blocked",
+        scope: "user",
+        file: "mcp-adapter.json",
+        plugin: "p",
+        server: "s",
+        names: ["token"],
+        reason: "not-https",
+      },
+    ],
+    expectedValid: false,
+  },
+  {
+    title: "rejects an option-blocked notice with no keys (D-PG10-21)",
+    notices: [
+      {
+        kind: "option-blocked",
+        scope: "user",
+        file: "mcp-adapter.json",
+        plugin: "p",
+        server: "s",
+        reason: "unset",
+      },
+    ],
+    expectedValid: false,
+  },
+  {
     title: "rejects an override-kept notice that names mcp.json",
     notices: [
       {

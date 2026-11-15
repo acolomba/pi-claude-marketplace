@@ -6,11 +6,11 @@
 // walk and the notify-grammar invariant never drive it. This dedicated lock
 // reads the `mcp-comments-dropped`, `mcp-config-left-unchanged`,
 // `mcp-override-kept`, `mcp-variables-missing`, `mcp-credentials-blanked`,
-// `mcp-tool-rules-unenforced`, `mcp-leftover-removed` and the three
-// `mcp-ca-file-removed` blocks from docs/output-catalog.md and asserts that the tui text strategy
+// `mcp-tool-rules-unenforced`, `mcp-leftover-removed`, the four
+// `mcp-ca-file-removed` and the `mcp-option-blocked` blocks from docs/output-catalog.md and asserts that the tui text strategy
 // emits each one byte for byte, in one warning-severity call, with a non-empty
 // summary line followed by a blank line (AFILE-06, AVAR-04, AVAR-05, ANAME-07,
-// AMIG-01, D-PG9-14). In
+// AMIG-01, D-PG9-14, D-PG10-21). In
 // json mode the same notice arrives as one schema-valid entry (JOUT-01).
 
 import assert from "node:assert/strict";
@@ -136,6 +136,18 @@ const CATALOG_NOTICE_ROWS: readonly CatalogNoticeRow[] = [
       plugin: "hello",
       server: "plugin_hello_srv_",
       reason: "entry-removed",
+    },
+  },
+  {
+    state: "mcp-option-blocked",
+    notice: {
+      kind: "option-blocked",
+      scope: "project",
+      file: "mcp-adapter.json",
+      plugin: "hello",
+      server: "srv",
+      names: ["token"],
+      reason: "unset",
     },
   },
 ];

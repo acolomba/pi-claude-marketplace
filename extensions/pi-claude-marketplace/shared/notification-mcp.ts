@@ -10,6 +10,7 @@ import type {
   McpMigrationRemovedRow,
   McpMigrationRow,
   McpMigrationStoppedRow,
+  McpOptionBlockedNotice,
   McpOverrideKeptNotice,
   McpToolRulesUnenforcedNotice,
   McpVariablesMissingNotice,
@@ -40,6 +41,7 @@ const MCP_CONFIG_NOTICE_SUMMARIES = {
   "tool-rules-unenforced": "MCP server tool rules not enforced.",
   "leftover-removed": "Old MCP server settings removed.",
   "ca-file-removed": "MCP server caFile removed.",
+  "option-blocked": "MCP server left out.",
 } as const satisfies Record<McpConfigNoticeSection, string>;
 
 const MCP_MIGRATION_MOVED_SUMMARY = "Plugin MCP servers moved from mcp.json to mcp-adapter.json.";
@@ -118,8 +120,17 @@ function mcpCaFileRemovedLine(notice: McpCaFileRemovedNotice): string {
   return `Server "${printable(notice.server)}" from ${printable(notice.plugin)} in the ${notice.scope}-scope ${notice.file} ${CA_FILE_REMOVED_CAUSES[notice.reason]}`;
 }
 
+// D-PG10-21: why the line says the server was left out, for each reason.
+const OPTION_BLOCKED_CAUSES = {
+  unset: "it names plugin options that have no value",
+} as const satisfies Record<McpOptionBlockedNotice["reason"], string>;
+
+function mcpOptionBlockedLine(notice: McpOptionBlockedNotice): string {
+  return `Server "${printable(notice.server)}" from ${printable(notice.plugin)} was left out of the ${notice.scope}-scope ${notice.file}, because ${OPTION_BLOCKED_CAUSES[notice.reason]}: ${notice.names.map(printable).join(", ")}.`;
+}
+
 /**
- * AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01 / D-PG9-14: the one line a notice
+ * AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01 / D-PG9-14 / D-PG10-21: the one line a notice
  * renders. Resolve also keys duplicate removal on it, so two notices that
  * read the same render once.
  */
@@ -140,6 +151,8 @@ export function mcpConfigNoticeLine(notice: RenderedMcpConfigNotice): string {
       return mcpLeftoverRemovedLine(notice);
     case "ca-file-removed":
       return mcpCaFileRemovedLine(notice);
+    case "option-blocked":
+      return mcpOptionBlockedLine(notice);
   }
 }
 

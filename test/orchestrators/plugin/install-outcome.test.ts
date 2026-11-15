@@ -2342,6 +2342,75 @@ test("D-PG10-21: the skills phase keeps the option references of a plugin with n
   assert.strictEqual(body, "Mode ${user_config.mode} retries ${user_config.retries}.\n");
 });
 
+/** Installs a plugin with a server that names `token` and a plain server, and returns the mcp summary. */
+async function stagedOptionServers(
+  t: TestContext,
+  pluginJson: Record<string, unknown>,
+): Promise<{ readonly names: readonly string[]; readonly notices: readonly unknown[] }> {
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-options-");
+  const seeded = await seedPlugin(environment.cwd, {
+    pluginJson,
+    mcpServers: {
+      keyed: { command: "node", args: ["${user_config.token}"] },
+      plain: { command: "node" },
+    },
+  });
+  const ledgerOutcome = await runInstallLedger(
+    seeded.state,
+    locationsFor("project", environment.cwd),
+    {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      consentView: "none",
+      removalOps: createRemovalOps(),
+      partial: true,
+      env: {},
+    },
+  );
+  assert.ok(ledgerOutcome.kind === "installed");
+  return {
+    names: ledgerOutcome.summary.stagedMcpServerNames,
+    notices: ledgerOutcome.summary.mcpConfigNotices,
+  };
+}
+
+test("D-PG10-21: the mcp phase leaves out a server that names a required option with no default", async (t) => {
+  // act
+  const staged = await stagedOptionServers(t, {
+    userConfig: {
+      token: { type: "string", title: "Token", description: "The token.", required: true },
+    },
+  });
+
+  // assert
+  assert.deepStrictEqual(staged, {
+    names: ["plain"],
+    notices: [
+      {
+        kind: "option-blocked",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "empty",
+        server: "keyed",
+        names: ["token"],
+        reason: "unset",
+      },
+    ],
+  });
+});
+
+test("D-PG10-21: the mcp phase stages every server of a plugin with no userConfig", async (t) => {
+  // act
+  const staged = await stagedOptionServers(t, {});
+
+  // assert
+  assert.deepStrictEqual(staged, { names: ["keyed", "plain"], notices: [] });
+});
+
 test("MREC-01: a bundle reference records the bundle flag beside no recorded server", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-mcp-bundle-");

@@ -3,16 +3,20 @@ import { describe, test } from "node:test";
 
 import {
   expandClaudeValue,
+  mcpOptionBlock,
   scanClaudeServerVariables,
 } from "../../extensions/pi-claude-marketplace/domain/claude-mcp-variables.ts";
+import { resolveOptions } from "../../extensions/pi-claude-marketplace/domain/user-config.ts";
 
 import type {
   ClaudeBuiltins,
   ClaudeEnv,
   ExpandedValue,
   FieldClass,
+  McpOptionBlock,
   ServerVariableScan,
 } from "../../extensions/pi-claude-marketplace/domain/claude-mcp-variables.ts";
+import type { ResolvedOptions } from "../../extensions/pi-claude-marketplace/domain/user-config.ts";
 
 interface ExpansionRow {
   readonly title: string;
@@ -727,6 +731,128 @@ describe("scanClaudeServerVariables", () => {
 
       // assert
       assert.deepStrictEqual(serverScan, expectedScan);
+    });
+  }
+});
+
+interface OptionBlockRow {
+  readonly title: string;
+  readonly server: unknown;
+  readonly options: ResolvedOptions | undefined;
+  readonly block: McpOptionBlock | undefined;
+}
+
+// D-PG10-20: the full option shape. `token` is required with no default,
+// `mode` has a default, and `note` is neither required nor given a default.
+const OPTIONS = resolveOptions({
+  token: { type: "string", title: "Token", description: "The token.", required: true },
+  region: { type: "string", title: "Region", description: "The region.", required: true },
+  mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+  note: { type: "string", title: "Note", description: "The note." },
+});
+
+const UNSET_TOKEN: McpOptionBlock = { reason: "unset", keys: ["token"] };
+
+const OPTION_BLOCK_ROWS: readonly OptionBlockRow[] = [
+  {
+    title: "D-PG10-21: a required option with no default in command blocks the server",
+    server: { command: "${user_config.token}" },
+    options: OPTIONS,
+    block: UNSET_TOKEN,
+  },
+  {
+    title: "D-PG10-21: a required option with no default in an args element blocks the server",
+    server: { command: "node", args: ["--token=${user_config.token}"] },
+    options: OPTIONS,
+    block: UNSET_TOKEN,
+  },
+  {
+    title: "D-PG10-21: a required option with no default in an env value blocks the server",
+    server: { command: "node", env: { TOKEN: "${user_config.token}" } },
+    options: OPTIONS,
+    block: UNSET_TOKEN,
+  },
+  {
+    title: "D-PG10-21: a required option with no default in url blocks the server",
+    server: { type: "http", url: "https://${user_config.token}.example/mcp" },
+    options: OPTIONS,
+    block: UNSET_TOKEN,
+  },
+  {
+    title: "D-PG10-21: a required option with no default in a headers value blocks the server",
+    server: {
+      type: "sse",
+      url: "https://x.example/sse",
+      headers: { Authorization: "Bearer ${user_config.token}" },
+    },
+    options: OPTIONS,
+    block: UNSET_TOKEN,
+  },
+  {
+    title: "D-PG10-08: a key the manifest does not declare blocks the server",
+    server: { command: "node", args: ["${user_config.missing}"] },
+    options: OPTIONS,
+    block: { reason: "unset", keys: ["missing"] },
+  },
+  {
+    title: "D-PG10-21: lists each key once, in first-seen field order",
+    server: {
+      command: "${user_config.region}",
+      args: ["${user_config.token}", "${user_config.region}"],
+      env: { TOKEN: "${user_config.token}" },
+    },
+    options: OPTIONS,
+    block: { reason: "unset", keys: ["region", "token"] },
+  },
+  {
+    title: "D-PG10-21: an option with a default blocks nothing",
+    server: { command: "node", args: ["${user_config.mode}"] },
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title: "D-PG10-21: an option that is not required and has no default blocks nothing",
+    server: { type: "http", url: "https://x.example/mcp", headers: { N: "${user_config.note}" } },
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title: "D-PG10-21: a server with no option reference blocks nothing",
+    server: { command: "node", args: ["${CLAUDE_PLUGIN_ROOT}/server.js", "${HOME}"] },
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title: "D-PG10-21: a reference under an env key Claude writes as is blocks nothing",
+    server: { command: "node", env: { CLAUDE_PLUGIN_DATA: "${user_config.token}" } },
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title: "D-PG10-21: a server that is not an object blocks nothing",
+    server: "${user_config.token}",
+    options: OPTIONS,
+    block: undefined,
+  },
+  {
+    title: "D-PG10-21: a plugin that declares no userConfig blocks nothing",
+    server: { command: "${user_config.token}" },
+    options: undefined,
+    block: undefined,
+  },
+];
+
+describe("mcpOptionBlock", () => {
+  for (const { title, server, options, block } of OPTION_BLOCK_ROWS) {
+    test(title, () => {
+      // arrange
+      const expectedBlock = block;
+
+      // act
+      const optionBlock = mcpOptionBlock(server, options);
+
+      // assert
+      assert.deepStrictEqual(optionBlock, expectedBlock);
     });
   }
 });

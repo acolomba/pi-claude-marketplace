@@ -281,6 +281,13 @@ function wireNotice(notice: RenderedMcpConfigNotice) {
       return { kind: notice.kind, ...wireNoticeSubject(notice) };
     case "ca-file-removed":
       return { kind: notice.kind, ...wireNoticeSubject(notice), reason: notice.reason };
+    case "option-blocked":
+      return {
+        kind: notice.kind,
+        ...wireNoticeSubject(notice),
+        names: [...notice.names],
+        reason: notice.reason,
+      };
   }
 }
 
