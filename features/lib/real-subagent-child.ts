@@ -12,6 +12,9 @@
  * installs the plugin with `/claude:plugin` in the user scope, as a user
  * does. The user's settings name the extension and the MCP implementation,
  * so every child session loads them, as a child loads the user's extensions.
+ * The main Pi saves its session in the fixture's agent directory, so
+ * pi-subagents writes that session's file into the header of each child
+ * session it creates (D-PG6-02, D-PG6-16).
  *
  * Every Pi, and every child it starts, selects a scripted OpenAI-compatible
  * provider that this module serves on the loopback address, with a dummy
@@ -29,15 +32,16 @@
  * agent's frontmatter and pi-subagents' configuration decide it. For a
  * detached child it waits for the runner's status to end and for the runner
  * to exit, and reads the child's Pi session id from the header of the session
- * file pi-subagents records, apart from any hook. pi-subagents then wakes the
- * main Pi with a notice, and the run waits for the main Pi to settle.
+ * file pi-subagents records, apart from any hook, and keeps that file.
+ * pi-subagents then wakes the main Pi with a notice, and the run waits for
+ * the main Pi to settle.
  *
  * `runConcurrentRealSubagentChildren` starts one runner process of its own,
  * with pi-subagents' child marker, that builds the sessions of a generation
  * through pi-subagents' launch module and session factory, as its background
  * runner builds a child, prompts them at once, round after round, disposes
  * them, and starts the next generation. It reports its pid and each session's
- * agent and id.
+ * agent, id, and file, which an in-memory session does not have.
  *
  * Every start waits at most `READY_TIMEOUT_MS`, a child at most
  * `CHILD_TIMEOUT_MS`, and a whole run at most `FIXTURE_TIMEOUT_MS`. A run
@@ -225,12 +229,16 @@ export interface DetachedChildObservation {
   readonly pid: number | undefined;
   /** The id of the child's Pi session, from the header of its session file. */
   readonly sessionId: string | undefined;
+  /** The child's session file, as pi-subagents recorded it, absent when it recorded none. */
+  readonly sessionFile?: string;
 }
 
 /** What the concurrent runner reported about one child session. */
 export interface ConcurrentSessionObservation {
   readonly agent: string;
   readonly sessionId: string;
+  /** The session's file, absent for a session that keeps no file. */
+  readonly sessionFile?: string;
   readonly pid: number;
 }
 
@@ -239,6 +247,8 @@ export interface MainObservation {
   readonly versions: RealChildVersions;
   /** The id of the main Pi's session after the install's new session. */
   readonly mainSessionId: string;
+  /** That session's file, as Pi reports it. */
+  readonly mainSessionFile: string;
   /** Every hook run, in the order the hook processes appended them. */
   readonly hookRuns: readonly HookRun[];
   /** The last user text of each provider request, in arrival order. */
@@ -625,8 +635,14 @@ interface MainRun {
   readonly provider: ScriptedProvider;
   readonly pi: PiProcess;
   readonly versions: RealChildVersions;
-  readonly mainSessionId: string;
+  readonly mainSession: MainSession;
   readonly subagents: Companion;
+}
+
+/** The main Pi's session after the install's new session. */
+interface MainSession {
+  readonly id: string;
+  readonly file: string;
 }
 
 // The scripts of the provider: each agent's launch and task, and the main
@@ -691,13 +707,14 @@ async function withMainRun<T>(
     pi = await PiProcess.start(fixture.sandbox, fixture.git, {
       extensions: [subagents.entry, ...(adapter === undefined ? [] : [adapter.entry])],
       environment: { TMPDIR: fixture.temporaryDirectory },
+      session: { kind: "saved" },
     });
-    const mainSessionId = await installPlugin(pi, fixture);
+    const mainSession = await installPlugin(pi, fixture);
     return await body({
       fixture,
       provider,
       pi,
-      mainSessionId,
+      mainSession,
       subagents,
       versions: {
         node: process.version,
@@ -711,8 +728,8 @@ async function withMainRun<T>(
 }
 
 // Installs the plugin through `/claude:plugin` and starts a new session,
-// returning that session's id.
-async function installPlugin(pi: PiProcess, fixture: Fixture): Promise<string> {
+// returning that session's id and file, which must lie in the fixture.
+async function installPlugin(pi: PiProcess, fixture: Fixture): Promise<MainSession> {
   await expectSuccess(pi, { type: "set_model", provider: PROVIDER, modelId: MODEL });
   for (const command of [
     `/claude:plugin marketplace add ${fixture.marketplace} --scope user`,
@@ -725,9 +742,15 @@ async function installPlugin(pi: PiProcess, fixture: Fixture): Promise<string> {
   await startSession(pi);
   await expectSuccess(pi, { type: "set_model", provider: PROVIDER, modelId: MODEL });
   const state = await expectSuccess(pi, { type: "get_state" });
-  const data = state.data as { readonly sessionId?: unknown } | undefined;
+  const data = state.data as
+    { readonly sessionId?: unknown; readonly sessionFile?: unknown } | undefined;
   assert.ok(typeof data?.sessionId === "string", JSON.stringify(state));
-  return data.sessionId;
+  assert.ok(typeof data.sessionFile === "string", JSON.stringify(state));
+  assert.ok(
+    data.sessionFile.startsWith(`${fixture.root}${path.sep}`),
+    `the main session file ${data.sessionFile} lies outside the fixture`,
+  );
+  return { id: data.sessionId, file: data.sessionFile };
 }
 
 // Prompts the main Pi with `prompt` and waits for the main Pi to settle:
@@ -803,6 +826,7 @@ async function detachedChild(agent: string, asyncDir: string): Promise<DetachedC
     state: String(status.state),
     pid,
     sessionId: typeof sessionFile === "string" ? await sessionIdOf(sessionFile) : undefined,
+    ...(typeof sessionFile === "string" ? { sessionFile } : {}),
   };
 }
 
@@ -834,7 +858,8 @@ async function launchChild(run: MainRun, agent: string): Promise<DetachedChildOb
 async function observeMain(run: MainRun): Promise<MainObservation> {
   return {
     versions: run.versions,
-    mainSessionId: run.mainSessionId,
+    mainSessionId: run.mainSession.id,
+    mainSessionFile: run.mainSession.file,
     hookRuns: await readHookRuns(run.fixture.harness),
     providerPrompts: run.provider.requests.map(({ lastUserText }) => lastUserText),
     providerModels: [...new Set(run.provider.requests.map(({ model }) => model))],
@@ -891,8 +916,11 @@ try {
     for (let round = 0; round < config.rounds; round += 1) {
       await Promise.all(sessions.map(({ child, session }) => session.prompt(child.task)));
     }
-    generations.push(sessions.map(({ child, session }) =>
-      ({ agent: child.agent, sessionId: session.sessionId, pid: process.pid })));
+    generations.push(sessions.map(({ child, session }) => ({
+      agent: child.agent, sessionId: session.sessionId,
+      ...(session.sessionFile === undefined ? {} : { sessionFile: session.sessionFile }),
+      pid: process.pid,
+    })));
     await Promise.all(sessions.map(({ session }) => session.dispose()));
   }
 } finally {
@@ -909,6 +937,7 @@ function isSessionObservation(value: unknown): value is ConcurrentSessionObserva
     typeof value.agent === "string" &&
     "sessionId" in value &&
     typeof value.sessionId === "string" &&
+    (!("sessionFile" in value) || typeof value.sessionFile === "string") &&
     "pid" in value &&
     typeof value.pid === "number"
   );

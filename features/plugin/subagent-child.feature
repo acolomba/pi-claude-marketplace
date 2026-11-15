@@ -547,13 +547,13 @@ Feature: Plugin subagent child
       | demo:runner  | background | complete | recorded       | first   |
       | demo:granted | background | complete | recorded       | second  |
     Then the real children's hooks record these runs in any order, and no main-session run names a child:
-      | session | event              | tool name                   | agent type   | agent id |
-      | first   | PreToolUse         | Bash                        | demo:runner  | first    |
-      | first   | PostToolUse        | Bash                        | demo:runner  | first    |
-      | first   | PreToolUse         | Read                        | demo:runner  | first    |
-      | first   | PostToolUseFailure | Read                        | demo:runner  | first    |
-      | second  | PreToolUse         | mcp__plugin_demo_stub__echo | demo:granted | second   |
-      | second  | PostToolUse        | mcp__plugin_demo_stub__echo | demo:granted | second   |
+      | session | event              | tool name                   | agent type   | agent id | transcript path        | CLAUDE_CODE_SESSION_ID |
+      | first   | PreToolUse         | Bash                        | demo:runner  | first    | session file of first  | first                  |
+      | first   | PostToolUse        | Bash                        | demo:runner  | first    | session file of first  | first                  |
+      | first   | PreToolUse         | Read                        | demo:runner  | first    | session file of first  | first                  |
+      | first   | PostToolUseFailure | Read                        | demo:runner  | first    | session file of first  | first                  |
+      | second  | PreToolUse         | mcp__plugin_demo_stub__echo | demo:granted | second   | session file of second | second                 |
+      | second  | PostToolUse        | mcp__plugin_demo_stub__echo | demo:granted | second   | session file of second | second                 |
     Then the main session's hooks record these runs for its control prompt:
       | event            | tool name | child identity |
       | SessionStart     |           | none           |
@@ -575,23 +575,23 @@ Feature: Plugin subagent child
       | 2          | demo:alpha | third   |
       | 2          | demo:beta  | fourth  |
     Then the real children's hooks record these runs in any order, and no main-session run names a child:
-      | session | event       | tool name | agent type | agent id |
-      | first   | PreToolUse  | Bash      | demo:alpha | first    |
-      | first   | PostToolUse | Bash      | demo:alpha | first    |
-      | first   | PreToolUse  | Bash      | demo:alpha | first    |
-      | first   | PostToolUse | Bash      | demo:alpha | first    |
-      | second  | PreToolUse  | Bash      | demo:beta  | second   |
-      | second  | PostToolUse | Bash      | demo:beta  | second   |
-      | second  | PreToolUse  | Bash      | demo:beta  | second   |
-      | second  | PostToolUse | Bash      | demo:beta  | second   |
-      | third   | PreToolUse  | Bash      | demo:alpha | third    |
-      | third   | PostToolUse | Bash      | demo:alpha | third    |
-      | third   | PreToolUse  | Bash      | demo:alpha | third    |
-      | third   | PostToolUse | Bash      | demo:alpha | third    |
-      | fourth  | PreToolUse  | Bash      | demo:beta  | fourth   |
-      | fourth  | PostToolUse | Bash      | demo:beta  | fourth   |
-      | fourth  | PreToolUse  | Bash      | demo:beta  | fourth   |
-      | fourth  | PostToolUse | Bash      | demo:beta  | fourth   |
+      | session | event       | tool name | agent type | agent id | transcript path | CLAUDE_CODE_SESSION_ID |
+      | first   | PreToolUse  | Bash      | demo:alpha | first    |                 | first                  |
+      | first   | PostToolUse | Bash      | demo:alpha | first    |                 | first                  |
+      | first   | PreToolUse  | Bash      | demo:alpha | first    |                 | first                  |
+      | first   | PostToolUse | Bash      | demo:alpha | first    |                 | first                  |
+      | second  | PreToolUse  | Bash      | demo:beta  | second   |                 | second                 |
+      | second  | PostToolUse | Bash      | demo:beta  | second   |                 | second                 |
+      | second  | PreToolUse  | Bash      | demo:beta  | second   |                 | second                 |
+      | second  | PostToolUse | Bash      | demo:beta  | second   |                 | second                 |
+      | third   | PreToolUse  | Bash      | demo:alpha | third    |                 | third                  |
+      | third   | PostToolUse | Bash      | demo:alpha | third    |                 | third                  |
+      | third   | PreToolUse  | Bash      | demo:alpha | third    |                 | third                  |
+      | third   | PostToolUse | Bash      | demo:alpha | third    |                 | third                  |
+      | fourth  | PreToolUse  | Bash      | demo:beta  | fourth   |                 | fourth                 |
+      | fourth  | PostToolUse | Bash      | demo:beta  | fourth   |                 | fourth                 |
+      | fourth  | PreToolUse  | Bash      | demo:beta  | fourth   |                 | fourth                 |
+      | fourth  | PostToolUse | Bash      | demo:beta  | fourth   |                 | fourth                 |
     Then the main session's hooks record these runs for its control prompt:
       | event            | tool name | child identity |
       | SessionStart     |           | none           |

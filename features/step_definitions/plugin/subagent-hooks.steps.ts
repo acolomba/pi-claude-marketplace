@@ -32,7 +32,12 @@
  * a loopback provider, and keep its hook runs, its child sessions in launch
  * order, and its main session as the last turn. A child session reads as its
  * launch-order ordinal, and the main session's control prompt is the positive
- * control (D-PG3-09).
+ * control (D-PG3-09). A run is a child's when its `agent_id` names a launched
+ * child, and a main-session run has the main session's id and no `agent_id`,
+ * so the runs step states which session a child's hook names in `session`,
+ * `transcript path`, and `CLAUDE_CODE_SESSION_ID`: an ordinal or `main` for
+ * an id, `session file of <ordinal>` or `session file of main` for a session
+ * file (D-PG6-01, D-PG6-24).
  */
 
 import assert from "node:assert/strict";
@@ -117,8 +122,27 @@ interface RealChildSession {
   readonly mode: string;
   readonly state: string;
   readonly sessionId: string | undefined;
+  readonly sessionFile: string | undefined;
   readonly pid: number | undefined;
 }
+
+// The main session as a run of real children records it in the turn.
+interface RealMainSession {
+  readonly sessionId: string;
+  readonly sessionFile: string;
+}
+
+// The stdin members and the variable a real child's run states, in the
+// columns of the runs step.
+const REAL_CHILD_COLUMNS = [
+  ["session", (run: HookRun) => run.stdin.session_id],
+  ["event", (run: HookRun) => run.stdin.hook_event_name],
+  ["tool name", (run: HookRun) => run.stdin.tool_name],
+  ["agent type", (run: HookRun) => run.stdin.agent_type],
+  ["agent id", (run: HookRun) => run.stdin.agent_id],
+  ["transcript path", (run: HookRun) => run.stdin.transcript_path],
+  ["CLAUDE_CODE_SESSION_ID", (run: HookRun) => run.environment.CLAUDE_CODE_SESSION_ID],
+] as const satisfies readonly (readonly [string, (run: HookRun) => unknown])[];
 
 const CHILD_ORDINALS: readonly string[] = ["first", "second", "third", "fourth"];
 
@@ -225,7 +249,7 @@ function recordRealChildren(
   prompt: string,
   hookRuns: readonly HookRun[],
   sessions: readonly RealChildSession[],
-  mainSessionId: string,
+  main: RealMainSession,
 ): void {
   world.recordTurn({
     prompt,
@@ -234,13 +258,19 @@ function recordRealChildren(
     logs: new Map<string, readonly unknown[]>([
       [HOOK_RUNS_LOG, hookRuns],
       [REAL_CHILDREN_LOG, sessions],
-      [REAL_MAIN_LOG, [mainSessionId]],
+      [REAL_MAIN_LOG, [main]],
     ]),
   });
 }
 
 function realChildSessions(world: ScenarioWorld): readonly RealChildSession[] {
   return (world.requireTurn().logs.get(REAL_CHILDREN_LOG) ?? []) as readonly RealChildSession[];
+}
+
+function realMainSession(world: ScenarioWorld): RealMainSession {
+  const [main] = (world.requireTurn().logs.get(REAL_MAIN_LOG) ?? []) as readonly RealMainSession[];
+  assert.ok(main !== undefined, "the turn holds no main session");
+  return main;
 }
 
 // Each child session's id by its ordinal, in launch order.
@@ -252,6 +282,28 @@ function childOrdinals(sessions: readonly RealChildSession[]): ReadonlyMap<strin
       return sessionId === undefined ? [] : [[sessionId, ordinal] as const];
     }),
   );
+}
+
+// The cell of each id and session file a real child's run may name: a child
+// session by its ordinal, the main session as `main`, and a session file as
+// `session file of` either.
+function realSessionNames(
+  sessions: readonly RealChildSession[],
+  main: RealMainSession,
+): ReadonlyMap<string, string> {
+  const ordinals = childOrdinals(sessions);
+  const files = sessions.flatMap(({ sessionId, sessionFile }) => {
+    const ordinal = ordinals.get(sessionId ?? "");
+    return ordinal === undefined || sessionFile === undefined
+      ? []
+      : [[sessionFile, `session file of ${ordinal}`] as const];
+  });
+  return new Map([
+    ...ordinals,
+    ...files,
+    [main.sessionId, "main"],
+    [main.sessionFile, "session file of main"],
+  ]);
 }
 
 function stdinCell(value: unknown, ordinals: ReadonlyMap<string, string>): string {
@@ -389,15 +441,21 @@ When(
       agents: parseRealChildAgents(table.raw()),
       ...(asyncByDefault !== "unset" && { asyncByDefault: asyncByDefault === "true" }),
     });
-    const sessions = observed.children.map(({ agent, mode, state, sessionId, pid }) => ({
-      generation: 1,
-      agent: agent ?? "",
-      mode,
-      state: state ?? "",
-      sessionId,
-      pid,
-    }));
-    recordRealChildren(this, "real children", observed.hookRuns, sessions, observed.mainSessionId);
+    const sessions = observed.children.map(
+      ({ agent, mode, state, sessionId, sessionFile, pid }) => ({
+        generation: 1,
+        agent: agent ?? "",
+        mode,
+        state: state ?? "",
+        sessionId,
+        sessionFile,
+        pid,
+      }),
+    );
+    recordRealChildren(this, "real children", observed.hookRuns, sessions, {
+      sessionId: observed.mainSessionId,
+      sessionFile: observed.mainSessionFile,
+    });
   },
 );
 
@@ -412,22 +470,20 @@ When(
       rounds: 2,
     });
     const sessions = observed.generations.flatMap((launched, index) =>
-      launched.map(({ agent, sessionId, pid }) => ({
+      launched.map(({ agent, sessionId, sessionFile, pid }) => ({
         generation: index + 1,
         agent,
         mode: "runner",
         state: "disposed",
         sessionId,
+        sessionFile,
         pid,
       })),
     );
-    recordRealChildren(
-      this,
-      "concurrent children",
-      observed.hookRuns,
-      sessions,
-      observed.mainSessionId,
-    );
+    recordRealChildren(this, "concurrent children", observed.hookRuns, sessions, {
+      sessionId: observed.mainSessionId,
+      sessionFile: observed.mainSessionFile,
+    });
   },
 );
 
@@ -548,24 +604,23 @@ Then(
 );
 
 // The child sessions' runs, in any order, since concurrent sessions append
-// theirs as they run; a session and an agent id name the child session by
-// its launch-order ordinal. The main session's runs are pi-subagents' turns
-// as much as the user's, so the step states none of them, and asserts only
-// that none of them carries a child identity.
+// theirs as they run. A run is a child's when its agent id names a launched
+// child session; an id and a session file read as `realSessionNames` names
+// them, and an empty value is an empty cell. The main session's runs are
+// pi-subagents' turns as much as the user's, so the step states none of
+// them, and asserts only that none of them carries a child identity.
 Then(
   "the real children's hooks record these runs in any order, and no main-session run names a child:",
   function (this: ScenarioWorld, table: DataTable) {
     const turn = this.requireTurn();
     const runs = (turn.logs.get(HOOK_RUNS_LOG) ?? []) as readonly HookRun[];
-    const ordinals = childOrdinals(realChildSessions(this));
-    const isChild = (run: HookRun): boolean => ordinals.has(String(run.stdin.session_id));
+    const sessions = realChildSessions(this);
+    const ordinals = childOrdinals(sessions);
+    const names = realSessionNames(sessions, realMainSession(this));
+    const isChild = (run: HookRun): boolean => ordinals.has(String(run.stdin.agent_id));
     const rows = runs
       .filter(isChild)
-      .map((run) =>
-        ["session_id", "hook_event_name", "tool_name", "agent_type", "agent_id"].map((key) =>
-          stdinCell(run.stdin[key], ordinals),
-        ),
-      )
+      .map((run) => REAL_CHILD_COLUMNS.map(([, read]) => stdinCell(read(run), names)))
       .sort((left, right) => left.join("\0").localeCompare(right.join("\0")));
     const [header = [], ...stated] = table.raw();
     assert.deepStrictEqual(
@@ -575,7 +630,10 @@ Then(
         ...[...stated].sort((left, right) => left.join("\0").localeCompare(right.join("\0"))),
       ],
     );
-    assert.deepStrictEqual(header, ["session", "event", "tool name", "agent type", "agent id"]);
+    assert.deepStrictEqual(
+      header,
+      REAL_CHILD_COLUMNS.map(([column]) => column),
+    );
     const named = runs
       .filter((run) => !isChild(run))
       .filter(
@@ -586,16 +644,16 @@ Then(
   },
 );
 
-// The positive control: the main session's first runs, for a prompt whose
-// model calls bash, carry no child identity.
+// The positive control: the main session's first runs, those with its id and
+// no agent id, for a prompt whose model calls bash, carry no child identity.
 Then(
   "the main session's hooks record these runs for its control prompt:",
   function (this: ScenarioWorld, table: DataTable) {
     const turn = this.requireTurn();
     const runs = (turn.logs.get(HOOK_RUNS_LOG) ?? []) as readonly HookRun[];
-    const [mainSessionId] = turn.logs.get(REAL_MAIN_LOG) ?? [];
+    const { sessionId } = realMainSession(this);
     const rows = runs
-      .filter((run) => run.stdin.session_id === mainSessionId)
+      .filter((run) => run.stdin.session_id === sessionId && !Object.hasOwn(run.stdin, "agent_id"))
       .slice(0, MAIN_CONTROL_RUNS)
       .map((run) => [
         run.event,
