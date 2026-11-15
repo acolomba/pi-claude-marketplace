@@ -63,7 +63,10 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import type { PackageInstallOps } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type {
+  ExtensionState,
+  PluginInstallRecord,
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Phase } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
@@ -2224,6 +2227,70 @@ test("MREC-01: the recorded configs are copies that a later change to the resolv
   assert.deepStrictEqual(seeded.state.marketplaces.marketplace?.plugins.empty?.mcpServerConfigs, [
     { name: "srv", config: { command: "node", args: ["s.js"] } },
   ]);
+});
+
+const DECLARED_OPTIONS = {
+  mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+  retries: { type: "number", title: "Retries", description: "The retries.", default: 3 },
+};
+
+async function installDeclaring(
+  t: TestContext,
+  pluginJson: Record<string, unknown>,
+): Promise<{
+  readonly record: PluginInstallRecord | undefined;
+  readonly resolved: InstallLedgerSummary["resolved"];
+}> {
+  const environment = await createHermeticEnvironment(t, "install-outcome-user-config-");
+  const seeded = await seedPlugin(environment.cwd, { pluginJson });
+  const ledgerOutcome = await runInstallLedger(
+    seeded.state,
+    locationsFor("project", environment.cwd),
+    {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      consentView: "none",
+      removalOps: createRemovalOps(),
+      env: {},
+    },
+  );
+  assert.ok(ledgerOutcome.kind === "installed");
+  return {
+    record: seeded.state.marketplaces.marketplace?.plugins.empty,
+    resolved: ledgerOutcome.summary.resolved,
+  };
+}
+
+test("D-PG10-23: records the declared options as a copy that a later change to the resolution does not reach", async (t) => {
+  // arrange
+  const { record, resolved } = await installDeclaring(t, { userConfig: DECLARED_OPTIONS });
+  const declared = resolved.declaredUserConfig as Record<string, { default?: unknown }>;
+
+  // act
+  declared.mode = { default: "changed" };
+
+  // assert
+  assert.deepStrictEqual(record?.userConfig, DECLARED_OPTIONS);
+});
+
+test("D-PG10-23: records a declared empty userConfig as an empty object", async (t) => {
+  // act
+  const { record } = await installDeclaring(t, { userConfig: {} });
+
+  // assert
+  assert.deepStrictEqual(record?.userConfig, {});
+});
+
+test("D-PG10-14: records no userConfig field for a plugin that declares no options", async (t) => {
+  // act
+  const { record } = await installDeclaring(t, {});
+
+  // assert
+  assert.strictEqual(Object.hasOwn(record ?? {}, "userConfig"), false);
 });
 
 test("MREC-01: a bundle reference records the bundle flag beside no recorded server", async (t) => {

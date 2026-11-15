@@ -4,7 +4,8 @@
  * A result can report a failure after the install already reached disk. These
  * steps look at what the install leaves behind: the plugins the scope's
  * installation record holds, with the version and enabled state of each, the
- * skill names it records for one plugin, the files a plugin's data directory
+ * skill names and the declared options it records for one plugin, the files a
+ * plugin's data directory
  * holds, the skills and prompts it stages, and the git clones of plugins and
  * marketplaces the scope keeps. A clone is shown
  * by its origin URL and, when pinned, by its revision, never by its directory
@@ -437,6 +438,34 @@ Then(
       recorded.find((candidate) => candidate.id === id) ??
       assert.fail(`the installation record of the ${scope} scope holds no plugin ${id}`);
     assert.deepStrictEqual([["skill"], ...plugin.skills.map((skill) => [skill])], table.raw());
+  },
+);
+
+// An option field's text: a string as it is, any other value as its JSON.
+function optionCell(value: unknown): string {
+  return typeof value === "string" ? value : JSON.stringify(value);
+}
+
+// One row per option the record holds: its key, then each field the table
+// names, empty when the option lacks it. A field the table does not name fails.
+Then(
+  "the installation record of the {word} scope holds these options of {string}:",
+  async function (this: ScenarioWorld, scope: string, id: string, table: DataTable) {
+    const fields = (table.raw()[0] ?? []).slice(1);
+    const record = await readPluginRecord(this.scopeRoot(scope), id);
+    const options = isPlainObject(record.userConfig) ? Object.entries(record.userConfig) : [];
+    const rows = options.map(([key, option]: [string, unknown]) => {
+      const declared = isPlainObject(option) ? option : {};
+      const unnamed = Object.keys(declared).filter((field) => !fields.includes(field));
+      assert.deepStrictEqual(unnamed, [], `the option ${key} of ${id} has unnamed fields`);
+      return [
+        key,
+        ...fields.map((field) =>
+          Object.hasOwn(declared, field) ? optionCell(Reflect.get(declared, field)) : "",
+        ),
+      ];
+    });
+    assert.deepStrictEqual([["option", ...fields], ...rows], table.raw());
   },
 );
 

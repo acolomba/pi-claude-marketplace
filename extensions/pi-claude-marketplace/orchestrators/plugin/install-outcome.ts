@@ -122,7 +122,7 @@ import {
   resolveStrict,
 } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource, type ParsedSource, type PathSource } from "../../domain/source.ts";
-import { mcpServerConfigsOf } from "../../persistence/state-io.ts";
+import { mcpServerConfigsOf, userConfigFieldsOf } from "../../persistence/state-io.ts";
 import { WorkflowsUnstageRefusedError } from "../../shared/errors-bridges.ts";
 import {
   ConcurrentInstallError,
@@ -1667,6 +1667,8 @@ async function runInstallLedgerBody(
         // substituted entries. Each config is a deep copy, so no later
         // in-memory change reaches the saved record.
         mcpServerConfigs: mcpServerConfigsOf(installCtx.resolved.declaredMcpServers),
+        // D-PG10-23: the declared options, absent when the plugin declares none.
+        ...userConfigFieldsOf(installCtx.resolved.declaredUserConfig),
         ...(installCtx.resolved.mcpBundle === true && { mcpBundle: true }),
         compatibility: {
           // INV-1 / D-66-01 / BFILL-01: record the REAL compatibility from the

@@ -42,6 +42,7 @@ import type {
   ParsedSource,
   UrlSource,
 } from "../domain/source.ts";
+import type { UserConfigSchema } from "../domain/user-config.ts";
 
 /**
  * D-100-01 / D-100-02 / ENBL-11: one persisted hook entry -- the event name
@@ -154,6 +155,18 @@ const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
   mcpServerConfigs: Type.Optional(
     Type.Array(Type.Object({ name: Type.String(), config: Type.Unknown() })),
   ),
+  // D-PG10-23 / D-PG10-14: the plugin's `userConfig` as it declared it, after
+  // the resolver parsed it, so a reader of options needs no manifest read. It
+  // holds the declared schema only, never a value a user typed. OPTIONAL and
+  // additive -- NO schemaVersion bump (the resolvedSha precedent), so a legacy
+  // record without it loads unchanged and absence needs no migrate fill.
+  //
+  // ABSENCE MEANS the plugin declares no options, or the record predates the
+  // key; either reads as no options until a restage writes it (D-PG10-15). A
+  // present empty object means the plugin declares `userConfig: {}`. The value
+  // stays unknown here because a project record is a file a repository can
+  // commit: its reader validates it again.
+  userConfig: Type.Optional(Type.Unknown()),
   // MREC-01: the plugin references a `.mcpb` or `.dxt` bundle, a block that
   // no recorded server represents and that no MCP implementation runs.
   // OPTIONAL and additive -- NO schemaVersion bump (the resolvedSha
@@ -304,6 +317,27 @@ export function mcpServerConfigsOf(
     name,
     config: structuredClone(config),
   }));
+}
+
+/**
+ * D-PG10-23: the `userConfig` field to write for a resolver's declared
+ * options: a deep copy, so no later in-memory change reaches the saved
+ * record, and no field when the plugin declares none. `Object.entries` and
+ * `Object.fromEntries` read and define own keys, so an option named
+ * `__proto__` stays an option.
+ */
+export function userConfigFieldsOf(
+  declared: UserConfigSchema | undefined,
+): Pick<PluginInstallRecord, "userConfig"> {
+  if (declared === undefined) {
+    return {};
+  }
+
+  return {
+    userConfig: Object.fromEntries(
+      Object.entries(declared).map(([key, option]) => [key, structuredClone(option)]),
+    ),
+  };
 }
 
 /**

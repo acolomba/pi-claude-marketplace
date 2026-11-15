@@ -662,7 +662,8 @@ type IsExact<Actual, Expected> = [Actual] extends [Expected]
 // a migrate fill that runs before validation, so every earlier document loads
 // with a truthful default (the enabled / ENBL-02 and provenance / D-04-03
 // precedent). Removing one is a migration. MREC-01 adds the optional
-// `mcpServerConfigs`, `mcpBundle`, and `compatibilityBasis` the first way.
+// `mcpServerConfigs`, `mcpBundle`, and `compatibilityBasis` the first way, and
+// D-PG10-23 adds the optional `userConfig` the same way.
 void (true satisfies IsExact<
   keyof PluginInstallRecord,
   | "compatibility"
@@ -679,6 +680,7 @@ void (true satisfies IsExact<
   | "resolvedVersion"
   | "resources"
   | "updatedAt"
+  | "userConfig"
   | "version"
 >);
 

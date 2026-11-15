@@ -19,6 +19,7 @@ import {
   replaceCompatibility,
   saveState,
   toDisabledRecord,
+  userConfigFieldsOf,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 interface HooksOnlyResources {
@@ -562,6 +563,15 @@ for (const { name, extra, accepted } of [
     extra: { mcpServerConfigs: [{ name: "srv" }] },
     accepted: false,
   },
+  {
+    name: "D-PG10-23 a record holding the options its plugin declares",
+    extra: {
+      userConfig: {
+        mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+      },
+    },
+    accepted: true,
+  },
   { name: "MREC-01 a record flagging a bundle", extra: { mcpBundle: true }, accepted: true },
   { name: "MREC-01 a false bundle flag", extra: { mcpBundle: false }, accepted: false },
   {
@@ -666,6 +676,116 @@ test("MREC-01: records no entry for a plugin declaring no MCP server", () => {
 
   // assert
   assert.deepStrictEqual(mcpServerConfigs, []);
+});
+
+test("D-PG10-23: loads a record's declared options unchanged at the same schema version", async (t) => {
+  // arrange
+  const extensionRoot = await createExtensionRoot(t, "state-io-user-config-");
+  const storedState = storedStateWithPluginKeys({
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+    userConfig: {
+      mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+      retries: { type: "number", title: "Retries", description: "The retries.", default: 3 },
+    },
+  });
+  await writeFile(path.join(extensionRoot, "state.json"), JSON.stringify(storedState));
+
+  // act
+  const loadedState = await loadState(extensionRoot);
+
+  // assert
+  assert.deepStrictEqual(loadedState, storedState);
+});
+
+test("D-PG10-23: gives a declared schema as the userConfig field to write", () => {
+  // arrange
+  const declared = {
+    mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+    hosts: {
+      type: "string",
+      title: "Hosts",
+      description: "The hosts.",
+      multiple: true,
+      default: ["a", "b"],
+    },
+  } satisfies Parameters<typeof userConfigFieldsOf>[0];
+
+  // act
+  const fields = userConfigFieldsOf(declared);
+
+  // assert
+  assert.deepStrictEqual(fields, { userConfig: declared });
+});
+
+test("D-PG10-23: gives a deep copy that a later change to the declared schema does not reach", () => {
+  // arrange
+  const declared = {
+    hosts: {
+      type: "string" as const,
+      title: "Hosts",
+      description: "The hosts.",
+      multiple: true,
+      default: ["a"],
+    },
+  };
+  const fields = userConfigFieldsOf(declared);
+
+  // act
+  declared.hosts.default.push("changed");
+  declared.hosts.title = "Changed";
+
+  // assert
+  assert.deepStrictEqual(fields, {
+    userConfig: {
+      hosts: {
+        type: "string",
+        title: "Hosts",
+        description: "The hosts.",
+        multiple: true,
+        default: ["a"],
+      },
+    },
+  });
+});
+
+test("D-PG10-23: gives a declared empty schema as an empty object", () => {
+  // act
+  const fields = userConfigFieldsOf({});
+
+  // assert
+  assert.deepStrictEqual(fields, { userConfig: {} });
+});
+
+test("D-PG10-14: gives no field for a plugin that declares no options", () => {
+  // act
+  const fields = userConfigFieldsOf(undefined);
+
+  // assert
+  assert.deepStrictEqual(fields, {});
+});
+
+test("D-PG10-23: keeps an option named __proto__ as an own key of the stored schema", () => {
+  // arrange
+  const declared = JSON.parse(
+    '{"__proto__":{"type":"string","title":"Proto","description":"The proto.","default":"x"}}',
+  ) as Parameters<typeof userConfigFieldsOf>[0];
+
+  // act
+  const stored = userConfigFieldsOf(declared).userConfig;
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      own: Object.hasOwn(stored as object, "__proto__"),
+      prototype: Object.getPrototypeOf(stored) === Object.prototype,
+      text: JSON.stringify(stored),
+    },
+    {
+      own: true,
+      prototype: true,
+      text: '{"__proto__":{"type":"string","title":"Proto","description":"The proto.","default":"x"}}',
+    },
+  );
 });
 
 test("returns the exact default for a missing state file", async (t) => {
