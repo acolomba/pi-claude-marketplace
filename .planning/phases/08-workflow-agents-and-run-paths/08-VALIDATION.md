@@ -68,7 +68,7 @@ Filled by the planner and executors from `08-RESEARCH.md` "Phase Requirements â†
 
 - [ ] The S5 scratch fixture (RESEARCH R1): engine in the main Pi and in `settings.json`, a workflow in the plugin, the scripted `workflow` call with `background: false`, the session-file read, the engine settings at `{agent dir}/workflows/settings.json`. Not committed unless it becomes a committed proof.
 - [ ] A `Given` step that makes the session's project a git repository with one commit (RESEARCH R4).
-- [ ] A catalog-uat fixture for the new note (no map entry needed: `PLUGIN_INFO_FIXTURES` is listed)'s `docs/output-catalog.md` state (RESEARCH R8).
+- [ ] A catalog-uat fixture for the new note's `docs/output-catalog.md` state (RESEARCH R8); no map entry is needed, because `PLUGIN_INFO_FIXTURES` is already listed.
 - [ ] Option B of PG-WF-05 only: real-child fixture options and a step text for a plugin with a workflow.
 
 ---

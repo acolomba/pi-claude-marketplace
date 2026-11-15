@@ -395,7 +395,25 @@ Plans:
   4. The workflow compatibility page says what a workflow subagent can reach, names the engine settings `inheritMainModel` and `providerMiddlewareExtensions`, and says that Pi's built-in MCP cannot load in a subagent and that plugin hooks do not run there. It states the adapter setting as spike S5 measured it (PG-WF-04).
   5. For a bridged agent whose source grants `Workflow` or `Workflow(<name>)`, in a plugin that stages a workflow, `subagent get` shows the engine's `workflow` tool and the background launch mode. In a live run with a real pi-subagents child, the lead agent of a fixture plugin starts the plugin's workflow (PG-WF-05).
 
-**Plans**: TBD
+**Plans**: 7 plans
+
+Plans:
+**Wave 1**
+- [ ] 08-01-PLAN.md -- Wave 1: run spike S5 (the engine in a real pi-subagents background child; the adapter in a workflow subagent) and record it
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 08-02-PLAN.md -- Wave 2: note a workflow agent type the plugin does not install, prove the agent type binding, and correct the `agentType` row
+- [ ] 08-03-PLAN.md -- Wave 2: cover the five uncovered workflow run paths with guard scenarios and a git-repository step
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 08-04-PLAN.md -- Wave 3: say what a workflow subagent can reach, graded by the spike, and correct the fan-out failure paragraph
+- [ ] 08-07-PLAN.md -- Wave 3: document the missing-agent note's `info` state in the output catalog, with its fixture and the pinned catalog counts
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 08-05-PLAN.md -- Wave 4: the maintainer chooses whether a bridged agent may hold the `workflow` tool; under option A, record and pin the drop
+
+**Wave 5** *(blocked on Wave 4 completion; only under option B)*
+- [ ] 08-06-PLAN.md -- Wave 5: grant `workflow` when the plugin stages a workflow, launch in the background, and prove it with a real child
 
 ### Phase 9: Adapter Entries and MCP Features
 
