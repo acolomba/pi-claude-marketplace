@@ -27,6 +27,7 @@ const stageSkillsInput: StageSkillsInput = {
   previousSkillNames: ["acme-obsolete"],
   knownWorkflowNames: ["acme:audit"],
   cwd: "/work/project",
+  options: undefined,
 } satisfies StageSkillsInput;
 void stageSkillsInput;
 

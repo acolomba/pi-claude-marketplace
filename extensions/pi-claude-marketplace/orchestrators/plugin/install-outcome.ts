@@ -122,6 +122,7 @@ import {
   resolveStrict,
 } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource, type ParsedSource, type PathSource } from "../../domain/source.ts";
+import { declaredOptions, resolveOptions } from "../../domain/user-config.ts";
 import { mcpServerConfigsOf, userConfigFieldsOf } from "../../persistence/state-io.ts";
 import { WorkflowsUnstageRefusedError } from "../../shared/errors-bridges.ts";
 import {
@@ -1276,6 +1277,8 @@ async function runInstallLedgerBody(
         knownWorkflowNames: generatedNames.workflows,
         // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
         cwd: installCtx.cwd,
+        // D-PG10-13: the options are written into skill content at staging.
+        options: declaredOptions(resolveOptions(installCtx.resolved.declaredUserConfig)),
       });
       installCtx.skillsPrep = prep;
       // Set before commit so undo can remove any dirs that were placed if

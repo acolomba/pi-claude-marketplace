@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { describe, test } from "node:test";
 
 import {
+  declaredOptions,
   hookOptionVariableName,
   ownedOptionVariableName,
   parseUserConfig,
@@ -381,6 +382,41 @@ describe("resolveOptions", () => {
       sensitive: new Set(["constructor"]),
     } satisfies ResolvedOptions);
     assert.strictEqual(Object.getPrototypeOf(schema), Object.prototype);
+  });
+});
+
+describe("declaredOptions", () => {
+  test("gives back the options of a plugin that declares userConfig (D-PG10-21)", () => {
+    // arrange
+    const options = resolveOptions({ mode: modeOption() });
+
+    // act
+    const passed = declaredOptions(options);
+
+    // assert
+    assert.strictEqual(passed, options);
+  });
+
+  test("gives back the options of an empty declared userConfig (D-PG10-21)", () => {
+    // arrange
+    const options = resolveOptions({});
+
+    // act
+    const passed = declaredOptions(options);
+
+    // assert
+    assert.strictEqual(passed, options);
+  });
+
+  test("gives no options for a plugin that declares no userConfig (D-PG10-21)", () => {
+    // arrange
+    const options = resolveOptions(undefined);
+
+    // act
+    const passed = declaredOptions(options);
+
+    // assert
+    assert.strictEqual(passed, undefined);
   });
 });
 

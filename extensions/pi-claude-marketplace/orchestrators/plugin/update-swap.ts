@@ -415,6 +415,7 @@ async function prepareUpdateHandles(
       knownWorkflowNames: referenceNames.workflows,
       // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
       cwd,
+      options: undefined,
     });
     handles.commands = await prepareStageCommands(ops, {
       locations,

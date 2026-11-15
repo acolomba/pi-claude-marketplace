@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { describe, test } from "node:test";
 
 import {
+  substituteClaudeContent,
   substituteClaudeVars,
+  type ClaudeContentOptions,
   type ClaudePluginVars,
 } from "../../extensions/pi-claude-marketplace/shared/vars.ts";
 
@@ -153,17 +155,129 @@ const substitutionCases = [
     },
     expectedContent: "before/${CLAUDE_SKILL_DIR}/after",
   },
+  {
+    name: "leaves an option reference as written (D-PG10-13)",
+    content: "mode=${user_config.mode};root=${CLAUDE_PLUGIN_ROOT}",
+    vars: { pluginRoot: "/plugin", pluginData: "/data" },
+    expectedContent: "mode=${user_config.mode};root=/plugin",
+  },
 ] satisfies readonly SubstitutionCase[];
 
-for (const substitutionCase of substitutionCases) {
-  test(substitutionCase.name, () => {
-    // arrange
-    const { content, vars, expectedContent } = substitutionCase;
+describe("substituteClaudeVars", () => {
+  for (const substitutionCase of substitutionCases) {
+    test(substitutionCase.name, () => {
+      // arrange
+      const { content, vars, expectedContent } = substitutionCase;
 
-    // act
-    const substitutedContent = substituteClaudeVars(content, vars);
+      // act
+      const substitutedContent = substituteClaudeVars(content, vars);
 
-    // assert
-    assert.strictEqual(substitutedContent, expectedContent);
-  });
+      // assert
+      assert.strictEqual(substitutedContent, expectedContent);
+    });
+  }
+});
+
+interface ContentCase {
+  readonly name: string;
+  readonly content: string;
+  readonly vars: ClaudePluginVars;
+  readonly options: ClaudeContentOptions | undefined;
+  readonly expectedContent: string;
 }
+
+const pluginVars = { pluginRoot: "/plugin", pluginData: "/data" } satisfies ClaudePluginVars;
+
+const modeOptions = {
+  values: new Map([
+    ["mode", "fast"],
+    ["token", "abc123"],
+  ]),
+  sensitive: new Set(["token", "secret"]),
+} satisfies ClaudeContentOptions;
+
+const contentCases = [
+  {
+    name: "writes the value of an option (D-PG10-13)",
+    content: "mode=${user_config.mode}",
+    vars: pluginVars,
+    options: modeOptions,
+    expectedContent: "mode=fast",
+  },
+  {
+    name: "writes the sensitive-option text for a sensitive option with a value (D-PG10-09)",
+    content: "token=${user_config.token}",
+    vars: pluginVars,
+    options: modeOptions,
+    expectedContent: "token=[sensitive option 'token' not available in skill content]",
+  },
+  {
+    name: "writes the sensitive-option text for a sensitive option with no value (D-PG10-09)",
+    content: "secret=${user_config.secret}",
+    vars: pluginVars,
+    options: modeOptions,
+    expectedContent: "secret=[sensitive option 'secret' not available in skill content]",
+  },
+  {
+    name: "keeps a reference to an option with no value as written (D-PG10-08)",
+    content: "note=${user_config.note}",
+    vars: pluginVars,
+    options: modeOptions,
+    expectedContent: "note=${user_config.note}",
+  },
+  {
+    name: "keeps a reference whose key is not an identifier as written (D-PG10-08)",
+    content: "${user_config.not-a-key}|${user_config.}",
+    vars: pluginVars,
+    options: modeOptions,
+    expectedContent: "${user_config.not-a-key}|${user_config.}",
+  },
+  {
+    name: "keeps every option reference as written for a plugin with no options (D-PG10-21)",
+    content: "mode=${user_config.mode};token=${user_config.token};root=${CLAUDE_PLUGIN_ROOT}",
+    vars: pluginVars,
+    options: undefined,
+    expectedContent: "mode=${user_config.mode};token=${user_config.token};root=/plugin",
+  },
+  {
+    name: "fills the path variables beside the options from left to right (D-PG10-13)",
+    content:
+      "${CLAUDE_PLUGIN_ROOT}|${user_config.mode}|${CLAUDE_PLUGIN_DATA}|" +
+      "${CLAUDE_SKILL_DIR}|${CLAUDE_PROJECT_DIR}",
+    vars: { ...pluginVars, skillDir: "/skill" },
+    options: modeOptions,
+    expectedContent: "/plugin|fast|/data|/skill|${CLAUDE_PROJECT_DIR}",
+  },
+  {
+    name: "writes an option value that holds a variable as text (D-PG10-13)",
+    content: "${user_config.mode}|${CLAUDE_PLUGIN_DATA}",
+    vars: pluginVars,
+    options: {
+      values: new Map([["mode", "${CLAUDE_PLUGIN_ROOT}/${user_config.mode}"]]),
+      sensitive: new Set(),
+    },
+    expectedContent: "${CLAUDE_PLUGIN_ROOT}/${user_config.mode}|/data",
+  },
+  {
+    name: "does not fill an option reference that a path value holds (D-PG10-13)",
+    content: "${CLAUDE_PLUGIN_ROOT}|${user_config.mode}",
+    vars: { pluginRoot: "/plugin/${user_config.mode}", pluginData: "/data" },
+    options: modeOptions,
+    expectedContent: "/plugin/${user_config.mode}|fast",
+  },
+] satisfies readonly ContentCase[];
+
+describe("substituteClaudeContent", () => {
+  for (const contentCase of contentCases) {
+    test(contentCase.name, () => {
+      // arrange
+      const { content, vars, options, expectedContent } = contentCase;
+
+      // act
+      const substitutedContent = substituteClaudeContent(content, vars, options);
+
+      // assert
+      assert.strictEqual(substitutedContent, expectedContent);
+    });
+  }
+});

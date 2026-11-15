@@ -284,6 +284,15 @@ export function resolveOptions(schema: UserConfigSchema | undefined): ResolvedOp
 }
 
 /**
+ * The options a content or MCP pass reads, or `undefined` for a plugin that
+ * declares no `userConfig`. Claude Code runs no option pass for such a plugin,
+ * so its references stay as written (D-PG10-21).
+ */
+export function declaredOptions(options: ResolvedOptions): ResolvedOptions | undefined {
+  return options.declared ? options : undefined;
+}
+
+/**
  * Replaces each `${user_config.KEY}` in one pass. Text that `replace` returns
  * is not scanned again.
  */

@@ -2293,6 +2293,55 @@ test("D-PG10-14: records no userConfig field for a plugin that declares no optio
   assert.strictEqual(Object.hasOwn(record ?? {}, "userConfig"), false);
 });
 
+/** Installs a plugin whose skill `opts` names options and returns the staged skill body. */
+async function stagedOptionSkillBody(
+  t: TestContext,
+  pluginJson: Record<string, unknown>,
+): Promise<string | undefined> {
+  const environment = await createHermeticEnvironment(t, "install-outcome-skill-options-");
+  const seeded = await seedPlugin(environment.cwd, { pluginJson });
+  const skillDir = path.join(seeded.pluginRoot, "skills", "opts");
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(
+    path.join(skillDir, "SKILL.md"),
+    "---\nname: opts\n---\nMode ${user_config.mode} retries ${user_config.retries}.\n",
+  );
+  const locations = locationsFor("project", environment.cwd);
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    consentView: "none",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+  assert.ok(ledgerOutcome.kind === "installed");
+  const staged = await readFile(
+    path.join(locations.skillsTargetDir, "empty-opts", "SKILL.md"),
+    "utf8",
+  );
+  return staged.split("---\n").at(-1);
+}
+
+test("D-PG10-13: the skills phase writes the declared options into skill content", async (t) => {
+  // act
+  const body = await stagedOptionSkillBody(t, { userConfig: DECLARED_OPTIONS });
+
+  // assert
+  assert.strictEqual(body, "Mode fast retries 3.\n");
+});
+
+test("D-PG10-21: the skills phase keeps the option references of a plugin with no userConfig", async (t) => {
+  // act
+  const body = await stagedOptionSkillBody(t, {});
+
+  // assert
+  assert.strictEqual(body, "Mode ${user_config.mode} retries ${user_config.retries}.\n");
+});
+
 test("MREC-01: a bundle reference records the bundle flag beside no recorded server", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-mcp-bundle-");

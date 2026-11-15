@@ -14,6 +14,7 @@ import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
+import type { ClaudeContentOptions } from "../../shared/vars.ts";
 
 /** A skill enumerated by `discoverPluginSkills` (one entry per source skill dir). */
 export interface DiscoveredSkill {
@@ -57,6 +58,12 @@ export interface StageSkillsInput {
    * substitution only.
    */
   readonly cwd: string;
+  /**
+   * D-PG10-13: the plugin's options, written into skill content where it names
+   * `${user_config.KEY}`. Required, like `cwd`; a caller passes `undefined` for
+   * a plugin that declares no `userConfig` (D-PG10-21).
+   */
+  readonly options: ClaudeContentOptions | undefined;
 }
 
 /**

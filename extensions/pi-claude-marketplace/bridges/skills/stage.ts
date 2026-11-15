@@ -7,7 +7,7 @@
 //     `<extensionRoot>/skills-staging/<uuid>/` -- staging and target both
 //     live under `<extensionRoot>/`, guaranteeing same-FS atomicity for the
 //     per-skill `rename`.
-//   - D-08: substitution helper is `shared/vars.ts::substituteClaudeVars`
+//   - D-08: substitution helper is `shared/vars.ts::substituteClaudeContent`
 //     (uniform across skills/commands/agents).
 //   - RN-6: two source skills that elide to the same generated name are a
 //     first-wins skip plus a warning, decided in `discover.ts` (D-141-04).
@@ -31,7 +31,7 @@ import { appendLeakToError, errorMessage } from "../../shared/errors.ts";
 import { cleanupStaging } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { discoveryWarning } from "../../shared/staging-warnings.ts";
-import { substituteClaudeVars } from "../../shared/vars.ts";
+import { substituteClaudeContent } from "../../shared/vars.ts";
 
 import { discoverPluginSkills } from "./discover.ts";
 import {
@@ -60,7 +60,7 @@ import type {
 } from "./types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { RemovalOps } from "../../shared/fs-utils.ts";
-import type { ClaudePluginVars } from "../../shared/vars.ts";
+import type { ClaudeContentOptions, ClaudePluginVars } from "../../shared/vars.ts";
 
 /**
  * SKILL-01: extract the markdown body from a skill source whose frontmatter
@@ -129,6 +129,7 @@ function augmentSkillDescription(
   frontmatter: Record<string, unknown>,
   body: string,
   vars: ClaudePluginVars,
+  options: ClaudeContentOptions | undefined,
 ): string {
   const rawDescription = frontmatter.description;
   const sourceDescription = typeof rawDescription === "string" ? rawDescription : "";
@@ -139,13 +140,13 @@ function augmentSkillDescription(
     sourceDescription === "" ? descriptionFallback(body, "Plugin skill") : sourceDescription;
   const folded = foldWhenToUse(base, whenToUse === "" ? undefined : whenToUse);
   // SK-4 / AG-8: substitute the Claude path vars BEFORE the value is escaped into
-  // the double-quoted scalar. The later whole-file `substituteClaudeVars` (below)
+  // the double-quoted scalar. The later whole-file `substituteClaudeContent` (below)
   // would otherwise splice a Windows path's backslashes into the ALREADY-escaped
   // scalar, forming an invalid `\U...`-class escape that fails the PARSE-02
   // backstop; substituting first lets `emitSafeDoubleQuotedScalar` escape those
   // backslashes. The cap is applied pre-substitution (the WTU-02 listing budget
   // measures the authored text).
-  const effective = substituteClaudeVars(truncate1536(folded), vars);
+  const effective = substituteClaudeContent(truncate1536(folded), vars, options);
 
   // NREG-01: a present, in-cap `description` with no `when_to_use` and no path
   // var to expand is unchanged -- do NOT re-emit it as a double-quoted scalar
@@ -285,6 +286,7 @@ interface SkillStagingContext {
   readonly pluginDataDir: string;
   /** SUB-02: the install cwd at project scope, `undefined` at user scope. */
   readonly projectDir: string | undefined;
+  readonly options: StageSkillsInput["options"];
   readonly locations: StageSkillsInput["locations"];
   readonly stagingRoot: string;
   readonly referenceNames: InstalledReferenceNames;
@@ -376,7 +378,13 @@ async function stageSkill(
   if (parsed !== undefined) {
     droppedFields = droppedInvocationFieldsWarning(skill.sourceName, parsed.frontmatter);
     content = rewriteFrontmatterName(content, skill.generatedName);
-    content = augmentSkillDescription(content, parsed.frontmatter, parsed.body, skillVars);
+    content = augmentSkillDescription(
+      content,
+      parsed.frontmatter,
+      parsed.body,
+      skillVars,
+      context.options,
+    );
     frontmatterAliases = frontmatterNameAliases(pluginName, parsed.frontmatter.name);
   }
 
@@ -393,7 +401,7 @@ async function stageSkill(
   // still reads as a token.
   const rewriteMarkdown = skillMarkdownRewrite(context, skill, stagedDir);
   content = rewriteMarkdown(content, stagedDir);
-  content = substituteClaudeVars(content, skillVars);
+  content = substituteClaudeContent(content, skillVars, context.options);
   // D-CF2-02 / D-CF2-06 / T-02-02: the record goes in last, after every
   // rewrite, so no reference rewrite reads its names. Its `pluginRoot` and
   // `pluginData` are the values the SK-4 substitution used.
@@ -505,6 +513,7 @@ export async function prepareStageSkills(
     pluginRoot,
     pluginDataDir,
     projectDir: locations.scope === "project" ? cwd : undefined,
+    options: input.options,
     locations,
     stagingRoot,
     // SKTK-01: the same-plugin reference targets this install materializes.
