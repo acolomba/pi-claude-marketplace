@@ -1388,6 +1388,8 @@ async function runInstallLedgerBody(
         },
         // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
         cwd: installCtx.cwd,
+        // D-PG10-13: the options are written into agent content at staging.
+        options: declaredOptions(resolveOptions(installCtx.resolved.declaredUserConfig)),
       });
       installCtx.agentsPrep = prep;
       // The agents bridge tags its D-07 duplicate-name skips discovery and

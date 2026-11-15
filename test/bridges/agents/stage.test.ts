@@ -128,6 +128,7 @@ describe("prepareStagePluginAgents", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -193,6 +194,7 @@ describe("prepareStagePluginAgents", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -252,6 +254,7 @@ describe("prepareStagePluginAgents", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -293,6 +296,7 @@ describe("prepareStagePluginAgents", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -325,6 +329,7 @@ describe("prepareStagePluginAgents", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -353,6 +358,7 @@ describe("prepareStagePluginAgents", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -383,6 +389,7 @@ describe("prepareStagePluginAgents", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -430,6 +437,7 @@ describe("prepareStagePluginAgents", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -545,6 +553,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -607,6 +616,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations: userLocations,
       cwd: userLocations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -669,6 +679,7 @@ Read \${CLAUDE_PROJECT_DIR} and ${pluginRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: "/work/app",
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -714,6 +725,51 @@ Work in /work/app; see /skill:acme-rules.
     assert.strictEqual(await abortPreparedAgents(createRemovalOps(), prepared), undefined);
   });
 
+  test("D-PG10-13: writes the options of its input into the body and a preloaded skill", async (t) => {
+    // arrange
+    const tree = await createStageTree(t, "agents-stage-options-");
+    await writeFile(
+      path.join(tree.agentsSourceDir, "bot.md"),
+      "---\nname: bot\ndescription: Bot\nskills: rules\n---\n\nBot ${user_config.mode}.\n",
+    );
+    const skillSource = path.join(tree.pluginRoot, "skills", "rules");
+    await mkdir(skillSource, { recursive: true });
+    await writeFile(
+      path.join(skillSource, "SKILL.md"),
+      "---\ndescription: The rules.\n---\nToken ${user_config.token}.\n",
+    );
+    const skillTarget = path.join(tree.locations.skillsTargetDir, "acme-rules");
+
+    // act
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations: tree.locations,
+      cwd: tree.locations.scopeRoot,
+      options: { values: new Map([["mode", "fast"]]), sensitive: new Set(["token"]) },
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: tree.pluginRoot,
+      pluginDataDir: tree.pluginDataDir,
+      agentsDirs: [tree.agentsSourceDir],
+      knownSkills: ["acme-rules"],
+      skillSources: [
+        { generatedName: "acme-rules", sourcePath: skillSource, targetPath: skillTarget },
+      ],
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const staged = await readFile(
+      path.join(prepared.stagingDir, "pi-claude-marketplace-acme-bot.md"),
+      "utf8",
+    );
+    await abortPreparedAgents(createRemovalOps(), prepared);
+
+    // assert
+    assert.strictEqual(
+      staged.split("---\n").at(-1),
+      `\nBot fast.\n\nBase directory for this skill: ${skillTarget}\n\n` +
+        "Token [sensitive option 'token' not available in skill content].\n",
+    );
+  });
+
   test("D-CF4-04: stages without reading a skill source when no agent declares skills", async (t) => {
     // arrange
     const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
@@ -731,6 +787,7 @@ Work in /work/app; see /skill:acme-rules.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -796,6 +853,7 @@ Bot body.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -923,6 +981,7 @@ Duplicate body.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -985,6 +1044,7 @@ Mixed body.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -1063,6 +1123,7 @@ Review files.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -1138,6 +1199,7 @@ Review files.
         prepareStagePluginAgents(createRemovalOps(), {
           locations,
           cwd: locations.scopeRoot,
+          options: undefined,
           marketplaceName: "catalog",
           pluginName: "acme",
           pluginRoot,
@@ -1187,6 +1249,7 @@ Review files.
     const error = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -1274,6 +1337,7 @@ describe("commitPreparedAgents", () => {
       const prepared = await prepareStagePluginAgents(createRemovalOps(), {
         locations,
         cwd: locations.scopeRoot,
+        options: undefined,
         marketplaceName: "catalog",
         pluginName: "acme",
         pluginRoot,
@@ -1332,6 +1396,7 @@ describe("commitPreparedAgents", () => {
       const retried = await prepareStagePluginAgents(createRemovalOps(), {
         locations,
         cwd: locations.scopeRoot,
+        options: undefined,
         marketplaceName: "catalog",
         pluginName: "acme",
         pluginRoot,
@@ -1489,6 +1554,7 @@ describe("commitPreparedAgents", () => {
       const prepared = await prepareStagePluginAgents(createRemovalOps(), {
         locations,
         cwd: locations.scopeRoot,
+        options: undefined,
         marketplaceName: "catalog",
         pluginName: "acme",
         pluginRoot,
@@ -1630,6 +1696,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -1722,6 +1789,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -1811,6 +1879,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -1859,6 +1928,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -1912,6 +1982,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const stageInput = {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -2010,6 +2081,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -2084,6 +2156,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -2136,6 +2209,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -2184,6 +2258,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -2287,6 +2362,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -2368,6 +2444,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -2432,6 +2509,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -2500,6 +2578,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -2542,6 +2621,7 @@ describe("assertAgentCommitTargets", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -2576,6 +2656,7 @@ describe("assertAgentCommitTargets", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -2614,6 +2695,7 @@ describe("abortPreparedAgents", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -2643,6 +2725,7 @@ describe("abortPreparedAgents", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,

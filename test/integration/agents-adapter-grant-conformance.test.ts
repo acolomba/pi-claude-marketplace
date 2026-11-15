@@ -43,6 +43,7 @@ function grantSelector(): string[] {
     },
     sourceHash: "abc",
     mapModel: false,
+    options: undefined,
     mcpServerNames: ["warehouse"],
     mcpImplementation: "adapter",
   });

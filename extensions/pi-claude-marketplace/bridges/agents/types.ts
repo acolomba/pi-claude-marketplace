@@ -20,6 +20,7 @@ import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { AgentsIndexRow } from "../../persistence/agents-index-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
+import type { ClaudeContentOptions } from "../../shared/vars.ts";
 
 export interface RawAgentFrontmatter {
   readonly name?: string;
@@ -129,6 +130,13 @@ export interface StageAgentsInput {
    * substitution only.
    */
   readonly cwd: string;
+  /**
+   * D-PG10-13: the plugin's options, written into agent bodies and preloaded
+   * skills where they name `${user_config.KEY}`. Required, like `cwd`; a
+   * caller passes `undefined` for a plugin that declares no `userConfig`
+   * (D-PG10-21).
+   */
+  readonly options: ClaudeContentOptions | undefined;
 }
 
 /**

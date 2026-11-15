@@ -917,13 +917,17 @@ test("D-PG10-15: a swap to a version that declares no options gives its routing 
 });
 
 /**
- * Swaps `hello` to 2.0.0, whose skill `tool` and command `opts` name
- * `${user_config.mode}`, and returns their staged bodies.
+ * Swaps `hello` to 2.0.0, whose skill `tool`, command `opts`, and agent
+ * `opts` name `${user_config.mode}`, and returns their staged bodies.
  */
 async function swapOptionContent(
   cwd: string,
   declared: Record<string, unknown> | undefined,
-): Promise<{ readonly skill: string | undefined; readonly command: string | undefined }> {
+): Promise<{
+  readonly skill: string | undefined;
+  readonly command: string | undefined;
+  readonly agent: string | undefined;
+}> {
   const args = await seedOptionsUpdate(
     cwd,
     { mode: { ...MODE_OPTION, default: "fast" } },
@@ -936,12 +940,19 @@ async function swapOptionContent(
   const commandsDir = path.join(cwd, "mp-src", "plugins", "hello", "commands");
   await mkdir(commandsDir, { recursive: true });
   await writeFile(path.join(commandsDir, "opts.md"), "Mode ${user_config.mode}.\n");
+  const agentsDir = path.join(cwd, "mp-src", "plugins", "hello", "agents");
+  await mkdir(agentsDir, { recursive: true });
+  await writeFile(
+    path.join(agentsDir, "opts.md"),
+    "---\nname: opts\ndescription: Opts\n---\nMode ${user_config.mode}.\n",
+  );
   await swapOptionsUpdate(args);
   const bodyOf = async (file: string): Promise<string | undefined> =>
     (await readFile(file, "utf8")).split("---\n").at(-1);
   return {
     skill: await bodyOf(path.join(args.locations.skillsTargetDir, "hello-tool", "SKILL.md")),
     command: await bodyOf(path.join(args.locations.promptsTargetDir, "hello:opts.md")),
+    agent: await bodyOf(path.join(args.locations.agentsDir, "pi-claude-marketplace-hello-opts.md")),
   };
 }
 
@@ -987,6 +998,28 @@ test("D-PG10-21: a swap to a version that declares no options keeps its command'
 
   // assert
   assert.strictEqual(command, "Mode ${user_config.mode}.\n");
+});
+
+test("D-PG10-13: a swap writes the options the new version declares into its agent", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-agent-options-");
+
+  // act
+  const { agent } = await swapOptionContent(cwd, { mode: { ...MODE_OPTION, default: "slow" } });
+
+  // assert
+  assert.strictEqual(agent, "\nMode slow.\n");
+});
+
+test("D-PG10-21: a swap to a version that declares no options keeps its agent's references", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-agent-no-options-");
+
+  // act
+  const { agent } = await swapOptionContent(cwd, undefined);
+
+  // assert
+  assert.strictEqual(agent, "\nMode ${user_config.mode}.\n");
 });
 
 /**

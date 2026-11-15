@@ -102,6 +102,7 @@ function grantSelectors(mcpImplementation: McpImplementationId): string[] {
     },
     sourceHash: "abc",
     mapModel: false,
+    options: undefined,
     mcpServerNames: ["db", "my-db", "warehouse"],
     mcpImplementation,
   });

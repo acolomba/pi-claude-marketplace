@@ -2299,13 +2299,17 @@ function bodyOf(staged: string): string | undefined {
 }
 
 /**
- * Installs a plugin whose skill `opts` and command `cmd` name options and
- * returns their staged bodies.
+ * Installs a plugin whose skill `opts`, command `cmd`, and agent `bot` name
+ * options and returns their staged bodies.
  */
 async function stagedOptionBodies(
   t: TestContext,
   pluginJson: Record<string, unknown>,
-): Promise<{ readonly skill: string | undefined; readonly command: string | undefined }> {
+): Promise<{
+  readonly skill: string | undefined;
+  readonly command: string | undefined;
+  readonly agent: string | undefined;
+}> {
   const environment = await createHermeticEnvironment(t, "install-outcome-skill-options-");
   const seeded = await seedPlugin(environment.cwd, { pluginJson });
   const skillDir = path.join(seeded.pluginRoot, "skills", "opts");
@@ -2318,6 +2322,11 @@ async function stagedOptionBodies(
   await writeFile(
     path.join(seeded.pluginRoot, "commands", "cmd.md"),
     "Mode ${user_config.mode} retries ${user_config.retries}.\n",
+  );
+  await mkdir(path.join(seeded.pluginRoot, "agents"), { recursive: true });
+  await writeFile(
+    path.join(seeded.pluginRoot, "agents", "bot.md"),
+    "---\nname: bot\ndescription: Bot\n---\nMode ${user_config.mode} retries ${user_config.retries}.\n",
   );
   const locations = locationsFor("project", environment.cwd);
   const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
@@ -2337,6 +2346,9 @@ async function stagedOptionBodies(
       await readFile(path.join(locations.skillsTargetDir, "empty-opts", "SKILL.md"), "utf8"),
     ),
     command: bodyOf(await readFile(path.join(locations.promptsTargetDir, "empty:cmd.md"), "utf8")),
+    agent: bodyOf(
+      await readFile(path.join(locations.agentsDir, "pi-claude-marketplace-empty-bot.md"), "utf8"),
+    ),
   };
 }
 
@@ -2370,6 +2382,22 @@ test("D-PG10-21: the commands phase keeps the option references of a plugin with
 
   // assert
   assert.strictEqual(command, "Mode ${user_config.mode} retries ${user_config.retries}.\n");
+});
+
+test("D-PG10-13: the agents phase writes the declared options into agent content", async (t) => {
+  // act
+  const { agent } = await stagedOptionBodies(t, { userConfig: DECLARED_OPTIONS });
+
+  // assert
+  assert.strictEqual(agent, "\nMode fast retries 3.\n");
+});
+
+test("D-PG10-21: the agents phase keeps the option references of a plugin with no userConfig", async (t) => {
+  // act
+  const { agent } = await stagedOptionBodies(t, {});
+
+  // assert
+  assert.strictEqual(agent, "\nMode ${user_config.mode} retries ${user_config.retries}.\n");
 });
 
 /** Installs a plugin with a server that names `token` and a plain server, and returns the mcp summary. */

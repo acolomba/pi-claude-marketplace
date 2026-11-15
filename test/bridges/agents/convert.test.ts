@@ -48,6 +48,7 @@ function mcpAgentInput(
     },
     sourceHash: "abc",
     mapModel: false,
+    options: undefined,
     mcpServerNames,
     mcpImplementation,
   };
@@ -137,6 +138,7 @@ describe("GUIDED_DROPPED_FIELDS", () => {
         },
         sourceHash: "abc",
         mapModel: false,
+        options: undefined,
       });
 
       // assert
@@ -360,6 +362,7 @@ Review files.
         },
         sourceHash: "converted-hash",
         mapModel: true,
+        options: undefined,
       });
 
       // assert
@@ -449,6 +452,7 @@ Keep \${CLAUDE_SKILL_DIR} literal.
       },
       sourceHash: "converted-hash",
       mapModel: true,
+      options: undefined,
       projectDir: "/workspace",
     });
 
@@ -507,6 +511,7 @@ Review files.
       },
       sourceHash: "converted-hash",
       mapModel: false,
+      options: undefined,
     });
 
     // assert
@@ -673,6 +678,7 @@ Review files.
         },
         sourceHash: "converted-hash",
         mapModel: true,
+        options: undefined,
       });
 
       // assert
@@ -797,6 +803,7 @@ Review files.
         },
         sourceHash: "converted-hash",
         mapModel: false,
+        options: undefined,
       });
 
       // assert
@@ -850,6 +857,7 @@ Review files.
       },
       sourceHash: "converted-hash",
       mapModel: true,
+      options: undefined,
     });
 
     // assert
@@ -886,6 +894,7 @@ Review files.
       },
       sourceHash: "converted-hash",
       mapModel: false,
+      options: undefined,
     });
 
     // assert
@@ -918,6 +927,7 @@ Review files.
         },
         sourceHash: "converted-hash",
         mapModel: false,
+        options: undefined,
       });
 
     // act & assert
@@ -947,6 +957,7 @@ Review files.
         },
         sourceHash: "converted-hash",
         mapModel: false,
+        options: undefined,
       });
 
     // act & assert
@@ -975,6 +986,7 @@ Review files.
       },
       sourceHash: "converted-hash",
       mapModel: false,
+      options: undefined,
     });
 
     // assert
@@ -1001,6 +1013,7 @@ Review files.
         },
         sourceHash: "converted-hash",
         mapModel: false,
+        options: undefined,
       });
 
     // act & assert
@@ -1029,6 +1042,7 @@ Review files.
       },
       sourceHash: "converted-hash",
       mapModel: false,
+      options: undefined,
     });
 
     // assert
@@ -1055,6 +1069,7 @@ Review files.
       },
       sourceHash: "converted-hash",
       mapModel: false,
+      options: undefined,
     });
 
     // assert
@@ -1080,6 +1095,7 @@ Review files.
         },
         sourceHash: "converted-hash",
         mapModel: false,
+        options: undefined,
       });
 
     // act & assert
@@ -1122,6 +1138,7 @@ Review files.
         },
         sourceHash: "converted-hash",
         mapModel: false,
+        options: undefined,
       });
 
     // act & assert
@@ -1165,6 +1182,7 @@ Review files.
       },
       sourceHash: "converted-hash",
       mapModel: false,
+      options: undefined,
     });
 
     // assert
@@ -1205,6 +1223,7 @@ Review files.
       },
       sourceHash: "converted-hash",
       mapModel: false,
+      options: undefined,
     });
 
     // assert
@@ -1261,6 +1280,7 @@ Body.
       },
       sourceHash: "abc",
       mapModel: false,
+      options: undefined,
     });
 
     // assert
@@ -1307,6 +1327,7 @@ Body.
       },
       sourceHash: "abc",
       mapModel: false,
+      options: undefined,
     });
 
     // assert
@@ -1356,6 +1377,7 @@ Body content.
       },
       sourceHash: "abc",
       mapModel: false,
+      options: undefined,
     });
 
     // assert
@@ -1401,6 +1423,7 @@ Body content.
       },
       sourceHash: "abc",
       mapModel: false,
+      options: undefined,
     });
 
     // assert
@@ -1449,6 +1472,7 @@ Body content.
       },
       sourceHash: "abc",
       mapModel: false,
+      options: undefined,
     });
 
     // assert
@@ -1494,6 +1518,7 @@ Body content.
       },
       sourceHash: "abc",
       mapModel: false,
+      options: undefined,
     });
 
     // assert
@@ -1540,6 +1565,7 @@ Body content.
       },
       sourceHash: "abc",
       mapModel: false,
+      options: undefined,
     });
 
     // assert
@@ -1587,6 +1613,7 @@ Body content.
       },
       sourceHash: "abc",
       mapModel: false,
+      options: undefined,
     });
 
     // assert
@@ -1636,6 +1663,7 @@ Body content.
       },
       sourceHash: "abc",
       mapModel: false,
+      options: undefined,
     });
 
     // assert
@@ -1682,6 +1710,7 @@ Body content.
       },
       sourceHash: "abc",
       mapModel: false,
+      options: undefined,
     });
 
     // assert
@@ -1729,6 +1758,7 @@ Body content.
       },
       sourceHash: "abc",
       mapModel: false,
+      options: undefined,
     });
 
     // assert
@@ -1824,6 +1854,7 @@ Body content.
         },
         sourceHash: "abc",
         mapModel: false,
+        options: undefined,
       });
 
       // assert
@@ -1874,6 +1905,7 @@ Check security.
       },
       sourceHash: "abc",
       mapModel: false,
+      options: undefined,
     });
 
     // assert
@@ -1922,6 +1954,7 @@ Body.\r
       },
       sourceHash: "abc",
       mapModel: false,
+      options: undefined,
     });
 
     // assert
@@ -2531,6 +2564,7 @@ Body content.
       },
       sourceHash: "abc",
       mapModel: false,
+      options: undefined,
     });
 
     // assert
@@ -2610,6 +2644,7 @@ describe("D-CF4-04 skill preloads", () => {
       },
       sourceHash: "abc",
       mapModel: false,
+      options: undefined,
       skillPreloads,
     });
   }
@@ -3126,6 +3161,44 @@ provenance:
         fileContent: `${expectedFrontmatter}\nBefore.\n---\nname: injected\n---\nAfter.\n`,
       },
     );
+  });
+});
+
+describe("D-PG10-13 plugin options in the body", () => {
+  const OPTION_BODY =
+    "Mode ${user_config.mode}, token ${user_config.token}, note ${user_config.note}.\n";
+
+  test("D-PG10-09: writes a default, the sensitive-option text, and an unset reference as written", () => {
+    // arrange
+    const input = mcpAgentInput({ description: "d" }, undefined, undefined, OPTION_BODY);
+
+    // act
+    const agent = convertAgent({
+      ...input,
+      options: {
+        values: new Map([
+          ["mode", "fast"],
+          ["token", "abc123"],
+        ]),
+        sensitive: new Set(["token"]),
+      },
+    });
+
+    // assert
+    assert.strictEqual(
+      agent.fileContent.slice(agent.frontmatter.length),
+      "\nMode fast, token [sensitive option 'token' not available in skill content], note ${user_config.note}.\n",
+    );
+  });
+
+  test("D-PG10-21: keeps every option reference of a plugin that declares no options", () => {
+    // act
+    const agent = convertAgent(
+      mcpAgentInput({ description: "d" }, undefined, undefined, OPTION_BODY),
+    );
+
+    // assert
+    assert.strictEqual(agent.fileContent.slice(agent.frontmatter.length), `\n${OPTION_BODY}`);
   });
 });
 

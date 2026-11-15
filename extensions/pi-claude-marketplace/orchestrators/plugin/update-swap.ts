@@ -159,6 +159,7 @@ import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { ClaudeContentOptions } from "../../shared/vars.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { RecordDegradeBaselineReader } from "./mcp-verdict.ts";
 import type { UpdateHooksRouting } from "./update-cascade.ts";
@@ -440,6 +441,7 @@ async function prepareUpdateHandles(
       agentsDirs,
       referenceNames,
       skills: handles.skills,
+      options,
     });
     handles.mcp = await prepareStageMcpServers({
       locations,
@@ -481,6 +483,8 @@ interface UpdateAgentsInputs {
   readonly agentsDirs: readonly string[];
   readonly referenceNames: InstalledReferenceNames;
   readonly skills: PreparedSkillsStaging;
+  /** D-PG10-13: the new version's options, written into agent content. */
+  readonly options: ClaudeContentOptions | undefined;
 }
 
 /**
@@ -520,6 +524,7 @@ async function prepareUpdateAgents(
     },
     // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
     cwd: args.cwd,
+    options: inputs.options,
   });
 }
 
