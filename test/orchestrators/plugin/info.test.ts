@@ -11042,7 +11042,7 @@ test("NFR-10 / PG-SEC-01: an agents path that is absolute or escapes the plugin 
           FOO_WORKFLOWS_REQUIRES_LINE,
           '    note: workflow script "scan.js" in "workflows" runs agent type "foo:spy", which ' +
             "this plugin does not install; the workflow engine runs a default agent in its " +
-            "place, where Claude Code stops the run",
+            "place, where Claude Code fails the step",
         ].join("\n"),
       },
     ]);

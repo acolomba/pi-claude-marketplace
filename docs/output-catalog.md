@@ -3156,7 +3156,7 @@ The plugin ships a workflow script that the command installs and that the host w
 
 ### Success -- a workflow script that runs an agent type the plugin does not install (PG-WF-02)
 
-The plugin ships a workflow script that runs an agent type in the plugin's own namespace, and the plugin does not install that agent type. The row shows one `note:` line for each pair of a script and an agent type the plugin does not install, after every component line and after any `dependencies:` line. The line is the text the install diagnostic shows for the same script: install, update, and `info` print the same words. The line names the script, the directory that holds it, and the agent type, and then it says that the workflow engine runs a default agent in its place, where Claude Code stops the run. The directory shows as its name alone and never as a full path, so the row does not disclose where the user's home directory is (NFR-9) and its bytes do not change from one machine to another. One script gets at most five such lines; after them, one count line gives the number of the other agent types that the script runs and the plugin does not install. A `note:` line does not change the severity of the row: it is a statement about one file, and not a failure of the read. Severity `info`; no reload-hint (read-only surface).
+The plugin ships a workflow script that runs an agent type in the plugin's own namespace, and the plugin does not install that agent type. The row shows one `note:` line for each pair of a script and an agent type the plugin does not install, after every component line and after any `dependencies:` line. The line is the text the install diagnostic shows for the same script: install, update, and `info` print the same words. The line names the script, the directory that holds it, and the agent type, and then it says that the workflow engine runs a default agent in its place, where Claude Code fails the step. The directory shows as its name alone and never as a full path, so the row does not disclose where the user's home directory is (NFR-9) and its bytes do not change from one machine to another. One script gets at most five such lines; after them, one count line gives the number of the other agent types that the script runs and the plugin does not install. A `note:` line does not change the severity of the row: it is a statement about one file, and not a failure of the read. Severity `info`; no reload-hint (read-only surface).
 
 <!-- catalog-state: installed-with-workflow-missing-agent-note -->
 
@@ -3167,7 +3167,7 @@ The plugin ships a workflow script that runs an agent type in the plugin's own n
     skills: commit-summary
     workflows: commit-commands:changelog
     requires: pi-dynamic-workflows
-    note: workflow script "changelog.js" in "workflows" runs agent type "commit-commands:reviewer", which this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code stops the run
+    note: workflow script "changelog.js" in "workflows" runs agent type "commit-commands:reviewer", which this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code fails the step
 ```
 
 ### Success -- installed single scope with dependency constraints

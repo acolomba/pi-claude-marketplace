@@ -233,7 +233,7 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
           notes: [
             'workflow script "changelog.js" in "workflows" runs agent type ' +
               '"commit-commands:reviewer", which this plugin does not install; the workflow ' +
-              "engine runs a default agent in its place, where Claude Code stops the run",
+              "engine runs a default agent in its place, where Claude Code fails the step",
           ],
           componentsResolved: true,
           components: {

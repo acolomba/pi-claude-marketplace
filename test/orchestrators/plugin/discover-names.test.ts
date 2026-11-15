@@ -95,7 +95,7 @@ function restrictionNote(
 }
 
 function missingAgentNote(fileName: string, folder: string, agentType: string): string {
-  return `workflow script "${fileName}" in "${folder}" runs agent type "${agentType}", which this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code stops the run`;
+  return `workflow script "${fileName}" in "${folder}" runs agent type "${agentType}", which this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code fails the step`;
 }
 
 function missingAgentCountLine(fileName: string, folder: string, more: string): string {
@@ -564,7 +564,7 @@ test("PG-WF-02: notes a workflow script that runs an agent type the plugin does 
     skills: [],
     workflows: ["acme:scan"],
     workflowAgentNotes: [
-      `workflow script "scan.js" in "workflows" runs agent type "acme:ghost", which this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code stops the run`,
+      `workflow script "scan.js" in "workflows" runs agent type "acme:ghost", which this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code fails the step`,
     ],
   });
 });

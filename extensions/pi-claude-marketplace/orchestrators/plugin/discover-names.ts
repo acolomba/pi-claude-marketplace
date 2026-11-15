@@ -169,7 +169,7 @@ function restrictionNote(
 
 /** PG-WF-02 / D-PG8-05: the text has no tense, so install and `info` print the same bytes. */
 function missingAgentNote(fileName: string, scriptFile: string, agentType: string): string {
-  return `${agentTypeLead(fileName, scriptFile, agentType)}, which this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code stops the run`;
+  return `${agentTypeLead(fileName, scriptFile, agentType)}, which this plugin does not install; the workflow engine runs a default agent in its place, where Claude Code fails the step`;
 }
 
 function missingAgentCountLine(fileName: string, scriptFile: string, count: number): string {
@@ -239,7 +239,7 @@ function scriptAgentNotes(
  *
  * PG-WF-02 / D-PG8-04: a note for an agent type that starts with the plugin
  * name and a colon and equals the declared name of no discovered agent.
- * Claude Code stops such a step; the workflow engine runs a default agent in
+ * Claude Code fails such a step; the workflow engine runs a default agent in
  * its place. The discovered agents are exactly the ones a successful install
  * writes: AG-11 fails the whole install, and AG-12 drops a duplicate inside
  * discovery. A name outside the plugin's namespace gets no note, because
