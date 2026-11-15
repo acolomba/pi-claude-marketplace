@@ -998,7 +998,7 @@ Feature: MCP server lifecycle
       """
 
   @adapter-only
-  Scenario: An idleTimeout of zero the user wrote for a stdio plugin server leaves the lifecycle default in place (PG-MCP-06, D-PG9-15)
+  Scenario: An idleTimeout of zero the user wrote for a stdio plugin server replaces the lifecycle default (PG-MCP-06, D-PG9-15)
     Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
       """
       {"mcpServers":{"srv":{"command":"pi-features-absent-mcp-server"}}}
@@ -1023,13 +1023,11 @@ Feature: MCP server lifecycle
             "toolPrefix": "mcp",
             "idleTimeout": 0,
             "requestTimeoutMs": 1800000,
-            "lifecycle": "lazy-keep-alive",
             "_piClaudeMarketplace": {
               "plugin": "demo",
               "marketplace": "fixtures",
               "defaultFields": {
-                "requestTimeoutMs": 1800000,
-                "lifecycle": "lazy-keep-alive"
+                "requestTimeoutMs": 1800000
               }
             }
           }

@@ -907,14 +907,13 @@ describe("stampServers", () => {
     );
   });
 
-  // D-PG9-15: idleTimeout values that name no idle stop in pi-mcp-adapter 7.0.1.
+  // D-PG9-15: pi-mcp-adapter 7.0.1 registers each of these in place of the global idle time.
   for (const [value, idleTimeout] of [
     ["zero", 0],
     ["a negative number", -5],
     ["a numeric string", "5"],
-    ["null", null],
   ] as const) {
-    test(`D-PG9-15: a user idleTimeout of ${value} keeps the lifecycle default`, () => {
+    test(`D-PG9-15: a user idleTimeout of ${value} stands for the lifecycle`, () => {
       // arrange
       const previous = { command: "old-command", idleTimeout, _piClaudeMarketplace: MARKER };
 
@@ -935,12 +934,39 @@ describe("stampServers", () => {
           env: INJECTED_ENV,
           ...OWNED,
           idleTimeout,
-          ...STDIO_DEFAULT,
-          _piClaudeMarketplace: STDIO_MARKER,
+          requestTimeoutMs: 1800000,
+          _piClaudeMarketplace: { ...MARKER, defaultFields: { requestTimeoutMs: 1800000 } },
         },
       });
     });
   }
+
+  test("D-PG9-15: a user idleTimeout of null keeps the lifecycle default", () => {
+    // arrange
+    const previous = { command: "old-command", idleTimeout: null, _piClaudeMarketplace: MARKER };
+
+    // act
+    const stamping = stampServers({
+      servers: { server: { command: "plugin-command" } },
+      pluginName: "acme",
+      marketplaceName: "catalog",
+      substitution: PROJECT_CONTEXT,
+      previous: { server: previous },
+      keptOverrides: {},
+    });
+
+    // assert
+    assert.deepStrictEqual(stamping.stamped, {
+      server: {
+        command: "plugin-command",
+        env: INJECTED_ENV,
+        ...OWNED,
+        idleTimeout: null,
+        ...STDIO_DEFAULT,
+        _piClaudeMarketplace: STDIO_MARKER,
+      },
+    });
+  });
 
   test("D-PG9-15: a recorded lifecycle default goes once the user sets an idleTimeout", () => {
     // arrange
