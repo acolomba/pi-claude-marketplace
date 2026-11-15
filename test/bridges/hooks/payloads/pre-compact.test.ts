@@ -1,4 +1,4 @@
-// Unit test for the PreCompact payload translator (PAYL-01 / D-60-04).
+// Unit test for the PreCompact payload translator (PAYL-01 / D-60-04, D-PG6-08).
 
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -46,16 +46,18 @@ function preCompactEvent(reason: SessionBeforeCompactEvent["reason"]): SessionBe
 }
 
 const compactTriggerCases = [
-  { reason: "manual", trigger: "manual" },
-  { reason: "threshold", trigger: "auto" },
-  { reason: "overflow", trigger: "auto" },
+  { reason: "manual", trigger: "manual", customInstructions: "Preserve decisions." },
+  { reason: "threshold", trigger: "auto", customInstructions: null },
+  { reason: "overflow", trigger: "auto", customInstructions: null },
 ] as const satisfies readonly {
   reason: SessionBeforeCompactEvent["reason"];
   trigger: "manual" | "auto";
+  customInstructions: string | null;
 }[];
 
-for (const { reason, trigger } of compactTriggerCases) {
-  test(`maps the ${reason} reason to the ${trigger} PreCompact trigger`, () => {
+for (const { reason, trigger, customInstructions } of compactTriggerCases) {
+  const sent = customInstructions === null ? "null instructions" : "its instructions";
+  test(`maps a ${reason} compaction with instructions to the ${trigger} trigger and ${sent}`, () => {
     // arrange
     const event = preCompactEvent(reason);
     const context = {
@@ -69,6 +71,7 @@ for (const { reason, trigger } of compactTriggerCases) {
       cwd: "/workspace/project",
       hook_event_name: "PreCompact",
       trigger,
+      custom_instructions: customInstructions,
     };
 
     // act
@@ -116,6 +119,81 @@ test("preserves empty context strings in the complete PreCompact envelope", () =
     cwd: "",
     hook_event_name: "PreCompact",
     trigger: "manual",
+    custom_instructions: "Preserve decisions.",
+  };
+
+  // act
+  const payload = translatePreCompact(event, context);
+
+  // assert
+  assert.deepStrictEqual(payload, expectedPayload);
+});
+
+test("sends the user's compaction instructions after the trigger (D-PG6-08)", () => {
+  // arrange
+  const event = { ...preCompactEvent("manual"), customInstructions: "keep the API notes" };
+  const context = {
+    sessionId: "session-instructions",
+    transcriptPath: "/sessions/session-instructions.jsonl",
+    cwd: "/workspace/instructions",
+  } satisfies TranslationContext;
+  const expectedPayload = {
+    session_id: "session-instructions",
+    transcript_path: "/sessions/session-instructions.jsonl",
+    cwd: "/workspace/instructions",
+    hook_event_name: "PreCompact",
+    trigger: "manual",
+    custom_instructions: "keep the API notes",
+  };
+
+  // act
+  const payload = translatePreCompact(event, context);
+
+  // assert
+  assert.deepStrictEqual(payload, expectedPayload);
+  assert.deepStrictEqual(Object.keys(payload), Object.keys(expectedPayload));
+});
+
+test("sends null instructions for a manual compaction with none (D-PG6-08)", () => {
+  // arrange
+  const { customInstructions: _omitted, ...event } = preCompactEvent("manual");
+  const context = {
+    sessionId: "session-no-instructions",
+    transcriptPath: "/sessions/session-no-instructions.jsonl",
+    cwd: "/workspace/no-instructions",
+  } satisfies TranslationContext;
+  const expectedPayload = {
+    session_id: "session-no-instructions",
+    transcript_path: "/sessions/session-no-instructions.jsonl",
+    cwd: "/workspace/no-instructions",
+    hook_event_name: "PreCompact",
+    trigger: "manual",
+    custom_instructions: null,
+  };
+
+  // act
+  const payload = translatePreCompact(event, context);
+
+  // assert
+  assert.deepStrictEqual(payload, expectedPayload);
+  assert.strictEqual(Object.hasOwn(payload, "custom_instructions"), true);
+});
+
+test("sends null instructions for a manual compaction with empty instructions (D-PG6-08)", () => {
+  // arrange
+  const event = { ...preCompactEvent("manual"), customInstructions: "" };
+  const context = {
+    sessionId: "session-empty-instructions",
+    transcriptPath: "/sessions/session-empty-instructions.jsonl",
+    cwd: "/workspace/empty-instructions",
+  } satisfies TranslationContext;
+  const expectedPayload = {
+    session_id: "session-empty-instructions",
+    transcript_path: "/sessions/session-empty-instructions.jsonl",
+    cwd: "/workspace/empty-instructions",
+    hook_event_name: "PreCompact",
+    trigger: "manual",
+    custom_instructions: null,
   };
 
   // act

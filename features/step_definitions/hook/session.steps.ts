@@ -248,9 +248,13 @@ async function recordRestart(world: ScenarioWorld, restart: PiRestart): Promise<
   world.recordTurn({ prompt: "restart", disposition: "handled", records, logs });
 }
 
-// RPC `compact` answers after Pi ran its `session_compact` handlers.
-async function compactSession(world: ScenarioWorld): Promise<void> {
-  const { response } = await world.pi.request({ type: "compact" });
+// RPC `compact` answers after Pi ran its `session_compact` handlers. Pi
+// passes `customInstructions` to the compaction as the user's `/compact` text.
+async function compactSession(world: ScenarioWorld, customInstructions?: string): Promise<void> {
+  const { response } = await world.pi.request({
+    type: "compact",
+    ...(customInstructions === undefined ? {} : { customInstructions }),
+  });
   assert.strictEqual(response.success, true, JSON.stringify(response));
 }
 
@@ -407,6 +411,13 @@ When(
   "the user compacts the session with the hooks recording",
   async function (this: ScenarioWorld) {
     await recordSessionAction(this, "compact", () => compactSession(this));
+  },
+);
+
+When(
+  "the user compacts the session with the instructions {string} and the hooks recording",
+  async function (this: ScenarioWorld, instructions: string) {
+    await recordSessionAction(this, "compact", () => compactSession(this, instructions));
   },
 );
 

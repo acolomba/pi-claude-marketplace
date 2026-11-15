@@ -751,7 +751,8 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
         willRetry: false,
         signal: new AbortController().signal,
       }) satisfies SessionBeforeCompactEvent,
-    eventFields: { trigger: "auto" },
+    // An automatic compaction sends no instructions, also when Pi carries a text (D-PG6-08).
+    eventFields: { trigger: "auto", custom_instructions: null },
   },
   {
     claudeEvent: "PostCompact",

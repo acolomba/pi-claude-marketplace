@@ -7,6 +7,11 @@
 // event-specific field `trigger` (`"manual" | "auto"` per
 // claude-hook-config-syntax.md § 3). Pi reports `manual`, `threshold`, or
 // `overflow`; the latter two are Claude automatic compaction triggers.
+//
+// D-PG6-08: `custom_instructions` is the text the user passed to `/compact`,
+// Pi's `customInstructions`, and `null` when there is none and for an
+// automatic compaction. Claude Code types it as a required string or `null`,
+// so the member is always sent. The mapped trigger decides, not Pi's reason.
 
 import { compactTrigger } from "./compact-trigger.ts";
 
@@ -19,17 +24,21 @@ export interface PreCompactStdin {
   readonly cwd: string;
   readonly hook_event_name: "PreCompact";
   readonly trigger: "auto" | "manual";
+  readonly custom_instructions: string | null;
 }
 
 export function translatePreCompact(
   event: SessionBeforeCompactEvent,
   ctx: TranslationContext,
 ): PreCompactStdin {
+  const trigger = compactTrigger(event.reason);
   return {
     session_id: ctx.sessionId,
     transcript_path: ctx.transcriptPath,
     cwd: ctx.cwd,
     hook_event_name: "PreCompact",
-    trigger: compactTrigger(event.reason),
+    trigger,
+    custom_instructions:
+      trigger === "manual" && event.customInstructions ? event.customInstructions : null,
   };
 }
