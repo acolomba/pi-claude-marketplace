@@ -4741,9 +4741,13 @@ Deferred by component-features Phase 5 (D-CF5-06). A Pi launch with `--continue`
 
 ## HOOKHEAL-01: let reconcile restore dropped `clear`, `compact`, and `fork` hook groups
 
+Update 2026-11-15 (parity-gaps, Phase 6, D-PG6-21): an installed plugin whose `UserPromptExpansion` group was dropped at install gets it at its next `update` or `reinstall`; a load does not restore it.
+
 Deferred by component-features Phase 5 (D-CF5-08). An install made before the session matcher change dropped these groups, and only `/claude:plugin reinstall` restores them. Add a growth move to `pending` and `apply` (the BFILL-01 planner) so reconcile heals such a plugin.
 
 ## HOOKENV-01: the remaining Claude Code hook variables
+
+Update 2026-11-15 (parity-gaps, Phase 6, D-PG6-10): the stdin field `effort` is sent; the `CLAUDE_EFFORT` variable stays deferred.
 
 Deferred by component-features Phase 5 (D-CF5-16). Set `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_SESSION_ATTENDED`, `CLAUDE_PID`, and `CLAUDE_EFFORT` in the hook env as Claude Code does. `docs/env-vars.md` "Not delivered" lists two of them today.
 
@@ -5201,6 +5205,8 @@ naming defect.
 
 ## HOOKRESULT-01: investigate and implement execution wrappers for full Claude-shaped hook results
 
+Update 2026-11-15 (parity-gaps, Phase 6, D-PG6-06): execution timing is no longer missing from the result hooks' stdin (`duration_ms`). The item's other facts stay open.
+
 **Status at 2026-11-13:** Open for the facts Phase 2 cannot observe during
 execution. Phase 2 already translates available per-tool result fields and
 accepted replacements, including MCP modern/legacy selection and downstream
@@ -5381,3 +5387,27 @@ Noted 2026-11-14 (parity-gaps, Phase 5 security audit, residual). In the backgro
 ## HOOKOUTSWEEPDOC-01: the compatibility page does not state the limits of the saved-output sweep
 
 Noted 2026-11-14 (parity-gaps, Phase 5 security audit, residual). `docs/hooks-compatibility.md` says each load removes the files in `_shared/hook-output/` that are older than 30 days. The sweep removes only regular files named `hook-<id>-<source>.txt`, keeps links and sub-folders, and skips an untrusted project, whose old files stay until Pi trusts it again. Name these limits on the page.
+
+## HOOKMCPSERVERSCOPE-01: `mcp_server` for an MCP tool of no plugin
+
+Noted 2026-11-15 (parity-gaps, Phase 6, D-PG6-07). The bridge sends `mcp_server` only for a tool of a plugin's MCP server. For a server of the user's own Pi MCP config, Claude Code sends the config scope as `source`, and the bridge would need the Pi config scope of the server. Track only if the maintainer wants it.
+
+## CHILDBASHSESSION-01: a child's Bash-tool `CLAUDE_CODE_SESSION_ID`
+
+Noted 2026-11-15 (parity-gaps, Phase 6, research finding F12). In a pi-subagents child, `applySessionEnv` sets the child's own id in `process.env`, so the child's Bash tool sees its own session, while the child's hooks read the launching session's id (D-PG6-01). The maintainer decides whether the root id should also reach the child's `process.env`.
+
+## NESTEDCHILDROOT-01: the root session of a nested pi-subagents child
+
+Noted 2026-11-15 (parity-gaps, Phase 6, D-PG6-02). The bridge reads one hop, so a child of a child names the child that launched it. A child process could publish its resolved root pair in two variables of this extension for its own background children (06-RESEARCH.md Pattern 1). This conflicts with D-PG3-06 ("never process-global child state"), and the maintainer decides.
+
+## EXPANSIONCMDNAME-01: a bridged command's `command_name` in `UserPromptExpansion`
+
+Noted 2026-11-15 (parity-gaps, Phase 6, D-PG6-19). A bridged command's `command_name` is its Pi name, which differs from Claude Code's name for a command file named `<plugin>-…` (PG-CMD-09 covers the alias) and on Windows, where Pi joins with `.`.
+
+## EXPANSIONNAMETABLE-01: a typed line is not refused when the plugin name table cannot be loaded
+
+Noted 2026-11-15 (parity-gaps, Phase 6, 06-12). When the plugin name table cannot be loaded, the expansion resolver answers from Pi's command list alone, so a `UserPromptExpansion` hook that names a skill by its Claude-form name does not run. The fail-closed rule may call for a refusal instead.
+
+## EXPANSIONMCPPROMPT-01: `expansion_type` `mcp_prompt`
+
+Noted 2026-11-15 (parity-gaps, Phase 6, D-PG6-22). The bridge never sends `expansion_type` `mcp_prompt`, because Pi has no slash surface for MCP prompts. Revisit if Pi gets one.
