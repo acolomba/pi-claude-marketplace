@@ -11,6 +11,7 @@ import {
   McpServerKeyCollisionError,
   McpUnstagePartialError,
   SkillFrontmatterNodeError,
+  UnsetPluginOptionError,
   WorkflowsUnstageRefusedError,
   WorkflowTargetOccupiedError,
 } from "../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
@@ -835,4 +836,24 @@ describe("SkillFrontmatterNodeError", () => {
       );
     });
   }
+});
+
+describe("UnsetPluginOptionError", () => {
+  test("D-PG10-08: states Claude Code's message with the key in both places and keeps the key", () => {
+    // act
+    const error = new UnsetPluginOptionError("token");
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, key: error.key },
+      {
+        name: "UnsetPluginOptionError",
+        message:
+          `Plugin option "token" isn't set. Open /plugin manage to configure it, or check ` +
+          `that the plugin's userConfig schema declares "token".`,
+        key: "token",
+      },
+    );
+  });
 });

@@ -128,6 +128,33 @@ Feature: Hook failures
       | severity | text                                                                                                                                          |
       | info     | UserPromptSubmit hook error: Failed with non-blocking status code: Error occurred while executing hook command: spawn missing-guard.sh ENOENT |
 
+  Scenario: An exec-form hook that names a plugin option with no value fails with Claude Code's message (D-PG10-08)
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name       | event            | matcher | form | arguments                |
+      | observer   | UserPromptSubmit |         |      |                          |
+      | token-hook | UserPromptSubmit |         | exec | ["${user_config.token}"] |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply |
+      | Done. |
+    When the user prompts "say done"
+    Then the hooks record these runs:
+      | event            | session | prompt   | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | UserPromptSubmit | first   | say done | {project dir} |                 | observer  | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the model receives these calls:
+      | call | role | text     |
+      | 1    | user | say done |
+    Then the hooks show the user these messages:
+      | severity | text                                                                                                                                                                             |
+      | info     | UserPromptSubmit hook error: Failed to run: Plugin option "token" isn't set. Open /plugin manage to configure it, or check that the plugin's userConfig schema declares "token". |
+
   Scenario: An edit hook that fails for each pair of an edit shows its error once
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source

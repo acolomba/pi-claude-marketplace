@@ -7,8 +7,10 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
+import { UnsetPluginOptionError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import type { UserConfigSchema } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import type { ClaudePluginVars } from "../../../extensions/pi-claude-marketplace/shared/vars.ts";
 
 const PATH_VARS = {
@@ -33,6 +35,21 @@ function execEntry(command: string, args: readonly unknown[]): RoutingEntry {
   };
 }
 
+const OPTION_SCHEMA = {
+  mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+  level: { type: "number", title: "Level", description: "The level.", default: 3 },
+  echo: {
+    type: "string",
+    title: "Echo",
+    description: "A value that names another option.",
+    default: "${user_config.mode}",
+  },
+} satisfies UserConfigSchema;
+
+function optionEntry(command: string, args: readonly unknown[]): RoutingEntry {
+  return { ...execEntry(command, args), options: resolveOptions(OPTION_SCHEMA) };
+}
+
 describe("planSpawn", () => {
   test("fills Claude's three path variables into exec-form arguments and leaves other placeholders literal", () => {
     // arrange
@@ -40,7 +57,6 @@ describe("planSpawn", () => {
       "${CLAUDE_PLUGIN_ROOT}/bin",
       "--data=${CLAUDE_PLUGIN_DATA}",
       "${CLAUDE_PROJECT_DIR}",
-      "${user_config.token}",
       "${HOME}",
       "${CLAUDE_SKILL_DIR}",
       7,
@@ -52,18 +68,83 @@ describe("planSpawn", () => {
     // assert
     assert.deepStrictEqual(spawnPlan, {
       command: "/usr/bin/hook",
-      args: [
-        "/p/bin",
-        "--data=/d",
-        "/w",
-        "${user_config.token}",
-        "${HOME}",
-        "${CLAUDE_SKILL_DIR}",
-        "7",
-      ],
+      args: ["/p/bin", "--data=/d", "/w", "${HOME}", "${CLAUDE_SKILL_DIR}", "7"],
       shell: false,
     });
   });
+
+  test("D-PG10-10: fills plugin options into an exec-form command and its string arguments after the path variables", () => {
+    // arrange
+    const entry = optionEntry("${CLAUDE_PLUGIN_ROOT}/bin/${user_config.mode}", [
+      "${user_config.mode}",
+      "--level=${user_config.level}",
+      "${CLAUDE_PLUGIN_DATA}/${user_config.mode}",
+      7,
+    ]);
+
+    // act
+    const spawnPlan = planSpawn(entry, PATH_VARS);
+
+    // assert
+    assert.deepStrictEqual(spawnPlan, {
+      command: "/p/bin/fast",
+      args: ["fast", "--level=3", "/d/fast", "7"],
+      shell: false,
+    });
+  });
+
+  test("D-PG10-10: fills two option references side by side and never rescans a spliced value", () => {
+    // arrange
+    const entry = optionEntry("/usr/bin/hook", [
+      "${user_config.mode}${user_config.level}",
+      "${user_config.echo}",
+    ]);
+
+    // act
+    const spawnPlan = planSpawn(entry, PATH_VARS);
+
+    // assert
+    assert.deepStrictEqual(spawnPlan, {
+      command: "/usr/bin/hook",
+      args: ["fast3", "${user_config.mode}"],
+      shell: false,
+    });
+  });
+
+  const unsetCases: readonly {
+    readonly name: string;
+    readonly entry: RoutingEntry;
+    readonly key: string;
+  }[] = [
+    {
+      name: "D-PG10-21: an argument of a plugin that declares no options",
+      entry: execEntry("/usr/bin/hook", ["${user_config.token}"]),
+      key: "token",
+    },
+    {
+      name: "D-PG10-08: the command, for a key the plugin does not declare",
+      entry: optionEntry("/usr/bin/${user_config.missing}", []),
+      key: "missing",
+    },
+    {
+      name: "D-PG10-08: a key that is not an identifier",
+      entry: optionEntry("/usr/bin/hook", ["${user_config.a-b}"]),
+      key: "a-b",
+    },
+  ];
+  for (const { name, entry, key } of unsetCases) {
+    test(`${name} fails the run with the unset-option error`, () => {
+      // act & assert
+      assert.throws(
+        () => planSpawn(entry, PATH_VARS),
+        (error: unknown) => {
+          assert.ok(error instanceof UnsetPluginOptionError);
+          assert.strictEqual(error.key, key);
+          return true;
+        },
+      );
+    });
+  }
 
   test("fills the path variables into an exec-form command with no arguments", () => {
     // arrange

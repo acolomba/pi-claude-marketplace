@@ -316,3 +316,20 @@ export class SkillFrontmatterNodeError extends Error {
     this.skill = skill;
   }
 }
+
+/**
+ * D-PG10-08: an exec-form hook names `${user_config.KEY}` for a key with no
+ * value, so the run fails before the spawn. The text is Claude Code 2.1.323's,
+ * verbatim.
+ */
+export class UnsetPluginOptionError extends Error {
+  readonly key: string;
+  constructor(key: string) {
+    super(
+      `Plugin option "${key}" isn't set. Open /plugin manage to configure it, or check that ` +
+        `the plugin's userConfig schema declares "${key}".`,
+    );
+    this.name = "UnsetPluginOptionError";
+    this.key = key;
+  }
+}

@@ -1797,7 +1797,7 @@ test("spawns an exec-form hook with Claude's path variables filled in", async (t
   const processBoundary = observeSpawn(t, processChild);
   const entry = makeEntry(caseRoot, {
     command: "${CLAUDE_PLUGIN_ROOT}/bin/hook",
-    args: ["--data=${CLAUDE_PLUGIN_DATA}", "${CLAUDE_PROJECT_DIR}", "${user_config.token}"],
+    args: ["--data=${CLAUDE_PLUGIN_DATA}", "${CLAUDE_PROJECT_DIR}"],
   });
 
   // act
@@ -1822,10 +1822,46 @@ test("spawns an exec-form hook with Claude's path variables filled in", async (t
       args: [
         `--data=${path.join(caseRoot, ".pi", "pi-claude-marketplace", "data", "dispatch-marketplace", "dispatch-plugin")}`,
         caseRoot,
-        "${user_config.token}",
       ],
       shell: false,
     },
+  );
+});
+
+test("D-PG10-10: spawns an exec-form hook with its plugin options filled in", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const caseRoot = await makeCaseRoot(t, "dispatch-exec-options-");
+  const processChild = makeInjectedChild(t);
+  const processBoundary = observeSpawn(t, processChild);
+  const entry = {
+    ...makeEntry(caseRoot, {
+      command: "/usr/bin/${user_config.mode}",
+      args: ["--mode=${user_config.mode}"],
+    }),
+    options: resolveOptions({
+      mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+    }),
+  } satisfies RoutingEntry;
+
+  // act
+  const pendingOutcome = dispatchHookExec(
+    entry,
+    { toolName: "bash", input: {} },
+    makeContext(caseRoot),
+    undefined,
+    runtime,
+    { spawnImpl: processBoundary.spawnImpl },
+  );
+  const call = await processBoundary.spawned;
+  await processChild.close(0);
+  const hookOutcome = await pendingOutcome;
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+  assert.deepStrictEqual(
+    { command: call.command, args: call.args, shell: call.options.shell },
+    { command: "/usr/bin/fast", args: ["--mode=fast"], shell: false },
   );
 });
 
@@ -1866,6 +1902,66 @@ test("blocks a hook that cannot start when onFailure is block", async (t) => {
 
   // assert
   assert.deepStrictEqual(hookOutcome, { kind: "block", reason: ON_FAILURE_HEAD });
+});
+
+const UNSET_TOKEN_MESSAGE =
+  `Plugin option "token" isn't set. Open /plugin manage to configure it, or check that ` +
+  `the plugin's userConfig schema declares "token".`;
+
+test("D-PG10-08: fails an exec-form hook that names an unset option without spawning it", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const caseRoot = await makeCaseRoot(t, "dispatch-exec-unset-option-");
+  const processChild = makeInjectedChild(t);
+  const processBoundary = observeSpawn(t, processChild);
+  const entry = makeEntry(caseRoot, { command: "guard", args: ["${user_config.token}"] });
+
+  // act
+  const hookOutcome = await dispatchHookExec(
+    entry,
+    { toolName: "bash", input: {} },
+    makeContext(caseRoot),
+    undefined,
+    runtime,
+    { spawnImpl: processBoundary.spawnImpl },
+  );
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "run", error: UNSET_TOKEN_MESSAGE },
+  });
+  assert.deepStrictEqual(processBoundary.calls, []);
+});
+
+test("D-PG10-08: blocks an exec-form hook that names an unset option when onFailure is block", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const caseRoot = await makeCaseRoot(t, "dispatch-exec-unset-option-block-");
+  const processChild = makeInjectedChild(t);
+  const processBoundary = observeSpawn(t, processChild);
+  const entry = makeEntry(caseRoot, {
+    command: "guard",
+    args: ["${user_config.token}"],
+    onFailure: "block",
+  });
+
+  // act
+  const hookOutcome = await dispatchHookExec(
+    entry,
+    { toolName: "bash", input: {} },
+    makeContext(caseRoot),
+    undefined,
+    runtime,
+    { spawnImpl: processBoundary.spawnImpl },
+  );
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "block",
+    reason: `${ON_FAILURE_HEAD}\n${UNSET_TOKEN_MESSAGE}`,
+  });
+  assert.deepStrictEqual(processBoundary.calls, []);
 });
 
 test("blocks a hook that exits 1 when onFailure is block", async (t) => {
