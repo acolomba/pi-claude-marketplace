@@ -281,13 +281,13 @@ test("D-PG10-23 a booted hook entry holds the options its record holds", async (
   });
 });
 
-test("D-PG10-23 a record whose userConfig is a string boots with no options and dispatches", async () => {
+test("D-PG10-25 a record whose userConfig is a string boots with declared options and no values, and dispatches", async () => {
   // act
   const booted = await bootWithRecordedOptions("mode=fast");
 
   // assert
   assert.deepStrictEqual(booted, {
-    options: [{ declared: false, values: [] }],
+    options: [{ declared: true, values: [] }],
     calls: [{ pluginId: "optioned", claudeEvent: "SessionStart", scope: "user" }],
   });
 });
