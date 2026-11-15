@@ -12,7 +12,8 @@
  * caller names, which lies in the scenario's sandbox (D-BG-13).
  */
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import assert from "node:assert/strict";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { jsonObject, readObject } from "./earlier-version-state.ts";
@@ -55,7 +56,7 @@ export async function declarePublishedMcpServer(
  * empty server map. pi-mcp-adapter honors the setting only from a user-global
  * file, and ignores it in a project file.
  */
-export const PROJECT_SERVERS_ALLOWED_CONFIG = `${JSON.stringify(
+const PROJECT_SERVERS_ALLOWED_CONFIG = `${JSON.stringify(
   { settings: { projectServers: "allow" }, mcpServers: {} },
   null,
   2,
@@ -68,12 +69,20 @@ export async function writeCommentedMcpConfig(file: string): Promise<void> {
 }
 
 /**
- * Writes the config that allows project MCP servers to `file`, the
- * `mcp-adapter.json` of the user scope, which must not exist yet.
+ * Writes the config that allows project MCP servers to the `mcp-adapter.json`
+ * of the user scope, which must not exist yet, and removes it on the world's
+ * release. pi-mcp-adapter reads it when a session starts, so this precedes
+ * the profile Pi.
  */
-export async function writeProjectServersAllowedConfig(file: string): Promise<void> {
+export async function allowProjectServersForUser(world: {
+  scopeRoot(scope: string): string;
+  onRelease(release: () => Promise<void> | void): void;
+}): Promise<void> {
+  const file = path.join(world.scopeRoot("user"), "mcp-adapter.json");
   await mkdir(path.dirname(file), { recursive: true });
   await writeFile(file, PROJECT_SERVERS_ALLOWED_CONFIG, { flag: "wx" });
+  world.onRelease(() => rm(file, { force: true }));
+  assert.strictEqual(await readFile(file, "utf8"), PROJECT_SERVERS_ALLOWED_CONFIG);
 }
 
 // The marker member release 0.19.2 put on each server entry it wrote (MC-5).

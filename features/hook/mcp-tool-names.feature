@@ -57,6 +57,30 @@ Feature: Hook MCP tool names
       | PreToolUse  | first   | mcp__plugin_hook-demo_stub-server__echo | {tool use 1} |                | {"name":"plugin:hook-demo:stub-server","source":"plugin"} | {"text":"ping"} |                                                                                                                       | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-demo | {agent dir}/pi-claude-marketplace/data/fixtures/hook-demo | first                  | first             | 1          |
       | PostToolUse | first   | mcp__plugin_hook-demo_stub-server__echo | {tool use 1} | {milliseconds} | {"name":"plugin:hook-demo:stub-server","source":"plugin"} | {"text":"ping"} | {"content":[{"type":"text","text":"echo:ping"}],"structuredContent":{"content":[{"type":"text","text":"echo:ping"}]}} | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-demo | {agent dir}/pi-claude-marketplace/data/fixtures/hook-demo | first                  | first             | 1          |
 
+  @mcp
+  Scenario: A hook of a project-scope plugin's MCP tool receives the server's name and source
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name      | version |
+      | hook-demo | 1.0.0   |
+    Given the published plugin "hook-demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event       | matcher                                 |
+      | before | PreToolUse  | mcp__plugin_hook-demo_stub-server__echo |
+      | after  | PostToolUse | mcp__plugin_hook-demo_stub-server__echo |
+    Given the published plugin "hook-demo" of the marketplace "fixtures" has the stub mcp server "stub-server" for its hooks
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install hook-demo@fixtures --scope project", which did not fail
+    Given the project holds a pi settings file
+    Given the mcp implementation allows the project's plugin mcp servers
+    Given pi runs with the scripted model and the mcp implementation
+    Given the mcp implementation has listed the tools of the stub mcp server "stub-server" of the plugin "hook-demo"
+    Given the scripted model calls the tool "echo" of the hooks' stub mcp server "stub-server" of the plugin "hook-demo" through the mcp implementation with '{"text": "ping"}', then replies "Done."
+    When the user prompts "call the stub"
+    Then the hooks record these runs in any order:
+      | event       | session | tool name                               | tool use id  | duration ms    | mcp server                                                | tool input      | tool response                                                                                                         | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                             | CLAUDE_PLUGIN_DATA                                            | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse  | first   | mcp__plugin_hook-demo_stub-server__echo | {tool use 1} |                | {"name":"plugin:hook-demo:stub-server","source":"plugin"} | {"text":"ping"} |                                                                                                                       | {project dir} |                 | before    | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/hook-demo | first                  | first             | 1          |
+      | PostToolUse | first   | mcp__plugin_hook-demo_stub-server__echo | {tool use 1} | {milliseconds} | {"name":"plugin:hook-demo:stub-server","source":"plugin"} | {"text":"ping"} | {"content":[{"type":"text","text":"echo:ping"}],"structuredContent":{"content":[{"type":"text","text":"echo:ping"}]}} | {project dir} |                 | after     | {project dir}      | {home}/marketplaces/fixtures/plugins/hook-demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/hook-demo | first                  | first             | 1          |
+
   @adapter-only
   Scenario: A successful adapter tool with a 64-character hash-tail name runs its server-prefix hook (D-PG1-08)
     Given the marketplace "fixtures" is published as a dir source
