@@ -456,6 +456,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261116-hk1 | Keep the last of two workflow scripts with one name, as Claude Code does (maintainer review of D-PG8-07) | 2026-11-16 | b35b86d1 | complete | [261116-hk1-keep-the-last-workflow-script-that-parse](./quick/261116-hk1-keep-the-last-workflow-script-that-parse/) |
 | 261116-im3 | Fail closed on unreadable recorded plugin options (maintainer review of D-PG10-25) | 2026-11-16 | 6d9a3cdd | complete | [261116-im3-fail-closed-on-unreadable-recorded-plugi](./quick/261116-im3-fail-closed-on-unreadable-recorded-plugi/) |
 | 261116-kw7 | Keep both workflow names that the plugin prefix elision would merge (maintainer decision D-PG8-18) | 2026-11-16 | 3488bf29 | complete | [261116-kw7-keep-both-workflow-names-the-prefix-elis](./quick/261116-kw7-keep-both-workflow-names-the-prefix-elis/) |
+| 261116-p4s | End the UserPromptSubmit block notice with the original prompt (maintainer decision, HOOKORIGPROMPT-01) | 2026-11-16 | 8c64be00 | complete | [261116-p4s-end-the-prompt-block-notice-with-the-orig](./quick/261116-p4s-end-the-prompt-block-notice-with-the-orig/) |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 

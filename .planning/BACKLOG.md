@@ -4807,7 +4807,11 @@ For SessionEnd, Claude Code 2.1.319 writes `SessionEnd hook [<command>] failed: 
 
 Noted by component-features Phase 5. Claude Code shows `Operation stopped by hook: <reason>`. The bridge stops the prompt with no notice.
 
-## HOOKORIGPROMPT-01: the `Original prompt:` line of the blocked-prompt notice
+## ~~HOOKORIGPROMPT-01: the `Original prompt:` line of the blocked-prompt notice~~ -- CLOSED
+
+status: resolved
+
+**Resolved 2026-11-16** (maintainer decision). The `UserPromptSubmit` notice now ends with a blank line and `Original prompt: <prompt>` too, unless the hook's JSON sets `suppressOriginalPrompt` under its own `hookEventName` or the block comes from `onFailure: "block"`, as Claude Code 2.1.323 writes it (D-PG6-20, amending D-CF5-24). Original report follows.
 
 Noted by component-features Phase 5 (D-CF5-24). Decide whether the blocked-prompt notice adds Claude Code's third line, `Original prompt: <prompt>`.
 
