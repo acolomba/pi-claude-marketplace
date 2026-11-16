@@ -284,6 +284,21 @@ describe("rewriteMarkdownReferences", () => {
     assert.strictEqual(rewritten, "Run acme:audit on every branch.\n");
   });
 
+  test("keeps the full workflow name a clashing script installs under (D-PG8-18)", () => {
+    // arrange
+    const content = "Run acme:acme-audit, then /acme:audit.\n";
+
+    // act
+    const rewritten = rewriteMarkdownReferences(content, "acme", {
+      skills: [],
+      commands: [],
+      workflows: ["acme:acme-audit", "acme:audit"],
+    });
+
+    // assert
+    assert.strictEqual(rewritten, "Run acme:acme-audit, then /acme:audit.\n");
+  });
+
   test("keeps the slash of a workflow reference its source wrote with one", () => {
     // arrange
     const content = "Type /acme:acme-audit on every branch.\n";
@@ -432,7 +447,7 @@ describe("rewriteMarkdownReferences", () => {
     const rewritten = rewriteMarkdownReferences(content, "acme", {
       skills: [],
       commands: [],
-      workflows: [`acme:${source}`],
+      workflows: ["acme:audit"],
     });
 
     // assert

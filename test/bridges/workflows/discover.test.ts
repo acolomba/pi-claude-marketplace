@@ -758,6 +758,42 @@ test("keeps the last script in file order when two files generate the same workf
   assert.deepStrictEqual(discovery.warnings, []);
 });
 
+test("keeps the full name of a prefixed script whose elided name another script declares (D-PG8-18)", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-elision-clash-");
+  const workflowsDir = path.join(pluginRoot, "workflows");
+  await mkdir(workflowsDir);
+  await writeFile(
+    path.join(workflowsDir, "a.js"),
+    'export const meta = { name: "scan", description: "s" };\n',
+  );
+  await writeFile(
+    path.join(workflowsDir, "b.js"),
+    'export const meta = { name: "acme-scan", description: "s" };\n',
+  );
+  const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
+
+  // act
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    discovery.discovered.map((record) => [
+      record.verdict.fileName,
+      record.verdict.outcome === "named" ? record.verdict.generatedName : undefined,
+    ]),
+    [
+      ["a.js", "acme:scan"],
+      ["b.js", "acme:acme-scan"],
+    ],
+  );
+  assert.deepStrictEqual(discovery.warnings, []);
+});
+
 test("keeps the script of the later declared path when two paths generate the same workflow name", async (t) => {
   // arrange
   const pluginRoot = await createPluginRoot(t, "workflow-discover-declared-order-");

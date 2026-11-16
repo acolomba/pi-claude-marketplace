@@ -19,6 +19,7 @@ import {
   mcpServerDisplayName,
   recordedMarketplaceNameRefusal,
   reservedMarketplaceNameRefusal,
+  unelidedWorkflowName,
 } from "../../extensions/pi-claude-marketplace/domain/name.ts";
 import {
   ReservedMarketplaceNameError,
@@ -1757,4 +1758,32 @@ describe("generatedWorkflowName", () => {
       });
     });
   }
+});
+
+describe("unelidedWorkflowName", () => {
+  test("keeps the plugin prefix of the declared name", () => {
+    // arrange
+    const sourceName = "acme-audit";
+
+    // act
+    const workflowName = unelidedWorkflowName("acme", sourceName);
+
+    // assert
+    assert.strictEqual(workflowName, "acme:acme-audit");
+  });
+
+  test("refuses a full name above the engine's 128-character cap", () => {
+    // arrange
+    const sourceName = `acme-${"a".repeat(123)}`;
+
+    // act & assert
+    assert.throws(
+      () => unelidedWorkflowName("acme", sourceName),
+      (error: unknown) => {
+        assert.ok(error instanceof UnsafeGeneratedNameError);
+        assert.strictEqual(error.attemptedName, `acme:${sourceName}`);
+        return true;
+      },
+    );
+  });
 });

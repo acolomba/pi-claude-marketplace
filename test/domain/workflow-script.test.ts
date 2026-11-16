@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   admitWorkflowScript,
   keepLastWorkflowPerName,
+  unelideClashingWorkflowNames,
   WORKFLOW_SCRIPT_SUFFIX,
   type NamedWorkflow,
   type RefusedCause,
@@ -1533,6 +1534,133 @@ describe("keepLastWorkflowPerName", () => {
 
     // assert
     assert.deepStrictEqual(kept, [composed, decomposed]);
+  });
+});
+
+describe("unelideClashingWorkflowNames", () => {
+  const named = (
+    fileName: string,
+    metaName: string,
+    generatedName: string,
+  ): { verdict: NamedWorkflow } => ({
+    verdict: { outcome: "named", fileName, metaName, generatedName },
+  });
+  const installedNames = (records: readonly { verdict: WorkflowVerdict }[]): string[] =>
+    records.map((record) =>
+      record.verdict.outcome === "named"
+        ? `${record.verdict.fileName} ${record.verdict.generatedName}`
+        : record.verdict.fileName,
+    );
+
+  test("returns the records unchanged when no two meta names share a name", () => {
+    // arrange
+    const records = [named("a.js", "acme-audit", "acme:audit"), named("b.js", "scan", "acme:scan")];
+
+    // act
+    const settled = unelideClashingWorkflowNames("acme", records);
+
+    // assert
+    assert.deepStrictEqual(settled, records);
+    assert.strictEqual(settled[0], records[0]);
+  });
+
+  test("gives the prefixed script its full name when another script declares its elided name", () => {
+    // arrange
+    const records = [named("a.js", "acme-scan", "acme:scan"), named("b.js", "scan", "acme:scan")];
+
+    // act
+    const settled = unelideClashingWorkflowNames("acme", records);
+
+    // assert
+    assert.deepStrictEqual(settled, [
+      named("a.js", "acme-scan", "acme:acme-scan"),
+      named("b.js", "scan", "acme:scan"),
+    ]);
+  });
+
+  test("names each script the same way whatever the file order", () => {
+    // arrange
+    const records = [named("a.js", "scan", "acme:scan"), named("b.js", "acme-scan", "acme:scan")];
+
+    // act
+    const settled = unelideClashingWorkflowNames("acme", records);
+
+    // assert
+    assert.deepStrictEqual(installedNames(settled), ["a.js acme:scan", "b.js acme:acme-scan"]);
+  });
+
+  test("repeats until a full name no longer clashes with the elided name of a third script", () => {
+    // arrange
+    const records = [
+      named("a.js", "acme-scan", "acme:scan"),
+      named("b.js", "scan", "acme:scan"),
+      named("c.js", "acme-acme-scan", "acme:acme-scan"),
+    ];
+
+    // act
+    const settled = unelideClashingWorkflowNames("acme", records);
+
+    // assert
+    assert.deepStrictEqual(installedNames(settled), [
+      "a.js acme:acme-scan",
+      "b.js acme:scan",
+      "c.js acme:acme-acme-scan",
+    ]);
+  });
+
+  test("leaves two scripts with one meta name on one name for the keep-last rule", () => {
+    // arrange
+    const records = [
+      named("a.js", "acme-scan", "acme:scan"),
+      named("b.js", "acme-scan", "acme:scan"),
+    ];
+
+    // act
+    const settled = unelideClashingWorkflowNames("acme", records);
+
+    // assert
+    assert.deepStrictEqual(settled, records);
+  });
+
+  test("keeps the elided name of a script whose full name passes the engine's cap", () => {
+    // arrange
+    const tail = "a".repeat(123);
+    const records = [
+      named("a.js", `acme-${tail}`, `acme:${tail}`),
+      named("b.js", tail, `acme:${tail}`),
+    ];
+
+    // act
+    const settled = unelideClashingWorkflowNames("acme", records);
+
+    // assert
+    assert.deepStrictEqual(settled, records);
+  });
+
+  test("passes skipped and refused records through", () => {
+    // arrange
+    const skipped = {
+      verdict: {
+        outcome: "skipped",
+        fileName: "helper.js",
+        reason: "helper.js declares no `meta`, so there is nothing to install",
+        cause: "no-meta",
+      } satisfies SkippedWorkflow,
+    };
+    const refused = {
+      verdict: {
+        outcome: "refused",
+        fileName: "b.js",
+        reason: "b.js is not parseable JavaScript, so no name can be read from it",
+        cause: "unparseable",
+      } satisfies RefusedWorkflow,
+    };
+
+    // act
+    const settled = unelideClashingWorkflowNames("acme", [skipped, refused]);
+
+    // assert
+    assert.deepStrictEqual(settled, [skipped, refused]);
   });
 });
 

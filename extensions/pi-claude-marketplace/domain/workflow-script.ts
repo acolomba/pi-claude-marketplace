@@ -27,7 +27,7 @@ import { parse, tokTypes } from "acorn";
 
 import { errorMessage } from "../shared/errors.ts";
 
-import { assertSafeName, generatedWorkflowName } from "./name.ts";
+import { assertSafeName, generatedWorkflowName, unelidedWorkflowName } from "./name.ts";
 
 import type {
   Comment,
@@ -235,6 +235,82 @@ export function admitWorkflowScript(
   const agentTypes = readAgentTypes(parsed.ast);
 
   return namedVerdict(pluginName, fileName, metaName.value, description, gate, agentTypes);
+}
+
+/**
+ * D-PG8-18 (amends WNAM-06): when the `<plugin>-` elision makes two different
+ * `meta.name`s of one plugin produce one generated name, each of them keeps its
+ * full name, `<plugin>:<meta.name>`, so both are installed, as in Claude Code,
+ * which does not elide. In the plugin `demo`, `demo-scan` and `scan` install as
+ * `demo:demo-scan` and `demo:scan`. A full name can clash with the elided name
+ * of a third script (`demo-demo-scan`), so the rule repeats until no two
+ * different `meta.name`s share a name. The outcome depends on the set of
+ * `meta.name`s only, never on the order of the files.
+ *
+ * A full name that fails the engine's screens (it can pass 128 characters) is
+ * not used, and that script keeps its elided name. Two scripts with one
+ * `meta.name` keep one name; `keepLastWorkflowPerName` then keeps the last one.
+ */
+export function unelideClashingWorkflowNames<T extends { readonly verdict: WorkflowVerdict }>(
+  pluginName: string,
+  records: readonly T[],
+): T[] {
+  const admitted = records.map((record) => record.verdict).filter(isAdmitted);
+  const fullNames = new Map<string, string>();
+  const tried = new Set<string>();
+  const nameOf = (verdict: AdmittedWorkflow): string =>
+    fullNames.get(verdict.metaName) ?? verdict.generatedName;
+
+  for (
+    let clashing = clashingMetaNames(admitted, nameOf, tried);
+    clashing.length > 0;
+    clashing = clashingMetaNames(admitted, nameOf, tried)
+  ) {
+    for (const metaName of clashing) {
+      tried.add(metaName);
+
+      const fullName = screenedFullName(pluginName, metaName);
+
+      if (fullName !== undefined) {
+        fullNames.set(metaName, fullName);
+      }
+    }
+  }
+
+  return records.map((record) =>
+    isAdmitted(record.verdict) && nameOf(record.verdict) !== record.verdict.generatedName
+      ? { ...record, verdict: { ...record.verdict, generatedName: nameOf(record.verdict) } }
+      : record,
+  );
+}
+
+/** The `meta.name`s not yet tried that share their current name with another `meta.name`. */
+function clashingMetaNames(
+  admitted: readonly AdmittedWorkflow[],
+  nameOf: (verdict: AdmittedWorkflow) => string,
+  tried: ReadonlySet<string>,
+): string[] {
+  const claimants = new Map<string, Set<string>>();
+
+  for (const verdict of admitted) {
+    const metaNames = claimants.get(nameOf(verdict)) ?? new Set<string>();
+
+    metaNames.add(verdict.metaName);
+    claimants.set(nameOf(verdict), metaNames);
+  }
+
+  return [...claimants.values()]
+    .filter((metaNames) => metaNames.size > 1)
+    .flatMap((metaNames) => [...metaNames])
+    .filter((metaName) => !tried.has(metaName));
+}
+
+function screenedFullName(pluginName: string, metaName: string): string | undefined {
+  try {
+    return unelidedWorkflowName(pluginName, metaName);
+  } catch {
+    return undefined;
+  }
 }
 
 /**

@@ -44,6 +44,7 @@ import {
   admitWorkflowScript,
   forMessage,
   keepLastWorkflowPerName,
+  unelideClashingWorkflowNames,
   WORKFLOW_SCRIPT_MAX_BYTES,
   WORKFLOW_SCRIPT_SUFFIX,
 } from "../../domain/workflow-script.ts";
@@ -384,7 +385,9 @@ function verdictWarning(
  *    reads the declared paths in order and replaces an earlier script of the
  *    same name. Within a directory Claude Code takes the file system's
  *    `readdir` order, which no platform fixes, so the sorted order here
- *    decides which one is last.
+ *    decides which one is last. Before that, two different `meta.name`s that
+ *    the `<plugin>-` elision gives one name each keep their full name
+ *    (D-PG8-18), so only scripts with one `meta.name` reach the keep-last rule.
  *
  * The one dedup that DOES run here is by absolute source path, and it is not a
  * name rule: the resolver dedups its component paths by the raw declared
@@ -439,7 +442,9 @@ export async function discoverPluginWorkflows(input: {
   }
 
   return {
-    discovered: Object.freeze(keepLastWorkflowPerName(discovered)),
+    discovered: Object.freeze(
+      keepLastWorkflowPerName(unelideClashingWorkflowNames(input.pluginName, discovered)),
+    ),
     warnings: Object.freeze(warnings),
   };
 }

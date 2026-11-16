@@ -737,8 +737,25 @@ export function generatedWorkflowName(plugin: string, source: string): string {
   const prefix = `${plugin}-`;
   const stripped = source.startsWith(prefix) ? source.slice(prefix.length) : source;
   const elided = stripped === "" ? source : stripped;
-  const generated = `${plugin}:${elided}`;
 
+  return screenedWorkflowName(source, `${plugin}:${elided}`);
+}
+
+/**
+ * D-PG8-18: the workflow name with nothing elided, `<plugin>:<source>`, which
+ * a script whose elided name another script of the plugin also produces keeps
+ * instead (`domain/workflow-script.ts::unelideClashingWorkflowNames`). It is the
+ * name Claude Code gives the script, and it passes the same screens as
+ * `generatedWorkflowName`.
+ */
+export function unelidedWorkflowName(plugin: string, source: string): string {
+  assertSafeName(plugin);
+
+  return screenedWorkflowName(source, `${plugin}:${source}`);
+}
+
+/** The screens every generated workflow name passes; see `generatedWorkflowName`. */
+function screenedWorkflowName(source: string, generated: string): string {
   // The one emptiness rule that survives as a check on the part: the join always
   // carries "<plugin>:", so a `source` of nothing at all still produces a
   // non-empty name that every whole-name screen below would admit.
@@ -808,7 +825,7 @@ export function generatedWorkflowName(plugin: string, source: string): string {
  *
  * This wraps rather than widens `assertSafeName`, which skills, commands and
  * agents all share and none of which wants a 128-character cap or a whitespace
- * ban. Only `generatedWorkflowName` calls this.
+ * ban. Only `screenedWorkflowName` calls this.
  */
 function assertSafeSavedWorkflowName(name: string): void {
   if (name.length > 128) {

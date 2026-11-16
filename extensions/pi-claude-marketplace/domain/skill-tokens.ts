@@ -65,13 +65,21 @@ export function resolveSkillReference(
 /**
  * Resolves a workflow reference, or `undefined` when the plugin stages no
  * workflow under it. A name the generator refuses is skipped rather than
- * thrown, so one malformed candidate cannot fail the whole rewrite.
+ * thrown, so one malformed candidate cannot fail the whole rewrite. The full
+ * name comes first, because a script whose elided name clashes installs under
+ * it (D-PG8-18).
  */
 function resolveWorkflowReference(
   pluginName: string,
   source: string,
   workflows: ReadonlySet<string>,
 ): string | undefined {
+  const fullName = `${pluginName}:${source}`;
+
+  if (workflows.has(fullName)) {
+    return fullName;
+  }
+
   let generated: string;
   try {
     generated = generatedWorkflowName(pluginName, source);
