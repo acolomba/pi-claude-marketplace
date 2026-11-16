@@ -106,3 +106,17 @@ Audited at 4e8d8d0b. Each requirement maps to a test that exists and passes:
 | Gaps found | 0 |
 | Resolved | 0 |
 | Escalated | 0 |
+
+## Phase Gate 2026-11-16
+
+`npm run check` on the final tree at 9874efc2, in a hermetic home (`PI_CODING_AGENT_DIR` set to a scratch directory). Log: `/tmp/pg11-phasegate2.log`, `exit=0`.
+
+| Check | Result |
+|---|---|
+| check:static (typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, check:features) | passed |
+| test:unpaired, test:integration | passed |
+| test:cucumber, adapter profile | 2094 scenarios, 25908 steps passed |
+| test:cucumber, builtin profile | 204 scenarios, 2762 steps passed |
+| test:coverage:direct:all | passed, `coverage/direct.lcov` 374 records |
+
+An earlier run at b574dd55 (`/tmp/pg11-phasegate.log`, `exit=0`, adapter 2092, builtin 204) passed before the last review fix round (WR-04, WR-05, IN-10). The review fixes added owner rows to `test/domain/file-mentions.test.ts` (now 115) and `test/orchestrators/skill-alias-state.test.ts`, and Examples rows to `features/slash-command/invocation.feature` and `features/slash-command/aliases.feature`.
