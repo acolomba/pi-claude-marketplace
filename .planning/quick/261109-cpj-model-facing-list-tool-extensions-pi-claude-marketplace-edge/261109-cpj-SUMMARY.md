@@ -8,7 +8,7 @@ status: complete
 requires: ["261109-cpm"]
 provides:
   - edge/marketplace-counts.ts (offeredPluginCount, marketplaceDescription), shared by the picker and the list tool
-  - "[disabled]" tag and the `disabled` filter of pi_claude_marketplace_plugin_list
+  - '"[disabled]" tag and the `disabled` filter of pi_claude_marketplace_plugin_list'
 affects:
   - pi_claude_marketplace_list line shape
   - pi_claude_marketplace_plugin_list tags and filters
