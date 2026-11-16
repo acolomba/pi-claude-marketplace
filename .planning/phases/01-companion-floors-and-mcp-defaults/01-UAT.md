@@ -48,7 +48,7 @@ This is runtime acceptance of test 2, with fresh confirmation of test 1. PG-MCP-
 
 ## Historical Test 2 Blocked Run — 2026-11-12
 
-### 2. Real detached child excludes the disallowed long adapter tool
+### Superseded test 2 run on pi-subagents 0.88.0
 
 expected: The parent and unrestricted demo:control child offer and can call mcp__plugin_demo_a-server-whose-name-runs-well-past-the_a4df039c. A real demo:restricted child does not have that tool in its actual tool inventory, while mcp__plugin_demo_stub__echo remains available and callable. Preserve inventory or provider tool-schema evidence; a model's unsupported assertion is insufficient.
 result: blocked
