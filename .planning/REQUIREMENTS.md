@@ -71,9 +71,9 @@
 ### Skills and Commands
 
 - [x] **PG-SKILL-04**: In a staged `SKILL.md` and its supporting Markdown, a relative link to a sibling skill of the same plugin resolves to that sibling's staged folder. (P0)
-- [ ] **PG-SKILL-01**: A typed bridged command or skill attaches each `@path` reference that its author wrote and that names an existing regular text file. A `@path` that arrives through an argument or through the output of an injected `!` command is not attached, and neither is one inside fenced code or a code span. Covers the PRD's CMD-01. (P1; spike S8)
-- [ ] **PG-CMD-09**: A bridged command also answers to Claude Code's own name for it, `/<plugin>:<path>:<file>`, whenever that name differs from its Pi name. (P1; decision 13)
-- [ ] **PG-SKILL-11**: Each alias suggestion shows the description of its target and, for a skill, its `argument-hint`. Covers the PRD's CMD-10. (P1)
+- [x] **PG-SKILL-01**: A typed bridged command or skill attaches each `@path` reference that its author wrote and that names an existing regular text file. A `@path` that arrives through an argument or through the output of an injected `!` command is not attached, and neither is one inside fenced code or a code span. Covers the PRD's CMD-01. (P1; spike S8)
+- [x] **PG-CMD-09**: A bridged command also answers to Claude Code's own name for it, `/<plugin>:<path>:<file>`, whenever that name differs from its Pi name. (P1; decision 13)
+- [x] **PG-SKILL-11**: Each alias suggestion shows the description of its target and, for a skill, its `argument-hint`. Covers the PRD's CMD-10. (P1)
 
 ### Security
 
@@ -83,8 +83,8 @@
 
 ### Documentation
 
-- [ ] **PG-DOC-01**: A page `docs/skills-commands-compatibility.md` covers the dropped fields, `!` injection, the `run_plugin_command` tool, the skill-read fill, and the name mapping, and each row of its status table cites the scenario that proves it. (P1)
-- [ ] **PG-DOC-02**: The eight statements that the PRD's section 10 marks "none" are corrected: the event count and the first-party claim in `docs/research/claude-hooks-vs-pi-events.md`; the `tool_search` claim, the bundle reason, and the Pi 1.5.0 proof paths in `docs/mcp-compatibility.md` and the code comments that repeat them; the `PATH` row of `docs/env-vars.md`; BACKLOG `TOOLSEARCHOFF-01`, `WOUT-01`, and `UAT-02`; and the "Component" entry in section 3 of `docs/prd/pi-claude-marketplace-prd.md`. A claim that only a spike can settle is marked unmeasured. (added at milestone start)
+- [x] **PG-DOC-01**: A page `docs/skills-commands-compatibility.md` covers the dropped fields, `!` injection, the `run_plugin_command` tool, the skill-read fill, and the name mapping, and each row of its status table cites the scenario that proves it. (P1)
+- [x] **PG-DOC-02**: The eight statements that the PRD's section 10 marks "none" are corrected: the event count and the first-party claim in `docs/research/claude-hooks-vs-pi-events.md`; the `tool_search` claim, the bundle reason, and the Pi 1.5.0 proof paths in `docs/mcp-compatibility.md` and the code comments that repeat them; the `PATH` row of `docs/env-vars.md`; BACKLOG `TOOLSEARCHOFF-01`, `WOUT-01`, and `UAT-02`; and the "Component" entry in section 3 of `docs/prd/pi-claude-marketplace-prd.md`. A claim that only a spike can settle is marked unmeasured. (added at milestone start)
 
 ## v2 Requirements
 
@@ -206,14 +206,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PG-CORE-06   | Phase 10 | Complete |
 | PG-CORE-07   | Phase 10 | Complete |
 | PG-SKILL-04  | Phase 4  | Complete |
-| PG-SKILL-01  | Phase 11 | Pending |
-| PG-CMD-09    | Phase 11 | Pending |
-| PG-SKILL-11  | Phase 11 | Pending |
+| PG-SKILL-01  | Phase 11 | Complete |
+| PG-CMD-09    | Phase 11 | Complete |
+| PG-SKILL-11  | Phase 11 | Complete |
 | PG-SEC-01    | Phase 4  | Complete |
 | PG-SEC-02    | Phase 10 | Pending |
 | PG-SEC-03    | Phase 9  | Complete |
-| PG-DOC-01    | Phase 11 | Pending |
-| PG-DOC-02    | Phase 11 | Pending |
+| PG-DOC-01    | Phase 11 | Complete |
+| PG-DOC-02    | Phase 11 | Complete |
 
 **Coverage:**
 

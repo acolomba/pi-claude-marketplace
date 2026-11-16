@@ -107,7 +107,7 @@ run against them. Phase 4 depends on Phase 1 alone, so it can move earlier.
 - [x] **Phase 8: Workflow Agents and Run Paths** - A workflow runs the plugin's own agents and notes a missing one, an agent with a `Workflow` grant starts its plugin's workflow, and the uncovered run paths and the limits of a workflow subagent are proven or documented (completed 2026-11-15)
 - [x] **Phase 9: Adapter Entries and MCP Features** - Under the adapter a stdio server stays alive and user-written fields survive updates, the sampling and UI question is settled, and resources, prompts, and elicitation are documented and tested (completed 2026-11-14)
 - [x] **Phase 10: Plugin Options, Variables, and Trust** - `userConfig` defaults reach hooks, servers, and content, user-scope skills and commands get the project directory, a plugin `bin` joins `PATH` only when it exists and the project is trusted, and the trust gap is decided (completed 2026-11-15)
-- [ ] **Phase 11: Skills, Commands, and Records** - Typed commands and skills attach `@file` references, commands answer to their Claude Code names, alias suggestions show descriptions, and the compatibility page and the record corrections land
+- [x] **Phase 11: Skills, Commands, and Records** - Typed commands and skills attach `@file` references, commands answer to their Claude Code names, alias suggestions show descriptions, and the compatibility page and the record corrections land (completed 2026-11-16)
 
 <details>
 <summary>✅ behavioral-gaps — Behavioral Coverage Gaps — SHIPPED 2026-11-08</summary>
@@ -554,32 +554,32 @@ Plans:
   4. The alias scenarios in `features/skill/aliases.feature` and `features/slash-command/aliases.feature` assert the description column: each alias suggestion shows the description of its target and, for a skill, its `argument-hint` (PG-SKILL-11).
   5. `docs/skills-commands-compatibility.md` covers the dropped fields, `!` injection, the `run_plugin_command` tool, the skill-read fill, and the name mapping, and each row of its status table cites a scenario that passes. The eight statements that the PRD's section 10 marks "none" are corrected, and a claim that only a spike can settle is marked unmeasured (PG-DOC-01, PG-DOC-02).
 
-**Plans**: 8 plans
+**Plans**: 8/8 plans complete
 
 Plans:
 **Wave 1**
-- [ ] 11-01-PLAN.md -- Wave 1: make a typed command answer to the name Claude Code gives it, stored at staging and read under the existing alias rules, and describe the alias in both READMEs
+- [x] 11-01-PLAN.md -- Wave 1: make a typed command answer to the name Claude Code gives it, stored at staging and read under the existing alias rules, and describe the alias in both READMEs
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 11-02-PLAN.md -- Wave 2: show each alias suggestion's description and argument hint in Pi's menu, and read a hint that is not a string as Claude Code does
+- [x] 11-02-PLAN.md -- Wave 2: show each alias suggestion's description and argument hint in Pi's menu, and read a hint that is not a string as Claude Code does
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 11-03-PLAN.md -- Wave 3: find the author-written `@` file mentions of a body in one pure module, with code masked, and turn a file's bytes into Pi's file block
+- [x] 11-03-PLAN.md -- Wave 3: find the author-written `@` file mentions of a body in one pure module, with code masked, and turn a file's bytes into Pi's file block
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 11-04-PLAN.md -- Wave 4: attach the files a typed command's body mentions, behind an injected reader, with guards for a path from an argument, from code, and from a `!` command
+- [x] 11-04-PLAN.md -- Wave 4: attach the files a typed command's body mentions, behind an injected reader, with guards for a path from an argument, from code, and from a `!` command
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 11-05-PLAN.md -- Wave 5: attach the files a typed skill's body mentions inside Pi's skill block, with a guard for a path from an argument and for the model's own read
+- [x] 11-05-PLAN.md -- Wave 5: attach the files a typed skill's body mentions inside Pi's skill block, with a guard for a path from an argument and for the model's own read
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 11-06-PLAN.md -- Wave 6: correct the eight statements that the PRD's section 10 marks "none", in four pages, four BACKLOG entries, three code comments, and one scenario description
+- [x] 11-06-PLAN.md -- Wave 6: correct the eight statements that the PRD's section 10 marks "none", in four pages, four BACKLOG entries, three code comments, and one scenario description
 
 **Wave 7** *(blocked on Wave 6 completion)*
-- [ ] 11-07-PLAN.md -- Wave 7: record D-PG11-01, D-PG11-02, and D-PG11-03, amend D-141-01, fill the S8 result cell, and add the CHANGELOG lines and two BACKLOG records
+- [x] 11-07-PLAN.md -- Wave 7: record D-PG11-01, D-PG11-02, and D-PG11-03, amend D-141-01, fill the S8 result cell, and add the CHANGELOG lines and two BACKLOG records
 
 **Wave 8** *(blocked on Wave 7 completion)*
-- [ ] 11-08-PLAN.md -- Wave 8: write `docs/skills-commands-compatibility.md` with a status table whose every row cites a scenario line, link it from both READMEs, and run the full gate on the combined tree
+- [x] 11-08-PLAN.md -- Wave 8: write `docs/skills-commands-compatibility.md` with a status table whose every row cites a scenario line, link it from both READMEs, and run the full gate on the combined tree
 
 ## Progress
 
@@ -595,7 +595,7 @@ Plans:
 | 8. Workflow Agents and Run Paths | 7/7 | Complete    | 2026-11-15 |
 | 9. Adapter Entries and MCP Features | 6/6 | Complete    | 2026-11-14 |
 | 10. Plugin Options, Variables, and Trust | 21/21 | Complete    | 2026-11-15 |
-| 11. Skills, Commands, and Records | 0/0 | Not started | - |
+| 11. Skills, Commands, and Records | 8/8 | Complete    | 2026-11-16 |
 
 ## Carried Forward
 

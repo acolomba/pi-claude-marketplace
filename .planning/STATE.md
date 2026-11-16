@@ -4,18 +4,18 @@ milestone: parity-gaps
 milestone_name: Claude Code Parity Gaps and Defects
 current_phase: 11
 current_phase_name: Skills, Commands, and Records
-status: not_started
-stopped_at: Phase 11 context gathered
-last_updated: "2026-11-15T23:44:43.302Z"
-last_activity: 2026-11-15
-last_activity_desc: Merged features/gaps-mcp (Phases 9 and 10 complete) into features/gaps and applied its parent records
-state_head: 4d8de3e6e54775beabc7acf1f043335cd5332ffe
+status: completed
+stopped_at: Phase 11 complete; next is the milestone lifecycle
+last_updated: "2026-11-16T05:25:55.482Z"
+last_activity: 2026-11-16
+last_activity_desc: Phase 11 complete
+state_head: ceb1e3a147c760a555a2480d9d198b4e57d23e2f
 progress:
   total_phases: 11
-  completed_phases: 10
+  completed_phases: 11
   total_plans: 102
-  completed_plans: 94
-  percent: 91
+  completed_plans: 102
+  percent: 100
 ---
 
 # Project State
@@ -27,21 +27,51 @@ See: `.planning/PROJECT.md` (updated 2026-11-13 after parity-gaps Phase 2)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** the Phase 9 security re-check, then Phase 11 — Skills, Commands, and Records
+**Current focus:** parity-gaps milestone lifecycle (all 11 phases complete on features/gaps)
 
 ## Current Position
 
-Phase: 11 (Skills, Commands, and Records) — READY TO EXECUTE
-Plan: none yet
-Status: Phases 1–10 complete on features/gaps (7–8 merged from features/gaps-agents, 9–10 merged from features/gaps-mcp)
-Last activity: 2026-11-15 — merged features/gaps-mcp (Phases 9 and 10, head 711af3f5) and applied its parent records (STATE decisions D-PG10-*, REQUIREMENTS PG-CORE-03/-05/-06/-07 complete and PG-SEC-02 Pending, BACKLOG, CHANGELOG, PROJECT D-PG9-* and D-PG10-* rows)
+Phase: 11 (Skills, Commands, and Records) — COMPLETE
+Plan: 8/8
+Status: All 11 phases complete on features/gaps (7–8 merged from features/gaps-agents, 9–10 merged from features/gaps-mcp)
+Last activity: 2026-11-16 — Phase 11 closed: validation, security, review loop (3 iterations), phase gate, verification, `phase complete 11`
 
-Progress: [█████████░] 91% (this branch: Phases 1–10 of 11)
+Progress: [██████████] 100% (this branch: Phases 1–11 of 11)
 
-Next, in order:
+Next, in order (milestone lifecycle):
 
-1. Security re-check for Phase 9: its audit predates its review-fix round. (Phase 7 was re-audited at 24de427b.)
-2. Phase 11 — Skills, Commands, and Records.
+1. Re-verify Phases 1–2 for staleness (later phases touched files their reports cover); fix the UAT parser ambiguity; keep AGTLONGNAME01 and PG1TIMING01 open.
+2. `/gsd-audit-milestone`, then `/gsd-complete-milestone`, then `/gsd-cleanup`, on this branch.
+3. Offer the version bump; no PR, merge, or publish without the maintainer.
+
+### parity-gaps Phase 11 (Skills, Commands, and Records)
+
+Phase 11 complete 2026-11-16 (8/8 plans).
+
+- Phase gate: `npm run check` exit 0 at 9874efc2 (`/tmp/pg11-phasegate2.log`, hermetic `PI_CODING_AGENT_DIR`): adapter 2094 scenarios / 25908 steps, builtin 204 / 2762, direct.lcov 374 records. An earlier run at b574dd55 (`/tmp/pg11-phasegate.log`, exit 0, 2092 + 204) preceded the last fix round.
+- Validation: Nyquist-compliant, 0 gaps (cd2da90e).
+- Security: 27/27 threats closed (25 mitigate, 2 accepted: AR-11-01 closing tag in file content, AR-11-02 author mention reach), threats_open 0, ASVS 1 (cd2da90e).
+- Review: iteration 1 WR-01 (frontmatter `name` drops the path alias, 3c9f6415) and WR-02 (escaped backticks and block starts end a code span, 4ba4a058); iteration 2 WR-03 (thematic break and setext underline, 8b1c0eb1), IN-06 (paragraph-end rules, bfca1330), IN-07 (positive alias rows, 259f969a); iteration 3 WR-04 and WR-05, regressions of bfca1330, fixed in 32402034 and 2222bacd with IN-10 docs (79408239). The loop cap of three review iterations was reached, so no review read the last round; its owner rows were red then green and the gate passed after it. README alias wording fixed after verification (29661a49).
+- Verification: passed, 7/7 (6 verified, 1 by override: the documented CommonMark residual of the D-PG11-03 mask, pending maintainer review) (ceb1e3a1). PG-SKILL-01, PG-CMD-09, PG-SKILL-11, PG-DOC-01, PG-DOC-02 complete (marked by hand: the ROADMAP requirements line did not parse).
+
+Decisions (Phase 11):
+
+- A bridged command also answers to Claude Code's name `/<plugin>:<path>:<file>` when it differs from the Pi name, stored as `claudeName` in the staged command record; a command staged before this phase gets it at its next restage (D-PG11-01, amends D-141-01).
+- The alias reader drops the stored path name when the command's frontmatter declares `name` (`declaresFrontmatterName`, as Claude Code 2.1.323's `dBt`: any present value whose string form is non-empty and at most 256 characters), so a renamed command answers only to its frontmatter names, as upstream (D-PG11-01, WR-01).
+- Only author-written `@path` mentions are attached: the scan input is the body with variables filled and no arguments, built before `!` commands run (D-PG11-02).
+- A mention inside fenced code or an inline code span is not attached, a divergence from upstream; the span mask follows CommonMark for escapes, paragraph ends, thematic breaks, setext underlines, and quoted fences, and approximates it inside lists and for a tab after `>`, in both directions (D-PG11-03; residual IN-09, IN-11 list half).
+- Mentions use upstream syntax (quoted, unquoted, CJK marks, `#L` ranges, `@agent-` excluded); each file is appended as Pi's `<file name="...">` block, inside the skill block for a skill (D-PG11-04, D-PG11-05).
+- A mention qualifies only for a regular file of at most 262,144 bytes with no NUL byte; a directory is not attached (D-PG11-06).
+- Attachment runs on typed invocations only; `run_plugin_command` and the model's skill read attach nothing (D-PG11-07), through an injected `MentionFileReader` (D-PG11-08).
+- Each alias suggestion carries its target's description and, for a skill, its `argument-hint`, in pi-tui 1.5.0's row format (D-PG11-09).
+- Hooks and MCP servers keep a plugin's `bin` on `PATH`, where Claude Code gives it to the Bash and PowerShell tools only; recorded as a divergence in `docs/env-vars.md` (D-PG11-10).
+
+Open for the maintainer (Phase 11):
+
+- D-PG11-01 (keep the Claude Code name alias), D-PG11-02 (author-written mentions only), D-PG11-03 (keep the code skip or follow upstream; accept or reopen the IN-09 / IN-11 list residual); D-PG11-06 has no PROJECT.md Key Decisions row yet.
+- The verification override (CommonMark residual) and the 14 judgment-tier prohibitions.
+- WR-01 rule: a whitespace, list, or mapping frontmatter `name` also drops the path alias, though it adds no alias of its own (copied from upstream `dBt`).
+- Open Info: IN-01 (empty file attaches an empty block; Pi skips it), IN-02 (reversed or zero `#L` range), IN-03 (`</skill>` in content splits Pi's display), IN-04 (repeats deduplicated by text, not path), IN-05 (map key with `/` stored as `plugin:a:b`), IN-08 (`commandUpstreamNames` path name vs frontmatter `name`, upstream unverified), IN-09 (tab after `>`), IN-11 list half (fence indented four columns in a list item). BACKLOG CMDNESTNAME-01 stays unverified.
 
 ### parity-gaps merge of features/gaps-mcp (Phases 9 and 10)
 
@@ -1190,9 +1220,9 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-15T23:45:00.000Z
-Stopped at: Phase 11 planned (8 plans, 8 sequential waves; plan-checker passed)
-Resume file: .planning/phases/11-skills-commands-and-records/11-01-PLAN.md
+Last session: 2026-11-16T05:30:00.000Z
+Stopped at: Phase 11 complete — all 11 phases complete; next is the milestone lifecycle (re-verify Phases 1–2 staleness, audit, complete, cleanup)
+Resume file: .planning/phases/11-skills-commands-and-records/11-VERIFICATION.md
 
 ### Phase 2 completion-helper notes
 

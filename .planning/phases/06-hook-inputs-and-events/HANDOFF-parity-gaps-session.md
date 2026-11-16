@@ -3,7 +3,7 @@
 Standing instruction: run all phases autonomously (reversible upstream-parity defaults, flagged for maintainer review); stop only for PR, publish, merge to main. Hermetic homes only; never touch the real ~/.pi/agent.
 
 ## Branches and worktrees
-- `features/gaps` — /home/acolomba/src/pi-claude-marketplace-gaps (this session's cwd). Phases 1–10 complete.
+- `features/gaps` — /home/acolomba/src/pi-claude-marketplace-gaps (this session's cwd). Phases 1–11 complete.
 - `features/gaps-agents` — ~/src/pi-claude-marketplace-gaps-agents. Phase 7 complete (d0898ebd); Phase 8 executed, in review.
 - `features/gaps-mcp` — Phases 9 and 10 complete (head 711af3f5); merged into features/gaps 2026-11-15 with its parent lines applied.
 - Side branches keep their old STATE.md on purpose (phase complete there reverted STATE; update STATE at merge).
@@ -15,15 +15,15 @@ and start the prompt with `[gsd:dispatch phase="NN" plan="NN-MM"]`. Shared execu
 Wave gate: `npm run check > log 2>&1; echo "exit=$?" >> log` in background; read the exit= line. A timing-only failure may be rerun once.
 
 ## Status at handoff
+- UPDATE 2026-11-16: Phase 11 COMPLETE on features/gaps (gate exit 0 at 9874efc2, 2094+204; security 27/27; review 3 iterations; verification passed with 1 override). Next: milestone lifecycle below.
 - UPDATE 2026-11-15: Phase 6 COMPLETE on features/gaps. Parent records applied (daef4bac: D-PG6 rows, D-CF5-06/28 and D-BG-403 superseded, BACKLOG items, codebase maps, reasoning-model skill rule, 03-VERIFICATION PG-HOOK-07a row closed); validation and security (205e10b8, 31/31 threats closed); review iteration 1 fixed WR-01/02 and documented WR-03 (cf060a19..aa4b5b6e), iteration 2 Info only; phase gate green at 4a4f3a82 (1967+188); verification passed with two judgment-tier overrides pending maintainer review (4b3392d2); HOOKPAYLOAD-01, HOOKLAUNCH-01, CHILDSESSIONID-01 closed; PG-HOOK-04/06/11 complete.
 - UPDATE: Phase 6 06-12 done, wave 7 gate green at 3312c94a (1966+186). Phase 8 close-out delegated to a general-purpose agent (fix WR2-01/IN2, gate, verify, phase complete 8 on its branch) — check its report/commits on features/gaps-agents.
 - Phase 8 COMPLETE on features/gaps-agents (98aaf822): gate green a78def62 (1974+185), verification passed with criterion-5 override (option A). Open for maintainer: T-08-13 open nonblocking; AG-11 zero-tool-agent install refusal vs Claude Code launch-time refusal (IN3-01); IN3-02 settings keys docs. Merged into features/gaps 2026-11-15 with its parent lines applied.
 - Phase 6: plans 06-01..06-12 done; 06-13 (docs + consolidated records) next; then validation, security, review loop (max 3), phase gate, verifier, fingerprint, `phase complete 6`, STATE/REQUIREMENTS hand fixes. Last green gate 4d74af3a (wave 6). Wave 7 gate after 06-12.
 - Phase 8: all plans done (08-06 skipped: option A); gate green f7360834; validation/security/review committed 3826ad12; fixes 8305e78b; re-review iteration 2 running. Then: fix loop, phase gate, verifier, complete (on its branch; skip STATE).
-- Phase 11: not started; Phases 6, 8, and 10 are merged. The Phase 9 security re-check comes first (its audit predates its review-fix round; Phase 7 was re-audited at 3a59a8fd).
 
 ## Decisions pending maintainer review (highlights)
-D-PG7-04 (unparseable agent gets all tools; conflicts with fail-closed rule), D-PG7-17/18/19, D-PG9-07 amendment (openUi withheld), D-PG9-14/15/16, D-PG8-11 option A, D-PG6-02 (nested child names launcher), F12, D-PG10-01 (trust gap confirmed; security), D-PG10-19 (defaults on hooks/content beyond Claude Code), D-PG10-23. Overrides: Phase 5 (1), 7 (2), 9 (4).
+D-PG7-04 (unparseable agent gets all tools; conflicts with fail-closed rule), D-PG7-17/18/19, D-PG9-07 amendment (openUi withheld), D-PG9-14/15/16, D-PG8-11 option A, D-PG6-02 (nested child names launcher), F12, D-PG10-01 (trust gap confirmed; security), D-PG10-19 (defaults on hooks/content beyond Claude Code), D-PG10-23, D-PG11-01/02/03/06. Overrides: Phase 5 (1), 7 (2), 9 (4), 10 (1), 11 (1).
 
-## Lifecycle after Phase 11
+## Lifecycle (next; Phase 11 complete 2026-11-16)
 Re-verify Phases 1–2 staleness, fix UAT parser ambiguity, keep AGTLONGNAME01/PG1TIMING01 open; audit, complete, cleanup; offer version bump; final report of decisions and deviations. No PR/merge without the user.
