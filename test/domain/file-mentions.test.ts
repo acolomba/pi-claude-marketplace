@@ -237,6 +237,31 @@ describe("findFileMentions", () => {
       expected: [whole("b.md")],
     },
     {
+      title: "D-PG11-03: closes no code span across a thematic break of dashes",
+      body: "Intro `x\n---\n@b.md `y",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: closes no code span across a thematic break of asterisks",
+      body: "Intro `x\n***\n@b.md `y",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: closes no code span across a thematic break of underscores",
+      body: "Intro `x\n___\n@b.md `y",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: closes no code span across a setext underline",
+      body: "Intro `x\n===\n@b.md `y",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: reads a mention after a code span over a dash line indented like code",
+      body: "Use `a\n    ---\n` @c.md `z`",
+      expected: [whole("c.md")],
+    },
+    {
       title: "D-PG11-03: closes no code span across the start of a blockquote",
       body: "Use `one\n> @b.md two`",
       expected: [whole("b.md")],

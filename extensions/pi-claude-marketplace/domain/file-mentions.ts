@@ -77,6 +77,13 @@ const QUOTE_MARKERS = /^(?:[^\S\n]*>)*/;
 // Code attaches them.
 const BLOCK_START = /^[^\S\n]*(?:[-*+]|\d{1,9}[.)]|(#{1,6}))(?:\s|$)/;
 
+// A thematic break: three or more of one of `-`, `*`, or `_`, with spaces or
+// tabs between them.
+const THEMATIC_BREAK = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
+
+// A setext underline, which ends the paragraph above it.
+const SETEXT_UNDERLINE = /^ {0,3}(?:=+|-+)[ \t]*$/;
+
 const BACKTICK_RUN = /`+/g;
 
 const NOT_NEWLINE = /[^\n]/g;
@@ -105,9 +112,9 @@ interface LineShape {
   /** The line holds only whitespace after its blockquote markers. */
   readonly blank: boolean;
   readonly quoteDepth: number;
-  /** The line starts a list item or an ATX heading. */
+  /** The line starts a list item, an ATX heading, or a break. */
   readonly blockStart: boolean;
-  /** The line is an ATX heading, which no next line continues. */
+  /** The line is an ATX heading or a break, which no next line continues. */
   readonly heading: boolean;
 }
 
@@ -229,16 +236,18 @@ function lineShape(line: string): LineShape {
   const content = line.replace(QUOTE_MARKERS, "");
   const quote = line.slice(0, line.length - content.length);
   const block = BLOCK_START.exec(content);
+  const breaks = THEMATIC_BREAK.test(content) || SETEXT_UNDERLINE.test(content);
   return {
     blank: content.trim() === "",
     quoteDepth: quote.length - quote.replaceAll(">", "").length,
-    blockStart: block !== null,
-    heading: block?.[1] !== undefined,
+    blockStart: block !== null || breaks,
+    heading: block?.[1] !== undefined || breaks,
   };
 }
 
-// A blank line, a list item, a heading, and a deeper blockquote each start a
-// block, and a heading ends one.
+// A blank line, a list item, an ATX heading, a thematic break, a setext
+// underline, and a deeper blockquote each start a block. A heading, a break,
+// and an underline also end one.
 function startsParagraph(line: LineShape, previous: LineShape): boolean {
   return (
     line.blank ||
