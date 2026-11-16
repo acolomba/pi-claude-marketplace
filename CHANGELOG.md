@@ -20,7 +20,8 @@
   - A `Stop` or prompt hook whose script is missing no longer blocks, and its notice tells you to reinstall the plugin.
   - A hook that fails without blocking now shows the first line of its stderr.
   - A hook that returns `continue: false` now shows its `stopReason`.
-  - Hook context over 10,000 characters now goes to a file in `pi-claude-marketplace/data/_shared/hook-output/`, and the model gets its path and a preview.
+  - Hook context over 10,000 characters now goes to a file in `pi-claude-marketplace/data/_shared/hook-output/`, and the model gets its path and a preview. Files older than 30 days are removed.
+  - For a project plugin, that folder is inside the project, under `.pi/`. If you keep the project in version control, add the folder to the ignore list.
   - A plain `async` hook now has no timeout.
   - Tool hooks now get the call's `tool_use_id` and `duration_ms`, and the hooks of a plugin's MCP tool get `mcp_server`.
   - Tool, `Stop`, and `StopFailure` hooks now get the session's thinking level as `effort`.
@@ -35,7 +36,7 @@
   - A plugin agent's `model: inherit` now runs on the session's model instead of `subagents.defaultModel`.
   - A plugin agent with both `tools` and `disallowedTools` is now restricted by both lists, and the two warnings about pi-subagents limits are gone.
   - Run `/claude:plugin reinstall` once on an installed plugin to get these agent changes.
-  - Install, update, and `info` now note a workflow agent type that the plugin does not install, because the workflow engine runs a default agent in its place where Claude Code stops the run.
+  - Install, update, and `info` now note a workflow agent type that the plugin does not install, because the workflow engine runs a default agent in its place where Claude Code stops that step.
   - The workflow compatibility page now says what a workflow subagent can reach, and which engine settings give it MCP tools and the session's model.
   - When two workflow scripts of one plugin declare the same name, the install now keeps the last one, as Claude Code does. Before, the whole install failed.
   - Workflow names like `demo-scan` and `scan` in the plugin `demo` now both install, as `/demo:demo-scan` and `/demo:scan`, instead of merging into one.
@@ -50,7 +51,7 @@
   - If an install record holds plugin options that do not parse, each new session warns with `{unreadable}`, and `list` and `info` show it. Servers and hooks that name an option do not run until `/claude:plugin reinstall`.
   - A user-scope skill or command now gets the project directory for `${CLAUDE_PROJECT_DIR}` when you invoke it or the model reads it.
   - A plugin's `bin` folder now joins `PATH` only when it exists. A project plugin's `bin` folder joins only in a project that Pi trusts.
-  - A plugin command with no frontmatter `name` now also answers to its Claude Code name, so `foo-bar` in plugin `foo`, listed as `/foo:bar`, also answers to `/foo:foo-bar`. An installed plugin gets the name when it updates to a new version, or at `/claude:plugin reinstall`.
+  - A plugin command with no frontmatter `name` now also answers to its Claude Code name, so `foo-bar` in plugin `foo`, listed as `/foo:bar`, also answers to `/foo:foo-bar`. A command installed earlier answers to that name only after its plugin's next update to a new version, reinstall, or enable.
   - Alias suggestions in Pi's menu now show the description and the argument hint of the command or skill they name.
   - A plugin command or skill that you type now attaches the files that its body names with an `@` path. A path inside code is attached, as in Claude Code; a path in the typed arguments or in the output of a `!` command is not.
   - A new page, [Skill and command compatibility](docs/skills-commands-compatibility.md), compares skills and commands with Claude Code. Each row of its status table names the scenario that proves it.

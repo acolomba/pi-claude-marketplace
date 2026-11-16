@@ -2,11 +2,11 @@
 phase: 07-agent-frontmatter-and-grants
 verified: 2026-11-16T07:22:50Z
 status: passed
-score: 40/40 must-haves verified (35 VERIFIED, 5 PASSED (override))
+score: 40/40 must-haves verified (36 VERIFIED, 4 PASSED (override))
 covered_files: [".planning/phases/07-agent-frontmatter-and-grants/07-01-PLAN.md",".planning/phases/07-agent-frontmatter-and-grants/07-01-SUMMARY.md",".planning/phases/07-agent-frontmatter-and-grants/07-02-PLAN.md",".planning/phases/07-agent-frontmatter-and-grants/07-02-SUMMARY.md",".planning/phases/07-agent-frontmatter-and-grants/07-03-PLAN.md",".planning/phases/07-agent-frontmatter-and-grants/07-03-SUMMARY.md",".planning/phases/07-agent-frontmatter-and-grants/07-04-PLAN.md",".planning/phases/07-agent-frontmatter-and-grants/07-04-SUMMARY.md",".planning/phases/07-agent-frontmatter-and-grants/07-05-PLAN.md",".planning/phases/07-agent-frontmatter-and-grants/07-05-SUMMARY.md",".planning/phases/07-agent-frontmatter-and-grants/07-06-PLAN.md",".planning/phases/07-agent-frontmatter-and-grants/07-06-SUMMARY.md","README.es.md","README.md","docs/mcp-compatibility.md","docs/output-catalog.md","docs/prd/pi-claude-marketplace-prd.md","docs/research/parity-gaps/subagents.md","extensions/pi-claude-marketplace/bridges/agents/convert.ts","extensions/pi-claude-marketplace/bridges/agents/discover.ts","extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts","extensions/pi-claude-marketplace/bridges/agents/legacy-grant-form.ts","extensions/pi-claude-marketplace/bridges/agents/mcp-async-warning.ts","extensions/pi-claude-marketplace/bridges/agents/stage.ts","extensions/pi-claude-marketplace/bridges/agents/types.ts","extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts","extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts","extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts","extensions/pi-claude-marketplace/bridges/skills/skill-names.ts","extensions/pi-claude-marketplace/bridges/skills/stage.ts","extensions/pi-claude-marketplace/shared/frontmatter-repair.ts","features/agent/frontmatter.feature","features/agent/invocation.feature","features/lib/agent-files.ts","features/lib/upstream/subagents.ts","features/lib/workflow-files.ts","features/mcp-server/agent-grants.feature","features/step_definitions/agent/listing.steps.ts","features/step_definitions/agent/runs.steps.ts","features/step_definitions/plugin/installation.steps.ts","features/step_definitions/workflow/runs.steps.ts","features/workflow/agent-steps.feature","test/bridges/agents/convert.test.ts","test/bridges/agents/discover.test.ts","test/bridges/agents/frontmatter.test.ts","test/bridges/agents/grant-forms.test.ts","test/bridges/agents/grant-rewrite.test.ts","test/bridges/agents/legacy-grant-form.test.ts","test/bridges/agents/stage.test.ts","test/bridges/skills/frontmatter-degrade.test.ts","test/bridges/skills/frontmatter-scan.test.ts","test/integration/agents-builtin-grant-conformance.test.ts","test/integration/pi-subagents-child-launch-conformance.test.ts","test/integration/provenance-invisibility.test.ts","test/integration/workflow-engine-agent-registry.test.ts","test/shared/frontmatter-repair.test.ts"]
 covered_digest: "v4:sha256:419990e0d9a610ab8258a1871e98148cfd005d34bc37452a8f47b16e7a1d42c0"
 behavior_unverified: 0
-overrides_applied: 5
+overrides_applied: 4
 overrides:
   - must_have: "subagent get lists subagent among the tools of an agent with no tools field (criterion 3, PG-AGENT-03)"
     reason: "Pi capability gap, re-checked 2026-11-16, unchanged. pi-subagents 0.88.1 `formatAgentDetail` (src/agents/agent-management.js:951-976) prints Model, Tools and Excluded tools lines but no line for allowNestedSubagents, so an agent with no tools list cannot show `subagent` in `subagent get` without an explicit tools list, which would take away its default and ambient tools. The intent (the agent can start subagents) is proven by behavior: the staged file holds `allowNestedSubagents: true` (features/agent/frontmatter.feature:127, :958, :1135, :1246; convert.ts:615-652, :1207-1213; frontmatter.ts:441-443), the scripted child of an agent with no tools list calls subagent({agent: \"demo:helper\"}) and gets the reply (features/agent/invocation.feature:340), the child is offered the session's nameable tools, `subagent` included (invocation.feature:246; features/step_definitions/agent/runs.steps.ts:34), the deny case shows `excluded tools subagent` (frontmatter.feature:1367) and cannot nest (invocation.feature:375), and pi-subagents' own child-tool-plan authorizes fan-out for the written key (src/runs/shared/child-tool-plan.js:216-218; named test `PG-AGENT-03: the key written for an agent with no tools list authorizes fan-out and keeps ambient MCP tools`, passed this pass). Recorded as the override candidate in 07-05-PLAN truth 4 and D-PG7-15."
@@ -24,10 +24,6 @@ overrides:
     reason: "Superseded by decision D-PG7-18 (PROJECT.md:2419, in-phase review fix CR-03, pending maintainer review): a one-line description stays on the key line only when YAML reads it as its own text (frontmatter.ts:51-74, `YAML_UNSAFE_PLAIN` plus a parseFrontmatter round trip); any other one-line description, the four block headers included, is written as the `|-` block (frontmatter.ts:93-100), because the workflow engine reads the file with Pi's YAML reader and refused the frontmatter otherwise. A description YAML reads as its text keeps its bytes (frontmatter.test.ts:325-330 and `D-PG7-18: a colon and a hash that YAML reads as text unchanged`). Evidence: named tests `emits a description with the block header | alone as a literal block` and `emits a description with D-PG7-18: a colon before a space as a literal block` (both passed this pass), `D-PG7-06: a description that is only | reads as text under pi-subagents' own reader` (passed), test/integration/workflow-engine-agent-registry.test.ts:96, scenario features/workflow/agent-steps.feature:39, docs/mcp-compatibility.md:474. The previous report did not note this change of a plan truth."
     accepted_by: "project decision D-PG7-18 (PROJECT.md decision log, pending maintainer review)"
     accepted_at: "2026-11-16T07:22:50Z"
-  - must_have: "07-04 truth: the compatibility page and both READMEs say that Agent and Task grants let an agent start subagents, that the type list is not applied, and that model: inherit is always kept"
-    reason: "Met for the compatibility page (docs/mcp-compatibility.md:413 for the grants and the unapplied type list, :435 for inherit). The READMEs carry only the model sentence (README.md:379, README.es.md:379); neither names `Agent` or `Task`. This is what the plan's own task asked of the READMEs (07-04-PLAN.md:278, acceptance at :290-292), and decision D-PG7-16 (PROJECT.md:2418, Good) scopes the phase's documentation to the agents section of the compatibility page and docs/output-catalog.md. The literal README clause of the truth is unmet and has never been met; it is not a regression. The previous report did not check plan truths one by one."
-    accepted_by: "project decision D-PG7-16 (PROJECT.md decision log, Good); README clause pending maintainer review"
-    accepted_at: "2026-11-16T07:22:50Z"
 re_verification:
   previous_status: passed
   previous_score: "5/5 (3 verified, 2 passed by override)"
@@ -40,8 +36,8 @@ re_verification:
   overrides_added:
     - "07-04 inherit-sentinel clause (D-PG7-17)"
     - "07-03 one-line description bytes (D-PG7-18)"
-    - "07-04 README clause (D-PG7-16)"
-  overrides_removed: []
+  overrides_removed:
+    - "07-04 README clause (D-PG7-16): removed 2026-11-16, when README.md:379 and README.es.md:379 gained the Agent and Task grant sentence, so the truth holds as written"
 decision_coverage:
   honored: 19
   total: 19
@@ -58,7 +54,7 @@ human_verification: []
 **Phase Goal:** A bridged agent gets the name, description, model, and tool grants that its source declares. The agents bridge reads frontmatter as YAML, maps `Agent` and `Task` grants to nested subagents, passes `model: inherit` on, and writes both tool lists.
 
 **Verified:** 2026-11-16T07:22:50Z
-**Status:** passed. All five roadmap criteria and all 35 separate plan truths hold on the current tree, three criteria and 32 truths as written. Five pass by override: the two earlier orchestrator overrides (criterion 3 no-tools `subagent get` wording, criterion 4 `model: ""`), and three new decision overrides (D-PG7-17, D-PG7-18, D-PG7-16). All five wait for maintainer review, as do the product decisions listed under Maintainer Review.
+**Status:** passed. All five roadmap criteria and all 35 separate plan truths hold on the current tree, three criteria and 33 truths as written. Four pass by override: the two earlier orchestrator overrides (criterion 3 no-tools `subagent get` wording, criterion 4 `model: ""`), and two new decision overrides (D-PG7-17, D-PG7-18). The D-PG7-16 README override was removed on 2026-11-16, when the READMEs gained the grant sentence. All four wait for maintainer review, as do the product decisions listed under Maintainer Review.
 **Re-verification:** Yes. The previous report (passed, 5/5, two overrides, 2026-11-14T23:29:00Z) became stale, because later work changed 18 of its 41 covered non-planning files.
 
 ## Verification Basis
@@ -119,7 +115,7 @@ Since the previous report, these phase source files changed: A/convert.ts, A/typ
 | 07-04 | A deny by either name removes the grant, with or without a specifier (D-PG7-14) | ✓ VERIFIED | F/:1304 (`Read, Agent` with `Task` denied, and the reverse, both show `tools read`); convert.test.ts:2898. |
 | 07-04 | Every other source model without `--map-model` writes no `model` line, no original-model record, no warning; with the flag the alias table and `claude-` pass-through are unchanged (D-PG1-04, D-PG1-06) | ✓ VERIFIED | A/convert.ts:351-353, :355-360; convert.test.ts:741; F/:477, :513. |
 | 07-04 | The literal for a source `inherit` is pi-subagents' own sentinel; fan-out authorized for an explicit list with `subagent` | PASSED (override) | First clause superseded by D-PG7-17; second clause verified by named test. See override 3. |
-| 07-04 | The page and both READMEs state the grants, the unapplied type list, and the kept inherit (D-PG7-16) | PASSED (override) | Page: docs/mcp-compatibility.md:413, :435. READMEs: model sentence only (README.md:379, README.es.md:379). See override 5. |
+| 07-04 | The page and both READMEs state the grants, the unapplied type list, and the kept inherit (D-PG7-16) | ✓ VERIFIED | Page: docs/mcp-compatibility.md:413, :435. READMEs: the model sentence, then the `Agent` and `Task` grant sentence with the unapplied type list (README.md:379, README.es.md:379, added 2026-11-16). |
 | 07-05 | No `tools` or `tools: *` gets `allowNestedSubagents: true`, unless a deny of `Agent`/`Task`, which writes `excludeTools: subagent` and no key (D-PG7-09) | ✓ VERIFIED | A/convert.ts:615-652, :1207-1213; convert.test.ts:2967, :3001 (`a disallowed ${deny} writes excludeTools: subagent and no allowNestedSubagents`); named test `a disallowed Bash writes excludeTools, then allowNestedSubagents` (passed). |
 | 07-05 | A child of an agent with no `tools` calls `demo:helper` and gets the reply; it is offered the `subagent` tool as the session is | ✓ VERIFIED | invocation.feature:340; :246 compares the child's nameable tools with the session's, and the nameable list includes `subagent` (features/step_definitions/agent/runs.steps.ts:34). In Gate G. |
 | 07-05 | A child of an agent with no `tools` that disallows `Agent` cannot nest; `subagent get` shows `excluded tools subagent` | ✓ VERIFIED | invocation.feature:375 (offered `read, bash, edit, write` only); F/:1367. |
@@ -134,7 +130,7 @@ Since the previous report, these phase source files changed: A/convert.ts, A/typ
 | 07-06 | A deny with no exact Pi name (`mcp__*`, a whole server beside no `tools`) keeps its warning (D-PG7-14) | ✓ VERIFIED | A/convert.ts:636-641; named test `D-PG7-14: denies with no exact Pi name keep the cannot-narrow warning` (passed). |
 | 07-06 | The page says both lists restrict, how each deny is written, which two warnings are gone (D-PG7-16) | ✓ VERIFIED | docs/mcp-compatibility.md:426-433. |
 
-**Score:** 40/40 (35 VERIFIED, 5 PASSED (override); 0 present, behavior-unverified)
+**Score:** 40/40 (36 VERIFIED, 4 PASSED (override); 0 present, behavior-unverified)
 
 ## Required Artifacts
 
@@ -228,7 +224,7 @@ These items wait for the maintainer. None is a gap:
 
 1. **D-PG7-04** (PROJECT.md:2412): an agent whose frontmatter does not parse after the repair loads with every tool, nested delegation included (docs/mcp-compatibility.md:821), and one install note (Claude Code 2.1.323 parity). This conflicts with the recorded fail-closed-on-corrupt-data preference. Decide which holds.
 2. **Override 1** (criterion 3, no-tools `subagent get` wording, pi-subagents display gap) and **override 2** (criterion 4, `model: ""`, D-PG7-17, PROJECT.md:2416, whose row says it amends the criterion): accept, amend ROADMAP criteria 3 and 4 to the delivered wording, or reject. If D-PG7-17 is rejected, criterion 4 needs a form both pi-subagents and the workflow engine accept, which 07-REVIEW-FIX.md CR-01 reports does not exist.
-3. **New overrides 3-5:** D-PG7-17 for the 07-04 sentinel clause, D-PG7-18 (PROJECT.md:2419) for the 07-03 one-line-bytes truth, and D-PG7-16 for the 07-04 README clause (the READMEs do not mention `Agent`/`Task` grants; add a sentence or accept the narrower scope).
+3. **New overrides 3-4:** D-PG7-17 for the 07-04 sentinel clause and D-PG7-18 (PROJECT.md:2419) for the 07-03 one-line-bytes truth. The D-PG7-16 README override was removed on 2026-11-16: both READMEs now state the `Agent` and `Task` grants.
 4. **Pending decisions:** D-PG7-02 (narrower repair trigger, AGTREPAIRSET-01), D-PG7-07 (rename at the next update or reinstall), D-PG7-10 (depth 2, Claude Code 3), D-PG7-18 and D-PG7-19 (agents keep the last copy of a repeated key; skills still refuse it).
 
 ## Gaps Summary
@@ -238,7 +234,7 @@ There are no gaps and no regressions. On the current tree, all five roadmap crit
 - Phase 10 (D-PG10-13) fills plugin options into agent bodies and preloaded skills. The frontmatter reader, the emitter and the tool and model mapping did not change.
 - Phase 11 (D-PG11-01) added `declaresFrontmatterName` to `skill-names.ts`. The skills repair path that 07-01 moved is unchanged.
 
-Checking plan truths one by one found three that do not hold as written, none a regression. Two were changed by in-phase review fixes now recorded as D-PG7-17 and D-PG7-18. The third is a README clause that the plan's own task never asked for. Each now passes by a decision override. The status stays `passed`. The score moves from 5/5 to 40/40, because this pass also counts the plan truths.
+Checking plan truths one by one found three that do not hold as written, none a regression. Two were changed by in-phase review fixes now recorded as D-PG7-17 and D-PG7-18. The third was a README clause that the plan's own task never asked for; it holds since 2026-11-16, when both READMEs gained the grant sentence. The first two pass by a decision override. The status stays `passed`. The score moves from 5/5 to 40/40, because this pass also counts the plan truths.
 
 ---
 
