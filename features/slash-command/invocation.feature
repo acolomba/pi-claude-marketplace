@@ -361,3 +361,63 @@ Feature: Slash command invocation
     Then the model receives these calls:
       | call | role | text                                                                                                                                                                     |
       | 1    | user | Review @{home}/marketplaces/fixtures/plugins/demo/templates/x.md\n\n<file name="{home}/marketplaces/fixtures/plugins/demo/templates/x.md">\nCheck the spelling.\n</file> |
+
+  Scenario: A file that a typed argument mentions is not attached (PG-SKILL-01)
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "review" described as "Reviews the named file." with this body:
+      """
+      Review $ARGUMENTS
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "templates/x.md" with this text:
+      """
+      Check the spelling.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts "/demo:review @{home}/marketplaces/fixtures/plugins/demo/templates/x.md"
+    Then the model receives these calls:
+      | call | role | text                                                             |
+      | 1    | user | Review @{home}/marketplaces/fixtures/plugins/demo/templates/x.md |
+
+  Scenario Outline: A mention <mention place> is not attached (PG-SKILL-01)
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "review" with this command file:
+      """
+      ---
+      description: Reviews against the template.
+      ---
+
+      <command body>
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "templates/x.md" with this text:
+      """
+      Check the spelling.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts "/demo:review"
+    Then the model receives these calls:
+      | call | role | text         |
+      | 1    | user | <model text> |
+
+    Examples:
+      | mention place                       | command body                                                         | model text                                                                               |
+      | in fenced code                      | Example:\n```text\nReview @${CLAUDE_PLUGIN_ROOT}/templates/x.md\n``` | Example:\n```text\nReview @{home}/marketplaces/fixtures/plugins/demo/templates/x.md\n``` |
+      | in a code span                      | Run `cat @${CLAUDE_PLUGIN_ROOT}/templates/x.md` to see it.           | Run `cat @{home}/marketplaces/fixtures/plugins/demo/templates/x.md` to see it.           |
+      | in a context command and its output | Shown: !`echo @${CLAUDE_PLUGIN_ROOT}/templates/x.md`                 | Shown: @{home}/marketplaces/fixtures/plugins/demo/templates/x.md                         |
