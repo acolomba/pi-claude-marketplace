@@ -939,6 +939,65 @@ test("keeps the stdout outputs on an exit-2 stderr block", () => {
   });
 });
 
+for (const { name, exitCode } of [
+  { name: "exit 0", exitCode: 0 },
+  { name: "exit 1", exitCode: 1 },
+]) {
+  test(`marks a block on ${name} whose hook suppresses the original prompt (D-PG6-20)`, () => {
+    // act
+    const hookOutcome = parseHookStdout(
+      exitCode,
+      '{"decision":"block","reason":"r","hookSpecificOutput":{"hookEventName":"UserPromptExpansion","suppressOriginalPrompt":true,"additionalContext":"ctx"}}',
+      "ignored stderr",
+      "UserPromptExpansion",
+    );
+
+    // assert
+    assert.deepStrictEqual(hookOutcome, {
+      kind: "block",
+      reason: "r",
+      suppressOriginalPrompt: true,
+      additionalContext: "ctx",
+    });
+  });
+}
+
+for (const { name, exitCode, stdout, hookOutcome } of [
+  {
+    name: "a non-true suppressOriginalPrompt on a block",
+    exitCode: 0,
+    stdout:
+      '{"decision":"block","reason":"r","hookSpecificOutput":{"suppressOriginalPrompt":"true"}}',
+    hookOutcome: { kind: "block", reason: "r" },
+  },
+  {
+    name: "suppressOriginalPrompt on a stop",
+    exitCode: 0,
+    stdout: '{"continue":false,"hookSpecificOutput":{"suppressOriginalPrompt":true}}',
+    hookOutcome: { kind: "stop" },
+  },
+  {
+    name: "suppressOriginalPrompt on an exit-2 block",
+    exitCode: 2,
+    stdout:
+      '{"decision":"block","reason":"r","hookSpecificOutput":{"suppressOriginalPrompt":true}}',
+    hookOutcome: { kind: "block", reason: "r" },
+  },
+] satisfies ReadonlyArray<{
+  readonly name: string;
+  readonly exitCode: number;
+  readonly stdout: string;
+  readonly hookOutcome: HookExecResult;
+}>) {
+  test(`ignores ${name} (D-PG6-20)`, () => {
+    // act
+    const parsed = parseHookStdout(exitCode, stdout, "ignored stderr", "UserPromptExpansion");
+
+    // assert
+    assert.deepStrictEqual(parsed, hookOutcome);
+  });
+}
+
 test("ignores a non-string system message and context", () => {
   // act
   const hookOutcome = parseHookStdout(

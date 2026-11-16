@@ -37,7 +37,8 @@
 //
 // Whatever the decision, a JSON object's top-level `systemMessage` and its
 // `hookSpecificOutput.additionalContext` ride the arm it gives (D-CF5-13,
-// D-CF5-14), and `permissionDecision: "defer"` is ignored (Pi has no
+// D-CF5-14), a block carries `hookSpecificOutput.suppressOriginalPrompt:
+// true` (D-PG6-20), and `permissionDecision: "defer"` is ignored (Pi has no
 // deferred-permission flow; D-CF5-11).
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -190,7 +191,22 @@ function nonZeroExitResult(
  * hook's outputs on whichever arm the decision gives.
  */
 function normalizeClaudeStdout(parsed: object): HookExecResult {
-  return { ...decideClaudeStdout(parsed), ...hookOutputs(parsed) };
+  const decided = decideClaudeStdout(parsed);
+  return decided.kind === "block" && suppressesOriginalPrompt(parsed)
+    ? { ...decided, suppressOriginalPrompt: true, ...hookOutputs(parsed) }
+    : { ...decided, ...hookOutputs(parsed) };
+}
+
+// D-PG6-20: Claude Code 2.1.323 leaves the original prompt out of a JSON
+// block's notice when `hookSpecificOutput.suppressOriginalPrompt` is true. An
+// exit 2 reads no such field from stdout.
+function suppressesOriginalPrompt(parsed: object): boolean {
+  const hso = (parsed as Record<string, unknown>).hookSpecificOutput;
+  return (
+    hso !== null &&
+    typeof hso === "object" &&
+    (hso as Record<string, unknown>).suppressOriginalPrompt === true
+  );
 }
 
 /**

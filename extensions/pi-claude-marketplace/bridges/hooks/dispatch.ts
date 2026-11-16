@@ -93,6 +93,7 @@ import { ifFires } from "./if-field/index.ts";
 import { createHookToolView } from "./mcp-tool-view.ts";
 import { compactTrigger } from "./payloads/compact-trigger.ts";
 import { withToolFacts } from "./payloads/tool-event-facts.ts";
+import { expansionPrompt } from "./payloads/user-prompt-expansion.ts";
 import { decideEditBatch, editPairToolUseId, editPairViews } from "./tool-batch.ts";
 
 import type { CompactionCancel, HookAdapterContext } from "./event-adapters.ts";
@@ -560,7 +561,8 @@ function systemMessageNotices(
 /**
  * D-CF5-11 / D-CF5-18 / D-CF5-24: the notices a block shows the user. A
  * blocked prompt or expansion shows why once, with the first block in routing
- * order (D-PG6-20). A
+ * order, and `originalPrompt` after it unless that hook suppressed it
+ * (D-PG6-20). A
  * SessionStart or SessionEnd block changes nothing, so each one shows as the
  * event's hook error, as Claude Code shows exit-2 stderr there. A PostCompact
  * block shows in its hook's line after a manual compaction (D-BG-501).
@@ -568,15 +570,26 @@ function systemMessageNotices(
  * every blocking hook, as Claude Code reports a blocked compaction. A tool
  * block goes to the model instead.
  */
-function blockNotices(claudeEvent: NoticeEvent, label: string, folded: FoldedBucket): string[] {
+function blockNotices(
+  claudeEvent: NoticeEvent,
+  label: string,
+  folded: FoldedBucket,
+  originalPrompt: string | undefined,
+): string[] {
   switch (claudeEvent) {
     case "UserPromptSubmit":
     case "UserPromptExpansion":
       return folded.result.kind === "block"
         ? blocks(folded.outcomes)
             .slice(0, 1)
-            .map(({ reason, command, fromStderr }) =>
-              promptBlockedText(claudeEvent, reason, command, fromStderr),
+            .map(({ reason, command, fromStderr, suppressOriginalPrompt }) =>
+              promptBlockedText(
+                claudeEvent,
+                reason,
+                command,
+                fromStderr,
+                suppressOriginalPrompt === true ? undefined : originalPrompt,
+              ),
             )
         : [];
     case "SessionStart":
@@ -660,6 +673,7 @@ function blocks(outcomes: readonly BucketOutcome[]): HookBlock[] {
             reason: result.reason,
             command: entry.handlerDecl.command ?? "",
             fromStderr: result.fromStderr === true,
+            ...(result.suppressOriginalPrompt === true ? { suppressOriginalPrompt: true } : {}),
           },
         ]
       : [],
@@ -781,12 +795,18 @@ export function showHookNotice(
 
 /**
  * HOOK-05: the notices of a folded bucket's decisions, labeled `label`: the
- * system messages in routing order (D-CF5-09), then the block notices.
+ * system messages in routing order (D-CF5-09), then the block notices, which
+ * end with `originalPrompt` when there is one (D-PG6-20).
  */
-function decisionNotices(claudeEvent: NoticeEvent, label: string, folded: FoldedBucket): string[] {
+function decisionNotices(
+  claudeEvent: NoticeEvent,
+  label: string,
+  folded: FoldedBucket,
+  originalPrompt?: string,
+): string[] {
   return [
     ...systemMessageNotices(claudeEvent, label, folded.outcomes),
-    ...blockNotices(claudeEvent, label, folded),
+    ...blockNotices(claudeEvent, label, folded, originalPrompt),
   ];
 }
 
@@ -798,9 +818,10 @@ function hookNotices(
   claudeEvent: NoticeEvent,
   label: string,
   folded: FoldedBucket,
+  originalPrompt?: string,
 ): (string | HookNotice)[] {
   return [
-    ...decisionNotices(claudeEvent, label, folded),
+    ...decisionNotices(claudeEvent, label, folded, originalPrompt),
     ...failureNotices(claudeEvent, label, folded.outcomes),
   ];
 }
@@ -1054,7 +1075,12 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
       entryFires(claudeEvent, entry, view),
     );
     const label = noticeLabel(claudeEvent, view.event);
-    showHookNotices(runtime, ctx, pi, hookNotices(claudeEvent, label, folded));
+    showHookNotices(
+      runtime,
+      ctx,
+      pi,
+      hookNotices(claudeEvent, label, folded, originalPromptOf(claudeEvent, view.event)),
+    );
     if (claudeEvent === "PreToolUse") {
       sendToolContext(pi, label, folded.result);
     }
@@ -1633,6 +1659,14 @@ function entryFires(
 
   const value = matchValue(claudeEvent, view.event);
   return value === undefined || matcherFiresOnClosedSetValue(entry, value);
+}
+
+// D-PG6-20: the typed command an expansion block notice ends with. The
+// UserPromptSubmit block notice still leaves its prompt out (D-CF5-24).
+function originalPromptOf(claudeEvent: CompositeDispatchEvent, event: unknown): string | undefined {
+  return claudeEvent === "UserPromptExpansion"
+    ? expansionPrompt(event as UserPromptExpansionEvent)
+    : undefined;
 }
 
 /**

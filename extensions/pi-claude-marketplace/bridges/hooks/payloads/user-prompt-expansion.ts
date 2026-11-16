@@ -31,9 +31,19 @@ export interface UserPromptExpansionStdin {
 }
 
 /**
+ * The typed command as Claude Code 2.1.323 rebuilds it for the stdin's
+ * `prompt` and for the block notice's `Original prompt:` part: `/<name>`, then
+ * one space and the arguments when there are any (D-PG6-19, D-PG6-20).
+ */
+export function expansionPrompt(event: UserPromptExpansionEvent): string {
+  return event.command_args === ""
+    ? `/${event.command_name}`
+    : `/${event.command_name} ${event.command_args}`;
+}
+
+/**
  * Pi has no slash surface for MCP prompts, so `expansion_type` is always
- * `slash_command` (D-PG6-22). `prompt` is built as Claude Code 2.1.323 builds
- * it: `/<name>`, then one space and the arguments when there are any.
+ * `slash_command` (D-PG6-22).
  */
 export function translateUserPromptExpansion(
   event: UserPromptExpansionEvent,
@@ -48,9 +58,6 @@ export function translateUserPromptExpansion(
     command_name: event.command_name,
     command_args: event.command_args,
     ...(event.command_source === undefined ? {} : { command_source: event.command_source }),
-    prompt:
-      event.command_args === ""
-        ? `/${event.command_name}`
-        : `/${event.command_name} ${event.command_args}`,
+    prompt: expansionPrompt(event),
   };
 }

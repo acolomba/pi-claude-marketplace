@@ -7859,25 +7859,33 @@ describe("UserPromptExpansion dispatch (D-PG6-19 / D-PG6-20)", () => {
       name: "the event's block notice with a decision reason",
       results: { guard: { kind: "block", reason: "not now" } },
       output: { action: "handled" },
-      notices: ["UserPromptExpansion operation blocked by hook:\nnot now"],
+      notices: [
+        "UserPromptExpansion operation blocked by hook:\nnot now\n\nOriginal prompt: /demo:deploy staging",
+      ],
     },
     {
       name: "the event's block notice with an exit-2 stderr",
       results: { guard: { kind: "block", reason: "denied", fromStderr: true } },
       output: { action: "handled" },
-      notices: ["UserPromptExpansion operation blocked by hook:\n[printf guard]: denied"],
+      notices: [
+        "UserPromptExpansion operation blocked by hook:\n[printf guard]: denied\n\nOriginal prompt: /demo:deploy staging",
+      ],
     },
     {
       name: "Claude Code's default reason for a block without one",
       results: { guard: { kind: "block" } },
       output: { action: "handled" },
-      notices: ["UserPromptExpansion operation blocked by hook:\nBlocked by hook"],
+      notices: [
+        "UserPromptExpansion operation blocked by hook:\nBlocked by hook\n\nOriginal prompt: /demo:deploy staging",
+      ],
     },
     {
       name: "the default text of an exit 2 without stderr",
       results: { guard: { kind: "block", fromStderr: true } },
       output: { action: "handled" },
-      notices: ["UserPromptExpansion operation blocked by hook:\n[printf guard]: No stderr output"],
+      notices: [
+        "UserPromptExpansion operation blocked by hook:\n[printf guard]: No stderr output\n\nOriginal prompt: /demo:deploy staging",
+      ],
     },
     {
       name: "only the first block in routing order",
@@ -7886,7 +7894,26 @@ describe("UserPromptExpansion dispatch (D-PG6-19 / D-PG6-20)", () => {
         second: { kind: "block", reason: "r2", fromStderr: true },
       },
       output: { action: "handled" },
-      notices: ["UserPromptExpansion operation blocked by hook:\nr1"],
+      notices: [
+        "UserPromptExpansion operation blocked by hook:\nr1\n\nOriginal prompt: /demo:deploy staging",
+      ],
+    },
+    {
+      name: "the block notice without the original prompt that its hook suppressed",
+      results: { guard: { kind: "block", reason: "not now", suppressOriginalPrompt: true } },
+      output: { action: "handled" },
+      notices: ["UserPromptExpansion operation blocked by hook:\nnot now"],
+    },
+    {
+      name: "the original prompt when only a later block's hook suppressed it",
+      results: {
+        first: { kind: "block", reason: "r1" },
+        second: { kind: "block", reason: "r2", suppressOriginalPrompt: true },
+      },
+      output: { action: "handled" },
+      notices: [
+        "UserPromptExpansion operation blocked by hook:\nr1\n\nOriginal prompt: /demo:deploy staging",
+      ],
     },
     {
       name: "the stop notice with its reason",

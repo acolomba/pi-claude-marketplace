@@ -1,9 +1,12 @@
 // Unit test for the UserPromptExpansion payload translator (PG-HOOK-06, D-PG6-19, D-PG6-22).
 
 import assert from "node:assert/strict";
-import test from "node:test";
+import { describe, test } from "node:test";
 
-import { translateUserPromptExpansion } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-expansion.ts";
+import {
+  expansionPrompt,
+  translateUserPromptExpansion,
+} from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-expansion.ts";
 
 import type {
   UserPromptExpansionEvent,
@@ -30,124 +33,145 @@ function expansionEvent(commandArgs: string, commandSource?: string): UserPrompt
   };
 }
 
-test("PG-HOOK-06: emits the complete UserPromptExpansion envelope of a typed command", () => {
-  // arrange
-  const event = expansionEvent("staging", "plugin");
-  const expectedPayload = {
-    session_id: "session-expansion",
-    transcript_path: "/sessions/session-expansion.jsonl",
-    cwd: "/workspace/project",
-    hook_event_name: "UserPromptExpansion",
-    expansion_type: "slash_command",
-    command_name: "demo:deploy",
-    command_args: "staging",
-    command_source: "plugin",
-    prompt: "/demo:deploy staging",
-  } satisfies UserPromptExpansionStdin;
+describe("translateUserPromptExpansion", () => {
+  test("PG-HOOK-06: emits the complete UserPromptExpansion envelope of a typed command", () => {
+    // arrange
+    const event = expansionEvent("staging", "plugin");
+    const expectedPayload = {
+      session_id: "session-expansion",
+      transcript_path: "/sessions/session-expansion.jsonl",
+      cwd: "/workspace/project",
+      hook_event_name: "UserPromptExpansion",
+      expansion_type: "slash_command",
+      command_name: "demo:deploy",
+      command_args: "staging",
+      command_source: "plugin",
+      prompt: "/demo:deploy staging",
+    } satisfies UserPromptExpansionStdin;
 
-  // act
-  const payload = translateUserPromptExpansion(event, CONTEXT);
+    // act
+    const payload = translateUserPromptExpansion(event, CONTEXT);
 
-  // assert
-  assert.deepStrictEqual(
-    { payload, keys: Object.keys(payload) },
+    // assert
+    assert.deepStrictEqual(
+      { payload, keys: Object.keys(payload) },
+      {
+        payload: expectedPayload,
+        keys: [
+          "session_id",
+          "transcript_path",
+          "cwd",
+          "hook_event_name",
+          "expansion_type",
+          "command_name",
+          "command_args",
+          "command_source",
+          "prompt",
+        ],
+      },
+    );
+  });
+
+  test("PG-HOOK-06: gives no arguments as an empty string and a prompt with no trailing space", () => {
+    // arrange
+    const event = expansionEvent("", "plugin");
+
+    // act
+    const payload = translateUserPromptExpansion(event, CONTEXT);
+
+    // assert
+    assert.deepStrictEqual(payload, {
+      session_id: "session-expansion",
+      transcript_path: "/sessions/session-expansion.jsonl",
+      cwd: "/workspace/project",
+      hook_event_name: "UserPromptExpansion",
+      expansion_type: "slash_command",
+      command_name: "demo:deploy",
+      command_args: "",
+      command_source: "plugin",
+      prompt: "/demo:deploy",
+    } satisfies UserPromptExpansionStdin);
+  });
+
+  test("D-PG6-19: leaves out command_source when the command has none", () => {
+    // arrange
+    const event = expansionEvent("staging");
+
+    // act
+    const payload = translateUserPromptExpansion(event, CONTEXT);
+
+    // assert
+    assert.deepStrictEqual(payload, {
+      session_id: "session-expansion",
+      transcript_path: "/sessions/session-expansion.jsonl",
+      cwd: "/workspace/project",
+      hook_event_name: "UserPromptExpansion",
+      expansion_type: "slash_command",
+      command_name: "demo:deploy",
+      command_args: "staging",
+      prompt: "/demo:deploy staging",
+    } satisfies UserPromptExpansionStdin);
+  });
+
+  test("D-PG6-19: sends no session title, model, or permission mode from a full context", () => {
+    // arrange
+    const event = expansionEvent("staging", "plugin");
+    const context = {
+      ...CONTEXT,
+      model: "claude-sonnet",
+      sessionTitle: "Release work",
+      childIdentity: { agentType: "worker", sessionId: "session-expansion" },
+    } satisfies TranslationContext;
+
+    // act
+    const payload = translateUserPromptExpansion(event, context);
+
+    // assert
+    assert.deepStrictEqual(payload, {
+      session_id: "session-expansion",
+      transcript_path: "/sessions/session-expansion.jsonl",
+      cwd: "/workspace/project",
+      hook_event_name: "UserPromptExpansion",
+      expansion_type: "slash_command",
+      command_name: "demo:deploy",
+      command_args: "staging",
+      command_source: "plugin",
+      prompt: "/demo:deploy staging",
+    } satisfies UserPromptExpansionStdin);
+  });
+
+  test("D-PG6-10: sends no effort from a context that holds one, as UserPromptExpansion carries none upstream", () => {
+    // arrange
+    const context = {
+      sessionId: "session-effort",
+      transcriptPath: "/sessions/session-effort.jsonl",
+      cwd: "/workspace/effort",
+      effort: { level: "max" },
+    } satisfies TranslationContext;
+
+    // act
+    const payload = translateUserPromptExpansion(expansionEvent("staging", "plugin"), context);
+
+    // assert
+    assert.strictEqual(Object.hasOwn(payload, "effort"), false);
+  });
+});
+
+describe("expansionPrompt", () => {
+  for (const { name, commandArgs, prompt } of [
     {
-      payload: expectedPayload,
-      keys: [
-        "session_id",
-        "transcript_path",
-        "cwd",
-        "hook_event_name",
-        "expansion_type",
-        "command_name",
-        "command_args",
-        "command_source",
-        "prompt",
-      ],
+      name: "the command and its arguments",
+      commandArgs: "staging",
+      prompt: "/demo:deploy staging",
     },
-  );
-});
+    { name: "the command alone when it has no arguments", commandArgs: "", prompt: "/demo:deploy" },
+  ]) {
+    test(`D-PG6-20: rebuilds ${name} as the typed prompt`, () => {
+      // act
+      const typed = expansionPrompt(expansionEvent(commandArgs));
 
-test("PG-HOOK-06: gives no arguments as an empty string and a prompt with no trailing space", () => {
-  // arrange
-  const event = expansionEvent("", "plugin");
-
-  // act
-  const payload = translateUserPromptExpansion(event, CONTEXT);
-
-  // assert
-  assert.deepStrictEqual(payload, {
-    session_id: "session-expansion",
-    transcript_path: "/sessions/session-expansion.jsonl",
-    cwd: "/workspace/project",
-    hook_event_name: "UserPromptExpansion",
-    expansion_type: "slash_command",
-    command_name: "demo:deploy",
-    command_args: "",
-    command_source: "plugin",
-    prompt: "/demo:deploy",
-  } satisfies UserPromptExpansionStdin);
-});
-
-test("D-PG6-19: leaves out command_source when the command has none", () => {
-  // arrange
-  const event = expansionEvent("staging");
-
-  // act
-  const payload = translateUserPromptExpansion(event, CONTEXT);
-
-  // assert
-  assert.deepStrictEqual(payload, {
-    session_id: "session-expansion",
-    transcript_path: "/sessions/session-expansion.jsonl",
-    cwd: "/workspace/project",
-    hook_event_name: "UserPromptExpansion",
-    expansion_type: "slash_command",
-    command_name: "demo:deploy",
-    command_args: "staging",
-    prompt: "/demo:deploy staging",
-  } satisfies UserPromptExpansionStdin);
-});
-
-test("D-PG6-19: sends no session title, model, or permission mode from a full context", () => {
-  // arrange
-  const event = expansionEvent("staging", "plugin");
-  const context = {
-    ...CONTEXT,
-    model: "claude-sonnet",
-    sessionTitle: "Release work",
-    childIdentity: { agentType: "worker", sessionId: "session-expansion" },
-  } satisfies TranslationContext;
-
-  // act
-  const payload = translateUserPromptExpansion(event, context);
-
-  // assert
-  assert.deepStrictEqual(payload, {
-    session_id: "session-expansion",
-    transcript_path: "/sessions/session-expansion.jsonl",
-    cwd: "/workspace/project",
-    hook_event_name: "UserPromptExpansion",
-    expansion_type: "slash_command",
-    command_name: "demo:deploy",
-    command_args: "staging",
-    command_source: "plugin",
-    prompt: "/demo:deploy staging",
-  } satisfies UserPromptExpansionStdin);
-});
-
-test("D-PG6-10: sends no effort from a context that holds one, as UserPromptExpansion carries none upstream", () => {
-  // arrange
-  const context = {
-    sessionId: "session-effort",
-    transcriptPath: "/sessions/session-effort.jsonl",
-    cwd: "/workspace/effort",
-    effort: { level: "max" },
-  } satisfies TranslationContext;
-
-  // act
-  const payload = translateUserPromptExpansion(expansionEvent("staging", "plugin"), context);
-
-  // assert
-  assert.strictEqual(Object.hasOwn(payload, "effort"), false);
+      // assert
+      assert.strictEqual(typed, prompt);
+    });
+  }
 });

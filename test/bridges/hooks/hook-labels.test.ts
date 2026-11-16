@@ -218,6 +218,37 @@ describe("promptBlockedText", () => {
       assert.strictEqual(notice, text);
     });
   }
+
+  for (const { name, claudeEvent, reason, fromStderr, text } of [
+    {
+      name: "the original prompt after an expansion's exit-2 stderr reason",
+      claudeEvent: "UserPromptExpansion",
+      reason: "no deploys today",
+      fromStderr: true,
+      text: `UserPromptExpansion operation blocked by hook:\n[${GUARD_COMMAND}]: no deploys today\n\nOriginal prompt: /demo:deploy production`,
+    },
+    {
+      name: "the original prompt after an expansion's decision reason",
+      claudeEvent: "UserPromptExpansion",
+      reason: "not now",
+      fromStderr: false,
+      text: "UserPromptExpansion operation blocked by hook:\nnot now\n\nOriginal prompt: /demo:deploy production",
+    },
+  ] as const) {
+    test(`writes ${name} (D-PG6-20)`, () => {
+      // act
+      const notice = promptBlockedText(
+        claudeEvent,
+        reason,
+        GUARD_COMMAND,
+        fromStderr,
+        "/demo:deploy production",
+      );
+
+      // assert
+      assert.strictEqual(notice, text);
+    });
+  }
 });
 
 describe("compactionBlockedText", () => {

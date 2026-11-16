@@ -25,7 +25,7 @@
   - Tool hooks now get the call's `tool_use_id` and `duration_ms`, and the hooks of a plugin's MCP tool get `mcp_server`.
   - Tool, `Stop`, and `StopFailure` hooks now get the session's thinking level as `effort`.
   - `SessionStart` hooks now get `model` and `session_title`, `UserPromptSubmit` hooks get `session_title`, and `PreCompact` hooks get the text of `/compact`.
-  - `UserPromptExpansion` hooks now run when you type a plugin command or a skill, and they can block it. Run `/claude:plugin update` or `/claude:plugin reinstall` on a plugin installed earlier to get these hooks.
+  - `UserPromptExpansion` hooks now run when you type a plugin command or a skill, and they can block it. The block notice ends with `Original prompt: <command>`, as in Claude Code, unless the hook sets `suppressOriginalPrompt`. Run `/claude:plugin update` or `/claude:plugin reinstall` on a plugin installed earlier to get these hooks.
   - A `SessionStart` hook now gets `resume` when Pi starts with `--continue` or `--session`, and `fork` when Pi starts with `--fork`.
   - In a background subagent, a tool hook's `session_id` now names the session that started the subagent.
   - Plugin agent frontmatter is now read as YAML, as Claude Code reads it: quoted values lose their quote marks, comments are ignored, a multi-line description keeps its lines, and an agent whose frontmatter cannot be parsed installs with no fields and a note.

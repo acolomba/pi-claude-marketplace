@@ -103,6 +103,8 @@ export interface HookBlock {
   readonly reason: string | undefined;
   readonly command: string;
   readonly fromStderr: boolean;
+  /** D-PG6-20: the hook asked to leave the original prompt out of the notice. */
+  readonly suppressOriginalPrompt?: true;
 }
 
 /**
@@ -129,17 +131,20 @@ export function hookSaysText(label: string, text: string): string {
 /**
  * D-CF5-11 / D-CF5-24 / D-PG6-20: the notice a blocked prompt or expansion
  * shows the user, `<event> operation blocked by hook:\n<message>`, the
- * message as `hookErrorText` writes it. Claude Code 2.1.323 adds a blank line
- * and `Original prompt: <prompt>` on both events, which this notice leaves
- * out (D-CF5-24).
+ * message as `hookErrorText` writes it. With `originalPrompt`, a blank line
+ * and `Original prompt: <originalPrompt>` follow, as Claude Code 2.1.323 ends
+ * the notice. The `UserPromptSubmit` notice still leaves that part out
+ * (D-CF5-24).
  */
 export function promptBlockedText(
   claudeEvent: "UserPromptSubmit" | "UserPromptExpansion",
   reason: string | undefined,
   command: string,
   fromStderr: boolean,
+  originalPrompt?: string,
 ): string {
-  return `${claudeEvent} operation blocked by hook:\n${blockMessage(reason, command, fromStderr)}`;
+  const notice = `${claudeEvent} operation blocked by hook:\n${blockMessage(reason, command, fromStderr)}`;
+  return originalPrompt === undefined ? notice : `${notice}\n\nOriginal prompt: ${originalPrompt}`;
 }
 
 /**

@@ -46,8 +46,37 @@ Feature: Hook prompt expansion
       | event               | session | expansion type | command name | command args | command source | prompt                  | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | UserPromptExpansion | first   | slash_command  | demo:deploy  | production   | plugin         | /demo:deploy production | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the hooks show the user these messages:
-      | severity | text                                                                                                     |
-      | info     | UserPromptExpansion operation blocked by hook:\n[${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: no deploys today |
+      | severity | text                                                                                                                                                 |
+      | info     | UserPromptExpansion operation blocked by hook:\n[${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: no deploys today\n\nOriginal prompt: /demo:deploy production |
+    Then the prompt the hook blocked reaches the model in no call
+
+  Scenario: An expansion hook that blocks with suppressOriginalPrompt leaves the typed command out of the notice
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "cmd" with this command file:
+      """
+      ---
+      description: Runs the command.
+      ---
+
+      Command body: [$ARGUMENTS]
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event               | matcher | form   | output                                                                                                                             |
+      | quiet | UserPromptExpansion |         | script | {"decision":"block","reason":"not now","hookSpecificOutput":{"hookEventName":"UserPromptExpansion","suppressOriginalPrompt":true}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    When the user prompts "/demo:cmd first second"
+    Then the hooks record these runs:
+      | event               | session | expansion type | command name | command args | command source | prompt                 | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | UserPromptExpansion | first   | slash_command  | demo:cmd     | first second | plugin         | /demo:cmd first second | {project dir} |                 | quiet     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the hooks show the user these messages:
+      | severity | text                                                    |
+      | info     | UserPromptExpansion operation blocked by hook:\nnot now |
     Then the prompt the hook blocked reaches the model in no call
 
   Scenario Outline: An expansion hook records the typed plugin <typed kind>, and the model gets the expanded text

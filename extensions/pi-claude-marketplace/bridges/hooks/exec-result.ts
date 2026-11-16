@@ -93,6 +93,8 @@ export type HookExecResult =
       kind: "block";
       reason?: string;
       fromStderr?: true;
+      /** D-PG6-20: the hook's `hookSpecificOutput.suppressOriginalPrompt: true`. */
+      suppressOriginalPrompt?: true;
       additionalContext?: string;
       systemMessage?: string;
       readonly postCompactRun?: PostCompactRun;
