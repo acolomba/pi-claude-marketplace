@@ -144,7 +144,7 @@ Feature: Slash command aliases
       | command    | argument hint | description       |
       | demo:fancy |               | Ships the branch. |
 
-  Scenario: A command whose frontmatter sets a name does not answer to its path name
+  Scenario Outline: A command whose frontmatter sets a name sends <typed name> to the model as <what the model gets>
     Given pi runs with the scripted model
     Given the published plugin "demo" of the marketplace "fixtures" has the slash command "demo-ship" with this command file:
       """
@@ -161,7 +161,14 @@ Feature: Slash command aliases
     Given the scripted model plays these steps:
       | reply  |
       | Noted. |
-    When the user prompts "/demo:demo-ship production"
+    When the user prompts "<typed name> production"
     Then the model receives these calls:
-      | call | role | text                       |
-      | 1    | user | /demo:demo-ship production |
+      | call | role | text         |
+      | 1    | user | <model text> |
+
+    Examples:
+      | typed name      | what the model gets | model text                                |
+      | /demo:ship      | its body            | Ship the branch.\n\nARGUMENTS: production |
+      | /demo:fancy     | its body            | Ship the branch.\n\nARGUMENTS: production |
+      | /fancy          | its body            | Ship the branch.\n\nARGUMENTS: production |
+      | /demo:demo-ship | plain text          | /demo:demo-ship production                |
