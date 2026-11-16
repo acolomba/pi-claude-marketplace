@@ -25,11 +25,10 @@
 
 import { parse, tokTypes } from "acorn";
 
-import { errorMessage, WorkflowNameCollisionError } from "../shared/errors.ts";
+import { errorMessage } from "../shared/errors.ts";
 
 import { assertSafeName, generatedWorkflowName } from "./name.ts";
 
-import type { WorkflowNameCollision } from "../shared/errors.ts";
 import type {
   Comment,
   Program,
@@ -156,7 +155,7 @@ interface ParsedScript {
  * never contributes to the command name, which comes from `meta.name` alone.
  *
  * The PLUGIN name is checked before anything else, and it throws rather than
- * refusing. It is a defect of the SET, like the WNAM-05 collision: it
+ * refusing. It is a defect of the SET: it
  * disqualifies every script in the plugin at once and no file is at fault, so
  * rendering it as a per-file refusal would blame each well-formed file in turn
  * for a fact about the plugin. WNAM-06's per-file refusal covers the name the
@@ -239,46 +238,31 @@ export function admitWorkflowScript(
 }
 
 /**
- * WNAM-05: detect two workflow scripts in one plugin whose `meta.name` resolves
- * to the same generated command name. Both FILE names are listed, because the
- * clash lives in the declared names and neither file name reveals it.
+ * D-PG8-07: when two admitted scripts of one plugin share a generated name,
+ * keep the LAST one, as Claude Code 2.1.323 does. Its loader folds the
+ * plugin's scripts into a map by name, and a later script replaces the earlier
+ * one when its whole script parses; it says nothing about the one it drops.
  *
- * Single-collision message:
- *   `Generated workflow name collision detected. Rename the meta.name of one of the source scripts:
- *      "acme:deploy" <- ["deploy.workflow.js", "ship.workflow.js"]`
- *
- * Multi-collision messages join each line on a fresh `\n  ` separator.
- *
- * Takes the FULL verdict array and narrows internally, which leaves the caller
- * no opportunity to dedup first. That is the deliberate divergence from
- * `bridges/commands/stage.ts::assertNoCommandCollisions`: the commands discover
- * path first-wins-dedups by generated name (D-07) before its assert ever runs,
- * which makes that assert unreachable in practice. For commands a clash can only
- * arise from prefix elision, which the two file names make legible; for
- * workflows it arises from `meta.name`, so keeping the first silently would be
- * the misnaming WNAM-05 exists to prevent.
+ * A script that does not parse never reaches the `named` arm here, so it
+ * cannot replace an earlier copy, which is Claude Code's "keep the earlier copy"
+ * branch. Records of every other arm pass through, because each already
+ * carries its own warning. The order of the records that are kept is unchanged.
  */
-export function assertNoWorkflowNameCollisions(verdicts: readonly WorkflowVerdict[]): void {
-  const groups = new Map<string, string[]>();
+export function keepLastWorkflowPerName<T extends { readonly verdict: WorkflowVerdict }>(
+  records: readonly T[],
+): T[] {
+  const lastIndex = new Map<string, number>();
 
-  for (const admitted of verdicts.filter(isAdmitted)) {
-    const claimants = groups.get(admitted.generatedName) ?? [];
-
-    claimants.push(admitted.fileName);
-    groups.set(admitted.generatedName, claimants);
-  }
-
-  const collisions: WorkflowNameCollision[] = [];
-
-  for (const [generatedName, fileNames] of groups) {
-    if (fileNames.length > 1) {
-      collisions.push({ generatedName, fileNames });
+  records.forEach((record, index) => {
+    if (isAdmitted(record.verdict)) {
+      lastIndex.set(record.verdict.generatedName, index);
     }
-  }
+  });
 
-  if (collisions.length > 0) {
-    throw new WorkflowNameCollisionError(collisions);
-  }
+  return records.filter(
+    (record, index) =>
+      !isAdmitted(record.verdict) || lastIndex.get(record.verdict.generatedName) === index,
+  );
 }
 
 /** Only the arm that carries a `generatedName` can take part in a collision. */
@@ -359,11 +343,9 @@ export const WORKFLOW_SCRIPT_MAX_BYTES = 524_288;
  * one broken file in a twenty-script plugin must not block the other nineteen,
  * so an unsafe name becomes this file's own `refused` verdict.
  *
- * The collision (WNAM-05) stays a throw because it is a defect of the SET, not
- * of one file, and refusing one arbitrary member would be silent misnaming. The
- * plugin name is screened by `admitWorkflowScript` before this runs, for the
- * same reason, so what reaches this catch is always a defect of the name the
- * FILE supplies.
+ * The plugin name is screened by `admitWorkflowScript` before this runs,
+ * because it is a defect of the whole plugin, so what reaches this catch is
+ * always a defect of the name the FILE supplies.
  *
  * `declaredName` is the text the name is BUILT FROM -- the declared `meta.name`.
  * Everywhere else in this module

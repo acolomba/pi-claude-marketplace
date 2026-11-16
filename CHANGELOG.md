@@ -36,6 +36,7 @@
   - Run `/claude:plugin reinstall` once on an installed plugin to get these agent changes.
   - Install, update, and `info` now note a workflow agent type that the plugin does not install, because the workflow engine runs a default agent in its place where Claude Code stops the run.
   - The workflow compatibility page now says what a workflow subagent can reach, and which engine settings give it MCP tools and the session's model.
+  - When two workflow scripts of one plugin declare the same name, the install now keeps the last one, as Claude Code does. Before, the whole install failed.
   - Under pi-mcp-adapter, a plugin's stdio MCP server now stays running for the session once it starts, and updates keep your `protocolVersion`, `tasks`, `exposeResources`, and `caFile`. Run `/claude:plugin reinstall` once to apply this to an installed plugin.
   - pi-mcp-adapter then starts such a server again in the background when it exits, and asks for project server approval again after the reinstall.
   - pi-mcp-adapter's global `settings.idleTimeout` no longer stops such a server. To let one stop when idle, set `idleTimeout` on its entry.

@@ -18373,10 +18373,10 @@ test("WLIF-01: a workflows prepare failure leaves the undo with nothing to remov
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-workflows-prepare-fail-"));
     try {
-      // arrange -- two scripts declaring the SAME `meta.name` make
-      // `prepareStageWorkflows` raise before it returns a handle, so
-      // `workflowsPrep` is still undefined when the runner unwinds and the
-      // undo takes its early return.
+      // arrange -- a regular file where the workflows staging directory
+      // belongs makes `prepareStageWorkflows` raise before it returns a
+      // handle, so `workflowsPrep` is still undefined when the runner unwinds
+      // and the undo takes its early return.
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -18388,12 +18388,10 @@ test("WLIF-01: a workflows prepare failure leaves the undo with nothing to remov
             sourceName: "first",
             body: 'export const meta = { name: "greet", description: "a" };\n',
           },
-          {
-            sourceName: "second",
-            body: 'export const meta = { name: "greet", description: "b" };\n',
-          },
         ],
       });
+      await mkdir(path.dirname(locations.workflowsStagingDir), { recursive: true });
+      await writeFile(locations.workflowsStagingDir, "not a directory\n");
       const { ctx, run } = makeCtx();
 
       // act
@@ -18408,7 +18406,7 @@ test("WLIF-01: a workflows prepare failure leaves the undo with nothing to remov
 
       // assert
       assert.strictEqual(outcome.status, "failed");
-      assert.strictEqual(outcome.error.name, "WorkflowNameCollisionError");
+      assert.strictEqual((outcome.error as NodeJS.ErrnoException).code, "ENOTDIR");
       assert.deepStrictEqual(await entriesOf(locations.workflowsSavedDir), []);
       const state = await loadState(locations.extensionRoot);
       assert.strictEqual(state.marketplaces.mp?.plugins.hello, undefined);

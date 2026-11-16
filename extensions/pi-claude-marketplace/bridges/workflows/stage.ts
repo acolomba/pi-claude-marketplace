@@ -54,7 +54,6 @@ import { randomUUID } from "node:crypto";
 import { mkdir, rename, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { assertNoWorkflowNameCollisions } from "../../domain/workflow-script.ts";
 import { WorkflowTargetOccupiedError } from "../../shared/errors-bridges.ts";
 import { appendLeakToError, appendLeaks, errorMessage } from "../../shared/errors.ts";
 import { cleanupStaging, createRemovalOps, pathExists } from "../../shared/fs-utils.ts";
@@ -160,16 +159,8 @@ async function foreignOccupiedTargets(
  * Per-file rename to the saved directory is deferred to
  * `commitPreparedWorkflows`.
  *
- * The five-step ordering is the contract: discover, collision assert,
- * materialization gate, staging root, per-file write. The collision assert is
- * where this bridge parts from the commands analog (`discover.ts` lists the
- * divergences); the other steps match it.
- *
- * The collision assert runs over the FULL verdict array of every discovered
- * record, before anything is deduped or filtered. `assertNoWorkflowNameCollisions`
- * narrows internally for exactly that reason (WNAM-05): a clash arises from
- * the declared `meta.name`, which neither file name reveals, so keeping the
- * first silently would be the misnaming the rule exists to prevent.
+ * The four-step ordering is the contract: discover, materialization gate,
+ * staging root, per-file write.
  *
  * Returns a `kind: "noop"` short-circuit when nothing is admitted AND there
  * are no previous names: nothing to stage and nothing to remove, so creating
@@ -189,16 +180,8 @@ export async function prepareStageWorkflows(
     tense: "install",
   });
 
-  assertNoWorkflowNameCollisions(discovered.map((d) => d.verdict));
-
-  // The admitted list is already unique by generated name, and two upstream
-  // invariants are between them what make it so: the collision assert above
-  // rejects two distinct scripts claiming one name (WNAM-05), and discovery
-  // dedups by absolute source path, so one script cannot be reached twice
-  // (`discover.ts::pathDedupKey`). A first-wins filter here could never fire --
-  // and were either invariant to loosen, dropping a claimant silently is the
-  // wrong recovery: it installs one script under a name the author gave to two,
-  // which is the outcome the collision assert exists to prevent.
+  // Discovery already keeps one script per generated name (D-PG8-07), so each
+  // admitted verdict names its own target file.
   const admitted = discovered.map(admittedVerdict).filter((verdict) => verdict !== undefined);
 
   if (admitted.length === 0 && previousNames.length === 0) {

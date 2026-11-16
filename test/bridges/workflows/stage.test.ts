@@ -21,10 +21,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/workflows/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { WorkflowTargetOccupiedError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
-import {
-  ManualRecoveryError,
-  WorkflowNameCollisionError,
-} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { ManualRecoveryError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
 import type {
@@ -366,31 +363,33 @@ describe("prepareStageWorkflows", () => {
     assert.deepStrictEqual(stagedEnvelopes, ["acme:greet.json"]);
   });
 
-  test("rejects a generated-name collision before any envelope is written", async (t) => {
+  test("stages only the last of two scripts that share one generated name", async (t) => {
     // arrange
-    const { locations } = await createWorkflowScope(t, "workflows-stage-collision-");
-    const pluginRoot = await createPluginRoot(t, "workflows-collision-source-");
+    const { locations } = await createWorkflowScope(t, "workflows-stage-shared-name-");
+    const pluginRoot = await createPluginRoot(t, "workflows-shared-name-source-");
     const workflowsDir = await createWorkflowsDir(pluginRoot);
     await writeWorkflowScript(workflowsDir, "alpha.js", GREET_SOURCE);
-    await writeWorkflowScript(workflowsDir, "beta.js", GREET_SOURCE);
+    await writeWorkflowScript(workflowsDir, "beta.js", GREET_REVISED_SOURCE);
 
     // act
-    const error = await prepareStageWorkflows({
-      locations,
-      pluginName: PLUGIN_NAME,
-      resolved: resolvedPlugin(pluginRoot, ["workflows"]),
-    }).then(
-      () => undefined,
-      (reason: unknown) => reason,
+    const prepared = stagedPreparation(
+      await prepareStageWorkflows({
+        locations,
+        pluginName: PLUGIN_NAME,
+        resolved: resolvedPlugin(pluginRoot, ["workflows"]),
+      }),
     );
-    const stagingDirExists = await pathIsPresent(locations.workflowsStagingDir);
+    const stagedEnvelopes = await readdir(prepared.stagingRoot);
+    const stagedBytes = await readFile(path.join(prepared.stagingRoot, "acme:greet.json"), "utf8");
 
     // assert
-    assert.ok(error instanceof WorkflowNameCollisionError);
-    assert.deepStrictEqual(error.collisions, [
-      { generatedName: "acme:greet", fileNames: ["alpha.js", "beta.js"] },
-    ]);
-    assert.strictEqual(stagingDirExists, false);
+    assert.deepStrictEqual(prepared.result, {
+      stagedNames: ["acme:greet"],
+      warnings: [],
+      unownedNames: [],
+    });
+    assert.deepStrictEqual(stagedEnvelopes, ["acme:greet.json"]);
+    assert.strictEqual(stagedBytes, GREET_REVISED_ENVELOPE);
   });
 
   test("keeps the first record when one directory is declared under two spellings", async (t) => {

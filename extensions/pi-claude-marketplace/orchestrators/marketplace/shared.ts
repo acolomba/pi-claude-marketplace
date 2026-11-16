@@ -114,8 +114,7 @@ export class AgentsUnstageFailureError extends Error {
  * names identify EXECUTABLE files left on disk, and the error crosses the
  * ledger boundary into a renderer that reads it long after the bridge
  * returned; a frozen copy is the only way the field is provably the same list
- * at read time as at throw time. This follows `WorkflowNameCollisionError`
- * rather than the no-copy sibling.
+ * at read time as at throw time.
  */
 export class WorkflowsUnstageFailureError extends Error {
   readonly failedWorkflows: readonly UnstageWorkflowFailure[];
