@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   ContextInjectionError,
   expandContextInjections,
+  withoutContextInjections,
 } from "../../extensions/pi-claude-marketplace/domain/context-injection.ts";
 
 import type {
@@ -218,5 +219,34 @@ for (const { ending, result, reason, message } of [
       assert.strictEqual(error.message, message);
       return true;
     });
+  });
+}
+
+for (const { title, text, expected } of [
+  {
+    title: "D-PG11-02: puts one ! in place of an inline command",
+    text: "Files: !`cat @a.md` and @b.md",
+    expected: "Files: ! and @b.md",
+  },
+  {
+    title: "D-PG11-02: puts one ! in place of a fenced block",
+    text: "```!\ncat @a.md\n```\n@b.md",
+    expected: "!\n@b.md",
+  },
+  {
+    title: "D-PG11-02: keeps a code span that is not a command",
+    text: "Use `@a.md` here",
+    expected: "Use `@a.md` here",
+  },
+]) {
+  test(title, () => {
+    // arrange
+    const expectedText = expected;
+
+    // act
+    const stripped = withoutContextInjections(text);
+
+    // assert
+    assert.strictEqual(stripped, expectedText);
   });
 }

@@ -363,16 +363,11 @@ Feature: Slash command invocation
       | 1    | user | <model text> |
 
     Examples:
-      | mention place                                      | command body                                                                                 | model text                                                                                                                                                                                                               |
-      | as plain text                                      | Review @${CLAUDE_PLUGIN_ROOT}/templates/x.md                                                 | Review @{home}/marketplaces/fixtures/plugins/demo/templates/x.md\n\n<file name="{home}/marketplaces/fixtures/plugins/demo/templates/x.md">\nCheck the spelling.\n</file>                                                 |
-      | after an escaped backtick                          | Type \\` then review @${CLAUDE_PLUGIN_ROOT}/templates/x.md with `lint`                       | Type \\` then review @{home}/marketplaces/fixtures/plugins/demo/templates/x.md with `lint`\n\n<file name="{home}/marketplaces/fixtures/plugins/demo/templates/x.md">\nCheck the spelling.\n</file>                       |
-      | in a list item after an unclosed backtick          | - Run `lint\n- Review @${CLAUDE_PLUGIN_ROOT}/templates/x.md, then `ship`                     | - Run `lint\n- Review @{home}/marketplaces/fixtures/plugins/demo/templates/x.md, then `ship`\n\n<file name="{home}/marketplaces/fixtures/plugins/demo/templates/x.md">\nCheck the spelling.\n</file>                     |
-      | after a thematic break under an unclosed backtick  | Run `lint\n---\nReview @${CLAUDE_PLUGIN_ROOT}/templates/x.md, then `ship`                    | Run `lint\n---\nReview @{home}/marketplaces/fixtures/plugins/demo/templates/x.md, then `ship`\n\n<file name="{home}/marketplaces/fixtures/plugins/demo/templates/x.md">\nCheck the spelling.\n</file>                    |
-      | after a code span over a line that starts with 2.  | Step `a\n2. b` then review @${CLAUDE_PLUGIN_ROOT}/templates/x.md with `lint`                 | Step `a\n2. b` then review @{home}/marketplaces/fixtures/plugins/demo/templates/x.md with `lint`\n\n<file name="{home}/marketplaces/fixtures/plugins/demo/templates/x.md">\nCheck the spelling.\n</file>                 |
-      | after a quoted code block and an unclosed backtick | > ```\n> code\n> ```\nRun `lint\n> Review @${CLAUDE_PLUGIN_ROOT}/templates/x.md, then `ship` | > ```\n> code\n> ```\nRun `lint\n> Review @{home}/marketplaces/fixtures/plugins/demo/templates/x.md, then `ship`\n\n<file name="{home}/marketplaces/fixtures/plugins/demo/templates/x.md">\nCheck the spelling.\n</file> |
-      | after a fence on a list item                       | - ```bash\n  ls\n  ```\n\nThen review @${CLAUDE_PLUGIN_ROOT}/templates/x.md                  | - ```bash\n  ls\n  ```\n\nThen review @{home}/marketplaces/fixtures/plugins/demo/templates/x.md\n\n<file name="{home}/marketplaces/fixtures/plugins/demo/templates/x.md">\nCheck the spelling.\n</file>                  |
-      | after a quoted fence in indented code              | Example:\n\n    > ```\n    > Review @${CLAUDE_PLUGIN_ROOT}/templates/x.md                    | Example:\n\n    > ```\n    > Review @{home}/marketplaces/fixtures/plugins/demo/templates/x.md\n\n<file name="{home}/marketplaces/fixtures/plugins/demo/templates/x.md">\nCheck the spelling.\n</file>                    |
-      | after a fence on a list item in a blockquote       | > - ```\n>   ls\n>   ```\n> Review @${CLAUDE_PLUGIN_ROOT}/templates/x.md                     | > - ```\n>   ls\n>   ```\n> Review @{home}/marketplaces/fixtures/plugins/demo/templates/x.md\n\n<file name="{home}/marketplaces/fixtures/plugins/demo/templates/x.md">\nCheck the spelling.\n</file>                     |
+      | mention place                             | command body                                                         | model text                                                                                                                                                                                       |
+      | as plain text                             | Review @${CLAUDE_PLUGIN_ROOT}/templates/x.md                         | Review @{home}/marketplaces/fixtures/plugins/demo/templates/x.md\n\n<file name="{home}/marketplaces/fixtures/plugins/demo/templates/x.md">\nCheck the spelling.\n</file>                         |
+      | in fenced code                            | Example:\n```text\nReview @${CLAUDE_PLUGIN_ROOT}/templates/x.md\n``` | Example:\n```text\nReview @{home}/marketplaces/fixtures/plugins/demo/templates/x.md\n```\n\n<file name="{home}/marketplaces/fixtures/plugins/demo/templates/x.md">\nCheck the spelling.\n</file> |
+      | in a code span                            | Run `cat @${CLAUDE_PLUGIN_ROOT}/templates/x.md` to see it.           | Run `cat @{home}/marketplaces/fixtures/plugins/demo/templates/x.md` to see it.\n\n<file name="{home}/marketplaces/fixtures/plugins/demo/templates/x.md">\nCheck the spelling.\n</file>           |
+      | in a fence on a list item in a blockquote | > - ```\n>   Review @${CLAUDE_PLUGIN_ROOT}/templates/x.md\n>   ```   | > - ```\n>   Review @{home}/marketplaces/fixtures/plugins/demo/templates/x.md\n>   ```\n\n<file name="{home}/marketplaces/fixtures/plugins/demo/templates/x.md">\nCheck the spelling.\n</file>   |
 
   Scenario: A file that a typed argument mentions is not attached (PG-SKILL-01)
     Given pi runs with the scripted model
@@ -399,7 +394,7 @@ Feature: Slash command invocation
       | call | role | text                                                             |
       | 1    | user | Review @{home}/marketplaces/fixtures/plugins/demo/templates/x.md |
 
-  Scenario Outline: A mention <mention place> is not attached (PG-SKILL-01)
+  Scenario: A mention in a context command and its output is not attached (PG-SKILL-01)
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -411,7 +406,7 @@ Feature: Slash command invocation
       description: Reviews against the template.
       ---
 
-      <command body>
+      Shown: !`echo @${CLAUDE_PLUGIN_ROOT}/templates/x.md`
       """
     Given the published plugin "demo" of the marketplace "fixtures" has the file "templates/x.md" with this text:
       """
@@ -425,13 +420,5 @@ Feature: Slash command invocation
       | Noted. |
     When the user prompts "/demo:review"
     Then the model receives these calls:
-      | call | role | text         |
-      | 1    | user | <model text> |
-
-    Examples:
-      | mention place                                        | command body                                                                | model text                                                                                      |
-      | in fenced code                                       | Example:\n```text\nReview @${CLAUDE_PLUGIN_ROOT}/templates/x.md\n```        | Example:\n```text\nReview @{home}/marketplaces/fixtures/plugins/demo/templates/x.md\n```        |
-      | in a code span                                       | Run `cat @${CLAUDE_PLUGIN_ROOT}/templates/x.md` to see it.                  | Run `cat @{home}/marketplaces/fixtures/plugins/demo/templates/x.md` to see it.                  |
-      | in a context command and its output                  | Shown: !`echo @${CLAUDE_PLUGIN_ROOT}/templates/x.md`                        | Shown: @{home}/marketplaces/fixtures/plugins/demo/templates/x.md                                |
-      | in a code span over an unindented === line in a list | - Run `lint\n===\nReview @${CLAUDE_PLUGIN_ROOT}/templates/x.md, then `ship` | - Run `lint\n===\nReview @{home}/marketplaces/fixtures/plugins/demo/templates/x.md, then `ship` |
-      | in a fence on a list item in a blockquote            | > - ```\n>   Review @${CLAUDE_PLUGIN_ROOT}/templates/x.md\n>   ```          | > - ```\n>   Review @{home}/marketplaces/fixtures/plugins/demo/templates/x.md\n>   ```          |
+      | call | role | text                                                             |
+      | 1    | user | Shown: @{home}/marketplaces/fixtures/plugins/demo/templates/x.md |
