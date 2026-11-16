@@ -16,8 +16,8 @@
  * user's own in the scope's shared `agents/` directory, where an install
  * writes the agents of every plugin, plant an agents index entry that claims
  * a file there, move a plugin's recorded plugin root outside its
- * marketplace, and set the scope a marketplace's record names, as a hand edit
- * of the installation record can. Others rewrite the whole installation record
+ * marketplace, leave a plugin's recorded options unreadable, and set the scope
+ * a marketplace's record names, as a hand edit of the installation record can. Others rewrite the whole installation record
  * as an earlier release wrote it, or with a schema version newer than this
  * release reads, as an upgrade or a downgrade leaves it (D-BG-13); the one
  * for release 0.4.3 also deletes the scope's configs, which that release did
@@ -47,6 +47,7 @@ import {
   readPluginRecord,
   relocatePluginRoot,
   rewriteMarketplaceRecord,
+  rewritePluginRecord,
 } from "../../lib/installation-record.ts";
 import { projectTokens } from "../../lib/run-tokens.ts";
 
@@ -362,6 +363,21 @@ Given(
     await relocatePluginRoot(scopeRoot, id, copy);
     const record = await readPluginRecord(scopeRoot, id);
     assert.equal(record.resolvedSource, copy);
+  },
+);
+
+// D-PG10-25: a hand edit leaves the record's `userConfig` a string, which the
+// manifest parser refuses.
+Given(
+  "the installation record of the plugin {string} in the {word} scope holds plugin options that do not parse",
+  async function (this: ScenarioWorld, pluginId: string, scope: string) {
+    const scopeRoot = this.scopeRoot(scope);
+    await rewritePluginRecord(scopeRoot, pluginId, (record) => ({
+      ...record,
+      userConfig: "token=secret",
+    }));
+    const record = await readPluginRecord(scopeRoot, pluginId);
+    assert.strictEqual(record.userConfig, "token=secret");
   },
 );
 
