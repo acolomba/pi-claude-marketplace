@@ -68,8 +68,14 @@ const AGENT_SUFFIX = " (agent)";
 // At most three spaces, then a run of three or more backticks or tildes.
 const FENCE_RUN = /^ {0,3}(`{3,}|~{3,})/;
 
-// A blank line between two paragraphs, which ends any code span.
-const PARAGRAPH_BREAK = /(\n[^\S\n]*\n)/;
+// The blockquote markers that open a line.
+const QUOTE_MARKERS = /^(?:[^\S\n]*>)*/;
+
+// A list item or an ATX heading, which starts a block, so no code span crosses
+// the start of the line. Any indentation counts: a line indented like code
+// that is read as a block start only lets more mentions through, as Claude
+// Code attaches them.
+const BLOCK_START = /^[^\S\n]*(?:[-*+]|\d{1,9}[.)]|(#{1,6}))(?:\s|$)/;
 
 const BACKTICK_RUN = /`+/g;
 
@@ -84,6 +90,25 @@ interface BacktickRun {
   readonly index: number;
   readonly start: number;
   readonly end: number;
+}
+
+/** The runs that can close a code span opened at one run. */
+interface SpanClosers {
+  /** The next run of the opening run's length. */
+  readonly whole: BacktickRun | undefined;
+  /** The next run one backtick shorter, for a run whose first backtick is escaped. */
+  readonly escaped: BacktickRun | undefined;
+}
+
+/** How one line bounds the code spans around it. */
+interface LineShape {
+  /** The line holds only whitespace after its blockquote markers. */
+  readonly blank: boolean;
+  readonly quoteDepth: number;
+  /** The line starts a list item or an ATX heading. */
+  readonly blockStart: boolean;
+  /** The line is an ATX heading, which no next line continues. */
+  readonly heading: boolean;
 }
 
 interface LocatedMention {
@@ -136,21 +161,41 @@ function maskFences(text: string): string {
   return masked.join("\n");
 }
 
-// Maps each run that opens a span to the next run of the same length.
-function closingRuns(runs: readonly BacktickRun[]): Map<number, BacktickRun> {
-  const closers = new Map<number, BacktickRun>();
-  const lastOfLength = new Map<number, number>();
-  for (const run of runs) {
+// Maps each run to the later runs that can close a span it opens.
+function closingRuns(runs: readonly BacktickRun[]): Map<number, SpanClosers> {
+  const closers = new Map<number, SpanClosers>();
+  const nextOfLength = new Map<number, BacktickRun>();
+  for (const run of [...runs].reverse()) {
     const length = run.end - run.start;
-    const previous = lastOfLength.get(length);
-    if (previous !== undefined) {
-      closers.set(previous, run);
-    }
-
-    lastOfLength.set(length, run.index);
+    closers.set(run.index, {
+      whole: nextOfLength.get(length),
+      escaped: nextOfLength.get(length - 1),
+    });
+    nextOfLength.set(length, run);
   }
 
   return closers;
+}
+
+// An odd count of backslashes right before `at` escapes the character there.
+function isEscaped(text: string, at: number): boolean {
+  let backslashes = 0;
+  while (text.charAt(at - backslashes - 1) === "\\") {
+    backslashes += 1;
+  }
+
+  return backslashes % 2 === 1;
+}
+
+// As in CommonMark, an escaped backtick opens no span, and the rest of its run
+// can; inside a span a backslash is text, so any run of the length closes it.
+function spanCloser(
+  paragraph: string,
+  run: BacktickRun,
+  closers: ReadonlyMap<number, SpanClosers>,
+): BacktickRun | undefined {
+  const candidates = closers.get(run.index);
+  return isEscaped(paragraph, run.start) ? candidates?.escaped : candidates?.whole;
 }
 
 // D-PG11-03: blanks the content of each code span of one paragraph. A run of
@@ -168,7 +213,7 @@ function maskParagraphSpans(paragraph: string): string {
   let copied = 0;
   let lastClosed = -1;
   for (const run of runs) {
-    const closer = run.index > lastClosed ? closers.get(run.index) : undefined;
+    const closer = run.index > lastClosed ? spanCloser(paragraph, run, closers) : undefined;
     if (closer !== undefined) {
       const content = paragraph.slice(run.end, closer.start);
       masked += paragraph.slice(copied, run.end) + content.replace(NOT_NEWLINE, " ");
@@ -180,10 +225,55 @@ function maskParagraphSpans(paragraph: string): string {
   return masked + paragraph.slice(copied);
 }
 
+function lineShape(line: string): LineShape {
+  const content = line.replace(QUOTE_MARKERS, "");
+  const quote = line.slice(0, line.length - content.length);
+  const block = BLOCK_START.exec(content);
+  return {
+    blank: content.trim() === "",
+    quoteDepth: quote.length - quote.replaceAll(">", "").length,
+    blockStart: block !== null,
+    heading: block?.[1] !== undefined,
+  };
+}
+
+// A blank line, a list item, a heading, and a deeper blockquote each start a
+// block, and a heading ends one.
+function startsParagraph(line: LineShape, previous: LineShape): boolean {
+  return (
+    line.blank ||
+    previous.blank ||
+    line.blockStart ||
+    previous.heading ||
+    line.quoteDepth > previous.quoteDepth
+  );
+}
+
+// D-PG11-03: the text split into the runs of lines one paragraph can hold, so
+// that no code span crosses a block boundary. A masked fence is blank lines.
+function paragraphs(text: string): string[] {
+  const groups: string[][] = [];
+  let current: string[] = [];
+  let previous: LineShape | undefined;
+  for (const line of text.split("\n")) {
+    const shape = lineShape(line);
+    if (previous !== undefined && startsParagraph(shape, previous)) {
+      groups.push(current);
+      current = [];
+    }
+
+    current.push(line);
+    previous = shape;
+  }
+
+  groups.push(current);
+  return groups.map((group) => group.join("\n"));
+}
+
 // The masked text has the length and the lines of the body; it is only scanned,
 // never sent to the model.
 function maskCode(body: string): string {
-  return maskFences(body).split(PARAGRAPH_BREAK).map(maskParagraphSpans).join("");
+  return paragraphs(maskFences(body)).map(maskParagraphSpans).join("\n");
 }
 
 function quotedMentions(text: string): LocatedMention[] {

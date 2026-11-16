@@ -333,7 +333,7 @@ Feature: Slash command invocation
       | call | role | text       |
       | 1    | user | Shell: ran |
 
-  Scenario: A command attaches the file that its body mentions (PG-SKILL-01)
+  Scenario Outline: A command attaches the file that its body mentions <mention place> (PG-SKILL-01)
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -345,7 +345,7 @@ Feature: Slash command invocation
       description: Reviews against the template.
       ---
 
-      Review @${CLAUDE_PLUGIN_ROOT}/templates/x.md
+      <command body>
       """
     Given the published plugin "demo" of the marketplace "fixtures" has the file "templates/x.md" with this text:
       """
@@ -359,8 +359,14 @@ Feature: Slash command invocation
       | Noted. |
     When the user prompts "/demo:review"
     Then the model receives these calls:
-      | call | role | text                                                                                                                                                                     |
-      | 1    | user | Review @{home}/marketplaces/fixtures/plugins/demo/templates/x.md\n\n<file name="{home}/marketplaces/fixtures/plugins/demo/templates/x.md">\nCheck the spelling.\n</file> |
+      | call | role | text         |
+      | 1    | user | <model text> |
+
+    Examples:
+      | mention place                             | command body                                                             | model text                                                                                                                                                                                           |
+      | as plain text                             | Review @${CLAUDE_PLUGIN_ROOT}/templates/x.md                             | Review @{home}/marketplaces/fixtures/plugins/demo/templates/x.md\n\n<file name="{home}/marketplaces/fixtures/plugins/demo/templates/x.md">\nCheck the spelling.\n</file>                             |
+      | after an escaped backtick                 | Type \\` then review @${CLAUDE_PLUGIN_ROOT}/templates/x.md with `lint`   | Type \\` then review @{home}/marketplaces/fixtures/plugins/demo/templates/x.md with `lint`\n\n<file name="{home}/marketplaces/fixtures/plugins/demo/templates/x.md">\nCheck the spelling.\n</file>   |
+      | in a list item after an unclosed backtick | - Run `lint\n- Review @${CLAUDE_PLUGIN_ROOT}/templates/x.md, then `ship` | - Run `lint\n- Review @{home}/marketplaces/fixtures/plugins/demo/templates/x.md, then `ship`\n\n<file name="{home}/marketplaces/fixtures/plugins/demo/templates/x.md">\nCheck the spelling.\n</file> |
 
   Scenario: A file that a typed argument mentions is not attached (PG-SKILL-01)
     Given pi runs with the scripted model

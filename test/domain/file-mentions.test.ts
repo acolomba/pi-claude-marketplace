@@ -197,6 +197,66 @@ describe("findFileMentions", () => {
       expected: [whole("a.md")],
     },
     {
+      title: "D-PG11-03: opens no code span at a backtick a backslash escapes",
+      body: "Use \\` then @a.md then `x`",
+      expected: [whole("a.md")],
+    },
+    {
+      title: "D-PG11-03: opens a code span at a backtick whose backslash a backslash escapes",
+      body: "Use \\\\` then @a.md then `x`",
+      expected: [],
+    },
+    {
+      title: "D-PG11-03: opens a code span at the rest of a run whose first backtick is escaped",
+      body: "Use \\``x @a.md` here",
+      expected: [],
+    },
+    {
+      title: "D-PG11-03: closes a code span at a backtick after a backslash inside it",
+      body: "`a\\` @a.md `c`",
+      expected: [whole("a.md")],
+    },
+    {
+      title: "D-PG11-03: closes no code span across the start of a list item",
+      body: "- item `one\n- @b.md two`",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: closes no code span across the start of an ordered list item",
+      body: "1. item `one\n2) @b.md two`",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: closes no code span across the start of a heading",
+      body: "Use `one\n# @b.md two`",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: closes no code span across the end of a heading",
+      body: "# Use `one\n@b.md two`",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: closes no code span across the start of a blockquote",
+      body: "Use `one\n> @b.md two`",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: closes no code span across a blank blockquote line",
+      body: "> Use `one\n>\n> @b.md two`",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: skips a mention in a code span over two lines of one blockquote",
+      body: "> Use `one\n> @b.md two`",
+      expected: [],
+    },
+    {
+      title: "D-PG11-03: skips a mention in a code span over a list item's continuation line",
+      body: "- Use `one\n  @b.md two`",
+      expected: [],
+    },
+    {
       title: "D-PG11-03: reads no mention from an @ right after a code span",
       body: "Use `x`@a.md",
       expected: [],
