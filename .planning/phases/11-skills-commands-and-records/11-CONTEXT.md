@@ -120,17 +120,23 @@ criteria 1 and 2 say the opposite for all three.
   plugin-authoring guidance (`plugin-dev` teaches the `@` pattern inside code
   in more than 20 places, so parity would attach the files its examples name,
   when they exist). No doc may call it parity. Maintainer question: keep the
-  skip, or follow upstream and change criterion 2. Code spans follow
-  CommonMark's escape rule and paragraph ends (code review WR-02, WR-03,
-  IN-06, 2026-11-15): a backslash-escaped backtick opens none, and none
-  crosses a blank line, an ATX heading, a thematic break, a setext underline
-  under text, the start of a deeper blockquote, the end of an indented block,
-  or a list item that can interrupt the paragraph (indented under four
-  columns, with text, numbered 1 if ordered; any item on a line that leaves a
-  blockquote), so a mention outside a real span stays attached as D-PG11-04
-  requires. Residual: inside a list, every item and heading ends a span at any
-  indentation, so a nested line that CommonMark reads as paragraph text can
-  end a span early and skip a mention outside code.
+  skip, or follow upstream and change criterion 2. Fences and code spans
+  follow CommonMark's escape rule and paragraph ends (code review WR-02 to
+  WR-05, IN-06, 2026-11-15): a fence may sit in a blockquote and ends with
+  it; a backslash-escaped backtick opens no span; and no span crosses a blank
+  line, an ATX heading, a thematic break, a setext underline under text, the
+  start of a deeper blockquote, the end of an indented block, or a list item
+  that can interrupt the paragraph (indented under four columns, with text,
+  numbered 1 if ordered; on a line that leaves a blockquote, any item indented
+  under four columns), so a mention outside a real span stays attached as
+  D-PG11-04 requires. Residual: inside a list the bridge does not track where
+  an item's text starts. Every item, heading, and thematic break ends a span
+  at any indentation, a setext underline does when indented one column or
+  more, and a fence indented four columns or more is not recognized. So in a
+  list a span can end early or late, and a mention can be skipped or attached
+  against CommonMark. A tab after `>` counts as four columns; CommonMark
+  counts it to the next multiple of four and can take the marker's space from
+  it, so such a line can split either way.
 - **D-PG11-04 (syntax; parity):** recognize mentions as upstream does
   (`z_s`, `R3n`, `sls`): `@"path with spaces"` and an unquoted `@token`, where
   `@` starts a whitespace-delimited token or follows one of `。、？！`; trailing
