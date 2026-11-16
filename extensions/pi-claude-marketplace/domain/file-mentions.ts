@@ -344,20 +344,23 @@ function startsParagraph(line: LineShape, paragraph: ParagraphStart): boolean {
 }
 
 // A setext underline ends the paragraph whose text it follows in the same
-// blockquote. A line that starts a paragraph and is one is text.
+// blockquote. Inside a list it must be indented, as a stand-in for the item's
+// content column: an unindented one is lazy text. A line that starts a
+// paragraph and is one is text.
 function underlines(line: LineShape, paragraph: ParagraphStart): boolean {
   return (
     line.underline &&
     line.quoteDepth === paragraph.quoteDepth &&
-    (paragraph.inList || line.indent < CODE_INDENT)
+    (paragraph.inList ? line.indent > 0 : line.indent < CODE_INDENT)
   );
 }
 
 // D-PG11-03: the text split into the runs of lines one paragraph can hold, so
 // that no code span crosses a block boundary. A heading or a thematic break
 // that starts a paragraph ends it, as a setext underline does after the text.
-// This follows CommonMark for text, blockquotes, and one level of list, but
-// not its whole container model. A masked fence is blank lines.
+// This approximates CommonMark: it counts a tab as four columns, and inside a
+// list it does not track where an item's content starts, so there a split can
+// come early or late. A masked fence is blank lines.
 function paragraphs(text: string): string[] {
   const groups: string[][] = [];
   let current: string[] = [];

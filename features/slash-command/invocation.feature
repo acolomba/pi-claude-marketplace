@@ -426,7 +426,8 @@ Feature: Slash command invocation
       | 1    | user | <model text> |
 
     Examples:
-      | mention place                       | command body                                                         | model text                                                                               |
-      | in fenced code                      | Example:\n```text\nReview @${CLAUDE_PLUGIN_ROOT}/templates/x.md\n``` | Example:\n```text\nReview @{home}/marketplaces/fixtures/plugins/demo/templates/x.md\n``` |
-      | in a code span                      | Run `cat @${CLAUDE_PLUGIN_ROOT}/templates/x.md` to see it.           | Run `cat @{home}/marketplaces/fixtures/plugins/demo/templates/x.md` to see it.           |
-      | in a context command and its output | Shown: !`echo @${CLAUDE_PLUGIN_ROOT}/templates/x.md`                 | Shown: @{home}/marketplaces/fixtures/plugins/demo/templates/x.md                         |
+      | mention place                                        | command body                                                                | model text                                                                                      |
+      | in fenced code                                       | Example:\n```text\nReview @${CLAUDE_PLUGIN_ROOT}/templates/x.md\n```        | Example:\n```text\nReview @{home}/marketplaces/fixtures/plugins/demo/templates/x.md\n```        |
+      | in a code span                                       | Run `cat @${CLAUDE_PLUGIN_ROOT}/templates/x.md` to see it.                  | Run `cat @{home}/marketplaces/fixtures/plugins/demo/templates/x.md` to see it.                  |
+      | in a context command and its output                  | Shown: !`echo @${CLAUDE_PLUGIN_ROOT}/templates/x.md`                        | Shown: @{home}/marketplaces/fixtures/plugins/demo/templates/x.md                                |
+      | in a code span over an unindented === line in a list | - Run `lint\n===\nReview @${CLAUDE_PLUGIN_ROOT}/templates/x.md, then `ship` | - Run `lint\n===\nReview @{home}/marketplaces/fixtures/plugins/demo/templates/x.md, then `ship` |

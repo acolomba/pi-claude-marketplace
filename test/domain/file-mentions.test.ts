@@ -340,6 +340,18 @@ describe("findFileMentions", () => {
       expected: [whole("b.md")],
     },
     {
+      title:
+        "D-PG11-03: skips a mention in a code span over an unindented underline of equals in a list",
+      body: "- a `x\n===\n@b.md `y",
+      expected: [],
+    },
+    {
+      title:
+        "D-PG11-03: skips a mention in a code span over an unindented underline of dashes in a list",
+      body: "- a `x\n--\n@b.md `y",
+      expected: [],
+    },
+    {
       title: "D-PG11-03: closes no code span across a heading in a list item",
       body: "- a `x\n  # h\n@b.md `y",
       expected: [whole("b.md")],
