@@ -1,17 +1,27 @@
 ---
 phase: 03-background-subagents
-verified: 2026-11-14T01:30:00Z
+verified: 2026-11-16T06:37:40Z
 status: passed
 score: 31/31 must-haves verified
-covered_files: [".planning/phases/03-background-subagents/03-01-PLAN.md",".planning/phases/03-background-subagents/03-01-SUMMARY.md",".planning/phases/03-background-subagents/03-02-PLAN.md",".planning/phases/03-background-subagents/03-02-SUMMARY.md",".planning/phases/03-background-subagents/03-03-PLAN.md",".planning/phases/03-background-subagents/03-03-SUMMARY.md",".planning/phases/03-background-subagents/03-04-PLAN.md",".planning/phases/03-background-subagents/03-04-SUMMARY.md",".planning/phases/03-background-subagents/03-05-PLAN.md",".planning/phases/03-background-subagents/03-05-SUMMARY.md",".planning/phases/03-background-subagents/03-06-PLAN.md",".planning/phases/03-background-subagents/03-06-SUMMARY.md",".planning/phases/03-background-subagents/03-07-PLAN.md",".planning/phases/03-background-subagents/03-07-SUMMARY.md",".planning/phases/03-background-subagents/03-08-PLAN.md",".planning/phases/03-background-subagents/03-08-SUMMARY.md","docs/hooks-compatibility.md","docs/mcp-compatibility.md","extensions/pi-claude-marketplace/bridges/agents/convert.ts","extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts","extensions/pi-claude-marketplace/bridges/agents/grant-rewrite.ts","extensions/pi-claude-marketplace/bridges/agents/legacy-grant-form.ts","extensions/pi-claude-marketplace/bridges/agents/mcp-async-warning.ts","extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts","extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts","extensions/pi-claude-marketplace/bridges/hooks/event-router.ts","extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts","extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts","extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts","extensions/pi-claude-marketplace/bridges/hooks/runtime.ts","extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts","features/agent/frontmatter.feature","features/agent/invocation.feature","features/lib/agent-files.ts","features/lib/real-subagent-child.ts","features/lib/subagent-hook-session.ts","features/mcp-server/agent-grants.feature","features/mcp-server/verdict-markers.feature","features/plugin/subagent-child.feature","features/step_definitions/agent/listing.steps.ts","features/step_definitions/mcp-server/agent-grants.steps.ts","features/step_definitions/plugin/subagent-hooks.steps.ts","features/support/pi-process.ts","test/bridges/agents/convert.test.ts","test/bridges/agents/grant-forms.test.ts","test/bridges/agents/grant-rewrite.test.ts","test/bridges/agents/legacy-grant-form.test.ts","test/bridges/agents/mcp-async-warning.test.ts","test/bridges/agents/stage.test.ts","test/bridges/hooks/async-rewake/registry.test.ts","test/bridges/hooks/dispatch-exec.test.ts","test/bridges/hooks/event-router.test.ts","test/bridges/hooks/payloads/post-tool-use-failure.test.ts","test/bridges/hooks/payloads/post-tool-use.test.ts","test/bridges/hooks/payloads/pre-tool-use.test.ts","test/bridges/hooks/runtime.test.ts","test/bridges/hooks/translation-context.test.ts","test/integration/hooks-dispatch-end-to-end.test.ts","test/integration/pi-subagents-child-identity.test.ts","test/integration/subagent-hook-ownership.test.ts","test/orchestrators/plugin/install-flow-ledger.test.ts","test/orchestrators/plugin/install-outcome.test.ts","test/orchestrators/plugin/reinstall-flow.test.ts","test/orchestrators/plugin/update-swap.test.ts"]
-covered_digest: "v4:sha256:a1f54f567577f0cfdcaefce1170d070bf1b433544876e5bb606483d80e8e9517"
+covered_files: [".planning/phases/03-background-subagents/03-01-PLAN.md",".planning/phases/03-background-subagents/03-01-SUMMARY.md",".planning/phases/03-background-subagents/03-02-PLAN.md",".planning/phases/03-background-subagents/03-02-SUMMARY.md",".planning/phases/03-background-subagents/03-03-PLAN.md",".planning/phases/03-background-subagents/03-03-SUMMARY.md",".planning/phases/03-background-subagents/03-04-PLAN.md",".planning/phases/03-background-subagents/03-04-SUMMARY.md",".planning/phases/03-background-subagents/03-05-PLAN.md",".planning/phases/03-background-subagents/03-05-SUMMARY.md",".planning/phases/03-background-subagents/03-06-PLAN.md",".planning/phases/03-background-subagents/03-06-SUMMARY.md",".planning/phases/03-background-subagents/03-07-PLAN.md",".planning/phases/03-background-subagents/03-07-SUMMARY.md",".planning/phases/03-background-subagents/03-08-PLAN.md",".planning/phases/03-background-subagents/03-08-SUMMARY.md","docs/hooks-compatibility.md","docs/mcp-compatibility.md","extensions/pi-claude-marketplace/bridges/agents/convert.ts","extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts","extensions/pi-claude-marketplace/bridges/agents/grant-rewrite.ts","extensions/pi-claude-marketplace/bridges/agents/legacy-grant-form.ts","extensions/pi-claude-marketplace/bridges/agents/mcp-async-warning.ts","extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts","extensions/pi-claude-marketplace/bridges/hooks/child-root-session.ts","extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts","extensions/pi-claude-marketplace/bridges/hooks/event-router.ts","extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts","extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts","extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts","extensions/pi-claude-marketplace/bridges/hooks/runtime.ts","extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts","extensions/pi-claude-marketplace/platform/subagent-child.ts","features/agent/frontmatter.feature","features/agent/invocation.feature","features/lib/agent-files.ts","features/lib/field-rows.ts","features/lib/real-subagent-child.ts","features/lib/subagent-hook-session.ts","features/mcp-server/agent-grants.feature","features/mcp-server/verdict-markers.feature","features/plugin/subagent-child.feature","features/step_definitions/agent/listing.steps.ts","features/step_definitions/hook/runs.steps.ts","features/step_definitions/mcp-server/agent-grants.steps.ts","features/step_definitions/plugin/subagent-hooks.steps.ts","features/support/pi-process.ts","test/bridges/agents/convert.test.ts","test/bridges/agents/grant-forms.test.ts","test/bridges/agents/grant-rewrite.test.ts","test/bridges/agents/legacy-grant-form.test.ts","test/bridges/agents/mcp-async-warning.test.ts","test/bridges/agents/stage.test.ts","test/bridges/hooks/async-rewake/registry.test.ts","test/bridges/hooks/dispatch-exec.test.ts","test/bridges/hooks/event-router.test.ts","test/bridges/hooks/payloads/post-tool-use-failure.test.ts","test/bridges/hooks/payloads/post-tool-use.test.ts","test/bridges/hooks/payloads/pre-tool-use.test.ts","test/bridges/hooks/runtime.test.ts","test/bridges/hooks/translation-context.test.ts","test/integration/hooks-dispatch-end-to-end.test.ts","test/integration/pi-subagents-child-identity.test.ts","test/integration/subagent-hook-ownership.test.ts","test/orchestrators/plugin/install-flow-ledger.test.ts","test/orchestrators/plugin/install-outcome.test.ts","test/orchestrators/plugin/reinstall-flow.test.ts","test/orchestrators/plugin/update-swap.test.ts"]
+covered_digest: "v4:sha256:ccc8f7db13d03b80684a1d633f079edebcf2f03254f22bc7fee281c16d8f0d7c"
 behavior_unverified: 0
-overrides_applied: 1
-overrides:
-  - must_have: "PG-HOOK-07a unclassified probe row: child tool hook session_id, transcript_path and CLAUDE_CODE_SESSION_ID"
-    reason: "Not a phase 3 criterion or plan truth. Deferred to Phase 6 as decision 26 and success criterion 6 (ROADMAP), tracked as BACKLOG CHILDSESSIONID-01; current behavior documented in docs/hooks-compatibility.md Child identity (commit a98ae4ae). pi-subagents passes PI_SUBAGENT_PARENT_SESSION to background children, so parity is reachable there."
-    accepted_by: "orchestrator (autonomous run, pending maintainer review)"
-    accepted_at: "2026-11-14T01:50:00Z"
+overrides_applied: 0
+re_verification:
+  previous_status: passed
+  previous_score: 31/31
+  reason: "staleness: Phases 4-11, the gaps-agents/gaps-mcp merges and later fixes changed 39 of the 48 covered non-planning files after 2026-11-14T01:50:00Z"
+  gaps_closed: []
+  gaps_remaining: []
+  regressions: []
+  overrides_removed:
+    - must_have: "PG-HOOK-07a unclassified probe row: child tool hook session_id, transcript_path and CLAUDE_CODE_SESSION_ID"
+      why: "No longer needed. D-PG6-01/02/03 (parity-gaps Phase 6) shipped the behavior the override deferred: a background child's tool hooks name the launching session in session_id, transcript_path, CLAUDE_CODE_SESSION_ID and CLAUDE_SESSION_ID, and agent_id names the child (H/translation-context.ts:131-152; features/plugin/subagent-child.feature:542, features/agent/frontmatter.feature:410,423). PROJECT.md:2401 records that the decision closes this row; BACKLOG CHILDSESSIONID-01 is CLOSED (BACKLOG.md:5327). It was never one of the 31 counted truths."
+advisory:
+  - finding: "Since D-PG6-01 (commit f3250f3b), the real-child tests can no longer see a hook run of a child's lifecycle event. test/integration/pi-subagents-child-identity.test.ts:119-121 (childRuns) and the cucumber step at features/step_definitions/plugin/subagent-hooks.steps.ts:612-645 select a child's runs by agent_id, which only the three tool payloads carry. A child SessionStart/UserPromptSubmit/Stop/SessionEnd run, if one happened, would carry the launching session's session_id and no agent_id, so it would read as a main run; the main-session checks take only the first six main runs (.slice(0, 6), pi-subagents-child-identity.test.ts:201 and subagent-hooks.steps.ts:657). Before f3250f3b, runsOf filtered by session_id === child and asserted the child's full run list."
+    category: other
+    reason: "Test evidence narrowed, not a behavior defect. The invariant still holds: the stand-in child scenarios assert every run of a real Pi process that has the child marker (subagent-child.feature:202,247,275,503), the owner cases drive each registered handler in a child (event-router.test.ts:5285), and this verifier's scratch probe dumped every hook run of a real pi-subagents 0.88.1 ordinary child and found only its PreToolUse/PostToolUse rows (the last Stop row carries stop_hook_active true, the main session's re-entry). To resolve: give the real-child assertions a discriminator for child processes (for example count the main session's lifecycle runs exactly, or record a child marker in the hook recorder) so a child lifecycle run fails the test again."
+    evidence_status: "reproducible by reading the two filters and git show f3250f3b; no failing test"
 decision_coverage:
   honored: 9
   total: 9
@@ -23,149 +33,174 @@ human_verification: []
 
 **Phase Goal:** A bridged agent starts as a Claude Code subagent starts by default: in the launch mode that pi-subagents chooses, which is the background. A pi-subagents child that loads this extension runs the plugin's tool hooks and none of its main-session hooks.
 
-**Verified:** 2026-11-14T01:30:00Z
-**Status:** passed (one item deferred by autonomous override; see Override below)
-**Re-verification:** No — initial verification
+**Verified:** 2026-11-16T06:37:40Z
+**Status:** passed
+**Re-verification:** Yes. The previous report (passed, 31/31, one override, 2026-11-14T01:30:00Z, digest recomputed after `a98ae4ae`) became stale, because later work changed 39 of its 48 covered non-planning files.
 
 ## Verification Basis
 
-Read all eight plans and summaries, CONTEXT, RESEARCH (A1, open questions), VALIDATION, REVIEW, REVIEW-FIX, REVIEW-DISPOSITION, REQUIREMENTS, the ROADMAP Phase 3 section and the Phase 2 report. The verdict rests on the code diff `cab4a540..HEAD` (60 commits, 48 changed files under `extensions/`, `features/`, `test/`, `docs/`), the actual callers, the complete assertions of the named tests, and independent runs. No previous `03-VERIFICATION.md` and no override existed.
+This pass re-checked every roadmap criterion and every plan must-have against the current tree, `features/gaps` at `f48729e3`. It did not reuse the earlier verdicts. Summaries were not taken as evidence. For each truth, the implementing code, its caller, and the test or scenario that exercises it were read again. Citations are current line numbers. **H/** means `extensions/pi-claude-marketplace/bridges/hooks/`, and **A/** means `extensions/pi-claude-marketplace/bridges/agents/`.
 
-In the tables, **H/** means `extensions/pi-claude-marketplace/bridges/hooks/` and **A/** means `extensions/pi-claude-marketplace/bridges/agents/`.
+**Gate G (reused, not re-run):** `npm run check` exited 0 on the combined tree at `1183aae3` (log `/tmp/pg11-maskfix.log`, Node v26.13.1). The log was inspected: all seven static checks passed (typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, check:features), then the unpaired and integration tests, whose diagnostics show real pi-subagents 0.88.1 children (`demo:runner`, `demo:granted`, `demo:plain`) in mode `background`, state `complete`, one `demo:plain` in mode `foreground`, and two concurrent generations of `demo:alpha`/`demo:beta` in one runner PID. The adapter profile ran 2098/2098 scenarios and 25964 steps (seed 700460). The builtin profile ran 204/204 scenarios and 2762 steps (seed 547387). Direct coverage merged 374 LCOV records. The log ends with `exit=0`. `git diff --name-only 1183aae3 HEAD` outside `.planning/` is empty, so G covers every executable input of HEAD. The project's reuse rule applies, and the suite was not repeated.
 
-**Gate G (cited, not rerun):** `npm run check` exit 0 at `b0246dfa` (after the review fixes), Node v26.13.1, log `/tmp/pg3-fix-check.log`: adapter profile 1,893 scenarios / 23,130 steps (seed 65615), builtin profile 184 scenarios / 2,492 steps (seed 674771), all 361 direct pairs merged. The tail of the log was read and matches. `git diff --stat b0246dfa..HEAD` touches only three `.planning/` files, so G applies to HEAD.
+**Independent named checks (this pass):** 16 single tests were run with `node --import ./test/platform/isolated-pi-home.ts --test --test-isolation=none --test-reporter=tap --test-name-pattern '^<name>$' <file>`, each under a fresh `mktemp` HOME and `PI_CODING_AGENT_DIR` in the session scratchpad. Each reported `tests 1, pass 1, fail 0, cancelled 0, skipped 0` (see Behavioral Spot-Checks). One extra scratch probe (not committed) dumped every hook run of a real ordinary child; see the advisory.
 
-**Independent runs by this verifier (hermetic HOME under the session scratchpad, plus `test/platform/isolated-pi-home.ts`):**
+## Superseded mechanisms (later decisions)
 
-- **S1:** 11 owner test files (event-router, runtime, translation-context, the three payload translators, dispatch-exec, mcp-async-warning, convert, grant-rewrite, legacy-grant-form): 610/610 pass. Includes the 20 cases `{main,child} routes <event> by the ten-event policy`.
-- **S2:** async-rewake registry, update-swap, reinstall-flow, grant-forms, stage: 670/670 pass. Includes the D-PG3-03 load/update/reinstall/retry cases and the child journal ownership, recovery and identity-omission cases.
-- **S3:** `test/integration/pi-subagents-child-identity.test.ts` and `test/integration/subagent-hook-ownership.test.ts` against the installed pi-subagents 0.88.1 and pi-mcp-adapter 7.0.1: 8/8 pass (detached adapter and builtin children, ordinary empty-body agent in the companion's default mode under both profiles, foreground default, concurrent same-PID sessions, parent/sibling survival, dead-owner recovery).
+| Decision | What it changed | Effect on Phase 3 must-haves |
+| --- | --- | --- |
+| D-PG6-01/02/03 (Phase 6, pending maintainer review) | In a background child whose identity is known and whose launching session was resolved, tool hooks get the launching session in `session_id`, `transcript_path`, `CLAUDE_CODE_SESSION_ID` and `CLAUDE_SESSION_ID`. `agent_id` stays the child's own session. Internal keys (env file, journal owner, identity guard) stay on `ownSessionId` (H/translation-context.ts:57-74,131-152). | R4 and P03.1/P05.1/P06.1 still hold: `agent_type` and `agent_id` (the child's own session) are present in a child and absent in main. The "current child Pi session ID" now travels only in `agent_id`. Real children's rows now read `session main`, `transcript path session file of main`, `CLAUDE_CODE_SESSION_ID main` (subagent-child.feature:552-558). The earlier override for the unclassified probe row is resolved and **removed**. The real-child tests' filter moved from `session_id` to `agent_id`; see the advisory. |
+| D-PG6-18 (Phase 6, pending maintainer review) | `UserPromptExpansion` admitted and suppressed in a child (H/event-router.ts:177-178, :1135). | Additive. P01.2's "ten-event policy" is now eleven events, still exhaustive (`satisfies Record<BucketAEvent, ChildEventOutcome>`, :179) and still dispatching only the three tool events in a child. Test titles read "eleven-event policy" (event-router.test.ts:5285). |
+| D-PG5-01 (Phase 5, Good) | `Stop` moved from `agent_settled` to `agent_before_settle`. | P05.2/P06.4 still hold on the new event: the child gate wraps both `agent_before_settle` (:1620-1626) and `agent_settled` (:1628-1638), the latter also dropping the cached last-assistant message. |
+| D-PG7-05 (Phase 7, Good) | Agent frontmatter goes through YAML; `background` counts only `true` or `"true"`, both read as text `true` (A/convert.ts:1137-1139). | P07.2 still holds (frontmatter.feature:7 shows `async true` for both). Additive: `'"true"'` writes no `async` key (frontmatter.feature:73). |
 
 ## Goal Achievement
 
 ### Roadmap Success Criteria
 
-| ID | Roadmap truth | Status | Evidence |
+| ID | Roadmap truth | Status | Current evidence |
 | --- | --- | --- | --- |
-| R1 | `subagent get` shows no `async false` line for a plain bridged agent; `background: true` and plugin-MCP agents still show the background mode; the scenario "A call that leaves the launch mode open runs a bridged agent in the foreground" is replaced. | VERIFIED | `A/convert.ts:1035` spreads `async: true` only when `backgroundForMcp \|\| isTrueBackground`. `features/agent/frontmatter.feature` "An ordinary bridged agent leaves its launch mode to pi-subagents" asserts the exact `subagent get` result: no `async` line for `demo:plain`, `async true` for `background: true` and `"true"`, and the exact generated file with no `async` key. The old scenario title appears nowhere in `features/` or `test/`. MCP agents: "Explicit background and MCP grants keep a child in the background" runs `granted` and `granted-false` as detached background children under `asyncByDefault: false`. Passed in G; S3 reproduces the real-child runs. |
-| R2 | The MCP warning no longer says Claude Code runs agents in the foreground; a file holding the earlier warning still follows an MCP implementation switch at the next session start. | VERIFIED | `A/mcp-async-warning.ts:37` emits the corrected generation ("which require a pi-subagents background child -- the agent runs in the background (`async: true`); ..."); exact public diagnostics in `features/mcp-server/verdict-markers.feature:338,372`. `isMcpAsyncWarning` and `rewriteMcpAsyncWarning` recognize both generations exactly and keep the found generation; `A/grant-rewrite.ts:131` and `A/legacy-grant-form.ts:86` consume them. `features/mcp-server/agent-grants.feature`: "An old MCP warning still permits a grant implementation switch", the reverse switch, the implementation-less outline, the user-edit and near-match scenarios. Passed in G and S1. |
-| R3 | In the stand-in child of `features/plugin/subagent-child.feature`, recording `SessionStart`, `UserPromptSubmit`, `Stop`, `SessionEnd` hooks record no run, and `PreToolUse` still runs. | VERIFIED | `H/event-router.ts:138-156` `CHILD_EVENT_POLICY` (exhaustive `satisfies Record<BucketAEvent, ...>`) gates `session_start`, `input`, `session_before_compact`, `session_compact`, `session_shutdown` and `agent_settled`. Stand-in scenario "A child runs tool hooks without main-session hooks" asserts the exact turn table: only the four tool rows, no SessionStart/UserPromptSubmit/Stop. **SessionEnd note:** that table is read while the stand-in Pi still runs (`promptInStartupSession` reads the logs after `agent_settled`), so it cannot observe a shutdown-time SessionEnd; the main-session control scenario shows no SessionEnd row either. The SessionEnd half is proven instead by the owner case `child routes SessionEnd by the ten-event policy` (drives the registered `session_shutdown` handler, S1) and by S3, where the pi-subagents runner emits `session_shutdown` with reason `quit` at child end (pi-subagents bundle `chunk-PCZEQQAQ.js:7681`), the recording `ending` SessionEnd hook is installed (`features/lib/real-subagent-child.ts:152`), the runner is awaited to exit before the runs are read, and `runsOf(child)` is asserted exactly with no SessionEnd row. |
-| R4 | A child tool hook receives `agent_type`, and `agent_id` when knowable; the same hook in a main session receives neither. | VERIFIED | `H/runtime.ts` `captureChildIdentity` parses the anchored `<active_agent name="..."/>\n\n` prefix from Pi's structured prompt options at `before_agent_start`; `childIdentityFor` returns `main` outside a child and `unavailable` for another session. `H/translation-context.ts` attaches the snapshot only when its session matches; all three payload translators spread `agent_type`/`agent_id` only then. Scenarios "A child tool hook identifies its own agent and session" (4 examples incl. entity decoding and a spoofed body), "A main tool hook has no child identity", "A child keeps its own identity after another session runs", "Missing child metadata clears the previous identity"; real children in S3 carry `agent_type` = agent name and `agent_id` = child session id; main runs carry `{}`. |
+| R1 | `subagent get` shows no `async false` line for a plain bridged agent; `background: true` and plugin-MCP agents still show the background mode; the old foreground-default scenario is replaced. | VERIFIED | A/convert.ts:1090 spreads `async: true` only for `backgroundForMcp \|\| isTrueBackground(raw.background)` (:1020, :1137). frontmatter.feature:7 asserts the exact `subagent get` results: no `async` line for `demo:plain`, `async true` for `true` and `"true"`, and the exact generated file with no `async` key. MCP agents: frontmatter.feature:423 runs `granted` and `granted-false` as background children under `asyncByDefault: false`. The old title "A call that leaves the launch mode open runs a bridged agent in the foreground" appears nowhere in `features/` or `test/`. Passed in G. |
+| R2 | The MCP warning no longer says Claude Code runs agents in the foreground; a file holding the earlier warning still follows an MCP implementation switch at the next session start. | VERIFIED | A/mcp-async-warning.ts:39-41 emits `CORRECTED_WARNINGS` (:16-18,32-35). `isMcpAsyncWarning` (:44-46) and `rewriteMcpAsyncWarning` (:49-57) recognize both generations exactly and keep the found one; consumers A/grant-rewrite.ts:131, A/legacy-grant-form.ts:88,112. Exact public rows: verdict-markers.feature:338,372. Switch scenarios: agent-grants.feature:689 (old warning), :705 (reverse), :721 (implementation-less outline), :742 (user edit), :759 (near match). Passed in G; S6 here. |
+| R3 | In the stand-in child of `subagent-child.feature`, recording `SessionStart`, `UserPromptSubmit`, `Stop`, `SessionEnd` hooks record no run, and `PreToolUse` still runs. | VERIFIED | H/event-router.ts:166-179 `CHILD_EVENT_POLICY`, :188-190 `dispatchesInCurrentSession`, gating `session_start` (:1504), `input` UPS (:1565), `session_before_compact` (:1538), `session_compact` (:1293), `session_shutdown` (:1226), `agent_before_settle` (:1624), `agent_settled` (:1632). Scenario subagent-child.feature:202 asserts the full run table (`recordTable` adds any unstated column, features/lib/field-rows.ts:93-99; exact compare at runs.steps.ts:164-167): only the four tool rows. SessionEnd fires at shutdown, after that table is read, so its half rests on the owner case `child routes SessionEnd by the eleven-event policy` (S1, drives the registered `session_shutdown` handler) and on this verifier's real-child probe (advisory). |
+| R4 | A child tool hook receives `agent_type`, and `agent_id` when knowable; the same hook in a main session receives neither. | VERIFIED | Capture: H/runtime.ts:55 anchored prefix, :551-578 `captureChildIdentity` from Pi's structured prompt options, :580-593 `childIdentityFor` (main outside a child, unavailable for another session). Context: H/translation-context.ts:81-91,136,145-147 keeps the identity only for its own session. Translators spread both fields only then: payloads/pre-tool-use.ts:56-58, post-tool-use.ts:82-84, post-tool-use-failure.ts:78-80. Scenarios :401 (4 examples incl. entity decoding and a spoofed body), :443 (main: the table states no `agent type`/`agent id` column, so any present field would fail), :471, :503; real children :542, :568, frontmatter.feature:410,423. Passed in G; S11-S16 here. |
 
 ### Plan Observable Truths
 
-| ID | Truth | Status | Evidence |
+| ID | Truth | Status | Current evidence |
 | --- | --- | --- | --- |
-| P01.1 | A child never reaps or rewrites the parent legacy PID table or another live runtime's journal. | VERIFIED | `H/async-rewake/registry.ts:261` routes child persistence through `runtime.persistenceOwner`; `H/runtime.ts` `pidTableEntries` filters by owner. Registry cases (journal isolation, foreign-journal preservation for invalid/oversized/mismatched files, live/EPERM/unknown owners keep rows) pass in S2; ownership integration passes in S3. |
-| P01.2 | The exhaustive ten-event policy admits only the three tool events in children while retaining internal setup and owned cleanup. | VERIFIED | `CHILD_EVENT_POLICY` plus 20 `{main,child} routes <event>` owner cases (S1); "child hydrates user tool hooks without executing untrusted project hooks" (S1); `sessionShutdownCallback` drains only in a child (`finally` branch). |
-| P01.3 | The anchored structured prefix yields a factory-local session identity; malformed or missing metadata clears stale identity with a bounded diagnostic. | VERIFIED | `ACTIVE_AGENT_PREFIX` regex, `resetChildIdentity` at registration, `CHILD_IDENTITY_DIAGNOSTIC` at `H/event-router.ts:152,279`. Runtime cases for missing sections, missing delimiter, malformed tag, conflicting sections (S1); "Missing child metadata clears the previous identity" in G. |
-| P02.1 | Recognition admits only complete exact historical/corrected strings; a near-match never gains migration eligibility. | VERIFIED | Strict `===` comparison over `WARNING_GENERATIONS`; near-match owner cases (S1) and the near-match scenario in G. |
-| P02.2 | Both warning generations survive adapter/builtin round trips, including implementation-less rows. | VERIFIED | `rewriteMcpAsyncWarning` returns the same generation's form; legacy-grant-form and grant-rewrite cases (S1); both-profile agent-grants scenarios in G. |
-| P02.3 | A user-edited generated file is preserved with provenance; locks, containment, atomic replacement and retry recovery remain intact. | VERIFIED | `grant-rewrite.ts` diff changes only the candidate predicate; "A user's agent edit survives an MCP implementation switch" in G; grant-rewrite owner cases (S1). |
-| P03.1 | PreToolUse includes actual agent_type and current child session ID on sync, plain async and asyncRewake. | VERIFIED | `H/dispatch-exec.ts:206` and `H/async-rewake/registry.ts:254` both read `childIdentityFor` and call `buildTranslationContext`; dispatch-exec and registry identity cases (S1, S2). |
-| P03.2 | Main, unavailable and stale-session contexts own neither identity property. | VERIFIED | Registry "omits identity from main/unavailable child plain async/asyncRewake stdin" (S2); translation-context stale-session cases (S1). |
-| P03.3 | A captured payload keeps its identity when another runtime/session starts; Phase 2 translation and process ownership stay intact. | VERIFIED | Immutable snapshot copied into `TranslationContext`; registry delayed-exit and dispatch-exec cases (S1/S2); Phase 2 hook suites pass in G. |
-| P04.1 | Fresh adapter/builtin output explains that MCP requires background and keeps the implementation suffix. | VERIFIED | `CORRECTED_WARNINGS` reuse `ADAPTER_SUFFIX`/`BUILTIN_SUFFIX`; mcp-async-warning cases (S1). |
-| P04.2 | Conversion, staging, install and public diagnostics contain the corrected warning without duplicate or lost messages. | VERIFIED | convert/stage/install-outcome expectations (S1, S2, G); verdict-markers exact rows in G; "either order of equivalent ... MCP grants runs in the background with one warning" (S1). |
-| P04.3 | Historical stored warnings still switch exactly and user edits remain protected under both profiles. | VERIFIED | Same evidence as R2/P02.3 under both cucumber profiles in G. |
-| P05.1 | Successful and failed child tool hooks carry the same identity as PreToolUse, Phase 2 semantics preserved. | VERIFIED | post-tool-use(-failure) translators; payload owner cases (S1); stand-in identity outline asserts all four tool rows; S3 real children. |
-| P05.2 | A child's blocking main-session Stop hook cannot stop child completion; lifecycle and compaction hooks stay absent while main controls run. | VERIFIED | `agent_settled` wrapper skips Stop/StopFailure in a child; "A child ignores a Stop hook that would continue the main session", "Child compaction runs no main-session hooks", "A main session still runs its lifecycle hooks" in G; S3 children reach `complete` with a blocking Stop hook installed. |
-| P05.3 | Parent and sibling hook processes survive child load, writes, exit and reload; a verified dead owner is recoverable. | VERIFIED | "Loading and stopping a child leaves parent and sibling hooks running" in G; S3 ownership tests (parent/sibling survival, dead-owner recovery). |
-| P06.1 | Each child tool event carries identity through sync, plain async and asyncRewake, with main/stale/missing controls. | VERIFIED | dispatch-exec and registry identity cases (S1, S2), integration end-to-end changes in G. |
-| P06.2 | The installed companion completes detached children with loopback fixtures and dummy credentials, without hand-injected identity. | VERIFIED | S3: `detached adapter/builtin children ... hook with their own identity`; identity comes from pi-subagents' own prompt tag; `providerModels` is `["scripted"]`. |
-| P06.3 | Concurrent same-PID children keep distinct sessions/types through append/replace modes, repeated runs and cleanup. | VERIFIED | S3 "concurrent child sessions in one runner process keep their own hook identity across runs and new sessions"; scenario "Concurrent companion children keep separate hook identities" in G. |
-| P06.4 | A main Stop hook that would block cannot prevent child completion; no parent/sibling process or journal is damaged. | VERIFIED | S3 children `state: complete`; ownership integration (S3). |
-| P07.1 | Ordinary absent/false background emits no async key, including an empty body. | VERIFIED | `A/convert.ts:1035`; "D-PG3-01: an ordinary agent with an empty body leaves its launch mode to pi-subagents" (S1). |
-| P07.2 | Accepted true parsing and effective MCP grants emit async true; MCP wins over source false. | VERIFIED | Same expression; `granted-false` runs in background in G/S3; convert cases (S1). |
-| P07.3 | Reversing equivalent MCP grant order leaves launch preference and warning unchanged. | VERIFIED | "D-PG3-02: either order of equivalent adapter/builtin MCP grants runs in the background with one warning" (S1). |
-| P07.4 | The real companion picks its default or configured mode when preference is absent; explicit foreground controls keep their meaning. | VERIFIED | S3: ordinary agent detached under default (both profiles), foreground under `asyncByDefault: false`; frontmatter scenarios in G. |
-| P08.1 | A normal load preserves earlier ordinary bytes; update and reinstall regenerate atomically and safely on retry. | VERIFIED | S2: three D-PG3-03 cases (load keeps `async: false` bytes; update and reinstall regenerate; failed save restores bytes and retry completes); frontmatter update/reinstall scenarios in G. |
-| P08.2 | A real ordinary empty-body child with no override completes with correct identity, three tool outcomes, zero lifecycle hooks, and preserved controls. | VERIFIED | S3 ordinary empty-body cases for both profiles assert exact child runs and main control runs. |
-| P08.3 | Compatibility docs state event policy, identity provenance, conservative recovery, default/forced modes and migration boundaries. | VERIFIED | `docs/hooks-compatibility.md:33-73` and `docs/mcp-compatibility.md:384-405,635` checked against the code above; the IN-01 recovery correction is present. |
+| P01.1 | A child never reaps or rewrites the parent legacy PID table or another live runtime's journal. | VERIFIED | `reapOrphans` returns at once in a child (H/async-rewake/registry.ts:855-857). Child persistence goes to `childJournalPath(owner)` (:972, :997-1001) with `pidTableEntries(loc, owner)` (:975; H/runtime.ts:639-660 filters by owner). `ownerIsDead` (:1129-1136) gates journal reaping. S10 and S15 here; registry journal cases in G. |
+| P01.2 | The exhaustive child event policy admits only the three tool events while retaining internal setup and owned cleanup. | VERIFIED | `CHILD_EVENT_POLICY` (now eleven events, see Superseded). Setup still runs before the gates (session_start routing rebuild and data directories at :1491-1494 precede the SessionStart gate at :1504). Child-only drain in `sessionShutdownCallback`'s `finally` (:1233-1235). S1-S3 here; 22 `{main,child} routes <event>` cases in G. |
+| P01.3 | The anchored structured prefix yields a factory-local session identity; malformed or missing metadata clears stale identity with a bounded diagnostic. | VERIFIED | `resetChildIdentity` at registration (H/event-router.ts:1396; runtime.ts:545-549); capture/diagnostic at event-router.ts:331-335 (`CHILD_IDENTITY_DIAGNOSTIC`, :181-182). Scenario :503 asserts the diagnostic line and the cleared identity. Passed in G. |
+| P02.1 | Recognition admits only complete exact strings; a near-match never gains migration eligibility. | VERIFIED | Strict `===` over `WARNING_GENERATIONS` (mcp-async-warning.ts:36,45). S6 here; agent-grants.feature:759 in G. |
+| P02.2 | Both warning generations survive adapter/builtin round trips, including implementation-less rows. | VERIFIED | `rewriteMcpAsyncWarning` returns `forms[id]` of the found generation (:49-57); legacy-grant-form.ts:88,112; agent-grants.feature:689,705,721 in both profiles in G. |
+| P02.3 | A user-edited generated file is preserved with provenance; locks, containment, atomic replacement and retry recovery stay intact. | VERIFIED | grant-rewrite.ts:131 changes only the candidate predicate; agent-grants.feature:742 in G; grant-rewrite owner cases in G. |
+| P03.1 | PreToolUse includes actual `agent_type` and the child's own Pi session id on sync, plain async and asyncRewake. | VERIFIED | Sync: H/dispatch-exec.ts:228-229. Async lanes: registry.ts:364-365, translator at :369. Both use `childHookIdentityOf` + `buildTranslationContext`. The own session id is in `agent_id` (D-PG6-01). S14 and the registry identity cases in G. |
+| P03.2 | Main, unavailable and stale-session contexts own neither identity property. | VERIFIED | translation-context.ts:136 drops an identity of another session; `childHookIdentityOf` gives none for main/unavailable (:82-84). S9 (`omits stale child identity from synchronous stdin`) here. |
+| P03.3 | A captured payload keeps its identity when another runtime/session starts; Phase 2 translation and process ownership stay intact. | VERIFIED | Immutable snapshot copied into the context; persistence owner captured per dispatch (registry.ts:366-368). Scenario :471 in G; Phase 2 hook suites in G. |
+| P04.1 | Fresh adapter/builtin output explains that MCP requires background and keeps the implementation suffix. | VERIFIED | `CORRECTED_WARNINGS` reuse `ADAPTER_SUFFIX`/`BUILTIN_SUFFIX` (:19-21,32-35); mcp-async-warning owner cases in G. |
+| P04.2 | Conversion, staging, install and public diagnostics carry the corrected warning without duplicate or lost messages. | VERIFIED | convert.ts:1020-1022 pushes it once; verdict-markers.feature:338,372 exact rows; S5 (`either order ... with one warning`) here. |
+| P04.3 | Historical stored warnings still switch exactly and user edits stay protected under both profiles. | VERIFIED | Same as R2/P02.3, both cucumber profiles in G. |
+| P05.1 | Successful and failed child tool hooks carry the same identity as PreToolUse, Phase 2 semantics preserved. | VERIFIED | post-tool-use.ts:82-84, post-tool-use-failure.ts:78-80; scenario :401 asserts all four tool rows; real children in S12/S13. |
+| P05.2 | A child's blocking main-session Stop hook cannot stop child completion; lifecycle and compaction hooks stay absent while main controls run. | VERIFIED | Stop gates at event-router.ts:1620-1638 (D-PG5-01 events). Scenarios :247 (Stop), :275 (compaction), :302 (main control) in G; real children reach `complete` with a blocking Stop hook (S12, S13). |
+| P05.3 | Parent and sibling hook processes survive child load, writes, exit and reload; a verified dead owner is recoverable. | VERIFIED | Scenario :359 in G; S15 (`a child's load, hook, new session, and stop leave the parent's and a sibling's waiting hooks running with their records`) and S16 (`a main load stops the waiting hook of a child whose Pi died and keeps a live sibling's`) here. |
+| P06.1 | Each child tool event carries identity through sync, plain async and asyncRewake, with main/stale/missing controls. | VERIFIED | dispatch-exec.ts:228-229, registry.ts:364-369; dispatch-exec and registry identity cases in G; S9. |
+| P06.2 | The installed companion completes detached children with loopback fixtures and dummy credentials, without hand-injected identity. | VERIFIED | S12: `detached adapter children ... hook with their own identity`; identity comes from pi-subagents' own tag; G diagnostics show `providerModels` scripted runs under 0.88.1. |
+| P06.3 | Concurrent same-PID children keep distinct sessions/types through append/replace modes, repeated runs and cleanup. | VERIFIED | Scenario :568 (four sessions, one runner PID) in G; integration case `concurrent child sessions in one runner process ...` (pi-subagents-child-identity.test.ts:367) in G. These children have no launch variable, so they keep their own `session_id` (D-PG6-01 fallback). |
+| P06.4 | A main Stop hook that would block cannot prevent child completion; no parent/sibling process or journal is damaged. | VERIFIED | S12/S13 children `state: complete`; S15/S16. |
+| P07.1 | Ordinary absent/false background emits no async key, including an empty body. | VERIFIED | convert.ts:1090; S4 (`D-PG3-01: an ordinary agent with an empty body leaves its launch mode to pi-subagents`). |
+| P07.2 | Accepted true parsing and effective MCP grants emit async true; MCP wins over source false. | VERIFIED | Same expression; `granted-false` runs in the background (frontmatter.feature:423) in G. Parsing now per D-PG7-05 (see Superseded). |
+| P07.3 | Reversing equivalent MCP grant order leaves launch preference and warning unchanged. | VERIFIED | S5 here (adapter); the builtin case in G. |
+| P07.4 | The real companion picks its default or configured mode when preference is absent; explicit foreground controls keep their meaning. | VERIFIED | frontmatter.feature:410 (default: background), :423 (`asyncByDefault: false`: `demo:plain` foreground); S11 (`an ordinary agent runs in the foreground when pi-subagents' configuration makes the foreground its default`). |
+| P08.1 | A normal load preserves earlier ordinary bytes; update and reinstall regenerate atomically and safely on retry. | VERIFIED | S7 (update-swap.test.ts:3264) and S8 (reinstall-flow.test.ts:1070) here; frontmatter.feature:145 (update) and :282 (reinstall) in G. |
+| P08.2 | A real ordinary empty-body child with no call override completes with correct identity, three tool outcomes, zero lifecycle hooks, and preserved concurrent/main controls. | VERIFIED | S13 (`an ordinary builtin agent with an empty body runs detached ...`, pi-subagents-child-identity.test.ts:139-221) passes; the adapter case passes in G. "Zero lifecycle hooks" is no longer asserted by that test (advisory); the verifier's scratch probe of a real ordinary child observed none, and the stand-in scenarios assert it exactly. |
+| P08.3 | Compatibility docs state event policy, identity provenance, conservative recovery, default/forced modes and migration boundaries. | VERIFIED | docs/hooks-compatibility.md:35-55 (policy), :57-79 (identity, incl. D-PG6-01 fields and the foreground gap), :81-85 (journals and recovery); docs/mcp-compatibility.md:484-505 (modes, the two `async: true` cases, migration at update/reinstall, both warning generations). Checked against the code above. |
 
-PLAN truths are listed one by one even where they overlap a roadmap criterion; none was merged. **Score: 31/31 (4 roadmap + 27 plan), 0 behavior-unverified.** Every behavior-dependent truth (event routing, identity capture and staleness, shutdown drain, journal ownership, migration retry) has a named passing test from S1–S3 or G.
+**Score:** 31/31 truths verified (4 roadmap + 27 plan, 0 present but behavior-unverified). Every behavior-dependent truth has a passing named test from this pass or from G.
 
 ### Decision Coverage
 
-D-PG3-01..09 all honored: 01/02 in `convert.ts`; 03 in the load/update/reinstall tests and both-generation recognition; 04/05 in `CHILD_EVENT_POLICY` and retained hydration/trust/drain; 06 in prompt-tag identity with session binding and no fabrication; 07 in unchanged Phase 2 suites under G; 08 in the replaced and added scenarios; 09 in the real-companion driver and integration tests.
+D-PG3-01..09 honored (9/9, traced by hand; `query check.decision-coverage-verify` returned `skipped: CONTEXT.md missing` for this phase directory although `03-CONTEXT.md` exists, so the tool gave no verdict). 01/02 in convert.ts:1090,1137; 03 in S7/S8 and two-generation recognition; 04/05 in `CHILD_EVENT_POLICY` and the retained setup and drain; 06 in prompt-tag identity with session binding and no fabrication (now with D-PG6-01's root fields beside it); 07 in the Phase 2 suites under G; 08 in the replaced and added scenarios; 09 in the real-companion driver and integration tests (S11-S16).
 
 ### Required Artifacts
 
-| Artifact | Status | Details |
-| --- | --- | --- |
-| `H/runtime.ts` | VERIFIED | Identity capture, session-bound read, journal owners; used by event-router, dispatch-exec, registry. |
-| `H/async-rewake/registry.ts` | VERIFIED | Child journals, owner-scoped persistence, shutdown row removal (WR-01), main-session keep-running on table failure (IN-02). |
-| `H/event-router.ts` | VERIFIED | Child policy gating on six Pi events, before-run capture, child-only shutdown drain (CR-01). |
-| `H/translation-context.ts`, `H/payloads/*.ts`, `H/dispatch-exec.ts` | VERIFIED | Identity snapshot flows into all three translators on every lane. |
-| `A/convert.ts`, `A/mcp-async-warning.ts`, `A/legacy-grant-form.ts`, `A/grant-rewrite.ts` | VERIFIED | True-only `async`; corrected emitter; exact two-generation recognition. |
-| `features/lib/real-subagent-child.ts`, `features/lib/subagent-hook-session.ts` | VERIFIED | Consumed by step files and the integration tests. |
-| `features/plugin/subagent-child.feature`, `features/agent/frontmatter.feature`, agent-grants and verdict-markers features | VERIFIED | Exact assertions; passed in G. |
-| `test/integration/pi-subagents-child-identity.test.ts`, `test/integration/subagent-hook-ownership.test.ts` | VERIFIED | 8/8 in S3. |
+`query verify.artifacts` exited 0 for all eight plans: **31/31** declared artifacts exist and are substantive. All 48 previously covered non-planning files still exist; none was deleted or renamed.
 
 ### Key Link Verification
 
-| From | To | Via | Status |
+`query verify.key-links` exited 0 for all eight plans (16/16). Current connections:
+
+| Plan | From -> To | Current connection | Status |
 | --- | --- | --- | --- |
-| event-router `before_agent_start` | runtime | `captureChildIdentity` / `childIdentityFor` | WIRED (`H/event-router.ts:277-279`) |
-| registry | runtime | `persistenceOwner` / `pidTableEntries(loc, owner)` | WIRED (`registry.ts:261,441,544`) |
-| dispatch-exec | translation-context | `childIdentityFor` + `buildTranslationContext` | WIRED (`dispatch-exec.ts:206`) |
-| registry | payload translators | `buildTranslationContext` + translate | WIRED (`registry.ts:254-255`) |
-| legacy-grant-form / grant-rewrite | mcp-async-warning | `rewriteMcpAsyncWarning` / `isMcpAsyncWarning` | WIRED |
-| convert | mcp-async-warning | `mcpAsyncWarning` (corrected generation) | WIRED |
-| integration test and steps | real-subagent-child | `runRealSubagentChild` / `runConcurrentRealSubagentChildren` | WIRED |
+| 01 | event-router -> runtime | `captureChildIdentity` :331, `childIdentityFor` :332 | WIRED |
+| 01 | registry -> runtime | `persistenceOwner` :367, `pidTableEntries(loc, owner)` :975 | WIRED |
+| 02 | legacy-grant-form -> mcp-async-warning | `rewriteMcpAsyncWarning` :88,:112 | WIRED |
+| 02 | grant-rewrite -> mcp-async-warning | `isMcpAsyncWarning` :131 | WIRED |
+| 03 | dispatch-exec -> translation-context | `childIdentityFor` + `buildTranslationContext` :228-229 | WIRED |
+| 03 | registry -> payloads/pre-tool-use | `buildTranslationContext` :365, `TRANSLATORS[...]` :369 | WIRED |
+| 04 | convert -> mcp-async-warning | `mcpAsyncWarning` :1022 | WIRED |
+| 04 | agent-grants.feature -> verdict-markers.feature | both-profile migration and diagnostics | WIRED |
+| 05 | translation-context -> payloads/post-tool-use | `ctx.childIdentity` :82-84 | WIRED |
+| 05 | subagent-hooks.steps -> subagent-hook-session | `createSubagentHookSession` | WIRED |
+| 06 | real-subagent-child -> companions | `resolveCompanion` | WIRED |
+| 06 | integration test -> real-subagent-child | `runRealSubagentChild` / `runConcurrentRealSubagentChildren` (:36-40) | WIRED |
+| 07 | convert -> grant-forms | `async` / `backgroundForMcp` | WIRED |
+| 07 | frontmatter.feature -> real-subagent-child | `asyncByDefault` (:411,:424) | WIRED |
+| 08 | frontmatter.feature -> update-swap.test | update/reinstall scenarios :145,:282 | WIRED |
+| 08 | integration test -> real-subagent-child | `runRealSubagentChild` | WIRED |
+
+### Data-Flow Trace (Level 4)
+
+| Value | Source -> consumer | Real data | Status |
+| --- | --- | --- | --- |
+| `agent_type` | pi-subagents `<active_agent>` tag in Pi's prompt options -> `captureChildIdentity` -> context -> translators -> hook stdin | Yes. Real children in S12/S13 carry the agent name. | FLOWING |
+| `agent_id` | Child's own `sessionManager.getSessionId()` -> `childId` -> context `childIdentity.sessionId` -> stdin | Yes. Equals the child session id the driver records. | FLOWING |
+| `session_id` in a child | `PI_SUBAGENT_PARENT_SESSION` + header `parentSession` -> `recordChildRoot` -> context (D-PG6-01) | Yes. Rows read `main`. | FLOWING |
+| Generated `async` | Source `background` / MCP grants -> convert.ts:1090 -> agent file -> `subagent get` | Yes. Exact file and get output asserted. | FLOWING |
+| MCP warning | `mcpAsyncWarning` -> staging warnings -> notification row | Yes. Exact rows in verdict-markers. | FLOWING |
 
 ### Behavioral Spot-Checks
 
-| Behavior | Command | Result | Status |
+All runs used a fresh scratchpad `mktemp` HOME and `PI_CODING_AGENT_DIR`, with no services. Each gave `tests 1 / pass 1 / fail 0 / cancelled 0 / skipped 0`.
+
+| ID | Named test | File | Result |
 | --- | --- | --- | --- |
-| Child/main event policy, identity, payloads, warnings, conversion | `node --import test/platform/isolated-pi-home.ts --test` on 11 owner files | 610/610 | PASS |
-| Journal ownership, migration on update/reinstall/retry | same, 5 owner files | 670/670 | PASS |
-| Real pi-subagents 0.88.1 children (detached, default, foreground, concurrent, ownership) | same, the two integration files | 8/8 | PASS |
+| S1 | child routes SessionEnd by the eleven-event policy | test/bridges/hooks/event-router.test.ts | PASS |
+| S2 | child routes Stop by the eleven-event policy | test/bridges/hooks/event-router.test.ts | PASS |
+| S3 | child routes PreToolUse by the eleven-event policy | test/bridges/hooks/event-router.test.ts | PASS |
+| S4 | D-PG3-01: an ordinary agent with an empty body leaves its launch mode to pi-subagents | test/bridges/agents/convert.test.ts | PASS |
+| S5 | D-PG3-02: either order of equivalent adapter MCP grants runs in the background with one warning | test/bridges/agents/convert.test.ts | PASS |
+| S6 | recognizes only the complete historical warning for its implementation | test/bridges/agents/mcp-async-warning.test.ts | PASS |
+| S7 | D-PG3-03: a load keeps an earlier ordinary agent's async false bytes and an update regenerates the agent without a launch preference | test/orchestrators/plugin/update-swap.test.ts | PASS |
+| S8 | D-PG3-03 / NFR-3: a reinstall whose state save fails restores an earlier ordinary agent's async false bytes, and its retry regenerates the agent | test/orchestrators/plugin/reinstall-flow.test.ts | PASS |
+| S9 | omits stale child identity from synchronous stdin | test/bridges/hooks/dispatch-exec.test.ts | PASS |
+| S10 | keeps journal owners and PID rows separate by session and runtime | test/bridges/hooks/runtime.test.ts | PASS |
+| S11 | an ordinary agent runs in the foreground when pi-subagents' configuration makes the foreground its default | test/integration/pi-subagents-child-identity.test.ts | PASS |
+| S12 | detached adapter children of a background agent and an MCP agent hook with their own identity | test/integration/pi-subagents-child-identity.test.ts | PASS |
+| S13 | an ordinary builtin agent with an empty body runs detached in pi-subagents' default mode and hooks only its tools with its own identity | test/integration/pi-subagents-child-identity.test.ts | PASS |
+| S14 | gives a known child's root with its identity (D-PG6-02) | test/bridges/hooks/translation-context.test.ts | PASS |
+| S15 | a child's load, hook, new session, and stop leave the parent's and a sibling's waiting hooks running with their records | test/integration/subagent-hook-ownership.test.ts | PASS |
+| S16 | a main load stops the waiting hook of a child whose Pi died and keeps a live sibling's | test/integration/subagent-hook-ownership.test.ts | PASS |
+| P | scratch probe: every hook run of a real ordinary adapter child (not committed) | scratchpad only | child rows: PreToolUse/PostToolUse Bash only; no child lifecycle run |
+| G | `npm run check` at `1183aae3` (same executable inputs as HEAD) | root scripts, both cucumber profiles | PASS (reused) |
 
 ### Probe Execution
 
-None declared. `scripts/*/tests/probe-*.sh` does not apply to this phase; its evidence is the named tests above.
+No plan declares a `probe-*.sh`, and no `scripts/*/tests/probe-*.sh` is in scope. Not applicable.
 
 ### Requirements Coverage
 
-| Requirement | Source Plans | Status | Evidence |
+| Requirement | Source plans | Status | Evidence |
 | --- | --- | --- | --- |
-| PG-AGENT-01 | 03-02, 03-04, 03-06, 03-07, 03-08 | SATISFIED | R1, R2, P02–P04, P07, P08.1. Its migration clause (line 16 of REQUIREMENTS) is met: `async: false` changes at update/reinstall, not at load. |
-| PG-HOOK-07a | 03-01, 03-03, 03-05, 03-06, 03-08 | SATISFIED (flag retained) | R3, R4, P01, P03, P05, P06, P08.2. The unclassified probe row stays flagged; see Human Verification. Closed 2026-11-15 by decision 26 (D-PG6-01, parity-gaps Phase 6). |
+| PG-AGENT-01 | 03-02, 03-04, 03-06, 03-07, 03-08 | SATISFIED | R1, R2, P02, P04, P07, P08.1. REQUIREMENTS.md:38 `[x]`, trace :186 Complete. The migration clause (REQUIREMENTS.md:16) is met: `async: false` changes at update/reinstall, not at load. |
+| PG-HOOK-07a | 03-01, 03-03, 03-05, 03-06, 03-08 | SATISFIED | R3, R4, P01, P03, P05, P06, P08.2. REQUIREMENTS.md:27 `[x]`, trace :178 Complete. Its unclassified probe row is closed by D-PG6-01 (PROJECT.md:2401). |
 
-No orphaned requirement: REQUIREMENTS maps only these two IDs to Phase 3, and both appear in plan frontmatter. Both still read "Pending" in the traceability table; updating that is an orchestrator step.
+No orphaned requirement: REQUIREMENTS maps only these two IDs to Phase 3, and both appear in plan frontmatter.
 
 ### Anti-Patterns Found
 
-| File | Line | Pattern | Severity | Impact |
-| --- | --- | --- | --- | --- |
-| `A/mcp-async-warning.ts` | 3-6 | Stale module header: "launches in the background where Claude Code runs it in the foreground. Both MCP implementations have the same foreground gap". The ROADMAP notes say the correction to this file lands in this phase; the emitted text was corrected, the header was not. | Warning | Comment only, contradicts D-PG3-01 and the corrected warning; no user-visible effect. Fix in a follow-up quick task. |
-| changed files (48) | -- | TBD/FIXME/XXX/TODO/HACK | -- | None found. |
+| Scope | Pattern | Severity | Result |
+| --- | --- | --- | --- |
+| All 52 covered non-planning files | Unreferenced TBD / FIXME / XXX / TODO / HACK | None | No match |
+| Same scope | `.skip` / `.only` / `.todo`, `@skip`/`@wip` | None | One platform-conditional `{ skip: FIFO_SKIP }` at reinstall-flow.test.ts:7551, unrelated to Phase 3 |
+| A/mcp-async-warning.ts:1-8 | Stale header (flagged last time) | None | Fixed: the header now says MCP agents always launch in the background (D-PG3-02) and that the first generation's foreground claim stays recognized for stored rows (D-PG3-03) |
+| Real-child test filters | Child lifecycle runs no longer observable | Advisory | See below |
 
-### Flagged Items Assessed
+### Advisory (New Scope, Unevidenced)
 
-- **PG-HOOK-07a unclassified probe row: retained; closed 2026-11-15 by decision 26 (D-PG6-01, parity-gaps Phase 6): a child's tool hooks name the session that launched it, and `agent_id` names the child.** 03-08 told the verifier to review the covered edge list and keep the flag if an edge is uncovered. The listed edges (ten-event policy, stale/missing identity, trust, parent/sibling process safety, real concurrent children) are covered. One edge is not: in a child, `session_id`, `transcript_path` and `CLAUDE_CODE_SESSION_ID` name the child's own Pi session, the same value as `agent_id` (`translation-context.ts` takes `sessionId` from the child's session manager). Claude Code appears to keep the main session in those base fields and add `agent_id` beside them. No research, decision or doc covers this. This goes to the user (Human Verification 1); it does not falsify any roadmap criterion.
-- **Research A1: open, risk accepted by design.** If another ambient extension alters the prompt tag, the bridge omits both identity fields and logs the bounded diagnostic; it never invents a name. Defensive cases pass (S1, "Missing child metadata clears the previous identity" in G), and every supported real launch carries the tag (S3). No action needed beyond keeping the flag.
-- **Foreground child loads no ambient extension.** Under `asyncByDefault: false` an ordinary agent runs in the foreground and no plugin hook runs for its tool calls. This is documented as a Pi capability gap in `docs/hooks-compatibility.md:67`, which the project constraints accept as grounds for a divergence. It is consistent with the goal, which covers a child "that loads this extension". S3 shows it.
-- **WR-03 (deferred): pre-existing, not a phase gap.** A main-session `/reload` race on the shared PID table exists at `cab4a540`; carried in `.planning/BACKLOG.md:5289` ASYNCRELOADTABLE-01. It concerns main sessions, not the child behavior this phase adds.
+| # | Finding | Category | Why advisory |
+| --- | --- | --- | --- |
+| 1 | Since f3250f3b (D-PG6-01), `childRuns` (pi-subagents-child-identity.test.ts:119-121) and the cucumber real-child step (subagent-hooks.steps.ts:612-645) select a child's runs by `agent_id`, which only tool payloads carry, and the main controls take only the first six main runs (`.slice(0, 6)`). A child lifecycle run would now pass unseen, because it would carry the launching session's `session_id` and no `agent_id`. Before f3250f3b, `runsOf` filtered by `session_id === child`. | other | No behavior defect: the stand-in scenarios assert every run of a child-marked Pi exactly, the owner cases cover each event, and the scratch probe of a real child saw no lifecycle run. To resolve: give the real-child assertions a child discriminator so such a run fails again. |
 
 ### Human Verification Required
 
-### 1. Child session fields in tool hook payloads
-
-**Test:** Decide whether, in a pi-subagents child, the tool hook stdin `session_id` and `transcript_path`, and the `CLAUDE_CODE_SESSION_ID` variable, should name the main session or the child's own session (as now, equal to `agent_id`). Check Claude Code's subagent hook input to settle the upstream contract first (`claude-code-compat-research`).
-**Expected:** Either record the current behavior as a divergence with a reason in `docs/hooks-compatibility.md` "Child identity", or file a follow-up requirement. Either way, close the PG-HOOK-07a unclassified probe row.
-**Why human:** Upstream parity choice the project routes to the user. The verifier's evidence is partial: Claude Code 2.1.323's SubagentStop schema has `agent_transcript_path` beside the base `transcript_path`, which suggests the base fields name the main session; this was not confirmed for the tool events.
+None. The earlier report's single item (the child session fields) was decided by D-PG6-01 and shipped, and its override is removed.
 
 ### Gaps Summary
 
-No gaps. All four roadmap criteria and all 27 plan truths are verified with behavioral evidence: gate G, plus three independent hermetic runs by this verifier (1,288 owner tests and 8 real-companion integration tests). Status is `human_needed` for one reason only: the PG-HOOK-07a unclassified row stays flagged, because the child's `session_id`/`transcript_path` parity with Claude Code was never researched or decided. One non-blocking warning: the stale header comment in `bridges/agents/mcp-async-warning.ts`.
+No gaps and no regressions. On the current tree, all four roadmap criteria and all 27 plan must-haves of Phase 3 still hold, with citations updated to current lines. Four later decisions changed mechanisms that the phase relies on, all without breaking a criterion. D-PG6-01/02/03 moved the child's `session_id` family to the launching session and kept `agent_id` on the child, which closes the old override. D-PG6-18 grew the child policy to eleven events. D-PG5-01 moved Stop to `agent_before_settle`. D-PG7-05 changed how `background` is parsed. One advisory: the real-child tests lost their view of a child's lifecycle runs when D-PG6-01 changed their filter. The behavior still holds, and other tests cover it.
 
 ---
 
-_Verified: 2026-11-14T01:30:00Z_
+_Verified: 2026-11-16T06:37:40Z_
 _Verifier: Claude (gsd-verifier)_
-
-## Override (orchestrator, autonomous run)
-
-The single human-verification item, the session fields of a child tool hook, is deferred rather than decided here. It was not a Phase 3 criterion or plan truth. It is carried to Phase 6 as decision 26 and success criterion 6, tracked as BACKLOG CHILDSESSIONID-01, and the current behavior is documented in `docs/hooks-compatibility.md` (commit `a98ae4ae`, which also fixed the stale `mcp-async-warning.ts` header comment this report flagged). The maintainer should confirm this deferral. The covered-input fingerprint was recomputed with `verification.fingerprint` after that commit.
