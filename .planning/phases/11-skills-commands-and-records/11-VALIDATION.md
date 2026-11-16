@@ -2,10 +2,10 @@
 phase: "11"
 slug: "skills-commands-and-records"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
-# audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: false) (#2117)
-status: draft
+# audit-milestone §5.5 distinguishes NOT-VALIDATED (draft) from PARTIAL (validated + nyquist_compliant: true) (#2117)
+status: validated
 nyquist_compliant: false
-wave_0_complete: false
+wave_0_complete: true
 created: "2026-11-15"
 ---
 
@@ -43,18 +43,18 @@ created: "2026-11-15"
 
 | Requirement | Behavior | Test Type | Automated Command | File Exists | Status |
 |-------------|----------|-----------|-------------------|-------------|--------|
-| PG-CMD-09 | `/demo:demo-lint x` sends the body of `commands/demo-lint.md` | cucumber, red first | `npx cucumber-js --profile adapter --name "(PG-CMD-09)" features/slash-command/aliases.feature` | scenario new | ⬜ pending |
-| PG-CMD-09 | Claude Code name function; record round trip; planted name dropped | unit | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/domain/name.test.ts test/bridges/commands/command-record.test.ts test/orchestrators/skill-alias-state.test.ts` | yes | ⬜ pending |
-| PG-SKILL-11 | Command alias row shows its description | cucumber, red by edit | `npm run test:cucumber:profile -- --profile adapter features/slash-command/aliases.feature features/slash-command/frontmatter.feature` | rows change | ⬜ pending |
-| PG-SKILL-11 | Skill alias row shows `argument-hint` and description | cucumber, red first | `npx cucumber-js --profile adapter --name "(PG-SKILL-11)" features/skill/aliases.feature` | scenario new | ⬜ pending |
-| PG-SKILL-11 | Hint only / description only / both / neither | unit | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/edge/skill-aliases.test.ts` | yes | ⬜ pending |
-| PG-SKILL-01 | Command body mention reaches the model in a `<file>` block | cucumber, red first | `npx cucumber-js --profile adapter --name "(PG-SKILL-01)" features/slash-command/invocation.feature` | scenario new | ⬜ pending |
-| PG-SKILL-01 | Argument path, fence, code span, `!` output not attached | cucumber, guard | same command | scenario new | ⬜ pending |
-| PG-SKILL-01 | Skill body mention attached through an alias | cucumber, red first | `npx cucumber-js --profile adapter --name "(PG-SKILL-01)" features/skill/invocation.feature` | scenario new | ⬜ pending |
-| PG-SKILL-01 | Mention parser | unit | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/domain/file-mentions.test.ts` | ❌ W0 | ⬜ pending |
-| PG-SKILL-01 | Qualification and reads | unit | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/orchestrators/mention-attachments.test.ts` | ❌ W0 | ⬜ pending |
-| PG-DOC-01 | Each cited line is a `Scenario` line; each cited scenario passes | script + suite | citation check in `11-RESEARCH.md`; `npm run test:cucumber` | page new | ⬜ pending |
-| PG-DOC-02 | Old statements gone, new text present | grep | grep checks in `11-RESEARCH.md` | -- | ⬜ pending |
+| PG-CMD-09 | `/demo:demo-lint x` sends the body of `commands/demo-lint.md` | cucumber, red first | `npx cucumber-js --profile adapter --name "(PG-CMD-09)" features/slash-command/aliases.feature` | yes | ✅ green |
+| PG-CMD-09 | Claude Code name function; record round trip; planted name dropped | unit | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/domain/name.test.ts test/bridges/commands/command-record.test.ts test/orchestrators/skill-alias-state.test.ts` | yes | ✅ green |
+| PG-SKILL-11 | Command alias row shows its description | cucumber, red by edit | `npm run test:cucumber:profile -- --profile adapter features/slash-command/aliases.feature features/slash-command/frontmatter.feature` | yes | ✅ green |
+| PG-SKILL-11 | Skill alias row shows `argument-hint` and description | cucumber, red first | `npx cucumber-js --profile adapter --name "(PG-SKILL-11)" features/skill/aliases.feature` | yes | ✅ green |
+| PG-SKILL-11 | Hint only / description only / both / neither | unit | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/edge/skill-aliases.test.ts` | yes | ✅ green |
+| PG-SKILL-01 | Command body mention reaches the model in a `<file>` block | cucumber, red first | `npx cucumber-js --profile adapter --name "(PG-SKILL-01)" features/slash-command/invocation.feature` | yes | ✅ green |
+| PG-SKILL-01 | Argument path, fence, code span, `!` output not attached | cucumber, guard | same command | yes | ✅ green |
+| PG-SKILL-01 | Skill body mention attached through an alias | cucumber, red first | `npx cucumber-js --profile adapter --name "(PG-SKILL-01)" features/skill/invocation.feature` | yes | ✅ green |
+| PG-SKILL-01 | Mention parser | unit | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/domain/file-mentions.test.ts` | yes | ✅ green |
+| PG-SKILL-01 | Qualification and reads | unit | `node --import "$PWD/test/platform/isolated-pi-home.ts" --test test/orchestrators/mention-attachments.test.ts` | yes | ✅ green |
+| PG-DOC-01 | Each cited line is a `Scenario` line; each cited scenario passes | script + suite | citation check in `11-RESEARCH.md`; `npm run test:cucumber` | yes | ✅ green |
+| PG-DOC-02 | Old statements gone, new text present | grep | grep checks in `11-RESEARCH.md` | -- | ✅ green |
 
 The plans' task IDs carry the exact commands; this table is the requirement-level contract.
 
@@ -64,8 +64,8 @@ The plans' task IDs carry the exact commands; this table is the requirement-leve
 
 ## Wave 0 Requirements
 
-- [ ] `test/domain/file-mentions.test.ts` — lands with its source in the same commit
-- [ ] `test/orchestrators/mention-attachments.test.ts` — lands with its source in the same commit
+- [x] `test/domain/file-mentions.test.ts` — lands with its source in the same commit
+- [x] `test/orchestrators/mention-attachments.test.ts` — lands with its source in the same commit
 
 No framework install and no shared fixture is missing.
 
@@ -81,11 +81,28 @@ No framework install and no shared fixture is missing.
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 90s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [x] Feedback latency < 90s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** validated 2026-11-15 (gsd-validate-phase, no gaps)
+
+## Validation Evidence 2026-11-15
+
+Audited at 4e8d8d0b. Each requirement maps to a test that exists and passes:
+
+- The nine owner unit files (`name`, `command-record`, `staged-command`, `skill-alias-state`, `skill-aliases`, `file-mentions`, `mention-attachments`, `command-invocation`, `skill-invocation`) ran together: 600 tests, 0 failures. The `run_plugin_command` and skill-read guards are the two `D-PG11-07` cases, which assert that the mention reader is asked for nothing.
+- The tagged scenarios exist: `(PG-CMD-09)` in `features/slash-command/aliases.feature`, `(PG-SKILL-11)` twice in `features/skill/aliases.feature`, `(PG-SKILL-01)` three times in `features/slash-command/invocation.feature` and twice in `features/skill/invocation.feature`. They passed in the wave 8 gate (`/tmp/pg11-wave8.log`, `exit=0`, adapter 2084, builtin 204).
+- PG-DOC-01: the citation check found 35 citations in `docs/skills-commands-compatibility.md`, and each one is a `Scenario` line (exit 0).
+- PG-DOC-02: the four grep checks of `11-RESEARCH.md` print nothing.
+
+## Validation Audit 2026-11-15
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
