@@ -1,25 +1,40 @@
 ---
 phase: 01-companion-floors-and-mcp-defaults
-verified: 2026-11-12T20:00:07Z
+verified: 2026-11-16T05:35:26Z
 status: passed
-overrides: []
-score: 20/20 accounted for (19 VERIFIED; 1 PASSED (override))
+score: 20/20 accounted for (18 VERIFIED; 2 PASSED (override))
 covered_files: [".agents/skills/cucumber/rules/world-and-stand-ins.md",".github/workflows/ci.yml",".planning/debug/artifacts/real-child-mcp-automation/README.md",".planning/debug/artifacts/real-child-mcp-automation/companion.patch.gz",".planning/debug/artifacts/real-child-mcp-automation/driver.template.mjs",".planning/debug/artifacts/real-child-mcp-automation/fixture/marketplace/plugins/demo/agents/control.md",".planning/debug/artifacts/real-child-mcp-automation/fixture/marketplace/plugins/demo/agents/restricted.md",".planning/debug/artifacts/real-child-mcp-automation/fixture/marketplace/plugins/demo/agents/runner.md",".planning/debug/artifacts/real-child-mcp-automation/live-fixed-all.out.gz",".planning/debug/artifacts/real-child-mcp-automation/live-fixed-mcp-requests.jsonl",".planning/debug/artifacts/real-child-mcp-automation/live-pinned-control.out.gz",".planning/debug/artifacts/real-child-mcp-automation/live-pinned-restricted.out.gz",".planning/debug/artifacts/real-child-mcp-automation/live-pinned-runner.out.gz",".planning/debug/artifacts/real-child-mcp-automation/openai-stub-server.mjs",".planning/debug/artifacts/real-child-mcp-automation/pi-subagents-mcp-adjacent-integration.out.gz",".planning/debug/artifacts/real-child-mcp-automation/pi-subagents-mcp-adjacent-mcp-only.out.gz",".planning/debug/artifacts/real-child-mcp-automation/pi-subagents-mcp-baseline-agent-eject.out.gz",".planning/debug/artifacts/real-child-mcp-automation/pi-subagents-mcp-baseline-agent-memory.out.gz",".planning/debug/artifacts/real-child-mcp-automation/pi-subagents-mcp-reapply-green.out.gz",".planning/debug/artifacts/real-child-mcp-automation/pi-subagents-mcp-revert-red.out.gz",".planning/debug/artifacts/real-child-mcp-automation/pi-subagents-mcp-self-contained-run.out.gz",".planning/debug/artifacts/real-child-mcp-automation/pi-subagents-mcp-unit-fixed.out.gz",".planning/debug/artifacts/real-child-mcp-automation/run.mjs",".planning/debug/real-child-mcp-automation.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-01-PLAN.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-01-SUMMARY.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-02-PLAN.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-02-SUMMARY.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-03-PLAN.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-03-SUMMARY.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-04-PLAN.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-04-SUMMARY.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-05-PLAN.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-05-SUMMARY.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-06-PLAN.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-06-SUMMARY.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-07-PLAN.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-07-SUMMARY.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-08-PLAN.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-08-SUMMARY.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-09-PLAN.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-09-SUMMARY.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-10-PLAN.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-10-SUMMARY.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-11-PLAN.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-11-SUMMARY.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-SECURITY.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-UAT.md",".planning/phases/01-companion-floors-and-mcp-defaults/01-VALIDATION.md",".planning/quick/261112-jzs-add-installed-companion-characterization/261112-jzs-SUMMARY.md",".planning/seeds/SEED-261112-81c-adopt-pi-subagents-ambient-mcp-fix.md","CHANGELOG.md","CONTRIBUTING.md","README.es.md","README.md","docs/hooks-compatibility.md","docs/mcp-compatibility.md","docs/prd/parity-gaps-prd.md","extensions/pi-claude-marketplace/bridges/agents/convert.ts","extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts","extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts","extensions/pi-claude-marketplace/bridges/mcp/adapter-entry.ts","extensions/pi-claude-marketplace/bridges/mcp/marker.ts","extensions/pi-claude-marketplace/domain/components/hooks/builtin-mcp-tool-names.ts","extensions/pi-claude-marketplace/domain/mcp-builtin-translation.ts","extensions/pi-claude-marketplace/domain/mcp-implementation.ts","extensions/pi-claude-marketplace/domain/mcp-server-features.ts","features/agent/frontmatter.feature","features/hook/mcp-tool-names.feature","features/hook/tool-use.feature","features/lib/companions.ts","features/lib/mcp-server-files.ts","features/lib/mcp-stub-server.ts","features/lib/upstream/subagents.ts","features/mcp-server/agent-grants.feature","features/mcp-server/builtin-values.feature","features/mcp-server/configuration.feature","features/mcp-server/legacy-move.feature","features/mcp-server/lifecycle.feature","features/mcp-server/listing.feature","features/plugin/subagent-child.feature","features/step_definitions/hook/tool-use.steps.ts","features/step_definitions/mcp-server/lifecycle.steps.ts","features/step_definitions/mcp-server/listing.steps.ts","package-lock.json","package.json","scripts/install-test-peers.mjs","scripts/pi.sh","test/architecture/gate-targets.ts","test/architecture/integration-materialization-gate.test.ts","test/architecture/peer-floor.test.ts","test/bridges/agents/convert.test.ts","test/bridges/agents/stage.test.ts","test/bridges/hooks/dispatch.test.ts","test/bridges/mcp/adapter-entry.test.ts","test/bridges/mcp/builtin-entry.test.ts","test/bridges/mcp/marker.test.ts","test/bridges/mcp/stage.test.ts","test/domain/components/hooks/builtin-mcp-tool-names.test.ts","test/domain/mcp-builtin-translation.test.ts","test/domain/mcp-implementation.test.ts","test/domain/mcp-server-features.test.ts","test/edge/handlers/plugin/install.test.ts","test/edge/handlers/plugin/update.test.ts","test/integration/adapter-tool-name-conformance.test.ts","test/integration/agents-adapter-grant-conformance.test.ts","test/integration/agents-builtin-grant-conformance.test.ts","test/integration/mcp-adapter-entry-conformance.test.ts","test/integration/mcp-home-path-partial.test.ts","test/integration/mcp-legacy-sweep.test.ts","test/integration/mcp-override-lifecycle.test.ts","test/integration/mcp-tool-rules.test.ts","test/integration/mcp-variable-expansion.test.ts","test/integration/optional-peer-suite-versions.json","test/integration/optional-peer.ts","test/integration/pi-mcp-adapter-peer.ts","test/integration/pi-subagents-child-launch-conformance.test.ts","test/integration/pi-subagents-peer.ts","test/integration/provenance-invisibility.test.ts","test/integration/skill-path-resolution.test.ts","test/live-uat/README.md","test/live-uat/mcp-adapter-canary.mjs","test/orchestrators/mcp/builtin-registration-step.test.ts","test/orchestrators/plugin/install-flow-ledger.test.ts","test/orchestrators/plugin/reinstall-flow.test.ts","test/orchestrators/plugin/update-flow.test.ts","test/orchestrators/plugin/update-swap.test.ts","test/orchestrators/reconcile/mcp-migration.test.ts"]
-covered_digest: "v4:sha256:5219ba134d7cc62eac5aabfbf24c52ece63f33d28f9ede1aa9ba869b01b1249a"
+covered_digest: "v4:sha256:6f14494867347b6660f468924f0ab7b88dc13ad3b926dc7fc73a946062f418c2"
 behavior_unverified: 0
-empirically_verified: 19
-deferred_behavior_unverified: 0
-overrides_applied: 0
-re_verification: {"previous_status":"human_needed","previous_score":"19/20","gaps_closed":["User explicitly accepted external-adoption deferral through AGTAMBIENT-01 / SEED-261112-81c; original installed-peer failure remains recorded."],"gaps_remaining":[],"regressions":[]}
+overrides_applied: 2
+overrides:
+  - must_have: "the test suites install and run pi-subagents 0.88.0 and pi-mcp-adapter 7.0.1 (roadmap criterion 1, suite-version clause)"
+    reason: "Superseded by decision: D-PG1-02 makes the pi-subagents suite version one entry of test/integration/optional-peer-suite-versions.json; quick 261113-8yn (AGTAMBIENT-01 retirement, STATE.md 'pi-subagents 0.88.1 adoption — 2026-11-13', REQUIREMENTS.md PG-MCP-02) moved that entry to the published 0.88.1 fix and kept the declared floor >=0.87.0. The suites now run pi-subagents 0.88.1 and pi-mcp-adapter 7.0.1; the floor clause and the no-0.87.0-suite-proof consequence of D-PG1-02 are unchanged. No D-ID amends the literal 0.88.0 in ROADMAP criterion 1 (maintainer review)."
+    accepted_by: "acolomba (quick 261113-8yn adoption; recorded by gsd-verifier as superseded-by-decision)"
+    accepted_at: "2026-11-13T12:22:37Z"
+  - must_have: "Under the adapter, a plugin tool whose Claude Code name is longer than 64 characters works wherever the project names it: the server listing shows it, a hook whose matcher is the full Claude Code name runs and receives that name, and an agent whose disallowedTools names the tool is not offered it (PG-MCP-02)"
+    reason: "Historical external-adoption deferral of the real-child exclusion check to AGTAMBIENT-01 / SEED-261112-81c, kept as the caller requested. The 2026-11-13 supplement records the runtime proof on published pi-subagents 0.88.1, and the three ambient launch-builder cases pass again on the current tree; the deferral's trigger is retired."
+    accepted_by: "acolomba"
+    accepted_at: "2026-11-12T19:58:21Z"
+re_verification:
+  previous_status: passed
+  previous_score: "20/20 accounted for (19 VERIFIED; 1 PASSED (override))"
+  previous_verified: 2026-11-12T20:00:07Z
+  reason: "stale fingerprint: Phases 2-11 and the gaps-agents/gaps-mcp merges changed 54 covered files; 01-UAT.md changed only by the heading retitle of 5fd2706a"
+  gaps_closed: []
+  gaps_remaining: []
+  regressions: []
+  superseded:
+    - criterion: "Roadmap criterion 1, suite runs pi-subagents 0.88.0"
+      by: "D-PG1-02 suite-version file, applied by quick 261113-8yn (0.88.1 adoption, AGTAMBIENT-01 retired)"
 decision_coverage: {honored: 14, total: 14, not_honored: []}
 prohibitions_flagged: 17
-prohibition_review: "NON-AUTHORITATIVE; unverified-prohibition — human review recommended. Seventeen judgment-tier declarations were reviewed against existing evidence. No additional concrete violation was found; these flags are not seventeen new manual tests or newly accepted risks."
+prohibition_review: "NON-AUTHORITATIVE; unverified-prohibition — human review recommended. The seventeen judgment-tier declarations were re-read against the current tree. No violation was found; these flags are not seventeen new manual tests or newly accepted risks."
 prohibitions: [{"id":"01-01-P1","statement":"MUST NOT state or imply, in a comment, a test title, the README, or a record, that a suite proves pi-subagents 0.87.0: the suites run 0.88.0, and the 0.87.0 floor rests on the pi-subagents changelog and source (D-PG1-02).","verification":"judgment","status":"unverified","flagged":true,"assessment":"NON-AUTHORITATIVE: no violation found in the reviewed implementation and evidence; human review recommended","source":"01-01-PLAN.md"},{"id":"01-01-P2","statement":"MUST NOT rewrite an installed agent file at a load or at a session start to change its model: an installed agent changes only at its next `update --map-model` (D-PG1-05, APL-D1).","verification":"judgment","status":"unverified","flagged":true,"assessment":"NON-AUTHORITATIVE: no violation found in the reviewed implementation and evidence; human review recommended","source":"01-01-PLAN.md"},{"id":"01-01-P3","statement":"MUST NOT change which model an alias selects, and MUST NOT add or remove an alias: only the provider prefix goes (D-PG1-06; the alias table update is AGENT-06, not scheduled).","verification":"judgment","status":"unverified","flagged":true,"assessment":"NON-AUTHORITATIVE: no violation found in the reviewed implementation and evidence; human review recommended","source":"01-01-PLAN.md"},{"id":"01-02-P1","statement":"MUST NOT leave a tool pin, a contributor document, or a test comment that says the suites prove the declared pi-subagents floor: they prove 0.88.0 (D-PG1-02).","verification":"judgment","status":"unverified","flagged":true,"assessment":"NON-AUTHORITATIVE: no violation found in the reviewed implementation and evidence; human review recommended","source":"01-02-PLAN.md"},{"id":"01-04-P1","statement":"MUST NOT read `MCP_TOOL_TIMEOUT` or `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT`: REQUIREMENTS.md keeps both out of scope, and a variable the user set for Claude Code must not change a Pi timeout without a decision.","verification":"judgment","status":"unverified","flagged":true,"assessment":"NON-AUTHORITATIVE: no violation found in the reviewed implementation and evidence; human review recommended","source":"01-04-PLAN.md"},{"id":"01-05-P1","statement":"MUST NOT present an agent's `mcp:` grant over a tool with an adapter name longer than 64 characters as working: the pi-subagents 0.88.0 launch gap is measured or read from source, and every record says which.","verification":"judgment","status":"unverified","flagged":true,"assessment":"NON-AUTHORITATIVE: no violation found in the reviewed implementation and evidence; human review recommended","source":"01-05-PLAN.md"},{"id":"01-06-P1","statement":"MUST NOT replace a `requestTimeoutMs` that the user wrote on an entry with the default, at any restage (D-PG1-11, D-PG1-13).","verification":"judgment","status":"unverified","flagged":true,"assessment":"NON-AUTHORITATIVE: no violation found in the reviewed implementation and evidence; human review recommended","source":"01-06-PLAN.md"},{"id":"01-06-P2","statement":"MUST NOT write a default timeout into `mcp-adapter.json` at a load, outside the AMIG-01 legacy move that already restages entries (APL-D1, D-PG1-12).","verification":"judgment","status":"unverified","flagged":true,"assessment":"NON-AUTHORITATIVE: no violation found in the reviewed implementation and evidence; human review recommended","source":"01-06-PLAN.md"},{"id":"01-07-P1","statement":"MUST NOT run a hook for a tool of another server because a server prefix longer than the 55 kept characters shares its start with a cut tool name.","verification":"judgment","status":"unverified","flagged":true,"assessment":"NON-AUTHORITATIVE: no violation found in the reviewed implementation and evidence; human review recommended","source":"01-07-PLAN.md"},{"id":"01-07-P2","statement":"MUST NOT send a hook a full tool name that the adapter rule does not cut to exactly the name Pi gave the event.","verification":"judgment","status":"unverified","flagged":true,"assessment":"NON-AUTHORITATIVE: no violation found in the reviewed implementation and evidence; human review recommended","source":"01-07-PLAN.md"},{"id":"01-08-P1","statement":"MUST NOT skip the hooks of a real tool call because its cut name has the shape of a pi-mcp-adapter proxy call.","verification":"judgment","status":"unverified","flagged":true,"assessment":"NON-AUTHORITATIVE: no violation found in the reviewed implementation and evidence; human review recommended","source":"01-08-PLAN.md"},{"id":"01-08-P2","statement":"MUST NOT present the PreToolUse and PostToolUseFailure events of a shortened tool that no hook names as full-name parity: the scenario titles name the shortened name a pi-mcp-adapter capability gap.","verification":"judgment","status":"unverified","flagged":true,"assessment":"NON-AUTHORITATIVE: no violation found in the reviewed implementation and evidence; human review recommended","source":"01-08-PLAN.md"},{"id":"01-09-P1","statement":"MUST NOT commit a scenario or a harness change that makes the suite wait 60 seconds or more, and MUST NOT report the slow call as proven by the suite: it is one recorded run per implementation (D-PG1-14).","verification":"judgment","status":"unverified","flagged":true,"assessment":"NON-AUTHORITATIVE: no violation found in the reviewed implementation and evidence; human review recommended","source":"01-09-PLAN.md"},{"id":"01-10-P1","statement":"MUST NOT describe a real background child's call of a plugin MCP tool as proven by a scenario: the page says that the harness cannot start a detached child and how the call was checked.","verification":"judgment","status":"unverified","flagged":true,"assessment":"NON-AUTHORITATIVE: no violation found in the reviewed implementation and evidence; human review recommended","source":"01-10-PLAN.md"},{"id":"01-10-P2","statement":"MUST NOT describe a tool call that stays silent for more than 60 seconds as proven by the suite: the page cites the recorded run of D-PG1-14, or says that no run is recorded.","verification":"judgment","status":"unverified","flagged":true,"assessment":"NON-AUTHORITATIVE: no violation found in the reviewed implementation and evidence; human review recommended","source":"01-10-PLAN.md"},{"id":"01-11-P1","statement":"MUST NOT record the pi-subagents 0.87.0 floor as proven by a test suite: the D-PG1-02 row says that the suites run 0.88.0 and that the floor rests on the changelog and source.","verification":"judgment","status":"unverified","flagged":true,"assessment":"NON-AUTHORITATIVE: no violation found in the reviewed implementation and evidence; human review recommended","source":"01-11-PLAN.md"},{"id":"01-11-P2","statement":"MUST NOT tell the reader that installed agents change by themselves: the CHANGELOG entry says that an agent installed with `--map-model` keeps its old model ID until the next `update --map-model` (D-PG1-05).","verification":"judgment","status":"unverified","flagged":true,"assessment":"NON-AUTHORITATIVE: no violation found in the reviewed implementation and evidence; human review recommended","source":"01-11-PLAN.md"}]
-
 human_verification: []
 deferred: []
 nonblocking_debt: [{"id":"PG1-TIMING-01","item":"Focused-feedback timing sign-off incomplete; nyquist_compliant remains false.","tracking":"01-VALIDATION.md#phase-closure-deferral-and-nonblocking-timing-debt"}]
-
+open_external_limitations: [{"id":"AGTLONGNAME-01","item":"pi-subagents names a granted adapter tool over 64 characters without the cut; explicit long grants stay unsupported.","tracking":".planning/BACKLOG.md#agtlongname-01-pi-subagents-names-a-granted-adapter-tool-without-the-64-character-cut"}]
 adoption_supplement: {requirement: PG-MCP-02, status: passed, version: 0.88.1, date: 2026-11-13}
 ---
 
@@ -27,134 +42,147 @@ adoption_supplement: {requirement: PG-MCP-02, status: passed, version: 0.88.1, d
 
 **Phase Goal:** The project declares pi-subagents 0.87.0 and pi-mcp-adapter 7.0.1 as its floors and models what those versions do: a mapped model ID runs on the session's provider, and a plugin tool whose name is longer than 64 characters works under the adapter. A plugin MCP server that declares no `timeout` gets Claude Code's idle window under both implementations.
 
-**Verified:** 2026-11-12T20:00:07Z
-**Historical status (2026-11-12):** passed with one explicit external-dependency override. The 2026-11-13 adoption supplement below closes that deferral; there is no active ambient-MCP override.
-**Re-verification:** Yes -- applied the user's explicit external-adoption deferral; preserved the runtime failure history.
-**Scope:** Current `features/gaps` tree; complete combined gate reused from `92bace26f6438a09f01c92148673695d7d7fb655`. Only acceptance/planning records changed after those build inputs.
+**Verified:** 2026-11-16T05:35:26Z (staleness re-verification on `features/gaps` at `5fd2706a`)
+**Status:** passed, with two PASSED (override) rows and 17 flagged judgment-tier prohibitions
+**Re-verification:** Yes. The previous report (2026-11-12, passed, plus the 2026-11-13 adoption supplement) went stale because later phases changed 54 covered files. Every criterion was re-checked against the current tree, and the citations below are the current line numbers.
 
-The real detached child's explicit short MCP grant is now verified. Long-name exclusion passed with the locally patched companion, but remains unverified for the adopted dependency: installed/published 0.88.0 still prevents both positive controls from receiving direct tools. The user explicitly deferred adoption to AGTAMBIENT-01 / SEED-261112-81c and authorized moving beyond Phase 1. Phase closure therefore uses one PASSED (override), not a claim that the adopted dependency works. It does not establish a local exclusion implementation defect or bypass. The separate upstream long-grant limitation remains AGTLONGNAME-01; neither limitation is claimed fixed.
+**Gate evidence reused:** `npm run check` exited 0 at `9874efc2` (log `/tmp/pg11-phasegate2.log`): all static checks passed, 2094/2094 adapter scenarios, 204/204 built-in scenarios, 374 merged direct-coverage records, with the installed peers pi-subagents 0.88.1 and pi-mcp-adapter 7.0.1. Since `9874efc2`, only `README.md`, `README.es.md` (a command-alias paragraph, not the floors) and `.planning/` changed. This verifier did not run `npm run check`. It ran eleven named tests in a hermetic home (see the spot-checks).
 
-**Autonomous prohibition flag:** Complete automated verification with **17 flagged judgment-tier prohibitions**. Each assessment below is NON-AUTHORITATIVE: **unverified-prohibition — human review recommended**. Existing plan approval, the accepted-risk log, tests, and the review/security findings support the assessments; they are not individual human acceptance of this verifier's judgments. No additional concrete unresolved invariant was found beyond the now-deferred exclusion check. These autonomous review flags remain visible and non-authoritative; the external-dependency override is not acceptance of these judgments. These flags do not create seventeen new manual tests.
+**Autonomous prohibition flag:** this verification completes with **17 flagged judgment-tier prohibitions**. Each assessment is NON-AUTHORITATIVE: **unverified-prohibition — human review recommended**.
 
 ## Goal Achievement
 
 ### Observable Truths
 
-The four roadmap criteria are retained verbatim as rows 1-4. The remaining rows merge the 59 PLAN truths by outcome and add the explicitly deferred live-child check. The appendix maps every PLAN truth to evidence; merging does not reduce the roadmap contract. `EXT/` below means `extensions/pi-claude-marketplace/`.
+Rows 1-4 are the roadmap criteria. Rows 5-20 merge the 59 PLAN truths by outcome, as in the previous report. `EXT/` means `extensions/pi-claude-marketplace/`.
 
-| # | Truth | Status | Evidence |
+| # | Truth | Status | Current evidence |
 |---|---|---|---|
-| 1 | `package.json` and the README name pi-subagents 0.87.0 and pi-mcp-adapter 7.0.1 as the floors, and the test suites install and run pi-subagents 0.88.0 and pi-mcp-adapter 7.0.1 (D-PG1-02 amends this criterion: `scripts/install-test-peers.mjs` installs the suite version of pi-subagents, one release above its floor). The documentation no longer describes the two fixed pi-subagents bugs as open, and the scenarios in `features/mcp-server/agent-grants.feature` pin what pi-subagents 0.88.0 does with a foreground run (D-PG1-03) (PG-AGENT-02, PG-MCP-02). | VERIFIED | Manifest lines 66-67, lock root lines 48-49, both README files lines 39-40; suite JSON and three readers; installed-peer versions in final check log. Foreground scenarios preserve extension-owned tool/server names. Compatibility page and upstream status paragraph distinguish fixed bugs from the remaining live check. No suite proof of 0.87.0 is claimed. |
-| 2 | An agent installed with `--map-model` lists its model with no provider prefix, such as `model claude-sonnet-5-5`, so it runs on the session's provider when that provider has the model (PG-AGENT-07b). | VERIFIED | `EXT/bridges/agents/convert.ts:62-69,304-345` emits bare IDs; the mapped-model feature and complete owner coverage pass. Independent invocation of installed pi-subagents' resolver returned `session-provider/claude-sonnet-5-5` with two matching providers. Foreground and background callers pass the current provider (see spot-checks). |
-| 3 | Under the adapter, a plugin tool whose Claude Code name is longer than 64 characters works wherever the project names it: the server listing shows it, a hook whose matcher is the full Claude Code name runs and receives that name, and an agent whose `disallowedTools` names the tool is not offered it (PG-MCP-02). | PASSED (override) | Listing, hook, and staged exclusion assertions pass. Real unrestricted PID 3263943 and restricted PID 3264825 both lacked direct tools, including the permitted short control, before and after `mcp connect`. Companion blanket suppression prevents attribution to exclusion. Local fix controls pass, but the dependency is unchanged. Override accepted by acolomba at 2026-11-12T19:58:21Z: defer adoption to AGTAMBIENT-01 / SEED-261112-81c and move beyond Phase 1. |
-| 4 | Under both profiles, the registered configuration of a stdio plugin server with no declared `timeout` shows 30 minutes, and that of a remote server shows 5 minutes. Under the adapter, a timeout the user wrote on the entry is still there after an update (PG-MCP-01). | VERIFIED | `defaultRequestTimeoutMs` returns 1800000/300000; built-in translation divides by 1000. Adapter stamp preserves plugin/user precedence before defaults. Configuration features and four lifecycle scenarios pass in the reused combined check. Independent named transition and user-value tests pass. |
-| 5 | One suite-version file drives installation and both readers; readers require the exact selected version and the architecture guard allows only the pi-subagents override. | VERIFIED | `scripts/install-test-peers.mjs:36-58`, `test/integration/optional-peer.ts:88-128`, `features/lib/companions.ts:91-144`; range validation precedes cache acceptance. Architecture test at `peer-floor.test.ts:156`; final log proves both readers accept the installed peers. Workflow engine stays 3.15.0. |
-| 6 | Developer launcher, canary, contributor/CI/test-support records, and adapter shape/range guard use the selected versions accurately. | VERIFIED | `scripts/pi.sh:108-121`, canary `ADAPTER_VERSION`, live-UAT README, contributor and CI comments, STACK, Cucumber rule, and test-support headers. `adapter-entry.test.ts` pins the range and 7.0.1 shape/marker audit; final static/integration check passes. |
-| 7 | One adapter join/fit rule covers the 64/65/84 boundary, dot replacement, empty names, UTF-16/UTF-8 behavior, and the retained-prefix limit. | VERIFIED | `EXT/domain/mcp-implementation.ts:48-102`; eleven conformance cases import the installed adapter's own `formatToolName`. Independent pinned screenshot case passes. `toolNamePrefix` returns undefined beyond the retained 55 units; scenario helper falls back to exact naming. |
-| 8 | Agent exclusions use registered names; grants remain raw selectors; the long-grant upstream mismatch is measured and recorded without claiming a live launch. | VERIFIED | `convert.ts:119-125`; dotted/long exclusion owner cases; `agents-adapter-grant-conformance.test.ts:70` drives the actual peer resolver and asserts its uncut 77-character result differs from the registered name. AGTLONGNAME-01, PRD row, and unfiled upstream draft exist. No companion patch is claimed. |
-| 9 | A full hook literal in any tool-event bucket gives every matching hook of that event the same recovered name, including payloads, notices, block reasons, and input rewrites. | VERIFIED | `toolEventMcpLiterals` -> `toolEventView` -> `recoverAdapterToolName` precedes dispatch; `dispatch.ts:917-934,1097-1109`. Owner assertions at 4567-4765 and 5244 plus successful/failed Cucumber cases pass. |
-| 10 | Recovery rejects mismatched candidates, protects long sibling-server prefixes, preserves built-in/short names, and handles an original 64-character hash-tail name correctly. | VERIFIED | `builtin-mcp-tool-names.ts:66-83,140-157`; literal candidates require more than 64 units, verified result metadata requires exact fit. Named recovery and real-dispatcher regression tests passed independently. CR-01 is fixed; no manual check is needed for that deterministic fix. |
-| 11 | Successful result metadata recovers the full name; absent/malformed/failure metadata falls back safely, and remaining PreToolUse/failure-name gaps are explicit. | VERIFIED | `dispatch.ts:917` excludes failed results from metadata recovery; `adapterResultToolName` validates string server/tool fields before joining. Owner cases 5096-5204 and the two no-full-literal feature scenarios pass; compatibility pages state the gap. |
-| 12 | A cut-shaped direct tool is not skipped as an adapter proxy, while ordinary proxy calls retain their skip behavior. | VERIFIED | `dispatch.ts:710-725` checks the cut shape first. Direct-tool/proxy unit rows and `features/hook/tool-use.feature` scenario pass. Rare hash-shaped namespace-proxy ambiguity is documented in the approved plan and source. |
-| 13 | The marker validates optional default provenance; plugin values precede user values, which precede defaults; defaults are not plugin-set fields. | VERIFIED | `marker.ts:65-93,107-123`; `adapter-entry.ts:199-243,319-380`. Own-property and malformed-value cases have owner coverage. Named user-value test passed independently. Equality with the recorded default is intentionally treated as extension-owned (D-PG1-13). |
-| 14 | Restaging recomputes defaults after transport changes, excludes defaults from saved user choices, restores defaults after disable/enable, and upgrades earlier-release entries at reinstall. | VERIFIED | Named recompute and saved-choice tests pass; `userCarriedFields` is consumed by `adapter-doc.ts`. Four whole-file scenarios at `lifecycle.feature:394,456,493,528` pass in the final combined run. |
-| 15 | Installed models are not rewritten at load, adapter defaults arrive through existing restage paths only, and built-in registration applies the default each session. | VERIFIED | Model output change stays in converter; no new startup writer. Existing AMIG-01 legacy restage remains the adapter exception. `builtinRegistrationStep` -> `syncSession` -> recorded servers -> `builtinServerConfig` -> translation; named initial/resync registration tests pass. Adoption boundaries are documented. |
-| 16 | Compatibility documentation states the fixed floor bugs, measured foreground outcomes, naming gaps, timeout precedence/adoption, and source-derived approval consequence accurately. | VERIFIED | Updated `docs/mcp-compatibility.md:404-406` distinguishes the separate real-child grant success and blocked exclusion from permanent Cucumber coverage. Existing hook/timeout evidence remains unchanged; project reapproval remains source-derived. |
-| 17 | Decision/backlog/upstream/release records describe the changes and limitations, preserve alias targets and package version, and distinguish floor from suite version. | VERIFIED | Fourteen D-PG1 decision rows; MCPBG-01/MCPV2-03 dated updates; shipped-fix status and unfiled long-grant draft; CHANGELOG adoption guidance. Package remains 0.23.0. Provenance test changes only its header. |
-| 18 | Both implementations completed a call silent for 65 seconds, and declared five-second controls timed out; no slow wait was committed to the suite. | VERIFIED | Independently parsed both preserved Cucumber JSON files and read both exit files (0). All four scenarios passed; durations/results below. No committed `slow-call.feature` or `STUB_CALL_DELAY_MS` remains. D-PG1-14 does not require a permanent slow scenario. |
-| 19 | The combined implementation passed the required full gate and the initial companion changes/breaks are auditable. | VERIFIED historical gate | `npm run check` passed at `ec14242d...` and later `ce06beb3`; the recorded counts/logs are below. New local companion and durable-runner evidence has separate validation. No fresh root full-gate result is asserted for this evidence refresh. |
-| 20 | A real detached child calls a granted plugin MCP tool and returns its result. | VERIFIED | Detached PID 3263124, run `7e8c4b83-e5b8-4e47-b231-179d48b6ddda`: both provider schemas offered only `mcp__plugin_demo_stub__echo`; MCP request log records `pg1-live-short`; the child received `echo:pg1-live-short`. Verifier read retained artifacts and checked their recorded hashes. |
+| 1 | `package.json` and the README name pi-subagents 0.87.0 and pi-mcp-adapter 7.0.1 as the floors, and the test suites install and run pi-subagents 0.88.0 and pi-mcp-adapter 7.0.1 (D-PG1-02). The documentation no longer describes the two fixed pi-subagents bugs as open, and the foreground scenarios of `agent-grants.feature` pin what pi-subagents does (D-PG1-03). | PASSED (override): superseded by decision | Floors hold: `package.json:66-67` (`>=7.0.1 <8`, `>=0.87.0`), lock root `package-lock.json:48-49`, `README.md:39,41` and `README.es.md:39,41`. Suite version: `test/integration/optional-peer-suite-versions.json` = `0.88.1`, so the literal "0.88.0" no longer holds. Superseded by the D-PG1-02 mechanism as applied by quick 261113-8yn (see overrides). The gate log shows 0.88.1 and 7.0.1 at every reader. Fixed bugs: `docs/mcp-compatibility.md:493` and `.planning/upstream/pi-subagents-mcp-direct-tools.md:8`. The foreground scenarios `agent-grants.feature:411,443` pass in the gate on 0.88.1. |
+| 2 | An agent installed with `--map-model` lists its model with no provider prefix, such as `model claude-sonnet-5-5` (PG-AGENT-07b). | VERIFIED | `EXT/bridges/agents/convert.ts:64-71` (alias map, bare IDs), `:341-366` `mapModel`, then `fullModelId`. No `anthropic/` prefix in the agents bridge. `features/agent/frontmatter.feature:477-511` lists `model claude-sonnet-5-5` and passes in the gate. Phase 7 (D-PG7-11/17) added `inherit` -> `model: ""` beside this rule; the bare-ID rule is unchanged. |
+| 3 | Under the adapter, a plugin tool whose Claude Code name is longer than 64 characters works wherever the project names it: listing, full-name hook, and `disallowedTools` exclusion (PG-MCP-02). | PASSED (override) (historical override kept; runtime proof present) | Listing `features/mcp-server/listing.feature:229-238`. Hooks `features/hook/mcp-tool-names.feature:157,185`. Staged exclusion `features/mcp-server/agent-grants.feature:18`. Real-child exclusion on 0.88.1: the 2026-11-13 supplement below. Today the installed-0.88.1 launch cases `pi-subagents-child-launch-conformance.test.ts:142,169,200` pass (3/3). |
+| 4 | Under both profiles, a stdio server with no declared `timeout` shows 30 minutes, a remote server 5 minutes; under the adapter, a user's timeout survives an update (PG-MCP-01). | VERIFIED | `EXT/domain/mcp-server-features.ts:64-65,87-103` (`defaultRequestTimeoutMs` 1800000/300000). `EXT/domain/mcp-builtin-translation.ts:85` divides by 1000. `features/mcp-server/configuration.feature:10` (adapter, `requestTimeoutMs: 1800000`) and `:150` (built-in, `"timeout":1800`/`300`). `lifecycle.feature:402` (user value survives update). Phase 9 (D-PG9-01..04) added a stdio `lifecycle` default to the same table; this only adds to the timeout rule. |
+| 5 | One suite-version file drives the installation and both readers. The readers require the exact selected version, and the architecture guard allows only the pi-subagents entry. | VERIFIED | `scripts/install-test-peers.mjs:36-58`; `test/integration/optional-peer.ts:93-96`; `features/lib/companions.ts:91-144`. The guard at `test/architecture/peer-floor.test.ts:156` now names 0.88.1 and passed. |
+| 6 | The launcher, the canary, the contributor/CI/test-support records and the adapter range guard use the selected versions. | VERIFIED | `scripts/pi.sh:110-119` pins `pi-mcp-adapter@7.0.1` and `pi-subagents@0.88.1`. `test/live-uat/mcp-adapter-canary.mjs:120` `ADAPTER_VERSION = "7.0.1"`. `test/bridges/mcp/adapter-entry.test.ts:2547` pins `>=7.0.1 <8`. Static checks pass in the gate. |
+| 7 | One adapter join/fit rule covers the 64/65/84 boundary, dots, empty names, UTF-16/UTF-8 and the 55-unit prefix limit. | VERIFIED | `EXT/domain/mcp-implementation.ts:48-102`. The conformance test against the installed adapter's `formatToolName` (`adapter-tool-name-conformance.test.ts:116` screenshot case) passed. |
+| 8 | Agent exclusions use registered names; grants stay raw selectors; the long-grant mismatch is measured (AGTLONGNAME-01). | VERIFIED | `EXT/bridges/agents/convert.ts:136-143` `excludeNameFor` -> `profile.toolName`, used at `:406`. `test/integration/agents-adapter-grant-conformance.test.ts:71` pins the mismatch. AGTLONGNAME-01 is still open at `.planning/BACKLOG.md:5212`. |
+| 9 | A full hook literal gives every matching hook of the event the same recovered name. | VERIFIED | `EXT/bridges/hooks/dispatch.ts:1315-1316` (result path) and `:1536-1607` (`toolEventMcpLiterals` -> `toolEventView` -> `recoverAdapterToolName`) run before dispatch. The scenarios at `mcp-tool-names.feature:157,185` pass. |
+| 10 | Recovery rejects mismatched candidates, protects long sibling-server prefixes, keeps built-in/short names, and handles a 64-character hash-tail name. | VERIFIED | `EXT/domain/components/hooks/builtin-mcp-tool-names.ts:55-100,121-166`. The named tests (`builtin-mcp-tool-names.test.ts:375`, `dispatch.test.ts:6848`) passed. |
+| 11 | Successful result metadata recovers the full name; absent, malformed or failed metadata falls back; the PreToolUse/failure gaps are stated. | VERIFIED | `dispatch.ts:1315` excludes failed results. `adapterResultToolName` at `:1553` validates string `server`/`tool` before joining. The gap scenarios are `mcp-tool-names.feature:210,235`. |
+| 12 | A direct tool with a cut-shaped name is not skipped as a proxy, and real proxy calls keep the skip. | VERIFIED | `dispatch.ts:912-928` `isMcpProxyCall` checks the cut shape first. `features/hook/tool-use.feature:1279` passes. |
+| 13 | The marker validates default provenance; plugin values come before user values, which come before defaults; a default is never plugin-set. | VERIFIED | `EXT/bridges/mcp/marker.ts:59-93,129-146,166` (`defaultFields` is now a scalar record, generalized by D-PG9-03). `EXT/bridges/mcp/adapter-entry.ts:243,493-562` (`stampServers`). Named test `adapter-entry.test.ts:721` passed. |
+| 14 | A restage recomputes defaults after a transport change, keeps defaults out of saved user choices, restores them after disable/enable, and upgrades older entries at reinstall. | VERIFIED | `adapter-entry.ts:408` `userCarriedFields`. The tests at `adapter-entry.test.ts:689` (renamed `D-PG1-13 / D-PG9-03: ...`) and `:2410` passed. Scenarios at `lifecycle.feature:402,470,564,601` (previously 394/456/493/528) pass in the gate. |
+| 15 | Installed models are not rewritten at load; adapter defaults arrive only through restage paths; built-in registration applies the default each session. | VERIFIED | No `model` handling in `EXT/bridges/agents/grant-rewrite.ts` or `EXT/orchestrators/mcp/agent-grants-step.ts`. No `requestTimeoutMs` in `EXT/orchestrators/reconcile/`. `BLT-01` registration test (`builtin-registration-step.test.ts:262`, both suites) passed. |
+| 16 | The compatibility pages state the fixed bugs, the foreground outcomes, the naming gaps, the timeout order and the approval consequence. | VERIFIED | `docs/mcp-compatibility.md:303-305` (timeout order), `:493` (fixes), `:507-531` (foreground and real-child runs, including 0.88.1), `:751` (long-grant gap). `docs/hooks-compatibility.md:261-294`. |
+| 17 | The decision, backlog, upstream and release records describe the changes; aliases and the package version are kept. | VERIFIED | D-PG1-01..14 rows in `.planning/PROJECT.md` (for example `:2378`). Upstream status at `pi-subagents-mcp-direct-tools.md:8`. `CHANGELOG.md:3-10` (now one aggregated milestone entry: floors, bare IDs and `update --map-model`, defaults, long names). `package.json:122` is 0.23.0. |
+| 18 | Both implementations completed a call silent for 65 seconds, the 5-second controls timed out, and no slow wait is committed. | VERIFIED (historical run) | Recorded run carried below. No `slow-call.feature` and no `STUB_CALL_DELAY_MS` exist in `features/` or `test/`. |
+| 19 | The combined implementation passes the full gate. | VERIFIED | `npm run check` exit 0 at `9874efc2` (counts above); only READMEs and `.planning/` changed since. |
+| 20 | A real detached child calls a granted plugin MCP tool and returns its result. | VERIFIED (historical run) | The recorded real-child runs (0.88.0 local, 0.88.1 supplement) are carried below. Today the installed-0.88.1 case `explicit short MCP grant selects its adapter tool` passes. |
 
-**Score:** 20/20 accounted for: **19 VERIFIED + 1 PASSED (override)**. Roadmap criteria: 3 VERIFIED + 1 PASSED (override). The adopted dependency's exclusion behavior remains unverified in the accepted deferral; it is not counted as an empirical pass.
+**Score:** 20/20 accounted for: **18 VERIFIED + 2 PASSED (override)**. Roadmap criteria: 2 VERIFIED (2, 4) and 2 PASSED (override) (1 superseded-by-decision, 3 historical override with runtime proof).
+
+### Superseded Criteria
+
+| Criterion clause | Superseded by | Evidence |
+|---|---|---|
+| Criterion 1: the suites "install and run pi-subagents 0.88.0" | D-PG1-02 (one suite-version entry) applied by quick 261113-8yn, which retired AGTAMBIENT-01 and moved the suite to 0.88.1 (STATE.md "pi-subagents 0.88.1 adoption — 2026-11-13"; REQUIREMENTS.md PG-MCP-02; ROADMAP Phase 1 "Adoption (2026-11-13)") | The suite JSON is `0.88.1`; `peer-floor.test.ts:156` asserts 0.88.1 and that 0.88.1 satisfies `>=0.87.0`. The floor clause and the rule that no suite proves 0.87.0 still hold. |
+
+The two foreground scenarios of criterion 1 (D-PG1-03) were measured on 0.88.0, and they now pass unchanged on 0.88.1. The prose of `docs/mcp-compatibility.md:507,521` still dates those measurements to 0.88.0. That is a dated record, not a false claim (Info).
 
 ### Required Artifacts
 
-Canonical `query verify.artifacts` ran for all eleven plans: **39/39 declared artifact instances passed**, each invocation exit 0. Repeated paths are counted as declared instances. Manual inspection established substance and runtime wiring for the product artifacts, rather than using pattern matches as behavioral evidence.
-
-| Artifact group | Status | Substance and wiring |
+| Artifact group | Status | Current state |
 |---|---|---|
-| Suite-version JSON, installer, integration/Cucumber readers, architecture gate | VERIFIED | Shared version data is read and validated; cache package versions feed real companion imports. |
-| `bridges/agents/convert.ts`, agent feature/projection | VERIFIED | Converter emits bare IDs and profile-derived excludes; staging and `subagent get/list` consume them. Real detached exclusion still needs observation. |
-| `domain/mcp-implementation.ts`, naming conformance, listing feature | VERIFIED | Actual join/hash logic is called by agent and hook paths; conformance imports the independent installed peer implementation. |
-| `domain/mcp-server-features.ts`, built-in translation/config feature | VERIFIED | Closed transport defaults feed the registration builder and actual Pi registry. |
-| `bridges/mcp/marker.ts`, `adapter-entry.ts`, configuration/lifecycle features | VERIFIED | Default provenance participates in carry-forward and saved-choice paths; complete file assertions cover output. |
-| Hook name domain, dispatcher, if-field, tool-event features | VERIFIED | Recovered identity feeds matcher/if evaluation and payloads before execution; input rewrite retains Pi's original input. |
-| Launcher/canary, compatibility pages, decision/backlog/upstream/changelog records | VERIFIED | Pins reach actual launch arguments; documents distinguish measured results from source-derived claims and live gaps. |
+| Suite-version JSON, installer, readers, architecture gate | VERIFIED | Present and read by all three consumers. The guard passed. |
+| `bridges/agents/convert.ts` and the agent features | VERIFIED | Bare IDs, profile-derived exclusions; wired to staging. |
+| `domain/mcp-implementation.ts` and the naming conformance | VERIFIED | Used by the agent and hook paths; held against the installed adapter. |
+| `domain/mcp-server-features.ts`, `domain/mcp-builtin-translation.ts` | VERIFIED | The defaults table feeds the adapter stamp and the built-in registration. |
+| `bridges/mcp/marker.ts`, `bridges/mcp/adapter-entry.ts` | VERIFIED | `defaultFields` provenance is used by carry-forward and saved choices. |
+| Hook name domain, `bridges/hooks/dispatch.ts`, `if-field` | VERIFIED | The recovered identity is computed before matching and payloads. |
+| Launcher, canary, docs, records | VERIFIED | Pins and wording as cited. |
 
 ### Key Link Verification
 
-Canonical `query verify.key-links` ran for all eleven plans: **28/28 links passed**, each invocation exit 0. The following manual traces supplement the pattern check:
-
 | From | To | Via | Status |
 |---|---|---|---|
-| Installer / `findCachedPeer` / `resolveCompanion` | Suite-version JSON | Shared override then semver floor fallback; mismatch rejection | WIRED |
-| `excludeNameFor` | Adapter profile | `profile.toolName(pluginName, server, tool)` | WIRED |
-| Hook literal/recovery functions | Adapter join/fit | Hash equality; server-prefix boundary | WIRED |
-| Dispatcher | Hook name and if-field functions | One recovered event identity before `runAndFold` | WIRED |
-| Successful adapter result | Recovered event name | String metadata -> join -> exact fit -> hook payload | WIRED |
-| `stampServers` | Default table / marker | Plugin-set -> carried user value -> default -> marker | WIRED |
-| `leavingChoice` | `userCarriedFields` | Defaults excluded before choice persistence | WIRED |
-| Session registration | Built-in translation | Recorded server -> config -> Pi registry sync | WIRED |
-| Feature steps | Actual Pi/config output | Registry/list/detail/whole-file assertions | WIRED |
-| Documentation and decision rows | Scenarios/context | Explicit paths, matching behavior and stated limits | WIRED |
+| `install-test-peers.mjs` / `findCachedPeer` / `resolveCompanion` | Suite-version JSON | `suiteVersions[name] ?? floor.version` | WIRED |
+| `excludeNameFor` (`convert.ts:136`) | Adapter profile | `profile.toolName` | WIRED |
+| `recoverAdapterToolName` | `fittedAdapterToolName` | exact-fit check (`builtin-mcp-tool-names.ts:82`) | WIRED |
+| Tool result handler (`dispatch.ts:1315`) | `adapterResultToolName` -> `toolEventView` | verified name before matching | WIRED |
+| `stampServers` (`adapter-entry.ts:525`) | `adapterEntryDefaults` / marker | plugin -> user -> default -> `defaultFields` | WIRED |
+| `translateBuiltinMcpServer` (`mcp-builtin-translation.ts:85`) | `defaultRequestTimeoutMs` | `adapter.requestTimeoutMs ?? default` | WIRED |
 
 ### Data-Flow Trace (Level 4)
 
-There is no web UI or database layer. The applicable dynamic outputs were traced:
-
-| Artifact | Value | Real source | Status |
-|---|---|---|---|
-| Agent model/exclude fields | Generated frontmatter | Plugin agent input -> converter -> staged file -> pi-subagents list/detail | FLOWING |
-| Hook payload `tool_name` | Full or cut name | Pi tool event plus hook literals/success metadata -> validated identity -> executor payload | FLOWING |
-| Adapter timeout | `requestTimeoutMs` | Plugin server plus previous user entry/marker -> stamping -> atomic MCP document staging | FLOWING |
-| Built-in timeout | Seconds | Enabled installation record -> server translation -> `registerMcpServer`/registry sync | FLOWING |
-| Long-name listing | Registered name | Installed adapter tool registration -> Pi tool list -> full feature assertion | FLOWING |
-
-The constants 1800000/300000 and hash-length constants are contract defaults, not placeholder data. Empty returns in malformed-marker, unsupported-field, or no-default branches are deliberate guards; other branches populate the real outputs.
+Unchanged from the previous report. Agent model/exclude fields, hook `tool_name`, adapter `requestTimeoutMs` and built-in `timeout` all flow from real inputs (plugin files, Pi events, previous entries, records) to the staged or registered output. The constants are contract defaults.
 
 ### Behavioral Spot-Checks
 
-All named test commands below used this prefix, preserving the isolated Pi home:
-
-```text
-node --import "$PWD/test/platform/isolated-pi-home.ts" --test --test-isolation=none --test-name-pattern '<pattern>' <file>
-```
+Every run used `HOME` and `PI_CODING_AGENT_DIR` under a scratch `mktemp -d`, and `node --import ./test/platform/isolated-pi-home.ts --test --test-isolation=none --test-name-pattern '<pattern>' <file>`.
 
 | Pattern | File | Result | Status |
 |---|---|---|---|
-| `^D-PG1-13: recomputes a recorded stdio default when the server becomes remote$` | `test/bridges/mcp/adapter-entry.test.ts` | Exit 0; 1 passed; 0 skipped; 0.68s | PASS |
-| `^D-PG1-13: carries a user value that differs from the recorded default$` | Same | Exit 0; 1 passed; 0 skipped; 0.75s | PASS |
-| `^D-PG1-13: excludes a recorded default from the user` | Same | Exit 0; 1 passed; 0 skipped; 0.68s | PASS |
-| `^recovers a verified 64-character adapter name with a hash-shaped tail$` | `test/domain/components/hooks/builtin-mcp-tool-names.test.ts` | Exit 0; 1 passed; 0 skipped; 0.80s | PASS |
-| `^runs the server-prefix hook for a verified 64-character adapter name$` | `test/bridges/hooks/dispatch.test.ts` | Exit 0; 1 passed; 0 skipped; 2.46s | PASS |
-| `^D-PG1-09: the installed adapter cuts the screenshot tool to the pinned name$` | `test/integration/adapter-tool-name-conformance.test.ts` | Exit 0; 1 passed; installed adapter 7.0.1; 0.93s | PASS |
-| `^BLT-01: registers the recorded stdio server of an enabled user record$` | `test/orchestrators/mcp/builtin-registration-step.test.ts` | Exit 0; 2 passed (same named case under initial and resync suites); 0 skipped; 2.91s | PASS |
+| `^D-PG1-13 / D-PG9-03: recomputes the recorded stdio defaults` | `test/bridges/mcp/adapter-entry.test.ts` | 1/1 pass, exit 0 | PASS |
+| `^D-PG1-13: carries a user value that differs from the recorded default$` | same | 1/1 pass | PASS |
+| `^D-PG1-13: excludes a recorded default from the user` | same | 1/1 pass | PASS |
+| `^recovers a verified 64-character adapter name with a hash-shaped tail$` | `test/domain/components/hooks/builtin-mcp-tool-names.test.ts` | 1/1 pass | PASS |
+| `^runs the server-prefix hook for a verified 64-character adapter name$` | `test/bridges/hooks/dispatch.test.ts` | 1/1 pass | PASS |
+| `^D-PG1-09: the installed adapter cuts the screenshot tool to the pinned name$` | `test/integration/adapter-tool-name-conformance.test.ts` | 1/1 pass (installed 7.0.1) | PASS |
+| `^BLT-01: registers the recorded stdio server of an enabled user record$` | `test/orchestrators/mcp/builtin-registration-step.test.ts` | 2/2 pass | PASS |
+| `D-PG1-0[12]` | `test/architecture/peer-floor.test.ts` | 2/2 pass | PASS |
+| `^(unrestricted runner keeps\|exclusion-only runner keeps\|explicit short MCP grant)` | `test/integration/pi-subagents-child-launch-conformance.test.ts` | 3/3 pass (installed 0.88.1) | PASS |
 
-A separate read-only installed-companion probe called:
-
-```javascript
-resolveEffectiveSubagentModel(
-  undefined,
-  "claude-sonnet-5-5",
-  { provider: "session-provider", id: "parent" },
-  ["anthropic", "session-provider"].map(provider => ({
-    provider,
-    id: "claude-sonnet-5-5",
-    fullId: provider + "/claude-sonnet-5-5",
-  })),
-  "session-provider",
-);
-```
-
-Imported from the cached pi-subagents 0.88.0 `src/runs/shared/model-resolution.js`, it returned `session-provider/claude-sonnet-5-5` and the equality assertion passed (exit 0). Its real foreground callers at `subagent-executor.js:2870,3212,3652` pass `agentConfig.modelProvider ?? currentProvider`; the background caller at `async-execution.js:960` passes `a.modelProvider ?? ctx.currentModelProvider`. The converter writes no model-provider override. This verifies the selection rule; it does not claim a paid external-provider completion.
-
-**Historical passing full gate:** `npm run check`, exit 0, Node v26.13.0, clean reference `ec14242df04a53d91fd8bfdcbe4c3f31977719f0`, log `/tmp/gsd-parity-phase1-final-check.log`. Direct log inspection found passing static checks, 1812/1812 adapter scenarios, 155/155 built-in scenarios, and 354 merged direct-coverage records. Before report creation, `git diff <reference> -- . ':(exclude,glob).planning/**/*.md'` and `git ls-files --others --exclude-standard` were empty. That comparison was true at the initial verification. It does not establish a current-tree gate after `docs/mcp-compatibility.md` changed. The orchestrator subsequently completed `npm run check` with exit 0 on Node v26.13.0 at clean reference `ce06beb3`: 1,812 adapter scenarios, 155 built-in scenarios, and 354 direct-coverage pairs passed. Log: `/tmp/gsd-parity-automation-final-check.log`. Only this planning report changed during the run; the comparison excluding planning Markdown was empty, with no untracked inputs. The verifier inspected evidence; the orchestrator ran this refreshed gate.
-
-**Current reusable full gate:** `npm run check` exited 0 at `92bace26f6438a09f01c92148673695d7d7fb655`, Node v26.13.0: 1,812 adapter scenarios, 155 built-in scenarios, and 354 direct-coverage pairs. Log `/tmp/gsd-mcp-characterization-full-check.log` was inspected. The current diff excluding `.planning/**/*.md` is empty; no untracked build input exists. No new suite was run for this acceptance-record refresh.
+The live real-child automation was not re-run, as the caller instructed.
 
 ### Probe Execution
 
-No conventional `scripts/*/tests/probe-*.sh` exists and no phase PLAN declares such a probe. The registered-configuration “probe” is a Cucumber extension covered by the existing passing gate, not an omitted shell script. The separate automation used an account-free local scripted API provider and real detached children. On installed 0.88.0 it supplied one pass and one blocked acceptance check. Subsequent local-fix automation passed all controls; adoption remains outstanding, as detailed below. The earlier claim that these checks inherently require a real authenticated provider is superseded. This refresh only inspected retained evidence; no server or service was started by this verifier.
+No `scripts/*/tests/probe-*.sh` exists, and no plan declares one. The D-PG1-14 slow-call runs are historical and are carried below.
+
+### Requirements Coverage
+
+| Requirement | Plans | Status | Evidence |
+|---|---|---|---|
+| PG-AGENT-02 | 01, 02, 05, 10, 11 | SATISFIED | Floor `>=0.87.0`; fixed-bug records; the suite version is superseded as above. |
+| PG-AGENT-07b | 01, 11 | SATISFIED | Truth 2. |
+| PG-MCP-02 | 01, 02, 03, 05, 07, 08, 10, 11 | SATISFIED (REQUIREMENTS.md complete since 2026-11-13) | Truths 3, 7-12; 0.88.1 supplement. AGTLONGNAME-01 stays open and separate. |
+| PG-MCP-01 | 04, 06, 09, 10, 11 | SATISFIED | Truths 4, 13-15, 18. |
+
+No orphaned requirement.
+
+### Anti-Patterns Found
+
+| File / surface | Pattern | Severity | Impact |
+|---|---|---|---|
+| Phase 1 implementation files (convert, dispatch, if-field, adapter-entry, marker, mcp-implementation, mcp-server-features, mcp-builtin-translation, builtin-mcp-tool-names) | No TBD/FIXME/XXX marker | None | No blocker |
+| `docs/mcp-compatibility.md:507,521,751,765`, `.planning/upstream/pi-subagents-mcp-direct-tools.md:9` | Measurements dated to pi-subagents 0.88.0 while the suite runs 0.88.1 | Info | Dated records; the pinned scenarios pass on 0.88.1 |
+| `docs/mcp-compatibility.md:85,145,510` and others | Measurements dated to pi-mcp-adapter 7.0.0 | Info | Already present at the previous verification; line 9 states that the page reflects 7.0.1 |
+| `01-VALIDATION.md` | `nyquist_compliant: false` (PG1-TIMING-01) | WARNING (nonblocking debt) | Stays open, as the caller requested |
+
+### Judgment-Tier Prohibitions
+
+The 17 declarations are kept exactly in the frontmatter, each NON-AUTHORITATIVE and flagged. Re-checked against the current tree: no `MCP_TOOL_TIMEOUT` / `CLAUDE_CODE_MCP_TOOL_IDLE_TIMEOUT` read in `EXT/` (01-04-P1). No load-time model or timeout writer (01-01-P2, 01-06-P2). The alias targets are unchanged (01-01-P3). No record claims a suite proves 0.87.0 (01-01-P1, 01-02-P1, 01-11-P1). AGTLONGNAME-01 is still stated as a gap (01-05-P1). The cut-shape check precedes the proxy skip (01-08-P1). The gap scenario titles are intact (01-08-P2). No committed slow wait (01-09-P1, 01-10-P2). The CHANGELOG still says an installed agent keeps its ID until `update --map-model` (01-11-P2). The remaining items (01-06-P1, 01-07-P1/P2, 01-10-P1) are held by the named tests and docs above.
+
+### Human Verification Required
+
+None. The 17 prohibition flags are recommended reviews, not new manual tests.
+
+### Remaining Debt and Maintainer Review
+
+- PG1-TIMING-01 stays open (`01-VALIDATION.md`, `nyquist_compliant: false`).
+- AGTLONGNAME-01 stays open (explicit long-grant mismatch, external pi-subagents limitation).
+- Maintainer review: ROADMAP criterion 1 still says "0.88.0". No D-ID amends it, so the superseded-by-decision override rests on D-PG1-02's mechanism plus the 261113-8yn adoption record. Recording a D-ID, or amending the criterion text, would remove the need for the override.
+- Maintainer review: truth 3 keeps its historical override at the caller's request, although the supplement's runtime proof would support VERIFIED.
+
+---
+
+_Verified: 2026-11-16T05:35:26Z_
+_Verifier: gsd-verifier (staleness re-verification)_
+
+# Historical Evidence (carried verbatim from the 2026-11-12 report and the 2026-11-13 supplement)
+
+Line numbers in this section are those of 2026-11-12/13. The current citations are in the tables above.
+
+### Slow-Call Runs (D-PG1-14)
 
 The one-off D-PG1-14 evidence was independently read rather than inferred from SUMMARY prose:
 
@@ -165,76 +193,9 @@ The one-off D-PG1-14 evidence was independently read rather than inferred from S
 
 Both `adapter-slow.exit` and `builtin-slow.exit` contain 0. The temporary feature and waits were intentionally removed under D-PG1-14. These commands document the preserved run; they are not runnable now without reconstructing the temporary harness. They establish survival beyond the old 60-second timeout and the explicit-timeout control, not a 30-minute wall-clock measurement.
 
-### Requirements Coverage
-
-| Requirement | Source plans | Description | Status | Evidence / limit |
-|---|---|---|---|---|
-| PG-AGENT-02 | 01, 02, 05, 10, 11 | Raise floor and correct shipped-bug records | SATISFIED | Existing implementation evidence plus the recorded real detached child's explicit short-grant call. D-PG1-02 permits 0.88.0 suite coverage; it does not prove runtime 0.87.0. |
-| PG-AGENT-07b | 01, 11 | Bare mapped model ID uses session provider when available | SATISFIED | Converter, listing scenario, owner tests, installed-companion resolver probe and callers. |
-| PG-MCP-02 | 01, 02, 03, 05, 07, 08, 10, 11 | Adapter floor, long names in listings/hooks/exclusions | PASSED (override) for adopted-child exclusion; other scope VERIFIED | Listing/hook/name/staging assertions pass. Installed 0.88.0 still invalidates the exclusion controls. The local companion fix passes all real-child controls, but adoption and verification against the adopted build are explicitly deferred by the user to AGTAMBIENT-01 / SEED-261112-81c. AGTLONGNAME-01 concerns explicit long grants and remains separate. |
-| PG-MCP-01 | 04, 06, 09, 10, 11 | Idle defaults and user timeout preservation | SATISFIED | Config and lifecycle tests, named restage checks, preserved slow/control runs. |
-
-All four Phase 1 requirement IDs appear in plan frontmatter. No orphaned requirement was found. No requirement was marked complete in REQUIREMENTS.md by this verifier.
-
-### Decision Coverage
-
-All trackable CONTEXT.md decisions are honored by shipped artifacts.
-
-Canonical decision-coverage result: **14/14**, `not_honored: []`, warning-only gate. The sole new override is the explicit companion-adoption deferral. No acceptance or override is inferred from the prior size/budget exceptions. Those apply only to 01-01/01-06 and retained every check.
-
 ### Installed-Companion Characterization
 
 `test/integration/pi-subagents-child-launch-conformance.test.ts` calls the installed `buildInProcessChildLaunch` export in six cases: two intentionally pin the ambient-tool suppression bug and four preserve explicit grant/restriction behavior. Quick 261112-jzs records six passes on 0.88.0, exactly the two known-bug cases failing when the actual fixed module was substituted, four controls still passing, byte-for-byte restoration, and a restored six-pass run. The local-fixed positive runner passed all three real children. These characterization passes prove the installed bug remains detectable; they do not prove adopted-version exclusion. The new test is included in the complete gate and fingerprint.
-
-### Test Quality Audit
-
-| Test surface | Linked requirement | Active / skipped | Oracle / circularity | Assertion level | Verdict |
-|---|---|---|---|---|---|
-| Peer-floor architecture test and three reader paths | PG-AGENT-02, PG-MCP-02 | Active; no disabled requirement tests found | Literal manifest/range contract plus installed package identity | Value | Adequate |
-| Agent converter/stage/install/update and frontmatter feature | PG-AGENT-07b | Active | Literal expected frontmatter; actual pi-subagents listing; independent resolver probe | Value / behavioral | Adequate |
-| Adapter naming conformance | PG-MCP-02 | 11 active cases in final gate | Installed adapter `formatToolName`, plus pinned screenshot expected name | Value | Independent oracle |
-| Hook domain/dispatcher/features | PG-MCP-02 | Active | Literal recorded hook runs and event payload assertions | Behavioral | Adequate; CR-01 independently retested |
-| Agent long-name exclusion feature | PG-MCP-02 | Active | Real `subagent get` output | Value | Proves staging only; live child remains unverified |
-| Adapter long-grant conformance | PG-MCP-02 | Active | Actual pi-subagents resolver with hermetic input config/cache | Value | Deliberately proves mismatch; not a launch-success test |
-| Timeout translation/marker/entry/lifecycle | PG-MCP-01 | Active | Literal complete config/entry expectations and multi-step lifecycle | Behavioral | Adequate |
-| Slow/control evidence | PG-MCP-01 | Four preserved passing scenarios | Actual recorded model-turn output/duration | Behavioral | Adequate one-off evidence |
-
-Disabled-test scan found no `test.skip`, `it.skip`, `describe.skip`, `todo`, or equivalent disabled declarations in the changed requirement-linked files. Test fixture writes create inputs, not generated expected output. The long-grant test writes cache fixtures using the companion's hash to satisfy its real input contract; the independently asserted selection name is not generated from the resolver under test. No circular expected-output generator was found. Stand-in-child coverage is insufficient for either live truth. The separate real-child grant run now establishes outcome 20; the installed companion's blocked controls leave outcome 3 unverified for the adopted dependency; the local fix has passed the same boundary.
-
-### Anti-Patterns Found
-
-| File / surface | Pattern | Severity | Impact |
-|---|---|---|---|
-| Changed implementation/evidence file set | No unreferenced TBD/FIXME/XXX marker, missing body, or unwired artifact found | None | No blocker |
-| Guard branches in marker/translation/entry code | Empty return/null on invalid or inapplicable input | Info | Deliberate guarded absence; not a stub feeding user output |
-| `01-VALIDATION.md` | `nyquist_compliant: false`; focused-feedback timing sign-off incomplete | WARNING | Validation bookkeeping remains incomplete. It does not imply a missing test or an unperformed slow run. |
-| Existing review structural table | Estimated-coverage complexity advisories | Info | Preserved in 01-REVIEW; no deterministic correctness failure established by those estimates |
-
-Inversion checks covered (1) a default overwriting a user value, (2) hook suppression/misattribution at the exact-64 boundary, and (3) staging being mistaken for detached-child enforcement. The first two were falsified by implementation plus passing named tests. The third is the concrete remaining evidence gap. No additional uncovered error path was established; malformed metadata/markers and wrong-server cases have active owner tests.
-
-### Judgment-Tier Prohibitions
-
-All 17 declarations are preserved exactly in frontmatter. Each row below is a **NON-AUTHORITATIVE LLM-judge assessment; unverified-prohibition — human review recommended**, not a green deterministic prohibition verdict. No test-tier prohibition was declared. Existing evidence supports “no violation observed” for each item; no new risk acceptance was made.
-
-| ID | Constraint reviewed | Existing evidence and assessment |
-|---|---|---|
-| 01-01-P1 | No false 0.87.0 suite claim | Suite JSON/readers and docs distinguish 0.88.0; D-PG1-02 and security T-01-29 support the wording. |
-| 01-01-P2 | No load-time model rewrite | Change stays in conversion; startup paths unchanged; D-PG1-05 and release note retain update-only adoption. |
-| 01-01-P3 | Preserve six alias targets | Six map entries differ only by removed provider prefix; literal owner cases retain targets. |
-| 01-02-P1 | No misleading tool/test floor claims | Launcher/canary/contributor/CI/test-support records name suite versions; pin checks and final static check pass. |
-| 01-04-P1 | Do not read Claude timeout environment variables | No reference found in production extension code; values come from closed transport table. |
-| 01-05-P1 | Do not claim long explicit grants work | Resolver conformance, AGTLONGNAME-01 and unfiled draft explicitly preserve the mismatch and source-derived launch consequence. |
-| 01-06-P1 | Preserve user timeout | Named differing-value test and whole-file update scenario; plugin precedence and equal-default limitation are declared. |
-| 01-06-P2 | No ordinary-load default write | Existing restage caller chain; only established AMIG-01 load migration restages; security T-01-16. |
-| 01-07-P1 | No sibling-server hook caused by retained prefix | Guard at 55 units plus exact fit; wrong-server owner tests and CR-01 rereview. |
-| 01-07-P2 | No fabricated full tool identity | Both literal and metadata candidates require exact fit to registered event name. |
-| 01-08-P1 | No proxy-shaped direct-call hook suppression | Cut-shape predicate precedes proxy-input check; owner and feature regressions pass. |
-| 01-08-P2 | No false full-name parity in missing-data events | Two feature titles and compatibility pages explicitly name capability gaps. |
-| 01-09-P1 | No committed slow wait or suite-proof overstatement | Temporary feature absent; ordinary waits restored; preserved run identified as one-off. |
-| 01-10-P1 | No false real-child scenario claim | Updated documentation labels the real detached-child run as separate one-off automation, identifies the explicit short-grant pass, and retains the exclusion blocker. It makes no permanent-suite claim. |
-| 01-10-P2 | No false slow-call suite claim | Dated one-off run and preserved JSON/exit evidence; permanent suite checks configuration. |
-| 01-11-P1 | No false floor proof in decision record | D-PG1-02 explicitly says no suite proves 0.87.0. |
-| 01-11-P2 | No automatic installed-agent model adoption claim | CHANGELOG requires the next `update --map-model`. |
 
 ### Recorded Real-Child Automation
 
@@ -281,21 +242,6 @@ PG_COMPANION_INDEX=<adopted-build>/index.js node .planning/debug/artifacts/real-
 
 The runner without `PG_COMPANION_INDEX` selects the project's installed companion, which is currently still 0.88.0. It creates a fresh isolated fixture and asserts actual provider inventories, child echo results, and MCP server requests. The unrestricted child must offer and call the long direct tool; the restricted child must omit it while calling short; the explicit short-grant child must also succeed. Reproduction details are in the artifact README. No rerun is requested until the release/adoption prerequisite changes. PR #3259's last recorded state is open, with addressed review and passing CI on `7629470d`; that is not release evidence. The seed also requires replacing the two known-bug characterization assertions only after positive acceptance, retaining the four restriction controls, and passing the combined full gate.
 
-### Human Verification Required
-
-None. The automated external-adoption blocker is explicitly deferred; its historical failed controls and future acceptance remain recorded above. The autonomous prohibition assessments remain prominently flagged for recommended review, with no invented human acceptance.
-
-### Advisory (New Scope, Unevidenced)
-
-None. The installed-companion prerequisite and the successful local fix are supported by retained runtime output and source, not an unevidenced new-scope finding.
-
-### Remaining Validation and Scope
-
-`01-VALIDATION.md` leaves focused-feedback timing sign-off incomplete and `nyquist_compliant` false. Existing task tests, the five wave gates, the prior final combined gate, both slow/control runs, and the separate real-child short grant passed. The refreshed combined gate at `ce06beb3` passed with exit 0; it does not resolve the separate companion-blocked acceptance check. Carry the incomplete timing evidence review as PG1-TIMING-01 in `01-VALIDATION.md`. It is nonblocking bookkeeping, with `nyquist_compliant: false`, not an absent product test or a new human acceptance item.
-
-The full milestone roadmap was checked. Phase 3 owns default background launch/main-session hook behavior; Phase 7 owns explicit `tools` plus `disallowedTools`; neither closes adopted-version exclusion. The user has now explicitly deferred that scope through the release-triggered seed instead of assigning it to those phases. AGTLONGNAME-01 is an explicitly recorded external companion limitation, not a claim of completed grant parity.
-
-Security reports 41/41 threats closed and zero open threats; code rereview is clean after CR-01. The updated security record preserves 41/41 closure and distinguishes the real-child grant pass from the remaining exclusion blocker. Those results alone did not waive the acceptance check; the user's later explicit deferral governs its phase-closure disposition. The explicit external-adoption override above is the only new acceptance; it does not change those audit findings.
 
 ## PLAN Truth Coverage Appendix
 
@@ -364,11 +310,6 @@ These are the original 59 PLAN truths, retained for audit. Their plan-specific a
 | 01-11 T6 | `CHANGELOG.md` has one reader-facing entry under `## [Unreleased]` for this work: the new floors, the bare model ID of `--map-model` with what an installed agent needs (D-PG1-05), the default timeouts with when an installed plugin gets them (D-PG1-12), and long tool names under pi-mcp-adapter. `package.json` keeps its version. | VERIFIED | Outcome 17; final gate and relevant source/owner/feature evidence above. |
 
 For 01-07 T3, the “longer than 64” restriction applies to unverified hook-literal candidates. The later 01-08 metadata path and CR-01 correction allow a matching original 64-character metadata name. Exact-fit validation remains mandatory; this is the documented implementation evolution, not an override.
-
----
-
-_Verified: 2026-11-12T20:00:07Z_
-_Verifier: gsd-verifier_
 
 ## PG-MCP-02 Published-Companion Adoption Supplement — 2026-11-13
 
