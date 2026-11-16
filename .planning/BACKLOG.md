@@ -5430,6 +5430,8 @@ Noted 2026-11-15 (parity-gaps, Phase 6, D-PG6-02). The bridge reads one hop, so 
 
 Noted 2026-11-15 (parity-gaps, Phase 6, D-PG6-19). A bridged command's `command_name` is its Pi name, which differs from Claude Code's name for a command file named `<plugin>-…` (PG-CMD-09 covers the alias) and on Windows, where Pi joins with `.`.
 
+Update 2026-11-15 (parity-gaps, Phase 11, D-PG11-01): install now stores Claude Code's name of a command in the staged command's record (`claudeName`), so a `UserPromptExpansion` hook could be given that name where it differs from the Pi name. D-PG6-19 is unchanged, and the change would amend it.
+
 ## EXPANSIONNAMETABLE-01: a typed line is not refused when the plugin name table cannot be loaded
 
 Noted 2026-11-15 (parity-gaps, Phase 6, 06-12). When the plugin name table cannot be loaded, the expansion resolver answers from Pi's command list alone, so a `UserPromptExpansion` hook that names a skill by its Claude-form name does not run. The fail-closed rule may call for a refusal instead.
@@ -5492,3 +5494,7 @@ Noted 2026-11-15 (parity-gaps, Phase 10). A plugin with a command `opts` and a s
 ## MCPOPTFALLBACK-01: an option reference inside a `${NAME:-default}` default stays partly literal
 
 Noted 2026-11-15 (parity-gaps, Phase 10, D-PG10-11). In an MCP field, `${FOO:-${user_config.x}}` is split: the option becomes its own segment, and the `${FOO:-` text and the closing `}` stay as written. Claude Code 2.1.323 fills the option first and then reads `${FOO:-value}` (read in the binary). Under pi-mcp-adapter the value is not in the entry, so that read cannot run, and Pi's built-in MCP does the same for one behavior. pi-mcp-adapter 7.0.1's `interpolateEnvVars` cannot nest a reference in a fallback, because its fallback pattern stops at the first `}`. A fix needs a design for each implementation.
+
+## CMDNESTNAME-01: a frontmatter `name` on a nested command
+
+Noted 2026-11-15 (parity-gaps, Phase 11, research Open Question 2). Unverified: Claude Code 2.1.323's command builder appears to replace only the last segment of a nested command's name with a frontmatter `name` (`Ft=e.slice(0,e.lastIndexOf(":")+1)`, then `` `${Ft}${ln}` ``). So `commands/build/web.md` with `name: x` in plugin `demo` would be `demo:build:x`, where this extension gives `demo:x` (`frontmatterNameAliases`). This is a reading of one fragment of the binary, `e` was not traced, and no session ran. Confirm it in the binary or with a probe before changing the alias.
