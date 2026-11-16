@@ -13,6 +13,7 @@ import { captureDebugLog } from "../platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type {
+  AliasMenuText,
   PluginAliasTarget,
   PluginNames,
   SkillAliasDependencies,
@@ -26,6 +27,10 @@ const AGENT_DIR = "/agent";
 const CWD = "/work";
 const PROJECT_ROOT = path.join(CWD, ".pi");
 
+/** The menu text of the staged skill and command files of these cases. */
+const SKILL_MENU: AliasMenuText = { description: "A skill.", argumentHint: undefined };
+const COMMAND_MENU: AliasMenuText = { description: "A command.", argumentHint: undefined };
+
 /** The alias table of the plugin names that `loadPluginNames` gives. */
 async function loadPluginAliases(
   ...args: Parameters<typeof loadPluginNames>
@@ -38,12 +43,16 @@ function stagedPath(root: string, generatedName: string): string {
   return path.join(root, "pi-claude-marketplace", "resources", "skills", generatedName, "SKILL.md");
 }
 
-/** A staged `SKILL.md` whose record stores `names`. */
-function recordedSkill(generatedName: string, names: readonly string[]): string {
+/** A staged `SKILL.md` whose record stores `names`, with the frontmatter lines `menuLines`. */
+function recordedSkill(
+  generatedName: string,
+  names: readonly string[],
+  menuLines: readonly string[] = ["description: A skill."],
+): string {
   return [
     "---",
     `name: ${generatedName}`,
-    "description: A skill.",
+    ...menuLines,
     `pi-claude-marketplace: {"names":${JSON.stringify(names)},"pluginRoot":"/plugin","pluginData":"/data"}`,
     "---",
     "",
@@ -568,13 +577,13 @@ test("D-CF2-02: reads the staged skill file from disk with the production reader
 });
 
 /** The table target of the bridged skill `generatedName`. */
-function skill(generatedName: string): PluginAliasTarget {
-  return { kind: "skill", generatedName };
+function skill(generatedName: string, menu: AliasMenuText = SKILL_MENU): PluginAliasTarget {
+  return { kind: "skill", generatedName, menu };
 }
 
 /** The table target of the bridged command `name`. */
-function command(name: string): PluginAliasTarget {
-  return { kind: "command", name };
+function command(name: string, menu: AliasMenuText = COMMAND_MENU): PluginAliasTarget {
+  return { kind: "command", name, menu };
 }
 
 /** The staged command file of `name` under the scope root `root`. */
@@ -880,11 +889,11 @@ test("D-CF2-02: the plugin table keeps every skill alias and gives a command the
   assert.deepStrictEqual(
     [...aliases],
     [
-      ["demo:review", { kind: "skill", generatedName: "demo-review" }],
-      ["demo:fancy", { kind: "skill", generatedName: "demo-review" }],
-      ["fancy", { kind: "skill", generatedName: "demo-review" }],
-      ["demo:release", { kind: "command", name: "demo:deploy" }],
-      ["release", { kind: "command", name: "demo:deploy" }],
+      ["demo:review", skill("demo-review")],
+      ["demo:fancy", skill("demo-review")],
+      ["fancy", skill("demo-review")],
+      ["demo:release", command("demo:deploy")],
+      ["release", command("demo:deploy")],
     ],
   );
   verify(pi);
@@ -1057,6 +1066,133 @@ test("D-PG6-18: the name cache does not keep a rejected load", async () => {
   assert.deepStrictEqual(
     { failed, loads, aliases: [...names.aliases.keys()] },
     { failed: "state unreadable", loads: 2, aliases: ["demo:review"] },
+  );
+  verify(pi);
+});
+
+test("D-PG11-09: a skill alias and a command alias carry the target's staged description and argument hint", async () => {
+  // arrange
+  const skillFile = stagedPath(AGENT_DIR, "demo-review");
+  const commandFile = stagedCommandPath(AGENT_DIR, "demo:ship");
+  const pi = piWith([
+    skillCommand("demo-review", skillFile),
+    stagedPromptCommand("demo:ship", commandFile),
+  ]);
+  const reviewMenu = { description: "Reviews a change.", argumentHint: "<change>" };
+  const shipMenu = { description: "Ships the branch.", argumentHint: "<environment>" };
+
+  // act
+  const aliases = await loadPluginAliases(
+    pi,
+    CWD,
+    false,
+    dependencies(
+      {
+        [AGENT_DIR]: stateWithCommands({
+          demo: { skills: ["demo-review"], prompts: ["demo:ship"] },
+        }),
+      },
+      {
+        [skillFile]: recordedSkill(
+          "demo-review",
+          ["demo:review", "demo:fancy"],
+          ["description: Reviews a change.", "argument-hint: <change>"],
+        ),
+        [commandFile]: [
+          "---",
+          "name: release",
+          "description: Ships the branch.",
+          "argument-hint: <environment>",
+          "---",
+          "",
+          "Body.",
+          "",
+        ].join("\n"),
+      },
+    ),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    [...aliases],
+    [
+      ["demo:review", skill("demo-review", reviewMenu)],
+      ["demo:fancy", skill("demo-review", reviewMenu)],
+      ["demo:release", command("demo:ship", shipMenu)],
+      ["release", command("demo:ship", shipMenu)],
+    ],
+  );
+  verify(pi);
+});
+
+for (const { title, menuLines } of [
+  { title: "absent", menuLines: [] },
+  { title: "empty", menuLines: ['description: ""', 'argument-hint: ""'] },
+  { title: "not text", menuLines: ["description: 3", "argument-hint: { name: change }"] },
+]) {
+  test(`D-PG11-09: a description and an argument hint that are ${title} give no menu text`, async () => {
+    // arrange
+    const file = stagedPath(AGENT_DIR, "demo-review");
+    const pi = piWith([skillCommand("demo-review", file)]);
+
+    // act
+    const aliases = await loadPluginAliases(
+      pi,
+      CWD,
+      false,
+      dependencies(
+        { [AGENT_DIR]: stateWith({ demo: ["demo-review"] }) },
+        { [file]: recordedSkill("demo-review", ["demo:review"], menuLines) },
+      ),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      [...aliases],
+      [["demo:review", skill("demo-review", { description: undefined, argumentHint: undefined })]],
+    );
+    verify(pi);
+  });
+}
+
+test("D-PG11-09: an alias that a second skill also claims keeps the first skill's menu text", async () => {
+  // arrange
+  const first = stagedPath(AGENT_DIR, "demo-review");
+  const second = stagedPath(AGENT_DIR, "demo-audit");
+  const pi = piWith([skillCommand("demo-review", first), skillCommand("demo-audit", second)]);
+  const reviewMenu = { description: "Reviews a change.", argumentHint: undefined };
+  const auditMenu = { description: "Audits a change.", argumentHint: undefined };
+
+  // act
+  const aliases = await loadPluginAliases(
+    pi,
+    CWD,
+    false,
+    dependencies(
+      { [AGENT_DIR]: stateWith({ demo: ["demo-review", "demo-audit"] }) },
+      {
+        [first]: recordedSkill(
+          "demo-review",
+          ["demo:review", "fancy"],
+          ["description: Reviews a change."],
+        ),
+        [second]: recordedSkill(
+          "demo-audit",
+          ["demo:audit", "fancy"],
+          ["description: Audits a change."],
+        ),
+      },
+    ),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    [...aliases],
+    [
+      ["demo:review", skill("demo-review", reviewMenu)],
+      ["fancy", skill("demo-review", reviewMenu)],
+      ["demo:audit", skill("demo-audit", auditMenu)],
+    ],
   );
   verify(pi);
 });

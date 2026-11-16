@@ -9,6 +9,7 @@ import { createPluginNamesCache } from "../../extensions/pi-claude-marketplace/o
 import { captureDebugLog } from "../platform/debug-log-capture.ts";
 
 import type {
+  AliasMenuText,
   PluginAliasTarget,
   PluginNamesCache,
 } from "../../extensions/pi-claude-marketplace/orchestrators/skill-alias-state.ts";
@@ -64,9 +65,11 @@ function aliasCache(pi: ExtensionAPI, loadAliases: AliasLoader): PluginNamesCach
   );
 }
 
-/** The alias target of the bridged skill `generatedName`. */
-function skillAlias(generatedName: string): PluginAliasTarget {
-  return { kind: "skill", generatedName };
+const NO_MENU: AliasMenuText = { description: undefined, argumentHint: undefined };
+
+/** The alias target of the bridged skill `generatedName`, with the menu text `menu`. */
+function skillAlias(generatedName: string, menu: AliasMenuText = NO_MENU): PluginAliasTarget {
+  return { kind: "skill", generatedName, menu };
 }
 
 /** Registers the handlers on strict mocks and captures the input listener. */
@@ -317,8 +320,8 @@ test("T-02-17: passes Pi's project trust to the alias table and the invocation",
 });
 
 const SHIP_ALIASES: ReadonlyMap<string, PluginAliasTarget> = new Map([
-  ["demo:fancy", { kind: "command", name: "demo:ship" }],
-  ["fancy", { kind: "command", name: "demo:ship" }],
+  ["demo:fancy", { kind: "command", name: "demo:ship", menu: NO_MENU }],
+  ["fancy", { kind: "command", name: "demo:ship", menu: NO_MENU }],
 ]);
 
 for (const { token, event, expected } of [
@@ -1147,4 +1150,139 @@ test("keeps Pi's suggestions and logs when the alias table fails, then loads it 
   verify(pi);
   verify(ctx);
   verify(ui);
+});
+
+/**
+ * The suggestions of the alias provider for the typed text `typed`, over Pi's
+ * own `nativeItems` and the alias table `aliases`.
+ */
+async function aliasSuggestions(
+  typed: string,
+  nativeItems: readonly { value: string; label: string; description?: string }[],
+  aliases: ReadonlyMap<string, PluginAliasTarget>,
+): Promise<unknown> {
+  const pi = mock<ExtensionAPI>({ exactParams: true, name: "extension API" });
+  const ctx = mock<ExtensionContext>({ exactParams: true, name: "context" });
+  const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "UI" });
+  const factory = It.willCapture<ProviderFactory>("provider factory");
+  const session = It.willCapture<SessionListener>("session");
+  const input = It.willCapture<InputListener>("input");
+  when(() => {
+    pi.on("session_start", session);
+  })
+    .thenReturn()
+    .times(1);
+  when(() => {
+    pi.on("input", input);
+  })
+    .thenReturn()
+    .times(1);
+  when(() => ctx.ui)
+    .thenReturn(ui)
+    .times(1);
+  when(() => {
+    ui.addAutocompleteProvider(factory);
+  })
+    .thenReturn()
+    .times(1);
+  when(() => ctx.cwd)
+    .thenReturn("/workspace")
+    .times(1);
+  when(() => ctx.isProjectTrusted())
+    .thenReturn(true)
+    .times(1);
+  const base = {
+    getSuggestions: () =>
+      Promise.resolve(nativeItems.length === 0 ? null : { items: [...nativeItems], prefix: typed }),
+    applyCompletion: (lines: string[]) => ({ lines, cursorLine: 0, cursorCol: 0 }),
+  } satisfies AutocompleteProvider;
+
+  registerSkillAliases(
+    pi,
+    aliasCache(pi, () => Promise.resolve(aliases)),
+  );
+  session.value?.({ type: "session_start", reason: "startup" }, ctx);
+  const suggestions = await factory
+    .value?.(base)
+    .getSuggestions([typed], 0, typed.length, { signal: new AbortController().signal });
+  verify(pi);
+  verify(ctx);
+  verify(ui);
+  return suggestions;
+}
+
+for (const { title, menu, expected } of [
+  {
+    title: "joins the argument hint and the description with a spaced em dash",
+    menu: { description: "Reviews a change.", argumentHint: "<change>" },
+    expected: { description: "<change> \u2014 Reviews a change." },
+  },
+  {
+    title: "shows the argument hint alone when the target has no description",
+    menu: { description: undefined, argumentHint: "<change>" },
+    expected: { description: "<change>" },
+  },
+  {
+    title: "shows the description alone when the target has no argument hint",
+    menu: { description: "Reviews a change.", argumentHint: undefined },
+    expected: { description: "Reviews a change." },
+  },
+  {
+    title: "has no description when the target has neither",
+    menu: { description: undefined, argumentHint: undefined },
+    expected: {},
+  },
+]) {
+  test(`D-PG11-09: an alias suggestion ${title}, as pi-tui 1.5.0 builds a native row`, async () => {
+    // act
+    const suggestions = await aliasSuggestions(
+      "/demo:fa",
+      [],
+      new Map([["demo:fancy", skillAlias("demo-review", menu)]]),
+    );
+
+    // assert
+    assert.deepStrictEqual(suggestions, {
+      items: [{ value: "demo:fancy", label: "demo:fancy", ...expected }],
+      prefix: "/demo:fa",
+    });
+  });
+}
+
+test("D-PG11-09: alias suggestions follow Pi's own items in the table's order and skip a value Pi already suggests", async () => {
+  // arrange
+  const nativeItems = [
+    { value: "demo:fancy", label: "demo:fancy", description: "Pi's own row." },
+    { value: "skill:demo-review", label: "skill:demo-review" },
+  ];
+  const reviewMenu = { description: "Reviews a change.", argumentHint: "<change>" };
+
+  // act
+  const suggestions = await aliasSuggestions(
+    "/demo:",
+    nativeItems,
+    new Map([
+      ["demo:fancy", skillAlias("demo-review", reviewMenu)],
+      ["demo:zeta", skillAlias("demo-review", reviewMenu)],
+      ["demo:alpha", skillAlias("demo-review", reviewMenu)],
+    ]),
+  );
+
+  // assert
+  assert.deepStrictEqual(suggestions, {
+    items: [
+      ...nativeItems,
+      {
+        value: "demo:zeta",
+        label: "demo:zeta",
+        description: "<change> \u2014 Reviews a change.",
+      },
+      {
+        value: "demo:alpha",
+        label: "demo:alpha",
+        description: "<change> \u2014 Reviews a change.",
+      },
+    ],
+    prefix: "/demo:",
+  });
 });

@@ -127,7 +127,7 @@ Feature: Slash command aliases
       | call | role | text                                                                                                                                                                                                                                                                  |
       | 1    | user | <skill name="demo-review" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-review/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-review.\n\nReview the change.\n\nARGUMENTS: Ada\n</skill> |
 
-  Scenario: Pi's terminal menu offers a command's plugin-qualified alias
+  Scenario: Pi's terminal menu offers a command's plugin-qualified alias with its description
     Given the published plugin "demo" of the marketplace "fixtures" has the slash command "ship" with this command file:
       """
       ---
@@ -141,5 +141,5 @@ Feature: Slash command aliases
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     When the user types the slash command prefix "/demo:fa" in pi's terminal
     Then pi's terminal menu offers these slash commands:
-      | command    | argument hint | description |
-      | demo:fancy |               |             |
+      | command    | argument hint | description       |
+      | demo:fancy |               | Ships the branch. |

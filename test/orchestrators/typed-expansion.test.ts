@@ -36,11 +36,13 @@ const BRIDGED_COMMANDS: readonly Command[] = [
   command("skill:demo-legacy", "skill", "temporary"),
 ];
 
+const NO_MENU = { description: undefined, argumentHint: undefined };
+
 const NAMES: PluginNames = {
   aliases: new Map([
-    ["demo:status", { kind: "skill", generatedName: "demo-status" }],
-    ["demo:legacy", { kind: "skill", generatedName: "demo-legacy" }],
-    ["demo:fancy", { kind: "command", name: "demo:cmd" }],
+    ["demo:status", { kind: "skill", generatedName: "demo-status", menu: NO_MENU }],
+    ["demo:legacy", { kind: "skill", generatedName: "demo-legacy", menu: NO_MENU }],
+    ["demo:fancy", { kind: "command", name: "demo:cmd", menu: NO_MENU }],
   ]),
   skills: new Map([["demo-status", "demo:status"]]),
   commands: new Set(["demo:cmd"]),

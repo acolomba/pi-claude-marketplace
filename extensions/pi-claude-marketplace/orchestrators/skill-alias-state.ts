@@ -28,6 +28,12 @@
 // skill already answers to. SK-6: a name that a Pi command of another source
 // already has stays with that command.
 //
+// D-PG11-09: the same read of a staged file gives the menu text of each
+// alias, the target's own `description` and `argument-hint`. A staged skill
+// and a staged command keep both keys, and a skill's `description` already
+// holds its `when_to_use` fold. Pi's terminal menu shows the text on an alias
+// row only; Pi's own row of a skill has no place for the hint.
+//
 // D-PG6-18 / D-PG6-19: the same read pass gives the typed-line resolver the
 // Claude-form name of each loaded bridged skill and the bridged commands Pi
 // loaded. One cache (`createPluginNamesCache`) holds the table of a directory
@@ -73,10 +79,16 @@ export interface SkillAliasDependencies {
   readonly readFile: (file: string) => Promise<string>;
 }
 
-/** What a plugin alias stands for: a bridged skill or a bridged command. */
+/** D-PG11-09: the text an alias row of Pi's terminal menu shows for its target. */
+export interface AliasMenuText {
+  readonly description: string | undefined;
+  readonly argumentHint: string | undefined;
+}
+
+/** What a plugin alias stands for: a bridged skill or a bridged command, with its menu text. */
 export type PluginAliasTarget =
-  | { readonly kind: "skill"; readonly generatedName: string }
-  | { readonly kind: "command"; readonly name: string };
+  | { readonly kind: "skill"; readonly generatedName: string; readonly menu: AliasMenuText }
+  | { readonly kind: "command"; readonly name: string; readonly menu: AliasMenuText };
 
 const DEFAULT_DEPENDENCIES: SkillAliasDependencies = {
   loadState,
@@ -185,21 +197,41 @@ const COMMAND_KIND: AliasKind = {
   ],
 };
 
-/** The names the staged file of `entry` claims; none when it cannot be read. */
-async function entryNames(
+/** The names and the menu text that the staged file of one loaded entry gives. */
+interface EntryClaim {
+  readonly entry: LoadedEntry;
+  readonly names: readonly string[];
+  readonly menu: AliasMenuText;
+}
+
+/** A frontmatter value as menu text: a string with text, as pi-tui 1.5.0 shows one. */
+function menuString(value: unknown): string | undefined {
+  return typeof value === "string" && value !== "" ? value : undefined;
+}
+
+/** D-PG11-09: the menu text of a staged skill or command. */
+function menuText(frontmatter: Record<string, unknown>): AliasMenuText {
+  return {
+    description: menuString(frontmatter.description),
+    argumentHint: menuString(frontmatter["argument-hint"]),
+  };
+}
+
+/** The claim of the staged file of `entry`; no name when it cannot be read. */
+async function entryClaim(
   kind: AliasKind,
   entry: LoadedEntry,
   dependencies: Pick<SkillAliasDependencies, "readFile">,
-): Promise<readonly string[]> {
+): Promise<EntryClaim> {
   let frontmatter: Record<string, unknown>;
   try {
     frontmatter = parseFrontmatter(await dependencies.readFile(entry.file)).frontmatter;
   } catch (err) {
     hookDebugLog(`skill aliases skip ${entry.file}: ${errorMessage(err)}`, "skills");
-    return [];
+    return { entry, names: [], menu: { description: undefined, argumentHint: undefined } };
   }
 
-  return kind.names(entry, frontmatter);
+  return { entry, names: kind.names(entry, frontmatter), menu: menuText(frontmatter) };
 }
 
 /** The entries of the state under `root` whose staged file Pi has loaded, in state order. */
@@ -255,12 +287,6 @@ async function readScopes(
   return scopes;
 }
 
-/** The names that the staged file of one loaded entry claims. */
-interface EntryClaim {
-  readonly entry: LoadedEntry;
-  readonly names: readonly string[];
-}
-
 /** The claims of the loaded entries of `kind`, user root first, state order within a root. */
 async function kindClaims(
   kind: AliasKind,
@@ -276,25 +302,23 @@ async function kindClaims(
   const entries = scopes.flatMap(({ root, state }) =>
     loadedEntries(kind, state, root, loadedPaths),
   );
-  return Promise.all(
-    entries.map(async (entry) => ({ entry, names: await entryNames(kind, entry, resolved) })),
-  );
+  return Promise.all(entries.map((entry) => entryClaim(kind, entry, resolved)));
 }
 
 /**
- * D-CF2-02: maps each name that a claim holds to the entry's own name. The
- * first claim wins, and a name in `reserved`, which a Pi command of another
- * source has, is never mapped (SK-6).
+ * D-CF2-02: maps each name that a claim holds to the claim. The first claim
+ * wins, and a name in `reserved`, which a Pi command of another source has,
+ * is never mapped (SK-6).
  */
 function claimedAliases(
   claims: readonly EntryClaim[],
   reserved: ReadonlySet<string>,
-): ReadonlyMap<string, string> {
-  const aliases = new Map<string, string>();
-  for (const { entry, names } of claims) {
-    for (const alias of names) {
+): ReadonlyMap<string, EntryClaim> {
+  const aliases = new Map<string, EntryClaim>();
+  for (const claim of claims) {
+    for (const alias of claim.names) {
       if (!reserved.has(alias) && !aliases.has(alias)) {
-        aliases.set(alias, entry.name);
+        aliases.set(alias, claim);
       }
     }
   }
@@ -328,7 +352,8 @@ export interface PluginNames {
    * name, then each name that a loaded bridged command answers to and no skill
    * claimed, mapped to the command's Pi name: the Claude Code name its record
    * stores (D-PG11-01), then the names its frontmatter `name` gives it. A
-   * command alias never displaces a name a skill answers to.
+   * command alias never displaces a name a skill answers to. Each target
+   * carries the menu text of the entry that claimed the alias (D-PG11-09).
    */
   readonly aliases: ReadonlyMap<string, PluginAliasTarget>;
   /** D-PG6-19: the Claude-form name of each loaded bridged skill, by its generated name. */
@@ -355,13 +380,13 @@ export async function loadPluginNames(
     kindClaims(COMMAND_KIND, commands, scopes, resolved),
   ]);
   const aliases = new Map<string, PluginAliasTarget>();
-  for (const [alias, generatedName] of claimedAliases(skillClaims, reserved)) {
-    aliases.set(alias, { kind: "skill", generatedName });
+  for (const [alias, { entry, menu }] of claimedAliases(skillClaims, reserved)) {
+    aliases.set(alias, { kind: "skill", generatedName: entry.name, menu });
   }
 
-  for (const [alias, name] of claimedAliases(commandClaims, reserved)) {
+  for (const [alias, { entry, menu }] of claimedAliases(commandClaims, reserved)) {
     if (!aliases.has(alias)) {
-      aliases.set(alias, { kind: "command", name });
+      aliases.set(alias, { kind: "command", name: entry.name, menu });
     }
   }
 

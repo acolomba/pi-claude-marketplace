@@ -9,7 +9,11 @@ import { openNotificationRun } from "../shared/notification-run.ts";
 
 import { finishedTransform } from "./input-transform.ts";
 
-import type { PluginNamesCache } from "../orchestrators/skill-alias-state.ts";
+import type {
+  AliasMenuText,
+  PluginAliasTarget,
+  PluginNamesCache,
+} from "../orchestrators/skill-alias-state.ts";
 import type {
   SkillInvocationOutcome,
   SkillInvocationRequest,
@@ -24,23 +28,53 @@ import type {
 
 type Suggestions = Awaited<ReturnType<AutocompleteProvider["getSuggestions"]>>;
 
+// D-PG11-09: pi-tui 1.5.0 joins a command's argument hint and description
+// with an em dash between spaces. It stays escaped because the
+// fix-unicode-dashes hook rewrites a literal one.
+const HINT_SEPARATOR = " \u2014 ";
+
+/**
+ * D-PG11-09: the description of an alias suggestion, built as pi-tui 1.5.0
+ * builds a native command's: the hint and the description joined, or either
+ * part alone.
+ */
+function menuDescription({ description, argumentHint }: AliasMenuText): string | undefined {
+  if (argumentHint === undefined) {
+    return description;
+  }
+
+  return description === undefined
+    ? argumentHint
+    : `${argumentHint}${HINT_SEPARATOR}${description}`;
+}
+
 /** Adds unclaimed skill aliases alongside Pi's native suggestions. */
 function appendAliasSuggestions(
   typed: string,
   suggestions: Suggestions,
-  aliases: Iterable<string>,
+  aliases: Iterable<[string, PluginAliasTarget]>,
 ): Suggestions {
   const query = typed.slice(1).toLowerCase();
   const nativeItems = suggestions?.items ?? [];
   const existing = new Set(nativeItems.map((item) => item.value));
   const matches = [...aliases].filter(
-    (alias) => alias.toLowerCase().includes(query) && !existing.has(alias),
+    ([alias]) => alias.toLowerCase().includes(query) && !existing.has(alias),
   );
 
   return matches.length === 0
     ? suggestions
     : {
-        items: [...nativeItems, ...matches.map((alias) => ({ value: alias, label: alias }))],
+        items: [
+          ...nativeItems,
+          ...matches.map(([alias, target]) => {
+            const description = menuDescription(target.menu);
+            return {
+              value: alias,
+              label: alias,
+              ...(description !== undefined && { description }),
+            };
+          }),
+        ],
         prefix: suggestions?.prefix ?? typed,
       };
 }
@@ -67,7 +101,7 @@ function aliasProvider(
       // A table that cannot be loaded adds no suggestion, so Pi's stay.
       try {
         const { aliases } = await names.get(ctx.cwd, ctx.isProjectTrusted());
-        return appendAliasSuggestions(typed, suggestions, aliases.keys());
+        return appendAliasSuggestions(typed, suggestions, aliases.entries());
       } catch (err) {
         hookDebugLog(`alias completion skipped: ${errorMessage(err)}`, "skills");
         return suggestions;
