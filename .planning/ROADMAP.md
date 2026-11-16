@@ -104,7 +104,7 @@ run against them. Phase 4 depends on Phase 1 alone, so it can move earlier.
 - [x] **Phase 5: Stop Continuation and Hook Failures** - A blocking `Stop` hook continues the same run, a missing script does not block, failures and `stopReason` are shown, context stops at 10,000 characters, and a plain `async` hook has no timeout (completed 2026-11-14)
 - [x] **Phase 6: Hook Inputs and Events** - Hooks receive `tool_use_id` and the other missing stdin fields, `UserPromptExpansion` hooks run before an expansion, and a continued session reports `resume` (completed 2026-11-15)
 - [x] **Phase 7: Agent Frontmatter and Grants** - Agent frontmatter is read as YAML, `Agent` and `Task` grants let an agent delegate, `model: inherit` is passed on, and both tool lists restrict an agent (completed 2026-11-14)
-- [x] **Phase 8: Workflow Agents and Run Paths** - A workflow runs the plugin's own agents and notes a missing one, an agent with a `Workflow` grant starts its plugin's workflow, and the uncovered run paths and the limits of a workflow subagent are proven or documented (completed 2026-11-15)
+- [x] **Phase 8: Workflow Agents and Run Paths** - A workflow runs the plugin's own agents and notes a missing one, an agent's `Workflow` grant stays dropped, as no Claude Code subagent gets the Workflow tool, and the uncovered run paths and the limits of a workflow subagent are proven or documented (completed 2026-11-15)
 - [x] **Phase 9: Adapter Entries and MCP Features** - Under the adapter a stdio server stays alive and user-written fields survive updates, the sampling and UI question is settled, and resources, prompts, and elicitation are documented and tested (completed 2026-11-14)
 - [x] **Phase 10: Plugin Options, Variables, and Trust** - `userConfig` defaults reach hooks, servers, and content, user-scope skills and commands get the project directory, a plugin `bin` joins `PATH` only when it exists and the project is trusted, and the trust gap is decided (completed 2026-11-15)
 - [x] **Phase 11: Skills, Commands, and Records** - Typed commands and skills attach `@file` references, commands answer to their Claude Code names, alias suggestions show descriptions, and the compatibility page and the record corrections land (completed 2026-11-16)
@@ -412,7 +412,7 @@ Plans:
 
 ### Phase 8: Workflow Agents and Run Paths
 
-**Goal**: A plugin workflow runs the plugin's own agents, and an install says when a script names an agent the plugin does not have. An agent whose source lets it start a workflow can start it. The run paths with no scenario today get one, and the compatibility page says what a workflow subagent can reach.
+**Goal**: A plugin workflow runs the plugin's own agents, and an install says when a script names an agent the plugin does not have. An agent whose source grants `Workflow` gets no workflow tool, as no Claude Code subagent does (D-PG8-11 option A, amended with criterion 5). The run paths with no scenario today get one, and the compatibility page says what a workflow subagent can reach.
 **Depends on**: Phase 3, Phase 4, Phase 7
 **Requirements**: PG-WF-02, PG-WF-07, PG-WF-04, PG-WF-05
 **Spike first**: S5 is the first work: does the workflow engine work when a pi-subagents background child loads it, and does pi-mcp-adapter work when it is listed in the engine's `providerMiddlewareExtensions`? It gates PG-WF-05 and the adapter half of PG-WF-04. PG-WF-05 has Low confidence. If the engine does not work in a child, this project cannot meet the requirement, and the question goes to the maintainer before any plan is written for it.
@@ -468,7 +468,7 @@ Plans:
 - [x] 09-02-PLAN.md -- Wave 1: let the entry marker record a string or boolean default, and model an adapter entry as release 0.23.0 wrote it
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [x] 09-03-PLAN.md -- Wave 2: write `lifecycle: "lazy-keep-alive"` for stdio plugin servers and `openUi: false` for every plugin server, recorded in the marker, and bring every pinned entry, stub message table, and status row to what the adapter now does
+- [x] 09-03-PLAN.md -- Wave 2: write `lifecycle: "lazy-keep-alive"` for stdio plugin servers, recorded in the marker, and bring every pinned entry, stub message table, and status row to what the adapter now does. The planned `openUi: false` default is not written: it makes pi-subagents 0.88.1 MCP grants fail (D-PG9-07, BACKLOG MCPOPENUI-01)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [x] 09-04-PLAN.md -- Wave 3: keep a user's `protocolVersion`, `tasks`, `exposeResources`, and `caFile` across an update and a reinstall, and pin a user's lifecycle and openUi across an update

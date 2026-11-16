@@ -180,6 +180,8 @@ ______________________________________________________________________
 | Engine absent                                              | Envelope written; `requires pi-dynamic-workflows` marker                                                                                                                          | supported                                      | `features/workflow/companion-missing.feature`                                                |
 | Uninstall, disable, rename                                 | Envelope removed; the command lingers until a new session                                                                                                                         | Pi gap, reported with `stale workflow command` | `features/workflow/lifecycle.feature:20-58`                                                  |
 
+Note (2026-11-16): the U8 row records the behavior read on 2026-11-11. The project now installs the last of two scripts with one name, as Claude Code does, and the install no longer fails (D-PG8-07).
+
 ### Is a Claude script source-compatible with the engine?
 
 Mostly yes at the statement level, with these exact exceptions. "Count" is occurrences in the 7 official scripts.
