@@ -1,5 +1,14 @@
 {
-  "entry": ["extensions/pi-claude-marketplace/index.ts"],
+  "entry": [
+    "extensions/pi-claude-marketplace/index.ts",
+    "extensions/pi-claude-marketplace/domain/file-mentions.ts"
+  ],
+  "ignoreExports": [
+    {
+      "file": "extensions/pi-claude-marketplace/domain/file-mentions.ts",
+      "exports": ["FileMention", "findFileMentions"]
+    }
+  ],
   "rulePacks": ["rule-packs/architecture.json"],
   "ignorePatterns": [".pi/**", ".planning/**"],
   "production": {
