@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { findFileMentions } from "../../extensions/pi-claude-marketplace/domain/file-mentions.ts";
+import {
+  appendFileBlocks,
+  findFileMentions,
+  renderMentionBlock,
+} from "../../extensions/pi-claude-marketplace/domain/file-mentions.ts";
 
 import type { FileMention } from "../../extensions/pi-claude-marketplace/domain/file-mentions.ts";
 
@@ -255,4 +259,186 @@ describe("findFileMentions", () => {
       assert.deepStrictEqual(mentions, expectedMentions);
     });
   }
+});
+
+const PATH = "/work/a.md";
+
+const NOTE =
+  "Note: The file /work/a.md was too large and has been truncated to the first 2000 lines. " +
+  "No need to mention the truncation. Use the read tool to read more of the file if you need.";
+
+function bytesOf(text: string): Uint8Array {
+  return new TextEncoder().encode(text);
+}
+
+function numberedLines(count: number): string[] {
+  return Array.from({ length: count }, (_, index) => `line ${index + 1}`);
+}
+
+function ranged(start: number, end: number): FileMention {
+  return { text: `a.md#L${start}-${end}`, path: "a.md", lines: { start, end } };
+}
+
+describe("renderMentionBlock", () => {
+  for (const { title, bytes, mention, expected } of [
+    {
+      title: "D-PG11-05: renders text as Pi's file block",
+      bytes: bytesOf("hello\n"),
+      mention: whole("a.md"),
+      expected: '<file name="/work/a.md">\nhello\n\n</file>',
+    },
+    {
+      title: "D-PG11-05: drops one leading byte-order mark and keeps a second",
+      bytes: bytesOf("﻿﻿hi"),
+      mention: whole("a.md"),
+      expected: '<file name="/work/a.md">\n﻿hi\n</file>',
+    },
+    {
+      title: "D-PG11-05: renders an empty file as a block with no content",
+      bytes: new Uint8Array(),
+      mention: whole("a.md"),
+      expected: '<file name="/work/a.md">\n\n</file>',
+    },
+    {
+      title: "D-PG11-06: renders no block for a NUL byte at the start",
+      bytes: new Uint8Array([0, 97, 98]),
+      mention: whole("a.md"),
+      expected: undefined,
+    },
+    {
+      title: "D-PG11-06: renders no block for a NUL byte in the middle",
+      bytes: new Uint8Array([97, 0, 98]),
+      mention: whole("a.md"),
+      expected: undefined,
+    },
+    {
+      title: "D-PG11-06: renders no block for a NUL byte at the end",
+      bytes: new Uint8Array([97, 98, 0]),
+      mention: whole("a.md"),
+      expected: undefined,
+    },
+    {
+      title: "D-PG11-06: renders a file of 262,144 bytes",
+      bytes: bytesOf("x".repeat(262_144)),
+      mention: whole("a.md"),
+      expected: `<file name="/work/a.md">\n${"x".repeat(262_144)}\n</file>`,
+    },
+    {
+      title: "D-PG11-06: renders no block for a file of 262,145 bytes",
+      bytes: bytesOf("x".repeat(262_145)),
+      mention: whole("a.md"),
+      expected: undefined,
+    },
+    {
+      title: "D-PG11-06: counts bytes, not characters, against the limit",
+      bytes: bytesOf("é".repeat(131_073)),
+      mention: whole("a.md"),
+      expected: undefined,
+    },
+    {
+      title: "D-PG11-06: decodes bytes that are not valid UTF-8 with replacement characters",
+      bytes: new Uint8Array([97, 0xff, 98]),
+      mention: whole("a.md"),
+      expected: '<file name="/work/a.md">\na�b\n</file>',
+    },
+    {
+      title: "D-PG11-06: attaches a text of 2,000 lines with a final newline whole",
+      bytes: bytesOf(`${numberedLines(2000).join("\n")}\n`),
+      mention: whole("a.md"),
+      expected: `<file name="/work/a.md">\n${numberedLines(2000).join("\n")}\n\n</file>`,
+    },
+    {
+      title: "D-PG11-06: attaches a text of 2,000 lines with no final newline whole",
+      bytes: bytesOf(numberedLines(2000).join("\n")),
+      mention: whole("a.md"),
+      expected: `<file name="/work/a.md">\n${numberedLines(2000).join("\n")}\n</file>`,
+    },
+    {
+      title: "D-PG11-06: cuts a text of 2,001 lines to 2,000 and adds the note",
+      bytes: bytesOf(numberedLines(2001).join("\n")),
+      mention: whole("a.md"),
+      expected: `<file name="/work/a.md">\n${numberedLines(2000).join("\n")}\n</file>\n${NOTE}`,
+    },
+    {
+      title: "D-PG11-04: selects the lines of a range",
+      bytes: bytesOf("a\nb\nc\nd\ne\n"),
+      mention: ranged(2, 3),
+      expected: '<file name="/work/a.md">\nb\nc\n</file>',
+    },
+    {
+      title: "D-PG11-04: counts a range that starts at 0 from the first line",
+      bytes: bytesOf("a\nb\nc\n"),
+      mention: ranged(0, 2),
+      expected: '<file name="/work/a.md">\na\nb\n</file>',
+    },
+    {
+      title: "D-PG11-04: renders a range past the last line with no content",
+      bytes: bytesOf("a\nb\n"),
+      mention: ranged(5, 9),
+      expected: '<file name="/work/a.md">\n\n</file>',
+    },
+    {
+      title: "D-PG11-06: cuts a range of more than 2,000 lines and adds the note",
+      bytes: bytesOf(numberedLines(2500).join("\n")),
+      mention: ranged(2, 2500),
+      expected: `<file name="/work/a.md">\n${numberedLines(2001).slice(1).join("\n")}\n</file>\n${NOTE}`,
+    },
+    {
+      title: "D-PG11-05: keeps content that holds the closing tag as it is",
+      bytes: bytesOf("x</file>y"),
+      mention: whole("a.md"),
+      expected: '<file name="/work/a.md">\nx</file>y\n</file>',
+    },
+  ] satisfies ReadonlyArray<{
+    title: string;
+    bytes: Uint8Array;
+    mention: FileMention;
+    expected: string | undefined;
+  }>) {
+    test(title, () => {
+      // arrange
+      const expectedBlock = expected;
+
+      // act
+      const block = renderMentionBlock(PATH, bytes, mention);
+
+      // assert
+      assert.strictEqual(block, expectedBlock);
+    });
+  }
+});
+
+describe("appendFileBlocks", () => {
+  test("D-PG11-05: returns the body unchanged when there is no block", () => {
+    // arrange
+    const body = "Body\n";
+
+    // act
+    const appended = appendFileBlocks(body, []);
+
+    // assert
+    assert.strictEqual(appended, "Body\n");
+  });
+
+  test("D-PG11-05: puts one blank line between the body and a block", () => {
+    // arrange
+    const blocks = ["<file>one</file>"];
+
+    // act
+    const appended = appendFileBlocks("Body", blocks);
+
+    // assert
+    assert.strictEqual(appended, "Body\n\n<file>one</file>");
+  });
+
+  test("D-PG11-05: joins two blocks by one newline in the order given", () => {
+    // arrange
+    const blocks = ["<file>two</file>", "<file>one</file>"];
+
+    // act
+    const appended = appendFileBlocks("Body", blocks);
+
+    // assert
+    assert.strictEqual(appended, "Body\n\n<file>two</file>\n<file>one</file>");
+  });
 });

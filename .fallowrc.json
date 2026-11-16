@@ -6,7 +6,13 @@
   "ignoreExports": [
     {
       "file": "extensions/pi-claude-marketplace/domain/file-mentions.ts",
-      "exports": ["FileMention", "findFileMentions"]
+      "exports": [
+        "FileMention",
+        "findFileMentions",
+        "MENTION_FILE_BYTE_LIMIT",
+        "renderMentionBlock",
+        "appendFileBlocks"
+      ]
     }
   ],
   "rulePacks": ["rule-packs/architecture.json"],
