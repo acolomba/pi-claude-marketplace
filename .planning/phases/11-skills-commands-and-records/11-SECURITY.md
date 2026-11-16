@@ -42,8 +42,8 @@ Evidence for each row (file:line and test names) is in the auditor's verdict of 
 | T-11-07 | Denial of service | slow scan of a hostile body | medium | mitigate | linear expressions, one pass per rule; `sonarjs/slow-regex` at error | closed |
 | T-11-08 | Tampering | content holding a closing tag | low | accept | AR-11-01; pinned by file-mentions.test.ts | closed |
 | T-11-09 | Info disclosure | binary or oversized content | medium | mitigate | `renderMentionBlock` limit 262,144 bytes and NUL check; both sides tested | closed |
-| T-11-10 | Info disclosure | argument names a file | high | mitigate | scan input `args: undefined` (D-PG11-02); `@$ARGUMENTS` case; `slash-command/invocation.feature:374` | closed |
-| T-11-11 | Info disclosure | `!` output names a file | high | mitigate | scan input built before `expandContextInjections`; Outline row in `slash-command/invocation.feature:399`, recorded red under a rendered-text scan | closed |
+| T-11-10 | Info disclosure | argument names a file | high | mitigate | scan input `args: undefined` (D-PG11-02); `@$ARGUMENTS` case; `slash-command/invocation.feature:377` | closed |
+| T-11-11 | Info disclosure | `!` output names a file | high | mitigate | scan input built before `expandContextInjections`; Outline row in `slash-command/invocation.feature:402`, recorded red under a rendered-text scan | closed |
 | T-11-12 | Denial of service | FIFO, device, or growing file | medium | mitigate | `stat` first, regular files only, bounded read of 262,145 bytes; growth, directory, size, symlink cases. Residual: stat/open window needs local write as the user | closed |
 | T-11-13 | Elevation of privilege | untrusted project command reads files | high | mitigate | attachment only in `renderCommand`, after `prepareCommand`'s refusal; D-LOC-01 `asked: []` case | closed |
 | T-11-14 | Info disclosure | author mentions a private user file | medium | accept | AR-11-02 | closed |
@@ -91,4 +91,4 @@ Evidence for each row (file:line and test names) is in the auditor's verdict of 
 
 **Approval:** verified 2026-11-15
 
-Citations updated 2026-11-16 to the lines after the review fixes (`slash-command/invocation.feature:374` and `:399`). The fixes changed only the code-span mask and the alias reader. They did not change the scan input, the trust order, or the read limits that the register relies on.
+Citations updated 2026-11-16 to the lines after the review fixes (`slash-command/invocation.feature:377` and `:402`). The fixes changed only the code-span mask and the alias reader. They did not change the scan input, the trust order, or the read limits that the register relies on.

@@ -187,6 +187,76 @@ describe("findFileMentions", () => {
       expected: [whole("a.md")],
     },
     {
+      title: "D-PG11-03: reads a blockquote marker indented four spaces as indented code",
+      body: "    > ```\n> @b.md",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: reads a fence in an indented code block as text",
+      body: "Example:\n\n    > ```\n    > @b.md\n\nAfter @c.md",
+      expected: [whole("b.md"), whole("c.md")],
+    },
+    {
+      title: "D-PG11-03: skips a mention in a fence in a blockquote indented three spaces",
+      body: "   > ```\n> @a.md\n> ```\n@b.md",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: skips a mention in a fence that opens on a list item in a blockquote",
+      body: "> - ```\n>   @a.md\n>   ```\n> @b.md",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: skips a mention in a fence in a blockquote in a list item",
+      body: "- > ```\n  > @a.md\n  > ```\n  > @b.md",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: reads a mention after a fence that opens on a list item",
+      body: "- ```bash\n  ls\n  ```\n\nThen read @c.md",
+      expected: [whole("c.md")],
+    },
+    {
+      title: "D-PG11-03: skips a mention in a fence that opens on an ordered list item",
+      body: "1. ```\n   @a.md\n   ```\n@b.md",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: ends a fence in a list item at a line outside the item",
+      body: "- ```\n  @a.md\n@b.md",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: skips a mention in a fence indented four spaces in a list item",
+      body: "1. Step:\n\n    ```\n    see @b.md\n\n    more\n    ```",
+      expected: [],
+    },
+    {
+      title: "D-PG11-03: skips a mention in a fence after a blank line in a blockquoted list item",
+      body: "> - a\n>\n>   ```\n>   @a.md\n>   ```\n> @b.md",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: ends an empty list item at a blank line",
+      body: "-\n\n  ```\n@a.md",
+      expected: [],
+    },
+    {
+      title: "D-PG11-03: reads five spaces after a list marker as indented code in the item",
+      body: "-      ```\n        @a.md",
+      expected: [whole("a.md")],
+    },
+    {
+      title: "D-PG11-03: ends a lazy blockquote paragraph at a fence",
+      body: "> a `x\n```\n@b.md `y",
+      expected: [],
+    },
+    {
+      title: "D-PG11-03: reads a marker past the hundredth container as text",
+      body: `${"> ".repeat(101)}\`\`\`\n${"> ".repeat(101)}@a.md`,
+      expected: [whole("a.md")],
+    },
+    {
       title: "D-PG11-03: skips a mention inside a code span of one backtick",
       body: "Use `@a.md` here",
       expected: [],
@@ -297,6 +367,32 @@ describe("findFileMentions", () => {
       title:
         "D-PG11-03: closes no code span across a list item in a blockquote indented three spaces",
       body: "> Use `a\n>    - @b.md `z",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: reads an item indented four spaces after a blank line as indented code",
+      body: "text\n\n    - a `x\n===\n@b.md `y",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: closes no code span across the end of an indented item line",
+      body: "text\n\n    - a `x\n@b.md `y",
+      expected: [whole("b.md")],
+    },
+    {
+      title:
+        "D-PG11-03: closes no code span across a list item after a tab after a blockquote marker",
+      body: "> Note `x\n>\t- @b.md `y",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: skips a mention in a code span over an item numbered 2 in a list item",
+      body: "- a `x\n    2. @b.md `y",
+      expected: [],
+    },
+    {
+      title: "D-PG11-03: closes no code span across a blockquote after an empty item in one",
+      body: "> -\nfoo `a\n> @b.md `y",
       expected: [whole("b.md")],
     },
     {

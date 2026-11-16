@@ -19,6 +19,15 @@
 //   Claude Code sends a Read call and its result as separate messages.
 // - D-PG11-06: only a file of text qualifies. Claude Code attaches a directory
 //   as a listing.
+//
+// D-PG11-03 finds code as CommonMark 0.31 does. One pass reads each line's
+// containers: its blockquotes and list items, with an item's content column,
+// a tab counted to the next multiple of four, and lazy continuation lines.
+// The fence mask and the code span mask both read the roles that pass gives.
+// An indented code block is not masked, so a mention in it is a mention. Two
+// rules differ from CommonMark: an HTML block is read as a paragraph, so a code
+// span in it is masked, and a line opens at most 100 containers, so a deeper
+// marker is text.
 
 import { stripBom } from "../shared/bom.ts";
 
@@ -65,40 +74,69 @@ const AGENT_PREFIX = "agent-";
 
 const AGENT_SUFFIX = " (agent)";
 
-// At most three spaces, then a run of three or more backticks or tildes.
-const FENCE_RUN = /^ {0,3}(`{3,}|~{3,})/;
+// CommonMark's tab stop; block structure reads a tab as spaces to the next stop.
+const TAB_STOP = 4;
 
-// The blockquote markers that open a line, each with the one space after it
-// that belongs to the marker.
-const QUOTE_MARKERS = /^(?:[^\S\n]*> ?)*/;
+// CommonMark: a line indented this far or more past its containers is
+// indented code, or the continuation of an open paragraph.
+const CODE_INDENT = 4;
 
-// A list item or an ATX heading, after the indentation. Group 1 is an ordered
-// item's number, group 2 a heading's marks, and group 3 the rest of the line.
-const BLOCK_START = /^(?:[-*+]|(\d{1,9})[.)]|(#{1,6}))(?:\s(.*)|$)/;
+// The run of a fence opener or closer, after its indentation.
+const FENCE_RUN = /^(?:`{3,}|~{3,})/;
 
-// A thematic break: three or more of one of `-`, `*`, or `_`, with spaces or
-// tabs between them.
-const THEMATIC_BREAK = /^([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
+// A list item marker, followed by a space or the end of the line. Group 1 is
+// an ordered item's number.
+const ITEM_MARKER = /^(?:[-*+]|(\d{1,9})[.)])(?= |$)/;
+
+const ATX_HEADING = /^#{1,6}(?: |$)/;
+
+// A thematic break: three or more of one of `-`, `*`, or `_`, with spaces
+// between them.
+const THEMATIC_BREAK = /^([-*_])(?: *\1){2,} *$/;
 
 // A setext underline, which ends the paragraph above it.
-const SETEXT_UNDERLINE = /^(?:=+|-+)[ \t]*$/;
+const SETEXT_UNDERLINE = /^(?:=+|-+) *$/;
 
-// CommonMark: a line indented this far or more continues a paragraph.
-const CODE_INDENT = 4;
+const BLANK_REST = /^ *$/;
+
+// The most containers a line can be in. A blank line continues every list item
+// without reading a character, so this bound keeps the scan linear; a deeper
+// marker is text.
+const MAX_CONTAINERS = 100;
 
 const BACKTICK_RUN = /`+/g;
 
 const NOT_NEWLINE = /[^\n]/g;
 
-/** A line split after its blockquote markers. */
-interface QuotedLine {
-  readonly depth: number;
-  readonly content: string;
+// The role of a line that is not paragraph text: fenced code, which is
+// masked, or a line with no code span, which is kept. Paragraph text takes the
+// number of its paragraph, from 1.
+const FENCED_LINE = -1;
+const PLAIN_LINE = 0;
+
+/** An open blockquote or list item. */
+interface Container {
+  /** A list item's content column, from the start of its own container; absent for a blockquote. */
+  readonly width?: number;
+  /** The container holds a block. A list item that holds none ends at a blank line. */
+  holdsBlock: boolean;
 }
 
-interface FenceLine {
-  readonly run: string;
-  readonly rest: string;
+/** The open blocks before a line, as CommonMark's block parser keeps them. */
+interface BlockState {
+  readonly containers: Container[];
+  /** The run of the open fence. */
+  fence: string | undefined;
+  /** A paragraph is open in the innermost open container. */
+  paragraph: boolean;
+  /** The number of the latest paragraph. */
+  paragraphs: number;
+}
+
+/** A position in a line, and the number of containers before it. */
+interface Cursor {
+  readonly at: number;
+  readonly depth: number;
 }
 
 interface BacktickRun {
@@ -115,99 +153,246 @@ interface SpanClosers {
   readonly escaped: BacktickRun | undefined;
 }
 
-/** The list item that a line starts. */
-interface ListItem {
-  /** The number of an ordered item; undefined for a bullet item. */
-  readonly number: number | undefined;
-  /** The item has text after its marker. */
-  readonly text: boolean;
-}
-
-/** How one line bounds the code spans around it. */
-interface LineShape {
-  /** The line holds only whitespace after its blockquote markers. */
-  readonly blank: boolean;
-  readonly quoteDepth: number;
-  /** The columns before the content, after the blockquote markers; a tab counts as four. */
-  readonly indent: number;
-  readonly item: ListItem | undefined;
-  /** The line is an ATX heading or a thematic break. */
-  readonly heading: boolean;
-  /** The line is a setext underline that is not also a thematic break. */
-  readonly underline: boolean;
-}
-
-/** The first line of a paragraph, and what it means for the lines after it. */
-interface ParagraphStart {
-  readonly quoteDepth: number;
-  readonly inList: boolean;
-  /** The paragraph is an indented code block, which a line indented less ends. */
-  readonly code: boolean;
-}
-
 interface LocatedMention {
   readonly at: number;
   readonly text: string;
 }
 
-function unquote(line: string): QuotedLine {
-  const content = line.replace(QUOTE_MARKERS, "");
-  const quote = line.slice(0, line.length - content.length);
-  return { depth: quote.length - quote.replaceAll(">", "").length, content };
+// The line that block structure reads: its tabs expanded from column 0 and a
+// final carriage return dropped. Only roles come from it, so the masked text
+// keeps the body's own characters.
+function blockLine(line: string): string {
+  const text = line.endsWith("\r") ? line.slice(0, -1) : line;
+  let expanded = "";
+  for (const char of text) {
+    expanded += char === "\t" ? " ".repeat(TAB_STOP - (expanded.length % TAB_STOP)) : char;
+  }
+
+  return expanded;
 }
 
-function fenceLineOf(line: string): FenceLine | undefined {
-  const match = FENCE_RUN.exec(line);
-  return match === null ? undefined : { run: String(match[1]), rest: line.slice(match[0].length) };
+function spacesAt(line: string, at: number): number {
+  let end = at;
+  while (line.charAt(end) === " ") {
+    end += 1;
+  }
+
+  return end - at;
 }
 
-// The run of a line that opens a fence. A backtick fence takes no backtick
-// after its run, as in CommonMark.
-function openingRun(fence: FenceLine | undefined): string | undefined {
-  return fence === undefined || (fence.run.startsWith("`") && fence.rest.includes("`"))
-    ? undefined
-    : fence.run;
+// A blockquote marker takes the one space after it.
+function afterQuoteMarker(line: string, at: number): number {
+  return line.charAt(at) === " " ? at + 1 : at;
 }
 
-function closesFence(fence: FenceLine | undefined, open: string): boolean {
+// Where `line` continues `container` from `at`, or undefined when it does not.
+// A blockquote needs its marker at most three columns in; a list item needs a
+// blank line or its content column.
+function continuation(container: Container, line: string, at: number): number | undefined {
+  const indent = spacesAt(line, at);
+  if (container.width === undefined) {
+    return indent < CODE_INDENT && line.charAt(at + indent) === ">"
+      ? afterQuoteMarker(line, at + indent + 1)
+      : undefined;
+  }
+
+  if (at + indent === line.length) {
+    return container.holdsBlock ? at : undefined;
+  }
+
+  return indent >= container.width ? at + container.width : undefined;
+}
+
+function matchContainers(line: string, containers: readonly Container[]): Cursor {
+  let at = 0;
+  let depth = 0;
+  for (const container of containers) {
+    const next = continuation(container, line, at);
+    if (next === undefined) {
+      break;
+    }
+
+    at = next;
+    depth += 1;
+  }
+
+  return { at, depth };
+}
+
+// The list item that `rest` starts, `indent` columns into its container. An
+// item that interrupts a paragraph has text and, if ordered, the number 1.
+function itemStart(
+  rest: string,
+  indent: number,
+  interrupts: boolean,
+): { readonly container: Container; readonly length: number } | undefined {
+  const marker = ITEM_MARKER.exec(rest);
+  if (marker === null || THEMATIC_BREAK.test(rest)) {
+    return undefined;
+  }
+
+  const spaces = spacesAt(rest, marker[0].length);
+  const empty = marker[0].length + spaces === rest.length;
+  const first = marker[1] === undefined || Number(marker[1]) === 1;
+  if (interrupts && (empty || !first)) {
+    return undefined;
+  }
+
+  // Five spaces or more after the marker start indented code in the item.
+  const padding = empty || spaces > CODE_INDENT ? 1 : spaces;
+  return {
+    container: { width: indent + marker[0].length + padding, holdsBlock: false },
+    length: marker[0].length + (empty ? spaces : padding),
+  };
+}
+
+// The blockquote or list item that starts at `at`, and where its content
+// starts.
+function containerStart(
+  line: string,
+  at: number,
+  interrupts: boolean,
+): { readonly container: Container; readonly at: number } | undefined {
+  const indent = spacesAt(line, at);
+  const marker = at + indent;
+  if (indent >= CODE_INDENT) {
+    return undefined;
+  }
+
+  if (line.charAt(marker) === ">") {
+    return { container: { holdsBlock: false }, at: afterQuoteMarker(line, marker + 1) };
+  }
+
+  const item = itemStart(line.slice(marker), indent, interrupts);
+  return item === undefined ? undefined : { container: item.container, at: marker + item.length };
+}
+
+// Closes the containers past `depth`, and the block open in them.
+function closeUnmatched(state: BlockState, depth: number): void {
+  if (depth < state.containers.length) {
+    state.containers.splice(depth);
+    state.fence = undefined;
+    state.paragraph = false;
+  }
+}
+
+// Opens the containers that start the line after its matched ones. A new
+// container closes the unmatched ones and the block open in them.
+function openContainers(state: BlockState, line: string, matched: Cursor): Cursor {
+  let { at, depth } = matched;
+  for (;;) {
+    const interrupts = state.paragraph && depth === state.containers.length;
+    const opened = depth < MAX_CONTAINERS ? containerStart(line, at, interrupts) : undefined;
+    if (opened === undefined) {
+      return { at, depth };
+    }
+
+    closeUnmatched(state, depth);
+    const parent = state.containers.at(-1);
+    if (parent !== undefined) {
+      parent.holdsBlock = true;
+    }
+
+    state.containers.push(opened.container);
+    state.fence = undefined;
+    state.paragraph = false;
+    at = opened.at;
+    depth += 1;
+  }
+}
+
+// A backtick fence takes no backtick after its run.
+function openingFence(text: string): string | undefined {
+  const run = FENCE_RUN.exec(text)?.[0];
+  return run?.startsWith("`") === true && text.includes("`", run.length) ? undefined : run;
+}
+
+// A line inside an open fence, whose containers all continue. A run of the
+// fence's mark, at least as long, with nothing after it closes the fence.
+function fencedLine(state: BlockState, rest: string, open: string): number {
+  const indent = spacesAt(rest, 0);
+  const text = rest.slice(indent);
+  const run = FENCE_RUN.exec(text)?.[0] ?? "";
+  if (
+    indent < CODE_INDENT &&
+    run.startsWith(open.charAt(0)) &&
+    run.length >= open.length &&
+    BLANK_REST.test(text.slice(run.length))
+  ) {
+    state.fence = undefined;
+  }
+
+  return FENCED_LINE;
+}
+
+function startParagraph(state: BlockState): number {
+  state.paragraph = true;
+  state.paragraphs += 1;
+  return state.paragraphs;
+}
+
+// A line that leaves an open container can still continue the paragraph open
+// in it, as CommonMark's lazy continuation line, unless it starts a block.
+function continuesLazily(text: string, indent: number): boolean {
   return (
-    fence !== undefined &&
-    fence.run.startsWith(open.charAt(0)) &&
-    fence.run.length >= open.length &&
-    fence.rest.trim() === ""
+    text !== "" &&
+    (indent >= CODE_INDENT ||
+      (openingFence(text) === undefined && !ATX_HEADING.test(text) && !THEMATIC_BREAK.test(text)))
   );
 }
 
-// D-PG11-03: blanks every line of a fence, its marker lines included. As in
-// CommonMark, a fence can follow blockquote markers, only a line of its own
-// blockquote closes it, and a line of a shallower one ends it. A fence that
-// never closes runs to the end of the text.
-function maskFences(text: string): string {
-  const masked: string[] = [];
-  let open: string | undefined;
-  let openDepth = 0;
-  for (const line of text.split("\n")) {
-    const { depth, content } = unquote(line);
-    const fence = fenceLineOf(content);
-    if (depth < openDepth) {
-      open = undefined;
-    }
-
-    if (open === undefined) {
-      open = openingRun(fence);
-      openDepth = depth;
-      masked.push(open === undefined ? line : " ".repeat(line.length));
-      continue;
-    }
-
-    if (depth === openDepth && closesFence(fence, open)) {
-      open = undefined;
-    }
-
-    masked.push(" ".repeat(line.length));
+// The role of the line's leaf block, in its innermost container.
+function leafRole(state: BlockState, text: string, indent: number): number {
+  if (text === "") {
+    state.paragraph = false;
+    return PLAIN_LINE;
   }
 
-  return masked.join("\n");
+  const container = state.containers.at(-1);
+  if (container !== undefined) {
+    container.holdsBlock = true;
+  }
+
+  if (indent >= CODE_INDENT) {
+    return state.paragraph ? state.paragraphs : PLAIN_LINE;
+  }
+
+  state.fence = openingFence(text);
+  if (state.fence !== undefined || (state.paragraph && SETEXT_UNDERLINE.test(text))) {
+    state.paragraph = false;
+    return state.fence === undefined ? PLAIN_LINE : FENCED_LINE;
+  }
+
+  if (THEMATIC_BREAK.test(text)) {
+    state.paragraph = false;
+    return PLAIN_LINE;
+  }
+
+  const heading = ATX_HEADING.test(text);
+  const role = state.paragraph && !heading ? state.paragraphs : startParagraph(state);
+  state.paragraph = !heading;
+  return role;
+}
+
+// D-PG11-03: the role of one line, from one model of its containers that both
+// the fence and the code span masks read: the line's blockquotes and list
+// items, matched as CommonMark matches them.
+function lineRole(state: BlockState, rawLine: string): number {
+  const line = blockLine(rawLine);
+  const matched = matchContainers(line, state.containers);
+  if (state.fence !== undefined && matched.depth === state.containers.length) {
+    return fencedLine(state, line.slice(matched.at), state.fence);
+  }
+
+  const cursor = openContainers(state, line, matched);
+  const indent = spacesAt(line, cursor.at);
+  const text = line.slice(cursor.at + indent);
+  if (state.paragraph && cursor.depth < state.containers.length && continuesLazily(text, indent)) {
+    return state.paragraphs;
+  }
+
+  closeUnmatched(state, cursor.depth);
+  return leafRole(state, text, indent);
 }
 
 // Maps each run to the later runs that can close a span it opens.
@@ -274,121 +459,32 @@ function maskParagraphSpans(paragraph: string): string {
   return masked + paragraph.slice(copied);
 }
 
-function listItem(block: RegExpExecArray | null): ListItem | undefined {
-  return block === null || block[2] !== undefined
-    ? undefined
-    : {
-        number: block[1] === undefined ? undefined : Number(block[1]),
-        text: (block[3] ?? "").trim() !== "",
-      };
-}
-
-function lineShape(line: string): LineShape {
-  const { depth, content } = unquote(line);
-  const rest = content.trimStart();
-  const block = BLOCK_START.exec(rest);
-  const thematic = THEMATIC_BREAK.test(rest);
-  return {
-    blank: rest === "",
-    quoteDepth: depth,
-    indent: content.slice(0, content.length - rest.length).replaceAll("\t", "    ").length,
-    item: thematic ? undefined : listItem(block),
-    heading: block?.[2] !== undefined || thematic,
-    underline: !thematic && SETEXT_UNDERLINE.test(rest),
-  };
-}
-
-// The text starts as a blank line does, outside any blockquote or list.
-const TEXT_START: ParagraphStart = { quoteDepth: 0, inList: false, code: false };
-
-// A paragraph is in a list when it starts at an item, or when it is indented
-// and the paragraph before it was in a list. A blank line keeps the state.
-function paragraphStart(line: LineShape, before: ParagraphStart): ParagraphStart {
-  const inList = line.blank
-    ? before.inList
-    : line.item !== undefined || (before.inList && line.indent > 0);
-  return { quoteDepth: line.quoteDepth, inList, code: !inList && line.indent >= CODE_INDENT };
-}
-
-// CommonMark: an item interrupts a paragraph only when it has text and, if
-// ordered, the number 1.
-function interruptsParagraph(item: ListItem | undefined): boolean {
-  return item?.text === true && (item.number === undefined || item.number === 1);
-}
-
-// Inside a list, every item and heading starts a block, at any indentation.
-// Elsewhere, as in CommonMark, only a heading or an item does, and only when it
-// is indented less than code. An item on a line of the paragraph's own
-// blockquote must interrupt the paragraph.
-function startsBlock(line: LineShape, paragraph: ParagraphStart): boolean {
-  if (paragraph.inList) {
-    return line.heading || line.item !== undefined;
+function maskRun(lines: readonly string[], role: number): string {
+  const text = lines.join("\n");
+  if (role === FENCED_LINE) {
+    return text.replace(NOT_NEWLINE, " ");
   }
 
-  const item =
-    line.quoteDepth < paragraph.quoteDepth
-      ? line.item !== undefined
-      : interruptsParagraph(line.item);
-  return line.indent < CODE_INDENT && (line.heading || item);
+  return role === PLAIN_LINE ? text : maskParagraphSpans(text);
 }
 
-// A blank line, a deeper blockquote, the end of an indented code block, and a
-// block start each start a paragraph.
-function startsParagraph(line: LineShape, paragraph: ParagraphStart): boolean {
-  return (
-    line.blank ||
-    line.quoteDepth > paragraph.quoteDepth ||
-    (paragraph.code && line.indent < CODE_INDENT) ||
-    startsBlock(line, paragraph)
-  );
-}
-
-// A setext underline ends the paragraph whose text it follows in the same
-// blockquote. Inside a list it must be indented, as a stand-in for the item's
-// content column: an unindented one is lazy text. A line that starts a
-// paragraph and is one is text.
-function underlines(line: LineShape, paragraph: ParagraphStart): boolean {
-  return (
-    line.underline &&
-    line.quoteDepth === paragraph.quoteDepth &&
-    (paragraph.inList ? line.indent > 0 : line.indent < CODE_INDENT)
-  );
-}
-
-// D-PG11-03: the text split into the runs of lines one paragraph can hold, so
-// that no code span crosses a block boundary. A heading or a thematic break
-// that starts a paragraph ends it, as a setext underline does after the text.
-// This approximates CommonMark: it counts a tab as four columns, and inside a
-// list it does not track where an item's content starts, so there a split can
-// come early or late. A masked fence is blank lines.
-function paragraphs(text: string): string[] {
-  const groups: string[][] = [];
-  let current: string[] = [];
-  let paragraph = TEXT_START;
-  let afterBlank = true;
-  let closed = false;
-  for (const line of text.split("\n")) {
-    const shape = lineShape(line);
-    const starts: boolean = afterBlank || closed || startsParagraph(shape, paragraph);
-    if (starts) {
-      groups.push(current);
-      current = [];
-      paragraph = paragraphStart(shape, paragraph);
-    }
-
-    closed = starts ? shape.heading : underlines(shape, paragraph);
-    current.push(line);
-    afterBlank = shape.blank;
-  }
-
-  groups.push(current);
-  return groups.slice(1).map((group) => group.join("\n"));
-}
-
-// The masked text has the length and the lines of the body; it is only scanned,
-// never sent to the model.
+// D-PG11-03: blanks fenced code, its marker lines included, and the content of
+// each code span of a paragraph or heading. The masked text has the length and
+// the lines of the body; it is only scanned, never sent to the model.
 function maskCode(body: string): string {
-  return paragraphs(maskFences(body)).map(maskParagraphSpans).join("\n");
+  const state: BlockState = { containers: [], fence: undefined, paragraph: false, paragraphs: 0 };
+  const runs: Array<{ readonly role: number; readonly lines: string[] }> = [];
+  for (const line of body.split("\n")) {
+    const role = lineRole(state, line);
+    const last = runs.at(-1);
+    if (last?.role === role) {
+      last.lines.push(line);
+    } else {
+      runs.push({ role, lines: [line] });
+    }
+  }
+
+  return runs.map((run) => maskRun(run.lines, run.role)).join("\n");
 }
 
 function quotedMentions(text: string): LocatedMention[] {
