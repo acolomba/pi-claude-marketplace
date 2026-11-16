@@ -4811,6 +4811,8 @@ Noted by component-features Phase 5. Claude Code shows `Operation stopped by hoo
 
 Noted by component-features Phase 5 (D-CF5-24). Decide whether the blocked-prompt notice adds Claude Code's third line, `Original prompt: <prompt>`.
 
+The `UserPromptExpansion` notice adds it since the maintainer review of 2026-11-16 (D-PG6-20), with `hookSpecificOutput.suppressOriginalPrompt`. The `UserPromptSubmit` notice still leaves it out.
+
 ## HOOKSTOPNOTE-01: a notice for a blocking Stop hook
 
 Noted by component-features Phase 5. Decide whether a blocking Stop hook also shows Claude Code's `Stop hook blocking error from command: "<command>": <reason>` notice. Claude Code shows none for a Stop `additionalContext`.

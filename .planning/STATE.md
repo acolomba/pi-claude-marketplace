@@ -452,6 +452,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 35 | Wait for the background save of a migrated state.json in the state-migration step (CI run 42842685676 flake) | 2026-11-10 | ecc72b9d | — | — |
 | 261112-jzs | Add installed-companion MCP gap tests and upstream PR 3259 | 2026-11-12 | 92bace26 | — | [261112-jzs-add-installed-companion-characterization](./quick/261112-jzs-add-installed-companion-characterization/) |
 | 261113-8yn | Adopt pi-subagents 0.88.1, verify ambient MCP regression tests, and retire the upgrade trigger | 2026-11-13 | 2db3b81a | complete | [261113-8yn-adopt-pi-subagents-0-88-1-ambient-mcp-fi](./quick/261113-8yn-adopt-pi-subagents-0-88-1-ambient-mcp-fi/) |
+| 261116-gwm | Restore the `Original prompt:` part of the UserPromptExpansion block notice (maintainer review of D-PG6-18..22) | 2026-11-16 | 4d6825ba | complete | [261116-gwm-restore-the-original-prompt-part-of-the-](./quick/261116-gwm-restore-the-original-prompt-part-of-the-/) |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
