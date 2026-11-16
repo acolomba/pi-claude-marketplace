@@ -32,22 +32,22 @@ describe("findFileMentions", () => {
     },
     {
       title: "D-PG11-04: reads a mention after an ideographic full stop",
-      body: "see。@a.md",
+      body: "see\u3002@a.md",
       expected: [whole("a.md")],
     },
     {
       title: "D-PG11-04: reads a mention after an ideographic comma",
-      body: "see、@a.md",
+      body: "see\u3001@a.md",
       expected: [whole("a.md")],
     },
     {
       title: "D-PG11-04: reads a mention after a fullwidth question mark",
-      body: "see？@a.md",
+      body: "see\uFF1F@a.md",
       expected: [whole("a.md")],
     },
     {
       title: "D-PG11-04: reads a mention after a fullwidth exclamation mark",
-      body: "see！@a.md",
+      body: "see\uFF01@a.md",
       expected: [whole("a.md")],
     },
     {
@@ -57,7 +57,7 @@ describe("findFileMentions", () => {
     },
     {
       title: "D-PG11-04: reads a quoted mention after a mark",
-      body: 'see。@"my notes.md"',
+      body: 'see\u3002@"my notes.md"',
       expected: [whole("my notes.md")],
     },
     {
@@ -78,7 +78,7 @@ describe("findFileMentions", () => {
     },
     {
       title: "D-PG11-04: ends a path at its last ASCII word character",
-      body: "@café",
+      body: "@caf\u00E9",
       expected: [whole("caf")],
     },
     {
@@ -289,9 +289,9 @@ describe("renderMentionBlock", () => {
     },
     {
       title: "D-PG11-05: drops one leading byte-order mark and keeps a second",
-      bytes: bytesOf("﻿﻿hi"),
+      bytes: bytesOf("\uFEFF\uFEFFhi"),
       mention: whole("a.md"),
-      expected: '<file name="/work/a.md">\n﻿hi\n</file>',
+      expected: '<file name="/work/a.md">\n\uFEFFhi\n</file>',
     },
     {
       title: "D-PG11-05: renders an empty file as a block with no content",
@@ -331,7 +331,7 @@ describe("renderMentionBlock", () => {
     },
     {
       title: "D-PG11-06: counts bytes, not characters, against the limit",
-      bytes: bytesOf("é".repeat(131_073)),
+      bytes: bytesOf("\u00E9".repeat(131_073)),
       mention: whole("a.md"),
       expected: undefined,
     },
@@ -339,7 +339,7 @@ describe("renderMentionBlock", () => {
       title: "D-PG11-06: decodes bytes that are not valid UTF-8 with replacement characters",
       bytes: new Uint8Array([97, 0xff, 98]),
       mention: whole("a.md"),
-      expected: '<file name="/work/a.md">\na�b\n</file>',
+      expected: '<file name="/work/a.md">\na\uFFFDb\n</file>',
     },
     {
       title: "D-PG11-06: attaches a text of 2,000 lines with a final newline whole",

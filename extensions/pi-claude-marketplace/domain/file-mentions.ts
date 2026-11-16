@@ -35,12 +35,12 @@ export interface FileMention {
 // The marks after which an `@` starts a mention: U+3002 ideographic full stop,
 // U+3001 ideographic comma, U+FF1F fullwidth question mark, and U+FF01
 // fullwidth exclamation mark.
-const MENTION_MARKS = "。、？！";
+const MENTION_MARKS = "\u3002\u3001\uFF1F\uFF01";
 
 // Claude Code's quoted form: `@"..."` at the start of the text or after
 // whitespace or a mark. Group 1 is the character before the `@`; group 2 is
 // the value.
-const QUOTED_MENTION = /(^|[\s。、？！])@"([^"]+)"/g;
+const QUOTED_MENTION = /(^|[\s\u3002\u3001\uFF1F\uFF01])@"([^"]+)"/g;
 
 const TOKEN = /\S+/g;
 
