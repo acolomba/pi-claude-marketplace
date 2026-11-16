@@ -402,8 +402,8 @@ Feature: MCP server sources
 
   @mcp
   Scenario: An .mcpb bundle source makes the plugin partially available
-    Claude Code unpacks and runs an MCP bundle. Neither MCP implementation has a
-    bundle runner, so this extension cannot run one (D-CF6-01).
+    Claude Code unpacks an MCP bundle and reads a normal server config from it. This
+    extension has no unpack step and no manifest translation, so it does not read one (D-CF6-01).
 
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:

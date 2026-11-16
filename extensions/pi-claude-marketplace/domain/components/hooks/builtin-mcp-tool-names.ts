@@ -3,7 +3,8 @@
 // How a hook matcher or `if` field names a tool that Pi's built-in MCP serves
 // (MHK-01). Claude Code names an MCP tool `mcp__<server>__<tool>` with `-`
 // kept in both segments. Pi 1.5.0 names it with its `createMcpToolName`
-// (`dist/extensions/mcp/tools.js`): every character of that text outside
+// (`dist/extensions/mcp/tools.js`; since Pi 1.5.1 it is in
+// `@earendil-works/pi-mcp`, `dist/naming.js`): every character of that text outside
 // `[A-Za-z0-9_]` becomes `_`, and a name over 64 characters, or one that
 // another tool already holds, keeps its first 55 characters, then `_` and the
 // first 8 hex of the sha256 of `<server>\0<tool>`. Pi keeps the server's

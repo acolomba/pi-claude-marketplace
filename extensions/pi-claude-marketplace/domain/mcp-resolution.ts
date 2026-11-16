@@ -72,8 +72,9 @@ function isPlainObject(value: unknown): value is Readonly<Record<string, unknown
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-// D-CF6-01: Claude Code bundles MCP servers as `.mcpb` (or legacy `.dxt`)
-// archives that it unpacks and runs. pi-mcp-adapter has no bundle runner.
+// D-CF6-01: Claude Code unpacks an `.mcpb` (or legacy `.dxt`) archive and
+// reads a normal server config from it. This extension has no unpack step and
+// no manifest translation, so it does not read a bundle.
 function isMcpBundle(reference: string): boolean {
   return reference.endsWith(".mcpb") || reference.endsWith(".dxt");
 }

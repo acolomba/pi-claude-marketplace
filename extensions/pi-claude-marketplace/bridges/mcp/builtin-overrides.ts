@@ -17,7 +17,9 @@
 // string `command` or `url`, which approximates Pi's validated set. A project
 // entry with neither only overrides a global server of the same name, which
 // already holds the namespace. Any read or parse error reads as no server, so
-// the read never throws inside info (T-02-18).
+// the read never throws inside info (T-02-18). The path is the one of Pi 1.5.0.
+// Since Pi 1.5.1 the config validation is in `@earendil-works/pi-mcp`
+// (`dist/config.js`).
 //
 // BLT-04 / T-02-18: a missing file configures nothing and leaves no trace, as
 // Pi skips a missing `mcp.json`. Any other read error, or text that does not
