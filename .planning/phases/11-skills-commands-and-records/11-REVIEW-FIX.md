@@ -1,10 +1,10 @@
 ---
 phase: 11-skills-commands-and-records
-iteration: 2
+iteration: 3
 created: 2026-11-15T00:00:00Z
-fixed_at: 2026-11-15T00:00:00Z
+fixed_at: 2026-11-16T00:00:00Z
 review_path: .planning/phases/11-skills-commands-and-records/11-REVIEW.md
-fix_scope: WR-03, IN-06, IN-07
+fix_scope: WR-04, WR-05, IN-10
 findings_in_scope: 3
 fixed: 3
 skipped: 0
@@ -154,3 +154,62 @@ The caller told me to work in the main checkout. So every gate ran in `/home/aco
 
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 2_
+
+## Iteration 3
+
+**Source review:** `.planning/phases/11-skills-commands-and-records/11-REVIEW.md` (iteration 3)
+**Scope:** WR-04, WR-05, IN-10. IN-09 and IN-11 are out of scope and stay open. The WR-05 fix also covers the blockquote half of IN-11.
+
+**Summary:**
+
+- Findings in scope: 3
+- Fixed: 3
+- Skipped: 0
+
+### WR-05: After a fence inside a blockquote, an unquoted line is read as lazy text, so a plain-text mention in the next blockquote is dropped
+
+**Files modified:** `extensions/pi-claude-marketplace/domain/file-mentions.ts`, `test/domain/file-mentions.test.ts`, `features/slash-command/invocation.feature`, `docs/skills-commands-compatibility.md` (citation lines only)
+**Commit:** `2222bacd`
+**Status:** fixed: requires human verification (logic)
+**Applied fix:** `maskFences` now strips the blockquote markers before it tests for a fence, through a new `unquote` helper that `lineShape` also uses. A line of a shallower blockquote ends an open fence, as in CommonMark. This differs from the reviewer's prototype in one place: only a line at the fence's own depth can close it. The prototype let a deeper line such as ```` > ``` ```` close an unquoted fence. The guard row `keeps a fence open past a quoted run inside it` (```` "```\n> ```\n@a.md\n```\n@b.md" ````) passes at HEAD and fails on the prototype. The new cucumber row in the attachment Outline moved the next two scenarios down one line. So the page's citations `invocation.feature:373` and `:398` became `:374` and `:399` in the same commit.
+
+### WR-04: A column-0 `===` or `--` line under a list item ends the paragraph, so a mention CommonMark puts in a code span is attached
+
+**Files modified:** `extensions/pi-claude-marketplace/domain/file-mentions.ts`, `test/domain/file-mentions.test.ts`, `features/slash-command/invocation.feature`
+**Commit:** `32402034`
+**Status:** fixed: requires human verification (logic)
+**Applied fix:** `underlines` now requires `line.indent > 0` inside a list, as the review proposed. The `paragraphs` comment no longer claims parity for blockquotes and one list level. It now says that the code counts a tab as four columns and that, inside a list, a split can come early or late. The cucumber row went at the end of the last Examples table, so no citation moved.
+
+### IN-10: The docs and the D-PG11-03 record state the list residual in one direction only, and they overstate two rules
+
+**Files modified:** `docs/skills-commands-compatibility.md`, `.planning/phases/11-skills-commands-and-records/11-CONTEXT.md`
+**Commit:** `79408239`
+**Applied fix:** Both texts now state the list residual in both directions: a mention can be skipped, or a mention that CommonMark puts in a span can be attached. ```` "- a `x\n    2. @b.md `y" ```` still attaches after this change. Both texts now also name the other in-list rules: thematic breaks end a span at any indentation, an underline ends one only when indented, and a fence indented four columns or more is not recognized. They also say that a fence can be inside a blockquote and ends with it, that an item on a line that leaves a blockquote must be indented under four columns, and that a tab after `>` counts as four columns (the IN-09 residual). The escaped-backtick consequence now sits next to its own sentence, so the "such a backtick" phrase is gone. The citation check passes.
+
+### Red and green (iteration 3)
+
+- Unit, `test/domain/file-mentions.test.ts`: 6 new rows. Against HEAD `d2b55120`: 110 pass, 5 fail. The five failures are the WR-04 rows ```` - a `x\n===\n@b.md `y ```` and ```` - a `x\n--\n@b.md `y ````, and the WR-05 rows (the review body, a fence ended by an unquoted line, and the IN-11 blockquote body). The sixth row is the guard row, which passes at HEAD. After the fixes: 115 pass, 0 fail. All 109 existing rows stay green.
+- Cucumber, adapter profile, `invocation.feature:336` and `:399`, with the HEAD module put back in place: 8 passed, 2 failed. The two failures are exactly the new rows: `after a quoted code block and an unclosed backtick` (WR-05, the file was not attached) and `in a code span over an unindented === line in a list` (WR-04, the file was attached). After the fixes: 10 passed. The builtin profile selects no scenario in this feature (0 scenarios), so it proves nothing here.
+- Linearity: I timed `findFileMentions` on the reviewer's 18 hostile shapes plus 4 new ones (quoted fence lines, quoted fences that an unquoted line ends, one 200k `> > …` fence line, and list underline floods) at 25k, 50k, 100k, and 200k characters. The times stay linear before and after. The worst case is 200,000 blank lines: 277 ms before and 312 ms after. The quoted-fence shapes go from 54 ms to 74 ms and from 52 ms to 78 ms at 200k, because each line now runs `QUOTE_MARKERS` once more.
+
+### Residuals (iteration 3)
+
+- IN-09 is open: a tab after `>` counts as four columns. ```` "> Note `x\n>\t- @b.md `y" ```` still attaches nothing. The page and D-PG11-03 now state this.
+- IN-11, list half, is open: a fence indented four columns or more in a list item is not recognized. ```` "1. Step:\n\n    ```\n    see @b.md\n\n    more\n    ```" ```` still attaches. The page and D-PG11-03 now state this. The blockquote half is fixed and pinned by a row.
+- The WR-05 empty-item body ```` "> -\nfoo `a\n> @b.md `y" ```` still attaches nothing. It is a list shape, and the list residual covers it.
+- `11-SECURITY.md:46` cites `slash-command/invocation.feature:390`, which was already stale before this round. I did not change it.
+
+### Verification (iteration 3)
+
+Every gate ran in the main checkout `/home/acolomba/src/pi-claude-marketplace-gaps` on `features/gaps`, with no worktree, so anyone can rerun the numbers from that tree. Unit runs used `node --import "$PWD/test/platform/isolated-pi-home.ts" --test`. Cucumber ran through `npm run test:cucumber:profile`. Every other npm and fallow command ran with `HOME` and `PI_CODING_AGENT_DIR` set to a fresh `mktemp -d` directory. The commits and pre-commit kept the real HOME for git only.
+
+- On the final tree: `npm run typecheck` exit 0; `eslint --max-warnings 0` on both changed `.ts` files exit 0; `npx fallow dead-code --quiet`, `npx fallow health --quiet`, and `npx fallow dupes --quiet` exit 0; `npm run check:features` exit 0; `npm run test:coverage:direct -- extensions/pi-claude-marketplace/domain/file-mentions.ts` exit 0. The intermediate WR-05 tree passed the owner suite (113/113) and `pre-commit run --files`. The commit hook's `check:commit` passed on all three commits.
+- Related unit suites (`file-mentions`, `mention-attachments`, `command-invocation`, `skill-invocation`): 245/245.
+- Citation check over `docs/skills-commands-compatibility.md`: passes.
+- Not run: the full `npm run check`.
+
+---
+
+_Fixed: 2026-11-16T00:00:00Z_
+_Fixer: Claude (gsd-code-fixer)_
+_Iteration: 3_
