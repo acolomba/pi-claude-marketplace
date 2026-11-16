@@ -4,6 +4,8 @@ Ideas surfaced during planning that are deferred from active scope but worth ret
 
 ## UAT-02: reconcile cascade invisible on `/reload` (host TUI limitation)
 
+**Out of date 2026-11-15** (parity-gaps Phase 11, 11-06). The premise below is out of date. On `/reload`, Pi's `handleReloadCommand` passes `beforeSessionStart: restoreChatBeforeSessionStart` to `session.reload()`, so Pi rebuilds the chat before `session_start`, and a notification sent during the reload is not erased by the rebuild. Source: `dist/modes/interactive/interactive-mode.js` of the installed Pi 1.5.0, read in code. The fix came in Pi 0.79.10, cited from the Pi changelog by `docs/research/parity-gaps/core.md`. This is unmeasured: it was read in code, not run in a live terminal, and no scenario reads a notice after a terminal `/reload`. The candidate directions and the workaround below rest on the old premise. The manual check that the last paragraph names would settle it.
+
 Surfaced by v1.12 milestone runtime UAT (2026-06-11). The load-time reconcile
 cascade (RECON-04) is emitted correctly via `ctx.ui.notify`, and IS visible at
 Pi startup -- but on `/reload`, pi's `handleReloadCommand` calls
@@ -3826,9 +3828,9 @@ Carried from `any-git-host` (`03-REVIEW-DISPOSITION.md`; milestone audit, 2026-0
 - Code hygiene: WR-01/WR-06/WR-07 (stale JSDoc and flow header), WR-08
   (five positional parameters), WR-09, IN-02, IN-03, IN-06, IN-07, IN-08.
 
-## WOUT-01: workflow output quality is unobserved because engine subagents declined every tool call
+## WOUT-01: workflow output quality on a real plugin is unobserved
 
-**Out of date 2026-11-15** (parity-gaps Phase 8, 08-03 and 08-04). Workflow subagents get Pi's `read`, `bash`, `edit`, and `write` since engine 3.13.1. In the scenario "A workflow step that asks for worktree isolation runs in a git worktree of the project, which the engine keeps where Claude Code removes an unchanged one" (`features/workflow/agent-steps.feature`), two workflow subagents each ran `bash` and got its result. Output quality on a real plugin is still unmeasured.
+**Out of date 2026-11-15** (parity-gaps Phase 8, 08-03 and 08-04). Workflow subagents get Pi's `read`, `bash`, `edit`, and `write` since engine 3.13.1. In the scenario "A workflow step that asks for worktree isolation runs in a git worktree of the project, which the engine keeps where Claude Code removes an unchanged one" (`features/workflow/agent-steps.feature`), two workflow subagents each ran `bash` and got its result. Output quality on a real plugin is still unmeasured. The scenario ran engine 3.15.0. The 3.13.1 bound is read in the engine source by `docs/research/parity-gaps/workflows.md`, not run.
 
 Carried from the json-output close (WINDOWS #84).
 
@@ -4605,7 +4607,9 @@ Added 2026-11-01 (component-features Phase 6, D-CF6-10).
 
 ## MCPB-01: `.mcpb` and `.dxt` MCP bundles
 
-Added 2026-11-01 (component-features Phase 6, D-CF6-01). Claude Code unpacks an `.mcpb` or `.dxt` bundle that `mcpServers` names and runs its server. pi-mcp-adapter has no bundle runner, so such a plugin is `(partially-available) {unsupported mcp}`, and `info` does not name the bundle. Trigger: pi-mcp-adapter adds a bundle runner.
+Added 2026-11-01 (component-features Phase 6, D-CF6-01). Claude Code unpacks an `.mcpb` or `.dxt` bundle that `mcpServers` names and runs its server. pi-mcp-adapter has no bundle runner, so such a plugin is `(partially-available) {unsupported mcp}`, and `info` does not name the bundle. The original trigger was a bundle runner in pi-mcp-adapter.
+
+**Out of date 2026-11-15** (parity-gaps Phase 11, 11-06). Claude Code has no bundle runner either. It unpacks the `.mcpb` or `.dxt` bundle into `mcpb/` under the plugins root and reads a normal server config from it (Claude Code plugins reference, "MCP bundle path", fetched 2026-11-15; `docs/research/parity-gaps/mcp.md` N17). So what blocks bundles is this project's own work: an unpack step and a translation of the bundle manifest, the bundle's `user_config` included. Trigger: a decision to do that work. It does not wait for pi-mcp-adapter. Until then D-CF6-01 stays the decision that this extension never reads a bundle.
 
 ## MCPREF-01: an `mcpServers` path without `./`
 
@@ -4934,6 +4938,8 @@ Noted 2026-11-05 (mcp-builtin, P2-DC-08, D-MB-19, BLT-04). When an `mcp.json` en
 ## TOOLSEARCHOFF-01: a fallback when Pi's `tool_search` is turned off
 
 Noted 2026-11-05 (mcp-builtin, 02-08 item 4 (d)). Plugin MCP tools under Pi's built-in MCP reach the model through Pi's `tool_search`. When a user turns `tool_search` off, the model cannot find those tools. The milestone deferred this because no requirement covers it. Candidate direction: detect at registration that `tool_search` is off and register the plugin tools with direct exposure, or document the requirement.
+
+**Out of date 2026-11-15** (parity-gaps Phase 11, 11-06). With `tool_search` off, a `codemode` script can still call the plugin tools once the user turns `codemode` on. Pi reaches a tool with `deferred` exposure through `tool_search` or through `codemode`, and it turns `codemode` on by itself only for a server with `codemode` exposure. This extension registers plugin servers as deferred, so the user must turn `codemode` on, for example with `"defaultTools": ["+codemode"]`. Source: `docs/mcp.md` of the installed Pi 1.5.0. This is unmeasured: it was read in the docs, and no scenario calls a plugin tool from a `codemode` script. The candidate direction changes: the fallback question is now whether to register the plugin tools with direct exposure or to document that the user turns `codemode` on.
 
 ## BLTOWNER-01: tell another extension's same-name built-in registration apart in `info`
 
