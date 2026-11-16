@@ -78,7 +78,7 @@
 ### Security
 
 - [x] **PG-SEC-01**: The install of a plugin whose workflow script names an agent with a `tools` or `disallowedTools` field prints a note that the workflow does not keep the restriction, `info` shows it, and the workflow compatibility page says so. The request to pi-dynamic-workflows of the PRD's section 8.4 is drafted under `.planning/upstream/` for the maintainer to file. (P0)
-- [ ] **PG-SEC-02**: The maintainer confirms or reopens the accepted project trust gap of D-LOC-01, and the decision is recorded with its premise and the Pi version it was checked against. (P1; decision 23) Recorded as D-PG10-01 (option A, pending maintainer review); stays open until the maintainer answers.
+- [x] **PG-SEC-02**: The maintainer confirms or reopens the accepted project trust gap of D-LOC-01, and the decision is recorded with its premise and the Pi version it was checked against. (P1; decision 23) Recorded as D-PG10-01, checked against Pi 1.5.0 and 1.5.2. The maintainer review of 2026-11-16 confirmed option A: the gap stays, and the request to Pi (`.planning/upstream/pi-extension-trust-paths.md`) stays a draft, not filed.
 - [x] **PG-SEC-03**: Under the adapter, a plugin server either gets the fields that withhold the `sampling` capability and the MCP UI extension, or the divergence is recorded as a decision. (P1; decision 20)
 
 ### Documentation
@@ -210,7 +210,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | PG-CMD-09    | Phase 11 | Complete |
 | PG-SKILL-11  | Phase 11 | Complete |
 | PG-SEC-01    | Phase 4  | Complete |
-| PG-SEC-02    | Phase 10 | Pending |
+| PG-SEC-02    | Phase 10 | Complete |
 | PG-SEC-03    | Phase 9  | Complete |
 | PG-DOC-01    | Phase 11 | Complete |
 | PG-DOC-02    | Phase 11 | Complete |
@@ -224,4 +224,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 ______________________________________________________________________
 
 *Requirements defined: 2026-11-11*
-*Last updated: 2026-11-15 after merging parity-gaps Phases 7 and 8 (PG-AGENT-03, -05, -07a, -09 and PG-WF-02, -04, -07 complete; PG-WF-05 closed as not a gap, D-PG8-11)*
+*Last updated: 2026-11-16 after the maintainer review (PG-SEC-02 complete: D-PG10-01 option A confirmed)*

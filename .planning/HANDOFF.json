@@ -39,11 +39,6 @@
   "async_jobs": [],
   "human_actions_pending": [
     {
-      "action": "Review autonomous decisions D-PG7-04, D-PG10-01, D-PG10-19, T-08-13, D-PG8-11, D-PG9-07, D-PG11-01/02/03/06 and the 9 verification overrides",
-      "context": "reversible defaults taken during the autonomous run",
-      "blocking": false
-    },
-    {
       "action": "Approve PR / merge to main / version bump",
       "context": "outward-facing; never done autonomously",
       "blocking": true
@@ -64,6 +59,11 @@
       "decision": "Workflow grant stays dropped (D-PG8-11 option A)",
       "rationale": "Claude Code gives Workflow to no subagent",
       "phase": "8"
+    },
+    {
+      "decision": "Maintainer decision review done 2026-11-16: pending D-PG rows locked; D-PG4-11/12 and D-PG9-07 stay pending",
+      "rationale": "user answers recorded in PROJECT.md Key Decisions",
+      "phase": "milestone"
     }
   ],
   "uncommitted_files": [],

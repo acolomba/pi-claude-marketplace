@@ -44,6 +44,8 @@ Next, in order (milestone lifecycle):
 2. `/gsd-audit-milestone`, then `/gsd-complete-milestone`, then `/gsd-cleanup`, on this branch.
 3. Offer the version bump; no PR, merge, or publish without the maintainer.
 
+The maintainer decision review is done (2026-11-16): every pending D-PG row in PROJECT.md is locked, except D-PG4-11/12 (wording) and D-PG9-07, which stay pending.
+
 ### parity-gaps Phase 11 (Skills, Commands, and Records)
 
 Phase 11 complete 2026-11-16 (8/8 plans).
@@ -68,7 +70,7 @@ Decisions (Phase 11):
 
 Open for the maintainer (Phase 11):
 
-- D-PG11-01 (keep the Claude Code name alias), D-PG11-02 (author-written mentions only), D-PG11-03 (keep the code skip or follow upstream; accept or reopen the IN-09 / IN-11 list residual); D-PG11-06 has no PROJECT.md Key Decisions row yet.
+- Decided 2026-11-16: D-PG11-01 and D-PG11-02 confirmed, D-PG11-03 reversed, D-PG11-06 confirmed as deferred (BACKLOG MENTIONDIR-01; it has no PROJECT.md Key Decisions row).
 - The verification override (CommonMark residual) and the 14 judgment-tier prohibitions.
 - WR-01 rule: a whitespace, list, or mapping frontmatter `name` also drops the path alias, though it adds no alias of its own (copied from upstream `dBt`).
 - Open Info: IN-01 (empty file attaches an empty block; Pi skips it), IN-02 (reversed or zero `#L` range), IN-03 (`</skill>` in content splits Pi's display), IN-04 (repeats deduplicated by text, not path), IN-05 (map key with `/` stored as `plugin:a:b`), IN-08 (`commandUpstreamNames` path name vs frontmatter `name`, upstream unverified), IN-09 (tab after `>`), IN-11 list half (fence indented four columns in a list item). BACKLOG CMDNESTNAME-01 stays unverified.
@@ -105,14 +107,14 @@ Decisions (Phase 10):
 - The option pass runs after the path variables and before the environment scan; the option becomes its own segment and is never sent through the deny-list or the missing-variable report, and its value is not scanned again (D-PG10-11).
 - Command content, agent bodies, and the skills an agent preloads get each ${user_config.KEY} at staging through substituteClaudeContent, by the skills rule: the sensitive-option text for a sensitive key, the default for a key with one, the reference as written otherwise, and no option pass for a plugin that declares no userConfig (D-PG10-08, D-PG10-09, D-PG10-13, D-PG10-21).
 - Under Pi's built-in MCP, ${user_config.KEY} in command, args, env, url, and headers is filled with the option's MCP value when the registration step builds the config at each session; the value is held in Pi's in-memory registry only, and env and headers values get Pi's escape ($ doubled, a leading ! behind a $) (D-PG10-12, D-PG10-21).
-- The project trust gap of D-LOC-01 is confirmed for Pi 1.5.0 and 1.5.2, pending maintainer review: option A taken, option B (an extension-kept consent record) recorded as the safer posture, the gap stays open until Pi lets an extension register a trust path (D-PG10-01).
+- The project trust gap of D-LOC-01 is confirmed for Pi 1.5.0 and 1.5.2, and the maintainer review of 2026-11-16 confirmed option A (PG-SEC-02 complete; the Pi request stays a draft): option B (an extension-kept consent record) recorded as the safer posture, the gap stays open until Pi lets an extension register a trust path (D-PG10-01).
 - An unreadable stored userConfig reads as declared with no values, so the built-in MCP skips servers that name an option; no notice (D-PG10-25).
 - The load-time MCP move writes the staged options to the record whatever its verdict (D-PG10-23).
 
 Open for the maintainer:
 
 - Phase 7: UF-07-02 anchor-on-repeated-key deny loss (design choice); AR-07-04; the quoted-deny change 5d985107; the D-PG7-02 retry residual.
-- Phase 10: D-PG10-01 option A or B (security; PG-SEC-02 stays Pending until answered); D-PG10-19; D-PG10-04 "Open /plugin manage" (IN-04); D-PG10-23 timing; D-PG10-24 reinstall vs apply; D-PG10-25 (IN-09); D-PG10-06, D-PG10-11, D-PG10-16; AR-10-01 and AR-10-02; the WR-01 residual; the `features/lib/mcp-configuration.ts` fixture edit; IN-01..IN-08 open (IN-07: unguarded mode check in `index.ts`).
+- Phase 10: the D-PG10 decisions were answered by the maintainer review of 2026-11-16 (D-PG10-01 option A, D-PG10-06 partial kept, D-PG10-19 defaults kept, D-PG10-25 fail closed, the rest confirmed). Still open: D-PG10-04 "Open /plugin manage" (IN-04); AR-10-01 and AR-10-02; the WR-01 residual; the `features/lib/mcp-configuration.ts` fixture edit; IN-01..IN-08 open (IN-07: unguarded mode check in `index.ts`).
 - Parity question (BACKLOG HOOKOPTFAIL-01): an option failure before a hook starts shows `Failed to run:`; Claude Code 2.1.323 may show `Failed with non-blocking status code: <message>` (10-RESEARCH E3; unconfirmed; `dispatch-exec.ts`, `hook-labels.ts`).
 - Review note: `${user_config.KEY}foo` with a `~` value blocks conservatively (home-path rule). Known gap: `${FOO:-${user_config.x}}` stays partly literal (BACKLOG MCPOPTFALLBACK-01).
 - CHANGELOG note: the first restage of a plugin whose entry held a literal `${user_config.KEY}` changes the entry's bytes, so pi-mcp-adapter asks for project approval again once.
@@ -123,8 +125,9 @@ Phase 7 (Agent Frontmatter and Grants, 6/6 plans) and Phase 8 (Workflow
 Agents and Run Paths, 7/7 plans; 08-06 skipped under option A) are complete.
 Both verifications passed with overrides pending maintainer review: Phase 7
 criteria 3 and 4 (D-PG7-17 writes `model: ""`), Phase 8 criterion 5 (option A
-of D-PG8-11; ROADMAP criterion 5 and PG-WF-05 amended to it). Open for the
-maintainer: D-PG7-02/04/07/10/17/18/19, D-PG8-04..15, and T-08-13 (open
+of D-PG8-11; ROADMAP criterion 5 and PG-WF-05 amended to it). The maintainer
+review of 2026-11-16 confirmed D-PG7-02/04/07/10/17/18/19 and D-PG8-04..15
+(D-PG8-07 changed to keep the last script). Still open: T-08-13 (open
 nonblocking; BACKLOG WFLENGINE-01 carries the engine-trust request).
 
 

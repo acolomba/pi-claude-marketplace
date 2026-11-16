@@ -5504,3 +5504,7 @@ Noted 2026-11-15 (parity-gaps, Phase 10, D-PG10-11). In an MCP field, `${FOO:-${
 ## CMDNESTNAME-01: a frontmatter `name` on a nested command
 
 Noted 2026-11-15 (parity-gaps, Phase 11, research Open Question 2). Unverified: Claude Code 2.1.323's command builder appears to replace only the last segment of a nested command's name with a frontmatter `name` (`Ft=e.slice(0,e.lastIndexOf(":")+1)`, then `` `${Ft}${ln}` ``). So `commands/build/web.md` with `name: x` in plugin `demo` would be `demo:build:x`, where this extension gives `demo:x` (`frontmatterNameAliases`). This is a reading of one fragment of the binary, `e` was not traced, and no session ran. Confirm it in the binary or with a probe before changing the alias.
+
+## MENTIONDIR-01: attach a directory `@` mention as an `ls` listing
+
+Noted 2026-11-16 (parity-gaps, Phase 11, D-PG11-06, deferred by the maintainer review 2026-11-16). A typed command or skill whose body mentions a directory, such as `@src/`, attaches nothing: the mention stays as text, and the invocation goes on with no notice. Claude Code 2.1.323 attaches a directory as the output of `ls`. The requirement named regular text files only, so the directory case was left out. `docs/skills-commands-compatibility.md` lists it as deferred. The work: attach the listing, as Claude Code does, with a scenario that fails without the change.

@@ -1,8 +1,8 @@
 ---
-status: awaiting_human_verify
+status: resolved
 trigger: "right, do try to automate these tests before interrupting"
 created: 2026-11-12
-updated: 2026-11-12
+updated: 2026-11-16
 ---
 
 ## Current Focus
@@ -10,7 +10,7 @@ updated: 2026-11-12
 hypothesis: Confirmed locally: clearing MCP_DIRECT_TOOLS for ambient child plans restores adapter direct tool registration, and Pi's excludeTools removes only the named long tool.
 test: The agent-authored regression fails before the patch, passes after it, fails again on revert, and passes on reapply; exact provider inventories and MCP calls pass on real detached children built from the local companion commit.
 expecting: The patch can be reviewed and incorporated upstream or installed locally; published pinned 0.88.0 still fails this acceptance check.
-next_action: Hand companion commit, workspace patch/repro artifacts, and exact verification limits to the parent; keep the debug session open pending human verification of the eventual installed companion version.
+next_action: None. Resolved 2026-11-16: the published pi-subagents 0.88.1 carries the fix, the real-child run of `.planning/phases/01-companion-floors-and-mcp-defaults/01-UAT.md` (tests 1 and 2, 2026-11-13) passes on it, and SEED-261112-81c is completed.
 
 reasoning_checkpoint:
   hypothesis: "The companion's fallback writes MCP_DIRECT_TOOLS=__none__ for ambient children, causing the adapter to register zero direct tools despite directTools:true."
@@ -85,7 +85,7 @@ verification:
   adjacent_tests: { result: pass, suites_run: ["companion owner module 25/25", "focused async MCP integration 3/3"], full_unit_baseline: "3 identical failures on reverted source", full_adjacent_module: "120-second timeout after relevant MCP cases passed" }
   revert_and_reconfirm: { result: pass, bug_returned_on_revert: true, fixed_on_reapply: true }
   live_fixed_build: { result: pass, evidence: "All three detached children completed; exact provider inventories and one MCP echo call each; durable logs in workspace artifact" }
-  published_pinned_package: { result: pending, reason: "Installed 0.88.0 unchanged and still suppresses ambient direct tools" }
+  published_pinned_package: { result: pass, evidence: "Published pi-subagents 0.88.1 passes the three real detached children (01-UAT.md tests 1 and 2, 2026-11-13); SEED-261112-81c completed" }
   guardrail_verdict: accepted
 oracle_type: specified (ambient Pi tool plan plus excludeTools contract)
 files_changed: ["companion:src/runs/shared/child-launch.ts", "companion:test/unit/child-tool-plan.test.ts"]
