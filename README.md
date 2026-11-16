@@ -122,7 +122,7 @@ Skills use Pi's `/skill:` form and also have aliases in interactive sessions and
 | `foo`       | `foo`                               | `/skill:foo`     | `/foo:foo`                     |
 | `foo`       | `bar`, with frontmatter `name: baz` | `/skill:foo-bar` | `/foo:bar`, `/foo:baz`, `/baz` |
 
-The aliases are the names that Claude Code gives a skill. The skill name is the name of the skill's folder. If the skill's frontmatter sets `name`, the skill also answers to `/<plugin>:<name>`, and to `/<name>` when the name has no colon.
+The aliases are the names that Claude Code gives a skill. The skill name is the name of the skill's folder. If the skill's frontmatter sets `name`, the skill also answers to `/<plugin>:<name>`, and to `/<name>` when the name has no colon. For more information, see [Skill and command compatibility](docs/skills-commands-compatibility.md).
 
 Plugin MCP servers get the names that Claude Code gives them. The model sees each tool as `mcp__plugin_<plugin>_<server>__<tool>`. pi-mcp-adapter stores each server under a key that ends with `_`. Pi's built-in MCP registers each server as `plugin_<plugin>_<server>`, with no `_` at the end. Under Pi's built-in MCP, the model sees each `-` of a tool name as `_`, and Pi cuts a tool name that is longer than 64 characters. For more information, see [Name length](docs/mcp-compatibility.md#name-length). `/claude:plugin info` shows each server as `plugin:<plugin>:<server>`. Plugin hooks see the server part of a tool name as Claude Code writes it. For more information, see [Tool name mapping](docs/hooks-compatibility.md#tool-name-mapping).
 
