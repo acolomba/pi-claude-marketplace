@@ -439,6 +439,8 @@ interface SeedPathMarketplaceOpts {
       };
       /** Persisted hook entries; omission exercises the legacy file fallback. */
       hookEntries?: readonly { event: string; matcher?: string }[];
+      /** D-PG10-25: the stored `userConfig`, as a hand edit may leave it. */
+      userConfig?: unknown;
     }
   >;
   readonly autoupdate?: boolean;
@@ -472,14 +474,17 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
   const plugins: Record<string, unknown> = {};
   for (const [name, info] of Object.entries(opts.installed ?? {})) {
     const override = info.resources;
-    plugins[name] = buildInstalledPluginRecord(info, {
-      agents: [...(override?.agents ?? [])],
-      hooks: [...(override?.hooks ?? [])],
-      mcpServers: [...(override?.mcpServers ?? [])],
-      prompts: [...(override?.prompts ?? [])],
-      skills: [...(override?.skills ?? [`${name}-skill`])],
-      workflows: [...(override?.workflows ?? [])],
-    });
+    plugins[name] = {
+      ...buildInstalledPluginRecord(info, {
+        agents: [...(override?.agents ?? [])],
+        hooks: [...(override?.hooks ?? [])],
+        mcpServers: [...(override?.mcpServers ?? [])],
+        prompts: [...(override?.prompts ?? [])],
+        skills: [...(override?.skills ?? [`${name}-skill`])],
+        workflows: [...(override?.workflows ?? [])],
+      }),
+      ...(info.userConfig !== undefined && { userConfig: info.userConfig }),
+    };
   }
 
   const record: Record<string, unknown> = {
@@ -4021,6 +4026,71 @@ test("plugin info manifest absent: ENBL-16 / D-96-03: a DISABLED record whose re
 // `{not in manifest}` is derived from the manifest lookup rather than from
 // disabled-ness -- without it, a stamp hard-coded on the disabled arm would
 // pass every other test in this file.
+test("D-PG10-25: a manifest-absent record whose stored options do not parse renders `{not in manifest, unreadable}`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", userConfig: "token=secret" } },
+    });
+
+    const { ctx, run, notifications } = makeCtx();
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest, unreadable}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("D-PG10-25: a declared disabled record whose stored options do not parse renders `(disabled) {unreadable}`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0", skills: "skills" }],
+      },
+      installed: { alpha: { version: "1.0.0", disabled: true, userConfig: "token=secret" } },
+      installablePluginDirs: ["alpha"],
+      componentDirs: { alpha: ["skills/alpha-src-skill"] },
+    });
+
+    const { ctx, run, notifications } = makeCtx();
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◍ alpha v1.0.0 (disabled) {unreadable}",
+          "    skills: alpha-src-skill",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
 test("plugin info manifest absent: ENBL-16 / ENBL-17: a DECLARED disabled record renders `(disabled)` with no reason brace", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange

@@ -30,6 +30,7 @@ import {
   isPlainObject,
   keptOverrideOf,
   pluginSetFieldsOf,
+  withheldOf,
 } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 import {
@@ -226,11 +227,32 @@ function pluginSetFieldsIn(translated: Readonly<Record<string, unknown>>): reado
  */
 function isRecordedDefault(
   previous: Record<string, unknown>,
-  source: Record<string, unknown>,
+  source: Readonly<Record<string, unknown>>,
   field: string,
   defaults: Readonly<Record<string, AdapterEntryDefaultValue>>,
 ): boolean {
   return source === previous && Object.hasOwn(defaults, field) && source[field] === defaults[field];
+}
+
+/**
+ * Where a carried field's user value lives: the override the marker keeps for
+ * a plugin-set field (ANAME-07), the marker's withheld fields for the
+ * `disabled` the load set on a withheld entry (D-PG10-25), else the entry.
+ */
+function carrySource(
+  field: string,
+  previous: Record<string, unknown>,
+  marker: {
+    readonly previousPluginSet: readonly string[];
+    readonly kept: Readonly<Record<string, unknown>>;
+    readonly withheld: Readonly<Record<string, unknown>> | undefined;
+  },
+): Readonly<Record<string, unknown>> {
+  if (field === "disabled" && marker.withheld !== undefined) {
+    return marker.withheld;
+  }
+
+  return marker.previousPluginSet.includes(field) ? marker.kept : previous;
 }
 
 function carriedFields(previous: unknown, pluginSet: readonly string[]): Record<string, unknown> {
@@ -242,8 +264,9 @@ function carriedFields(previous: unknown, pluginSet: readonly string[]): Record<
   const previousPluginSet = pluginSetFieldsOf(previous);
   const defaults = defaultFieldsOf(previous);
   const kept = keptOverrideOf(previous) ?? {};
+  const withheld = withheldOf(previous);
   for (const field of CARRIED_FIELDS) {
-    const source = previousPluginSet.includes(field) ? kept : previous;
+    const source = carrySource(field, previous, { previousPluginSet, kept, withheld });
     if (
       !pluginSet.includes(field) &&
       Object.hasOwn(source, field) &&

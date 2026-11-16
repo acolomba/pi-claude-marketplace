@@ -24,6 +24,8 @@ export {
   removeProjectDisableStubs,
 } from "./legacy.ts";
 export { unstageMcpServers } from "./unstage.ts";
+export { syncWithheldOptionServers } from "./option-withhold.ts";
+export type { RecordedOptionsReading } from "./option-withhold.ts";
 export { readBuiltinServerDescription } from "./builtin-description.ts";
 export { builtinServerConfig } from "./builtin-entry.ts";
 export { readMcpJsonServerNamespaces } from "./builtin-overrides.ts";

@@ -343,15 +343,30 @@ export function userConfigFieldsOf(
 }
 
 /**
- * D-PG10-23: the one reader of a record's `userConfig`. It parses the stored
- * value again with the manifest parser, because a project record is a file a
- * repository can commit. D-PG10-25: a stored value that does not parse is
- * logged and reads as declared options with no values, so a hand-edited
- * record never stops a load: the built-in MCP leaves out each server that
- * names an option, no option variable is set, and an exec-form hook that
- * names an option is refused as unset. pi-mcp-adapter still starts a stdio
- * server whose staged reference names that unset variable, with an empty
- * value.
+ * D-PG10-25: why a record's stored `userConfig` does not parse, or `undefined`
+ * for a record whose options read (none stored included). It parses the value
+ * again with the manifest parser, because a project record is a file a
+ * repository can commit.
+ */
+export function unreadableUserConfigOf(
+  record: Pick<PluginInstallRecord, "userConfig">,
+): string | undefined {
+  if (record.userConfig === undefined) {
+    return undefined;
+  }
+
+  const parsed = parseUserConfig(record.userConfig);
+  return parsed.kind === "malformed" ? parsed.detail : undefined;
+}
+
+/**
+ * D-PG10-23: the one reader of a record's `userConfig`. D-PG10-25: a stored
+ * value that does not parse is logged and reads as declared options with no
+ * values, marked `unreadable`, so every option-dependent part fails closed:
+ * the built-in MCP leaves out each server that names an option, no option
+ * variable is set, and an exec-form hook that names an option is refused as
+ * unreadable. The load holds back the record's pi-mcp-adapter entries that
+ * name an option and reports the record (`option-withhold.ts`).
  */
 export function recordedOptionsOf(
   record: Pick<PluginInstallRecord, "userConfig">,
@@ -363,7 +378,7 @@ export function recordedOptionsOf(
   const parsed = parseUserConfig(record.userConfig);
   if (parsed.kind === "malformed") {
     hookDebugLog(`recorded userConfig ignored: ${parsed.detail}`, "state");
-    return resolveOptions({});
+    return { ...resolveOptions({}), unreadable: true };
   }
 
   return resolveOptions(parsed.schema);

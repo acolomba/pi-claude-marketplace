@@ -12,6 +12,7 @@ import {
   McpUnstagePartialError,
   ShellFormOptionReferenceError,
   SkillFrontmatterNodeError,
+  UnreadablePluginOptionsError,
   UnsetPluginOptionError,
   WorkflowsUnstageRefusedError,
   WorkflowTargetOccupiedError,
@@ -853,6 +854,27 @@ describe("UnsetPluginOptionError", () => {
         message:
           `Plugin option "token" isn't set. Open /plugin manage to configure it, or check ` +
           `that the plugin's userConfig schema declares "token".`,
+        key: "token",
+      },
+    );
+  });
+});
+
+describe("UnreadablePluginOptionsError", () => {
+  test("D-PG10-25: names the key and the plugin, states the reinstall remedy, and keeps both", () => {
+    // act
+    const error = new UnreadablePluginOptionsError("demo@fixtures", "token");
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, plugin: error.plugin, key: error.key },
+      {
+        name: "UnreadablePluginOptionsError",
+        message:
+          `Plugin option "token" can't be read: the options in the install record of ` +
+          `demo@fixtures do not parse. Run /claude:plugin reinstall demo@fixtures to restore them.`,
+        plugin: "demo@fixtures",
         key: "token",
       },
     );

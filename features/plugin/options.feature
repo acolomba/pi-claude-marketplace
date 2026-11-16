@@ -2,7 +2,9 @@ Feature: Plugin options
 
   A plugin's userConfig options take their declared default. A plugin whose options all have
   one installs without --partial, and one with a required option that has no default stays
-  partially available (PG-CORE-03). A local marketplace stands in for a published one.
+  partially available (PG-CORE-03). Options that an install record holds in a form that does not
+  parse are reported as unreadable until a reinstall (D-PG10-25). A local marketplace stands in
+  for a published one.
 
   Background:
     Given the marketplace "fixtures" is published as a dir source
@@ -250,3 +252,95 @@ Feature: Plugin options
       | 2    | user        | show the plugin options                                                   |
       | 2    | assistant   | tool call bash {"command":"printf %s \"$PI_CLAUDE_MARKETPLACE_OPTIONS\""} |
       | 2    | tool result | bash returned: (no output)                                                |
+
+  Scenario: Every new session warns about a plugin whose recorded options do not parse (D-PG10-25)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "mode": { "type": "string", "title": "Mode", "description": "The mode.", "default": "fast" }
+        }
+      }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the installation record of the plugin "demo@fixtures" in the project scope holds plugin options that do not parse
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons    | scope   | cause chain                                                                                                                                                       | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | unreadable | project | The plugin options in the install record of demo@fixtures do not parse (userConfig is not an object). Run /claude:plugin reinstall demo@fixtures to restore them. | false           |       |                  |
+      | fixtures         | project           | demo@fixtures | demo | failed | unreadable | project | The plugin options in the install record of demo@fixtures do not parse (userConfig is not an object). Run /claude:plugin reinstall demo@fixtures to restore them. | false           |       |                  |
+
+  Scenario: The plugin list shows a plugin whose recorded options do not parse as unreadable (D-PG10-25)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "mode": { "type": "string", "title": "Mode", "description": "The mode.", "default": "fast" }
+        }
+      }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the installation record of the plugin "demo@fixtures" in the project scope holds plugin options that do not parse
+    When the user runs "/claude:plugin list --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons    | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed | unreadable | project | 1.0.0   |
+
+  Scenario: Info shows a plugin whose recorded options do not parse as unreadable (D-PG10-25)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "mode": { "type": "string", "title": "Mode", "description": "The mode.", "default": "fast" }
+        }
+      }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the installation record of the plugin "demo@fixtures" in the project scope holds plugin options that do not parse
+    When the user runs "/claude:plugin info demo@fixtures"
+    Then the result has these fields:
+      | kind                           | plugin-info   |
+      | marketplace details autoupdate | false         |
+      | marketplace name               | fixtures      |
+      | marketplace scope              | project       |
+      | needs reload                   | false         |
+      | plugin components resolved     | true          |
+      | plugin components skills       | demo-skill    |
+      | plugin id                      | demo@fixtures |
+      | plugin name                    | demo          |
+      | plugin reasons                 | unreadable    |
+      | plugin status                  | installed     |
+      | plugin version                 | 1.0.0         |
+      | severity                       | info          |
+      | plugin scope                   | project       |
+
+  Scenario: A reinstall restores the recorded options of a plugin whose recorded options do not parse (D-PG10-25)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "mode": { "type": "string", "title": "Mode", "description": "The mode.", "default": "fast" }
+        }
+      }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the installation record of the plugin "demo@fixtures" in the project scope holds plugin options that do not parse
+    Given the user has run "/claude:plugin reinstall demo@fixtures --scope project"
+    When the user starts a new pi session
+    Then the session reports no results

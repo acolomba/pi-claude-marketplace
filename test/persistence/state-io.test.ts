@@ -22,6 +22,7 @@ import {
   replaceUserConfig,
   saveState,
   toDisabledRecord,
+  unreadableUserConfigOf,
   userConfigFieldsOf,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { captureDebugLog } from "../platform/debug-log-capture.ts";
@@ -862,7 +863,7 @@ for (const { label, stored, logged } of [
     logged: 'userConfig option "mode": field "title" is missing',
   },
 ]) {
-  test(`D-PG10-25: reads ${label} stored as the options as declared options with no values and logs it`, (t) => {
+  test(`D-PG10-25: reads ${label} stored as the options as unreadable options with no values and logs it`, (t) => {
     // arrange
     const debugLines = captureDebugLog(t);
 
@@ -870,10 +871,36 @@ for (const { label, stored, logged } of [
     const options = recordedOptionsOf({ userConfig: stored });
 
     // assert
-    assert.deepStrictEqual(options, resolveOptions({}));
+    assert.deepStrictEqual(options, { ...resolveOptions({}), unreadable: true });
     assert.deepStrictEqual(debugLines, [`[state] recorded userConfig ignored: ${logged}`]);
   });
+
+  test(`D-PG10-25: names why ${label} stored as the options does not parse`, () => {
+    // act
+    const detail = unreadableUserConfigOf({ userConfig: stored });
+
+    // assert
+    assert.strictEqual(detail, logged);
+  });
 }
+
+test("D-PG10-25: reads a record with no stored options as readable", () => {
+  // act
+  const detail = unreadableUserConfigOf({});
+
+  // assert
+  assert.strictEqual(detail, undefined);
+});
+
+test("D-PG10-25: reads a record whose stored options parse as readable", () => {
+  // act
+  const detail = unreadableUserConfigOf({
+    userConfig: { mode: { type: "string", title: "Mode", description: "The mode.", default: "f" } },
+  });
+
+  // assert
+  assert.strictEqual(detail, undefined);
+});
 
 test("D-PG10-23: reads a stored option named __proto__ as an option", () => {
   // arrange

@@ -2407,6 +2407,37 @@ describe("restoredOverride", () => {
 });
 
 describe("userCarriedFields", () => {
+  test("D-PG10-25: reads the user's disabled of a withheld entry from its marker, not the entry", () => {
+    // arrange
+    const entry = {
+      command: "plugin-command",
+      disabled: true,
+      trace: true,
+      _piClaudeMarketplace: { ...MARKER, withheld: { disabled: false } },
+    };
+
+    // act
+    const fields = userCarriedFields(entry);
+
+    // assert
+    assert.deepStrictEqual(fields, { disabled: false, trace: true });
+  });
+
+  test("D-PG10-25: carries no disabled for a withheld entry that had none of its own", () => {
+    // arrange
+    const entry = {
+      command: "plugin-command",
+      disabled: true,
+      _piClaudeMarketplace: { ...MARKER, withheld: {} },
+    };
+
+    // act
+    const fields = userCarriedFields(entry);
+
+    // assert
+    assert.deepStrictEqual(fields, {});
+  });
+
   test("D-PG1-13: excludes a recorded default from the user's saved choices", () => {
     // arrange
     const entry = {

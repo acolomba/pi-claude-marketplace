@@ -372,7 +372,7 @@ Plugin list: 4 successes
 Plugin list: 1 success
 ```
 
-Triggered when the state record carries the explicit `enabled: false` marker (ENBL-05: the load-bearing predicate is `persistence/state-io.ts::isRecordedButDisabled`, which reads that boolean alone). Availability (`compatibility.installable`) is an ORTHOGONAL axis and is not part of the marker, so a partially-installed record the user disabled renders this same row -- ENBL-06, and the reason why no `(partially-installed)`-style brace appears on it. The `(disabled)` token is the new closed-set `PluginStatus` token (D-54-01); the row uses the `◍` glyph (D-80-01: reassigned from `◌`, which now marks `(remote)`; shared with `will disable` to match the realized/pending-tense precedent: `●` for `(installed)` / `(will install)`, `○` for `(available)` / `(will uninstall)`). Structurally distinct from `(unavailable)`: the byte form differs (`(disabled)` vs `(unavailable)`). The row carries at most ONE reason, `{not in manifest}`, and it carries that one only in the state below (ENBL-16 / D-100-07, which supersedes INV-04's "never carries a reason brace" clause); every other reason stays off a disabled row. The recorded version pin (ENBL-02) is preserved and rendered in the `v<version>` slot. Severity `info`; no reload-hint (inventory row, not a state-changer). The `/claude:plugin disable` command's fresh cascade reuses this exact row byte form WITH the reload-hint trailer via the `disable-cascade` kind (UAT-03; see [`## /claude:plugin disable`](#claudeplugin-disable-pluginmarketplace)); the fresh-disable site stamps no reason, so that row stays bare.
+Triggered when the state record carries the explicit `enabled: false` marker (ENBL-05: the load-bearing predicate is `persistence/state-io.ts::isRecordedButDisabled`, which reads that boolean alone). Availability (`compatibility.installable`) is an ORTHOGONAL axis and is not part of the marker, so a partially-installed record the user disabled renders this same row -- ENBL-06, and the reason why no `(partially-installed)`-style brace appears on it. The `(disabled)` token is the new closed-set `PluginStatus` token (D-54-01); the row uses the `◍` glyph (D-80-01: reassigned from `◌`, which now marks `(remote)`; shared with `will disable` to match the realized/pending-tense precedent: `●` for `(installed)` / `(will install)`, `○` for `(available)` / `(will uninstall)`). Structurally distinct from `(unavailable)`: the byte form differs (`(disabled)` vs `(unavailable)`). The row carries at most two reasons: `{not in manifest}`, only in the state below (ENBL-16 / D-100-07, which supersedes INV-04's "never carries a reason brace" clause), and `{unreadable}` after it when the record's options do not parse (D-PG10-25); every other reason stays off a disabled row. The recorded version pin (ENBL-02) is preserved and rendered in the `v<version>` slot. Severity `info`; no reload-hint (inventory row, not a state-changer). The `/claude:plugin disable` command's fresh cascade reuses this exact row byte form WITH the reload-hint trailer via the `disable-cascade` kind (UAT-03; see [`## /claude:plugin disable`](#claudeplugin-disable-pluginmarketplace)); the fresh-disable site stamps no reason, so that row stays bare.
 
 PL-4: when the manifest entry carries a non-empty `description` field, the renderer emits it on a second line indented four spaces beneath the plugin row. Descriptions longer than 66 characters are truncated to 63 characters and suffixed with `"..."` (landing exactly at column 66). Nine list-surface variants (`installed`, `upgradable`, `available`, `remote`, `partially-available`, `partially-installed`, `partially-upgradable`, `unavailable`, `disabled`) support the description field; the cascade-only variants (`updated`, `reinstalled`, `uninstalled`) do not. The count mirrors a runtime authority rather than a hand-kept list: a variant supports the line exactly when its message interface in `extensions/pi-claude-marketplace/shared/notification-types.ts` declares `description?`, and the two degraded-inventory variants (`PluginPartiallyInstalledMessage`, `PluginPartiallyUpgradableMessage`) are what last moved it off seven. The renderer emits the description line only when the field is defined and non-empty.
 
@@ -401,7 +401,7 @@ Plugin list: 1 success
 
 Two conditions cause this row. The state record carries the explicit `enabled: false` marker, and the marketplace manifest loaded successfully but does not declare the plugin.
 
-`{not in manifest}` is the only reason a disabled row on THIS surface can carry. The governing rule: render durable facts that constrain what the user can do next; suppress facts about runtime behavior that is currently suspended. Manifest absence is such a durable fact. `/claude:plugin enable` re-runs the install ledger, and that ledger resolves the plugin from the marketplace manifest. Thus the user cannot re-enable a disabled plugin the manifest no longer declares. The bare row gave no warning before the attempt.
+`{not in manifest}` is the only reason a disabled row on THIS surface can carry, apart from the `{unreadable}` of a record whose options do not parse (D-PG10-25). The governing rule: render durable facts that constrain what the user can do next; suppress facts about runtime behavior that is currently suspended. Manifest absence is such a durable fact. `/claude:plugin enable` re-runs the install ledger, and that ledger resolves the plugin from the marketplace manifest. Thus the user cannot re-enable a disabled plugin the manifest no longer declares. The bare row gave no warning before the attempt.
 
 Every other reason stays off this row. A disabled record whose install-time resolution dropped a component kind keeps its unsupported-kind tokens hidden. The soft-dependency markers `{requires pi-subagents}`, `{requires pi-mcp-adapter}` and `{requires pi-dynamic-workflows}` cannot appear either: the resolve step suppresses soft-dependency markers for disabled rows (ENBL-15 / D-100-06). Disable preserves the record's component inventory (ENBL-18), but that inventory cannot change these bytes.
 
@@ -4190,6 +4190,22 @@ A plugin operation needs attention.
 ● mp [project]
   ⊘ deploy-kit (failed) {not in manifest}
     cause: Plugin "deploy-kit" not found in marketplace "mp"
+
+Reconcile: 1 warning
+```
+
+### Load or apply warning, a plugin whose recorded options do not parse (D-PG10-25)
+
+An enabled plugin whose install record holds its options in a form that does not parse, for example after a hand edit. The extension does not guess at the options: it refuses every part of the plugin that names one. Pi's built-in MCP does not register such a server, pi-mcp-adapter gets the server's `mcp-adapter.json` entry with `"disabled": true`, an exec-form hook that names an option fails as unreadable, and no option variable is set. The row is `(failed)` at `warning` severity with `{unreadable}`, and its `cause:` line names the parse failure and the remedy. It follows the delisted rows, and a plugin this pass already reported, uninstalled, or disabled gets none. A disabled plugin gets no row. The row returns at each new session until a `reinstall`, or an `update` that restages, writes the options again. `list` and `info` show the same fault as `{unreadable}` on the plugin's row, after any other reason, a disabled row included. The trailing tally counts the row as one warning; no reload-hint.
+
+<!-- catalog-state: reconcile-plugin-options-unreadable -->
+
+```text
+A plugin operation needs attention.
+
+● mp [project]
+  ⊘ deploy-kit (failed) {unreadable}
+    cause: The plugin options in the install record of deploy-kit@mp do not parse (userConfig is not an object). Run /claude:plugin reinstall deploy-kit@mp to restore them.
 
 Reconcile: 1 warning
 ```

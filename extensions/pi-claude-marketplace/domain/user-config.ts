@@ -83,6 +83,12 @@ export interface ResolvedOptions {
   /** Keys with `required: true` and no default, in declaration order (D-PG10-06). */
   readonly unsetRequired: readonly string[];
   readonly sensitive: ReadonlySet<string>;
+  /**
+   * D-PG10-25: set only on the options of an install record whose stored
+   * `userConfig` does not parse. They declare options with no values, so
+   * every pass that names an option refuses it, and a hook says why.
+   */
+  readonly unreadable?: true;
 }
 
 /** The four strings that name one option's process variable (D-PG10-23). */

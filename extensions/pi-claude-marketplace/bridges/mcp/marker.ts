@@ -10,7 +10,9 @@
 // extension wrote (D-PG1-13), each a number, a string, or a boolean, while a
 // numbers-only record an earlier release wrote still reads (D-PG9-03), and
 // `keptOverride`: the user override the entry replaced, which an unstage
-// writes back (AFILE-06, AFILE-01).
+// writes back (AFILE-06, AFILE-01), and `withheld`: the user's own `disabled`
+// field, if any, of an entry the load disabled because its record's options do
+// not parse (D-PG10-25).
 // The load-time move reads only the owner a legacy `mcp.json` entry's marker
 // names (AMIG-01).
 //
@@ -45,6 +47,14 @@ export interface ClaudeMarketplaceMarker {
    * value (AFILE-01, AFILE-06).
    */
   readonly keptOverride?: Readonly<Record<string, unknown>>;
+  /**
+   * D-PG10-25: present on an entry the load disabled because its record's
+   * stored options do not parse. It holds the entry's own `disabled` field
+   * from before, or nothing when the entry had none, so the load that finds
+   * the options readable again puts it back, and a restage or an unstage
+   * reads the user's choice from here rather than the withheld `disabled`.
+   */
+  readonly withheld?: Readonly<Record<string, unknown>>;
 }
 
 /** A plain object, not null and not an array: the shape every MCP config member must have. */
@@ -86,17 +96,19 @@ function readMarker(value: unknown): ClaudeMarketplaceMarker | null {
   const pluginSetFields = ownMember(obj, "pluginSetFields");
   const defaultFields = ownMember(obj, "defaultFields");
   const keptOverride = ownMember(obj, "keptOverride");
+  const withheld = ownMember(obj, "withheld");
   return {
     plugin: obj.plugin,
     marketplace: obj.marketplace,
     ...(isStringArray(pluginSetFields) ? { pluginSetFields } : {}),
     ...(isDefaultRecord(defaultFields) ? { defaultFields } : {}),
     ...(isPlainObject(keptOverride) ? { keptOverride } : {}),
+    ...(isPlainObject(withheld) ? { withheld } : {}),
   };
 }
 
 /** A marker object that names a string plugin and marketplace. */
-interface MarkerObject extends Readonly<Record<string, unknown>> {
+export interface MarkerObject extends Readonly<Record<string, unknown>> {
   readonly plugin: string;
   readonly marketplace: string;
 }
@@ -111,8 +123,8 @@ function isMarkerObject(value: unknown): value is MarkerObject {
   );
 }
 
-/** The marker object of `value`, when it names its owner. */
-function markerObjectOf(value: unknown): MarkerObject | undefined {
+/** The marker object of `value`, when it names its owner, with every member it holds. */
+export function markerObjectOf(value: unknown): MarkerObject | undefined {
   if (!isPlainObject(value) || !Object.hasOwn(value, CLAUDE_MARKETPLACE_MARKER_KEY)) {
     return undefined;
   }
@@ -126,18 +138,19 @@ function ownMember(obj: Readonly<Record<string, unknown>>, key: string): unknown
 }
 
 // The marker members past the owner, each with the shape this extension writes.
-const MARKER_MEMBERS = ["pluginSetFields", "defaultFields", "keptOverride"] as const;
+const MARKER_MEMBERS = ["pluginSetFields", "defaultFields", "keptOverride", "withheld"] as const;
 const MARKER_MEMBER_SHAPES: Readonly<
   Record<(typeof MARKER_MEMBERS)[number], (value: unknown) => boolean>
 > = {
   pluginSetFields: isStringArray,
   defaultFields: isDefaultRecord,
   keptOverride: isPlainObject,
+  withheld: isPlainObject,
 };
 
 /**
  * The first member of `value`'s marker, which names its owner, that holds a
- * `pluginSetFields`, `defaultFields`, or `keptOverride` of another shape than
+ * `pluginSetFields`, `defaultFields`, `keptOverride`, or `withheld` of another shape than
  * this extension writes, or none. Only a hand edit or corruption leaves one.
  * Reading past it would take the plugin's values or the recorded defaults for
  * the user's, or lose the user's override, for good, so a stage or an unstage
@@ -215,4 +228,9 @@ export function defaultFieldsOf(
   value: unknown,
 ): Readonly<Record<string, AdapterEntryDefaultValue>> {
   return readMarker(value)?.defaultFields ?? {};
+}
+
+/** D-PG10-25: the user's own fields an entry's marker keeps while the load withholds it. */
+export function withheldOf(value: unknown): Readonly<Record<string, unknown>> | undefined {
+  return readMarker(value)?.withheld;
 }

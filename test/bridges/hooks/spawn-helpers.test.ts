@@ -9,6 +9,7 @@ import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import {
   ShellFormOptionReferenceError,
+  UnreadablePluginOptionsError,
   UnsetPluginOptionError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 
@@ -163,6 +164,41 @@ describe("planSpawn", () => {
       );
     });
   }
+
+  test("D-PG10-25: an option argument of a record whose options do not parse fails the run as unreadable", () => {
+    // arrange
+    const entry: RoutingEntry = {
+      ...execEntry("/usr/bin/hook", ["${user_config.token}"]),
+      options: { ...resolveOptions({}), unreadable: true },
+    };
+
+    // act & assert
+    assert.throws(
+      () => planSpawn(entry, PATH_VARS),
+      (error: unknown) => {
+        assert.ok(error instanceof UnreadablePluginOptionsError);
+        assert.deepStrictEqual(
+          { plugin: error.plugin, key: error.key },
+          { plugin: "exec-substitution@catalog", key: "token" },
+        );
+        return true;
+      },
+    );
+  });
+
+  test("D-PG10-25: an exec-form hook of a record whose options do not parse runs when it names no option", () => {
+    // arrange
+    const entry: RoutingEntry = {
+      ...execEntry("/usr/bin/hook", ["${CLAUDE_PLUGIN_ROOT}/x"]),
+      options: { ...resolveOptions({}), unreadable: true },
+    };
+
+    // act
+    const spawnPlan = planSpawn(entry, PATH_VARS);
+
+    // assert
+    assert.deepStrictEqual(spawnPlan, { command: "/usr/bin/hook", args: ["/p/x"], shell: false });
+  });
 
   test("fills the path variables into an exec-form command with no arguments", () => {
     // arrange

@@ -17,6 +17,7 @@
 import { replaceUserConfigReferences } from "../../domain/user-config.ts";
 import {
   ShellFormOptionReferenceError,
+  UnreadablePluginOptionsError,
   UnsetPluginOptionError,
 } from "../../shared/errors-bridges.ts";
 import { substituteClaudeVars, type ClaudePluginVars } from "../../shared/vars.ts";
@@ -55,8 +56,9 @@ export interface SpawnPlan {
  * second pass reads the first pass's output, so an option reference that a
  * path value holds is filled too, as upstream runs its option pass after the
  * path variables; an option value is never rescanned. A key
- * with no value fails the run with `UnsetPluginOptionError` (D-PG10-08). Any
- * other `${...}` stays literal. A non-string element is passed as its JSON
+ * with no value fails the run with `UnsetPluginOptionError` (D-PG10-08), or
+ * with `UnreadablePluginOptionsError` when the record's stored options do
+ * not parse (D-PG10-25). Any other `${...}` stays literal. A non-string element is passed as its JSON
  * text.
  *
  * The shell-form command is never rewritten: the shell expands the variables
@@ -71,7 +73,7 @@ export function planSpawn(entry: RoutingEntry, vars: ClaudePluginVars): SpawnPla
 
   if (Array.isArray(argsField)) {
     const fill = (text: string): string =>
-      fillPluginOptions(substituteClaudeVars(text, vars), entry.options.values);
+      fillPluginOptions(substituteClaudeVars(text, vars), entry);
     const args: string[] = (argsField as readonly unknown[]).map((a): string =>
       typeof a === "string" ? fill(a) : JSON.stringify(a),
     );
@@ -96,14 +98,18 @@ function namesPluginOption(text: string): boolean {
   return named;
 }
 
-function fillPluginOptions(text: string, values: ReadonlyMap<string, string>): string {
+function fillPluginOptions(text: string, entry: RoutingEntry): string {
   return replaceUserConfigReferences(text, (key) => {
-    const value = values.get(key);
-    if (value === undefined) {
-      throw new UnsetPluginOptionError(key);
+    const value = entry.options.values.get(key);
+    if (value !== undefined) {
+      return value;
     }
 
-    return value;
+    if (entry.options.unreadable === true) {
+      throw new UnreadablePluginOptionsError(`${entry.pluginId}@${entry.marketplace}`, key);
+    }
+
+    throw new UnsetPluginOptionError(key);
   });
 }
 

@@ -2,7 +2,8 @@ Feature: MCP server options
 
   A plugin's MCP servers receive the plugin's options under both MCP implementations, and a server
   that names an option with no value is left out and reported (PG-CORE-03, D-PG10-11, D-PG10-12,
-  D-PG10-21). A stdio stub server and a loopback HTTP server stand in for real servers, and a local
+  D-PG10-21). A server that names an option of a record whose options do not parse is held back
+  (D-PG10-25). A stdio stub server and a loopback HTTP server stand in for real servers, and a local
   marketplace for a published one.
 
   Background:
@@ -463,3 +464,154 @@ Feature: MCP server options
     Then the http mcp server "web" receives these other requests in any order:
       | request | x-team | mcp-protocol-version |
       | GET     | core   | 2025-11-25           |
+
+  @adapter-only
+  Scenario: A new session starts no server that names a plugin option of a record whose options do not parse (D-PG10-25)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "tool": { "type": "string", "title": "Tool", "description": "The tool.", "default": "reverse" }
+        }
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the stub mcp server "picker" whose tool name argument is "${user_config.tool}"
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the installation record of the plugin "demo@fixtures" in the user scope holds plugin options that do not parse
+    Given pi runs with the scripted model and the mcp implementation
+    Given the scripted model plays these steps:
+      | reply | tool | arguments |
+      |       | mcp  | {}        |
+      | Done. |      |           |
+    When the user prompts "list the mcp servers"
+    Then the model receives these calls:
+      | call | role        | text                                              |
+      | 1    | user        | list the mcp servers                              |
+      | 2    | user        | list the mcp servers                              |
+      | 2    | assistant   | tool call mcp {}                                  |
+      | 2    | tool result | mcp returned: server plugin_demo_picker_ disabled |
+    Then no stub mcp server receives a message
+
+  @adapter-only
+  Scenario: A new session disables in mcp-adapter.json a server that names a plugin option of a record whose options do not parse (D-PG10-25)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "tool": { "type": "string", "title": "Tool", "description": "The tool.", "default": "reverse" }
+        }
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"keyed": {"command": "pi-features-absent-mcp-server", "args": ["--tool", "${user_config.tool}"]}}}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the installation record of the plugin "demo@fixtures" in the user scope holds plugin options that do not parse
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons    | scope | cause chain                                                                                                                                                       | cause truncated | leaks | rollback partial |
+      | fixtures         | user              | demo@fixtures | demo | failed | unreadable | user  | The plugin options in the install record of demo@fixtures do not parse (userConfig is not an object). Run /claude:plugin reinstall demo@fixtures to restore them. | false           |       |                  |
+      | fixtures         | user              | demo@fixtures | demo | failed | unreadable | user  | The plugin options in the install record of demo@fixtures do not parse (userConfig is not an object). Run /claude:plugin reinstall demo@fixtures to restore them. | false           |       |                  |
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_keyed_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [
+              "--tool",
+              "${PI_CLAUDE_MARKETPLACE_OPTION_8fd4b1ce5a5f54e0}"
+            ],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "disabled": true,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              },
+              "withheld": {}
+            }
+          }
+        }
+      }
+
+      """
+
+  @adapter-only
+  Scenario: A reinstall enables again in mcp-adapter.json a server the load held back (D-PG10-25)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "tool": { "type": "string", "title": "Tool", "description": "The tool.", "default": "reverse" }
+        }
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"keyed": {"command": "pi-features-absent-mcp-server", "args": ["--tool", "${user_config.tool}"]}}}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
+    Given the installation record of the plugin "demo@fixtures" in the user scope holds plugin options that do not parse
+    Given pi runs with the scripted model and the mcp implementation
+    When the user runs "/claude:plugin reinstall demo@fixtures --scope user"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | reinstalled |         | user  | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_keyed_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [
+              "--tool",
+              "${PI_CLAUDE_MARKETPLACE_OPTION_8fd4b1ce5a5f54e0}"
+            ],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              }
+            }
+          }
+        }
+      }
+
+      """

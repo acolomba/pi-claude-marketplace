@@ -33,6 +33,7 @@ import {
   createScopeDependencyInstall,
 } from "./orchestrators/reconcile/apply.ts";
 import { createLoadReconcile } from "./orchestrators/reconcile/load.ts";
+import { withholdUserOptionServersAtStartup } from "./orchestrators/reconcile/option-withhold.ts";
 import { createPluginNamesCache, loadPluginNames } from "./orchestrators/skill-alias-state.ts";
 import { createTypedExpansionResolver } from "./orchestrators/typed-expansion.ts";
 import { locationsFor } from "./persistence/locations.ts";
@@ -109,6 +110,9 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   // the same reason. The project scope waits for the load's trust answer.
   const optionVariables = createPluginOptionVariables({ loadState, env: process.env });
   await applyOptionVariablesWith(optionVariables.applyUserScope);
+  // D-PG10-25: and for the same reason, a user-scope server that names an
+  // option of a record whose options do not parse is held back here.
+  await withholdUserOptionServersAtStartup(process.cwd(), process.env);
   const hooksRuntime = createHooksRuntime();
   const hooksRouting = createHooksRouting(hooksRuntime, { readHooksJson });
   const completionCache = createCompletionCache();

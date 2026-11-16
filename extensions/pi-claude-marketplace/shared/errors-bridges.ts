@@ -335,6 +335,26 @@ export class UnsetPluginOptionError extends Error {
 }
 
 /**
+ * D-PG10-25: an exec-form hook names `${user_config.KEY}`, and the install
+ * record's stored `userConfig` does not parse, so no option has a value and
+ * the run fails before the spawn. `plugin` is `<plugin>@<marketplace>`.
+ * Claude Code has no install record, so the text is this extension's.
+ */
+export class UnreadablePluginOptionsError extends Error {
+  readonly plugin: string;
+  readonly key: string;
+  constructor(plugin: string, key: string) {
+    super(
+      `Plugin option "${key}" can't be read: the options in the install record of ${plugin} ` +
+        `do not parse. Run /claude:plugin reinstall ${plugin} to restore them.`,
+    );
+    this.name = "UnreadablePluginOptionsError";
+    this.plugin = plugin;
+    this.key = key;
+  }
+}
+
+/**
  * D-PG10-10: a shell-form hook command names `${user_config.*}`, set or not,
  * so it is not run: a spliced value would be parsed again by the shell.
  * `plugin` is `<plugin>@<marketplace>`. The text is Claude Code 2.1.323's,

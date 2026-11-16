@@ -1,7 +1,7 @@
 import { parsePluginSource } from "../../domain/source.ts";
 import { declaredVersionWithPin, isSameVersion } from "../../domain/version.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { isRecordedButDisabled } from "../../persistence/state-io.ts";
+import { isRecordedButDisabled, unreadableUserConfigOf } from "../../persistence/state-io.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { legacyServersSourceFor } from "../mcp/recorded-servers.ts";
 
@@ -20,6 +20,7 @@ import type {
 import type { PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
+  ContentReason,
   PluginDisabledMessage,
   PluginInstalledMessage,
   PluginPartiallyInstalledMessage,
@@ -208,8 +209,30 @@ async function classifySource(
   return { kind: "enabled", status, effective, recorded, candidate };
 }
 
+/**
+ * D-PG10-25: `row` with `unreadable` last in its reasons when the record's
+ * stored options do not parse, whatever the row's status, so the inventory
+ * shows the fault until a reinstall writes the options again.
+ */
+function withUnreadableOptions<R extends { readonly reasons?: readonly ContentReason[] }>(
+  row: R,
+  record: PluginInstallRecord,
+): R {
+  if (unreadableUserConfigOf(record) === undefined) {
+    return row;
+  }
+
+  return { ...row, reasons: [...(row.reasons ?? []), "unreadable"] };
+}
+
 /** Composes one exact installed-inventory row without network access. */
 export async function composeInstalledListRow(
+  options: ComposeInstalledListRowOptions,
+): Promise<InstalledListRow> {
+  return withUnreadableOptions(await composeRecordRow(options), rowSource(options).record);
+}
+
+async function composeRecordRow(
   options: ComposeInstalledListRowOptions,
 ): Promise<InstalledListRow> {
   const { pluginName, pluginScope, marketplaceScope, lookup } = options;

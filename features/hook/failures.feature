@@ -208,6 +208,52 @@ Feature: Hook failures
       | severity | text                                                                                                                                                                             |
       | info     | UserPromptSubmit hook error: Failed to run: Plugin option "token" isn't set. Open /plugin manage to configure it, or check that the plugin's userConfig schema declares "token". |
 
+  Scenario: An exec-form hook that names a plugin option of a record whose options do not parse fails as unreadable (D-PG10-25)
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "token": { "type": "string", "title": "Token", "description": "The token.", "default": "abc" }
+        }
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name       | event            | matcher | form | arguments                |
+      | observer   | UserPromptSubmit |         |      |                          |
+      | token-hook | UserPromptSubmit |         | exec | ["${user_config.token}"] |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the installation record of the plugin "demo@fixtures" in the project scope holds plugin options that do not parse
+    Given the scripted model plays these steps:
+      | reply |
+      | Done. |
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons    | scope   | cause chain                                                                                                                                                       | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | unreadable | project | The plugin options in the install record of demo@fixtures do not parse (userConfig is not an object). Run /claude:plugin reinstall demo@fixtures to restore them. | false           |       |                  |
+      | fixtures         | project           | demo@fixtures | demo | failed | unreadable | project | The plugin options in the install record of demo@fixtures do not parse (userConfig is not an object). Run /claude:plugin reinstall demo@fixtures to restore them. | false           |       |                  |
+    When the user prompts "say done"
+    Then the hooks record these runs:
+      | event            | session | prompt   | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | UserPromptSubmit | first   | say done | {project dir} |                 | observer  | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the model receives these calls:
+      | call | role | text     |
+      | 1    | user | say done |
+    Then the hooks show the user these messages:
+      | severity | text                                                                                                                                                                                                          |
+      | info     | UserPromptSubmit hook error: Failed to run: Plugin option "token" can't be read: the options in the install record of demo@fixtures do not parse. Run /claude:plugin reinstall demo@fixtures to restore them. |
+
   Scenario: A shell-form hook that names a plugin option is not run, with Claude Code's message (D-PG10-10)
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source

@@ -14,10 +14,12 @@
 //     mtime stay untouched.
 //   - WR-01: every per-scope step is isolated, so one scope's throw becomes
 //     one structured row and the other scope still runs.
-//   - Per scope, `openScopePass` runs the read pass and then the AMIG-01 MCP
-//     move; `closeScopePass` reports the unreadable declarer, the plugins of a
-//     marketplace Claude Code refuses, and the delisted plugins, and rebuilds
-//     the hook routing table. A caller's own steps run between the two.
+//   - Per scope, `openScopePass` runs the read pass, then the AMIG-01 MCP
+//     move and the D-PG10-25 hold-back of option-naming entries;
+//     `closeScopePass` reports the unreadable declarer, the plugins of a
+//     marketplace Claude Code refuses, the delisted plugins, and the plugins
+//     whose recorded options do not parse, and rebuilds the hook routing
+//     table. A caller's own steps run between the two.
 //   - IL-2 / RECON-04: `notifyScopePasses` sends the one migration notice and
 //     at most one cascade for both scopes (`notifyScopeOutcomes`).
 //
@@ -43,10 +45,12 @@ import {
   reportDelistedPlugins,
   reportRefusedMarketplaces,
   reportUnreadableDeclarer,
+  reportUnreadableOptions,
 } from "./delisted-plugins.ts";
 import { buildScopeSatisfactionVerdict, verdictAfterToggles } from "./dependency-verdict.ts";
 import { migrateLegacyMcpEntries } from "./mcp-migration.ts";
 import { buildReconcileAppliedCascade } from "./notify.ts";
+import { withholdUnreadableOptionServers } from "./option-withhold.ts";
 import { planReconcile } from "./plan.ts";
 import { composeLayerMarketplaceCause, RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
 
@@ -430,17 +434,24 @@ function readPassFailureOutcome(scope: Scope, err: unknown): PerEntryOutcome {
 }
 
 /**
- * AMIG-01 / NFR-2: runs one scope's MCP move and turns any throw out of it
- * into a stopped row, never an `invalid-block` reconcile row, so the move
- * cannot abort the reconcile of either scope. `migrateMcpEntries` is the
- * injected step; `migrateLegacyMcpEntries` runs when it is absent.
+ * AMIG-01 / D-PG10-25: the default MCP step of a scope's pass: the legacy
+ * move, then the hold-back of the entries whose record's options do not
+ * parse, each isolated, so a throw out of the move still lets the hold-back
+ * run.
  */
-async function migrateScopeIsolated(
-  input: McpMigrationInput & { readonly migrateMcpEntries?: McpMigrationStep | undefined },
-): Promise<void> {
-  const { migrateMcpEntries, ...step } = input;
+async function defaultMcpStep(input: McpMigrationInput): Promise<void> {
+  await mcpStepIsolated(input, migrateLegacyMcpEntries);
+  await mcpStepIsolated(input, withholdUnreadableOptionServers);
+}
+
+/**
+ * AMIG-01 / NFR-2: runs one MCP step and turns any throw out of it into a
+ * stopped row, never an `invalid-block` reconcile row, so the step cannot
+ * abort the reconcile of either scope.
+ */
+async function mcpStepIsolated(input: McpMigrationInput, step: McpMigrationStep): Promise<void> {
   try {
-    await (migrateMcpEntries ?? migrateLegacyMcpEntries)(step);
+    await step(input);
   } catch (err) {
     input.rows.push({
       kind: "stopped",
@@ -448,6 +459,20 @@ async function migrateScopeIsolated(
       detail: redactAbsolutePaths(errorMessage(err)),
     });
   }
+}
+
+/**
+ * AMIG-01 / D-MB-12: runs one scope's MCP step. `migrateMcpEntries` is the
+ * injected step, which replaces both default steps: a pi-subagents child
+ * injects one that does nothing, so its load writes no MCP file.
+ */
+async function migrateScopeIsolated(
+  input: McpMigrationInput & { readonly migrateMcpEntries?: McpMigrationStep | undefined },
+): Promise<void> {
+  const { migrateMcpEntries, ...step } = input;
+  await (migrateMcpEntries === undefined
+    ? defaultMcpStep(step)
+    : mcpStepIsolated(step, migrateMcpEntries));
 }
 
 /**
@@ -590,7 +615,8 @@ export async function openScopePass(input: ScopePassInput): Promise<ScopeReadRes
  * walk's row, which names a delisted plugin whose installed copy cannot be
  * read with the fuller cause. The rows for the plugins of a marketplace Claude
  * Code refuses come before the delisted rows, so a refused plugin gets one row
- * (D-PL5-28). The routing rebuild runs last, so the next Pi
+ * (D-PL5-28). The `{unreadable}` rows of the plugins whose recorded options do
+ * not parse follow them (D-PG10-25). The routing rebuild runs last, so the next Pi
  * event fires against a bucket that reflects the scope after the pass.
  */
 export async function closeScopePass(
@@ -603,6 +629,7 @@ export async function closeScopePass(
   reportUnreadableDeclarer(scope, readResult, outcomes);
   await reportRefusedMarketplaces(scope, readResult.state, outcomes);
   await reportDelistedPlugins(scope, readResult.state, outcomes);
+  reportUnreadableOptions(scope, readResult.state, outcomes);
   await rebuildScopeRoutingTableIsolated(scope, cwd, hooksRouting, outcomes);
 }
 

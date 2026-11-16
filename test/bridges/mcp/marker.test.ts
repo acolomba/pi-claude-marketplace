@@ -8,8 +8,10 @@ import {
   malformedMarkerMember,
   isOwnedBy,
   keptOverrideOf,
+  markerObjectOf,
   markerOwnerOf,
   pluginSetFieldsOf,
+  withheldOf,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/marker.ts";
 
 describe("CLAUDE_MARKETPLACE_MARKER_KEY", () => {
@@ -442,6 +444,11 @@ describe("malformedMarkerMember", () => {
       member: "keptOverride",
     },
     {
+      description: "a withheld that is an array",
+      members: { withheld: [] },
+      member: "withheld",
+    },
+    {
       description: "a malformed defaultFields and keptOverride, the first of them",
       members: { keptOverride: null, defaultFields: [] },
       member: "defaultFields",
@@ -827,4 +834,62 @@ describe("markerOwnerOf", () => {
       assert.strictEqual(owner, expectedOwner);
     });
   }
+});
+
+describe("withheldOf", () => {
+  test("D-PG10-25: returns the fields an owned entry's marker keeps while the load withholds it", () => {
+    // arrange
+    const server = {
+      command: "node",
+      disabled: true,
+      _piClaudeMarketplace: {
+        plugin: "acme",
+        marketplace: "catalog",
+        withheld: { disabled: false },
+      },
+    };
+
+    // act
+    const withheld = withheldOf(server);
+
+    // assert
+    assert.deepStrictEqual(withheld, { disabled: false });
+  });
+
+  for (const { description, marker } of [
+    { description: "no withheld member", marker: { plugin: "acme", marketplace: "catalog" } },
+    {
+      description: "a withheld that is not an object",
+      marker: { plugin: "acme", marketplace: "catalog", withheld: true },
+    },
+  ]) {
+    test(`D-PG10-25: returns nothing for a marker with ${description}`, () => {
+      // act
+      const withheld = withheldOf({ command: "node", _piClaudeMarketplace: marker });
+
+      // assert
+      assert.strictEqual(withheld, undefined);
+    });
+  }
+});
+
+describe("markerObjectOf", () => {
+  test("D-PG10-25: returns the marker object with every member it holds", () => {
+    // arrange
+    const marker = { plugin: "acme", marketplace: "catalog", extra: 1 };
+
+    // act
+    const object = markerObjectOf({ command: "node", _piClaudeMarketplace: marker });
+
+    // assert
+    assert.strictEqual(object, marker);
+  });
+
+  test("D-PG10-25: returns nothing for a marker that names no owner", () => {
+    // act
+    const object = markerObjectOf({ _piClaudeMarketplace: { plugin: 1, marketplace: "catalog" } });
+
+    // assert
+    assert.strictEqual(object, undefined);
+  });
 });

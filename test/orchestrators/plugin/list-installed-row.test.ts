@@ -281,6 +281,65 @@ test("composes a manifest-absent disabled row with no suspended reasons", async 
   });
 });
 
+test("D-PG10-25: composes an installed row whose stored options do not parse with the unreadable reason", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+  const record: PluginInstallRecord = { ...pluginRecord(), userConfig: "token=secret" };
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    pluginName: "alpha",
+    pluginScope: "user",
+    marketplaceScope: "user",
+    marketplace: environment.marketplaceFor(record),
+    lookup: { kind: "absent" },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "installed",
+    name: "alpha",
+    dependencies: [],
+    version: "1.0.0",
+    reasons: ["not in manifest", "unreadable"],
+    severity: "info",
+    needsReload: false,
+  });
+});
+
+test("D-PG10-25: composes a disabled row whose stored options do not parse with the unreadable reason", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+  const record: PluginInstallRecord = {
+    ...pluginRecord({ enabled: false }),
+    userConfig: "token=secret",
+  };
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    pluginName: "alpha",
+    pluginScope: "user",
+    marketplaceScope: "user",
+    marketplace: environment.marketplaceFor(record),
+    lookup: { kind: "declared", entry: manifestEntry() },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "disabled",
+    name: "alpha",
+    version: "1.0.0",
+    description: "Alpha plugin.",
+    reasons: ["unreadable"],
+    severity: "info",
+    needsReload: false,
+  });
+});
+
 test("composes a degraded row with exact ordered reasons", async (testContext) => {
   // arrange
   const composeInstalledListRow = await loadComposeInstalledListRow();

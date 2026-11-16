@@ -76,6 +76,7 @@ import { locationsFor, type ScopedLocations } from "../../persistence/locations.
 import {
   isRecordedButDisabled,
   loadState,
+  unreadableUserConfigOf,
   type ExtensionState,
   type PluginInstallRecord,
 } from "../../persistence/state-io.ts";
@@ -1491,7 +1492,7 @@ async function buildBlock(args: {
         marketplace,
         scope,
         marketplaceDetails,
-        applyDisabledRowShape(stateOnly.row, installed.record),
+        applyRecordRowShape(stateOnly.row, installed.record),
         stateOnly.mcpDependency,
         skipReasonFor(installed.record, true),
       );
@@ -1595,7 +1596,7 @@ async function buildBlock(args: {
       marketplace,
       scope,
       marketplaceDetails,
-      applyDisabledRowShape(composed.row, installed.record),
+      applyRecordRowShape(composed.row, installed.record),
       composed.mcpDependency,
       skipReasonFor(installed.record, false),
     );
@@ -1700,7 +1701,7 @@ function invalidManifestBlock(args: {
     marketplace,
     scope,
     marketplaceDetails,
-    installed === undefined ? row : applyDisabledRowShape(row, installed),
+    installed === undefined ? row : applyRecordRowShape(row, installed),
     false,
     installed === undefined ? undefined : skipReasonFor(installed, false),
   );
@@ -1802,6 +1803,23 @@ function applyDisabledRowShape(
     status: "disabled",
     reasons: (row.reasons ?? []).filter((reason) => DISABLED_ROW_REASONS.has(reason)),
   };
+}
+
+/**
+ * D-PG10-25: the row of an installation record. `unreadable` goes last in its
+ * reasons when the record's stored options do not parse, once, and the
+ * disabled shape keeps it, so every arm that sees a record shows the fault.
+ */
+function applyRecordRowShape(
+  row: PluginInfoRow,
+  record: MarketplaceRecord["plugins"][string],
+): PluginInfoRow {
+  if (unreadableUserConfigOf(record) === undefined) {
+    return applyDisabledRowShape(row, record);
+  }
+
+  const reasons = new Set<ContentReason>([...(row.reasons ?? []), "unreadable"]);
+  return applyDisabledRowShape({ ...row, reasons: [...reasons] }, record);
 }
 
 /**
