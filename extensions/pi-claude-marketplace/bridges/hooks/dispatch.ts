@@ -1661,12 +1661,14 @@ function entryFires(
   return value === undefined || matcherFiresOnClosedSetValue(entry, value);
 }
 
-// D-PG6-20: the typed command an expansion block notice ends with. The
-// UserPromptSubmit block notice still leaves its prompt out (D-CF5-24).
+// D-PG6-20: the prompt a block notice ends with, as the hook's stdin `prompt`
+// holds it: the typed command of an expansion, the submitted text of a prompt.
 function originalPromptOf(claudeEvent: CompositeDispatchEvent, event: unknown): string | undefined {
-  return claudeEvent === "UserPromptExpansion"
-    ? expansionPrompt(event as UserPromptExpansionEvent)
-    : undefined;
+  if (claudeEvent === "UserPromptExpansion") {
+    return expansionPrompt(event as UserPromptExpansionEvent);
+  }
+
+  return claudeEvent === "UserPromptSubmit" ? (event as InputEvent).text : undefined;
 }
 
 /**

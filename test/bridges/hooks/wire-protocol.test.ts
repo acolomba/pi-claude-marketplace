@@ -6,6 +6,7 @@ import { BUCKET_A_EVENTS } from "../../../extensions/pi-claude-marketplace/domai
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
+import type { BucketAEvent } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 
 test("blocks exit 2 with its trimmed stderr reason, marked, when stdout names no block reason", () => {
   // arrange
@@ -939,17 +940,18 @@ test("keeps the stdout outputs on an exit-2 stderr block", () => {
   });
 });
 
-for (const { name, exitCode } of [
-  { name: "exit 0", exitCode: 0 },
-  { name: "exit 1", exitCode: 1 },
-]) {
+for (const { name, exitCode, claudeEvent } of [
+  { name: "exit 0", exitCode: 0, claudeEvent: "UserPromptExpansion" },
+  { name: "exit 1", exitCode: 1, claudeEvent: "UserPromptExpansion" },
+  { name: "a UserPromptSubmit exit 0", exitCode: 0, claudeEvent: "UserPromptSubmit" },
+] as const) {
   test(`marks a block on ${name} whose hook suppresses the original prompt (D-PG6-20)`, () => {
     // act
     const hookOutcome = parseHookStdout(
       exitCode,
-      '{"decision":"block","reason":"r","hookSpecificOutput":{"hookEventName":"UserPromptExpansion","suppressOriginalPrompt":true,"additionalContext":"ctx"}}',
+      `{"decision":"block","reason":"r","hookSpecificOutput":{"hookEventName":"${claudeEvent}","suppressOriginalPrompt":true,"additionalContext":"ctx"}}`,
       "ignored stderr",
-      "UserPromptExpansion",
+      claudeEvent,
     );
 
     // assert
@@ -962,36 +964,65 @@ for (const { name, exitCode } of [
   });
 }
 
-for (const { name, exitCode, stdout, hookOutcome } of [
+for (const { name, exitCode, claudeEvent, stdout, hookOutcome } of [
   {
     name: "a non-true suppressOriginalPrompt on a block",
     exitCode: 0,
+    claudeEvent: "UserPromptExpansion",
     stdout:
-      '{"decision":"block","reason":"r","hookSpecificOutput":{"suppressOriginalPrompt":"true"}}',
+      '{"decision":"block","reason":"r","hookSpecificOutput":{"hookEventName":"UserPromptExpansion","suppressOriginalPrompt":"true"}}',
     hookOutcome: { kind: "block", reason: "r" },
   },
   {
     name: "suppressOriginalPrompt on a stop",
     exitCode: 0,
-    stdout: '{"continue":false,"hookSpecificOutput":{"suppressOriginalPrompt":true}}',
+    claudeEvent: "UserPromptExpansion",
+    stdout:
+      '{"continue":false,"hookSpecificOutput":{"hookEventName":"UserPromptExpansion","suppressOriginalPrompt":true}}',
     hookOutcome: { kind: "stop" },
   },
   {
     name: "suppressOriginalPrompt on an exit-2 block",
     exitCode: 2,
+    claudeEvent: "UserPromptExpansion",
+    stdout:
+      '{"decision":"block","reason":"r","hookSpecificOutput":{"hookEventName":"UserPromptExpansion","suppressOriginalPrompt":true}}',
+    hookOutcome: { kind: "block", reason: "r" },
+  },
+  {
+    name: "suppressOriginalPrompt without a hookEventName",
+    exitCode: 0,
+    claudeEvent: "UserPromptSubmit",
     stdout:
       '{"decision":"block","reason":"r","hookSpecificOutput":{"suppressOriginalPrompt":true}}',
+    hookOutcome: { kind: "block", reason: "r" },
+  },
+  {
+    name: "suppressOriginalPrompt under another event's hookEventName",
+    exitCode: 0,
+    claudeEvent: "UserPromptSubmit",
+    stdout:
+      '{"decision":"block","reason":"r","hookSpecificOutput":{"hookEventName":"UserPromptExpansion","suppressOriginalPrompt":true}}',
+    hookOutcome: { kind: "block", reason: "r" },
+  },
+  {
+    name: "suppressOriginalPrompt on an event that does not read it",
+    exitCode: 0,
+    claudeEvent: "PreToolUse",
+    stdout:
+      '{"decision":"block","reason":"r","hookSpecificOutput":{"hookEventName":"PreToolUse","suppressOriginalPrompt":true}}',
     hookOutcome: { kind: "block", reason: "r" },
   },
 ] satisfies ReadonlyArray<{
   readonly name: string;
   readonly exitCode: number;
+  readonly claudeEvent: BucketAEvent;
   readonly stdout: string;
   readonly hookOutcome: HookExecResult;
 }>) {
   test(`ignores ${name} (D-PG6-20)`, () => {
     // act
-    const parsed = parseHookStdout(exitCode, stdout, "ignored stderr", "UserPromptExpansion");
+    const parsed = parseHookStdout(exitCode, stdout, "ignored stderr", claudeEvent);
 
     // assert
     assert.deepStrictEqual(parsed, hookOutcome);

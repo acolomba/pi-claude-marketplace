@@ -2135,7 +2135,11 @@ test("blocks a hook that cannot start when onFailure is block", async (t) => {
   });
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: ON_FAILURE_HEAD });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "block",
+    reason: ON_FAILURE_HEAD,
+    suppressOriginalPrompt: true,
+  });
 });
 
 const UNSET_TOKEN_MESSAGE =
@@ -2194,6 +2198,7 @@ test("D-PG10-08: blocks an exec-form hook that names an unset option when onFail
   assert.deepStrictEqual(hookOutcome, {
     kind: "block",
     reason: `${ON_FAILURE_HEAD}\n${UNSET_TOKEN_MESSAGE}`,
+    suppressOriginalPrompt: true,
   });
   assert.deepStrictEqual(processBoundary.calls, []);
 });
@@ -2216,6 +2221,7 @@ for (const { onFailure, outcome } of [
       reason:
         '[guard ${user_config.mode}]: failed; blocking because onFailure is "block"\n' +
         SHELL_REFUSAL_MESSAGE,
+      suppressOriginalPrompt: true,
     },
   },
 ] satisfies readonly { onFailure: string | undefined; outcome: HookExecResult }[]) {
@@ -2258,7 +2264,11 @@ test("blocks a hook that exits 1 when onFailure is block", async (t) => {
   );
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: `${ON_FAILURE_HEAD}\nboom` });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "block",
+    reason: `${ON_FAILURE_HEAD}\nboom`,
+    suppressOriginalPrompt: true,
+  });
 });
 
 test("blocks a hook whose stdout starts and ends a JSON object that does not parse", async (t) => {
@@ -2273,7 +2283,11 @@ test("blocks a hook whose stdout starts and ends a JSON object that does not par
   );
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: ON_FAILURE_HEAD });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "block",
+    reason: ON_FAILURE_HEAD,
+    suppressOriginalPrompt: true,
+  });
 });
 
 test("lets a hook pass whose stdout opens a JSON object and does not close it", async (t) => {
@@ -2327,7 +2341,11 @@ test("blocks a hook that exits 1 whose JSON allows the call when onFailure is bl
   );
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: ON_FAILURE_HEAD });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "block",
+    reason: ON_FAILURE_HEAD,
+    suppressOriginalPrompt: true,
+  });
 });
 
 test("blocks a hook its timeout killed with the timed out message", async (t) => {
@@ -2351,6 +2369,7 @@ test("blocks a hook its timeout killed with the timed out message", async (t) =>
   assert.deepStrictEqual(hookOutcome, {
     kind: "block",
     reason: '[guard]: timed out; blocking because onFailure is "block"',
+    suppressOriginalPrompt: true,
   });
 });
 
@@ -2487,6 +2506,7 @@ describe("PostCompact runs (D-BG-503)", () => {
       outcome: {
         kind: "block",
         reason: `${ON_FAILURE_HEAD}\nboom`,
+        suppressOriginalPrompt: true,
         postCompactRun: { succeeded: false, output: `${ON_FAILURE_RUN}\nboom` },
       },
     },
@@ -2514,6 +2534,7 @@ describe("PostCompact runs (D-BG-503)", () => {
       outcome: {
         kind: "block",
         reason: `${ON_FAILURE_HEAD}\nno shell`,
+        suppressOriginalPrompt: true,
         postCompactRun: { succeeded: false, output: `${ON_FAILURE_RUN}\nspawn guard ENOENT` },
       },
     },
@@ -2537,6 +2558,7 @@ describe("PostCompact runs (D-BG-503)", () => {
       outcome: {
         kind: "block",
         reason: '[guard]: timed out; blocking because onFailure is "block"\nlate',
+        suppressOriginalPrompt: true,
         postCompactRun: {
           succeeded: false,
           output: 'timed out; blocking because onFailure is "block"',
@@ -2582,6 +2604,7 @@ describe("PostCompact runs (D-BG-503)", () => {
     assert.deepStrictEqual(hookOutcome, {
       kind: "block",
       reason: `${ON_FAILURE_HEAD}\nrefusing acme`,
+      suppressOriginalPrompt: true,
       postCompactRun: { succeeded: false, output: `${ON_FAILURE_RUN}\nrefusing acme` },
     });
   });
@@ -2619,6 +2642,7 @@ test("blocks a hook whose spawn throws when onFailure is block", async (t) => {
   assert.deepStrictEqual(hookOutcome, {
     kind: "block",
     reason: `${ON_FAILURE_HEAD}\nThe argument 'file' must be a string without null bytes`,
+    suppressOriginalPrompt: true,
   });
 });
 
@@ -2641,6 +2665,7 @@ test("redacts absolute paths from the cause of a hook that cannot start", async 
   assert.deepStrictEqual(hookOutcome, {
     kind: "block",
     reason: `${ON_FAILURE_HEAD}\nrefusing acme`,
+    suppressOriginalPrompt: true,
   });
 });
 
@@ -2801,6 +2826,7 @@ test("blocks a hook that exits 1 with its whole stderr past 64 KB when onFailure
   assert.deepStrictEqual(hookOutcome, {
     kind: "block",
     reason: `${ON_FAILURE_HEAD}\nboom\n${"e".repeat(64 * 1024)}`,
+    suppressOriginalPrompt: true,
   });
 });
 
@@ -3101,6 +3127,7 @@ test("lets a hook that prints more than 1 MB run to its timeout", async (t) => {
   assert.deepStrictEqual(hookOutcome, {
     kind: "block",
     reason: '[guard]: timed out; blocking because onFailure is "block"',
+    suppressOriginalPrompt: true,
   });
 });
 

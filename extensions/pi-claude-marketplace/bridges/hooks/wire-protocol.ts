@@ -85,7 +85,7 @@ export function parseHookStdout(
   }
 
   if (exitCode !== 0) {
-    return nonZeroExitResult(exitCode, stdout, stderr);
+    return nonZeroExitResult(exitCode, stdout, stderr, claudeEvent);
   }
 
   const trimmed = stdout.trim();
@@ -108,7 +108,7 @@ export function parseHookStdout(
   }
 
   // A text that starts with `{`, ends with `}`, and parses is a JSON object.
-  return normalizeClaudeStdout(parsed as object);
+  return normalizeClaudeStdout(parsed as object, claudeEvent);
 }
 
 // D-CF5-13: plain stdout on exit 0 is context on SessionStart and
@@ -173,6 +173,7 @@ function nonZeroExitResult(
   exitCode: number | null,
   stdout: string,
   stderr: string,
+  claudeEvent: BucketAEvent,
 ): HookExecResult {
   const exit = exitCode === null ? "signal-kill" : String(exitCode);
   const parsed = exitCode === null ? undefined : stdoutObject(stdout);
@@ -182,7 +183,7 @@ function nonZeroExitResult(
   }
 
   hookDebugLog(`wire-protocol: non-zero exit (${exit}); applying its JSON output`);
-  return normalizeClaudeStdout(parsed);
+  return normalizeClaudeStdout(parsed, claudeEvent);
 }
 
 /**
@@ -190,22 +191,28 @@ function nonZeroExitResult(
  * `docs/research/claude-hook-config-syntax.md § 4`: the decision, with the
  * hook's outputs on whichever arm the decision gives.
  */
-function normalizeClaudeStdout(parsed: object): HookExecResult {
+function normalizeClaudeStdout(parsed: object, claudeEvent: BucketAEvent): HookExecResult {
   const decided = decideClaudeStdout(parsed);
-  return decided.kind === "block" && suppressesOriginalPrompt(parsed)
+  return decided.kind === "block" && suppressesOriginalPrompt(parsed, claudeEvent)
     ? { ...decided, suppressOriginalPrompt: true, ...hookOutputs(parsed) }
     : { ...decided, ...hookOutputs(parsed) };
 }
 
 // D-PG6-20: Claude Code 2.1.323 leaves the original prompt out of a JSON
-// block's notice when `hookSpecificOutput.suppressOriginalPrompt` is true. An
-// exit 2 reads no such field from stdout.
-function suppressesOriginalPrompt(parsed: object): boolean {
+// block's notice when `hookSpecificOutput.suppressOriginalPrompt` is true and
+// its `hookEventName` names the event the hook ran for, one of the two prompt
+// events that read the field. An exit 2 reads no such field from stdout.
+function suppressesOriginalPrompt(parsed: object, claudeEvent: BucketAEvent): boolean {
   const hso = (parsed as Record<string, unknown>).hookSpecificOutput;
+  if (hso === null || typeof hso !== "object") {
+    return false;
+  }
+
+  const { hookEventName, suppressOriginalPrompt } = hso as Record<string, unknown>;
   return (
-    hso !== null &&
-    typeof hso === "object" &&
-    (hso as Record<string, unknown>).suppressOriginalPrompt === true
+    hookEventName === claudeEvent &&
+    (claudeEvent === "UserPromptSubmit" || claudeEvent === "UserPromptExpansion") &&
+    suppressOriginalPrompt === true
   );
 }
 

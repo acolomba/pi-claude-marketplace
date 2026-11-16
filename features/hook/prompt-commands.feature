@@ -82,8 +82,8 @@ Feature: Hook prompt commands
       | event            | session | prompt       | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | UserPromptSubmit | first   | <typed text> | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the hooks show the user these messages:
-      | severity | text                                                                                                  |
-      | info     | UserPromptSubmit operation blocked by hook:\n[${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: no prompts today |
+      | severity | text                                                                                                                                   |
+      | info     | UserPromptSubmit operation blocked by hook:\n[${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: no prompts today\n\nOriginal prompt: <typed text> |
     Then the prompt the hook blocked reaches the model in no call
 
     Examples:

@@ -15,7 +15,8 @@
 //   [<command>]: failed; blocking because onFailure is "block"
 //   <stderr>
 //
-// with `timed out` in place of `failed` after a timeout. The default,
+// with `timed out` in place of `failed` after a timeout. Upstream leaves the
+// original prompt out of such a block's notice (D-PG6-20). The default,
 // `"continue"`, lets the failure pass, which the wire protocol already does.
 // Upstream ignores the field on Stop hooks, because a Stop block sends the
 // model back to work and the model cannot repair a hook that will not run,
@@ -139,5 +140,9 @@ export function onFailureBlock(
   const outcome = facts.timedOut ? "timed out" : "failed";
   const head = `[${entry.handlerDecl.command ?? ""}]: ${outcome}; blocking because onFailure is "block"`;
   const stderr = facts.stderr.trim();
-  return { kind: "block", reason: stderr === "" ? head : `${head}\n${stderr}` };
+  return {
+    kind: "block",
+    reason: stderr === "" ? head : `${head}\n${stderr}`,
+    suppressOriginalPrompt: true,
+  };
 }

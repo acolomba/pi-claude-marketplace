@@ -133,8 +133,7 @@ export function hookSaysText(label: string, text: string): string {
  * shows the user, `<event> operation blocked by hook:\n<message>`, the
  * message as `hookErrorText` writes it. With `originalPrompt`, a blank line
  * and `Original prompt: <originalPrompt>` follow, as Claude Code 2.1.323 ends
- * the notice. The `UserPromptSubmit` notice still leaves that part out
- * (D-CF5-24).
+ * the notice on both events.
  */
 export function promptBlockedText(
   claudeEvent: "UserPromptSubmit" | "UserPromptExpansion",

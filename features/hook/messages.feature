@@ -136,8 +136,29 @@ Feature: Hook messages
       | event            | session | prompt | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | UserPromptSubmit | first   | hello  | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the hooks show the user these messages:
-      | severity | text                                                                                                  |
-      | info     | UserPromptSubmit operation blocked by hook:\n[${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: no prompts today |
+      | severity | text                                                                                                                            |
+      | info     | UserPromptSubmit operation blocked by hook:\n[${CLAUDE_PLUGIN_ROOT}/hooks/guard.sh]: no prompts today\n\nOriginal prompt: hello |
+
+  Scenario: A prompt hook that blocks with suppressOriginalPrompt leaves the prompt out of the notice
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event            | matcher | form   | output                                                                                                                          |
+      | quiet | UserPromptSubmit |         | script | {"decision":"block","reason":"not now","hookSpecificOutput":{"hookEventName":"UserPromptSubmit","suppressOriginalPrompt":true}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    When the user prompts "hello"
+    Then the hooks record these runs:
+      | event            | session | prompt | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | UserPromptSubmit | first   | hello  | {project dir} |                 | quiet     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the hooks show the user these messages:
+      | severity | text                                                 |
+      | info     | UserPromptSubmit operation blocked by hook:\nnot now |
+    Then the prompt the hook blocked reaches the model in no call
 
   Scenario: A session start hook that exits 2 shows its error to the user
     Given pi runs with the scripted model

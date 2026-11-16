@@ -86,7 +86,11 @@ describe("onFailureBlock with onFailure block", () => {
       const block = onFailureBlock(entry, facts, NOOP);
 
       // assert
-      assert.deepStrictEqual(block, { kind: "block", reason: FAILED_REASON });
+      assert.deepStrictEqual(block, {
+        kind: "block",
+        reason: FAILED_REASON,
+        suppressOriginalPrompt: true,
+      });
     });
   }
 
@@ -98,6 +102,7 @@ describe("onFailureBlock with onFailure block", () => {
     assert.deepStrictEqual(block, {
       kind: "block",
       reason: `[${COMMAND}]: timed out; blocking because onFailure is "block"\nboom`,
+      suppressOriginalPrompt: true,
     });
   });
 
@@ -109,6 +114,7 @@ describe("onFailureBlock with onFailure block", () => {
     assert.deepStrictEqual(block, {
       kind: "block",
       reason: `[${COMMAND}]: timed out; blocking because onFailure is "block"\nboom`,
+      suppressOriginalPrompt: true,
     });
   });
 
@@ -120,6 +126,7 @@ describe("onFailureBlock with onFailure block", () => {
     assert.deepStrictEqual(block, {
       kind: "block",
       reason: `[${COMMAND}]: failed; blocking because onFailure is "block"`,
+      suppressOriginalPrompt: true,
     });
   });
 
@@ -134,6 +141,7 @@ describe("onFailureBlock with onFailure block", () => {
     assert.deepStrictEqual(block, {
       kind: "block",
       reason: '[]: failed; blocking because onFailure is "block"',
+      suppressOriginalPrompt: true,
     });
   });
 
@@ -185,6 +193,7 @@ describe("onFailureBlock with onFailure block", () => {
     assert.deepStrictEqual(block, {
       kind: "block",
       reason: `[${COMMAND}]: timed out; blocking because onFailure is "block"\nboom`,
+      suppressOriginalPrompt: true,
     });
   });
 
@@ -196,7 +205,11 @@ describe("onFailureBlock with onFailure block", () => {
     const block = onFailureBlock(entry, { ...CLEAN_EXIT, exitCode: 1 }, allow);
 
     // assert
-    assert.deepStrictEqual(block, { kind: "block", reason: FAILED_REASON });
+    assert.deepStrictEqual(block, {
+      kind: "block",
+      reason: FAILED_REASON,
+      suppressOriginalPrompt: true,
+    });
   });
 });
 
@@ -261,6 +274,7 @@ describe("onFailureBlock for the exit 2 of a missing script (D-PG5-09)", () => {
     assert.deepStrictEqual(block, {
       kind: "block",
       reason: `[${COMMAND}]: failed; blocking because onFailure is "block"\n${stderr.trim()}`,
+      suppressOriginalPrompt: true,
     });
   });
 

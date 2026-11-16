@@ -4600,8 +4600,15 @@ describe("hook notices (HOOK-05 / D-CF5-14)", () => {
       },
       notices: [
         "UserPromptSubmit says: said",
-        "UserPromptSubmit operation blocked by hook:\n[printf first]: r1",
+        "UserPromptSubmit operation blocked by hook:\n[printf first]: r1\n\nOriginal prompt: hello",
       ],
+    },
+    {
+      name: "a blocked prompt's notice without the prompt that its hook suppressed (D-PG6-20)",
+      claudeEvent: "UserPromptSubmit",
+      event: PROMPT_EVENT,
+      results: { guard: { kind: "block", reason: "no", suppressOriginalPrompt: true } },
+      notices: ["UserPromptSubmit operation blocked by hook:\nno"],
     },
     {
       name: "the stop notice and no blocked-prompt notice for a prompt a hook stops (D-PG5-13)",
@@ -4862,7 +4869,7 @@ describe("failure notices (D-PG5-10 / D-PG5-12)", () => {
       },
       notices: [
         "UserPromptSubmit says: said",
-        "UserPromptSubmit operation blocked by hook:\nno",
+        "UserPromptSubmit operation blocked by hook:\nno\n\nOriginal prompt: hello",
         "UserPromptSubmit hook error: Failed with non-blocking status code: boom",
       ],
     },
@@ -4992,7 +4999,10 @@ describe("missing-script notices (D-PG5-08 / D-PG5-11)", () => {
       name: "blocks the prompt beside a hook that blocks and shows both notices",
       results: { gone: missing, guard: { kind: "block", reason: "no" } },
       outcome: { action: "handled" },
-      notices: ["UserPromptSubmit operation blocked by hook:\nno", MISSING_SCRIPT_NOTICE],
+      notices: [
+        "UserPromptSubmit operation blocked by hook:\nno\n\nOriginal prompt: hello",
+        MISSING_SCRIPT_NOTICE,
+      ],
     },
   ] satisfies ReadonlyArray<{
     readonly name: string;
