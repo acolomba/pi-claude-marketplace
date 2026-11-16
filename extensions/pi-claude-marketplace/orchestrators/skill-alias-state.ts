@@ -209,11 +209,31 @@ function menuString(value: unknown): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined;
 }
 
+/** A frontmatter value that `String()` shows as its own text. */
+function isScalar(value: unknown): value is string | number | boolean {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
+}
+
+/**
+ * D-PG11-09: a staged `argument-hint` as menu text. Claude Code 2.1.323 reads
+ * the field with `String()`, so a number, a boolean, or a list of scalars
+ * shows as its text, and `[change]` shows `change`. A mapping, or a list that
+ * holds one or another list, gives no hint here, where Claude Code would show
+ * the text of an object.
+ */
+function argumentHint(value: unknown): string | undefined {
+  if (Array.isArray(value)) {
+    return value.every(isScalar) ? menuString(String(value)) : undefined;
+  }
+
+  return isScalar(value) ? menuString(String(value)) : undefined;
+}
+
 /** D-PG11-09: the menu text of a staged skill or command. */
 function menuText(frontmatter: Record<string, unknown>): AliasMenuText {
   return {
     description: menuString(frontmatter.description),
-    argumentHint: menuString(frontmatter["argument-hint"]),
+    argumentHint: argumentHint(frontmatter["argument-hint"]),
   };
 }
 

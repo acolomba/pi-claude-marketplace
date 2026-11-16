@@ -1196,3 +1196,45 @@ test("D-PG11-09: an alias that a second skill also claims keeps the first skill'
   );
   verify(pi);
 });
+
+for (const { written, argumentHint } of [
+  { written: "3", argumentHint: "3" },
+  { written: "true", argumentHint: "true" },
+  { written: "[change]", argumentHint: "change" },
+  { written: "[a, b]", argumentHint: "a,b" },
+  { written: "{ name: change }", argumentHint: undefined },
+  { written: "[{ name: change }]", argumentHint: undefined },
+  { written: "[[change]]", argumentHint: undefined },
+  { written: "[]", argumentHint: undefined },
+  { written: "null", argumentHint: undefined },
+]) {
+  test(`D-PG11-09: a staged argument hint written as ${written} reads as Claude Code 2.1.323 reads it`, async () => {
+    // arrange
+    const file = stagedPath(AGENT_DIR, "demo-review");
+    const pi = piWith([skillCommand("demo-review", file)]);
+
+    // act
+    const aliases = await loadPluginAliases(
+      pi,
+      CWD,
+      false,
+      dependencies(
+        { [AGENT_DIR]: stateWith({ demo: ["demo-review"] }) },
+        {
+          [file]: recordedSkill(
+            "demo-review",
+            ["demo:review"],
+            ["description: A skill.", `argument-hint: ${written}`],
+          ),
+        },
+      ),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      [...aliases],
+      [["demo:review", skill("demo-review", { description: "A skill.", argumentHint })]],
+    );
+    verify(pi);
+  });
+}

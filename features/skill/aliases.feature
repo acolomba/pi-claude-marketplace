@@ -252,3 +252,21 @@ Feature: Skill aliases
     Then pi's terminal menu offers these slash commands:
       | command    | argument hint | description       |
       | demo:fancy | <change>      | Reviews a change. |
+
+  Scenario: Pi's terminal menu shows a skill's bracketed argument hint without its brackets (PG-SKILL-11)
+    Given the published plugin "demo" of the marketplace "fixtures" has the skill "review" with this skill file:
+      """
+      ---
+      name: fancy
+      description: Reviews a change.
+      argument-hint: [change]
+      ---
+
+      Review the change.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    When the user types the slash command prefix "/demo:fa" in pi's terminal
+    Then pi's terminal menu offers these slash commands:
+      | command    | argument hint | description       |
+      | demo:fancy | change        | Reviews a change. |
