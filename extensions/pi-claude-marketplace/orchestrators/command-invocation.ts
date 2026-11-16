@@ -21,6 +21,11 @@
 //
 // D-LOC-01: a project command runs, and the model's tool lists it, only when
 // Pi trusts the project (`ctx.isProjectTrusted()`).
+//
+// PG-SKILL-01 / D-PG11-07: a typed command gets the files its body mentions,
+// read after its `!` commands ran, so a refused invocation reads none. The
+// mentions come from the body with its variables filled and no argument
+// substituted (D-PG11-02). The `run_plugin_command` result attaches nothing.
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -46,6 +51,9 @@ import {
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
 
+import { appendMentionedFiles, NODE_MENTION_FILE_READER } from "./mention-attachments.ts";
+
+import type { MentionFileReader } from "./mention-attachments.ts";
 import type { ShellRun } from "../domain/context-injection.ts";
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 import type { PromptShellHost, PromptShellRunner } from "../platform/prompt-shell.ts";
@@ -81,6 +89,8 @@ export interface CommandInvocationDependencies {
   /** The machine facts that choose a shell and give the commands their environment. */
   readonly host: PromptShellHost;
   readonly runShell: PromptShellRunner;
+  /** D-PG11-08: the reads of the files a typed command's body mentions. */
+  readonly mentions: MentionFileReader;
 }
 
 /** The dependencies of a running Pi: its agent directory, the filesystem, and this machine's shells. */
@@ -91,6 +101,7 @@ function nodeDependencies(): CommandInvocationDependencies {
     runShell: createPromptShellRunner({ host, spawn: NODE_PROMPT_SHELL_SPAWN }),
     readFile: async (file) => readFile(file, "utf8"),
     getAgentDir,
+    mentions: NODE_MENTION_FILE_READER,
   };
 }
 
@@ -199,23 +210,40 @@ function contextShell(
 /**
  * D-CF1-01 / D-CF1-02: fills the body with the typed arguments and the
  * invocation variables, then replaces each `!` command with its output.
- * Throws the cores' errors.
+ * PG-SKILL-01: then appends the files that the body with only its variables
+ * filled mentions (D-PG11-02). Throws the cores' errors.
  */
 async function renderCommand(
   request: CommandInvocationRequest,
   file: CommandFile,
   dependencies: CommandInvocationDependencies,
 ): Promise<CommandInvocationOutcome> {
+  const variables = commandVariables(request, file.frontmatter);
+  const authored = substituteArguments({
+    body: file.body,
+    args: undefined,
+    argumentNames: [],
+    variables,
+  });
   const filled = substituteArguments({
     body: file.body,
     args: request.args,
     argumentNames: parseArgumentNames(file.frontmatter.arguments),
-    variables: commandVariables(request, file.frontmatter),
+    variables,
   });
   const run = contextShell(request, file.frontmatter, dependencies);
-  return run === undefined
-    ? refusal(bashMissingMessage(request.typed))
-    : { kind: "send", text: await expandContextInjections(filled, run) };
+  if (run === undefined) {
+    return refusal(bashMissingMessage(request.typed));
+  }
+
+  const rendered = await expandContextInjections(filled, run);
+  return {
+    kind: "send",
+    text: await appendMentionedFiles(
+      { authored, rendered, cwd: request.cwd },
+      dependencies.mentions,
+    ),
+  };
 }
 
 /** T-01-24: the cores' own failures refuse with their message; any other propagates. */

@@ -332,3 +332,32 @@ Feature: Slash command invocation
     Then the model receives these calls:
       | call | role | text       |
       | 1    | user | Shell: ran |
+
+  Scenario: A command attaches the file that its body mentions (PG-SKILL-01)
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "review" with this command file:
+      """
+      ---
+      description: Reviews against the template.
+      ---
+
+      Review @${CLAUDE_PLUGIN_ROOT}/templates/x.md
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "templates/x.md" with this text:
+      """
+      Check the spelling.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts "/demo:review"
+    Then the model receives these calls:
+      | call | role | text                                                                                                                                                                     |
+      | 1    | user | Review @{home}/marketplaces/fixtures/plugins/demo/templates/x.md\n\n<file name="{home}/marketplaces/fixtures/plugins/demo/templates/x.md">\nCheck the spelling.\n</file> |

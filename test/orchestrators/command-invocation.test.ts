@@ -15,6 +15,7 @@ import type {
   CommandInvocationDependencies,
   CommandInvocationRequest,
 } from "../../extensions/pi-claude-marketplace/orchestrators/command-invocation.ts";
+import type { MentionFileReader } from "../../extensions/pi-claude-marketplace/orchestrators/mention-attachments.ts";
 import type { ExtensionAPI } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type {
   PromptShellHost,
@@ -51,10 +52,42 @@ const host = {
 } satisfies PromptShellHost;
 
 /**
- * Reads only the named files and runs no shell; any other read fails, and a
- * shell run fails the case.
+ * A mention reader over in-memory regular files that records each path that
+ * `stat` and `read` are asked for in `asked`; a path it does not hold rejects.
  */
-function dependencies(files: Readonly<Record<string, string>>): CommandInvocationDependencies {
+function recordingMentions(files: Readonly<Record<string, string>> = {}): {
+  readonly asked: string[];
+  readonly reader: MentionFileReader;
+} {
+  const asked: string[] = [];
+  const bytesOf = (file: string): Uint8Array => new TextEncoder().encode(files[file] ?? "");
+  return {
+    asked,
+    reader: {
+      stat: (file) => {
+        asked.push(`stat ${file}`);
+        return files[file] === undefined
+          ? Promise.reject(new Error(`no file ${file}`))
+          : Promise.resolve({ isFile: true, size: bytesOf(file).length });
+      },
+      read: (file, maxBytes) => {
+        asked.push(`read ${file}`);
+        return Promise.resolve(bytesOf(file).subarray(0, maxBytes));
+      },
+      homeDir: () => "/home/ada",
+    },
+  };
+}
+
+/**
+ * Reads only the named files and runs no shell; any other read fails, and a
+ * shell run fails the case. The mention reader holds no file unless a case
+ * passes one.
+ */
+function dependencies(
+  files: Readonly<Record<string, string>>,
+  mentions: MentionFileReader = recordingMentions().reader,
+): CommandInvocationDependencies {
   return {
     getAgentDir: () => AGENT_DIR,
     readFile: (file) => {
@@ -65,6 +98,7 @@ function dependencies(files: Readonly<Record<string, string>>): CommandInvocatio
     },
     host,
     runShell: () => Promise.reject(new Error("a body without a ! command must not run a shell")),
+    mentions,
   };
 }
 
@@ -586,9 +620,159 @@ describe("invokeStagedCommand", () => {
     // assert
     assert.deepStrictEqual(outcome, { kind: "send", text: "Greet Ada." });
   });
+  test("PG-SKILL-01: appends the file a body mentions after the rendered body", async () => {
+    // arrange
+    const files = { [PROJECT_COMMAND]: commandFile("Review @/work/x.md for $0.") };
+    const mentions = recordingMentions({ "/work/x.md": "Check." });
+
+    // act
+    const outcome = await invokeStagedCommand(request(), dependencies(files, mentions.reader));
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      kind: "send",
+      text: 'Review @/work/x.md for Ada.\n\n<file name="/work/x.md">\nCheck.\n</file>',
+    });
+  });
+
+  test("D-PG11-02: reads only the literal placeholder of a mention that an argument fills", async () => {
+    // arrange
+    const files = { [PROJECT_COMMAND]: commandFile("@$ARGUMENTS") };
+    const mentions = recordingMentions({ "/work/secret.md": "Secret." });
+
+    // act
+    const outcome = await invokeStagedCommand(
+      request({ args: "/work/secret.md" }),
+      dependencies(files, mentions.reader),
+    );
+
+    // assert
+    assert.deepStrictEqual(outcome, { kind: "send", text: "@/work/secret.md" });
+    assert.deepStrictEqual(mentions.asked, ["stat /work/$ARGUMENTS"]);
+  });
+
+  test("PG-SKILL-01: reads a user command's project-directory mention at the session directory", async () => {
+    // arrange
+    const files = { [USER_COMMAND]: commandFile("See @${CLAUDE_PROJECT_DIR}/notes.md") };
+    const mentions = recordingMentions({ "/work/notes.md": "Notes." });
+
+    // act
+    const outcome = await invokeStagedCommand(
+      request({ commands: [piCommand("demo:greet", "prompt", USER_COMMAND)], args: "" }),
+      dependencies(files, mentions.reader),
+    );
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      kind: "send",
+      text: 'See @/work/notes.md\n\n<file name="/work/notes.md">\nNotes.\n</file>',
+    });
+    assert.deepStrictEqual(mentions.asked, ["stat /work/notes.md", "read /work/notes.md"]);
+  });
+
+  test("PG-SKILL-01: reads a mentioned file after the context command ran", async () => {
+    // arrange
+    const files = { [PROJECT_COMMAND]: commandFile("Status: !`printf ok` @/work/x.md") };
+    const mentions = recordingMentions({ "/work/x.md": "Check." });
+
+    // act
+    const outcome = await invokeStagedCommand(request({ args: "" }), {
+      ...dependencies(files, mentions.reader),
+      runShell: () => {
+        mentions.asked.push("shell");
+        return Promise.resolve({
+          kind: "exited",
+          code: 0,
+          stdout: "ok",
+          stderr: "",
+          shell: "bash",
+        });
+      },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      kind: "send",
+      text: 'Status: ok @/work/x.md\n\n<file name="/work/x.md">\nCheck.\n</file>',
+    });
+    assert.deepStrictEqual(mentions.asked, ["shell", "stat /work/x.md", "read /work/x.md"]);
+  });
+
+  test("D-LOC-01: reads no mentioned file of a project command pi does not trust", async () => {
+    // arrange
+    const files = { [PROJECT_COMMAND]: commandFile("Review @/work/x.md") };
+    const mentions = recordingMentions({ "/work/x.md": "Check." });
+
+    // act
+    const outcome = await invokeStagedCommand(
+      request({ projectTrusted: false }),
+      dependencies(files, mentions.reader),
+    );
+
+    // assert
+    assert.strictEqual(outcome.kind, "refuse");
+    assert.deepStrictEqual(mentions.asked, []);
+  });
+
+  test("T-01-24: reads no mentioned file when the frontmatter asks for a missing Bash", async () => {
+    // arrange
+    const files = { [PROJECT_COMMAND]: commandFile("Review @/work/x.md", ["shell: bash"]) };
+    const mentions = recordingMentions({ "/work/x.md": "Check." });
+    const windows = { ...host, platform: "win32", env: {} } satisfies PromptShellHost;
+
+    // act
+    const outcome = await invokeStagedCommand(request({ args: "" }), {
+      ...dependencies(files, mentions.reader),
+      host: windows,
+    });
+
+    // assert
+    assert.strictEqual(outcome.kind, "refuse");
+    assert.deepStrictEqual(mentions.asked, []);
+  });
+
+  test("T-01-24: reads no mentioned file when a context command fails", async () => {
+    // arrange
+    const files = { [PROJECT_COMMAND]: commandFile("Check: !`exit 3` @/work/x.md") };
+    const mentions = recordingMentions({ "/work/x.md": "Check." });
+    const shell = recordingShell({
+      kind: "exited",
+      code: 3,
+      stdout: "",
+      stderr: "",
+      shell: "bash",
+    });
+
+    // act
+    const outcome = await invokeStagedCommand(request({ args: "" }), {
+      ...dependencies(files, mentions.reader),
+      runShell: shell.runShell,
+    });
+
+    // assert
+    assert.strictEqual(outcome.kind, "refuse");
+    assert.deepStrictEqual(mentions.asked, []);
+  });
 });
 
 describe("expandStagedCommand", () => {
+  test("D-PG11-07: asks the mention reader for nothing for a body that mentions a file", async () => {
+    // arrange
+    const files = { [PROJECT_COMMAND]: commandFile("Review @/work/x.md") };
+    const mentions = recordingMentions({ "/work/x.md": "Check." });
+
+    // act
+    const outcome = await expandStagedCommand(
+      request({ args: "" }),
+      "run_plugin_command",
+      dependencies(files, mentions.reader),
+    );
+
+    // assert
+    assert.deepStrictEqual(outcome, { kind: "send", text: "Review @/work/x.md" });
+    assert.deepStrictEqual(mentions.asked, []);
+  });
+
   test("D-CF3-01: fills the body with the arguments and variables and leaves its context command literal", async () => {
     // arrange
     const files = {
