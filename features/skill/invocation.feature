@@ -371,3 +371,28 @@ Feature: Skill invocation
     Then the model receives these calls:
       | call | role | text                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
       | 1    | user | <skill name="demo-review" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-review/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-review.\n\nFollow @{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-review/role.md\n\n<file name="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-review/role.md">\nReview as a careful editor.\n</file>\n</skill> |
+
+  Scenario: A file that a typed argument mentions is not attached to a skill (PG-SKILL-01)
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the skill "review" described as "Reviews the named file." with this body:
+      """
+      Review $ARGUMENTS
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "templates/x.md" with this text:
+      """
+      Check the spelling.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts "/demo:review @{home}/marketplaces/fixtures/plugins/demo/templates/x.md"
+    Then the model receives these calls:
+      | call | role | text                                                                                                                                                                                                                                                                                                |
+      | 1    | user | <skill name="demo-review" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-review/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-review.\n\nReview @{home}/marketplaces/fixtures/plugins/demo/templates/x.md\n</skill> |
