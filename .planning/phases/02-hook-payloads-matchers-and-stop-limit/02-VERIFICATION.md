@@ -1,12 +1,29 @@
 ---
 phase: 02-hook-payloads-matchers-and-stop-limit
-verified: 2026-11-13T14:14:30Z
+verified: 2026-11-16T05:37:57Z
 status: passed
 score: 55/55 must-haves verified
-covered_files: [".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-01-PLAN.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-01-SUMMARY.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-02-PLAN.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-02-SUMMARY.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-03-PLAN.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-03-SUMMARY.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-04-PLAN.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-04-SUMMARY.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-05-PLAN.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-05-SUMMARY.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-06-PLAN.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-06-SUMMARY.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-07-PLAN.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-07-SUMMARY.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-08-PLAN.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-08-SUMMARY.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-09-PLAN.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-09-SUMMARY.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-10-PLAN.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-10-SUMMARY.md","docs/hooks-compatibility.md","docs/research/claude-hook-config-syntax.md","docs/research/parity-gaps/hooks.md","extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts","extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts","extensions/pi-claude-marketplace/bridges/hooks/event-router.ts","extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts","extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts","extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts","extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts","extensions/pi-claude-marketplace/bridges/hooks/runtime.ts","extensions/pi-claude-marketplace/bridges/hooks/settle.ts","extensions/pi-claude-marketplace/bridges/hooks/tool-batch.ts","extensions/pi-claude-marketplace/bridges/hooks/tool-input-search.ts","extensions/pi-claude-marketplace/bridges/hooks/tool-input.ts","extensions/pi-claude-marketplace/bridges/hooks/tool-output-files.ts","extensions/pi-claude-marketplace/bridges/hooks/tool-output-search-shell.ts","extensions/pi-claude-marketplace/bridges/hooks/tool-result-files.ts","extensions/pi-claude-marketplace/bridges/hooks/tool-result-search-shell.ts","extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts","extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts","extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts","extensions/pi-claude-marketplace/domain/components/hooks/partition.ts","extensions/pi-claude-marketplace/platform/pi-api.ts","features/hook/async.feature","features/hook/matchers.feature","features/hook/mcp-tool-names.feature","features/hook/prompt-and-stop.feature","features/hook/tool-failure.feature","features/hook/tool-use.feature","features/lib/hook-case-tools.ts","features/lib/hook-files.ts","features/lib/hook-mcp-tool-server.ts","features/lib/hook-recorder.ts","features/lib/hook-result-observer.ts","features/skill/model-reads.feature","features/step_definitions/hook/async.steps.ts","features/step_definitions/hook/prompt-and-stop.steps.ts","features/step_definitions/hook/runs.steps.ts","features/step_definitions/hook/tool-use.steps.ts","features/support/world.ts","test/architecture/hook-script-cleanup.test.ts","test/architecture/hooks-cap-notify.test.ts","test/architecture/hooks-translators.test.ts","test/bridges/hooks/async-rewake/registry.test.ts","test/bridges/hooks/dispatch-exec.test.ts","test/bridges/hooks/dispatch.test.ts","test/bridges/hooks/event-adapters.test.ts","test/bridges/hooks/event-router.test.ts","test/bridges/hooks/exec-result.test.ts","test/bridges/hooks/payloads/post-tool-use-failure.test.ts","test/bridges/hooks/payloads/post-tool-use.test.ts","test/bridges/hooks/payloads/pre-tool-use.test.ts","test/bridges/hooks/runtime.test.ts","test/bridges/hooks/settle.test.ts","test/bridges/hooks/tool-batch.test.ts","test/bridges/hooks/tool-input-search.test.ts","test/bridges/hooks/tool-input.test.ts","test/bridges/hooks/tool-output-files.test.ts","test/bridges/hooks/tool-output-search-shell.test.ts","test/bridges/hooks/tool-result-files.test.ts","test/bridges/hooks/tool-result-search-shell.test.ts","test/bridges/hooks/wire-protocol.test.ts","test/domain/components/hooks.test.ts","test/domain/components/hooks/matcher.test.ts","test/domain/components/hooks/partition.test.ts","test/domain/hooks-resolution.test.ts","test/domain/plugin-resolver.test.ts","test/fixtures/hooks-pretooluse-matcher-mix.json","test/integration/hooks-result-boundary.test.ts","test/orchestrators/plugin/info.test.ts","test/orchestrators/plugin/install-flow-ledger.test.ts"]
-covered_digest: "v4:sha256:65bdf3efe08ca61d9f26ea6950ee6ecc49eb6e00c169af07f0571cd3b9674a09"
+covered_files: [".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-01-PLAN.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-01-SUMMARY.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-02-PLAN.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-02-SUMMARY.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-03-PLAN.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-03-SUMMARY.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-04-PLAN.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-04-SUMMARY.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-05-PLAN.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-05-SUMMARY.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-06-PLAN.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-06-SUMMARY.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-07-PLAN.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-07-SUMMARY.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-08-PLAN.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-08-SUMMARY.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-09-PLAN.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-09-SUMMARY.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-10-PLAN.md",".planning/phases/02-hook-payloads-matchers-and-stop-limit/02-10-SUMMARY.md","docs/hooks-compatibility.md","docs/research/claude-hook-config-syntax.md","docs/research/parity-gaps/hooks.md","extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts","extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts","extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts","extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts","extensions/pi-claude-marketplace/bridges/hooks/event-router.ts","extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts","extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts","extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts","extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts","extensions/pi-claude-marketplace/bridges/hooks/runtime.ts","extensions/pi-claude-marketplace/bridges/hooks/settle.ts","extensions/pi-claude-marketplace/bridges/hooks/tool-batch.ts","extensions/pi-claude-marketplace/bridges/hooks/tool-input-search.ts","extensions/pi-claude-marketplace/bridges/hooks/tool-input.ts","extensions/pi-claude-marketplace/bridges/hooks/tool-output-files.ts","extensions/pi-claude-marketplace/bridges/hooks/tool-output-search-shell.ts","extensions/pi-claude-marketplace/bridges/hooks/tool-result-files.ts","extensions/pi-claude-marketplace/bridges/hooks/tool-result-search-shell.ts","extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts","extensions/pi-claude-marketplace/domain/components/hook-events.ts","extensions/pi-claude-marketplace/domain/components/hook-tool-names.ts","extensions/pi-claude-marketplace/domain/components/hooks/matcher.ts","extensions/pi-claude-marketplace/domain/components/hooks/partition.ts","extensions/pi-claude-marketplace/platform/pi-api.ts","features/hook/async.feature","features/hook/matchers.feature","features/hook/mcp-tool-names.feature","features/hook/prompt-and-stop.feature","features/hook/tool-failure.feature","features/hook/tool-use.feature","features/lib/hook-case-tools.ts","features/lib/hook-files.ts","features/lib/hook-mcp-tool-server.ts","features/lib/hook-recorder.ts","features/lib/hook-result-observer.ts","features/skill/model-reads.feature","features/step_definitions/hook/async.steps.ts","features/step_definitions/hook/prompt-and-stop.steps.ts","features/step_definitions/hook/runs.steps.ts","features/step_definitions/hook/tool-use.steps.ts","features/support/world.ts","test/architecture/hook-script-cleanup.test.ts","test/architecture/hooks-cap-notify.test.ts","test/architecture/hooks-translators.test.ts","test/bridges/hooks/async-rewake/registry.test.ts","test/bridges/hooks/dispatch-exec.test.ts","test/bridges/hooks/dispatch.test.ts","test/bridges/hooks/event-adapters.test.ts","test/bridges/hooks/event-router.test.ts","test/bridges/hooks/exec-result.test.ts","test/bridges/hooks/payloads/post-tool-use-failure.test.ts","test/bridges/hooks/payloads/post-tool-use.test.ts","test/bridges/hooks/payloads/pre-tool-use.test.ts","test/bridges/hooks/runtime.test.ts","test/bridges/hooks/settle.test.ts","test/bridges/hooks/tool-batch.test.ts","test/bridges/hooks/tool-input-search.test.ts","test/bridges/hooks/tool-input.test.ts","test/bridges/hooks/tool-output-files.test.ts","test/bridges/hooks/tool-output-search-shell.test.ts","test/bridges/hooks/tool-result-files.test.ts","test/bridges/hooks/tool-result-search-shell.test.ts","test/bridges/hooks/wire-protocol.test.ts","test/domain/components/hooks.test.ts","test/domain/components/hooks/matcher.test.ts","test/domain/components/hooks/partition.test.ts","test/domain/hooks-resolution.test.ts","test/domain/plugin-resolver.test.ts","test/fixtures/hooks-pretooluse-matcher-mix.json","test/integration/hooks-result-boundary.test.ts","test/orchestrators/plugin/info.test.ts","test/orchestrators/plugin/install-flow-ledger.test.ts"]
+covered_digest: "v4:sha256:afb52d686ff8a13de189ef6c4578833a48a91c121465285ea302742f2f1c3106"
 behavior_unverified: 0
-overrides_applied: 0
+overrides_applied: 1
+overrides:
+  - must_have: "02-09 key link: settle.ts -> runtime.ts via agent_settled consumes the exact continuation transition and one cap notice"
+    reason: "Superseded by decision D-PG5-01 (Phase 5): Stop runs on agent_before_settle and a block continues the same run; the loop cap of D-PG2-11 moves unchanged. The link still holds through beforeSettleHandlerFor -> runStopBucket -> continuesBounded -> recordStopReentry (settle.ts:183,482,629; runtime.ts:489). Only the Pi event in the link's 'via' text changed."
+    accepted_by: "project decision D-PG5-01 (PROJECT.md decision log, outcome Good)"
+    accepted_at: "2026-11-14T15:39:39Z"
+re_verification:
+  previous_status: passed
+  previous_score: 55/55
+  reason: "staleness: Phases 3-11 and the gaps-agents/gaps-mcp merges changed 50 of the 72 covered non-planning files after 2026-11-13T14:14:30Z"
+  gaps_closed: []
+  gaps_remaining: []
+  regressions: []
+advisory:
+  - finding: "docs/research/parity-gaps/hooks.md:22 still says 'Stop still uses agent_settled; Phase 5 owns event migration and the cap environment variable.' Since D-PG5-01 (Stop on agent_before_settle) and D-PG5-04 (cap environment variable out of scope), the sentence is out of date. docs/hooks-compatibility.md:33 and :161-181 are correct."
+    category: other
+    reason: "Records drift from Phase 5, which corrected docs/hooks-compatibility.md but not this research status note. The file has not changed since the prior verification. No Phase 2 truth depends on it, and P10.2 forbids claiming deferred work shipped, which this sentence does not do. To resolve: a one-line records fix that names D-PG5-01/D-PG5-04."
+    evidence_status: "reproducible by grep; no test or runtime defect"
 decision_coverage:
   honored: 12
   total: 12
@@ -17,228 +34,210 @@ decision_coverage:
 
 **Phase Goal:** A plugin hook that the project reports as supported gets what Claude Code gives it. Hooks on file tools receive and return Claude-shaped tool input, matchers follow Claude Code's rules, and a Stop hook can block eight times in a row.
 
-**Verified:** 2026-11-13T14:14:30Z
+**Verified:** 2026-11-16T05:37:57Z
 **Status:** passed
-**Re-verification:** No — initial verification
+**Re-verification:** Yes. The previous report (passed, 55/55, 2026-11-13T14:14:30Z, source `d8930842`) became stale, because later phases changed 50 of its 72 covered non-planning files.
 
 ## Verification Basis
 
-Read all ten plans and summaries, CONTEXT, REQUIREMENTS, ROADMAP, validation, security, review, review-fix and review-disposition records. The summaries supplied scope and claimed outcomes; the verdict rests on actual implementation, callers, complete test assertions, independent named executions, and a reusable passing combined-tree gate. The exact scope contains 48 task/correction commits and 72 changed files, including the six review correction commits. No previous phase verification or accepted override was present.
+This pass re-checked every roadmap criterion and every plan must-have against the current tree, `features/gaps` at `5fd2706a`. It did not reuse the earlier verdicts. Summaries were not taken as evidence. For each truth, the implementing code, its caller, and the test or scenario that exercises it were read again. Citations below are current line numbers. **H/** means `extensions/pi-claude-marketplace/bridges/hooks/`. `domain/` paths are relative to `extensions/pi-claude-marketplace/`.
 
-CodeGraph was used first to trace the implementation. In the tables, **H/** means `extensions/pi-claude-marketplace/bridges/hooks/`; unprefixed hook owner test names mean `test/bridges/hooks/`. Paths under `domain/` are relative to `extensions/pi-claude-marketplace/`.
+**Gate G (reused, not re-run):** `npm run check` exited 0 on the combined tree at `9874efc2`, with Node and a hermetic `PI_CODING_AGENT_DIR` (log `/tmp/pg11-phasegate2.log`). The log was inspected: all static checks passed (typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, check:features), plus the unpaired and integration tests and direct coverage (374 merged LCOV records). The adapter profile ran 2094/2094 scenarios and 25908 steps. The builtin profile ran 204/204 scenarios and 2762 steps. The log ends with `exit=0`. `git diff --name-only 9874efc2 HEAD` outside `.planning/` lists only `README.md` and `README.es.md`, so G covers every executable input of the current tree. The project's reuse rule applies, and the suite was not repeated.
 
-**Gate G:** `node .codex/gsd-core/bin/gsd-tools.cjs run-with-timeout 2400 -- npm run check`, exit 0, Node v26.13.1, source revision `d893084229f11876c92b4e036a09b112c4002873`, 2026-11-13T13:49:46Z–14:05:05Z. Inspected `/tmp/pg2-final-check.log` and `/tmp/pg2-final-gate.json`: static checks, unpaired tests, integration tests, all 361 direct source/test coverage pairs at 100%, adapter profile 1,869 scenarios / 22,807 steps (seed 567364), and builtin MCP profile 162 scenarios / 2,210 steps (seed 225284) passed. Independent comparison against that revision found no differences outside planning Markdown, no untracked executable inputs, and the same Node version. This satisfies the project skill's same-input reuse rule; the full suite was not repeated. The configured prior-phase regression command is this same gate and includes the 34 Phase 1 owner files.
+**Independent named checks (this pass):** ten single tests were run with `node --import test/platform/isolated-pi-home.ts --test --test-isolation=none --test-reporter=tap --test-name-pattern '^<name>$' <file>`, each under a fresh `mktemp` HOME and `PI_CODING_AGENT_DIR`. Each reported `tests 1, pass 1, fail 0, cancelled 0, skipped 0` (see Behavioral Spot-Checks).
+
+## Superseded mechanisms (later decisions)
+
+| Decision | What it changed | Effect on Phase 2 must-haves |
+| --- | --- | --- |
+| D-PG5-01 (Phase 5, Good) | `Stop` moved from `agent_settled` re-entry to `agent_before_settle`. A block returns `continue: true` with one hidden `claude-hook-stop-block` entry, so the same run continues. "The loop cap (D-PG2-11) moves unchanged." | SC5 and P09.1-P09.6 still hold on the new event (scenario: 1 run start, 9 model calls, 1 cap notice). The earlier report's note "Phase 2 correctly retains the existing agent_settled path" no longer describes the tree. The 02-09 key link whose `via` names `agent_settled` is carried as **PASSED (override)**. |
+| D-PG5-04 (Phase 5) | Cap environment variable stays out of scope. | No change. The cap stays `STOP_OVERRIDE_CAP = 8` (H/runtime.ts:27). |
+| D-PG6-04/05 (Phase 6) | Tool events carry `tool_use_id`. Edit pairs get `<id>#<n>` (H/tool-batch.ts:126). | Additive. Per-pair invocations and the single native call are unchanged. Scenario tables gained a `tool use id` column. |
+| D-PG6-19 (Phase 6) | `UserPromptExpansion` matcher on `command_name` (`name-set` kind). | Additive. Tool matchers never hold `name-set` (domain/components/hooks/matcher.ts:11-21; H/dispatch.ts:158-171). Stop and UserPromptSubmit still ignore matchers. |
+| Phase 3 (PG-HOOK-07a) | `Stop`/`UserPromptSubmit` do not run in a pi-subagents child (H/event-router.ts:1619-1640 `dispatchesInCurrentSession`). | Narrows scope to the main session. SC4 and SC5 are main-session criteria and still hold. |
 
 ## Goal Achievement
 
 ### Roadmap Observable Truths
 
-All six roadmap success criteria remain in scope. The 51 plan truths add detail; P05.1 is merged into R6 and P09.1 into R5 as restatements. Every source truth is displayed below, but those two are counted once: **55/55 merged must-haves verified; 6/6 roadmap criteria and 51/51 plan entries covered; 0 behavior-unverified.**
-
-| ID | Roadmap truth | Status | Evidence |
+| ID | Roadmap truth | Status | Current evidence |
 | --- | --- | --- | --- |
-| R1 | A recording hook on a scripted edit call with one pair receives `{"file_path":"{project dir}/a.txt","old_string":"x","new_string":"y"}` as tool_input; Read and Write hooks receive absolute file_path. | VERIFIED | `H/tool-input.ts:72`, `H/tool-batch.ts:71`, payload translator calls; real recording-hook exact JSON assertions in `features/hook/tool-use.feature` passed in G. |
-| R2 | Blocking on the second edit pair blocks the call; Claude-shaped updatedInput changes Write bytes on disk; updatedMCPToolOutput changes MCP output like updatedToolOutput. | VERIFIED | `H/dispatch.ts:922,979`, whole input replacement at `event-adapters.ts:145`, modern/legacy selection at `dispatch.ts:425`; real later-pair denial, Write filesystem, and both MCP profile scenarios passed in G. |
-| R3 | Edit, Write matches write; ^Ba.* matches bash but not read, info reports support, and an invalid regex drops its group. | VERIFIED | Exact-list/whole-regex parser and partition admission feed actual Claude-form dispatch; matcher/install/info owners and real `features/hook/matchers.feature` scenarios passed in G; S6 independently verifies mixed routing order. |
-| R4 | Stop/UserPromptSubmit hooks with a matcher install without --partial and run. | VERIFIED | `domain/components/hooks/partition.ts:48` ignores their matcher before compilation; `H/event-router.ts:1208,1257` registers execution; real installation and reload scenarios passed in G. |
-| R5 | Always-blocking Stop makes eight reentries before the limit notice; ten blocks separated by tool calls are never overridden. | VERIFIED | Runtime cap is eight, count is bounded, native tool reset precedes dispatch exits, settle honors the decision. Independent S3/S4 and exact model-call/notice assertions in `features/hook/prompt-and-stop.feature` passed. |
-| R6 | Per-tool results expose available Claude-shaped fields; replacement reaches the model without stale structured content; missing facts are documented; unsupported input preserves the original call with notice, while explicit denial still blocks. | VERIFIED | Projectors, reverse renderers, transactional input decoder, and output-carrier clearing are wired through actual Pi callbacks. Complete result/model/filesystem scenarios, installed Pi boundary tests, and S2/S5 passed; documentation states all omissions. |
+| R1 | A recording hook on a one-pair `edit` receives `{"file_path":"{project dir}/a.txt","old_string":"x","new_string":"y"}`, and `Read`/`Write` hooks receive an absolute `file_path`. | VERIFIED | H/tool-input.ts:41,72 (`toHookFileInput`, `toHookToolInput`). H/tool-batch.ts:71 (`editPairViews`). The payloads call the codec at H/payloads/pre-tool-use.ts:53, post-tool-use.ts:75, post-tool-use-failure.ts:73. The recorder asserts exact `tool_input` JSON in `features/hook/matchers.feature:43-48` and `features/hook/tool-use.feature` (pair rows :628-:793, Read scenario :1334). These passed in G. |
+| R2 | Blocking on the second pair blocks the call. A Claude-shaped `updatedInput` changes Write bytes on disk. `updatedMCPToolOutput` changes MCP output like `updatedToolOutput`. | VERIFIED | Pair preflight H/dispatch.ts:1126-1229: `Promise.all` at :1148, the stop/block decision at :1188-1193, `decideEditBatch` at :1210. Whole-input replacement H/event-adapters.ts:166. Modern/legacy selection H/dispatch.ts:451-487 (legacy only when the modern field is `undefined` and the tool is MCP, :464-467). Scenarios "A denial of the second edit pair leaves the whole file unchanged" (tool-use.feature:725) and "An MCP result alias replaces the result" (:12) passed in G under both profiles. |
+| R3 | `Edit, Write` runs on `write`. `^Ba.*` runs on `bash` and not on `read`. `info` reports the group as supported. An invalid regex drops its group. | VERIFIED | Parser domain/components/hooks/matcher.ts:64 (`parsePattern`), :81 (list split on `\|`/`,` and trim), :92 (`parseMatcher`). Admission domain/components/hooks/partition.ts:35. Runtime H/dispatch.ts:158. Scenarios matchers.feature:6 (Write runs under `Edit, Write \| Read \| Bash`), :70 (`^Ba.*` installs, info shows no reasons, runs on Bash), :108 (`^ba.*` does not fire, so the match is case-sensitive), :130 (invalid regex drops only its group). S6 passed. |
+| R4 | A plugin whose `Stop` or `UserPromptSubmit` hook has a matcher installs without `--partial`, and the hook runs. | VERIFIED | `NON_TOOL_EVENT_FIELDS` sets `UserPromptSubmit: null` and `Stop: null` (domain/components/hook-events.ts:198-207). partition.ts:57 returns no drop condition before any regex compile. The Stop dispatch uses `() => true` (H/settle.ts:503-510). UserPromptSubmit `entryFires` returns true (H/dispatch.ts:1508-1523,1618-1635). Scenario matchers.feature:169 "Prompt and Stop hooks ignore even invalid matchers" passed in G. |
+| R5 | An always-blocking Stop makes eight re-entries before the limit notice. Ten blocks separated by tool calls are never overridden. | VERIFIED | Cap H/runtime.ts:27,489-501. Reset `recordToolCall` H/runtime.ts:511 runs at H/dispatch.ts:1019-1021, before the empty-bucket exit (:1028) and the proxy exit (`toolEventView` :1588). The cap is consumed in H/settle.ts:629-645 on the `agent_before_settle` path (:183-226) per D-PG5-01. Scenarios prompt-and-stop.feature:130 (9 replies, `stop hook active` false then true x8, cap notice count 1, 1 run start and 9 model calls) and :170 (ten blocks with tool calls, cap notice count 0) passed in G. S3, S4, S7 and S9 passed. |
+| R6 | Per-tool results expose the available Claude-shaped fields. A replacement reaches the model without stale structured content. Missing facts are documented. An unsupported input rewrite preserves the original call with a notice, and explicit denial still blocks. | VERIFIED | Projectors H/tool-result-files.ts:171 and H/tool-result-search-shell.ts:126, called at H/payloads/post-tool-use.ts:78-79. Reverse renderers H/event-adapters.ts:256-301. Fallback notice H/event-adapters.ts:375 (category only). Omissions are documented at docs/hooks-compatibility.md:31. S5 passed (installed Pi runner, no stale carrier). |
 
 ### Plan Observable Truths
 
-Runtime claims below use passing behavioral evidence from G or the independent S checks, not symbol presence alone.
+P05.1 merges into R6 and P09.1 into R5, as in the prior report: 6 roadmap + 51 plan entries = 55 merged must-haves.
 
-| ID | Truth | Status | Evidence |
+| ID | Truth (abridged) | Status | Current evidence |
 | --- | --- | --- | --- |
-| P01.1 | A real Read hook receives an absolute file_path and its accepted rewrite changes the one native read call. | VERIFIED | `H/tool-input.ts:72,221` maps and decodes Read; `H/event-adapters.ts:307` commits validated input. `tool-input.test.ts` plus real Read rewrite scenarios in `features/hook/tool-use.feature` passed in gate G. |
-| P01.2 | Write hooks can replace the file path and bytes written; Bash and PowerShell timeout values round-trip between seconds and milliseconds. | VERIFIED | `H/tool-input.ts:72,134` maps Write path/content and converts seconds/milliseconds. Owner tests and real Write disk assertions passed in G; PowerShell is explicitly contract-tested. |
-| P01.3 | An unsupported or malformed rewrite leaves the complete original input intact and reports only tool and field categories; explicit stop, denial, and rejected ask still block. | VERIFIED | `H/tool-input.ts:221` validates before acceptance, including malformed file URLs; `H/event-adapters.ts:338,368` emits category-only notices and preserves denial precedence. Owner and fallback scenarios passed in G. |
-| P01.4 | Native if predicates read native path and command fields; custom and MCP parameters keep their own schema. | VERIFIED | `H/dispatch.ts:234,1329` matches predicates against the original native view before serialization; exact native identities in `H/tool-input.ts:72` leave custom/MCP parameters alone. Owner and custom-identity scenarios passed in G. |
-| P01.5 | Missing optional mapped fields are removed by whole-input replacement; an unchanged translated echo preserves the native operation. | VERIFIED | `H/event-adapters.ts:145` deletes and replaces the complete input only after decoding; `H/tool-input.ts:221` retains unchanged echoes. Removal/echo assertions passed in G. |
-| P02.1 | Glob and Grep hook inputs express the native operation's actual semantics, and accepted equivalent rewrites execute in Pi. | VERIFIED | `H/tool-input-search.ts:38,117,173` maps actual find/grep behavior and reverses equivalent requests; owner tests and real search rewrite scenarios passed in G. |
-| P02.2 | Unsupported Grep modes, asymmetric context, conflicting aliases and inexact limits preserve the entire original call with the ignored-rewrite notice. | VERIFIED | `H/tool-input-search.ts:74,87,117` rejects unsupported modes, unequal context, conflicting aliases and inexact limits before mutation. Full-original fallback assertions passed in G. |
-| P02.3 | All three tool-event payloads carry the same translated input contract, including failure and background delivery. | VERIFIED | All three payload translators call `toHookToolInput`; `H/dispatch-exec.ts:277` and async registry serialization share those translators. Payload, failure and background tests passed in G. |
-| P02.4 | LS retains native input/result shapes as the explicitly unresolved schema exception; custom parameters remain unchanged. | VERIFIED | `H/tool-input.ts:72,221` explicitly preserves LS and non-native custom schemas; `H/payloads/post-tool-use.ts:37,50` preserves native result shape when no supported projector applies. Owner tests passed in G. |
-| P03.1 | Each native edit pair receives its own Claude-shaped pre-hook invocation before the one original native batch may execute. | VERIFIED | `H/tool-batch.ts:71` creates indexed pair views; `H/dispatch.ts:922` awaits all prechecks before the single native call. Real pair-recording/denial scenarios passed in G. |
-| P03.2 | Equal or adjacent edit pairs remain separate invocations in original pair order; identical values do not deduplicate pairs. | VERIFIED | Pair views retain array indices and duplicates; `Promise.all` retains input order in `H/dispatch.ts:922`. Duplicate-pair owner tests and independent reversed-completion check S1 passed. |
-| P03.3 | A zero-pair edit generates zero synthetic pair invocations and retains Pi's validation/execution behavior; one pair produces exactly one invocation, and malformed/null pair input is preserved for Pi to reject without bridge mutation. | VERIFIED | `H/tool-batch.ts:71` returns no synthetic batch for empty/malformed input; `H/dispatch.ts:861` preserves normal native validation. Zero/one/null/malformed assertions passed in G. |
-| P03.4 | Every hook is evaluated against original native input; outcome order is pair index then existing routing order regardless of process completion order, with final accepted target equality checked per pair. | VERIFIED | `H/dispatch.ts:922` freezes the original view for every invocation; ordered results feed `H/tool-batch.ts:121`, which compares final per-pair targets. S1 and batch target tests passed. |
-| P03.5 | Any stop, explicit denial or rejected ask blocks the whole call; accepted target conflicts block even when another candidate is unsupported. | VERIFIED | `H/dispatch.ts:979,986` resolves stop/block/ask before commit; `H/tool-batch.ts:154` checks target conflicts before unsupported fallback. Mixed-outcome owner and real later-pair denial tests passed in G. |
-| P03.6 | Any unsupported pair rewrite discards every proposed rewrite and runs the original whole call with a sanitized notice, unless a stronger block applies. | VERIFIED | `H/tool-batch.ts:158` chooses whole-original fallback; `H/dispatch.ts:1011` distinguishes stronger conflict blocks and emits a sanitized notice. Unsupported-pair and precedence tests passed in G. |
-| P03.7 | Reload or cancellation during preflight cannot commit any stale or partially decoded mutation. | VERIFIED | `H/dispatch.ts:913,963,993` rechecks generation/signal after asynchronous execution and authorization. Independent reload-during-ask check S2 and cancellation owner tests passed. |
-| P04.1 | Successful and failed result hooks run once per edit pair, and all receive the one actual native batch result or error. | VERIFIED | `H/dispatch.ts:1078,1136` fans out pair inputs with one actual success/error; real successful and failing native batch scenarios passed in G. |
-| P04.2 | All post hooks observe the original actual result, regardless of an earlier hook's proposed replacement; one final output is returned. | VERIFIED | `H/dispatch.ts:1136` passes unchanged actual result carriers to every hook; `acceptedToolOutput` selects only after outcomes return. Original-result/last-valid tests passed in G. |
-| P04.3 | Sync, plain async and asyncRewake lanes receive the same per-pair input and actual-result views; background output never retroactively rewrites an executed call. | VERIFIED | `H/dispatch-exec.ts:185,207` and `async-rewake/registry.ts:230` serialize the same selected pair view. Background lanes return noop to synchronous dispatch; async/failure scenarios and registry tests passed in G. |
-| P04.4 | Failure output mutations remain ignored and cancelled tools do not manufacture failure hook invocations. | VERIFIED | `H/dispatch.ts:1097` suppresses cancelled failures; `H/event-adapters.ts:470` rejects failure mutation. Failure owner tests and native-failure scenarios passed in G. |
-| P05.1 (merged) | Read, Edit and Write result hooks receive known Claude-shaped fields from actual Pi event facts, with unavailable facts omitted. | VERIFIED | `H/tool-result-files.ts:112,130,171` projects only actual result/input facts and omits unavailable ones. Owner tests, full result-recording scenarios and G verify roadmap R6's file-result portion. |
-| P05.2 | Edit pair responses share the actual batch patch and contain their corresponding oldString/newString; original file contents are never reconstructed after execution. | VERIFIED | `H/tool-result-files.ts:112` uses that pair's input and the shared actual diff; it performs no post-execution file read. Pair response/diff tests and real pair-result scenarios passed in G. |
-| P05.3 | Claude-shaped file result replacements change the model-visible content, including text and images, without altering completed filesystem effects. | VERIFIED | `H/tool-output-files.ts:64,165,197` renders validated replacement text/images; `H/event-adapters.ts:235` returns a result patch. Real model-output and unchanged-filesystem scenarios passed in G. |
-| P05.4 | Accepted redaction removes original content, structuredContent and output-derived details; a subsequent Pi handler observes no stale payload copy. | VERIFIED | `H/event-adapters.ts:235` clears output-derived details and structured carriers; installed Pi runner assertions in `test/integration/hooks-result-boundary.test.ts` and full downstream observer scenarios passed in G. |
-| P05.5 | An unchanged or invalid replacement preserves the original complete result; feedback-only append preserves original structured content and failure classification. | VERIFIED | `H/tool-output-files.ts` returns no patch for unchanged/invalid candidates; `H/event-adapters.ts:449` preserves structured data and failure state for feedback-only append. Owner/boundary assertions passed in G. |
-| P06.1 | Glob and Grep hook responses translate actual emitted search results without fabricated total counts, elapsed times or ambiguous filenames. | VERIFIED | `H/tool-result-search-shell.ts:17,63,94` uses emitted text and actual metadata, omitting ambiguous counts/paths. Search projector owner tests and real result scenarios passed in G. |
-| P06.2 | Bash exposes actual combined text/image blocks through Claude's structuredContent array and known metadata; PowerShell omits unavailable separate streams and the unsupported Bash-only array field. | VERIFIED | `H/tool-result-search-shell.ts:112` emits actual Bash text/image blocks; PowerShell omits the Bash-only array and unavailable separate streams. Owner tests passed in G; no live PowerShell claim. |
-| P06.3 | Search and shell updatedToolOutput values reach the model, including deliberate empty output and supplied image blocks, with no stale original payload. | VERIFIED | `H/tool-output-search-shell.ts:152,170,188` renders valid empty/text/image replacements; `H/event-adapters.ts:235` removes stale carriers. Owner/boundary tests and model-visible scenarios passed in G. |
-| P06.4 | LS remains the explicit native-shaped result exception, and a replacement-provided output path never causes a filesystem or network read. | VERIFIED | `H/tool-output-search-shell.ts:188` only translates exact supported native tools and treats supplied output paths as data. LS/custom and path-without-I/O assertions passed in G. |
-| P07.1 | For an identified MCP tool, updatedToolOutput wins whenever supplied; updatedMCPToolOutput is used only when the modern field is absent. | VERIFIED | `H/wire-protocol.ts:263` preserves both fields; `H/dispatch.ts:425` checks modern presence before legacy fallback, only for identified MCP calls. Alias/precedence tests and both-profile scenarios passed in G. |
-| P07.2 | The legacy alias never mutates a built-in or custom non-MCP tool, and neither output field replaces a failed result. | VERIFIED | `H/dispatch.ts:425` gates legacy selection on actual MCP identity; `H/event-adapters.ts:470` keeps failures immutable. Built-in/custom/failure assertions passed in G. |
-| P07.3 | MCP/custom content and structured results retain their native schema, including text and images; accepted replacement removes every original payload copy. | VERIFIED | `H/event-adapters.ts:183,235` handles native custom/MCP schemas, images and complete carrier replacement. Independent installed-runner same-text redaction check S5 plus G passed. |
-| P07.4 | Output selection is stable in pair then routing order, chooses the last valid accepted candidate, and is independent of process completion order. | VERIFIED | `H/dispatch.ts:253,1136` keeps pair/routing order through Promise.all; `acceptedToolOutput` retains the last effective valid candidate against the original result. S1 and ordered output tests passed. |
-| P07.5 | Modern null, false, zero, empty string and empty arrays are present values, not permission to select the legacy field. | VERIFIED | `H/dispatch.ts:425` uses `!== undefined`, not truthiness, for modern presence; falsy/null/empty candidate tests passed in G. |
-| P07.6 | Both MCP implementations preserve Phase 1 recovered identity, proxy exclusions and routing-only metadata after output replacement. | VERIFIED | `H/dispatch.ts:1329` preserves recovered MCP identity and proxy exclusions; `H/event-adapters.ts:217` retains only server/tool routing metadata. Both adapter and builtin MCP cucumber profiles passed in G. |
-| P08.1 | Exact lists split on comma or pipe and trim ASCII surrounding spaces; Read Write remains one literal, not two tool names. | VERIFIED | `domain/components/hooks/matcher.ts:4,56,71` distinguishes exact grammar, splits comma/pipe and trims surrounding ASCII spaces. Owner and `Read Write` literal scenarios passed in G. |
-| P08.2 | Repeated exact alternatives or adjacent separators do not duplicate a hook invocation; empty alternatives are discarded and a separator-only list matches no tool rather than all tools. | VERIFIED | Matcher alternatives are a Set, empty tokens discarded; an empty Set matches nothing. Deduplication/adjacent-separator owner and runtime tests passed in G. |
-| P08.3 | Omitted, empty and star matchers match all; malformed regex drops its group; schema-invalid null retains the existing parser rejection behavior. | VERIFIED | `matcher.ts:56` handles omitted/empty/star and invalid compilation; the existing schema rejects null. Parser, partition and install/info tests passed in G. |
-| P08.4 | Non-list patterns are one unanchored, case-sensitive JavaScript RegExp with no added flags or Unicode normalization; valid groups install and report supported. | VERIFIED | `matcher.ts:63` compiles the whole non-list string without flags or added anchors; `partition.ts:35` admits valid regex groups. Regex/install/info scenarios passed in G. |
-| P08.5 | Repeated matching uses the same stable routing order, and regex alternation never splits into independent exact-list tokens. | VERIFIED | `H/dispatch.ts:154,234` evaluates the whole parsed regex and preserves bucket order. Independent repeated mixed matcher order check S6 and owner assertions passed. |
-| P08.6 | UserPromptSubmit and Stop ignore every matcher before validation, including invalid regex, and their groups run after installation and reload. | VERIFIED | `domain/components/hooks/partition.ts:48` ignores matchers for those events before validation; event router registers input/settled dispatch. Real install/reload scenarios in `features/hook/matchers.feature` passed in G. |
-| P09.1 (merged) | Consecutive blocking Stop decisions one through eight continue the run; decision nine is overridden with the limit notice. | VERIFIED | `H/runtime.ts:18,276` permits exactly eight reentries, then one cap notice; `H/settle.ts:456` consumes that decision. S3 and real Stop scenarios passed; this restates roadmap R5's boundary. |
-| P09.2 | A fresh runtime, an empty Stop bucket or an allowed Stop starts with no consumed continuations; equal adjacent blocking decisions count separately. | VERIFIED | `H/runtime.ts:183,186` owns/reset its counter; `H/settle.ts:309` handles empty/allowed buckets. Exact-count, repeated equal block and no-op/allow tests passed in G. |
-| P09.3 | Every native model tool_call resets the continuation count and cap notice before empty-bucket or proxy exits, even for a Stop-only plugin. | VERIFIED | `H/dispatch.ts:838,843` resets on a current native tool event before empty/proxy exits; pair views stay inside that dispatch. S4 and Stop-only real tool-reset scenarios passed. |
-| P09.4 | Event order is authoritative: tool then Stop starts at one, while Stop then tool clears that prior count; synthetic edit pair views do not reset independently. | VERIFIED | `H/dispatch.ts:843,922` resets once per real tool event; settle then consumes subsequent blocks. Event-order/pair-count owner tests and real interleaving scenarios passed in G. |
-| P09.5 | The count stays an exact bounded integer with no rounding or numeric overflow; tests cover 0, 1, 7, 8 and 9 and repeated resets. | VERIFIED | `H/runtime.ts:276` stops incrementing at eight. S3 exercises 100,000 terminal callbacks; S4 proves reset reuse. Owner boundary assertions include 0/1/7/8/9. |
-| P09.6 | Reload and separate runtime instances cannot share a continuation count or accept a stale-generation Stop completion. | VERIFIED | State lives inside each runtime; router reload resets settle state, and `H/settle.ts:342` rejects stale completions. Runtime/router/settle reload, separate-instance and generation tests passed in G. |
-| P10.1 | Plugin authors can find the exact supported input/result maps, missing facts and original-call fallback behavior, with links to executable evidence. | VERIFIED | `docs/hooks-compatibility.md` provides forward/reverse maps, omitted fields, fallback conditions and specific feature/test links; links and described contracts were checked against the code above. |
-| P10.2 | Compatibility records describe per-pair side effects/shared results, regex/list semantics and the eight/ninth Stop boundary without claiming deferred work shipped. | VERIFIED | Compatibility and research status notes describe original batch side effects/shared results, whole regex/list rules and eight/ninth boundary consistently with the owners and scenario assertions. |
-| P10.3 | LS passthrough, unavailable live PowerShell evidence and modern/legacy MCP source ambiguity remain explicit, while HOOKRESULT-01 remains open for full capture wrappers. | VERIFIED | `docs/hooks-compatibility.md`, `.planning/PROJECT.md:88-95` and `.planning/BACKLOG.md:5198` explicitly retain LS, PowerShell evidence limits, MCP source ambiguity and open HOOKRESULT-01. |
-| P10.4 | The combined tree passes npm run check at the phase/final handoff and every validation row records actual command, exit status, commit, Node version and scope. | VERIFIED | Gate G is a recorded passing combined-tree command with unchanged executable inputs and Node; `02-VALIDATION.md` records all 29 task rows and wave/phase evidence. The corrected 02-02 filter has a real nonempty five-scenario result. |
+| P01.1 | Read hook gets an absolute path, and an accepted rewrite changes the one read call. | VERIFIED | H/tool-input.ts:72,105,221. Commit at H/event-adapters.ts:328-354. Read scenario tool-use.feature:1334 in G. |
+| P01.2 | Write path/bytes replaceable. Bash/PowerShell timeouts round-trip s<->ms. | VERIFIED | H/tool-input.ts:62,125,169. Owner `tool-input.test.ts` in G. PowerShell is contract-tested only (doc row :19). |
+| P01.3 | An unsupported or malformed rewrite keeps the original input and gives a category-only notice. Stop, deny and rejected ask still block. | VERIFIED | H/tool-input.ts:221. H/event-adapters.ts:333-336 (ask), :350-352 and :375-385 (`ignored input rewrite (<category>)`). |
+| P01.4 | Native `if` reads native fields. Custom and MCP keep their own schema. | VERIFIED | `matchingHooks(bucket, view.event, …)` evaluates on the native event (H/dispatch.ts:260,1141-1147). H/tool-input.ts:72 maps only exact native IDs. |
+| P01.5 | Missing optional fields are removed by whole replacement. An unchanged echo keeps the native operation. | VERIFIED | H/event-adapters.ts:166-183 (delete all, then define). :347 skips the write when the decoded value is the original object. |
+| P02.1 | Glob/Grep inputs reflect actual semantics. Equivalent rewrites execute. | VERIFIED | H/tool-input-search.ts:38,117,173. Wired via H/tool-input.ts:91,249. |
+| P02.2 | Unsupported Grep modes, asymmetric context, conflicting aliases and inexact limits keep the original call with a notice. | VERIFIED | H/tool-input-search.ts:74,87,117. |
+| P02.3 | All three tool-event payloads share the input contract, including failure and background delivery. | VERIFIED | Same `toHookToolInput` at pre:53, post:75, failure:73. Background lanes use `TRANSLATORS` (H/dispatch-exec.ts:144,346; H/async-rewake/registry.ts:152). |
+| P02.4 | LS keeps its native shape. Custom parameters unchanged. | VERIFIED | H/tool-input.ts:205 (`decodeLsInput`). Doc row :22. |
+| P03.1 | Each edit pair gets its own pre-hook before the one native batch. | VERIFIED | H/dispatch.ts:1148-1162 (per-pair runs), awaited before any commit (:1210-1229). |
+| P03.2 | Equal or adjacent pairs stay separate, in order. | VERIFIED | H/tool-batch.ts:71 keeps indices. `Promise.all` keeps order. S1 passed. |
+| P03.3 | Zero pairs give zero synthetic invocations. Malformed/null input is left to Pi. | VERIFIED | Branch guard H/dispatch.ts:1037-1041 (`Array.isArray(edits)`). `editPairViews` returns `undefined`, so there is no mutation (:1137-1139). |
+| P03.4 | Evaluated on the original input. Pair-then-routing order. Per-pair target agreement. | VERIFIED | H/dispatch.ts:1141-1147. H/tool-batch.ts:146-170 (targets compared at :168). S1 passed. |
+| P03.5 | Stop, deny or rejected ask blocks the whole call. Target conflicts block even beside an unsupported candidate. | VERIFIED | H/dispatch.ts:1188-1206. The conflict check (tool-batch.ts:168) runs before the `original` fallback (:172). |
+| P03.6 | Any unsupported pair gives the whole original call with a sanitized notice, unless a stronger block applies. | VERIFIED | H/dispatch.ts:1218-1228. H/tool-batch.ts:172-174. |
+| P03.7 | Reload or cancellation during preflight cannot commit a stale mutation. | VERIFIED | Generation and signal re-checks at H/dispatch.ts:1117,1168,1202. S2 (`reload while an edit ask awaits…`) passed. |
+| P04.1 | Success and failure result hooks run once per pair, with one actual result. | VERIFIED | H/dispatch.ts:1325-1332,1371-1410. |
+| P04.2 | Post hooks see the original result. One final output. | VERIFIED | Pair events spread the unchanged `event` (H/dispatch.ts:1395-1399). `acceptedToolOutput` selects after all runs (:1347). |
+| P04.3 | Sync, async and asyncRewake lanes get the same pair views. Background never rewrites. | VERIFIED | H/dispatch-exec.ts:207-217 (`spawnAndRegister`, fire-and-forget). Shared translators (above). |
+| P04.4 | Failure mutations ignored. Cancelled tools give no failure hook. | VERIFIED | H/event-adapters.ts:461-471,505-507. H/dispatch.ts:1235-1237,1310-1313. |
+| P05.2 | Edit pair responses share the actual patch. No reconstruction. | VERIFIED | H/tool-result-files.ts:112 (no file read). |
+| P05.3 | File result replacements change model-visible text/images, not filesystem effects. | VERIFIED | H/tool-output-files.ts:64,165,197,220. Routed at H/event-adapters.ts:266-268. |
+| P05.4 | Redaction removes content, structuredContent and derived details. Later handlers see no stale copy. | VERIFIED | H/event-adapters.ts:238,256-301. `test/integration/hooks-result-boundary.test.ts` in G. S5 passed. |
+| P05.5 | Unchanged or invalid replacement keeps the original. Feedback-only append keeps structured data and failure class. | VERIFIED | H/event-adapters.ts:279-284 (deep-equal echo), :437-456 and :490-501 (block keeps `structuredContent` and `isError`). |
+| P06.1 | Glob/Grep responses translate emitted results, with no fabricated counts or times. | VERIFIED | H/tool-result-search-shell.ts:17,63,94. |
+| P06.2 | Bash exposes actual text/image blocks. PowerShell omits unavailable fields. | VERIFIED | H/tool-result-search-shell.ts:112. |
+| P06.3 | Search/shell `updatedToolOutput` reaches the model, including empty and image output. | VERIFIED | H/tool-output-search-shell.ts:152,170,188. Routed at H/event-adapters.ts:270-272. |
+| P06.4 | LS stays the native exception. A supplied output path causes no I/O. | VERIFIED | The renderer is limited to exact native names (H/event-adapters.ts:266-272). Paths are treated as data. |
+| P07.1 | For MCP, the modern field wins when supplied, and the legacy field applies only in its absence. | VERIFIED | H/dispatch.ts:457-467. H/wire-protocol.ts:297-331 keeps both fields. |
+| P07.2 | Legacy alias never mutates built-in/custom non-MCP tools. Failures stay. | VERIFIED | The `mcpTool` gate (H/dispatch.ts:457). The failure path (H/dispatch.ts:1343-1345; event-adapters.ts:505-507). Scenario tool-use.feature:265. |
+| P07.3 | MCP/custom keep the native schema incl. images. Replacement removes all old copies. | VERIFIED | H/event-adapters.ts:185-236,286-300. Scenarios :96 and :139. S5 passed. |
+| P07.4 | Stable pair/routing order. Last valid candidate wins. | VERIFIED | H/dispatch.ts:459-483 (last non-undefined patch). `Promise.all` order. S1 passed. |
+| P07.5 | Modern null/false/0/""/[] count as present. | VERIFIED | `candidate === undefined` test (H/dispatch.ts:465). Scenario :224 (empty modern does not use legacy). |
+| P07.6 | Both MCP implementations keep the recovered identity, proxy exclusions and routing-only metadata. | VERIFIED | H/dispatch.ts:1582-1595 (`toolEventView`). H/event-adapters.ts:238 (`routingDetails`). Both profiles passed in G. |
+| P08.1 | Lists split on comma/pipe and trim. `Read Write` is one literal. | VERIFIED | matcher.ts:81-86. Scenario matchers.feature:51. |
+| P08.2 | No duplicate invocations. A separator-only list matches nothing. | VERIFIED | Set-based `toolNames` (matcher.ts:17,92-128). Empty members dropped. |
+| P08.3 | Omitted/empty/`*` match all. A malformed regex drops its group. Null is rejected by the schema. | VERIFIED | matcher.ts:64-77. partition.ts:35-46. |
+| P08.4 | Non-list text is one unanchored, case-sensitive RegExp with no flags. | VERIFIED | `new RegExp(raw)` (matcher.ts:74). Scenario :108 (`ash$` fires, `^ba.*` does not). |
+| P08.5 | Stable routing order. Alternation never splits. | VERIFIED | The whole pattern is tested at H/dispatch.ts:164-165. S6 passed. |
+| P08.6 | UserPromptSubmit and Stop ignore matchers before validation, and run after install and reload. | VERIFIED | hook-events.ts:203-204, partition.ts:57. Scenario matchers.feature:169. |
+| P09.2 | A fresh runtime, an empty bucket or an allowed Stop consumes nothing. Equal blocks count separately. | VERIFIED | H/runtime.ts:338-349. H/settle.ts:492-494 (empty bucket), :531 and :546 (reset). S9 passed. |
+| P09.3 | Every native tool_call resets the count and notice before the empty-bucket and proxy exits. | VERIFIED | H/dispatch.ts:1019-1021, ahead of :1027-1034 and :1588. S4 and S8 passed. Scenario prompt-and-stop.feature:170. |
+| P09.4 | Event order is authoritative. Synthetic pair views do not reset on their own. | VERIFIED | One reset per real `tool_call` (H/dispatch.ts:1019). Pair runs call `runHooks` directly (:1155). |
+| P09.5 | Exact bounded count. 0/1/7/8/9 and repeated resets covered. | VERIFIED | The counter stops at the cap (H/runtime.ts:490-498). S3 (100,000 terminal callbacks) and S7 (flags/results across nine Stops) passed. |
+| P09.6 | Reload and separate runtimes share no count. A stale-generation completion is rejected. | VERIFIED | Post-await generation re-check H/settle.ts:513-517. Entry guard :193. S10 (`a pending old-generation Stop completion cannot consume a reloaded budget`) passed. Scenario prompt-and-stop.feature:209. |
+| P10.1 | Authors can find the input/result maps, missing facts, fallback and evidence links. | VERIFIED | docs/hooks-compatibility.md:9-33. |
+| P10.2 | Records describe per-pair effects, regex/list semantics and the eight/ninth boundary without claiming deferred work. | VERIFIED | docs/hooks-compatibility.md:25,33 (eight continuations, ninth overridden, `agent_before_settle`, D-PG5-01/04). See the advisory on the research note. |
+| P10.3 | LS passthrough, PowerShell limits and the MCP legacy ambiguity stay explicit. HOOKRESULT-01 stays open. | VERIFIED | docs/hooks-compatibility.md:19,22,27,31. `.planning/PROJECT.md:84-99`. `.planning/BACKLOG.md:5230`. |
+| P10.4 | The combined tree passes `npm run check`, and validation rows record the evidence. | VERIFIED | Gate G above (current inputs). `02-VALIDATION.md` unchanged. |
+
+**Score:** 55/55 truths verified (0 present but behavior-unverified). Every runtime truth has behavioral evidence from G or from a named check run in this pass.
 
 ### Required Artifacts
 
-Ran `query verify.artifacts` for every plan: all ten commands exited 0, covering **22/22 declared artifact entries**. Manual review additionally checked substance and use; repeated artifacts below are separate plan declarations.
-
-| Plan | Artifact | Expected substance and actual wiring | Status |
-| --- | --- | --- | --- |
-| 01 | H/tool-input.ts | Complete forward/reverse native codec, called by payloads and mutation adapter; accepted/unsupported discriminant precedes commit. | VERIFIED |
-| 01 | features/hook/tool-use.feature | Real command-hook input and disk-effect scenarios use recorder and actual Pi tools; executed in G. | VERIFIED |
-| 02 | H/tool-input-search.ts | Semantic search mapping and validation, called from the shared input codec. | VERIFIED |
-| 02 | features/hook/tool-failure.feature | Actual failing tools deliver translated inputs and shared batch failure; executed in G. | VERIFIED |
-| 03 | H/tool-batch.ts | Indexed pair views and whole-batch rewrite decision, called by edit preflight/result dispatcher. | VERIFIED |
-| 03 | features/hook/tool-use.feature | Later-pair denial, target conflict, fallback and original-call assertions execute through Pi in G. | VERIFIED |
-| 04 | features/hook/tool-failure.feature | Real native batch failure reaches every pair; failure mutation remains ineffective in G. | VERIFIED |
-| 04 | features/hook/async.feature | Command hooks record translated pair views in async and asyncRewake lanes in G. | VERIFIED |
-| 05 | H/tool-result-files.ts | Available-fact file result projectors called from PostToolUse payload construction. | VERIFIED |
-| 05 | H/tool-output-files.ts | Validated reverse result rendering called by the tool-result adapter. | VERIFIED |
-| 05 | features/lib/hook-result-observer.ts | Downstream extension records complete content/details/structuredContent/isError after production handlers. | VERIFIED |
-| 05 | test/integration/hooks-result-boundary.test.ts | Imports installed Pi runner and observes actual post-hook carrier state; executed in G and S5. | VERIFIED |
-| 06 | H/tool-result-search-shell.ts | Projects real emitted search/shell results through the payload builder. | VERIFIED |
-| 06 | H/tool-output-search-shell.ts | Validates/renders reverse search/shell output through the result adapter. | VERIFIED |
-| 07 | H/exec-result.ts | Mutation type carries both modern and legacy fields consumed by wire decoding and dispatch. | VERIFIED |
-| 07 | features/hook/tool-use.feature | Native custom/MCP schemas, aliases, precedence and complete redaction scenarios pass in both profiles. | VERIFIED |
-| 08 | features/hook/matchers.feature | Real install/info/reload/runtime matcher scenarios executed in G. | VERIFIED |
-| 08 | domain/components/hooks/matcher.ts | Shared exact-list/whole-regex parser feeds install partitioning and runtime routing. | VERIFIED |
-| 09 | H/runtime.ts | Runtime-local bounded counter and explicit reset/notice state consumed by dispatcher and settle handler. | VERIFIED |
-| 09 | features/hook/prompt-and-stop.feature | Exact model-call and hook-row counts distinguish eight/ninth behavior and tool resets in G. | VERIFIED |
-| 10 | docs/hooks-compatibility.md | Current forward/reverse contract, omissions, accepted fallbacks and executable evidence links agree with code. | VERIFIED |
-| 10 | .planning/phases/02-hook-payloads-matchers-and-stop-limit/02-VALIDATION.md | 29 actual task records, wave/gate results and scoped limitations; final passing gate independently cross-checked. | VERIFIED |
+`query verify.artifacts` exited 0 for all ten plans: **22/22** declared artifacts exist and are substantive. Wiring was traced by hand above. All 72 previously covered non-planning files still exist. None was deleted or renamed.
 
 ### Key Link Verification
 
-Ran `query verify.key-links` for every plan. Its literal-path heuristic found 1/20 and exited 1 for each plan: the remaining 19 entries reported “Target not referenced in source.” Inspection resolves these as heuristic false negatives: the plans name root-relative files, while imports use relative paths, some contracts cross an intermediate dispatcher, and the PROJECT link is relative Markdown. These results were not accepted as proof of wiring or ignored; all twenty connections were traced below.
+`query verify.key-links` again reports 1/20 (exit 1 for each plan). This is the same literal-path heuristic false negative as before: the plans use root-relative paths, and the imports are relative. All 20 links were traced by hand on the current tree:
 
-| Plan | From → To | Actual connection | Status |
+| Plan | From -> To | Current connection | Status |
 | --- | --- | --- | --- |
-| 01 | H/payloads/pre-tool-use.ts → H/tool-input.ts | Relative import of toHookToolInput; invocation at payload line 41 precedes JSON serialization. | WIRED |
-| 01 | H/event-adapters.ts → H/tool-input.ts | decodeHookToolInput validates the complete proposal before replaceToolCallInput. | WIRED |
-| 02 | H/tool-input.ts → H/tool-input-search.ts | Exact native find/grep branches call shared search mapping and decoding. | WIRED |
-| 02 | H/payloads/post-tool-use-failure.ts → H/tool-input.ts | Failure payload line 59 calls the same translator as success/preflight. | WIRED |
-| 03 | H/dispatch.ts → H/tool-batch.ts | runEditPreflight uses editPairViews and decideEditBatch; await precedes commit. | WIRED |
-| 03 | H/dispatch.ts → H/event-adapters.ts | authorizeEditPairs uses authorization handling; accepted final input uses whole replacement; ignored rewrites use the notice adapter. | WIRED |
-| 04 | H/dispatch.ts → H/tool-batch.ts | Result dispatcher creates pair views while retaining one actual native result/error. | WIRED |
-| 04 | H/dispatch-exec.ts → H/async-rewake/registry.ts | Background execution calls spawnAndRegister with selected tool view; both lanes use TRANSLATORS. | WIRED |
-| 05 | H/payloads/post-tool-use.ts → H/tool-result-files.ts | fileToolResponse handles supported file tool results at payload line 62. | WIRED |
-| 05 | H/event-adapters.ts → H/tool-output-files.ts | Exact native file identities invoke reverse renderer before returning a Pi result patch. | WIRED |
-| 06 | H/payloads/post-tool-use.ts → H/tool-result-search-shell.ts | Search/shell projector is called at payload line 63 after file projection. | WIRED |
-| 06 | H/event-adapters.ts → H/tool-output-search-shell.ts | Supported native search/shell outputs call the reverse renderer; custom IDs remain custom. | WIRED |
-| 07 | H/wire-protocol.ts → H/dispatch.ts | buildMutateFromHso retains both fields in HookExecResult; executor returns it to acceptedToolOutput. | WIRED |
-| 07 | H/dispatch.ts → H/event-adapters.ts | Candidate selection calls the actual result adapter; validation and carrier clearing decide accepted output. | WIRED |
-| 08 | domain/components/hooks/partition.ts → matcher.ts | Tool group admission calls parseHookMatcher; ignored prompt/Stop matcher path precedes it. | WIRED |
-| 08 | H/dispatch.ts → domain/components/hooks/matcher.ts | Routing entries carry the parsed matcher from partitioning; matcherFiresOnToolEvent evaluates its exact/regex form. | WIRED |
-| 09 | H/dispatch.ts → H/runtime.ts | Current native PreToolUse event calls recordToolCall before empty-bucket/proxy exits. | WIRED |
-| 09 | H/settle.ts → H/runtime.ts | reenterBounded calls recordStopReentry and consumes reenter/notifyOverride; allowed Stop resets sequence. | WIRED |
-| 10 | docs/hooks-compatibility.md → features/hook/tool-use.feature | Specific executable input/result/pair scenario citations resolve to the feature. | WIRED |
-| 10 | .planning/PROJECT.md → .planning/BACKLOG.md | D-PG2-07 links BACKLOG.md#hookresult-01-investigate-and-implement-execution-wrappers-for-full-claude-shaped-hook-results. | WIRED |
+| 01 | payloads/pre-tool-use.ts -> tool-input.ts | import :20, call :53 | WIRED |
+| 01 | event-adapters.ts -> tool-input.ts | import :80, `decodeHookToolInput` :339 before `replaceToolCallInput` :348 | WIRED |
+| 02 | tool-input.ts -> tool-input-search.ts | import :5, calls :91,:249 | WIRED |
+| 02 | payloads/post-tool-use-failure.ts -> tool-input.ts | import :25, call :73 | WIRED |
+| 03 | dispatch.ts -> tool-batch.ts | `editPairViews` :1136, `decideEditBatch` :1210 | WIRED |
+| 03 | dispatch.ts -> event-adapters.ts | `adaptToolCallResult` :1109,:1192; `notifyIgnoredToolInputRewrite` :1222; `replaceToolCallInput` :1225 | WIRED |
+| 04 | dispatch.ts -> tool-batch.ts | result fan-out `editPairViews` :1326, `editPairToolUseId` :1397 | WIRED |
+| 04 | dispatch-exec.ts -> async-rewake/registry.ts | import :80, `spawnAndRegister` :217 | WIRED |
+| 05 | payloads/post-tool-use.ts -> tool-result-files.ts | import :26, call :78 | WIRED |
+| 05 | event-adapters.ts -> tool-output-files.ts | import :81, call :267 | WIRED |
+| 06 | payloads/post-tool-use.ts -> tool-result-search-shell.ts | import :27, call :79 | WIRED |
+| 06 | event-adapters.ts -> tool-output-search-shell.ts | import :82, call :271 | WIRED |
+| 07 | wire-protocol.ts -> dispatch.ts | `buildMutateFromHso` :297 keeps both fields, consumed by `acceptedToolOutput` :451 | WIRED |
+| 07 | dispatch.ts -> event-adapters.ts | `adaptToolResultResult` :473 | WIRED |
+| 08 | partition.ts -> matcher.ts | `parseMatcher` :36, `parseNameMatcher` :54 | WIRED |
+| 08 | dispatch.ts -> matcher.ts | `matcherFiresOnToolEvent` :158 over `entry.matcher` | WIRED |
+| 09 | dispatch.ts -> runtime.ts | `runtime.recordToolCall()` :1020, before the bucket exits | WIRED |
+| 09 | settle.ts -> runtime.ts (via `agent_settled`) | Now via `agent_before_settle`: router :1619 -> `beforeSettleHandlerFor` :183 -> `runStopBucket` :482 -> `continuesBounded` :629 -> `recordStopReentry` :635 | PASSED (override): D-PG5-01 |
+| 10 | docs/hooks-compatibility.md -> features/hook/tool-use.feature | links at :9 and elsewhere | WIRED |
+| 10 | .planning/PROJECT.md -> .planning/BACKLOG.md | D-PG2-07 row :94 links `#hookresult-01-…`, heading at BACKLOG.md:5230 | WIRED |
 
 ### Data-Flow Trace (Level 4)
 
-No database is required for this extension. The real sources are Pi tool events, executed filesystem effects and hook process replies.
-
-| Artifact / value | Source → transformation → consumer | Produces real data | Status |
+| Value | Source -> consumer | Real data | Status |
 | --- | --- | --- | --- |
-| Hook tool_input | Pi native tool_call/result.input → exact-native codec and pair view → payload translator → serialized child-process stdin; recorder reads fd 0. | Yes; scenarios assert full recorded input. | FLOWING |
-| Native rewritten call | Hook stdout JSON → wire protocol → complete reverse validation / all-pair decision → whole input replacement → original Pi tool execution. | Yes; file bytes and later-pair block are asserted through actual Pi execution. | FLOWING |
-| Hook tool_response | Actual event content/details/structuredContent plus executed input → available-fact projectors → PostToolUse stdin. | Yes; no reconstructed original file, fabricated count or static success result. | FLOWING |
-| Model-visible replacement | Valid hook candidate → tool-specific/native-schema renderer → Pi tool_result patch → installed runner → downstream observer and model messages. | Yes; tests check original carrier removal, images, empty replacements and same-text MCP redaction. | FLOWING |
-| Stop continuation/notice | Actual settled event → blocking result → runtime-local bounded decision → sendMessage reentry or mode-selected cap notice; native tool event resets sequence. | Yes; real scenario call counts and notices plus S3/S4 prove transitions. | FLOWING |
+| Hook `tool_input` | Pi `tool_call`/`tool_result` input -> codec and pair view -> payload translator -> child stdin | Yes. Recorder rows assert the full JSON. | FLOWING |
+| Rewritten call | Hook stdout -> wire protocol -> decode / all-pair decision -> whole replacement -> native execution | Yes. File bytes and later-pair block asserted. | FLOWING |
+| Hook `tool_response` | Actual content/details/structuredContent -> projectors -> PostToolUse stdin | Yes. No reconstruction. | FLOWING |
+| Model-visible replacement | Hook candidate -> renderer -> Pi `tool_result` patch -> downstream observer | Yes. S5. | FLOWING |
+| Stop continuation | Last assistant ending -> `agent_before_settle` -> Stop bucket -> bounded transition -> `continue: true` with hidden entry, or cap notice | Yes. Scenario counts and S7/S10. | FLOWING |
 
 ### Behavioral Spot-Checks
 
-Independent checks ran named tests with TAP output showing **one executed test, one pass, zero failures/cancellations/skips** per command. Every command completed in under three seconds. No service was started.
+All runs used a fresh scratchpad `mktemp` HOME and `PI_CODING_AGENT_DIR`, with no services. Each gave `tests 1 / pass 1 / fail 0 / cancelled 0 / skipped 0`.
 
-Command prefix for S1–S6:
-`node --import "$PWD/test/platform/isolated-pi-home.ts" --test --test-isolation=none --test-reporter=tap --test-name-pattern '<exact name below>' <file>`
-
-| ID | Named behavior / command argument | File | Observed result |
+| ID | Named test | File | Result |
 | --- | --- | --- | --- |
-| S1 | reversed hook completion still commits pair rewrites in native order | test/bridges/hooks/dispatch.test.ts | PASS, exit 0; reverse completion still commits original pair order. |
-| S2 | reload while an edit ask awaits cannot commit a rewrite | test/bridges/hooks/dispatch.test.ts | PASS, exit 0; resolving authorization after reload leaves input unmodified. |
-| S3 | keeps terminal Stop callbacks bounded and notifies only once | test/bridges/hooks/runtime.test.ts | PASS, exit 0; eight reentries, ninth notice, 100,000 subsequent terminal calls remain bounded and quiet. |
-| S4 | tool calls reset the Stop budget and notice without clearing active or rewake flags | test/bridges/hooks/runtime.test.ts | PASS, exit 0; exhausted budget resets and a fresh eight/ninth sequence works without unrelated flag loss. |
-| S5 | an MCP content-only patch clears structured output when public text is unchanged | test/integration/hooks-result-boundary.test.ts | PASS, exit 0; installed runner and downstream handler see no old details/structured payload. |
-| S6 | dispatches match-all, exact MCP, and whole regex matchers in declaration order | test/bridges/hooks/dispatch.test.ts | PASS, exit 0; mixed matching retains declaration order. |
-| G | Full combined-tree command recorded above | Root package scripts and both cucumber profiles | PASS, same executable inputs and Node; reused once under project policy. |
+| S1 | reversed hook completion still commits pair rewrites in native order | test/bridges/hooks/dispatch.test.ts | PASS |
+| S2 | reload while an edit ask awaits cannot commit a rewrite | test/bridges/hooks/dispatch.test.ts | PASS |
+| S3 | keeps terminal Stop callbacks bounded and notifies only once | test/bridges/hooks/runtime.test.ts | PASS |
+| S4 | tool calls reset the Stop budget and notice without clearing active or rewake flags | test/bridges/hooks/runtime.test.ts | PASS |
+| S5 | an MCP content-only patch clears structured output when public text is unchanged | test/integration/hooks-result-boundary.test.ts | PASS |
+| S6 | dispatches match-all, exact MCP, and whole regex matchers in declaration order | test/bridges/hooks/dispatch.test.ts | PASS |
+| S7 | the ninth consecutive block is suppressed and warns only once (drives `beforeSettleHandlerFor`) | test/bridges/hooks/settle.test.ts | PASS |
+| S8 | a stale native tool callback cannot reset the current Stop budget | test/bridges/hooks/dispatch.test.ts | PASS |
+| S9 | applies settle registration, input, and bounded reentry transitions | test/bridges/hooks/runtime.test.ts | PASS |
+| S10 | a pending old-generation Stop completion cannot consume a reloaded budget | test/bridges/hooks/settle.test.ts | PASS |
+| G | `npm run check` at `9874efc2` (same executable inputs as HEAD) | root scripts, both cucumber profiles | PASS (reused) |
 
 ### Probe Execution
 
-No plan declares a runnable `probe-*.sh`, and no conventional `scripts/*/tests/probe-*.sh` exists in scope. Step 7c shell-probe execution is not applicable. The source audit's thirteen “probe truths” are edge-case acceptance criteria, not missing shell artifacts: `02-VALIDATION.md` maps them to owner/scenario assertions exercised by G. They include zero/equal/malformed pairs, delayed completion and reload, bounded counters/resets, exact regex/list semantics, and complete replacement boundaries. Executor PASS-marker claims were not used as execution proof.
+No plan declares a `probe-*.sh`, and no `scripts/*/tests/probe-*.sh` is in scope. Not applicable.
 
 ### Requirements Coverage
 
-| Requirement | Source plans | Contract | Status | Evidence |
-| --- | --- | --- | --- | --- |
-| PG-HOOK-01 | 01–07, 10 | Claude-shaped tool input and effective updatedInput; every edit pair checked; legacy MCP output honored. | SATISFIED | R1/R2/R6, input and output codecs, complete edit preflight/result fanout, real recorder/filesystem/model scenarios, both MCP profiles and S1/S2/S5. |
-| PG-HOOK-03 | 08, 10 | Exact-list/whole-regex matcher admission and execution; ignored Stop/prompt matcher; invalid regex group exclusion; supported info status. | SATISFIED | R3/R4, shared parser/partition and dispatch, real installation/info/reload scenarios, S6. |
-| PG-HOOK-13 | 09, 10 | Eight consecutive blocks allowed; native tool activity starts the counter again. | SATISFIED | R5, runtime/settle/tool callback wiring, real exact-count scenarios, S3/S4. |
+| Requirement | Source plans | Status | Evidence |
+| --- | --- | --- | --- |
+| PG-HOOK-01 | 01-07, 10 | SATISFIED | R1, R2, R6. REQUIREMENTS.md:23 `[x]`, trace :175 Complete. |
+| PG-HOOK-03 | 08, 10 | SATISFIED | R3, R4. REQUIREMENTS.md:25 `[x]`, trace :176. Later PG-HOOK-06 builds on part (c) without changing tool matchers. |
+| PG-HOOK-13 | 09, 10 | SATISFIED | R5, on the D-PG5-01 event. REQUIREMENTS.md:26 `[x]`, trace :177. REQUIREMENTS.md:167 keeps `CLAUDE_CODE_STOP_HOOK_BLOCK_CAP` out of scope. |
 
-All plan requirement IDs are accounted for. REQUIREMENTS maps exactly these three IDs to Phase 2; there are no orphaned Phase 2 requirements. Its abbreviated PG-HOOK-03 text says “commas or spaces”; REQUIREMENTS explicitly gives the PRD precedence. PRD section 7.2 and accepted D-PG2-10 specify comma/pipe alternatives with surrounding spaces trimmed and internal spaces literal, which is what the parser and tests implement. This is not an unapproved grammar change.
+No orphaned Phase 2 requirements.
 
-The REQUIREMENTS checkboxes and phase trace statuses were still Pending during verification; completion bookkeeping belongs to the orchestrator and is not evidence of missing implementation.
+### Decision Coverage
 
-### Decision Coverage and Test Quality
+`query check.decision-coverage-verify` exited 0. All trackable CONTEXT.md decisions are honored by shipped artifacts (12/12). D-PG2-11's PROJECT.md row (:98) records the D-PG5-01 timing move and D-PG5-04.
 
-`query check.decision-coverage-verify` exited 0: all **12/12** trackable CONTEXT decisions honored, no missing or contradicted decisions. Manual traces above substantiate the result. Plans contain no prohibition entries, backstop-only truths or deferred `<human-check>` blocks requiring resolution.
+### Test Quality Audit
 
-Test quality was checked at the assertion boundary:
-- The recording hook reads actual JSON stdin and records the whole value; expected values are independently declared, not generated by the production codec.
-- The result observer registers after the production extension and records complete content, details, structuredContent and isError. The installed-runner integration test reaches Pi's real result merge behavior.
-- Stop scenario helpers compare the complete expected model-call sequence, full hook rows, absence of overflow and cap-notice count. They would fail on one/three/nine continuations or accidental tool-reset omissions.
-- Reverse-completion and delayed-authorization tests control actual promises and assert final input, not merely that a helper was called.
-- No skipped/focused test marker or unreferenced debt marker was found in the exact changed-file scope. The source/test owners and real cucumber scenarios cover the changed public command behavior.
+| Test file | Linked req | Skipped | Circular | Assertion level | Verdict |
+| --- | --- | --- | --- | --- | --- |
+| features/hook/tool-use.feature, tool-failure.feature, async.feature | PG-HOOK-01 | 0 | No (recorder reads real stdin; expected JSON declared literally) | Behavioral | OK |
+| features/hook/matchers.feature | PG-HOOK-03 | 0 | No | Behavioral | OK |
+| features/hook/prompt-and-stop.feature | PG-HOOK-13 | 0 | No | Behavioral (full reply/flag sequence, notice count, run and model-call counts) | OK |
+| test/bridges/hooks/{dispatch,runtime,settle}.test.ts, test/integration/hooks-result-boundary.test.ts | all | 0 | No | Value / behavioral | OK |
 
-The previous review's four runtime bugs and one documentation issue were checked against the corrected code, not treated as closed solely from the review disposition: same-text MCP carrier clearing (S5), native Glob output alias handling, malformed file-URL fallback, exact native/custom identities, and matcher prose now agree with implementation and assertions. The clean rereview and 27/27 closed security recheck provide corroborating evidence.
-
-No specific undeclared precondition, incidental ordering or fixture-only state was needed for the verified truths. Production code establishes ordering through await/Promise.all and explicit pair indices, owns reset/generation state, and obtains the same native input/result facts that the test fixtures supply.
+No `.skip`/`.only`/`.todo` markers and no `@skip`/`@wip` tags were found in the scanned hook test and feature files. Disabled tests: 0. Circular patterns: 0.
 
 ### Anti-Patterns Found
 
 | Scope | Pattern | Severity | Result |
 | --- | --- | --- | --- |
-| All 72 changed files | Unreferenced TBD / FIXME / XXX | None | No debt-marker blocker. |
-| Changed implementation and test owners | Placeholder output, empty implementation, console-only action, orphaned wiring, disabled tests | None | No stub or disconnected user-visible value found. Optional projector no-match/unsupported returns, empty initial collections and deliberate empty replacement values have substantive callers and defined behavior. |
-| Whole-regex matcher | Native JavaScript regex complexity | Accepted scoped residual | Existing explicit contract permits whole JavaScript regex; no phase requirement claims a regex sandbox or execution timeout. The security recheck records this residual. |
+| Hooks bridge sources, hook domain, hook features/steps/libs, hook tests, docs/hooks-compatibility.md | Unreferenced TBD / FIXME / XXX | None | No match |
+| Same scope | Stubs, empty handlers, orphaned wiring | None | Optional `undefined` returns are defined no-op outcomes with substantive callers |
+| docs/research/parity-gaps/hooks.md:22 | Out-of-date status sentence (Stop on `agent_settled`) | Advisory | See below. File unchanged since the prior verification. Not a Phase 2 truth. |
+
+### Advisory (New Scope, Unevidenced)
+
+| # | Finding | Category | Why advisory |
+| --- | --- | --- | --- |
+| 1 | `docs/research/parity-gaps/hooks.md:22` still says Stop uses `agent_settled` and that Phase 5 owns the event move and the cap environment variable. Both were settled by D-PG5-01 and D-PG5-04. | other | Records drift left by Phase 5. The file has not changed since the prior verification. No Phase 2 truth depends on it, and there is no runtime defect. |
 
 ### Human Verification Required
 
-None. Runtime behavior is covered by executed owner/integration tests and real Pi cucumber scenarios; the contract documentation was independently reviewed against those implementations. Generic summary human-judgment labels do not introduce an unresolved visual or external-service check for this phase.
+None. Every runtime behavior is covered by real Pi cucumber scenarios in G and by named owner and integration tests run in this pass. PowerShell remains contract-tested only, and LS remains the native-schema exception. Both are documented scope boundaries.
 
-PowerShell remains contract-tested because live PowerShell execution is unavailable in the accepted environment; the phase explicitly requires that limitation to be stated. LS is the accepted native-schema exception. Neither is silently counted as demonstrated live parity. Partial result projection intentionally omits facts Pi never supplied; execution wrappers remain open as HOOKRESULT-01. These are accepted scope boundaries, not missing current-phase artifacts.
+### Gaps Summary
 
-### Later-Phase Scope and Gaps
-
-No blocking gaps or unresolved warnings were found. Full-roadmap review confirms Phase 5 owns Stop event migration and the cap environment variable; Phase 2 correctly retains the existing agent_settled path. No failed current-phase truth was moved to a later phase to obtain this verdict.
-
-**Phase goal achieved within the recorded D-PG2-01..12 contract.** All runtime-dependent truths have passing behavioral evidence. No overrides were applied, no human decision is pending, and no source or completion-state file was changed by this verification.
+No gaps and no regressions. On the current tree, every roadmap criterion and every plan must-have of Phase 2 still holds, with citations updated to current lines. One mechanism was superseded on purpose: D-PG5-01 moved the Stop continuation from `agent_settled` to `agent_before_settle`, with the eight-block cap and its resets unchanged. The one plan key link whose text names `agent_settled` is carried as a decision override. A one-line records fix in `docs/research/parity-gaps/hooks.md:22` is advised.
 
 ---
 
-_Verified: 2026-11-13T14:14:30Z_
-_Verifier: gsd-verifier_
+_Verified: 2026-11-16T05:37:57Z_
+_Verifier: Claude (gsd-verifier)_
