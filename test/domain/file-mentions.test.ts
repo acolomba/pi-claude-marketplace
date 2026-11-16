@@ -157,6 +157,26 @@ describe("findFileMentions", () => {
       expected: [whole("a.md")],
     },
     {
+      title: "D-PG11-03: skips a mention inside a fence in a blockquote",
+      body: "> ```\n> @a.md\n>\n> ```\n@b.md",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: ends a fence in a blockquote at a line outside the blockquote",
+      body: "> ```\n> @a.md\n@b.md",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: keeps a fence open past a quoted run inside it",
+      body: "```\n> ```\n@a.md\n```\n@b.md",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: closes no code span across a blockquote after a fence in a blockquote",
+      body: "> ```\n> code\n> ```\nText with `x\n> @b.md `y",
+      expected: [whole("b.md")],
+    },
+    {
       title: "D-PG11-03: reads a backtick run with a backtick after it as a code span, not a fence",
       body: "```x``` @a.md",
       expected: [whole("a.md")],

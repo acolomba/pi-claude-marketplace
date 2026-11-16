@@ -90,6 +90,12 @@ const BACKTICK_RUN = /`+/g;
 
 const NOT_NEWLINE = /[^\n]/g;
 
+/** A line split after its blockquote markers. */
+interface QuotedLine {
+  readonly depth: number;
+  readonly content: string;
+}
+
 interface FenceLine {
   readonly run: string;
   readonly rest: string;
@@ -144,6 +150,12 @@ interface LocatedMention {
   readonly text: string;
 }
 
+function unquote(line: string): QuotedLine {
+  const content = line.replace(QUOTE_MARKERS, "");
+  const quote = line.slice(0, line.length - content.length);
+  return { depth: quote.length - quote.replaceAll(">", "").length, content };
+}
+
 function fenceLineOf(line: string): FenceLine | undefined {
   const match = FENCE_RUN.exec(line);
   return match === null ? undefined : { run: String(match[1]), rest: line.slice(match[0].length) };
@@ -166,20 +178,29 @@ function closesFence(fence: FenceLine | undefined, open: string): boolean {
   );
 }
 
-// D-PG11-03: blanks every line of a fence, its marker lines included. A fence
-// that never closes runs to the end of the text.
+// D-PG11-03: blanks every line of a fence, its marker lines included. As in
+// CommonMark, a fence can follow blockquote markers, only a line of its own
+// blockquote closes it, and a line of a shallower one ends it. A fence that
+// never closes runs to the end of the text.
 function maskFences(text: string): string {
   const masked: string[] = [];
   let open: string | undefined;
+  let openDepth = 0;
   for (const line of text.split("\n")) {
-    const fence = fenceLineOf(line);
+    const { depth, content } = unquote(line);
+    const fence = fenceLineOf(content);
+    if (depth < openDepth) {
+      open = undefined;
+    }
+
     if (open === undefined) {
       open = openingRun(fence);
+      openDepth = depth;
       masked.push(open === undefined ? line : " ".repeat(line.length));
       continue;
     }
 
-    if (closesFence(fence, open)) {
+    if (depth === openDepth && closesFence(fence, open)) {
       open = undefined;
     }
 
@@ -263,14 +284,13 @@ function listItem(block: RegExpExecArray | null): ListItem | undefined {
 }
 
 function lineShape(line: string): LineShape {
-  const content = line.replace(QUOTE_MARKERS, "");
-  const quote = line.slice(0, line.length - content.length);
+  const { depth, content } = unquote(line);
   const rest = content.trimStart();
   const block = BLOCK_START.exec(rest);
   const thematic = THEMATIC_BREAK.test(rest);
   return {
     blank: rest === "",
-    quoteDepth: quote.length - quote.replaceAll(">", "").length,
+    quoteDepth: depth,
     indent: content.slice(0, content.length - rest.length).replaceAll("\t", "    ").length,
     item: thematic ? undefined : listItem(block),
     heading: block?.[2] !== undefined || thematic,
