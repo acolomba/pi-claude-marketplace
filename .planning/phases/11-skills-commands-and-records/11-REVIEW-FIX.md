@@ -213,3 +213,39 @@ Every gate ran in the main checkout `/home/acolomba/src/pi-claude-marketplace-ga
 _Fixed: 2026-11-16T00:00:00Z_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 3_
+
+## Post-close review
+
+**Source:** an independent review of the code mask after iteration 3, against `5fd2706a`.
+**Commit:** `1183aae3`
+**Status:** fixed
+
+**Cause:** `maskFences` and `paragraphs()` each kept their own model of the blockquote and list item a line belongs to. A fence is an open-ended toggle. So when the fence pass missed an opener, the closer became an opener, and everything to the end of the blockquote or the text was masked. Three fix rounds in a row patched one of the two models and regressed the other.
+
+**Findings:**
+
+| ID | Severity | Body | Expected (CommonMark) | Before |
+| --- | --- | --- | --- | --- |
+| PC-1 | Warning | ```` "    > ```\n> @b.md" ````, ```` "Example:\n\n    > ```\n    > @b.md\n\nAfter @c.md" ```` | `[b.md]`, `[b.md, c.md]` | `[]`, `[c.md]`: `QUOTE_MARKERS` took a `>` at four columns or more |
+| PC-2 | Warning | ```` "> - ```\n>   @a.md\n>   ```\n> @b.md" ````, ```` "- > ```\n  > @a.md\n  > ```\n  > @b.md" ```` | `[b.md]`, `[b.md]` | `[a.md]`, `[a.md]`: a fence on an item line in a blockquote was missed |
+| PC-3 | Warning | ```` "- ```bash\n  ls\n  ```\n\nThen read @c.md" ```` | `[c.md]` | `[]`: a fence on an item line dropped every later mention |
+| PC-4 | Info | ```` "text\n\n    - a `x\n===\n@b.md `y" ````, ```` "text\n\n    - a `x\n@b.md `y" ```` | `[b.md]`, `[b.md]` | `[]`, `[]`: an item line at four columns outside a list was read as a list |
+| PC-5 | Info | the `maskFences` comment said "As in CommonMark" | the docs match the code | -- |
+
+**Applied fix:** one container model replaces both. `lineRole` reads each line once, as CommonMark's block parser does. It matches the open blockquotes and list items (a blockquote marker at most three columns in; a list item at its content column, or on a blank line when the item holds a block), opens new ones, and keeps a lazy continuation line in the open paragraph. Tabs are expanded to the next multiple of four for this pass only. Each line gets one role: fenced (masked), plain (kept: blank lines, breaks, underlines, and indented code), or the number of its paragraph or heading. `maskCode` masks fenced runs and runs `maskParagraphSpans` over each paragraph's lines. The code span algorithm did not change. A line opens at most 100 containers. Without that bound, a deep list followed by blank lines takes quadratic time (97 s at 200k characters), because a blank line continues every item without reading a character. The module header, the `maskCode` and `lineRole` comments, and the D-PG11-03 bullet of `docs/skills-commands-compatibility.md` now describe this model.
+
+The model also closes the residuals that iteration 3 left open: IN-09 (```` "> Note `x\n>\t- @b.md `y" ```` now attaches `b.md`), the list half of IN-11 (```` "1. Step:\n\n    ```\n    see @b.md\n\n    more\n    ```" ```` no longer attaches), the list residual (```` "- a `x\n    2. @b.md `y" ```` no longer attaches), and the WR-05 empty-item body (```` "> -\nfoo `a\n> @b.md `y" ```` now attaches). Each one now matches CommonMark and has a pin.
+
+### Red and green (post-close)
+
+- Unit, `test/domain/file-mentions.test.ts`: 19 new rows. With the module of `5fd2706a` in place: 120 pass, 14 fail. The 14 failures are the PC-1 to PC-4 bodies, their near variants (an ordered item, a fence ended by a line outside the item, a fence indented four columns in a list item), the four closed residuals above, and the 100-container bound. The 5 rows that pass are controls and branch cover: a blockquote fence at three columns, a fence after a blank line in a quoted list item, an empty item ended by a blank line, five spaces after a marker, and a lazy line that opens a fence. After the fix: 134/134. The 115 existing rows, the WR-02 and WR-03 pins among them, pass unchanged.
+- Cucumber, adapter profile, `invocation.feature:336` and `:402`: 4 new rows, 3 in the attach Outline (PC-3, PC-1, the attached half of PC-2) and 1 in the not-attached Outline (the masked half of PC-2). With the module of `5fd2706a` in place: 10 passed, 4 failed, exactly the new rows. After the fix: 14/14. The new rows moved the citations `invocation.feature:374` and `:399` to `:377` and `:402` in the page, `11-SECURITY.md`, and `11-VERIFICATION.md`.
+- Differential check against `commonmark` 0.31.2 (scratchpad only, not committed): random bodies built from quote, list, tab, fence, heading, break, and underline prefixes, with the CommonMark result taken from the AST (fenced code and code spans removed, indented code kept as text). The module of `5fd2706a` disagreed with CommonMark on 1,011 of 100,000 bodies. The fixed module disagrees on 0 of 500,000 bodies (two alphabets).
+- Full gate: `npm run check` on `1183aae3`, exit 0 (cucumber 2,098 scenarios under the adapter profile and 204 under the builtin profile, all passed).
+- Linearity: ten hostile shapes at 200k characters run in 18 ms to 324 ms. The module of `5fd2706a` ran the same shapes in 2 ms to 301 ms.
+
+### Residuals (post-close)
+
+- An HTML block is read as a paragraph, so a code span in it is masked. ```` "<div>\n`a @b.md`\n</div>" ```` attaches nothing; CommonMark reads the block as raw HTML. The module header and the page state this.
+- A line opens at most 100 containers, so a deeper marker is text. The header and the page state this, and a row pins it.
+- `11-CONTEXT.md` (D-PG11-03) and `11-VERIFICATION.md` (truth 7, its override, and maintainer item 3) still describe the residuals of iteration 3, which this fix closes. I left both as they were, because the decision record and the verdict belong to the maintainer.
