@@ -629,6 +629,17 @@ The install, update, reinstall, enable, and the move on `/reload` all check for 
 
 An installed plugin gets its option values at its next install, update to a new version, reinstall, or enable. Until then, its entry keeps the reference as written. Under Pi's built-in MCP, the registration reads the options from the install record, and a record written before this release holds none. pi-mcp-adapter approves a project server by a hash of its entry, so it asks for project server approval again once, after the first restage that writes such a reference. This was read in the source of pi-mcp-adapter and not measured.
 
+#### Options the install record cannot read
+
+The install record keeps the options that the plugin declares. If the record holds them in a form that does not parse, for example after a hand edit, the extension does not guess at them. It refuses each part of the plugin that names an option, and it tells you (D-PG10-25):
+
+- Each load shows a warning row for the plugin: `(failed) {unreadable}`, with a cause that says the options do not parse and tells you to run `/claude:plugin reinstall <plugin>@<marketplace>`. `list` and `info` show `{unreadable}` on the plugin's row.
+- No option variable is set for the plugin.
+- Under Pi's built-in MCP, a server that names an option is not registered. The other servers of the plugin are registered.
+- Under pi-mcp-adapter, the extension sets `"disabled": true` on each entry of the plugin in `mcp-adapter.json` that names an option, so pi-mcp-adapter does not start the server with empty option values. The entry's marker keeps the entry's own `disabled` value under `withheld`. For the user scope, this happens when the extension loads, before pi-mcp-adapter starts its servers. For the project scope, it happens at the load, as the project's option variables do. When the record reads again, the next load puts the entry's own value back. A file that holds comments is rewritten at the load, which reports the dropped comments.
+
+`reinstall` writes the options again from the plugin and writes fresh entries, so it repairs both the record and `mcp-adapter.json`. An `update` to a new version does the same. `uninstall` and `disable` remove a held-back entry as any other entry. A pi-subagents background child writes nothing (D-MB-12). Claude Code has no install record, so this is a rule of this extension, not parity (`features/mcp-server/options.feature`, `features/mcp-server/builtin-options.feature`).
+
 An option reference inside a default, such as `${FOO:-${user_config.x}}`, is filled as its own value, and the `${FOO:-` text and the closing `}` stay as written. Claude Code fills the option first and then reads `${FOO:-value}`. This is a known gap (BACKLOG MCPOPTFALLBACK-01).
 
 ### Withheld credentials

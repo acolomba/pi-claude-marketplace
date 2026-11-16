@@ -45,6 +45,7 @@
   - If you installed a plugin with `--partial` because of its `userConfig`, run `/claude:plugin reinstall` once to give it its options.
   - An MCP server that names a plugin option with no value is left out with a warning. A shell-form hook that names a plugin option does not run.
   - pi-mcp-adapter asks for project server approval again for a server whose entry names a plugin option, after the plugin's next update or reinstall.
+  - If an install record holds plugin options that do not parse, each new session warns with `{unreadable}`, and `list` and `info` show it. Servers and hooks that name an option do not run until `/claude:plugin reinstall`.
   - A user-scope skill or command now gets the project directory for `${CLAUDE_PROJECT_DIR}` when you invoke it or the model reads it.
   - A plugin's `bin` folder now joins `PATH` only when it exists. A project plugin's `bin` folder joins only in a project that Pi trusts.
   - A plugin command with no frontmatter `name` now also answers to its Claude Code name, so `foo-bar` in plugin `foo`, listed as `/foo:bar`, also answers to `/foo:foo-bar`. An installed plugin gets the name when it updates to a new version, or at `/claude:plugin reinstall`.

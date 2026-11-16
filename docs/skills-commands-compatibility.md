@@ -37,7 +37,7 @@ The variables in a body get these values:
 - `${CLAUDE_PLUGIN_ROOT}` and `${CLAUDE_PLUGIN_DATA}` are filled at install. In a skill, `${CLAUDE_SKILL_DIR}` is the staged copy of the skill folder, outside the plugin tree.
 - `${CLAUDE_SESSION_ID}` and `${CLAUDE_EFFORT}` are filled when you type the skill or command. The effort is the thinking level of the Pi session.
 - `${CLAUDE_PROJECT_DIR}` is filled at install for a project-scope plugin. A user-scope skill or command keeps it in its staged file. The bridge fills it with the working directory of the session when you type the skill or command, when the model reads a skill file, and when the model runs a command with `run_plugin_command` (D-PG10-16).
-- `${user_config.KEY}` is filled when the content is staged: at install, update, reinstall, and enable (D-PG10-13). A sensitive option becomes a fixed text that says the value is not available. An option with no default stays as written. A plugin that declares no `userConfig` keeps every `${user_config.KEY}` as written, as Claude Code does.
+- `${user_config.KEY}` is filled when the content is staged: at install, update, reinstall, and enable (D-PG10-13). A sensitive option becomes a fixed text that says the value is not available. An option with no default stays as written. A plugin that declares no `userConfig` keeps every `${user_config.KEY}` as written, as Claude Code does. The content keeps the values it got at staging even if the install record's options later do not parse. Each load then shows a `(failed) {unreadable}` warning for the plugin until a reinstall (D-PG10-25).
 
 For each variable and each surface, see [Environment variables](env-vars.md).
 

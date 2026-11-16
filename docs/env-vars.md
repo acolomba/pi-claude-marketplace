@@ -196,7 +196,7 @@ The extension applies the variables at these points:
 - At each load (startup and `/reload`), it sets the project scope only when Pi trusts the project. When Pi's answer is "not trusted", the load does not read the project's `state.json`, and it removes the project-scope names (D-PG10-23).
 - After each `/claude:plugin` command, it applies both scopes again with the trust answer of the last load. So an install or an uninstall changes the variables in the same session.
 
-If the `state.json` of a scope cannot be read, that scope keeps its variables.
+If the `state.json` of a scope cannot be read, that scope keeps its variables. If a plugin's install record holds options that do not parse, the extension sets no variable for that plugin, and it holds back the plugin's servers that name an option (D-PG10-25). See [Options the install record cannot read](mcp-compatibility.md#options-the-install-record-cannot-read).
 
 Bash, hooks, MCP servers, and every other child of Pi inherit both names. Claude Code gives Bash and other children no plugin option. This is a divergence, licensed as a project decision (D-PG10-11): pi-mcp-adapter reads only its configuration file and the process environment, so the process environment is the only place for a value that is not in the file. A project-scope stdio server that pi-mcp-adapter starts before the load sets the project names reads an unset variable (D-PG10-23). The scenarios in `features/plugin/options.feature` cover the bash tool in a trusted project, a project that the user marked "Do not trust", and an uninstall.
 
