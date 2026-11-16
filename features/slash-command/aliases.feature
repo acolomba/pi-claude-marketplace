@@ -143,3 +143,25 @@ Feature: Slash command aliases
     Then pi's terminal menu offers these slash commands:
       | command    | argument hint | description       |
       | demo:fancy |               | Ships the branch. |
+
+  Scenario: A command whose frontmatter sets a name does not answer to its path name
+    Given pi runs with the scripted model
+    Given the published plugin "demo" of the marketplace "fixtures" has the slash command "demo-ship" with this command file:
+      """
+      ---
+      name: fancy
+      description: Ships the branch.
+      ---
+
+      Ship the branch.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts "/demo:demo-ship production"
+    Then the model receives these calls:
+      | call | role | text                       |
+      | 1    | user | /demo:demo-ship production |

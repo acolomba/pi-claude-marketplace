@@ -8,7 +8,8 @@
 // never reaches it.
 //
 // D-PG11-01: the record also holds the name Claude Code gives the command
-// (`claudeCommandName`), which the alias reader adds as an alias. A command
+// from its path (`claudeCommandName`), which the alias reader adds as an alias
+// unless a frontmatter `name` replaces it, as in Claude Code 2.1.323. A command
 // staged before D-PG11-01 has a record without it, and that record still
 // reads; the command gets the alias when its plugin is staged again.
 
@@ -22,7 +23,7 @@ const RECORD_KEY = "pi-claude-marketplace";
 export interface CommandRecord {
   readonly pluginRoot: string;
   readonly pluginData: string;
-  /** D-PG11-01: Claude Code's name for the command; none in a file staged before D-PG11-01. */
+  /** D-PG11-01: Claude Code's path name for the command; none if staged before D-PG11-01. */
   readonly claudeName: string | undefined;
 }
 

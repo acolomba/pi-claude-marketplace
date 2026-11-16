@@ -46,7 +46,7 @@
   - pi-mcp-adapter asks for project server approval again for a server whose entry names a plugin option, after the plugin's next update or reinstall.
   - A user-scope skill or command now gets the project directory for `${CLAUDE_PROJECT_DIR}` when you invoke it or the model reads it.
   - A plugin's `bin` folder now joins `PATH` only when it exists. A project plugin's `bin` folder joins only in a project that Pi trusts.
-  - A plugin command now also answers to its Claude Code name, so `foo-bar` in plugin `foo`, listed as `/foo:bar`, also answers to `/foo:foo-bar`. An installed plugin gets the name when it updates to a new version, or at `/claude:plugin reinstall`.
+  - A plugin command with no frontmatter `name` now also answers to its Claude Code name, so `foo-bar` in plugin `foo`, listed as `/foo:bar`, also answers to `/foo:foo-bar`. An installed plugin gets the name when it updates to a new version, or at `/claude:plugin reinstall`.
   - Alias suggestions in Pi's menu now show the description and the argument hint of the command or skill they name.
   - A plugin command or skill that you type now attaches the files that its body names with an `@` path. A path in the typed arguments, in the output of a `!` command, or inside code is not attached.
   - A new page, [Skill and command compatibility](docs/skills-commands-compatibility.md), compares skills and commands with Claude Code. Each row of its status table names the scenario that proves it.

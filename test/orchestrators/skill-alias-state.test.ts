@@ -716,17 +716,59 @@ for (const { title, claudeName, otherCommands } of [
       true,
       dependencies(
         { [AGENT_DIR]: stateWithCommands({ demo: { prompts: ["demo:lint"] } }) },
-        { [file]: recordedCommand(claudeName, "fancy") },
+        { [file]: recordedCommand(claudeName) },
+      ),
+    );
+
+    // assert
+    assert.deepStrictEqual([...aliases], []);
+    verify(pi);
+  });
+}
+
+for (const { title, frontmatterName, expectedAliases } of [
+  {
+    title: "a plain name answers to its frontmatter name aliases only",
+    frontmatterName: "fancy",
+    expectedAliases: ["demo:fancy", "fancy"],
+  },
+  {
+    title: "a name with whitespace answers to no alias",
+    frontmatterName: "fancy name",
+    expectedAliases: [],
+  },
+  { title: "a list answers to no alias", frontmatterName: "[a, b]", expectedAliases: [] },
+  {
+    title: "an empty name keeps the stored name",
+    frontmatterName: '""',
+    expectedAliases: ["demo:demo-ship"],
+  },
+  {
+    title: "a name over 256 characters keeps the stored name",
+    frontmatterName: "a".repeat(257),
+    expectedAliases: ["demo:demo-ship"],
+  },
+]) {
+  test(`D-PG11-01: a command whose frontmatter sets ${title}, as Claude Code 2.1.323 replaces the path name`, async () => {
+    // arrange
+    const file = stagedCommandPath(AGENT_DIR, "demo:ship");
+    const pi = piWith([stagedPromptCommand("demo:ship", file)]);
+
+    // act
+    const aliases = await loadPluginAliases(
+      pi,
+      CWD,
+      true,
+      dependencies(
+        { [AGENT_DIR]: stateWithCommands({ demo: { prompts: ["demo:ship"] } }) },
+        { [file]: recordedCommand("demo:demo-ship", frontmatterName) },
       ),
     );
 
     // assert
     assert.deepStrictEqual(
       [...aliases],
-      [
-        ["demo:fancy", command("demo:lint")],
-        ["fancy", command("demo:lint")],
-      ],
+      expectedAliases.map((alias) => [alias, command("demo:ship")]),
     );
     verify(pi);
   });

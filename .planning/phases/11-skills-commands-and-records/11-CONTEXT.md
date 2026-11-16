@@ -75,6 +75,14 @@ questions that gate MCP-03, SKILL-06, and decision 26.
     is any loaded Pi command name, or that two entries claim, is not added
     (`claimedAliases`). A Claude Code name equal to another command's Pi name
     therefore keeps the Pi name.
+  - **Frontmatter `name` (code review WR-01, 2026-11-15):** when a command
+    sets a frontmatter `name`, Claude Code 2.1.323 replaces the path name with
+    it (`dBt` reads any present value with `String()` and ignores an empty or
+    over-256-character result; the builder then uses `Zt`, never the path name
+    `e`). So the path name is no alias then: `demo/commands/demo-ship.md` with
+    `name: fancy` does not answer to `/demo:demo-ship`. The alias reader drops
+    the stored name in that case (`declaresFrontmatterName`), so a command
+    staged earlier in this phase follows the rule with no restage.
   - Record: a Key Decisions row in `PROJECT.md` with the premise and the
     2.1.323 version; "Amended by D-PG11-01" on D-141-01.
 

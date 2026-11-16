@@ -109,6 +109,22 @@ export function frontmatterNameAliases(
 }
 
 /**
+ * D-PG11-01: whether Claude Code 2.1.323 reads `frontmatterName` as a set
+ * `name`, which replaces a command's path name (`dBt`). It reads any present
+ * value with `String()` and ignores an empty or over-long result, so a name
+ * that adds no alias here, such as one with whitespace, still counts.
+ */
+export function declaresFrontmatterName(frontmatterName: unknown): boolean {
+  if (frontmatterName === undefined || frontmatterName === null) {
+    return false;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-base-to-string -- Claude Code reads a mapping as `[object Object]` too, so it is a set name there
+  const name = String(frontmatterName);
+  return name !== "" && name.length <= NAME_LIMIT;
+}
+
+/**
  * D-CF2-02: every identity in `identities` is claimed before
  * any frontmatter alias, so a frontmatter alias never takes another skill's
  * directory name. D-CF2-03: an alias equal to one of `commandNames` is never

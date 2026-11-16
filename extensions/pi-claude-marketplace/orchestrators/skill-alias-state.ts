@@ -18,7 +18,9 @@
 // in the command's record (`readCommandRecord`). The Pi name keeps the
 // D-141-01 elision, so `demo/commands/demo-lint.md` is `/demo:lint` and also
 // answers to `/demo:demo-lint`. When the stored name is the Pi name, the
-// reserved names below drop it. A command staged before D-PG11-01 has no
+// reserved names below drop it. A frontmatter `name` replaces the path name in
+// Claude Code, so a command that sets one does not answer to the stored name
+// (`declaresFrontmatterName`). A command staged before D-PG11-01 has no
 // stored name and gets this alias when its plugin is staged again; this
 // module only reads.
 //
@@ -43,7 +45,11 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 import { readCommandRecord } from "../bridges/commands/command-record.ts";
-import { frontmatterNameAliases, readSkillRecord } from "../bridges/skills/skill-names.ts";
+import {
+  declaresFrontmatterName,
+  frontmatterNameAliases,
+  readSkillRecord,
+} from "../bridges/skills/skill-names.ts";
 import { generatedSkillName } from "../domain/name.ts";
 import { loadState } from "../persistence/state-io.ts";
 import { getAgentDir, parseFrontmatter } from "../platform/pi-api.ts";
@@ -173,15 +179,20 @@ const SKILL_KIND: AliasKind = {
 };
 
 /**
- * D-PG11-01 / T-02-17: the Claude Code name stored in the record of a command
- * of `pluginName`, in the form install writes: under the plugin's own prefix
- * and with no whitespace. A record that stores another name was not written by
- * install for this plugin, so the name is dropped.
+ * D-PG11-01 / T-02-17: the path name stored in the record of a command of
+ * `pluginName`, in the form install writes: under the plugin's own prefix and
+ * with no whitespace. A record that stores another name was not written by
+ * install for this plugin, so the name is dropped. A frontmatter `name`
+ * replaces the path name in Claude Code 2.1.323, so it is dropped then too.
  */
 function storedClaudeName(
   pluginName: string,
   frontmatter: Record<string, unknown>,
 ): readonly string[] {
+  if (declaresFrontmatterName(frontmatter.name)) {
+    return [];
+  }
+
   const name = readCommandRecord(frontmatter)?.claudeName;
   return name?.startsWith(`${pluginName}:`) === true && !/\s/.test(name) ? [name] : [];
 }
