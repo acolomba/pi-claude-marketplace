@@ -48,7 +48,7 @@
   - A plugin's `bin` folder now joins `PATH` only when it exists. A project plugin's `bin` folder joins only in a project that Pi trusts.
   - A plugin command with no frontmatter `name` now also answers to its Claude Code name, so `foo-bar` in plugin `foo`, listed as `/foo:bar`, also answers to `/foo:foo-bar`. An installed plugin gets the name when it updates to a new version, or at `/claude:plugin reinstall`.
   - Alias suggestions in Pi's menu now show the description and the argument hint of the command or skill they name.
-  - A plugin command or skill that you type now attaches the files that its body names with an `@` path. A path in the typed arguments, in the output of a `!` command, or inside code is not attached.
+  - A plugin command or skill that you type now attaches the files that its body names with an `@` path. A path inside code is attached, as in Claude Code; a path in the typed arguments or in the output of a `!` command is not.
   - A new page, [Skill and command compatibility](docs/skills-commands-compatibility.md), compares skills and commands with Claude Code. Each row of its status table names the scenario that proves it.
 
 - More plugin hook events now behave as in Claude Code, and the model-facing tools return what the model asks for. (#310)

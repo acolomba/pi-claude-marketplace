@@ -20,8 +20,9 @@ Pi 1.5.0 (the peer floor and the installed dev copy) and Claude Code 2.1.323
 
 - A typed bridged command or skill attaches the existing regular text files
   that its author's `@path` references name, in Pi's `<file>` form. A `@path`
-  that arrives through an argument or through `!` output, or that sits in
-  fenced code or a code span, is not attached (PG-SKILL-01).
+  that arrives through an argument or through `!` output is not attached; one
+  in fenced code or a code span is attached, as upstream (PG-SKILL-01;
+  D-PG11-03 reversed 2026-11-16).
 - A command answers to Claude Code's name `/<plugin>:<path>:<file>` when that
   name differs from its Pi name (PG-CMD-09).
 - Each alias suggestion shows its target's description and, for a skill, its
@@ -113,30 +114,15 @@ criteria 1 and 2 say the opposite for all three.
     `/demo:review @/etc/hostname`, which criterion 1 forbids.
   - **Reversible:** switching to the rendered text is a change of the scan
     input only.
-- **D-PG11-03 (pending maintainer review; divergence with no Pi gap; criterion 2):**
-  A mention inside fenced code (```` ``` ```` or `~~~`) or an inline code span
-  is not attached. Upstream attaches it. The license is this recorded
-  decision: the requirement chose it to avoid attaching example text in
-  plugin-authoring guidance (`plugin-dev` teaches the `@` pattern inside code
-  in more than 20 places, so parity would attach the files its examples name,
-  when they exist). No doc may call it parity. Maintainer question: keep the
-  skip, or follow upstream and change criterion 2. Fences and code spans
-  follow CommonMark's escape rule and paragraph ends (code review WR-02 to
-  WR-05, IN-06, 2026-11-15): a fence may sit in a blockquote and ends with
-  it; a backslash-escaped backtick opens no span; and no span crosses a blank
-  line, an ATX heading, a thematic break, a setext underline under text, the
-  start of a deeper blockquote, the end of an indented block, or a list item
-  that can interrupt the paragraph (indented under four columns, with text,
-  numbered 1 if ordered; on a line that leaves a blockquote, any item indented
-  under four columns), so a mention outside a real span stays attached as
-  D-PG11-04 requires. Residual: inside a list the bridge does not track where
-  an item's text starts. Every item, heading, and thematic break ends a span
-  at any indentation, a setext underline does when indented one column or
-  more, and a fence indented four columns or more is not recognized. So in a
-  list a span can end early or late, and a mention can be skipped or attached
-  against CommonMark. A tab after `>` counts as four columns; CommonMark
-  counts it to the next multiple of four and can take the marker's space from
-  it, so such a line can split either way.
+- **D-PG11-03 (reversed by the maintainer on 2026-11-16; parity; criterion 2):**
+  A mention inside fenced code or an inline code span is attached, as
+  upstream attaches it: Claude Code 2.1.323's mention tokenizer splits on
+  whitespace and does not read Markdown (`11-SPIKE-S8.md`, Q1). The
+  autonomous discussion first chose to skip code, to keep the example text
+  of plugin-authoring guidance out, with no Pi gap behind it; the maintainer
+  chose upstream parity instead, and criterion 2 changed to cover only `!`
+  output. The code mask is removed. The text of a `!` command is still not
+  scanned, because upstream replaces it with its output first (D-PG11-02).
 - **D-PG11-04 (syntax; parity):** recognize mentions as upstream does
   (`z_s`, `R3n`, `sls`): `@"path with spaces"` and an unquoted `@token`, where
   `@` starts a whitespace-delimited token or follows one of `。、？！`; trailing
@@ -170,7 +156,7 @@ criteria 1 and 2 say the opposite for all three.
   the model passes to `run_plugin_command` are covered by D-PG11-02 either
   way.
 - **D-PG11-08 (module):** a pure parser in `domain/` (mentions with their
-  ranges, the code-span and fence mask) and the file read behind an injected
+  ranges) and the file read behind an injected
   reader in the invocation orchestrators. All reads are read-only; no
   containment rule applies, because the author can already run `!` commands
   (D-CF1-02).
@@ -221,7 +207,7 @@ criteria 1 and 2 say the opposite for all three.
   follows the register of `docs/hooks-compatibility.md` and covers the
   dropped fields, `!` injection, `run_plugin_command`, the skill-read fill,
   the name mapping (with D-PG11-01), and `@file` attachment with D-PG11-02 and
-  D-PG11-03 marked as divergences. The status table starts from the skills
+  D-PG11-03 marked as divergences (D-PG11-03 was later reversed). The status table starts from the skills
   report's "Current project behavior" table. Every row cites a scenario
   (`features/...feature:<line>`) that passes on the combined tree; a behavior
   with no passing scenario goes into a separate "Not proven by a scenario"
@@ -236,8 +222,8 @@ criteria 1 and 2 say the opposite for all three.
   - `/demo:review @/etc/hostname` (use a fixture file in the scenario's
     world, not the real `/etc/hostname`, if the harness requires hermetic
     paths) reaches the model as text with no `<file>` block (criterion 1);
-  - a mention in a fence, in a code span, and in `!` output is not attached
-    (criterion 2);
+  - a mention in `!` output is not attached, and a mention in a fence or a
+    code span is attached (criterion 2, after the D-PG11-03 reversal);
   - a skill body mention attached through an alias invocation;
   - `/demo:demo-lint x` sends the body of `demo/commands/demo-lint.md`, as
     `/demo:lint x` does (criterion 3);
@@ -269,8 +255,6 @@ Reversible technical choices: D-PG11-04 to D-PG11-13.
 - D-PG11-02: attach author-written mentions only; upstream also attaches
   argument and `!` output paths (licensed by the missing Read permission gate
   in Pi).
-- D-PG11-03: skip mentions in code; upstream does not, and no Pi gap licenses
-  it.
 - D-PG11-06: a directory mention is not attached; upstream attaches an `ls`
   listing.
 

@@ -71,7 +71,7 @@
 ### Skills and Commands
 
 - [x] **PG-SKILL-04**: In a staged `SKILL.md` and its supporting Markdown, a relative link to a sibling skill of the same plugin resolves to that sibling's staged folder. (P0)
-- [x] **PG-SKILL-01**: A typed bridged command or skill attaches each `@path` reference that its author wrote and that names an existing regular text file. A `@path` that arrives through an argument or through the output of an injected `!` command is not attached, and neither is one inside fenced code or a code span. Covers the PRD's CMD-01. (P1; spike S8)
+- [x] **PG-SKILL-01**: A typed bridged command or skill attaches each `@path` reference that its author wrote and that names an existing regular text file. A `@path` that arrives through an argument or through the output of an injected `!` command is not attached. A `@path` inside fenced code or a code span is attached, as in Claude Code (D-PG11-03, reversed 2026-11-16). Covers the PRD's CMD-01. (P1; spike S8)
 - [x] **PG-CMD-09**: A bridged command also answers to Claude Code's own name for it, `/<plugin>:<path>:<file>`, whenever that name differs from its Pi name. (P1; decision 13)
 - [x] **PG-SKILL-11**: Each alias suggestion shows the description of its target and, for a skill, its `argument-hint`. Covers the PRD's CMD-10. (P1)
 
