@@ -68,21 +68,23 @@ const AGENT_SUFFIX = " (agent)";
 // At most three spaces, then a run of three or more backticks or tildes.
 const FENCE_RUN = /^ {0,3}(`{3,}|~{3,})/;
 
-// The blockquote markers that open a line.
-const QUOTE_MARKERS = /^(?:[^\S\n]*>)*/;
+// The blockquote markers that open a line, each with the one space after it
+// that belongs to the marker.
+const QUOTE_MARKERS = /^(?:[^\S\n]*> ?)*/;
 
-// A list item or an ATX heading, which starts a block, so no code span crosses
-// the start of the line. Any indentation counts: a line indented like code
-// that is read as a block start only lets more mentions through, as Claude
-// Code attaches them.
-const BLOCK_START = /^[^\S\n]*(?:[-*+]|\d{1,9}[.)]|(#{1,6}))(?:\s|$)/;
+// A list item or an ATX heading, after the indentation. Group 1 is an ordered
+// item's number, group 2 a heading's marks, and group 3 the rest of the line.
+const BLOCK_START = /^(?:[-*+]|(\d{1,9})[.)]|(#{1,6}))(?:\s(.*)|$)/;
 
 // A thematic break: three or more of one of `-`, `*`, or `_`, with spaces or
 // tabs between them.
-const THEMATIC_BREAK = /^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
+const THEMATIC_BREAK = /^([-*_])(?:[ \t]*\1){2,}[ \t]*$/;
 
 // A setext underline, which ends the paragraph above it.
-const SETEXT_UNDERLINE = /^ {0,3}(?:=+|-+)[ \t]*$/;
+const SETEXT_UNDERLINE = /^(?:=+|-+)[ \t]*$/;
+
+// CommonMark: a line indented this far or more continues a paragraph.
+const CODE_INDENT = 4;
 
 const BACKTICK_RUN = /`+/g;
 
@@ -107,15 +109,34 @@ interface SpanClosers {
   readonly escaped: BacktickRun | undefined;
 }
 
+/** The list item that a line starts. */
+interface ListItem {
+  /** The number of an ordered item; undefined for a bullet item. */
+  readonly number: number | undefined;
+  /** The item has text after its marker. */
+  readonly text: boolean;
+}
+
 /** How one line bounds the code spans around it. */
 interface LineShape {
   /** The line holds only whitespace after its blockquote markers. */
   readonly blank: boolean;
   readonly quoteDepth: number;
-  /** The line starts a list item, an ATX heading, or a break. */
-  readonly blockStart: boolean;
-  /** The line is an ATX heading or a break, which no next line continues. */
+  /** The columns before the content, after the blockquote markers; a tab counts as four. */
+  readonly indent: number;
+  readonly item: ListItem | undefined;
+  /** The line is an ATX heading or a thematic break. */
   readonly heading: boolean;
+  /** The line is a setext underline that is not also a thematic break. */
+  readonly underline: boolean;
+}
+
+/** The first line of a paragraph, and what it means for the lines after it. */
+interface ParagraphStart {
+  readonly quoteDepth: number;
+  readonly inList: boolean;
+  /** The paragraph is an indented code block, which a line indented less ends. */
+  readonly code: boolean;
 }
 
 interface LocatedMention {
@@ -232,51 +253,113 @@ function maskParagraphSpans(paragraph: string): string {
   return masked + paragraph.slice(copied);
 }
 
+function listItem(block: RegExpExecArray | null): ListItem | undefined {
+  return block === null || block[2] !== undefined
+    ? undefined
+    : {
+        number: block[1] === undefined ? undefined : Number(block[1]),
+        text: (block[3] ?? "").trim() !== "",
+      };
+}
+
 function lineShape(line: string): LineShape {
   const content = line.replace(QUOTE_MARKERS, "");
   const quote = line.slice(0, line.length - content.length);
-  const block = BLOCK_START.exec(content);
-  const breaks = THEMATIC_BREAK.test(content) || SETEXT_UNDERLINE.test(content);
+  const rest = content.trimStart();
+  const block = BLOCK_START.exec(rest);
+  const thematic = THEMATIC_BREAK.test(rest);
   return {
-    blank: content.trim() === "",
+    blank: rest === "",
     quoteDepth: quote.length - quote.replaceAll(">", "").length,
-    blockStart: block !== null || breaks,
-    heading: block?.[1] !== undefined || breaks,
+    indent: content.slice(0, content.length - rest.length).replaceAll("\t", "    ").length,
+    item: thematic ? undefined : listItem(block),
+    heading: block?.[2] !== undefined || thematic,
+    underline: !thematic && SETEXT_UNDERLINE.test(rest),
   };
 }
 
-// A blank line, a list item, an ATX heading, a thematic break, a setext
-// underline, and a deeper blockquote each start a block. A heading, a break,
-// and an underline also end one.
-function startsParagraph(line: LineShape, previous: LineShape): boolean {
+// The text starts as a blank line does, outside any blockquote or list.
+const TEXT_START: ParagraphStart = { quoteDepth: 0, inList: false, code: false };
+
+// A paragraph is in a list when it starts at an item, or when it is indented
+// and the paragraph before it was in a list. A blank line keeps the state.
+function paragraphStart(line: LineShape, before: ParagraphStart): ParagraphStart {
+  const inList = line.blank
+    ? before.inList
+    : line.item !== undefined || (before.inList && line.indent > 0);
+  return { quoteDepth: line.quoteDepth, inList, code: !inList && line.indent >= CODE_INDENT };
+}
+
+// CommonMark: an item interrupts a paragraph only when it has text and, if
+// ordered, the number 1.
+function interruptsParagraph(item: ListItem | undefined): boolean {
+  return item?.text === true && (item.number === undefined || item.number === 1);
+}
+
+// Inside a list, every item and heading starts a block, at any indentation.
+// Elsewhere, as in CommonMark, only a heading or an item does, and only when it
+// is indented less than code. An item on a line of the paragraph's own
+// blockquote must interrupt the paragraph.
+function startsBlock(line: LineShape, paragraph: ParagraphStart): boolean {
+  if (paragraph.inList) {
+    return line.heading || line.item !== undefined;
+  }
+
+  const item =
+    line.quoteDepth < paragraph.quoteDepth
+      ? line.item !== undefined
+      : interruptsParagraph(line.item);
+  return line.indent < CODE_INDENT && (line.heading || item);
+}
+
+// A blank line, a deeper blockquote, the end of an indented code block, and a
+// block start each start a paragraph.
+function startsParagraph(line: LineShape, paragraph: ParagraphStart): boolean {
   return (
     line.blank ||
-    previous.blank ||
-    line.blockStart ||
-    previous.heading ||
-    line.quoteDepth > previous.quoteDepth
+    line.quoteDepth > paragraph.quoteDepth ||
+    (paragraph.code && line.indent < CODE_INDENT) ||
+    startsBlock(line, paragraph)
+  );
+}
+
+// A setext underline ends the paragraph whose text it follows in the same
+// blockquote. A line that starts a paragraph and is one is text.
+function underlines(line: LineShape, paragraph: ParagraphStart): boolean {
+  return (
+    line.underline &&
+    line.quoteDepth === paragraph.quoteDepth &&
+    (paragraph.inList || line.indent < CODE_INDENT)
   );
 }
 
 // D-PG11-03: the text split into the runs of lines one paragraph can hold, so
-// that no code span crosses a block boundary. A masked fence is blank lines.
+// that no code span crosses a block boundary. A heading or a thematic break
+// that starts a paragraph ends it, as a setext underline does after the text.
+// This follows CommonMark for text, blockquotes, and one level of list, but
+// not its whole container model. A masked fence is blank lines.
 function paragraphs(text: string): string[] {
   const groups: string[][] = [];
   let current: string[] = [];
-  let previous: LineShape | undefined;
+  let paragraph = TEXT_START;
+  let afterBlank = true;
+  let closed = false;
   for (const line of text.split("\n")) {
     const shape = lineShape(line);
-    if (previous !== undefined && startsParagraph(shape, previous)) {
+    const starts: boolean = afterBlank || closed || startsParagraph(shape, paragraph);
+    if (starts) {
       groups.push(current);
       current = [];
+      paragraph = paragraphStart(shape, paragraph);
     }
 
+    closed = starts ? shape.heading : underlines(shape, paragraph);
     current.push(line);
-    previous = shape;
+    afterBlank = shape.blank;
   }
 
   groups.push(current);
-  return groups.map((group) => group.join("\n"));
+  return groups.slice(1).map((group) => group.join("\n"));
 }
 
 // The masked text has the length and the lines of the body; it is only scanned,

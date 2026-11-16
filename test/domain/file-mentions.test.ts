@@ -227,6 +227,104 @@ describe("findFileMentions", () => {
       expected: [whole("b.md")],
     },
     {
+      title: "D-PG11-03: closes no code span across an item numbered 1 under paragraph text",
+      body: "Use `a\n1. @b.md `z",
+      expected: [whole("b.md")],
+    },
+    {
+      title:
+        "D-PG11-03: reads a mention after a code span over an item numbered 2 under paragraph text",
+      body: "`a\n2. ` @c.md `z`",
+      expected: [whole("c.md")],
+    },
+    {
+      title: "D-PG11-03: reads a mention after a code span over an empty bullet item",
+      body: "`a\n*\n` @c.md `z`",
+      expected: [whole("c.md")],
+    },
+    {
+      title: "D-PG11-03: reads a mention after a code span over an empty ordered item",
+      body: "Use `a\n1.\n` @c.md `z`",
+      expected: [whole("c.md")],
+    },
+    {
+      title: "D-PG11-03: reads a mention after a code span over an item indented four spaces",
+      body: "Use `a\n    - ` @c.md `z`",
+      expected: [whole("c.md")],
+    },
+    {
+      title: "D-PG11-03: reads a mention after a code span over an item indented a tab",
+      body: "Use `a\n\t- ` @c.md `z`",
+      expected: [whole("c.md")],
+    },
+    {
+      title: "D-PG11-03: reads a mention after a code span over a heading indented four spaces",
+      body: "Use `a\n    # x\n` @c.md `z`",
+      expected: [whole("c.md")],
+    },
+    {
+      title:
+        "D-PG11-03: closes no code span across the next item of a list over an indented paragraph",
+      body: "1. a `x\n\n   more\n2. @b.md `y",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: skips a mention in a code span over an item numbered 2 after a list ends",
+      body: "- a\n\nText `x\n2. @b.md `y`",
+      expected: [],
+    },
+    {
+      title:
+        "D-PG11-03: closes no code span across a list item in a blockquote indented three spaces",
+      body: "> Use `a\n>    - @b.md `z",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: closes no code span across the end of an indented code block",
+      body: "    code `a\n@b.md `y",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: closes no code span across an item numbered 2 after a blockquote",
+      body: "> text `a\n2. @b.md `y",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: reads a mention after a code span over an indented item in a blockquote",
+      body: "> Use `a\n    2. ` @c.md `z`",
+      expected: [whole("c.md")],
+    },
+    {
+      title: "D-PG11-03: reads a mention after a code span over a lazy line of a blockquote",
+      body: "> `a\nb\n> ` @c.md `z`",
+      expected: [whole("c.md")],
+    },
+    {
+      title: "D-PG11-03: reads a mention after a code span over a lazy underline of a blockquote",
+      body: "> Text `a\n===\n` @c.md `z`",
+      expected: [whole("c.md")],
+    },
+    {
+      title: "D-PG11-03: reads a mention after a code span over an underline indented four spaces",
+      body: "Text `a\n    ===\n` @c.md `z`",
+      expected: [whole("c.md")],
+    },
+    {
+      title: "D-PG11-03: reads an underline that starts a paragraph as text",
+      body: "> ===\nz` @b.md\n2. `y",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: closes no code span across a setext underline in a list item",
+      body: "- a `x\n  ===\n@b.md `y",
+      expected: [whole("b.md")],
+    },
+    {
+      title: "D-PG11-03: closes no code span across a heading in a list item",
+      body: "- a `x\n  # h\n@b.md `y",
+      expected: [whole("b.md")],
+    },
+    {
       title: "D-PG11-03: closes no code span across the start of a heading",
       body: "Use `one\n# @b.md two`",
       expected: [whole("b.md")],
