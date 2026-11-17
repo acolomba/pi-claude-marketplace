@@ -1,7 +1,7 @@
 // test/integration/agents-adapter-grant-conformance.test.ts
 //
 // PG-MCP-02: compare a grant selector from the agents bridge with pi-subagents
-// 0.88.0's adapter resolver and pi-mcp-adapter 7.0.1's registered tool name.
+// 0.88.1's adapter resolver and pi-mcp-adapter 7.0.1's registered tool name.
 
 import assert from "node:assert/strict";
 import { writeFile } from "node:fs/promises";
