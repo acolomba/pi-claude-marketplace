@@ -1,10 +1,10 @@
 ---
 phase: 05-stop-continuation-and-hook-failures
-verified: 2026-11-17T02:37:02Z
+verified: 2026-11-17T03:39:23Z
 status: human_needed
 score: 55/56 must-haves verified (51 VERIFIED, 4 PASSED (override); 1 uncertain, CI item)
 covered_files: [".planning/phases/05-stop-continuation-and-hook-failures/05-01-PLAN.md",".planning/phases/05-stop-continuation-and-hook-failures/05-01-SUMMARY.md",".planning/phases/05-stop-continuation-and-hook-failures/05-02-PLAN.md",".planning/phases/05-stop-continuation-and-hook-failures/05-02-SUMMARY.md",".planning/phases/05-stop-continuation-and-hook-failures/05-03-PLAN.md",".planning/phases/05-stop-continuation-and-hook-failures/05-03-SUMMARY.md",".planning/phases/05-stop-continuation-and-hook-failures/05-04-PLAN.md",".planning/phases/05-stop-continuation-and-hook-failures/05-04-SUMMARY.md",".planning/phases/05-stop-continuation-and-hook-failures/05-05-PLAN.md",".planning/phases/05-stop-continuation-and-hook-failures/05-05-SUMMARY.md",".planning/phases/05-stop-continuation-and-hook-failures/05-06-PLAN.md",".planning/phases/05-stop-continuation-and-hook-failures/05-06-SUMMARY.md","CHANGELOG.md","docs/hooks-compatibility.md","docs/output-catalog.md","docs/research/claude-hooks-vs-pi-events.md","docs/research/issue-103-stop-stopfailure-promotion.md","extensions/pi-claude-marketplace/bridges/hooks/async-rewake/async-answer.ts","extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts","extensions/pi-claude-marketplace/bridges/hooks/context-cap.ts","extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts","extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts","extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts","extensions/pi-claude-marketplace/bridges/hooks/event-router.ts","extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts","extensions/pi-claude-marketplace/bridges/hooks/exec-timer.ts","extensions/pi-claude-marketplace/bridges/hooks/hook-labels.ts","extensions/pi-claude-marketplace/bridges/hooks/hook-output-files.ts","extensions/pi-claude-marketplace/bridges/hooks/on-failure.ts","extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts","extensions/pi-claude-marketplace/bridges/hooks/runtime.ts","extensions/pi-claude-marketplace/bridges/hooks/settle.ts","extensions/pi-claude-marketplace/bridges/hooks/stream-text.ts","extensions/pi-claude-marketplace/bridges/hooks/timeout.ts","extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts","extensions/pi-claude-marketplace/domain/components/hook-events.ts","extensions/pi-claude-marketplace/platform/pi-api.ts","extensions/pi-claude-marketplace/shared/atomic-json.ts","extensions/pi-claude-marketplace/shared/notification-run.ts","features/hook/additional-context.feature","features/hook/async.feature","features/hook/failures.feature","features/hook/messages.feature","features/hook/prompt-and-stop.feature","features/lib/boundary-continuer.ts","features/lib/boundary-refuser.ts","features/lib/hook-files.ts","features/lib/hook-recorder.ts","features/lib/run-start-probe.ts","features/plugin/subagent-child.feature","features/step_definitions/hook/additional-context.steps.ts","features/step_definitions/hook/async.steps.ts","features/step_definitions/hook/messages.steps.ts","features/step_definitions/hook/prompt-and-stop.steps.ts","features/step_definitions/plugin/subagent-hooks.steps.ts","features/support/world.ts","test/architecture/closed-set-enrollment.test.ts","test/architecture/hooks-lifecycle.test.ts","test/architecture/hooks-notice-notify.test.ts","test/bridges/hooks/async-rewake/async-answer.test.ts","test/bridges/hooks/async-rewake/registry.test.ts","test/bridges/hooks/context-cap.test.ts","test/bridges/hooks/dispatch-exec.test.ts","test/bridges/hooks/dispatch.test.ts","test/bridges/hooks/event-adapters.test.ts","test/bridges/hooks/event-router.test.ts","test/bridges/hooks/exec-result.test.ts","test/bridges/hooks/exec-timer.test.ts","test/bridges/hooks/hook-labels.test.ts","test/bridges/hooks/hook-output-files.test.ts","test/bridges/hooks/on-failure.test.ts","test/bridges/hooks/runtime.test.ts","test/bridges/hooks/settle.test.ts","test/bridges/hooks/stream-text.test.ts","test/bridges/hooks/wire-protocol.test.ts","test/e2e/_rpc.ts","test/index.test.ts","test/live-uat/README.md","test/live-uat/manifest-absence-canary.mjs","test/live-uat/openai-stub-server.mjs","test/pi-runtime.ts","test/platform/pi-api.test.ts","test/shared/atomic-json.test.ts"]
-covered_digest: "v4:sha256:534b2b12594f3c99624223cf51e2f3ee315346244c0c2c131598f455f3c492e6"
+covered_digest: "v4:sha256:f12eeb6a3f391f07c36110a9bb58a40edf17e6163b8d9c1fa3362b6122b707f2"
 behavior_unverified: 0
 overrides_applied: 4
 overrides:
@@ -23,7 +23,8 @@ overrides:
 re_verification:
   previous_status: human_needed
   previous_score: 55/56 (4 overrides; 1 uncertain, CI item)
-  reason: "staleness: after the previous report (tree cb5ee48c, 2026-11-16T06:58:01Z), the maintainer review fixes changed covered files: 4d6825ba and 8c64be00 (dispatch.ts, hook-labels.ts, on-failure.ts, wire-protocol.ts, exec-result.ts, messages.feature, failures.feature through 6d9a3cdd, docs/hooks-compatibility.md, CHANGELOG.md, and their owner tests), 594ea843 (CHANGELOG.md:23-24), and b5692689 (docs/output-catalog.md prose)."
+  reason: "staleness: after the previous report (commit 14c9d489, tree 5749bbf5, 2026-11-17T02:37:02Z), 421863f6 (docs: align decision wording with the maintainer review) changed one covered file, docs/hooks-compatibility.md: line 376 now calls D-PG10-19 confirmed by the maintainer, not pending maintainer review. That line is Phase 10 scope; no Phase 5 citation moved (598 lines before and after). ebcce31e changed only docs/mcp-compatibility.md, which is not covered. No source, test, or feature file changed."
+  earlier_pass_reason: "the pass before (tree cb5ee48c, 2026-11-16T06:58:01Z) went stale through 4d6825ba, 8c64be00, 6d9a3cdd, 594ea843 and b5692689; the 2026-11-17T02:37:02Z pass checked them."
   gaps_closed: []
   gaps_remaining: []
   regressions: []
@@ -43,15 +44,24 @@ human_verification:
 # Phase 5: Stop Continuation and Hook Failures Verification Report
 
 **Phase Goal:** A `Stop` hook that blocks continues the same run, as in Claude Code. A hook that fails, names a missing script, returns too much context, or runs in the background behaves as it does there.
-**Verified:** 2026-11-17T02:37:02Z
+**Verified:** 2026-11-17T03:39:23Z
 **Status:** human_needed. The code meets every roadmap criterion. One item waits for CI: the Node 24 wording of a spawn `ENOENT` (A9). The judgment-tier prohibition passed at the maintainer review of 2026-11-16. Four truths pass by override. The maintainer review of 2026-11-16 accepted all four.
-**Re-verification:** Yes. The previous report (human_needed, 55/56, four overrides, 2026-11-16T06:58:01Z) became stale, because the maintainer review fixes of 2026-11-16 changed covered files.
+**Re-verification:** Yes. The previous report (human_needed, 55/56, four overrides, 2026-11-17T02:37:02Z, commit 14c9d489) became stale, because 421863f6 changed one line of docs/hooks-compatibility.md. The line is a Phase 10 decision status (D-PG10-19), so no truth, score, or override changed.
 
 ## Verification Basis
 
-This pass checked the tree `features/gaps` at `5749bbf5`. Summaries were not taken as evidence. For each changed covered file, the diff since the previous report's tree (`cb5ee48c`) was read, and each phase truth that the diff touches was checked again against the code, its caller, and the test or scenario that exercises it. For each unchanged covered file, the earlier citations were spot-checked at their current lines. Citations are current line numbers. **H/** means `extensions/pi-claude-marketplace/bridges/hooks/`.
+This pass checked the tree `features/gaps` at `41292897`. Summaries were not taken as evidence. The diff `git diff 14c9d489 HEAD` was read whole. It changes one covered file, docs/hooks-compatibility.md, at one line (:376). Every docs/hooks-compatibility.md line that this report cites was read again at its line (:165, :175-178, :350-351, :390, :415-419, :475-479, :560); the file has 598 lines before and after, so no citation moved. The rest of this section records the previous pass, which checked tree `5749bbf5`. In that pass, for each changed covered file, the diff since the tree before (`cb5ee48c`) was read, and each phase truth that the diff touches was checked again against the code, its caller, and the test or scenario that exercises it. For each unchanged covered file, the earlier citations were spot-checked at their current lines. Citations are current line numbers. **H/** means `extensions/pi-claude-marketplace/bridges/hooks/`.
 
-**Changes since the previous report that touch this phase:**
+**Changes since the previous report (commit 14c9d489):**
+
+| Commit | Covered files | Effect |
+| --- | --- | --- |
+| 421863f6 | docs/hooks-compatibility.md:376 | "D-PG10-19, pending maintainer review" became "D-PG10-19, confirmed by the maintainer", which matches PROJECT.md:2438. The sentence is about plugin option defaults in a hook's environment (Phase 10). No Phase 5 truth cites it. The commit's other files (docs/env-vars.md, docs/mcp-compatibility.md, docs/prd/parity-gaps-prd.md, ROADMAP.md, the Phase 10 and 11 SECURITY.md files, 11-CONTEXT.md) are not covered by this report. |
+| ebcce31e | none | One sentence of docs/mcp-compatibility.md:435 (D-PG7-17). Not covered. |
+
+After ebcce31e, only VERIFICATION.md files changed (`git diff --name-only 421863f6 HEAD`).
+
+**Changes checked by the previous pass (since cb5ee48c):**
 
 | Commit | Phase-5 files | Effect |
 | --- | --- | --- |
@@ -63,9 +73,11 @@ This pass checked the tree `features/gaps` at `5749bbf5`. Summaries were not tak
 
 No commit after `cb5ee48c` changed H/settle.ts, H/runtime.ts, H/event-router.ts, H/event-adapters.ts, H/dispatch-exec.ts, H/context-cap.ts, H/hook-output-files.ts, H/async-rewake/registry.ts, H/exec-timer.ts, H/timeout.ts, shared/atomic-json.ts, or the prompt-and-stop, additional-context, async, and subagent-child features.
 
-**Gate G (reused, not re-run):** `npm run check` exited 0 at `333784b7` (log `/tmp/pg-final.log`, read by the verifier), on Node v26.13.1 with a hermetic `PI_CODING_AGENT_DIR`. All seven static checks passed (typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, check:features). Then the unpaired and integration tests passed, with pi-subagents 0.88.1, pi-mcp-adapter 7.0.1 and pi-dynamic-workflows 3.15.0 from `node_modules/.cache/optional-peers`. The adapter cucumber profile ran 2100/2100 scenarios and 25988/25988 steps (seed 478645). The builtin profile ran 204/204 scenarios and 2762/2762 steps (seed 413244). Direct coverage merged 376 LCOV records. The log ends with `exit=0`. `git diff --name-only 333784b7 HEAD` names only four planning `VERIFICATION.md` files, so G covers every executable input of HEAD. That includes 8c64be00 and the five phase features. The project's reuse rule applies, and the suite was not repeated.
+**Gate G (reused, not re-run):** `npm run check` exited 0 at `421863f6` (log `/tmp/pg-final2.log`, read by the verifier), on Node v26.13.1 with a hermetic `PI_CODING_AGENT_DIR`. This is the local Node version only; it does not close A9. The static checks passed, then the unpaired and integration tests, with pi-subagents 0.88.1, pi-mcp-adapter 7.0.1 and pi-dynamic-workflows 3.15.0 from `node_modules/.cache/optional-peers`. The adapter cucumber profile ran 2100/2100 scenarios and 25988/25988 steps (seed 115283). The builtin profile ran 204/204 scenarios and 2762/2762 steps (seed 836824). Direct coverage merged 376 LCOV records. The log ends with `exit=0`. `git diff --name-only 421863f6 HEAD` names four planning `VERIFICATION.md` files and docs/mcp-compatibility.md (ebcce31e, one sentence; docs are not build inputs), so G covers every executable input of HEAD. Between the previous gate (`333784b7`) and `421863f6`, only docs and planning files changed. The project's reuse rule applies, and the suite was not repeated.
 
-**Independent checks (this pass):** five owner test files of the changed sources were run whole under a fresh `mktemp` HOME and `PI_CODING_AGENT_DIR` in the session scratchpad, with `node --import ./test/platform/isolated-pi-home.ts --test --test-isolation=none --test-reporter=tap <file>` on Node v26.13.1. The named start-failure test S10 was also run alone. `query verify.artifacts`, `query verify.key-links`, and `query check.decision-coverage-verify` ran for the phase.
+**Independent checks (this pass, tree 41292897):** test/bridges/hooks/on-failure.test.ts (27/27) and test/bridges/hooks/wire-protocol.test.ts (98/98) were run whole under a fresh `mktemp` HOME and `PI_CODING_AGENT_DIR` in the session scratchpad, on Node v26.13.1. `query verification.fingerprint` was run with the unchanged covered_files list.
+
+**Independent checks (previous pass, tree 5749bbf5, same executable inputs):** five owner test files of the changed sources were run whole under a fresh `mktemp` HOME and `PI_CODING_AGENT_DIR` in the session scratchpad, with `node --import ./test/platform/isolated-pi-home.ts --test --test-isolation=none --test-reporter=tap <file>` on Node v26.13.1. The named start-failure test S10 was also run alone. `query verify.artifacts`, `query verify.key-links`, and `query check.decision-coverage-verify` ran for the phase.
 
 ## Superseded mechanisms (later decisions)
 
@@ -165,7 +177,7 @@ No commit after `cb5ee48c` changed H/settle.ts, H/runtime.ts, H/event-router.ts,
 
 ## Behavioral Spot-Checks
 
-Each run used a fresh scratchpad `mktemp` HOME and `PI_CODING_AGENT_DIR`, Node v26.13.1, no services.
+Each run used a fresh scratchpad `mktemp` HOME and `PI_CODING_AGENT_DIR`, Node v26.13.1, no services. The on-failure and wire-protocol rows ran again in this pass on tree 41292897 with the same result. The other owner rows are from the previous pass, on the same executable inputs.
 
 | Check | Command | Result | Status |
 | --- | --- | --- | --- |
@@ -175,7 +187,7 @@ Each run used a fresh scratchpad `mktemp` HOME and `PI_CODING_AGENT_DIR`, Node v
 | dispatch owner (failure notices, block notices, start-failure set) | same, test/bridges/hooks/dispatch.test.ts | tests 301, pass 301, fail 0 | ✓ PASS |
 | dispatch-exec owner (spawn and run failures, cap, timeout drop) | same, test/bridges/hooks/dispatch-exec.test.ts | tests 118, pass 118, fail 0 | ✓ PASS |
 | S10 "shows a start failure at the next event when its notice failed to show" | `--test-name-pattern '^…$'` test/bridges/hooks/dispatch.test.ts | tests 1, pass 1, fail 0 | ✓ PASS |
-| G | `npm run check` at `333784b7` (same executable inputs as HEAD) | exit 0; adapter 2100/2100, builtin 204/204; 376 LCOV records | ✓ PASS (reused) |
+| G | `npm run check` at `421863f6` (same executable inputs as HEAD) | exit 0; adapter 2100/2100, builtin 204/204; 376 LCOV records | ✓ PASS (reused) |
 
 The named tests S1-S9 and S11-S13 of the previous report exercise files that no later commit changed. They also ran inside G.
 
@@ -211,6 +223,7 @@ No orphaned requirement: REQUIREMENTS.md maps exactly these four IDs to Phase 5,
 - The previous report cited the saved-file disclosure at docs/hooks-compatibility.md:472-476, the `onFailure` section at :376-390, the catalog prose at :5548, and messages.feature:162-265. Later additions moved them to :475-479, :378-393, :5564 and messages.feature:183-286. The text is the same in substance.
 - Accepted residuals still tracked in BACKLOG: STOPMODECHECK-01 (:5379), PRETOOLSTOPREASON-01 (:5383), STOPREASONCONV-01 (:5387), STOPASYNCANSWER-01 (:5375), STOPFOLLOWUPCTX-01 (:5371), and HOOKTIMEDOUTEXIT2-01 (:5399).
 - The compatibility page marks A1 (a follow-up typed while a Stop hook runs may lose its UserPromptSubmit context) and A3 as unmeasured (docs/hooks-compatibility.md:175-178). No criterion depends on them.
+- 421863f6 aligned docs/hooks-compatibility.md:376 with PROJECT.md:2438: D-PG10-19 reads as confirmed by the maintainer. It is a Phase 10 line. This report calls no locked decision pending.
 - docs/hooks-compatibility.md now says that upstream rejects the whole output for a wrong `hookEventName`, while the bridge ignores only `suppressOriginalPrompt` (8c64be00). This is a Phase 6 (D-PG6-20) residual, not a Phase 5 truth.
 
 ## Human Verification Required
@@ -227,7 +240,7 @@ No orphaned requirement: REQUIREMENTS.md maps exactly these four IDs to Phase 5,
 
 **Test:** The CI `behavioral` job of the PR, on Node 24.
 **Expected:** failures.feature:157 "A prompt hook that cannot start lets the prompt through and shows its error" passes, with the notice ending in `spawn missing-guard.sh ENOENT`.
-**Why human/CI:** G ran on Node 26.13.1, and an earlier pass measured Node 22.22.2 and 26.13.1 only. No Node 24 is installed here, and `features/gaps` has no PR yet. If the wording differs, 05-02-SUMMARY:149 names the fix: a run token in `features/lib/run-tokens.ts`, without loosening the comparison.
+**Why human/CI:** G ran on Node 26.13.1 (at `421863f6`), and an earlier pass measured Node 22.22.2 and 26.13.1 only. No Node 24 is installed here, and `features/gaps` has no PR yet. If the wording differs, 05-02-SUMMARY:149 names the fix: a run token in `features/lib/run-tokens.ts`, without loosening the comparison.
 
 ## Maintainer Review
 
@@ -242,11 +255,11 @@ D-PG5-10/11/13, D-PG5-14/15/16 and D-PG5-17/18 are product decisions that the ma
 
 ## Gaps Summary
 
-There are no gaps and no regressions. The maintainer review fixes changed four phase source files, but no Phase 5 arm. 8c64be00 adds the `Original prompt:` part to a blocked `UserPromptSubmit` notice. It also makes an `onFailure: "block"` block leave that part out, so the 05-03 `onFailure` truth keeps its plain reason, and the failures.feature:7 Outline proves this in G. 594ea843 adds the CHANGELOG clause that closed the judgment prohibition. All citations now point at current lines.
+There are no gaps and no regressions. Since the previous report, 421863f6 changed one Phase 10 line of docs/hooks-compatibility.md (:376, D-PG10-19 status), and no Phase 5 citation moved. In the pass before, the maintainer review fixes changed four phase source files, but no Phase 5 arm. 8c64be00 adds the `Original prompt:` part to a blocked `UserPromptSubmit` notice. It also makes an `onFailure: "block"` block leave that part out, so the 05-03 `onFailure` truth keeps its plain reason, and the failures.feature:7 Outline proves this in G. 594ea843 adds the CHANGELOG clause that closed the judgment prohibition. All citations now point at current lines.
 
 The status stays `human_needed` for one item only: A9, the Node 24 wording of the spawn `ENOENT` notice, which the PR's CI run will measure.
 
 ---
 
-_Verified: 2026-11-17T02:37:02Z_
+_Verified: 2026-11-17T03:39:23Z_
 _Verifier: Claude (gsd-verifier)_
