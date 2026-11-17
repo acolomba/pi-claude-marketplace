@@ -1,20 +1,21 @@
 ---
 phase: 03-background-subagents
-verified: 2026-11-16T06:37:40Z
+verified: 2026-11-17T03:28:27Z
 status: passed
 score: 31/31 must-haves verified
 covered_files: [".planning/phases/03-background-subagents/03-01-PLAN.md",".planning/phases/03-background-subagents/03-01-SUMMARY.md",".planning/phases/03-background-subagents/03-02-PLAN.md",".planning/phases/03-background-subagents/03-02-SUMMARY.md",".planning/phases/03-background-subagents/03-03-PLAN.md",".planning/phases/03-background-subagents/03-03-SUMMARY.md",".planning/phases/03-background-subagents/03-04-PLAN.md",".planning/phases/03-background-subagents/03-04-SUMMARY.md",".planning/phases/03-background-subagents/03-05-PLAN.md",".planning/phases/03-background-subagents/03-05-SUMMARY.md",".planning/phases/03-background-subagents/03-06-PLAN.md",".planning/phases/03-background-subagents/03-06-SUMMARY.md",".planning/phases/03-background-subagents/03-07-PLAN.md",".planning/phases/03-background-subagents/03-07-SUMMARY.md",".planning/phases/03-background-subagents/03-08-PLAN.md",".planning/phases/03-background-subagents/03-08-SUMMARY.md","docs/hooks-compatibility.md","docs/mcp-compatibility.md","extensions/pi-claude-marketplace/bridges/agents/convert.ts","extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts","extensions/pi-claude-marketplace/bridges/agents/grant-rewrite.ts","extensions/pi-claude-marketplace/bridges/agents/legacy-grant-form.ts","extensions/pi-claude-marketplace/bridges/agents/mcp-async-warning.ts","extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts","extensions/pi-claude-marketplace/bridges/hooks/child-root-session.ts","extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts","extensions/pi-claude-marketplace/bridges/hooks/event-router.ts","extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use-failure.ts","extensions/pi-claude-marketplace/bridges/hooks/payloads/post-tool-use.ts","extensions/pi-claude-marketplace/bridges/hooks/payloads/pre-tool-use.ts","extensions/pi-claude-marketplace/bridges/hooks/runtime.ts","extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts","extensions/pi-claude-marketplace/platform/subagent-child.ts","features/agent/frontmatter.feature","features/agent/invocation.feature","features/lib/agent-files.ts","features/lib/field-rows.ts","features/lib/real-subagent-child.ts","features/lib/subagent-hook-session.ts","features/mcp-server/agent-grants.feature","features/mcp-server/verdict-markers.feature","features/plugin/subagent-child.feature","features/step_definitions/agent/listing.steps.ts","features/step_definitions/hook/runs.steps.ts","features/step_definitions/mcp-server/agent-grants.steps.ts","features/step_definitions/plugin/subagent-hooks.steps.ts","features/support/pi-process.ts","test/bridges/agents/convert.test.ts","test/bridges/agents/grant-forms.test.ts","test/bridges/agents/grant-rewrite.test.ts","test/bridges/agents/legacy-grant-form.test.ts","test/bridges/agents/mcp-async-warning.test.ts","test/bridges/agents/stage.test.ts","test/bridges/hooks/async-rewake/registry.test.ts","test/bridges/hooks/dispatch-exec.test.ts","test/bridges/hooks/event-router.test.ts","test/bridges/hooks/payloads/post-tool-use-failure.test.ts","test/bridges/hooks/payloads/post-tool-use.test.ts","test/bridges/hooks/payloads/pre-tool-use.test.ts","test/bridges/hooks/runtime.test.ts","test/bridges/hooks/translation-context.test.ts","test/integration/hooks-dispatch-end-to-end.test.ts","test/integration/pi-subagents-child-identity.test.ts","test/integration/subagent-hook-ownership.test.ts","test/orchestrators/plugin/install-flow-ledger.test.ts","test/orchestrators/plugin/install-outcome.test.ts","test/orchestrators/plugin/reinstall-flow.test.ts","test/orchestrators/plugin/update-swap.test.ts"]
-covered_digest: "v4:sha256:ccc8f7db13d03b80684a1d633f079edebcf2f03254f22bc7fee281c16d8f0d7c"
+covered_digest: "v4:sha256:433d94947c5be57d7b372cfa2418b98276d7756cbfacf2f104dc44e3f7d626ce"
 behavior_unverified: 0
 overrides_applied: 0
 re_verification:
   previous_status: passed
   previous_score: 31/31
-  reason: "staleness: Phases 4-11, the gaps-agents/gaps-mcp merges and later fixes changed 39 of the 48 covered non-planning files after 2026-11-14T01:50:00Z"
+  reason: "staleness: commit 421863f6 (docs: align decision wording with the maintainer review) changed docs/hooks-compatibility.md and docs/mcp-compatibility.md, two covered files. It only drops 'pending maintainer review' wording for locked decisions (D-PG10-19, D-PG9-01/08/14/15/16, D-PG9-07) and points the workflow-tools question at BACKLOG AGTWORKFLOWAMBIENT-01; no line was added or removed, so every citation below still holds. The other covered-file changes since the previous report commit 171d884f (4d6825ba, b35b86d1, 6826f6f6, 8c64be00, b5692689) touch test/bridges/hooks/dispatch-exec.test.ts (suppressOriginalPrompt in onFailure block outcomes), test/orchestrators/plugin/install-flow-ledger.test.ts (WLIF-01 now fails prepare with ENOTDIR, D-PG8-07 keep-last) and the same two docs outside the Phase 3 sections; none touches a Phase 3 truth."
+  previous_verified: 2026-11-16T06:37:40Z
   gaps_closed: []
   gaps_remaining: []
   regressions: []
-  overrides_removed:
+  overrides_removed: # carried from the 2026-11-16T06:37:40Z pass; no override exists now
     - must_have: "PG-HOOK-07a unclassified probe row: child tool hook session_id, transcript_path and CLAUDE_CODE_SESSION_ID"
       why: "No longer needed. D-PG6-01/02/03 (parity-gaps Phase 6) shipped the behavior the override deferred: a background child's tool hooks name the launching session in session_id, transcript_path, CLAUDE_CODE_SESSION_ID and CLAUDE_SESSION_ID, and agent_id names the child (H/translation-context.ts:131-152; features/plugin/subagent-child.feature:542, features/agent/frontmatter.feature:410,423). PROJECT.md:2401 records that the decision closes this row; BACKLOG CHILDSESSIONID-01 is CLOSED (BACKLOG.md:5327). It was never one of the 31 counted truths."
 advisory:
@@ -33,13 +34,21 @@ human_verification: []
 
 **Phase Goal:** A bridged agent starts as a Claude Code subagent starts by default: in the launch mode that pi-subagents chooses, which is the background. A pi-subagents child that loads this extension runs the plugin's tool hooks and none of its main-session hooks.
 
-**Verified:** 2026-11-16T06:37:40Z
+**Verified:** 2026-11-17T03:28:27Z
 **Status:** passed
-**Re-verification:** Yes. The previous report (passed, 31/31, one override, 2026-11-14T01:30:00Z, digest recomputed after `a98ae4ae`) became stale, because later work changed 39 of its 48 covered non-planning files.
+**Re-verification:** Yes. The previous report (passed, 31/31, no override, 2026-11-16T06:37:40Z, commit `171d884f`) became stale when `421863f6` ("docs: align decision wording with the maintainer review") edited two covered docs. That commit changed wording only. It dropped "pending maintainer review" from D-PG10-19, D-PG9-01, D-PG9-07, D-PG9-08, D-PG9-14, D-PG9-15 and D-PG9-16, and pointed the workflow-tools question at BACKLOG AGTWORKFLOWAMBIENT-01. It added and removed no line in either file, and it changed no source, test or feature file. The Phase 3 sections of both docs (hooks-compatibility.md:35-85, mcp-compatibility.md:484-505) were read again and still state what P08.3 needs.
+
+## Re-verification of 2026-11-17 (staleness only)
+
+- **What moved since `171d884f`:** `git log 171d884f..HEAD` over the 68 covered files names six commits. `421863f6`, `b5692689` and `6826f6f6` edit docs/hooks-compatibility.md and docs/mcp-compatibility.md. Apart from the wording of `421863f6`, no hunk falls in the cited Phase 3 ranges. The nearest, mcp-compatibility.md:507 (`b5692689`), corrects the pi-subagents version of the measured foreground MCP refusal from 0.88.0 to 0.88.1 (D-CF6-10). `4d6825ba` and `8c64be00` add `suppressOriginalPrompt: true` to the expected `onFailure` block outcomes in test/bridges/hooks/dispatch-exec.test.ts. `b35b86d1` (D-PG8-07, last of two scripts with one name, PROJECT.md:2422) makes the WLIF-01 case in test/orchestrators/plugin/install-flow-ledger.test.ts fail with `ENOTDIR` in place of the removed `WorkflowNameCollisionError`. None of these touches a Phase 3 truth or a cited line. No covered source file under `extensions/` changed since `f48729e3`, so the source citations below still hold.
+- **Gate G2 (reused, not re-run):** `npm run check` exited 0 at `421863f6` (log `/tmp/pg-final2.log`, ends `exit=0`): adapter profile 2100/2100 scenarios, builtin profile 204/204 scenarios and 2762 steps, direct coverage merged 376 LCOV records. `git diff --name-only 421863f6 HEAD` names only the Phase 1 and Phase 2 VERIFICATION.md files, so G2 covers every executable input of HEAD (`cd85fe2f`).
+- **Named checks (this pass):** S9 (in the changed dispatch-exec.test.ts), S1, S4, S6 and S14 were run again, each under a fresh `mktemp` HOME and `PI_CODING_AGENT_DIR` in the session scratchpad. Each gave `tests 1, pass 1, fail 0, cancelled 0, skipped 0`.
+- **Decision status:** checked against PROJECT.md. D-PG6-01/02/03 (:2401) and D-PG6-18 (:2409) are Locked by the maintainer review 2026-11-16. D-PG5-01 (:2396) and D-PG7-05 (:2413) are Good. The phase's own D-PG3-01..09 have no PROJECT.md row; D-CF4-05 (:2166) records their amendment. This report calls none of them pending.
+- **Result:** no gap closed, no gap remaining, no regression. The score stays 31/31. The advisory below still applies: the real-child test filters were not changed.
 
 ## Verification Basis
 
-This pass re-checked every roadmap criterion and every plan must-have against the current tree, `features/gaps` at `f48729e3`. It did not reuse the earlier verdicts. Summaries were not taken as evidence. For each truth, the implementing code, its caller, and the test or scenario that exercises it were read again. Citations are current line numbers. **H/** means `extensions/pi-claude-marketplace/bridges/hooks/`, and **A/** means `extensions/pi-claude-marketplace/bridges/agents/`.
+The full re-check below is from the 2026-11-16T06:37:40Z pass. This pass re-checked every roadmap criterion and every plan must-have against the current tree, `features/gaps` at `f48729e3`. It did not reuse the earlier verdicts. Summaries were not taken as evidence. For each truth, the implementing code, its caller, and the test or scenario that exercises it were read again. Citations are current line numbers. **H/** means `extensions/pi-claude-marketplace/bridges/hooks/`, and **A/** means `extensions/pi-claude-marketplace/bridges/agents/`.
 
 **Gate G (reused, not re-run):** `npm run check` exited 0 on the combined tree at `1183aae3` (log `/tmp/pg11-maskfix.log`, Node v26.13.1). The log was inspected: all seven static checks passed (typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, check:features), then the unpaired and integration tests, whose diagnostics show real pi-subagents 0.88.1 children (`demo:runner`, `demo:granted`, `demo:plain`) in mode `background`, state `complete`, one `demo:plain` in mode `foreground`, and two concurrent generations of `demo:alpha`/`demo:beta` in one runner PID. The adapter profile ran 2098/2098 scenarios and 25964 steps (seed 700460). The builtin profile ran 204/204 scenarios and 2762 steps (seed 547387). Direct coverage merged 374 LCOV records. The log ends with `exit=0`. `git diff --name-only 1183aae3 HEAD` outside `.planning/` is empty, so G covers every executable input of HEAD. The project's reuse rule applies, and the suite was not repeated.
 
@@ -162,7 +171,8 @@ All runs used a fresh scratchpad `mktemp` HOME and `PI_CODING_AGENT_DIR`, with n
 | S15 | a child's load, hook, new session, and stop leave the parent's and a sibling's waiting hooks running with their records | test/integration/subagent-hook-ownership.test.ts | PASS |
 | S16 | a main load stops the waiting hook of a child whose Pi died and keeps a live sibling's | test/integration/subagent-hook-ownership.test.ts | PASS |
 | P | scratch probe: every hook run of a real ordinary adapter child (not committed) | scratchpad only | child rows: PreToolUse/PostToolUse Bash only; no child lifecycle run |
-| G | `npm run check` at `1183aae3` (same executable inputs as HEAD) | root scripts, both cucumber profiles | PASS (reused) |
+| G | `npm run check` at `1183aae3` (earlier pass) | root scripts, both cucumber profiles | PASS (reused) |
+| G2 | `npm run check` at `421863f6` (same executable inputs as HEAD `cd85fe2f`) | root scripts, both cucumber profiles, `/tmp/pg-final2.log` | PASS (reused) |
 
 ### Probe Execution
 
@@ -185,6 +195,8 @@ No orphaned requirement: REQUIREMENTS maps only these two IDs to Phase 3, and bo
 | Same scope | `.skip` / `.only` / `.todo`, `@skip`/`@wip` | None | One platform-conditional `{ skip: FIFO_SKIP }` at reinstall-flow.test.ts:7551, unrelated to Phase 3 |
 | A/mcp-async-warning.ts:1-8 | Stale header (flagged last time) | None | Fixed: the header now says MCP agents always launch in the background (D-PG3-02) and that the first generation's foreground claim stays recognized for stored rows (D-PG3-03) |
 | Real-child test filters | Child lifecycle runs no longer observable | Advisory | See below |
+| Files changed since `171d884f` (two docs, two tests) | Unreferenced TBD / FIXME / XXX | None | No match |
+| docs/mcp-compatibility.md:435 | "This display is part of the pending review of D-PG7-17." | Info | Outside Phase 3 (a Phase 7 decision). D-PG7-17 is Locked (PROJECT.md:2416), so the sentence is stale; `421863f6` did not change it. Not edited here: this pass edits only this report |
 
 ### Advisory (New Scope, Unevidenced)
 
@@ -198,9 +210,9 @@ None. The earlier report's single item (the child session fields) was decided by
 
 ### Gaps Summary
 
-No gaps and no regressions. On the current tree, all four roadmap criteria and all 27 plan must-haves of Phase 3 still hold, with citations updated to current lines. Four later decisions changed mechanisms that the phase relies on, all without breaking a criterion. D-PG6-01/02/03 moved the child's `session_id` family to the launching session and kept `agent_id` on the child, which closes the old override. D-PG6-18 grew the child policy to eleven events. D-PG5-01 moved Stop to `agent_before_settle`. D-PG7-05 changed how `background` is parsed. One advisory: the real-child tests lost their view of a child's lifecycle runs when D-PG6-01 changed their filter. The behavior still holds, and other tests cover it.
+No gaps and no regressions. The 2026-11-17 pass found that the staleness came from wording-only doc edits and two unrelated test changes, and it changes no verdict. On the current tree, all four roadmap criteria and all 27 plan must-haves of Phase 3 still hold, with citations updated to current lines. Four later decisions changed mechanisms that the phase relies on, all without breaking a criterion. D-PG6-01/02/03 moved the child's `session_id` family to the launching session and kept `agent_id` on the child, which closes the old override. D-PG6-18 grew the child policy to eleven events. D-PG5-01 moved Stop to `agent_before_settle`. D-PG7-05 changed how `background` is parsed. One advisory: the real-child tests lost their view of a child's lifecycle runs when D-PG6-01 changed their filter. The behavior still holds, and other tests cover it.
 
 ---
 
-_Verified: 2026-11-16T06:37:40Z_
+_Verified: 2026-11-17T03:28:27Z (staleness re-check; full re-check 2026-11-16T06:37:40Z)_
 _Verifier: Claude (gsd-verifier)_
