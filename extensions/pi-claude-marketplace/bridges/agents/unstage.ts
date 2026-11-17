@@ -21,8 +21,8 @@ import { errorMessage } from "../../shared/errors.ts";
 import { partitionByOwner } from "./index-mutation.ts";
 import { isOwnedAgentFile, type SafetyResult } from "./marker.ts";
 
-import type { UnstageAgentFailure, UnstageAgentsInput, UnstageAgentsResult } from "./types.ts";
 import type { AgentsIndexRow } from "../../persistence/agents-index-io.ts";
+import type { UnstageAgentFailure, UnstageAgentsInput, UnstageAgentsResult } from "./types.ts";
 
 type Outcome =
   | { kind: "removed"; name: string }

@@ -2,6 +2,11 @@ import { isSubagentChild } from "../../platform/subagent-child.ts";
 
 import { findMcpServer } from "./mcp-server-table.ts";
 
+import type { BucketAEvent } from "../../domain/components/hook-events.ts";
+import type { McpToolIdentity } from "../../domain/components/hooks/builtin-mcp-tool-names.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { AssistantMessage, BeforeAgentStartEvent } from "../../platform/pi-api.ts";
+import type { Scope } from "../../shared/types.ts";
 import type { ChildRootSession } from "./child-root-session.ts";
 import type { ChildLike, TimerLadder } from "./exec-timer.ts";
 import type { McpServerEntry } from "./mcp-server-table.ts";
@@ -14,11 +19,6 @@ import type {
   RoutingEntry,
 } from "./routing-state.ts";
 import type { StreamText } from "./stream-text.ts";
-import type { BucketAEvent } from "../../domain/components/hook-events.ts";
-import type { McpToolIdentity } from "../../domain/components/hooks/builtin-mcp-tool-names.ts";
-import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { AssistantMessage, BeforeAgentStartEvent } from "../../platform/pi-api.ts";
-import type { Scope } from "../../shared/types.ts";
 
 /**
  * STOP-07: the number of consecutive Stop continuations allowed. The next

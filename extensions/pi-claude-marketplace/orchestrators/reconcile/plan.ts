@@ -52,6 +52,9 @@ import { ownValue } from "../../shared/own-key.ts";
 
 import { emptyReconcilePlan } from "./types.ts";
 
+import type { MergedConfig } from "../../persistence/config-merge.ts";
+import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
+import type { Scope } from "../../shared/types.ts";
 import type { ScopeSatisfactionVerdict, UnsatisfiedDeclaration } from "./dependency-verdict.ts";
 import type {
   PlannedDependencyDisable,
@@ -66,9 +69,6 @@ import type {
   PlannedSourceMismatch,
   ReconcilePlan,
 } from "./types.ts";
-import type { MergedConfig } from "../../persistence/config-merge.ts";
-import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
-import type { Scope } from "../../shared/types.ts";
 
 /**
  * Parse a flat-keyed plugin entry `"${plugin}@${marketplace}"` into its

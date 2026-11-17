@@ -121,20 +121,6 @@ import { mcpDependencyOf } from "./mcp-verdict.ts";
 import { applyPartialCascadeFold } from "./shared.ts";
 
 import type {
-  DependencyTagListingFailureReason,
-  DependencyTagProbeOptions,
-} from "./dependency-tag-probe.ts";
-import type {
-  DirectoryPinRange,
-  InstallFailureCapture,
-  InstallLedgerOptions,
-  InstallLedgerResult,
-  InstallLedgerSummary,
-  InstallLedgerTransaction,
-} from "./install-outcome.ts";
-import type { MarketplaceTagProbeOptions } from "./marketplace-tag-probe.ts";
-import type { LedgerDegradationSignals } from "./shared.ts";
-import type {
   ClosureLookup,
   ClosureMember,
   DependencyClosureResult,
@@ -150,6 +136,20 @@ import type { McpDependency } from "../../shared/concerns/soft-dep.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { DiscoveryWarning } from "../../shared/staging-warnings.ts";
 import type { Phase, RollbackPartial, RunPhasesResult } from "../../transaction/phase-ledger.ts";
+import type {
+  DependencyTagListingFailureReason,
+  DependencyTagProbeOptions,
+} from "./dependency-tag-probe.ts";
+import type {
+  DirectoryPinRange,
+  InstallFailureCapture,
+  InstallLedgerOptions,
+  InstallLedgerResult,
+  InstallLedgerSummary,
+  InstallLedgerTransaction,
+} from "./install-outcome.ts";
+import type { MarketplaceTagProbeOptions } from "./marketplace-tag-probe.ts";
+import type { LedgerDegradationSignals } from "./shared.ts";
 
 /** Materialization operations the cascade drives, injectable for fault tests. */
 export interface InstallCascadeLedgerSeam {

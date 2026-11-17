@@ -25,9 +25,9 @@ import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import { makeCtx, seedMcpPlugin } from "./mcp-plugin-seed.ts";
 
-import type { NotifyRecord } from "./mcp-plugin-seed.ts";
 import type { ScopedLocations } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
+import type { NotifyRecord } from "./mcp-plugin-seed.ts";
 
 const EMPTIED_MCP_JSON = '{\n  "mcpServers": {}\n}\n';
 const LEFTOVER_SUMMARY = "Old MCP server settings removed.";

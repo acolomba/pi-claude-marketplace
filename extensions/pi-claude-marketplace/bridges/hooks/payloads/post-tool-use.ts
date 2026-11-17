@@ -28,10 +28,10 @@ import { searchShellToolResponse } from "../tool-result-search-shell.ts";
 
 import { toolFactFields } from "./tool-event-facts.ts";
 
-import type { HookMcpServer, HookToolFacts } from "./tool-event-facts.ts";
 import type { ClaudeEffort } from "../../../domain/argument-substitution.ts";
 import type { ToolResultEvent } from "../../../platform/pi-api.ts";
 import type { TranslationContext } from "../translation-context.ts";
+import type { HookMcpServer, HookToolFacts } from "./tool-event-facts.ts";
 
 export interface PostToolUseStdin {
   readonly session_id: string;

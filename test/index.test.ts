@@ -68,7 +68,6 @@ import { retryTree } from "./orchestrators/plugin/scope-tree-inventory.ts";
 import { captureDebugLog } from "./platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "./platform/hermetic-environment.ts";
 
-import type { Notification } from "./edge/notification-boundary.ts";
 import type {
   AgentBeforeSettleEvent,
   AgentEndEvent,
@@ -89,6 +88,7 @@ import type {
   ToolCallEventResult,
   ToolResultEvent,
 } from "../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { Notification } from "./edge/notification-boundary.ts";
 import type { TurnEndEvent } from "@earendil-works/pi-coding-agent";
 
 /**

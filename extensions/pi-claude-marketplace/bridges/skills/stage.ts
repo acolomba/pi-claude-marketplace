@@ -54,6 +54,9 @@ import {
   writeSkillRecord,
 } from "./skill-names.ts";
 
+import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
+import type { RemovalOps } from "../../shared/fs-utils.ts";
+import type { ClaudeContentOptions, ClaudePluginVars } from "../../shared/vars.ts";
 import type { SkillNameClaims } from "./skill-names.ts";
 import type {
   DiscoveredSkill,
@@ -62,9 +65,6 @@ import type {
   StagedSkillRecord,
   StageSkillsInput,
 } from "./types.ts";
-import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
-import type { RemovalOps } from "../../shared/fs-utils.ts";
-import type { ClaudeContentOptions, ClaudePluginVars } from "../../shared/vars.ts";
 
 /** The frontmatter and body Pi's own `parseFrontmatter` yields for a skill source. */
 type ParsedSkillFrontmatter = ReturnType<typeof parseFrontmatter>;

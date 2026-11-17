@@ -15,9 +15,9 @@ import { hookOptionVariableName } from "../../domain/user-config.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { claudeSessionEnvFor } from "../../shared/session-env.ts";
 
-import type { RoutingEntry } from "./routing-state.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ClaudePluginVars } from "../../shared/vars.ts";
+import type { RoutingEntry } from "./routing-state.ts";
 
 /** The dispatch facts the env contract reads. */
 export interface HookEnvContext {

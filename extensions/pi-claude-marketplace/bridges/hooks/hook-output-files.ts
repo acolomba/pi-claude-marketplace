@@ -18,8 +18,8 @@ import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
-import type { HookContextSource } from "./context-cap.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { HookContextSource } from "./context-cap.ts";
 
 // D-PG5-15: how long a saved file stays. Upstream ties the file to its session,
 // which Pi cannot do here, so this retention is this project's choice.

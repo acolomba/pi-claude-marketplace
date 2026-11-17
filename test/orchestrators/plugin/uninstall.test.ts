@@ -75,7 +75,6 @@ import {
   startFifoStateServer,
 } from "./state-fifo.ts";
 
-import type { FifoStateServer } from "./state-fifo.ts";
 import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type {
@@ -87,6 +86,7 @@ import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/pers
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import type { FifoStateServer } from "./state-fifo.ts";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { TestContext } from "node:test";
 

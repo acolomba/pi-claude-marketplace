@@ -69,12 +69,12 @@ import {
   powerShellSubcommandFires,
 } from "./powershell.ts";
 
-import type { ParseResult } from "./bash.ts";
-import type { CompiledBashGlob, CompiledPathGlob, CompiledPowerShellGlob } from "./glob.ts";
 import type { PiToolName } from "../../../domain/components/hook-tool-names.ts";
 import type { McpToolIdentity } from "../../../domain/components/hooks/builtin-mcp-tool-names.ts";
 import type { ResolveHookIfContext } from "../../../domain/components/hooks.ts";
 import type { ExtensionContext } from "../../../platform/pi-api.ts";
+import type { ParseResult } from "./bash.ts";
+import type { CompiledBashGlob, CompiledPathGlob, CompiledPowerShellGlob } from "./glob.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // IfPredicate discriminated union

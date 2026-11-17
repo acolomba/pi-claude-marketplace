@@ -31,10 +31,10 @@ import { pathExists } from "../../shared/fs-utils.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
-import type { McpMigrationInput } from "./types.ts";
 import type { RecordedOptionsReading } from "../../bridges/mcp/index.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { SubagentChildEnv } from "../../platform/subagent-child.ts";
+import type { McpMigrationInput } from "./types.ts";
 
 /** How `state` records the options of `plugin@marketplace`. */
 function readingOf(

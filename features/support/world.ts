@@ -47,7 +47,7 @@ import {
 import { listedCommands } from "../../test/e2e/_rpc.ts";
 import { inLoadOrder, resolveCompanion } from "../lib/companions.ts";
 import { GITHUB_REDIRECT_EXTENSION } from "../lib/github-device-flow/extension.ts";
-import { stopHookScripts } from "../lib/hook-files.ts";
+import { openHookGate, stopHookScripts } from "../lib/hook-files.ts";
 import {
   classifyMcpImplementation,
   expectedMcpImplementation,
@@ -74,6 +74,7 @@ import { currentRun } from "./pi-process.ts";
 import type { PiSessionLaunch, RpcProfileEnvironment } from "../../test/e2e/_rpc.ts";
 import type { CompanionName } from "../lib/companions.ts";
 import type { GitPluginRepository } from "../lib/git-plugin.ts";
+import type { HookGate } from "../lib/hook-files.ts";
 import type { GitHostTraffic, HttpsGitHost, RequestWindow } from "../lib/https-git-host/server.ts";
 import type { McpImplementation, McpProfile } from "../lib/mcp-implementation.ts";
 import type { NpmRegistryRequest } from "../lib/npm-registry.ts";
@@ -298,6 +299,9 @@ export class ScenarioWorld extends World {
   // What this scenario's profile Pi launched with, once one started; a restart
   // changes it.
   private profileLaunch: ProfileLaunch | undefined = undefined;
+  // The hook gate of the running profile Pi, which a terminal Pi started
+  // beside it shares; a restart opens a new one.
+  private profileHookGate: HookGate | undefined = undefined;
   // Whether the scenario carries `@own-implementation`, so it chooses its own
   // MCP implementation; the `Before()` hook in `support/mcp-implementation.ts`
   // sets it.
@@ -937,7 +941,9 @@ export class ScenarioWorld extends World {
    * and selects the scripted model beside this scenario's profile Pi: it plays
    * the profile Pi's script from the same harness directory, and its `TMPDIR`
    * reuses the profile Pi's compile cache. That fails when no profile Pi
-   * started.
+   * started. The TUI shares the hook gate of a running profile Pi, whose
+   * release runs after the TUI's and so also stops the TUI's hook scripts. A
+   * TUI with no profile Pi beside it runs no lifecycle hook script (D-BG-12).
    */
   async startTuiSession(model: "none" | "scripted" = "none"): Promise<PiTuiSession> {
     if (this.tuiSession !== undefined) {
@@ -949,8 +955,11 @@ export class ScenarioWorld extends World {
     const tui = await PiTuiSession.start({
       sandbox: run.sandbox,
       git: this.tuiEnvironment ?? run.piEnvironment,
-      variables: this.tuiVariables,
       ...scripted,
+      variables: {
+        ...(scripted.variables ?? this.tuiVariables),
+        ...this.profileHookGate?.environment,
+      },
       extensions: [...this.tuiExtensions, ...(scripted.extensions ?? [])],
     });
     this.onRelease(() => tui.stop());
@@ -1122,10 +1131,16 @@ export class ScenarioWorld extends World {
   }
 
   // Waits for pi-mcp-adapter's onboarding write when the profile Pi loaded
-  // it, stops the profile Pi, asserts that its stand-ins stopped, and turns
-  // Pi's built-in MCP back on for a `builtin-on` restart (P1-DC-08).
+  // it, stops the profile Pi and its hook scripts, asserts that its
+  // stand-ins stopped, and turns Pi's built-in MCP back on for a
+  // `builtin-on` restart (P1-DC-08).
   private async stopProfilePiForRestart(launch: ProfileLaunch, restart: PiRestart): Promise<void> {
     const harness = this.profileHarness();
+    const hookGate = this.profileHookGate;
+    if (hookGate === undefined) {
+      assert.fail("no profile Pi of this scenario opened a hook gate");
+    }
+
     const { agentDir } = currentRun().sandbox;
     if (launch.companions.includes("pi-mcp-adapter")) {
       const { version } = await resolveCompanion("pi-mcp-adapter");
@@ -1133,7 +1148,7 @@ export class ScenarioWorld extends World {
     }
 
     await this.pi.stop();
-    await stopHookScripts(harness, [this.scopeRoot("user"), this.scopeRoot("project")]);
+    await stopHookScripts(harness, hookGate, [this.scopeRoot("user"), this.scopeRoot("project")]);
     await assertStandInsStopped(harness);
     if (restart === "builtin-on") {
       await turnOnBuiltinMcp(agentDir);
@@ -1169,6 +1184,7 @@ export class ScenarioWorld extends World {
     const companions = await Promise.all(
       inLoadOrder(launch.companions).map((name) => resolveCompanion(name)),
     );
+    const hookGate = await openHookGate(harness);
     const pi = await PiProcess.start(sandbox, profileGitEnvironment(launch), {
       extensions: [
         SCRIPTED_MODEL_EXTENSION,
@@ -1182,6 +1198,7 @@ export class ScenarioWorld extends World {
       environment: {
         TMPDIR: path.join(sandbox.home, "tmp"),
         ...(launch.subagentChild === true ? { PI_SUBAGENT_CHILD: "1" } : {}),
+        ...hookGate.environment,
       },
       ...(launch.noMcp === true ? { noMcp: true } : {}),
       ...(launch.session === undefined ? {} : { session: launch.session }),
@@ -1189,14 +1206,17 @@ export class ScenarioWorld extends World {
     // HAR-05: the profile Pi stops first, so a stand-in that exits when its
     // stdin closes has exited before its pid file is checked. Pi starts each
     // hook in a process group of its own, which stopping Pi leaves running,
-    // so the release stops each registered group and script apart.
+    // so the release stops each registered group and script apart, closing
+    // the Pi's hook gate first so that no script of the stopped Pi escapes
+    // (D-BG-12).
     this.onRelease(async () => {
       await pi.stop();
-      await stopHookScripts(harness, [this.scopeRoot("user"), this.scopeRoot("project")]);
+      await stopHookScripts(harness, hookGate, [this.scopeRoot("user"), this.scopeRoot("project")]);
       await assertStandInsStopped(harness);
     });
     this.scenarioPi = pi;
     this.profileLaunch = launch;
+    this.profileHookGate = hookGate;
     await this.expectSuccess({ type: "set_model", provider: "faux", modelId: "faux-1" });
     await this.expectSuccess({ type: "set_auto_retry", enabled: false });
     // Pi answers a request only after its startup, so the listing holds a

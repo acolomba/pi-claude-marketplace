@@ -57,12 +57,6 @@ import {
   verdictWithout,
 } from "./dependency-verdict.ts";
 
-import type {
-  InstalledDeclarationsReader,
-  ScopeSatisfactionVerdict,
-  UnsatisfiedDeclaration,
-} from "./dependency-verdict.ts";
-import type { PlannedPluginEnable, ReconcilePlan } from "./types.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { MaterializablePlugin, ResolveContext } from "../../domain/resolver-types.ts";
@@ -78,6 +72,12 @@ import type {
 import type { ListCandidate } from "../plugin/list-candidate-version.ts";
 import type { RecordDegradeBaseline } from "../plugin/mcp-verdict.ts";
 import type { RevisionMove } from "../types.ts";
+import type {
+  InstalledDeclarationsReader,
+  ScopeSatisfactionVerdict,
+  UnsatisfiedDeclaration,
+} from "./dependency-verdict.ts";
+import type { PlannedPluginEnable, ReconcilePlan } from "./types.ts";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
 type PluginRecord = MarketplaceRecord["plugins"][string];

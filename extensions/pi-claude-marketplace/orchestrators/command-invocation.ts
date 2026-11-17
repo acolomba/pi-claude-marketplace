@@ -53,10 +53,10 @@ import { errorMessage } from "../shared/errors.ts";
 
 import { appendMentionedFiles, NODE_MENTION_FILE_READER } from "./mention-attachments.ts";
 
-import type { MentionFileReader } from "./mention-attachments.ts";
 import type { ShellRun } from "../domain/context-injection.ts";
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 import type { PromptShellHost, PromptShellRunner } from "../platform/prompt-shell.ts";
+import type { MentionFileReader } from "./mention-attachments.ts";
 
 /** One typed invocation of a slash command, such as `/demo:greet Ada`. */
 export interface CommandInvocationRequest {

@@ -16,25 +16,6 @@ import { probeInstallClone } from "./install-clone-probe.ts";
 import { DEFAULT_MARKETPLACE_ADD, resolveTargetScopeMarketplace } from "./install-outcome.ts";
 import { collectInstallReachableMarketplaces, resolveInstallMarketplaceSource } from "./shared.ts";
 
-import type {
-  AddedMarketplaces,
-  CarriedAdd,
-  MarketplaceAddSeam,
-} from "./carried-marketplace-adds.ts";
-import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
-import type {
-  CascadeMarketplaceTagProbe,
-  CascadeTagProbe,
-  InstallCascadeResult,
-  ResolvedCascadeMember,
-} from "./install-cascade.ts";
-import type { InstallCloneCacheSeam } from "./install-clone-probe.ts";
-import type {
-  DirectoryPinRange,
-  InstallFailureCapture,
-  InstallLedgerOptions,
-  TargetScopeAddOptions,
-} from "./install-outcome.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type {
   ClosureLookup,
@@ -56,6 +37,25 @@ import type {
 } from "../../transaction/with-state-guard.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { InstallPluginOutcome } from "../types.ts";
+import type {
+  AddedMarketplaces,
+  CarriedAdd,
+  MarketplaceAddSeam,
+} from "./carried-marketplace-adds.ts";
+import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
+import type {
+  CascadeMarketplaceTagProbe,
+  CascadeTagProbe,
+  InstallCascadeResult,
+  ResolvedCascadeMember,
+} from "./install-cascade.ts";
+import type { InstallCloneCacheSeam } from "./install-clone-probe.ts";
+import type {
+  DirectoryPinRange,
+  InstallFailureCapture,
+  InstallLedgerOptions,
+  TargetScopeAddOptions,
+} from "./install-outcome.ts";
 
 export interface CascadeInstallOptions {
   readonly ctx: NotificationContext;

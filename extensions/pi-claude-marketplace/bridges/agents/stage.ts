@@ -41,6 +41,9 @@ import { assertAgentNamesUnclaimed, partitionByOwner } from "./index-mutation.ts
 import { isOwnedAgentFile } from "./marker.ts";
 import { readSkillPreloads } from "./skill-preload.ts";
 
+import type { AgentsIndexRow } from "../../persistence/agents-index-io.ts";
+import type { RemovalOps } from "../../shared/fs-utils.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type {
   ConvertedAgent,
   DiscoveredAgent,
@@ -51,9 +54,6 @@ import type {
   StagedAgentRecord,
   UnstageAgentFailure,
 } from "./types.ts";
-import type { AgentsIndexRow } from "../../persistence/agents-index-io.ts";
-import type { RemovalOps } from "../../shared/fs-utils.ts";
-import type { StagingWarning } from "../../shared/staging-warnings.ts";
 
 /**
  * 9-step prepare. NOTHING outside `<extensionRoot>/agents-staging/<uuid>/`

@@ -42,12 +42,13 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import { promptDisposition } from "../../test/e2e/_rpc.ts";
 
-import { readHookScriptPids } from "./hook-files.ts";
+import { closeHookGate, openHookGate, readHookScriptPids } from "./hook-files.ts";
 import { HOOK_LIFECYCLE_LOG, waitForHookLifecycle } from "./hook-recorder.ts";
 import { startSession } from "./pi-commands.ts";
 import { DIALOG_METHODS, PiProcess } from "./pi-process.ts";
 import { harnessDirectory, isRunning, readLogLengths, readLogLinesSince } from "./turn-records.ts";
 
+import type { HookGate } from "./hook-files.ts";
 import type { HookLifecycleEvent } from "./hook-recorder.ts";
 import type { RpcGitEnvironment, RpcRecord, RpcRequest, RpcSandbox } from "./pi-process.ts";
 
@@ -433,6 +434,9 @@ export function createSubagentHookSession(
 ): SubagentHookSession {
   const harness = harnessDirectory(options.sandbox.home);
   const started: PiProcess[] = [];
+  // The hook gate that every Pi of the session shares, opened at the first
+  // start, so that its lifecycle hook scripts run (D-BG-12).
+  let hookGate: Promise<HookGate> | undefined;
 
   async function expectSuccess(pi: PiProcess, request: RpcRequest): Promise<void> {
     const { response } = await within(pi.request(request), STAGE_TIMEOUT_MS, request.type);
@@ -440,11 +444,14 @@ export function createSubagentHookSession(
   }
 
   async function startPi(role: SessionRole): Promise<PiProcess> {
+    hookGate ??= mkdir(harness, { recursive: true }).then(() => openHookGate(harness));
+    const gate = await hookGate;
     const pi = await PiProcess.start(options.sandbox, options.git, {
       extensions: options.extensions,
       environment: {
         TMPDIR: options.temporaryDirectory,
         ...(role === "child" ? { PI_SUBAGENT_CHILD: "1" as const } : {}),
+        ...gate.environment,
       },
     });
     started.push(pi);
@@ -578,6 +585,10 @@ export function createSubagentHookSession(
 
   async function close(): Promise<void> {
     await Promise.all(started.splice(0).map((pi) => pi.stop()));
+    if (hookGate !== undefined) {
+      await closeHookGate(harness, await hookGate);
+    }
+
     const killed: number[] = [];
     for (const pid of await readHookScriptPids(harness)) {
       if (isRunning(pid) && (await isSandboxHook(pid, options.sandbox.home))) {

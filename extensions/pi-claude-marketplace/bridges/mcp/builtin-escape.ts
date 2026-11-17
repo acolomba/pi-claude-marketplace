@@ -16,8 +16,8 @@
 // and `url` are never resolved by Pi and are written as they are. The
 // resolved values live only in Pi's session registry (P2-DC-02).
 
-import type { McpFieldEncoder } from "./substitute.ts";
 import type { ClaudeEnv, Segment } from "../../domain/claude-mcp-variables.ts";
+import type { McpFieldEncoder } from "./substitute.ts";
 
 function segmentValue(segment: Segment, env: ClaudeEnv): string {
   if (segment.kind === "text") {

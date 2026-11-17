@@ -13,11 +13,6 @@ import { errorMessage } from "../../shared/errors.ts";
 import { collectPluginCloneCandidatesLocked } from "./clone-gc.ts";
 import { cascadeFailureCause, composeCascadeFailureMessage } from "./install-cascade.messaging.ts";
 
-import type { DependencyMoveContext, DependencyMoveMemos } from "./dependency-move.ts";
-import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
-import type { UpdateHooksRouting } from "./update-cascade.ts";
-import type { MaterializationPolicy } from "./update-preflight.ts";
-import type { ThreePhaseArgs } from "./update-swap.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
@@ -26,6 +21,11 @@ import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { UpdateDependencyRow } from "../types.ts";
+import type { DependencyMoveContext, DependencyMoveMemos } from "./dependency-move.ts";
+import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
+import type { UpdateHooksRouting } from "./update-cascade.ts";
+import type { MaterializationPolicy } from "./update-preflight.ts";
+import type { ThreePhaseArgs } from "./update-swap.ts";
 
 /**
  * UPD-DEP-D1 / NFR-5: `install` moves a dependency the way it reads every

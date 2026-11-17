@@ -51,18 +51,18 @@ import {
   readPiMcpAdapterDist,
 } from "./pi-mcp-adapter-peer.ts";
 
-import type { OptionalPeer } from "./optional-peer.ts";
-import type {
-  PiMcpAdapterAuthFlow,
-  PiMcpAdapterOAuthConfig,
-  PiMcpAdapterUtils,
-} from "./pi-mcp-adapter-peer.ts";
 import type { McpSubstitutionContext } from "../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
 import type {
   ClaudeBuiltins,
   Segment,
 } from "../../extensions/pi-claude-marketplace/domain/claude-mcp-variables.ts";
 import type { ExpansionField, OptionFieldCase } from "../bridges/mcp/expansion-cases.ts";
+import type { OptionalPeer } from "./optional-peer.ts";
+import type {
+  PiMcpAdapterAuthFlow,
+  PiMcpAdapterOAuthConfig,
+  PiMcpAdapterUtils,
+} from "./pi-mcp-adapter-peer.ts";
 
 const EMPTY_ENV_NAME = "PI_CLAUDE_MARKETPLACE_EMPTY";
 

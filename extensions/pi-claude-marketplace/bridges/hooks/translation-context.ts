@@ -34,10 +34,10 @@ import { hookEffortLevel } from "../../domain/argument-substitution.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 
-import type { ChildRootSession } from "./child-root-session.ts";
-import type { ChildIdentity } from "./runtime.ts";
 import type { ClaudeEffort } from "../../domain/argument-substitution.ts";
 import type { ExtensionContext } from "../../platform/pi-api.ts";
+import type { ChildRootSession } from "./child-root-session.ts";
+import type { ChildIdentity } from "./runtime.ts";
 
 /** Child identity captured for one Pi session before hook translation. */
 export interface ChildHookIdentity {

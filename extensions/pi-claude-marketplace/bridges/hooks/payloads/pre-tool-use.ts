@@ -21,10 +21,10 @@ import { toHookToolInput } from "../tool-input.ts";
 
 import { toolFactFields } from "./tool-event-facts.ts";
 
-import type { HookMcpServer, HookToolFacts } from "./tool-event-facts.ts";
 import type { ClaudeEffort } from "../../../domain/argument-substitution.ts";
 import type { ToolCallEvent } from "../../../platform/pi-api.ts";
 import type { TranslationContext } from "../translation-context.ts";
+import type { HookMcpServer, HookToolFacts } from "./tool-event-facts.ts";
 
 export interface PreToolUseStdin {
   readonly session_id: string;

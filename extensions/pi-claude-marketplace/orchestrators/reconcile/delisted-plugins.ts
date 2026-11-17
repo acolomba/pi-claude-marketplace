@@ -30,13 +30,13 @@ import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { recordedMarketplaceNameRefusal } from "../../domain/name.ts";
 import { unreadableUserConfigOf } from "../../persistence/state-io.ts";
 
-import type { PerEntryOutcome } from "./apply-outcomes.ts";
-import type { ScopeReadResult } from "./types.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { DeclarerReadFailure } from "../plugin/dependency-index.ts";
+import type { PerEntryOutcome } from "./apply-outcomes.ts";
+import type { ScopeReadResult } from "./types.ts";
 
 /**
  * RECON-04 single-emit: the outcomes after which a load-time warning about the

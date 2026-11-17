@@ -24,8 +24,8 @@ import { builtinMcpCommand, builtinMcpTool } from "../platform/pi-inventory-seed
 
 import { listedCommands, promptDisposition, runRpcSession } from "./_rpc.ts";
 
-import type { ListedCommand, RpcSessionResult } from "./_rpc.ts";
 import type { HermeticEnvironment } from "../platform/hermetic-environment.ts";
+import type { ListedCommand, RpcSessionResult } from "./_rpc.ts";
 import type { Static } from "typebox";
 
 /** The name and `sourceInfo.path` of one listed command. */

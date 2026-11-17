@@ -14,6 +14,10 @@ import { preparePruneRollback } from "./prune-rollback.ts";
 import { UNINSTALL_CONTEXT } from "./uninstall.messaging.ts";
 import { finalizePrunedMembers, sweepOrphans } from "./uninstall.ts";
 
+import type { NotificationContext } from "../../platform/pi-api.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { Scope } from "../../shared/types.ts";
 import type { PruneRestoreFailure, PruneRestoreOps, PruneRollback } from "./prune-rollback.ts";
 import type {
   ConfigLayerWrite,
@@ -21,10 +25,6 @@ import type {
   UninstallHooksRouting,
   UninstallTransaction,
 } from "./uninstall.ts";
-import type { NotificationContext } from "../../platform/pi-api.ts";
-import type { CompletionCache } from "../../shared/completion-cache.ts";
-import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { Scope } from "../../shared/types.ts";
 
 /** Inputs for an orphan sweep or read-only preview in exactly one scope. */
 export interface PrunePluginOptions {

@@ -20,9 +20,9 @@
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
 
-import type { PluginNames, PluginNamesCache } from "./skill-alias-state.ts";
 import type { TypedExpansion, TypedExpansionResolver } from "../bridges/hooks/index.ts";
 import type { ExtensionAPI, ExtensionContext } from "../platform/pi-api.ts";
+import type { PluginNames, PluginNamesCache } from "./skill-alias-state.ts";
 
 type Command = ReturnType<ExtensionAPI["getCommands"]>[number];
 

@@ -47,15 +47,6 @@ import {
 } from "./shared.ts";
 import { surfaceStagingDiagnostics } from "./staging-diagnostics.ts";
 
-import type { CascadeFailureSubject, CascadeInstalledRow } from "./install-cascade.messaging.ts";
-import type { CascadeMemberOutcome, CascadeSkippedMember } from "./install-cascade.ts";
-import type {
-  InstallFailureCapture,
-  InstallLedgerResult,
-  InstallLedgerSummary,
-  InstallPluginNotifications,
-} from "./install-outcome.ts";
-import type { surfaceDiscoveryWarnings } from "./staging-diagnostics.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { PluginConfigEntry, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -69,8 +60,17 @@ import type { ContentReason, McpConfigNotice } from "../../shared/notification-t
 import type { DiscoveryWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { InstallPluginOutcome, MovedDependency, UpdateDependencyRow } from "../types.ts";
+import type { CascadeFailureSubject, CascadeInstalledRow } from "./install-cascade.messaging.ts";
+import type { CascadeMemberOutcome, CascadeSkippedMember } from "./install-cascade.ts";
 import type { CascadeFailureSink } from "./install-flow-cascade-context.ts";
 import type { CascadeInstallOptions, CascadeTransaction } from "./install-flow-cascade-context.ts";
+import type {
+  InstallFailureCapture,
+  InstallLedgerResult,
+  InstallLedgerSummary,
+  InstallPluginNotifications,
+} from "./install-outcome.ts";
+import type { surfaceDiscoveryWarnings } from "./staging-diagnostics.ts";
 
 export interface ResultInstallOptions extends CascadeInstallOptions {
   readonly scope: Scope;

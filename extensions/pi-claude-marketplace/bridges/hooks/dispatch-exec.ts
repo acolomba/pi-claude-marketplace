@@ -105,16 +105,16 @@ import {
 } from "./translation-context.ts";
 import { parseHookStdout } from "./wire-protocol.ts";
 
+import type { DispatchableEvent } from "../../domain/components/hook-events.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
+import type { ClaudePluginVars } from "../../shared/vars.ts";
 import type { SpawnDeps } from "./async-rewake/registry.ts";
 import type { HookContextSource } from "./context-cap.ts";
 import type { HookExecResult } from "./exec-result.ts";
 import type { HookExitFacts } from "./on-failure.ts";
 import type { RoutingEntry } from "./routing-state.ts";
 import type { HooksRuntime } from "./runtime.ts";
-import type { DispatchableEvent } from "../../domain/components/hook-events.ts";
-import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
-import type { ClaudePluginVars } from "../../shared/vars.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Constants

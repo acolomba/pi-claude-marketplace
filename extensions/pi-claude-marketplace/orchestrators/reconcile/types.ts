@@ -51,8 +51,6 @@
 //
 // for any populated state.
 
-import type { PerEntryOutcome } from "./apply-outcomes.ts";
-import type { ScopeSatisfactionVerdict, UnsatisfiedKind } from "./dependency-verdict.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -62,6 +60,8 @@ import type { Scope } from "../../shared/types.ts";
 import type { GitOps } from "../marketplace/shared.ts";
 import type { InstallHooksRouting } from "../plugin/install-disable-cascade.ts";
 import type { UninstallPluginOperation } from "../plugin/uninstall.ts";
+import type { PerEntryOutcome } from "./apply-outcomes.ts";
+import type { ScopeSatisfactionVerdict, UnsatisfiedKind } from "./dependency-verdict.ts";
 
 /** Planned addition of a marketplace declared in config but not recorded. */
 export interface PlannedMarketplaceAdd {

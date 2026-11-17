@@ -1,5 +1,6 @@
 import { extractEnabledPluginRefs } from "./refs.ts";
 
+import type { Scope } from "../../shared/types.ts";
 import type {
   ClaudeImportPlan,
   EnabledPluginRef,
@@ -11,7 +12,6 @@ import type {
   ScopedClaudeImportPlanInput,
   SkippedPluginImport,
 } from "./types.ts";
-import type { Scope } from "../../shared/types.ts";
 
 const OFFICIAL_CLAUDE_MARKETPLACE = "claude-plugins-official";
 const OFFICIAL_CLAUDE_MARKETPLACE_SOURCE = "anthropics/claude-plugins-official";

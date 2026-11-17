@@ -14,7 +14,6 @@ import {
 import { ownValue } from "../../shared/own-key.ts";
 import { partitionStagingWarnings } from "../../shared/staging-warnings.ts";
 
-import type { UpdatePhase3Failure, UpdateRunOutcome } from "./update-swap.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -24,6 +23,7 @@ import type {
   ReinstallSkippedOutcome,
   RevisionMove,
 } from "../types.ts";
+import type { UpdatePhase3Failure, UpdateRunOutcome } from "./update-swap.ts";
 
 /** Identity shared by every composed reinstall outcome. */
 export interface ReinstallOutcomeTarget {

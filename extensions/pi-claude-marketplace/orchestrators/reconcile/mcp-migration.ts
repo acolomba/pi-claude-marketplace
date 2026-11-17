@@ -112,7 +112,6 @@ import {
 } from "../mcp/recorded-servers.ts";
 import { makeRecordedShaPresenceProbe } from "../plugin/git-source-probe.ts";
 
-import type { McpMigrationInput, ReconcilePlan } from "./types.ts";
 import type { LegacyMcpOwner, ProjectDisableStubOwner } from "../../bridges/mcp/index.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { RecordedMcpServers } from "../../domain/mcp-implementation.ts";
@@ -130,6 +129,7 @@ import type {
   McpMigrationUnfinishedRow,
 } from "../../shared/notification-types.ts";
 import type { LockedStateTransaction } from "../../transaction/with-state-guard.ts";
+import type { McpMigrationInput, ReconcilePlan } from "./types.ts";
 
 /**
  * The step's reads of mcp.json, its writes and its clock. A test replaces a

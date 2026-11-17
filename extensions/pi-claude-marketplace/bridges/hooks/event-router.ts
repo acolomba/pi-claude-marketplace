@@ -111,16 +111,6 @@ import {
   settleHandlerFor,
 } from "./settle.ts";
 
-import type { ChildRootSession } from "./child-root-session.ts";
-import type {
-  CompositeDispatchEvent,
-  CompositeEventFor,
-  CompositeReturnFor,
-  HookExecutor,
-} from "./dispatch.ts";
-import type { FollowUpTurnEnd } from "./event-adapters.ts";
-import type { SessionLaunchFacts } from "./payloads/session-start.ts";
-import type { HooksRuntime } from "./runtime.ts";
 import type { ResolvedOptions } from "../../domain/user-config.ts";
 import type {
   BeforeAgentStartEvent,
@@ -134,6 +124,16 @@ import type {
   SessionShutdownEvent,
 } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { ChildRootSession } from "./child-root-session.ts";
+import type {
+  CompositeDispatchEvent,
+  CompositeEventFor,
+  CompositeReturnFor,
+  HookExecutor,
+} from "./dispatch.ts";
+import type { FollowUpTurnEnd } from "./event-adapters.ts";
+import type { SessionLaunchFacts } from "./payloads/session-start.ts";
+import type { HooksRuntime } from "./runtime.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Cache key helper (D-59-02 + marketplace inclusion)

@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { stopHookScripts } from "../../features/lib/hook-files.ts";
+import { openHookGate, stopHookScripts } from "../../features/lib/hook-files.ts";
 
 test("stops a registered hook before its script writes a pid file", async (t) => {
   // arrange
@@ -22,6 +22,7 @@ test("stops a registered hook before its script writes a pid file", async (t) =>
   );
   await mkdir(harness, { recursive: true });
   await mkdir(path.dirname(table), { recursive: true });
+  const gate = await openHookGate(harness);
   const dispatchId = "dispatch-1";
   const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
     detached: process.platform !== "win32",
@@ -62,7 +63,7 @@ test("stops a registered hook before its script writes a pid file", async (t) =>
 
   // act
   const exited = once(child, "exit", { signal: AbortSignal.timeout(1_500) });
-  await stopHookScripts(harness, [scopeRoot]);
+  await stopHookScripts(harness, gate, [scopeRoot]);
   await exited;
 
   // assert

@@ -44,8 +44,8 @@ import { readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 
 import { commandUpstreamNames, skillIdentityName } from "./skill-names.ts";
 
-import type { DiscoveredSkill } from "./types.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
+import type { DiscoveredSkill } from "./types.ts";
 import type { Dirent } from "node:fs";
 
 /**

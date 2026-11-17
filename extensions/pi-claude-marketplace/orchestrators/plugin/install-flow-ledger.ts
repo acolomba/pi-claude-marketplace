@@ -64,6 +64,19 @@ import {
 } from "./shared.ts";
 import { surfaceDiscoveryWarnings } from "./staging-diagnostics.ts";
 
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
+import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { Dependency } from "../../shared/concerns/soft-dep.ts";
+import type { RemovalOps } from "../../shared/fs-utils.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { ContentReason, McpConfigNotice } from "../../shared/notification-types.ts";
+import type { Scope } from "../../shared/types.ts";
+import type { runPhases } from "../../transaction/phase-ledger.ts";
+import type { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
+import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { InstallPluginOutcome, MovedDependency } from "../types.ts";
 import type { CarriedAdd } from "./carried-marketplace-adds.ts";
 import type { DependencyMoveOwners } from "./dependency-bindings.ts";
 import type {
@@ -85,19 +98,6 @@ import type {
   InstallPluginNotifications,
 } from "./install-outcome.ts";
 import type { InstallMsg } from "./install.messaging.ts";
-import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
-import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.ts";
-import type { CompletionCache } from "../../shared/completion-cache.ts";
-import type { Dependency } from "../../shared/concerns/soft-dep.ts";
-import type { RemovalOps } from "../../shared/fs-utils.ts";
-import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { ContentReason, McpConfigNotice } from "../../shared/notification-types.ts";
-import type { Scope } from "../../shared/types.ts";
-import type { runPhases } from "../../transaction/phase-ledger.ts";
-import type { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
-import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type { InstallPluginOutcome, MovedDependency } from "../types.ts";
 
 /**
  * Controls how `installPlugin` surfaces notifications.

@@ -52,6 +52,7 @@ import { errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
+import type { WorkflowGate, WorkflowVerdict } from "../../domain/workflow-script.ts";
 import type {
   DiscoveredWorkflow,
   DiscoverPluginWorkflowsResult,
@@ -59,7 +60,6 @@ import type {
   WorkflowOutcomeSite,
   WorkflowOutcomeTense,
 } from "./types.ts";
-import type { WorkflowGate, WorkflowVerdict } from "../../domain/workflow-script.ts";
 import type { Dirent } from "node:fs";
 
 /**

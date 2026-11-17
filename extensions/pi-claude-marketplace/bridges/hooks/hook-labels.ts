@@ -27,8 +27,8 @@
 
 import { mapPiToClaudeToolName } from "../../domain/components/hook-tool-names.ts";
 
-import type { HookFailure } from "./exec-result.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { HookFailure } from "./exec-result.ts";
 
 // Claude Code's reason for a block that names none: an exit 2 with no stderr,
 // and a block or deny decision with no reason.

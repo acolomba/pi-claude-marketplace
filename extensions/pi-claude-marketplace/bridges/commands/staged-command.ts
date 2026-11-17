@@ -48,9 +48,9 @@ import { substituteClaudeContent } from "../../shared/vars.ts";
 
 import { withCommandRecord } from "./command-record.ts";
 
-import type { CommandOverrides, DiscoveredCommand } from "./types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { ClaudeContentOptions } from "../../shared/vars.ts";
+import type { CommandOverrides, DiscoveredCommand } from "./types.ts";
 
 /** What the writer needs besides the command: the install-time values. */
 export interface StagedCommandContext {

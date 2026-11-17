@@ -81,14 +81,6 @@ import { decodeHookToolInput } from "./tool-input.ts";
 import { renderFileToolOutput } from "./tool-output-files.ts";
 import { renderSearchShellToolOutput } from "./tool-output-search-shell.ts";
 
-import type { HookExecResult } from "./exec-result.ts";
-import type {
-  PendingPromptContext,
-  PendingSessionStartContext,
-  PromptContextEvent,
-  RoutingEntry,
-} from "./routing-state.ts";
-import type { HooksRuntime } from "./runtime.ts";
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type {
   AgentMessage,
@@ -102,6 +94,14 @@ import type {
   ToolResultEventResult,
 } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { HookExecResult } from "./exec-result.ts";
+import type {
+  PendingPromptContext,
+  PendingSessionStartContext,
+  PromptContextEvent,
+  RoutingEntry,
+} from "./routing-state.ts";
+import type { HooksRuntime } from "./runtime.ts";
 
 /**
  * What an adapter knows besides the folded result: the hooks runtime, the

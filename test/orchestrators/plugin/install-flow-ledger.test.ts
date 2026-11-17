@@ -82,12 +82,6 @@ import {
 import { seedMarketplaceRecord } from "./marketplace-seed.ts";
 import { retryTree } from "./scope-tree-inventory.ts";
 
-import type {
-  InstallOperation,
-  InstallTestOwner,
-  InstallTransactionControl,
-  NotifyRecord,
-} from "./install-flow-fixture.ts";
 import type { ParsedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type { GitAuthBundle } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
@@ -104,6 +98,12 @@ import type { NotificationContext } from "../../../extensions/pi-claude-marketpl
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
+import type {
+  InstallOperation,
+  InstallTestOwner,
+  InstallTransactionControl,
+  NotifyRecord,
+} from "./install-flow-fixture.ts";
 import type { TestContext } from "node:test";
 
 for (const orchestrated of [false, true]) {

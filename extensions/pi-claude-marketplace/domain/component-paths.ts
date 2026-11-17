@@ -5,9 +5,9 @@ import { discoveryWarning } from "../shared/staging-warnings.ts";
 
 import { forMessage } from "./workflow-script.ts";
 
+import type { DiscoveryWarning } from "../shared/staging-warnings.ts";
 import type { PluginEntry } from "./components/plugin.ts";
 import type { CommandMapEntry, RefusedListedSkillPath, StatKindReader } from "./resolver-types.ts";
-import type { DiscoveryWarning } from "../shared/staging-warnings.ts";
 
 const COMPONENT_PATH_KINDS = ["skills", "commands", "agents", "workflows"] as const;
 export type ComponentPathKind = (typeof COMPONENT_PATH_KINDS)[number];

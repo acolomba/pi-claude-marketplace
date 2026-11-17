@@ -27,10 +27,10 @@ import { storedGrantForms } from "../../persistence/agents-index-io.ts";
 
 import { convertAgent, convertAgentForm } from "./convert.ts";
 
-import type { ConvertAgentInput } from "./convert.ts";
-import type { ConvertedAgent, StageAgentsInput } from "./types.ts";
 import type { McpImplementationId } from "../../domain/mcp-implementation.ts";
 import type { AgentGrantForm, AgentGrantFormFields } from "../../persistence/agents-index-io.ts";
+import type { ConvertAgentInput } from "./convert.ts";
+import type { ConvertedAgent, StageAgentsInput } from "./types.ts";
 
 /** The conversion input both forms share; each form adds its implementation and servers. */
 export type GrantFormInput = Omit<ConvertAgentInput, "mcpServerNames" | "mcpImplementation">;

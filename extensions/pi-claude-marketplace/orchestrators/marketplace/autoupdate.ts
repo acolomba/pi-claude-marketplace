@@ -93,13 +93,13 @@ import { withLockedStateTransaction } from "../../transaction/with-state-guard.t
 import { AUTOUPDATE_CONTEXT, NOAUTOUPDATE_CONTEXT } from "./autoupdate.messaging.ts";
 import { crossScopeFlag, marketplaceFailureRows, marketplaceLayerVerdict } from "./shared.ts";
 
-import type { MarketplaceLayerVerdict } from "./shared.ts";
 import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { MarketplaceLayerVerdict } from "./shared.ts";
 
 /**
  * RECON-03 / WR-09: notification mode selector. Mirrors

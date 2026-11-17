@@ -97,6 +97,12 @@ import {
 } from "./apply-outcomes.ts";
 import { plannedSourceMismatchSubject } from "./types.ts";
 
+import type { MarketplaceManifest } from "../../domain/manifest.ts";
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
+import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { MarketplaceRows } from "../../shared/notify-context.ts";
+import type { Scope } from "../../shared/types.ts";
+import type { PluginUpdateOutcome, ScopeDependencyInstallRow } from "../types.ts";
 import type {
   PerEntryOutcome,
   PluginBackfilledOutcome,
@@ -108,12 +114,6 @@ import type {
 import type { CascadeStep, ConvergencePlan, PlannedMove } from "./convergence.ts";
 import type { PendingMsg, ReconcileAppliedMsg } from "./reconcile.messaging.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
-import type { MarketplaceManifest } from "../../domain/manifest.ts";
-import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
-import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { MarketplaceRows } from "../../shared/notify-context.ts";
-import type { Scope } from "../../shared/types.ts";
-import type { PluginUpdateOutcome, ScopeDependencyInstallRow } from "../types.ts";
 
 /**
  * S8 (PR #51): `status` is narrowed to the closed set the pending /

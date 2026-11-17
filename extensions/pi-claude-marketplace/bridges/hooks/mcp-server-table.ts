@@ -14,8 +14,8 @@ import {
 } from "../../domain/name.ts";
 import { isRecordedButDisabled, type ExtensionState } from "../../persistence/state-io.ts";
 
-import type { HookMcpServer } from "./payloads/tool-event-facts.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { HookMcpServer } from "./payloads/tool-event-facts.ts";
 
 /** One server of an enabled plugin record, under the key of each MCP implementation. */
 export interface McpServerEntry {

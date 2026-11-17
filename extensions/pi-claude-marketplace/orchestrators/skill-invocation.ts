@@ -52,9 +52,9 @@ import { errorMessage } from "../shared/errors.ts";
 
 import { appendMentionedFiles, NODE_MENTION_FILE_READER } from "./mention-attachments.ts";
 
-import type { MentionFileReader } from "./mention-attachments.ts";
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 import type { PromptShellHost, PromptShellRunner } from "../platform/prompt-shell.ts";
+import type { MentionFileReader } from "./mention-attachments.ts";
 
 /** One typed invocation of `/skill:<generatedName>` or of an alias of it. */
 export interface SkillInvocationRequest {

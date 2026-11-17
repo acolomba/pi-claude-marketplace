@@ -7,7 +7,6 @@ import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
 import { applyPartialCascadeFold } from "./shared.ts";
 
-import type { InstallMsg } from "./install.messaging.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -15,6 +14,7 @@ import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { UnstageOutcome } from "../marketplace/shared.ts";
+import type { InstallMsg } from "./install.messaging.ts";
 
 /** Hooks route effects required by install at its durable-state boundary. */
 export type InstallHooksRouting = Pick<

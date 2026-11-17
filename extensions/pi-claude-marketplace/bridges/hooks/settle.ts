@@ -48,10 +48,6 @@ import { hookSaysText, hookStoppedText } from "./hook-labels.ts";
 import { classifyStopFailure } from "./payloads/stop-failure.ts";
 import { STOP_OVERRIDE_CAP, type HooksRuntime } from "./runtime.ts";
 
-import type { BucketOutcome, HookExecutor } from "./dispatch.ts";
-import type { HookExecResult } from "./exec-result.ts";
-import type { StopFailureEvent } from "./payloads/stop-failure.ts";
-import type { StopEvent } from "./payloads/stop.ts";
 import type { StopFailureErrorType } from "../../domain/components/hook-events.ts";
 import type {
   AgentBeforeSettleEvent,
@@ -65,6 +61,10 @@ import type {
   PiTextContentBlock,
 } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { BucketOutcome, HookExecutor } from "./dispatch.ts";
+import type { HookExecResult } from "./exec-result.ts";
+import type { StopFailureEvent } from "./payloads/stop-failure.ts";
+import type { StopEvent } from "./payloads/stop.ts";
 
 /**
  * Custom-message type of the hidden entry that carries the Stop hooks'
