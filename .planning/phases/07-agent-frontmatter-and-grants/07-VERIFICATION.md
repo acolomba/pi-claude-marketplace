@@ -1,10 +1,10 @@
 ---
 phase: 07-agent-frontmatter-and-grants
-verified: 2026-11-17T02:44:19Z
+verified: 2026-11-17T03:45:31Z
 status: passed
 score: 40/40 must-haves verified (36 VERIFIED, 4 PASSED (override))
 covered_files: [".planning/phases/07-agent-frontmatter-and-grants/07-01-PLAN.md",".planning/phases/07-agent-frontmatter-and-grants/07-01-SUMMARY.md",".planning/phases/07-agent-frontmatter-and-grants/07-02-PLAN.md",".planning/phases/07-agent-frontmatter-and-grants/07-02-SUMMARY.md",".planning/phases/07-agent-frontmatter-and-grants/07-03-PLAN.md",".planning/phases/07-agent-frontmatter-and-grants/07-03-SUMMARY.md",".planning/phases/07-agent-frontmatter-and-grants/07-04-PLAN.md",".planning/phases/07-agent-frontmatter-and-grants/07-04-SUMMARY.md",".planning/phases/07-agent-frontmatter-and-grants/07-05-PLAN.md",".planning/phases/07-agent-frontmatter-and-grants/07-05-SUMMARY.md",".planning/phases/07-agent-frontmatter-and-grants/07-06-PLAN.md",".planning/phases/07-agent-frontmatter-and-grants/07-06-SUMMARY.md","README.es.md","README.md","docs/mcp-compatibility.md","docs/output-catalog.md","docs/prd/pi-claude-marketplace-prd.md","docs/research/parity-gaps/subagents.md","extensions/pi-claude-marketplace/bridges/agents/convert.ts","extensions/pi-claude-marketplace/bridges/agents/discover.ts","extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts","extensions/pi-claude-marketplace/bridges/agents/legacy-grant-form.ts","extensions/pi-claude-marketplace/bridges/agents/mcp-async-warning.ts","extensions/pi-claude-marketplace/bridges/agents/stage.ts","extensions/pi-claude-marketplace/bridges/agents/types.ts","extensions/pi-claude-marketplace/bridges/skills/frontmatter-degrade.ts","extensions/pi-claude-marketplace/bridges/skills/frontmatter-scan.ts","extensions/pi-claude-marketplace/bridges/skills/rewrite-frontmatter.ts","extensions/pi-claude-marketplace/bridges/skills/skill-names.ts","extensions/pi-claude-marketplace/bridges/skills/stage.ts","extensions/pi-claude-marketplace/shared/frontmatter-repair.ts","features/agent/frontmatter.feature","features/agent/invocation.feature","features/lib/agent-files.ts","features/lib/upstream/subagents.ts","features/lib/workflow-files.ts","features/mcp-server/agent-grants.feature","features/step_definitions/agent/listing.steps.ts","features/step_definitions/agent/runs.steps.ts","features/step_definitions/plugin/installation.steps.ts","features/step_definitions/workflow/runs.steps.ts","features/workflow/agent-steps.feature","test/bridges/agents/convert.test.ts","test/bridges/agents/discover.test.ts","test/bridges/agents/frontmatter.test.ts","test/bridges/agents/grant-forms.test.ts","test/bridges/agents/grant-rewrite.test.ts","test/bridges/agents/legacy-grant-form.test.ts","test/bridges/agents/stage.test.ts","test/bridges/skills/frontmatter-degrade.test.ts","test/bridges/skills/frontmatter-scan.test.ts","test/integration/agents-builtin-grant-conformance.test.ts","test/integration/pi-subagents-child-launch-conformance.test.ts","test/integration/provenance-invisibility.test.ts","test/integration/workflow-engine-agent-registry.test.ts","test/shared/frontmatter-repair.test.ts"]
-covered_digest: "v4:sha256:71eb92b3bba9d718b2642ac2396ce0e2e2bf10c10eb217db4764a434883f6a1d"
+covered_digest: "v4:sha256:63863b2b460b2ff3f3058bed8d0ddb7c67d9bf34a954273508a031924cc63d22"
 behavior_unverified: 0
 overrides_applied: 4
 overrides:
@@ -27,15 +27,14 @@ overrides:
 re_verification:
   previous_status: passed
   previous_score: "40/40 (36 verified, 4 passed by override)"
-  reason: "staleness after the maintainer review fixes of 2026-11-16: README.md and README.es.md (594ea843, the Agent and Task grant sentence), docs/mcp-compatibility.md (b5692689, pi-subagents 0.88.1 wording; 6826f6f6, the D-PG10-25 unreadable-options section), docs/output-catalog.md (6d9a3cdd/6826f6f6, D-PG10-25 rows) and features/step_definitions/plugin/installation.steps.ts (78011db4, a D-PG10-25 Given step) changed after the previous basis 2b1ced72. No phase source file under extensions/, no phase feature file and no phase test changed."
+  reason: "staleness after two docs-only commits changed docs/mcp-compatibility.md, a covered file, after the previous basis 5ead1acf: 421863f6 (docs: align decision wording with the maintainer review) dropped pending-review wording after D-PG9 decision IDs at :143, :145, :147, :383 and :767-770 and pointed the workflow-tools item at BACKLOG AGTWORKFLOWAMBIENT-01, and ebcce31e changed the D-PG7-17 sentence at :435 to say that the maintainer review of 2026-11-16 confirmed it. Each hunk replaces lines one for one, so no cited line moved. No source, test or feature file changed, and no other covered file changed."
   gaps_closed: []
   gaps_remaining: []
   regressions: []
   score_correction: "None. The denominator stays 5 roadmap criteria + 35 separate plan truths = 40."
-  status_correction: "The maintainer review of 2026-11-16 confirmed and locked D-PG7-02, -04, -07, -10, -17, -18 and -19 (PROJECT.md:2411-2419) and accepted the two orchestrator overrides (567585d3). The previous report still listed them as open items; this report records them as resolved. human_verification stays empty."
+  status_correction: "None. The report already recorded every D-PG7 decision as locked by the maintainer review of 2026-11-16 (PROJECT.md:2411-2419), and no text in it called a locked decision pending. The doc sentence at docs/mcp-compatibility.md:435 that override 2 cites now agrees with that."
   overrides_added: []
-  overrides_removed:
-    - "07-04 README clause (D-PG7-16): removed 2026-11-16 (594ea843), when README.md:379 and README.es.md:379 gained the Agent and Task grant sentence, so the truth holds as written"
+  overrides_removed: []
 decision_coverage:
   honored: 19
   total: 19
@@ -51,28 +50,26 @@ human_verification: []
 
 **Phase Goal:** A bridged agent gets the name, description, model, and tool grants that its source declares. The agents bridge reads frontmatter as YAML, maps `Agent` and `Task` grants to nested subagents, passes `model: inherit` on, and writes both tool lists.
 
-**Verified:** 2026-11-17T02:44:19Z
+**Verified:** 2026-11-17T03:45:31Z
 **Status:** passed. All five roadmap criteria and all 35 separate plan truths hold on the current tree, three criteria and 33 truths as written. Four pass by override: the two orchestrator overrides (criterion 3 no-tools `subagent get` wording, criterion 4 `model: ""`) and two decision overrides (D-PG7-17, D-PG7-18). The maintainer review of 2026-11-16 accepted all four and locked every phase decision it was asked about, so nothing in this phase is open.
-**Re-verification:** Yes. The previous report (passed, 40/40, four overrides, 2026-11-16T07:22:50Z) became stale after the maintainer review fixes changed five of its covered non-planning files.
+**Re-verification:** Yes. The previous report (passed, 40/40, four overrides, 2026-11-17T02:44:19Z, commit 5ead1acf) became stale when the docs-only commits 421863f6 and ebcce31e changed `docs/mcp-compatibility.md`, one of its covered files.
 
 ## Verification Basis
 
-This pass re-checked the roadmap criteria and plan must-haves against `features/gaps` at `14c9d489`. Summaries were not taken as evidence. **A/** means `extensions/pi-claude-marketplace/bridges/agents/`, and **F/** means `features/agent/frontmatter.feature`.
+This pass re-checked the roadmap criteria and plan must-haves against `features/gaps` at `c5bf5737`. Summaries were not taken as evidence. **A/** means `extensions/pi-claude-marketplace/bridges/agents/`, and **F/** means `features/agent/frontmatter.feature`.
 
-Changes since the previous basis (`2b1ced72`), by `git diff --stat 2b1ced72 HEAD` over the covered files:
+Changes since the previous basis (`5ead1acf`), by `git diff --stat 5ead1acf HEAD` over the 56 covered files: only `docs/mcp-compatibility.md`, 10 lines changed, 10 added and 10 removed, each hunk one line for one line.
 
-- `README.md`, `README.es.md` (594ea843): line 379 of each now says that a `tools` entry `Agent` or `Task` lets an agent start any subagent, even when the entry names agent types, and links to `docs/mcp-compatibility.md#customizing-generated-agents` (heading at :403). This is what the 07-04 README truth asks for, so the D-PG7-16 README override stays removed.
-- `docs/mcp-compatibility.md`: b5692689 changed `0.88.0` to `0.88.1` in four MCP sentences (now :507, :521, :762, :776). 6826f6f6 added the D-PG10-25 section "Options the install record cannot read" at :632, 11 lines. Phase 7 citations up to :476 did not move. The former :819-821 citations are now :830-832.
-- `docs/output-catalog.md` (D-PG10-25): two sentence edits and one new 16-line section at :4197. The D-PG7-04 note "Agent frontmatter not parsed" moved from :5528 to :5544, and its text is unchanged.
-- `features/step_definitions/plugin/installation.steps.ts` (78011db4): one new D-PG10-25 Given step and a header comment. The `holds these agents of` Thens that the D-PG7-07 rename scenarios use did not change.
+- 421863f6 (docs: align decision wording with the maintainer review) removed the pending-review wording after the D-PG9 decision IDs at :143 and :767 (D-PG9-01), :145 (D-PG9-15), :147 and :768 (D-PG9-16), :383 (D-PG9-14), :769 (D-PG9-08) and :770 (D-PG9-07), and rewrote the end of :833 to say that a `Workflow` grant stays dropped (D-PG8-11..15), with a pointer with a pointer to BACKLOG AGTWORKFLOWAMBIENT-01 (BACKLOG.md:5465) for the question of whether the converter should also exclude the engine's two workflow tools, which the line had called an open question for the maintainer. The rest of that commit changed files outside this phase's covered list: `docs/env-vars.md`, `docs/hooks-compatibility.md`, `docs/prd/parity-gaps-prd.md`, the Phase 10 closeout line in `.planning/ROADMAP.md` (:497), and planning files of Phases 10 and 11.
+- ebcce31e (docs: drop the pending note on the empty model display) changed one sentence of :435 from "This display is part of the pending review of D-PG7-17." to "This display comes with D-PG7-17, which the maintainer review of 2026-11-16 confirmed." Override 2 cites :435 for the empty `Model:` display, and the line still states that display.
 
-Under `extensions/`, no Phase 7 source file changed: the agents bridge, the skills frontmatter modules, and `shared/frontmatter-repair.ts`. No phase feature file changed (`features/agent/{frontmatter,invocation}.feature`, `features/mcp-server/agent-grants.feature`, `features/workflow/agent-steps.feature`). Of the phase test files, none changed. Every source citation of the previous report therefore stands. Spot reads this pass confirmed A/convert.ts:84 (`INHERIT_MODEL_VALUE = '""'`), :94-104 (`TOOL_MAP` with `Agent` and `Task` to `subagent`), :341-348 (`mapModel` inherit arm before the flag check), :615 and :1207-1213 (omitted-tools mapping and `toolsFields`), and A/frontmatter.ts:180-199 (`parseSource`: Pi's `parseFrontmatter` first, then one repair and one reparse only on a throw).
+The Phase 7 citations in this report (:403, :413, :426-433, :435, :437, :439, :458, :462, :472, :474, :476, :830-832) did not move, and their content is unchanged apart from the :435 sentence above. `git diff --name-only 5ead1acf HEAD -- extensions features test` is empty, so every source, feature and test citation of the previous report stands. A spot read confirmed A/convert.ts:84 (`INHERIT_MODEL_VALUE = '""'`). No `TBD`, `FIXME` or `XXX` occurs in the agents bridge or `shared/frontmatter-repair.ts`.
 
-The decision log was re-read. PROJECT.md:2411-2419 shows D-PG7-01/02/03, -04, -07, -08/09/10, -11/17 and -18/19 as confirmed by the maintainer review on 2026-11-16 and `Locked`. D-PG7-04 is locked with parity kept, so its conflict with the fail-closed preference is settled. D-PG7-17 still says that it amends ROADMAP criterion 4, passed by override. ROADMAP Phase 7 (criteria 1-5) did not change. b5692689 edited only the Phase 8 goal and a Phase 9 plan line.
+The decision log was re-read. `.planning/PROJECT.md`, `.planning/REQUIREMENTS.md` and `.planning/BACKLOG.md` did not change since `5ead1acf`. PROJECT.md:2411, :2412, :2414, :2415, :2416 and :2419 (D-PG7-01/02/03, -04, -07, -08/09/10, -11/17, -18/19) read `Locked (maintainer review 2026-11-16, confirmed)`, with "parity kept" on D-PG7-04 and "depth 2 kept" on D-PG7-08/09/10. :2413, :2417 and :2418 (D-PG7-05/06, -12/13/14, -15/16) read `Good`. D-PG10-25 (PROJECT.md:2441) reads as reversed by the maintainer review to fail closed, as the superseded-mechanisms table below states. ROADMAP Phase 7 (criteria 1-5) did not change; the one ROADMAP edit of 421863f6 is the Phase 10 closeout line.
 
-**Gate G (reused, not re-run):** `npm run check` exited 0 at `333784b7`, log `/tmp/pg-final.log`, which the verifier read. Node v26.13.1 ran with a hermetic `PI_CODING_AGENT_DIR`, as the caller reported; the real-child probes in the log run under `/tmp/pi-cm-features-*` homes. All seven static checks passed: typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, and check:features. The unpaired and integration tests passed with pi-subagents 0.88.1, pi-mcp-adapter 7.0.1, and `@quintinshaw/pi-dynamic-workflows` 3.15.0 from `node_modules/.cache/optional-peers`. The real-child probes record `piSubagents: 0.88.1` and children in mode `background`, state `complete`. The cucumber adapter profile passed 2100/2100 scenarios and 25988/25988 steps (seed 478645). The builtin profile passed 204/204 scenarios and 2762/2762 steps (seed 413244). Direct coverage merged 376 LCOV records. The log ends with `exit=0`. `git diff --name-only 333784b7 HEAD` names only five `NN-VERIFICATION.md` files of other phases, so G covers every executable input of HEAD, including the four phase features.
+**Gate G (reused, not re-run):** `npm run check` exited 0 at `421863f6`, log `/tmp/pg-final2.log`, which the verifier read. The cucumber adapter profile passed 2100/2100 scenarios, and the builtin profile passed 204/204 scenarios and 2762/2762 steps. Direct coverage merged 376 LCOV records. The log ends with `exit=0`. `git diff --name-only 421863f6 HEAD` names `docs/mcp-compatibility.md` (ebcce31e, one sentence; docs are not build inputs) and six `NN-VERIFICATION.md` files of Phases 1-6, so G covers every executable input of HEAD, including the four phase features.
 
-**Independent checks (this pass):** 12 named single tests ran with `node --import ./test/platform/isolated-pi-home.ts --test --test-isolation=none --test-reporter=tap --test-name-pattern '^<name>$' <file>`. Each run had a fresh `mktemp` HOME and `PI_CODING_AGENT_DIR` in the session scratchpad, on Node v26.13.1. Each reported `tests 1, pass 1, fail 0, skipped 0`. The 10 other named tests of the previous pass were not repeated, because their files and the code they test have not changed. `query verify.artifacts` gives 26/26 and `query verify.key-links` 19/19 across the six plans, with exit 0 for each. The pi-subagents 0.88.1 sources that the overrides depend on were read again in `node_modules/.cache/optional-peers`: `package.json` version 0.88.1, `formatAgentDetail` at agent-management.js:951-976 (Model, Tools, and Excluded tools lines, no `allowNestedSubagents` line), and child-tool-plan.js:213-218 (fan-out authorized by `subagent` in the list or by `allowNestedSubagents: true` when `subagent` is not excluded).
+**Independent checks (this pass):** four named single tests ran with `node --import ./test/platform/isolated-pi-home.ts --test --test-isolation=none --test-reporter=tap --test-name-pattern '^<name>$' <file>`. Each run had a fresh `mktemp` HOME and `PI_CODING_AGENT_DIR` in the session scratchpad, on Node v26.13.1. Each reported `tests 1, pass 1, fail 0, skipped 0`. The other named tests of the previous passes were not repeated, because their files and the code they test have not changed since, and Gate G ran them again. The previous pass's `query verify.artifacts` (26/26) and `query verify.key-links` (19/19) stand, because no plan and no artifact file changed.
 
 ## Superseded mechanisms (later decisions)
 
@@ -166,25 +163,17 @@ The decision log was re-read. PROJECT.md:2411-2419 shows D-PG7-01/02/03, -04, -0
 
 ## Behavioral Spot-Checks
 
-Each run used a fresh scratchpad `mktemp` HOME and `PI_CODING_AGENT_DIR` and no services. Each gave `tests 1 / pass 1 / fail 0 / skipped 0`. IDs keep the numbering of the previous report.
+Each run used a fresh scratchpad `mktemp` HOME and `PI_CODING_AGENT_DIR` and no services. Each gave `tests 1 / pass 1 / fail 0 / skipped 0`. IDs keep the numbering of the earlier reports.
 
 | ID | Named test | File | Result |
 | --- | --- | --- | --- |
-| N2 | PG-AGENT-03: the key written for an agent with no tools list authorizes fan-out and keeps ambient MCP tools | test/integration/pi-subagents-child-launch-conformance.test.ts | PASS |
-| N3 | PG-AGENT-03: the exclude list written for a denied Agent authorizes no fan-out | same | PASS |
-| N4 | PG-AGENT-07a / D-PG7-17: the model written for a source inherit runs the child on the parent's model over subagents.defaultModel | same | PASS |
-| N6 | PG-AGENT-09: the built-in exclude name is the name pi-subagents resolves for the denied tool of a whole-server grant | test/integration/agents-builtin-grant-conformance.test.ts | PASS |
-| N7 | D-PG7-17: the engine reads no model for an agent whose source model is inherit | test/integration/workflow-engine-agent-registry.test.ts | PASS |
-| N8 | D-PG7-06: no line of a description block becomes a key under pi-subagents' own reader | test/integration/provenance-invisibility.test.ts | PASS |
-| N10 | D-PG7-11: a source model of inherit gives the same file with and without --map-model | test/bridges/agents/convert.test.ts | PASS |
-| N12 | D-PG7-14: denies with no exact Pi name keep the cannot-narrow warning | same | PASS |
-| N15 | D-PG7-04 keeps an unparseable agent under its file name with one note | test/bridges/agents/discover.test.ts | PASS |
-| N18 | D-PG7-02 leaves a line the trigger refuses byte-for-byte | test/shared/frontmatter-repair.test.ts | PASS |
-| N20 | D-PG7-09: refuses allowNestedSubagents beside an explicit tools list | test/bridges/agents/frontmatter.test.ts | PASS |
-| N21 | emits a description with the block header \| alone as a literal block | same | PASS |
-| G | `npm run check` at `333784b7` (same executable inputs as HEAD) | root scripts, both cucumber profiles | PASS (reused) |
+| N4 | PG-AGENT-07a / D-PG7-17: the model written for a source inherit runs the child on the parent's model over subagents.defaultModel | test/integration/pi-subagents-child-launch-conformance.test.ts | PASS (this pass) |
+| N10 | D-PG7-11: a source model of inherit gives the same file with and without --map-model | test/bridges/agents/convert.test.ts | PASS (this pass) |
+| N15 | D-PG7-04 keeps an unparseable agent under its file name with one note | test/bridges/agents/discover.test.ts | PASS (this pass) |
+| N21 | emits a description with the block header \| alone as a literal block | test/bridges/agents/frontmatter.test.ts | PASS (this pass) |
+| G | `npm run check` at `421863f6` (same executable inputs as HEAD) | root scripts, both cucumber profiles | PASS (reused) |
 
-N1, N5, N9, N11, N13, N14, N16, N17, N19, and N22 passed in the previous pass. Their test files and the code they test did not change, and Gate G ran them again.
+N2, N3, N6, N7, N8, N12, N18 and N20 passed in the previous pass (2026-11-17T02:44:19Z), and N1, N5, N9, N11, N13, N14, N16, N17, N19 and N22 in the pass before it. Their test files and the code they test did not change, and Gate G ran them again.
 
 ## Probe Execution
 
@@ -212,7 +201,8 @@ No requirement is orphaned. REQUIREMENTS.md maps exactly these four IDs to Phase
 
 - D-PG7-07 names `apply` convergence as a third rename path. No scenario shows it, as docs/mcp-compatibility.md:476 states. The 07-03 truth names only update and reinstall, which are covered.
 - Residuals IN-01 (YAML tag warning on stderr, a Pi gap) and IN-04 (a lone-CR file skips the repair, docs/mcp-compatibility.md:458) stay documented.
-- Citation moves since the previous report: docs/mcp-compatibility.md :819, :820, :821 are now :830, :831, :832; docs/output-catalog.md :5528 is now :5544; BACKLOG.md AGTREPAIRSET-01 :5455 is now :5461. The content at each place is unchanged.
+- No citation moved since the previous report. The one cited line whose text changed is docs/mcp-compatibility.md:435 (ebcce31e), and it still states the empty `Model:` display that override 2 names.
+- docs/mcp-compatibility.md:833 (outside this phase's must-haves) now points the workflow-tools question at BACKLOG AGTWORKFLOWAMBIENT-01 (BACKLOG.md:5465). That item concerns the D-PG8 `Workflow` grant, not a Phase 7 truth.
 
 ## Human Verification Required
 
@@ -229,9 +219,9 @@ The maintainer review of 2026-11-16 answered every item the previous report had 
 
 ## Gaps Summary
 
-This pass found no gaps and no regressions. On the current tree, all five roadmap criteria and all 35 separate plan truths of Phase 7 hold. The maintainer review fixes changed only documentation and one step-definitions file that the phase does not use for its must-haves. None of them touched a phase source file, feature, or test. The README sentence of 594ea843 keeps the 07-04 README truth verified as written. The four overrides that remain are accepted by the maintainer review and rest on locked decisions. The status stays `passed` at 40/40.
+This pass found no gaps and no regressions. On the current tree, all five roadmap criteria and all 35 separate plan truths of Phase 7 hold. Since the previous report, only `docs/mcp-compatibility.md` changed among the covered files, through two docs-only commits (421863f6, ebcce31e) that removed pending-review wording and left every Phase 7 citation in place. No phase source file, feature or test changed, and Gate G at `421863f6` covers the executable inputs of HEAD. The four overrides stay as written and accepted by the maintainer review of 2026-11-16: override 1 rests on a pi-subagents display gap recorded in D-PG7-15, and overrides 2-4 on the locked decisions D-PG7-17 and D-PG7-18. The status stays `passed` at 40/40.
 
 ---
 
-_Verified: 2026-11-17T02:44:19Z_
+_Verified: 2026-11-17T03:45:31Z_
 _Verifier: Claude (gsd-verifier)_
