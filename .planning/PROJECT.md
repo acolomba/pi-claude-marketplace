@@ -21,7 +21,7 @@ Use these terms in code, messages, docs, and planning (user decisions 2026-10-17
 - **Declaration:** an entry in a layer. **Installation:** the plugin's artifacts and record in a scope.
 - **Effective configuration:** a scope's two layers merged field by field, local winning on conflicts. The same intent may be declared in both layers.
 
-## Current Milestone: parity-gaps -- Claude Code Parity Gaps and Defects
+## Previous Milestone: parity-gaps -- Claude Code Parity Gaps and Defects (branch: features/gaps, started 2026-11-11, completed 2026-11-17, not yet pushed, no PR or npm release yet)
 
 **Goal:** Close every P0 and P1 gap that
 [docs/prd/parity-gaps-prd.md](../docs/prd/parity-gaps-prd.md) lists between
@@ -75,13 +75,23 @@ marketplace) work end to end on Pi.
 - Spikes S5, S7, and S8 have not run. Each runs in the phase it gates.
 - P2 and P3 rows of the PRD are not scheduled.
 
+**Outcome:** 42/42 requirements, 11 phases, 102 plans; 2100 adapter-profile
+and 204 builtin-profile scenarios, and `npm run check` passes on the combined
+tree at `421863f6`. The audit reads `tech_debt` with no blockers. Every open
+PRD decision was answered in its phase, and the maintainer review of
+2026-11-16 locked every D-PG row below. Closed as `override_closeout`: Phase 5
+is `human_needed` on A9 alone (the start-failure notice has not run on Node
+24), which the PR's CI closes. The runtime UAT was skipped by the user's
+choice; the cucumber suite stands in for it. AGTLONGNAME-01 and PG1-TIMING-01
+stay open.
+
 ### Phase 2 hook decisions implemented (2026-11-13)
 
 Validated in parity-gaps Phase 2: PG-HOOK-01, PG-HOOK-03 and PG-HOOK-13.
 Goal verification passed 55/55 must-haves with no manual checks remaining;
 all review findings are fixed and the final combined-tree gate passed.
 
-The accepted choices below apply to PG-HOOK-01/03/13. The [current hook contract](../docs/hooks-compatibility.md#current-tool-contract-phase-2-2026-11-13) names supported fields and limitations; [Phase 2 validation](phases/02-hook-payloads-matchers-and-stop-limit/02-VALIDATION.md) ties each outcome to owner and real Pi tests. These decisions preserve Claude Code parity where Pi provides the necessary facts. The original-call fallback in D-PG2-09 is an intentional project decision where Pi cannot perform a requested rewrite.
+The accepted choices below apply to PG-HOOK-01/03/13. The [current hook contract](../docs/hooks-compatibility.md#current-tool-contract-phase-2-2026-11-13) names supported fields and limitations; [Phase 2 validation](milestones/parity-gaps-phases/02-hook-payloads-matchers-and-stop-limit/02-VALIDATION.md) ties each outcome to owner and real Pi tests. These decisions preserve Claude Code parity where Pi provides the necessary facts. The original-call fallback in D-PG2-09 is an intentional project decision where Pi cannot perform a requested rewrite.
 
 | Decision | Actual outcome and evidence |
 | --- | --- |
@@ -96,7 +106,7 @@ The accepted choices below apply to PG-HOOK-01/03/13. The [current hook contract
 | D-PG2-09 | Unsupported input rewrites use the whole original call with a sanitized notice unless denial, stop or target conflict blocks; [fallback and notice scenarios](../features/hook/tool-use.feature). This accepted divergence avoids pretending Pi executed an unsupported option. |
 | D-PG2-10 | Exact comma/pipe lists, whole unanchored JavaScript regex and ignored prompt/Stop matchers operate at install and runtime; [matcher scenarios](../features/hook/matchers.feature). |
 | D-PG2-11 | Eight Stop blocks continue, ninth overrides, and native tool calls/reload reset the count. Timing moved to `agent_before_settle` (D-PG5-01); the cap environment variable stays out of scope (D-PG5-04); [Stop scenarios](../features/hook/prompt-and-stop.feature). |
-| D-PG2-12 | Visible changes have real command-hook scenarios and owner/integration tests; normal commit hooks and combined-tree gates are tracked in [validation](phases/02-hook-payloads-matchers-and-stop-limit/02-VALIDATION.md). PowerShell has pure contract tests only. |
+| D-PG2-12 | Visible changes have real command-hook scenarios and owner/integration tests; normal commit hooks and combined-tree gates are tracked in [validation](milestones/parity-gaps-phases/02-hook-payloads-matchers-and-stop-limit/02-VALIDATION.md). PowerShell has pure contract tests only. |
 
 ## Previous Milestone: behavioral-gaps -- Behavioral Coverage Gaps (branch: features/behavioral-gaps, started 2026-11-07, completed 2026-11-08, not yet pushed, no PR or npm release yet)
 
@@ -922,6 +932,20 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
+**Completed on branch `features/gaps`, not yet pushed:** milestone
+`parity-gaps` (2026-11-17, Phases 1-11, 102 plans, 42/42 requirements;
+archived to `.planning/milestones/parity-gaps-*`). Plugin hooks, agents,
+workflows, MCP servers, skills, and commands now behave more like Claude Code
+2.1.322: the companion floors are pi-subagents 0.87.0 and pi-mcp-adapter
+7.0.1; hooks get Claude-shaped tool input, Claude Code's matchers, a `Stop`
+continuation in the same run, failure notices, the missing stdin fields, and
+`UserPromptExpansion`; a subagent child runs no main-session hooks; agent
+frontmatter is YAML and `Agent`, `Task`, `model: inherit`, and both tool lists
+work; workflows start by name and note agents that lose their restriction or
+are missing; `userConfig` defaults reach hooks, servers, and content; and
+typed commands and skills attach `@file` mentions and answer to their Claude
+Code names. The version stays 0.23.0 until the user bumps it.
+
 **Completed on branch `features/behavioral-gaps`, not yet pushed:** milestone
 `behavioral-gaps` (2026-11-08, Phases 1-16, 36 plans, 34/34 requirements;
 archived to `.planning/milestones/behavioral-gaps-*`). Behavioral scenarios
@@ -1118,11 +1142,9 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ### Active
 
-Milestone parity-gaps (started 2026-11-11) is active. Its 42 requirements,
-`PG-*`, are in [REQUIREMENTS.md](REQUIREMENTS.md): the 13 P0 and 28 P1 rows of
-[docs/prd/parity-gaps-prd.md](../docs/prd/parity-gaps-prd.md), and one
-requirement for the documentation corrections that no row owns.
-
+No milestone is active. The 42 parity-gaps requirements are validated and
+archived in
+[milestones/parity-gaps-REQUIREMENTS.md](milestones/parity-gaps-REQUIREMENTS.md).
 The 34 behavioral-gaps requirements are validated and
 archived in
 [milestones/behavioral-gaps-REQUIREMENTS.md](milestones/behavioral-gaps-REQUIREMENTS.md).
@@ -1143,6 +1165,18 @@ the 36 json-output requirements in
 
 ### Validated
 
+- ✓ Every P0 and P1 gap that `docs/prd/parity-gaps-prd.md` lists between
+  Claude Code 2.1.322 and this project is closed or recorded as a divergence
+  with a decision ID or a Pi capability gap: companion floors, MCP timeouts
+  and long tool names, hook payloads, matchers, `Stop` continuation, failure
+  notices, stdin fields, `UserPromptExpansion`, background subagents, skill
+  and workflow install defects, agent frontmatter and grants, workflow agents,
+  adapter entries and MCP features, plugin options, variables, and trust,
+  `@file` mentions, Claude Code command names, and the record corrections --
+  parity-gaps Phases 1-11 (PG-AGENT-01..03, 05, 07a, 07b, 09; PG-CMD-09;
+  PG-CORE-01, 03, 05..07; PG-DOC-01..02; PG-HOOK-01..04, 06, 07a, 11, 13, 14,
+  21, 23; PG-MCP-01, 02, 06, 08, 09; PG-SEC-01..03; PG-SKILL-01, 04, 11;
+  PG-WF-01, 02, 04, 05, 07)
 - ✓ The cucumber suite covers the behavior the November 2026 coverage audit
   found untested: async hooks and rewake, `StopFailure`, `PostToolUseFailure`,
   `PostCompact`, `SessionEnd`, the `state.json` and first-run config
@@ -2755,3 +2789,5 @@ _Last updated: 2026-11-16 after the maintainer decision D-PG8-18: two workflow n
 _Last updated: 2026-11-16 after the maintainer review of the parity-gaps decisions: every D-PG row that was pending is locked as confirmed, D-PG10-01 with option A, except D-PG4-11/12 (wording) and D-PG9-07, which stay pending. D-PG11-06 (no row) is confirmed as deferred in BACKLOG._
 
 _Last updated: 2026-11-16 after the maintainer review of the last two pending rows: D-PG4-11/12 is locked with its wording accepted, and D-PG9-07 is locked as confirmed, with the `openUi: false` default deferred to BACKLOG MCPOPENUI-01._
+
+_Last updated: 2026-11-17 after the parity-gaps milestone closed (`override_closeout`, Phase 5 A9 waits for the PR's CI); every D-PG decision row is kept as locked._

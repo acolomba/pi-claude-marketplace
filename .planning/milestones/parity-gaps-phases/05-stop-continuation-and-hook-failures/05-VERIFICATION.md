@@ -39,6 +39,10 @@ human_verification:
   - test: "Run CI on Node 24 (the PR's `behavioral` job) and check features/hook/failures.feature:157 \"A prompt hook that cannot start lets the prompt through and shows its error\" (research assumption A9)."
     expected: "The scenario passes on Node 24: the notice reads `... Error occurred while executing hook command: spawn missing-guard.sh ENOENT`."
     why_human: "Gate G ran on Node 26.13.1. An earlier pass measured the spawn ENOENT message on Node 22.22.2 and 26.13.1 (both `spawn <path> ENOENT`). No Node 24 is installed here, and features/gaps has no PR, so no CI run has covered it."
+audit_acknowledged:
+  milestone: parity-gaps
+  at: 2026-11-17
+  status: human_needed
 ---
 
 # Phase 5: Stop Continuation and Hook Failures Verification Report

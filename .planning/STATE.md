@@ -2,49 +2,58 @@
 gsd_state_version: "1.0"
 milestone: parity-gaps
 milestone_name: Claude Code Parity Gaps and Defects
-current_phase: 11
-current_phase_name: Skills, Commands, and Records
-status: completed
-stopped_at: Phase 11 complete; next is the milestone lifecycle
-last_updated: "2026-11-16T05:25:55.482Z"
-last_activity: 2026-11-16
-last_activity_desc: Phase 11 complete
-state_head: ceb1e3a147c760a555a2480d9d198b4e57d23e2f
+status: Awaiting next milestone
+stopped_at: Milestone parity-gaps completed and archived (override_closeout)
+last_updated: "2026-11-17T12:14:57.758Z"
+last_activity: 2026-11-17
+last_activity_desc: Milestone parity-gaps completed and archived
+state_head: d4bcf389e1e36621729dd04cd5506d73b09fa19c
 progress:
   total_phases: 11
   completed_phases: 11
   total_plans: 102
   completed_plans: 102
   percent: 100
+current_phase: null
+current_phase_name: null
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-11-13 after parity-gaps Phase 2)
+See: `.planning/PROJECT.md` (updated 2026-11-17 when the parity-gaps milestone closed)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** parity-gaps milestone lifecycle (all 11 phases complete on features/gaps)
+**Current focus:** Planning the next milestone; parity-gaps waits for a PR from `features/gaps`
 
 ## Current Position
 
-Phase: 11 (Skills, Commands, and Records) — COMPLETE
-Plan: 8/8
-Status: All 11 phases complete on features/gaps (7–8 merged from features/gaps-agents, 9–10 merged from features/gaps-mcp)
-Last activity: 2026-11-16 — Phase 11 closed: validation, security, review loop (3 iterations), phase gate, verification, `phase complete 11`
+Phase: Milestone parity-gaps complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-11-17 -- Milestone parity-gaps completed and archived
 
-Progress: [██████████] 100% (this branch: Phases 1–11 of 11)
+### parity-gaps closeout: `override_closeout`
 
-Next, in order (milestone lifecycle):
+Completed 2026-11-17 on `features/gaps` (not yet pushed, no PR or npm
+release; version stays 0.23.0). 11/11 phases, 102 plans, 42/42 requirements.
+The audit reads `tech_debt` with no blockers (integration 9/9, flows 6/6), and
+`npm run check` passed at `421863f6` (adapter 2100/2100, builtin 204/204, 376
+direct-coverage records). The archive is `.planning/milestones/parity-gaps-*`,
+with phase records under `milestones/parity-gaps-phases/` and the session
+handoff at `milestones/parity-gaps-HANDOFF.json`.
 
-1. Re-verify Phases 1–2 for staleness (later phases touched files their reports cover); fix the UAT parser ambiguity; keep AGTLONGNAME01 and PG1TIMING01 open.
-2. `/gsd-audit-milestone`, then `/gsd-complete-milestone`, then `/gsd-cleanup`, on this branch.
-3. Offer the version bump; no PR, merge, or publish without the maintainer.
-
-The maintainer decision review is done (2026-11-16): every pending D-PG row in PROJECT.md is locked, D-PG4-11/12 with its wording accepted and D-PG9-07 as confirmed (the `openUi: false` default waits in BACKLOG MCPOPENUI-01). T-08-13 is accepted.
+- Override: Phase 5 is `human_needed` on A9 alone (the start-failure notice
+  of `features/hook/failures.feature:157` has not run on Node 24); it closes
+  with the PR's CI `behavioral` job. Known verification overrides: 1 newly
+  acknowledged, 0 carried forward.
+- Runtime UAT skipped by the user's choice: the cucumber suite (real Pi, real
+  companion extensions, scripted model) stands in for it.
+- Still open: AGTLONGNAME-01, PG1-TIMING-01, and SEED-261107-kax (dormant,
+  upstream open-gsd/gsd-core#4649).
 
 ### parity-gaps Phase 11 (Skills, Commands, and Records)
 
@@ -367,6 +376,8 @@ Items acknowledged and deferred at milestone close, most recent first.
 
 | Category       | Item                                                                                                                                                                                          | Status          | Deferred At          | Milestone |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------- | --------- |
+| verification_gaps | 05/05-VERIFICATION.md: `human_needed`, A9 (start-failure notice not run on Node 24; closes with the PR's CI `behavioral` job) | acknowledged | 2026-11-17 | parity-gaps |
+| seeds | SEED-261107-kax: review the structure of skills, injected skills, and GSD capabilities | dormant -- pending upstream open-gsd/gsd-core#4649 | 2026-11-17 | parity-gaps |
 | verification_override | Phase 01 (foundation): verification `stale`; the flake fix `d04a5106` changed `features/lib/pi-process.ts` and `layout.md` after it; combined tree `npm run check` exit 0 | acknowledged | 2026-11-08 | behavioral-gaps |
 | verification_override | Phase 04 (PostToolUseFailure hooks): verification `stale`; later hooks phases changed `bridges/hooks/dispatch.ts`, its tests, and `docs/hooks-compatibility.md`; combined tree `npm run check` exit 0 | acknowledged | 2026-11-08 | behavioral-gaps |
 | verification_override | Phase 06 (SessionEnd hooks): verification `stale`; later hooks phases changed `bridges/hooks/timeout.ts` and `docs/hooks-compatibility.md`; combined tree `npm run check` exit 0 | acknowledged | 2026-11-08 | behavioral-gaps |
@@ -542,10 +553,7 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Review the High entries of `.planning/DUBIOUS-CHOICES.md` and the pending D-BG decision rows in PROJECT.md
-- Run the CI timing check of the three behavioral legs against the 15-minute job timeouts (D-CF1-16)
-- Offer the version bump, then open the PR for `features/behavioral-gaps`
-- Remove the 15 phase worktrees `~/src/pi-claude-marketplace-behavioral-gaps-phase-N` and their branches
+- Offer the version bump, then open the PR for `features/gaps`; its CI `behavioral` job on Node 24 closes Phase 5 A9
 - Start the next milestone with /gsd-new-milestone
 
 
@@ -1228,9 +1236,9 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-16T05:30:00.000Z
-Stopped at: Phase 11 complete — all 11 phases complete; next is the milestone lifecycle (re-verify Phases 1–2 staleness, audit, complete, cleanup)
-Resume file: .planning/phases/11-skills-commands-and-records/11-VERIFICATION.md
+Last session: 2026-11-17T12:15:00.000Z
+Stopped at: Milestone parity-gaps completed and archived (override_closeout); next is the PR for `features/gaps`
+Resume file: None
 
 ### Phase 2 completion-helper notes
 

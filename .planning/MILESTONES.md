@@ -1,5 +1,54 @@
 # Milestones: pi-claude-marketplace
 
+## parity-gaps Claude Code Parity Gaps and Defects (Shipped: 2026-11-17)
+
+**Branch:** `features/gaps` (not yet pushed, no PR or npm release; version stays 0.23.0). Phases 7 and 8 ran on `features/gaps-agents` and phases 9 and 10 on `features/gaps-mcp`, and both merged back.
+
+**Phases completed:** 11 phases, 102 plans, 105 tasks
+
+**Delivered:** Plugin hooks, agents, workflows, MCP servers, skills, and commands now behave more like Claude Code, against Claude Code 2.1.322 as the reference. The companion floors rise to pi-subagents 0.87.0 and pi-mcp-adapter 7.0.1 in 7.x; `--map-model` writes a bare model ID, a server with no `timeout` gets Claude Code's idle window, and long MCP tool names work under the adapter. Hooks on file tools get and return Claude-shaped tool input, matchers take lists and regular expressions, and a blocking `Stop` hook continues the same run up to eight times. Missing scripts no longer block, failures show their stderr and `stopReason`, context over 10,000 characters goes to a file, and a plain `async` hook has no timeout. Hooks receive `tool_use_id`, `duration_ms`, `mcp_server`, `effort`, and `resume` or `fork` at `SessionStart`, and `UserPromptExpansion` hooks run before a typed command or skill. A bridged agent runs in the launch mode pi-subagents chooses, and a subagent child runs no main-session hooks. Agent frontmatter is read as YAML, `Agent` and `Task` grants let an agent delegate, `model: inherit` runs on the session's model, and `tools` and `disallowedTools` both restrict. A root-source marketplace entry installs only its listed skills, sibling skill links resolve, a plugin starts its own workflow by name, and install notes a workflow agent that loses its tool restriction or is missing. Under the adapter a stdio server stays running and user-written entry fields survive updates. `userConfig` defaults reach hooks, MCP servers, and content, user-scope skills and commands get `${CLAUDE_PROJECT_DIR}`, and a plugin `bin` joins `PATH` only when it exists and the project is trusted. Typed commands and skills attach `@file` mentions, commands answer to their Claude Code names, alias suggestions show descriptions, and a new skills and commands compatibility page compares both with Claude Code. The suite reaches 2100 adapter-profile and 204 builtin-profile scenarios.
+
+**Closeout:** Audit `tech_debt`, no blockers: 42/42 requirements, 10/11 phases passed and current, 9/9 integration seams, 6/6 flows; the combined tree passes `npm run check` at `421863f6` (exit 0, 2100/2100 and 204/204, 376 direct-coverage records). Closed as `override_closeout`: Phase 5 is `human_needed` on one item, A9, because the start-failure notice of `features/hook/failures.feature:157` has run on Node 22 and 26 but never on Node 24; it closes with the PR's CI `behavioral` job. Known verification overrides: 1 newly acknowledged, 0 carried forward (the `audit-open` writer acknowledged 2 items, Phase 5 and the dormant SEED-261107-kax, and reads 17 acknowledgements from earlier closes still suppressed; see STATE.md Deferred Items). The manual runtime UAT was skipped by the user's choice: the cucumber suite, which drives a real Pi process with the real companion extensions and a scripted model, stands in for it. Every D-PG Key Decisions row is locked after the maintainer review of 2026-11-16. Nyquist validation is compliant for phases 2 to 11 and partial for Phase 1. Still open: AGTLONGNAME-01 (pi-subagents names a granted adapter tool over 64 characters without the cut) and PG1-TIMING-01 (Phase 1 focused-feedback timing sign-off), and SEED-261107-kax stays dormant pending upstream open-gsd/gsd-core#4649. Left in BACKLOG: the entries the milestone added, among them HOOKRESULT-01, MCPSAMPLING-01, MCPOPENUI-01, PITRUSTPATHS-01, STOPMODECHECK-01, SIBLINGPREFIX-01, and MENTIONDIR-01. [Roadmap](milestones/parity-gaps-ROADMAP.md), [requirements](milestones/parity-gaps-REQUIREMENTS.md), [audit](milestones/parity-gaps-MILESTONE-AUDIT.md), [handoff](milestones/parity-gaps-HANDOFF.json), [PRD](../docs/prd/parity-gaps-prd.md), and [phase records](milestones/parity-gaps-phases/).
+
+<details>
+<summary>Generated phase accomplishments</summary>
+
+**Key accomplishments:**
+- Raised the companion peer floors, ran the suites on pi-subagents 0.88.0 and pi-mcp-adapter 7.0.1, and staged bare Claude model IDs.
+- Pinned the developer launcher and MCP canary to the verified companions and corrected records to distinguish peer floors from suite versions.
+- Adapter tool names now use pi-mcp-adapter 7.0.1's 64-character fit rule, with a listing proof and an 11-case conformance test against the installed adapter.
+- Built-in MCP now registers plugin servers with Claude Code's 30-minute stdio and 5-minute remote idle defaults, while preserving a usable declared timeout.
+- Agent per-tool excludes now use the adapter's registered name; a hermetic conformance test measures pi-subagents 0.88.0's separate long-grant name gap.
+- Staged MCP adapter entries now receive Claude Code's idle windows while a value the user wrote survives every restage.
+- Hooks now match and receive a shortened adapter tool's full Claude Code name after an exact hash-fit check, on successful and failed calls.
+- Successful adapter results now give PostToolUse hooks a shortened tool's full Claude Code name, while cut-shaped direct tools keep their hooks.
+- Whole-file lifecycle checks protect user-written adapter timeouts and extension-owned defaults; one-off slow calls completed under both MCP implementations.
+- The MCP and hook compatibility pages now describe the verified companion floors, timeout defaults, and shortened tool-name behavior.
+- Recorded the fourteen companion and MCP decisions, corrected shipped-fix status, and added one release note for installed agents and servers.
+- Installed command hooks now receive Claude-shaped native tool inputs and can safely replace one Pi Read, Write, or shell call; unsupported rewrites retain the complete original call.
+- Exact Glob and Grep hook inputs now drive accepted search rewrites, while successful, failed, and background hooks share translated tool input.
+- Each native Pi edit batch now runs Claude-shaped hooks for every pair before one execution, with whole-batch decision precedence and target checks.
+- Every edit pair hook now receives its own executed input with the one actual native result or error, while the model receives one final outcome.
+- Read, Edit, and Write hook results now expose available Claude fields, and accepted replacements clear the model and downstream Pi result carriers.
+- Glob, Grep, Bash, and PowerShell hooks now receive available result facts, and validated search and shell replacements reach Pi without stale output.
+- MCP hooks now select the modern output field before the MCP-only legacy alias, preserve native result envelopes, and replace result data without leaking original content.
+- Installed hooks now apply exact tool lists and whole-pattern JavaScript regexes consistently across plugin info, dispatch, and reload; prompt and Stop hooks ignore matcher text.
+- Stop hooks now continue eight times, override the ninth blocking outcome, and regain a fresh budget after each native model tool call or reload.
+- The implemented tool, matcher and Stop contracts are documented with scenario-linked limits, and the combined tree passed its final local gate.
+- Child async journals now isolate process ownership, the router admits only tool hooks in child sessions, and before-run callbacks capture a session-bound companion identity.
+- Exact warning generation translation and implementation-less grant migration now retain provenance and user edits.
+- PreToolUse hook stdin now carries the actual child agent type and Pi session ID through synchronous and both background execution lanes.
+- Fresh MCP agents now explain that their tools require a pi-subagents background child while retaining each implementation's exact readiness warning.
+- Child tool result hooks now carry the child's identity, and installed-plugin and real-process tests prove a child runs no main-session hooks and never disturbs parent or sibling hooks.
+- Every child tool hook lane, a tagged stand-in child, and the installed pi-subagents' own detached and concurrent children now prove that a child's tool hooks carry its actual agent type and session id, while it runs no main-session hook.
+- A bridged agent now carries `async: true` only when its source asks for the background or it runs plugin MCP tools; every other agent leaves its launch mode to pi-subagents and the user's configuration.
+- An ordinary agent file that an earlier release wrote with `async: false` survives a load and loses the line only through update or reinstall. A real ordinary pi-subagents child now runs detached under the companion's default with its own tool-hook identity. The two compatibility pages state the measured child-hook and launch-mode contract.
+- A `SessionStart` hook now receives `resume` when Pi starts with `--continue` or `--session <file>` and `fork` when Pi starts with `--fork <file>`, decided from `ctx.sessionManager` alone; the cucumber harness can start the profile Pi with a saved session and restart it in each of those modes.
+
+</details>
+
+---
+
 ## behavioral-gaps Behavioral Coverage Gaps (Shipped: 2026-11-08)
 
 **Branch:** `features/behavioral-gaps` (not yet pushed, no PR or npm release yet). Phase 1 built the shared harness; fifteen stream phases then ran in parallel child sessions on local phase branches and merged back.
