@@ -72,7 +72,7 @@ Source paths without a prefix are relative to `extensions/pi-claude-marketplace/
 Documented residuals outside the register:
 
 - The 128-character display limit counts UTF-16 units before `forMessage` escapes the text. So a printed type of control characters can expand to about 1 KB. Output stays bounded by 5 notes and 1 count line.
-- Option A for PG-WF-05 was answered in the autonomous run, pending maintainer review (08-06-SUMMARY.md). If option B is chosen later, T-08-18 to T-08-23 become applicable, and plan 08-06 runs with its register.
+- Option A for PG-WF-05 was answered in the autonomous run (08-06-SUMMARY.md) and confirmed by the maintainer review 2026-11-16 (D-PG8-11..15). If option B were chosen later, T-08-18 to T-08-23 become applicable, and plan 08-06 runs with its register.
 
 No unregistered threat flags: all seven SUMMARY Threat Flags sections say None.
 

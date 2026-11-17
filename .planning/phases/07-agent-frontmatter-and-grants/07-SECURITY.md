@@ -74,7 +74,7 @@ Documented residuals outside the register:
 
 - D-PG7-10: nesting depth stays pi-subagents' default (2) where Claude Code's is 3. This is narrower than upstream (docs/mcp-compatibility.md:759).
 - AGTLONGNAME-01: an adapter exclude name over 64 characters beside a whole-server grant does not match pi-subagents' uncut name, and such an agent cannot launch (docs/mcp-compatibility.md:695).
-- D-PG7-02 retry, pending maintainer review: when another line makes YAML refuse the block, a `tools:` line whose comment holds a colon is quoted whole, so `tools: Read # ,Bash ,x:y` with `description: a: b` gives `tools: read,bash`. This is documented as Claude Code parity at docs/mcp-compatibility.md:410.
+- D-PG7-02 retry, confirmed by the maintainer review 2026-11-16: when another line makes YAML refuse the block, a `tools:` line whose comment holds a colon is quoted whole, so `tools: Read # ,Bash ,x:y` with `description: a: b` gives `tools: read,bash`. This is documented as Claude Code parity at docs/mcp-compatibility.md:410.
 - D-PG7-19 residuals: repeated-key forms that Bun 1.4.4 accepts and the repair does not find (explicit keys, nested repeats, escaped quoted keys, an anchor-only or tag-only earlier copy) stay unparseable and take the AR-07-04 arm (docs/mcp-compatibility.md:412-419).
 
 ## Unregistered Findings
@@ -104,7 +104,7 @@ Advisories (low, non-blocking):
 ## Sign-Off
 
 - [x] Every threat has a declared disposition and implementation evidence at 24de427b.
-- [x] Accepted risks logged; the D-PG7-04 residual is marked pending maintainer review.
+- [x] Accepted risks logged; the D-PG7-04 residual was confirmed by the maintainer review 2026-11-16.
 - [x] No blocking or nonblocking threat remains open.
 - [x] Unregistered findings UF-07-02 and UF-07-03 are reported for routing; they are outside the register and not counted in `threats_open`.
 - [x] `status: verified`; `threats_open: 0`.

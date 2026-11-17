@@ -40,15 +40,15 @@ tech_debt:
   - phase: 07-agent-frontmatter-and-grants
     items:
       - "4 overrides accepted 2026-11-16: `subagent get` nested-subagent line (Pi capability gap), model \"\" (D-PG7-17, two clauses), block description (D-PG7-18). The D-PG7-16 README override is gone."
-      - "Stale wording: 07-SECURITY.md:77 and :107 still call D-PG7-02/D-PG7-04 pending maintainer review (records only)."
+      - "Fixed 2026-11-17: Stale wording: 07-SECURITY.md:77 and :107 still call D-PG7-02/D-PG7-04 pending maintainer review (records only)."
   - phase: 08-workflow-agents-and-run-paths
     items:
       - "4 overrides: WR-02 note wording, D-PG8-11 option A, catalog pins (D-PG10-06 confirmed, D-PG10-25 reversed to fail closed), and the 08-03 two-scripts truth superseded by D-PG8-07/D-PG8-18."
-      - "Stale wording: 08-SECURITY.md:75 and :84 still call option A of PG-WF-05 and T-08-13 pending maintainer review (records only)."
+      - "Fixed 2026-11-17: Stale wording: 08-SECURITY.md:75 and :84 still call option A of PG-WF-05 and T-08-13 pending maintainer review (records only)."
   - phase: 09-adapter-entries-and-mcp-features
     items:
       - "5 overrides (10 truths): D-PG9-07 (locked; the openUi default returns through BACKLOG MCPOPENUI-01), D-PG9-14 (two), the D-PG9-03 addition (no PROJECT.md row), all accepted 2026-11-16, plus a new one for the 09-06 truth that expected `Pending maintainer review`, based on the locked rows D-PG9-01/-07/-08 (PROJECT.md:2427-2429), no maintainer sign-off claimed. MCPSAMPLING-01 carried. 7 judgment-tier prohibitions flagged."
-      - "Stale wording: 09-SECURITY.md:61, :66 and :84 still say pending maintainer review (records only)."
+      - "Fixed 2026-11-17: Stale wording: 09-SECURITY.md:61, :66 and :84 still say pending maintainer review (records only)."
   - phase: 10-plugin-options-variables-and-trust
     items:
       - "3 overrides: 10-08 truth 5 changed by D-PG10-25 (fail closed, accepted 2026-11-16), and two new ones for 10-20 truths 1 and 3, which expected `Pending maintainer review`, based on the locked rows D-PG10-01 and D-PG10-04..24 (PROJECT.md:2433-2440), no maintainer sign-off claimed. PG-SEC-02 verifies directly."
@@ -56,7 +56,7 @@ tech_debt:
   - phase: 11-skills-commands-and-records
     items:
       - "The D-PG11-03 mask override was removed: the maintainer reversed the decision and the mask is gone. 7 plan truths superseded in part."
-      - "Records only: 11-SECURITY.md T-11-10, T-11-11 and the :94 note cite invocation.feature:377/:402 (now :372/:397); T-11-06 still says mitigate for the example-code half that AR-11-02 now covers."
+      - "Fixed 2026-11-17: Records only: 11-SECURITY.md T-11-10, T-11-11 and the :94 note cite invocation.feature:377/:402 (now :372/:397); T-11-06 still says mitigate for the example-code half that AR-11-02 now covers."
   - phase: cross-phase
     items:
       - "INFO (PG-CORE-03, PG-MCP-09): under Pi's built-in MCP an unreadable record shows only as unset options per server; the load's (failed) {unreadable} line names the plugin."
@@ -135,4 +135,4 @@ Verdict: no blocker, no warning. 9/9 seams connected and 6/6 flows complete. No 
 
 ## Deliberately carried
 
-AGTLONGNAME-01 and PG1-TIMING-01 stay open. SEED-261107-kax is dormant pending upstream open-gsd/gsd-core#4649. The leftover "pending" wording in 07-, 08- and 09-SECURITY.md is records only and outside the requested fix list.
+AGTLONGNAME-01 and PG1-TIMING-01 stay open. SEED-261107-kax is dormant pending upstream open-gsd/gsd-core#4649. The leftover security-file wording (07-, 08-, 09- and 11-SECURITY.md) was fixed on 2026-11-17; no verification report covers those files, so none went stale.
