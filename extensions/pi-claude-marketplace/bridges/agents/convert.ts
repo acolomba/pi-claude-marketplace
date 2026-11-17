@@ -20,6 +20,11 @@ import { substituteClaudeVars } from "../../shared/vars.ts";
 import { emitGeneratedAgentFile, emitGeneratedAgentFrontmatter } from "./frontmatter.ts";
 import { mcpAsyncWarning } from "./mcp-async-warning.ts";
 
+import type { McpImplementationId } from "../../domain/mcp-implementation.ts";
+import type {
+  InstalledReferenceNames,
+  SkillReferenceResolution,
+} from "../../domain/skill-tokens.ts";
 import type { GeneratedToolsFields } from "./frontmatter.ts";
 import type {
   ConvertedAgent,
@@ -27,11 +32,6 @@ import type {
   RawAgentFrontmatter,
   SkillPreload,
 } from "./types.ts";
-import type { McpImplementationId } from "../../domain/mcp-implementation.ts";
-import type {
-  InstalledReferenceNames,
-  SkillReferenceResolution,
-} from "../../domain/skill-tokens.ts";
 
 /**
  * Source frontmatter fields the converter actively consumes. Anything else

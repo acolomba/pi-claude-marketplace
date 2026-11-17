@@ -40,8 +40,8 @@ import {
   type AgentsIndexEntry,
 } from "./agents-index-schema.ts";
 
-import type { ScopedLocations } from "./locations.ts";
 import type { McpImplementationId } from "../domain/mcp-implementation.ts";
+import type { ScopedLocations } from "./locations.ts";
 
 /** MGRT-01: one implementation's stored grant form of an agent. */
 export type AgentGrantForm = NonNullable<NonNullable<AgentsIndexEntry["mcpForms"]>["adapter"]>;

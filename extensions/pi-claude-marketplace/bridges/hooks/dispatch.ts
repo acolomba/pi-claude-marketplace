@@ -85,14 +85,6 @@ import { ifFires } from "./if-field/index.ts";
 import { createHookToolView } from "./mcp-tool-view.ts";
 import { compactTrigger } from "./payloads/compact-trigger.ts";
 
-import type { CompactionCancel, HookAdapterContext } from "./event-adapters.ts";
-import type { HookExecResult } from "./exec-result.ts";
-import type { HookBlock } from "./hook-labels.ts";
-import type { HookToolView } from "./mcp-tool-view.ts";
-import type { ClaudeSessionEndEvent } from "./payloads/session-end.ts";
-import type { ClaudeSessionStartEvent } from "./payloads/session-start.ts";
-import type { RoutingEntry } from "./routing-state.ts";
-import type { HooksRuntime } from "./runtime.ts";
 import type { BucketAEvent, DispatchableEvent } from "../../domain/components/hook-events.ts";
 import type { McpToolIdentity } from "../../domain/components/hooks/builtin-mcp-tool-names.ts";
 import type { ParsedMatcher } from "../../domain/components/hooks.ts";
@@ -108,6 +100,14 @@ import type {
   ToolResultEvent,
   ToolResultEventResult,
 } from "../../platform/pi-api.ts";
+import type { CompactionCancel, HookAdapterContext } from "./event-adapters.ts";
+import type { HookExecResult } from "./exec-result.ts";
+import type { HookBlock } from "./hook-labels.ts";
+import type { HookToolView } from "./mcp-tool-view.ts";
+import type { ClaudeSessionEndEvent } from "./payloads/session-end.ts";
+import type { ClaudeSessionStartEvent } from "./payloads/session-start.ts";
+import type { RoutingEntry } from "./routing-state.ts";
+import type { HooksRuntime } from "./runtime.ts";
 
 /**
  * The per-entry executor the bucket runners below take as a parameter. Every

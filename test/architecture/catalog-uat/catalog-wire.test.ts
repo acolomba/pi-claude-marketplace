@@ -61,7 +61,6 @@ import { loadCatalogExamples, type CatalogExample } from "./catalog-parser.ts";
 import { FIXTURE_MAPS, mergeFixtureMaps, tupleKey } from "./fixture-maps.ts";
 import { piWithAllLoaded, verifyPi } from "./mock-pi.ts";
 
-import type { CatalogFixture, FixtureMap } from "./fixture-types.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationPresentation } from "../../../extensions/pi-claude-marketplace/shared/notification-present.ts";
 import type { ResolvedRawSurface } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
@@ -73,6 +72,7 @@ import type {
   NotificationMessage,
   RawSurface,
 } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import type { CatalogFixture, FixtureMap } from "./fixture-types.ts";
 
 type PayloadSource = NotificationPresentation | ResolvedRawSurface;
 type Converter = (source: PayloadSource, origin: NotificationOrigin) => unknown;

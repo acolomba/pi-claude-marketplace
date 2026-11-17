@@ -21,13 +21,6 @@ import {
 
 import { INSTALL_CONTEXT } from "./install.messaging.ts";
 
-import type {
-  CascadeConstraintFailure,
-  CascadeSkippedMember,
-  Unmaterialized,
-} from "./install-cascade.ts";
-import type { InstallMsg } from "./install.messaging.ts";
-import type { LedgerDegradationSignals } from "./shared.ts";
 import type { DependencyClosureResult } from "../../domain/dependency-closure.ts";
 import type { SoftDepStatus } from "../../platform/pi-api.ts";
 import type { Dependency, McpDependency } from "../../shared/concerns/soft-dep.ts";
@@ -43,6 +36,13 @@ import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
 import type { UpdateDependencyRow } from "../types.ts";
+import type {
+  CascadeConstraintFailure,
+  CascadeSkippedMember,
+  Unmaterialized,
+} from "./install-cascade.ts";
+import type { InstallMsg } from "./install.messaging.ts";
+import type { LedgerDegradationSignals } from "./shared.ts";
 
 /**
  * install-cascade.messaging.ts -- the command-local notification vocabulary for

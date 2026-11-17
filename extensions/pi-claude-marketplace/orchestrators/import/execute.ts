@@ -76,13 +76,6 @@ import { buildClaudeImportPlan } from "./marketplaces.ts";
 import { loadMergedClaudeSettingsForScope as defaultLoadSettings } from "./settings.ts";
 
 import type {
-  ClaudeSettingsReadOptions,
-  ImportDiagnostic,
-  ImportDiagnosticCode,
-  MergedClaudeSettingsResult,
-  PlannedPluginImport,
-} from "./types.ts";
-import type {
   AddMarketplaceOptions,
   AddMarketplaceOutcome,
 } from "../../orchestrators/marketplace/add.ts";
@@ -106,6 +99,13 @@ import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
+import type {
+  ClaudeSettingsReadOptions,
+  ImportDiagnostic,
+  ImportDiagnosticCode,
+  MergedClaudeSettingsResult,
+  PlannedPluginImport,
+} from "./types.ts";
 
 export interface MarketplaceAddedOutcome {
   readonly kind: "marketplace-added";

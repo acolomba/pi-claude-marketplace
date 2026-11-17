@@ -12,6 +12,7 @@ import {
 } from "./notification-summary.ts";
 import { redactCredentials } from "./redact-credentials.ts";
 
+import type { SoftDepStatus } from "../platform/pi-api.ts";
 import type { Dependency } from "./concerns/soft-dep.ts";
 import type { SerializedCauseChain } from "./errors.ts";
 import type {
@@ -40,7 +41,6 @@ import type {
   Severity,
   WithPlugins,
 } from "./notification-types.ts";
-import type { SoftDepStatus } from "../platform/pi-api.ts";
 
 /**
  * PMOD-01: the single resolve step upstream of the text strategy. It turns a

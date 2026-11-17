@@ -118,12 +118,6 @@ import {
 } from "./shared.ts";
 import { surfaceStagingDiagnostics } from "./staging-diagnostics.ts";
 
-import type { RecordDeclarations } from "./dependency-index.ts";
-import type {
-  InstallFailureCapture,
-  InstallLedgerResult,
-  runInstallLedger,
-} from "./install-outcome.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type {
@@ -143,6 +137,12 @@ import type { Phase, RollbackPartial, RunPhasesResult } from "../../transaction/
 import type { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import type { cascadeUnstagePlugin } from "../marketplace/shared.ts";
 import type { UnstageOutcome } from "../marketplace/shared.ts";
+import type { RecordDeclarations } from "./dependency-index.ts";
+import type {
+  InstallFailureCapture,
+  InstallLedgerResult,
+  runInstallLedger,
+} from "./install-outcome.ts";
 
 /**
  * RECON-03: controls how `setPluginEnabled` surfaces

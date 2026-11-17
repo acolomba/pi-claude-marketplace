@@ -58,6 +58,7 @@ import {
 import { COMMAND_DELIVERY, requireNotificationMode } from "./notification-run.ts";
 import { composeRetainedWorkflowsAdvisories } from "./notification-summary.ts";
 
+import type { NotificationContext } from "../platform/pi-api.ts";
 import type { CommandErrorPresentation } from "./notification-command-error.ts";
 import type { NotifyArguments } from "./notification-grammar.ts";
 import type { CascadePresentation, NotificationPresentation } from "./notification-present.ts";
@@ -88,7 +89,6 @@ import type {
   UsageErrorMessage,
 } from "./notification-types.ts";
 import type { Scope } from "./types.ts";
-import type { NotificationContext } from "../platform/pi-api.ts";
 
 function isCommandOutcome(
   presentation: NotificationPresentation | ResolvedRawSurface | CommandErrorPresentation,

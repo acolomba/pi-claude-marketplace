@@ -15,6 +15,9 @@ import {
 import { createInstallLedgerPlugin } from "./install-flow-ledger.ts";
 import { createInstallPlanning } from "./install-flow-planning.ts";
 
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { InstallPluginOutcome } from "../types.ts";
 import type { InstallHooksRouting } from "./install-disable-cascade.ts";
 import type {
   InstallMissingDependencyOptions,
@@ -26,9 +29,6 @@ import type {
   InstallTransaction,
 } from "./install-flow-ledger.ts";
 import type { UpdateDependencyResolver } from "./update-swap.ts";
-import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
-import type { CompletionCache } from "../../shared/completion-cache.ts";
-import type { InstallPluginOutcome } from "../types.ts";
 
 export type {
   InstallMissingDependencyOptions,

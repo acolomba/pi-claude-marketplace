@@ -23,10 +23,10 @@ import { errorMessage } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
-import type { IndexedRecord } from "./dependency-index.ts";
-import type { ConfigLayerWrite } from "./uninstall.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { McpWrittenFile } from "../../shared/errors-bridges.ts";
+import type { IndexedRecord } from "./dependency-index.ts";
+import type { ConfigLayerWrite } from "./uninstall.ts";
 import type { Stats } from "node:fs";
 
 interface SavedPath {

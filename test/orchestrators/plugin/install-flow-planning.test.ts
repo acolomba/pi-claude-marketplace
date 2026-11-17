@@ -49,10 +49,10 @@ import {
   withHermeticHome,
 } from "./install-flow-fixture.ts";
 
-import type { CatalogPlugin, InstallTestOwner } from "./install-flow-fixture.ts";
 import type { createInstallPlanning } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow-planning.ts";
 import type { PreparedPluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import type { CascadeThreePhaseArgs } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
+import type { CatalogPlugin, InstallTestOwner } from "./install-flow-fixture.ts";
 
 type InstallPlanningComposition = ReturnType<typeof createInstallPlanning>;
 

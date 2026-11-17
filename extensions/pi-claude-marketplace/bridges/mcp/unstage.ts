@@ -64,13 +64,13 @@ import {
   type McpServerKey,
 } from "./adapter-doc.ts";
 
-import type { UnstageMcpInput, UnstageMcpResult } from "./types.ts";
 import type {
   McpConfigFileNotice,
   McpConfigNotice,
   McpOverrideRestoredNotice,
 } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { UnstageMcpInput, UnstageMcpResult } from "./types.ts";
 
 /** One config file and the plugin's entries in it. */
 interface UnstageTarget {

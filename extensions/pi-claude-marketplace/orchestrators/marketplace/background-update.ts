@@ -20,9 +20,9 @@
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 
+import type { InputEvent, SessionShutdownEvent } from "../../platform/pi-api.ts";
 import type { BackgroundGate } from "./background-gate.ts";
 import type { BackgroundContext, BackgroundPass } from "./background-pass.ts";
-import type { InputEvent, SessionShutdownEvent } from "../../platform/pi-api.ts";
 
 export interface BackgroundUpdateDeps {
   readonly gate: BackgroundGate;

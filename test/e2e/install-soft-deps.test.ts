@@ -18,8 +18,8 @@ import {
 import { installTargetWithMockPi, withE2EEnvironment } from "./_helpers.ts";
 import { E2E_MARKETPLACE_NAME } from "./_targets.ts";
 
-import type { E2EEnvironment } from "./_helpers.ts";
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { E2EEnvironment } from "./_helpers.ts";
 import type { SlashCommandInfo, ToolInfo } from "@earendil-works/pi-coding-agent";
 
 // Per-row soft-dep marker contract strings (CMC-13 / MSG-SD-1..2). Each

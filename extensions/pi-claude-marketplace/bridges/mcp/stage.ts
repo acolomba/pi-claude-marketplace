@@ -75,17 +75,6 @@ import {
 import { isOwnedBy, isPlainObject, pluginSetFieldsOf } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 
-import type { McpSubstitutionContext, VariableReport } from "./substitute.ts";
-import type {
-  McpReplacement,
-  PreparedMcpStaged,
-  PreparedMcpStaging,
-  RawMcpDoc,
-  RemoveLegacyMcpResult,
-  StageMcpCommitResult,
-  StageMcpInput,
-  StagedMcpRecord,
-} from "./types.ts";
 import type {
   McpConfigFileNotice,
   McpConfigNotice,
@@ -98,6 +87,17 @@ import type {
 } from "../../shared/notification-types.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { McpSubstitutionContext, VariableReport } from "./substitute.ts";
+import type {
+  McpReplacement,
+  PreparedMcpStaged,
+  PreparedMcpStaging,
+  RawMcpDoc,
+  RemoveLegacyMcpResult,
+  StageMcpCommitResult,
+  StageMcpInput,
+  StagedMcpRecord,
+} from "./types.ts";
 
 /** A file a replace is about to write, and what it held before. */
 interface PriorFile {

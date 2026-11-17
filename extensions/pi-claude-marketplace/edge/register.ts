@@ -82,11 +82,11 @@ import { makeUpdateHandler } from "./handlers/plugin/update.ts";
 import { registerListMarketplacesTool, registerListPluginsTool } from "./handlers/tools.ts";
 import { routeClaudePlugin, selectClaudePluginRoute } from "./router.ts";
 
-import type { SubcommandHandlers } from "./router.ts";
-import type { EdgeDeps } from "./types.ts";
 import type { InstallHooksRouting } from "../orchestrators/plugin/install-disable-cascade.ts";
 import type { UpdatePluginsFn } from "../orchestrators/plugin/update-flow.ts";
 import type { ExtensionAPI } from "../platform/pi-api.ts";
+import type { SubcommandHandlers } from "./router.ts";
+import type { EdgeDeps } from "./types.ts";
 
 const COMMAND_DESCRIPTION =
   "Manage Claude plugin marketplaces and plugins. Bootstrap, install, " +

@@ -1,3 +1,4 @@
+import type { Scope } from "../../shared/types.ts";
 import type {
   EnabledPluginRef,
   EnabledPluginRefsResult,
@@ -5,7 +6,6 @@ import type {
   MergedClaudeSettings,
   ParseEnabledPluginRefResult,
 } from "./types.ts";
-import type { Scope } from "../../shared/types.ts";
 
 function parseEnabledPluginRef(raw: string): ParseEnabledPluginRefResult {
   const trimmed = raw.trim();

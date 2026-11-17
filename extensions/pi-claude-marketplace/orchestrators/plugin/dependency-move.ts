@@ -34,17 +34,6 @@ import { isUpdatePreflightOutcome, preparePluginUpdate } from "./update-prefligh
 import { updatedRowFromOutcome } from "./update-row.ts";
 import { assertUpdateNamesFree } from "./update-swap.ts";
 
-import type {
-  DependencyMoveRequest,
-  PlannedCandidate,
-  PlannedDependencyMove,
-} from "./dependency-plan.ts";
-import type {
-  MaterializationPolicy,
-  PreparedPluginUpdate,
-  PreparePluginUpdateOptions,
-} from "./update-preflight.ts";
-import type { CascadeThreePhaseArgs, UpdateRunOutcome } from "./update-swap.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { SoftDepStatus } from "../../platform/pi-api.ts";
@@ -54,7 +43,18 @@ import type { Scope } from "../../shared/types.ts";
 import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { DependencyStagingDiagnostic, UpdateDependencyRow } from "../types.ts";
+import type {
+  DependencyMoveRequest,
+  PlannedCandidate,
+  PlannedDependencyMove,
+} from "./dependency-plan.ts";
 import type { UpdateHooksRouting } from "./update-cascade.ts";
+import type {
+  MaterializationPolicy,
+  PreparedPluginUpdate,
+  PreparePluginUpdateOptions,
+} from "./update-preflight.ts";
+import type { CascadeThreePhaseArgs, UpdateRunOutcome } from "./update-swap.ts";
 
 /** The collaborators every dependency move of one operation shares. */
 export interface DependencyMoveContext {

@@ -87,7 +87,6 @@ import { buildInstalledPluginRecord, seedAutoupdateConfig } from "./handlers/mar
 import { createJsonCapture } from "./json-capture.ts";
 import { createNotificationBoundary, expectSoftDepProbes } from "./notification-boundary.ts";
 
-import type { Notification } from "./notification-boundary.ts";
 import type { EdgeDeps } from "../../extensions/pi-claude-marketplace/edge/types.ts";
 import type { ClaudeImportExecutionResult } from "../../extensions/pi-claude-marketplace/orchestrators/import/index.ts";
 import type { UpdatePluginsFn } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
@@ -106,6 +105,7 @@ import type {
 } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
+import type { Notification } from "./notification-boundary.ts";
 import type {
   AutocompleteItem,
   AutocompleteProvider,

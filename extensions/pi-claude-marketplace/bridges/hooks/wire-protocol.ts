@@ -38,8 +38,8 @@
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
 
-import type { HookExecResult } from "./exec-result.ts";
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
+import type { HookExecResult } from "./exec-result.ts";
 
 // D-CF5-13: the events on which Claude Code adds plain stdout as context.
 const PLAIN_CONTEXT_EVENTS: ReadonlySet<BucketAEvent> = new Set([

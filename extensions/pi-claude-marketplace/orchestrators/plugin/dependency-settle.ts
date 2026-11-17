@@ -35,6 +35,12 @@ import { mcpConfigNoticesMember } from "../marketplace/shared.ts";
 import { failedMoveRow, supersedePinRefreshes } from "./dependency-move.ts";
 import { renderRequestedRanges } from "./dependency-plan.ts";
 
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type {
+  DependencyStagingDiagnostic,
+  MovedDependency,
+  UpdateDependencyRow,
+} from "../types.ts";
 import type { DependencyMoveRun } from "./dependency-move.ts";
 import type {
   DependencyMoveRequest,
@@ -45,12 +51,6 @@ import type {
 import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
 import type { CascadePlan, PlannedCascadeMember } from "./install-cascade.ts";
 import type { UpdateDependencySettlement } from "./update-swap.ts";
-import type { McpConfigNotice } from "../../shared/notification-types.ts";
-import type {
-  DependencyStagingDiagnostic,
-  MovedDependency,
-  UpdateDependencyRow,
-} from "../types.ts";
 
 /**
  * What one locked run of the closure cascade did. D-PL1-16: `installed`

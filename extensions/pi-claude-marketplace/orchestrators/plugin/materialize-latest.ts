@@ -14,6 +14,9 @@ import { DEFAULT_PACKAGE_INSTALL_OPS, installUpdatedPackages } from "./package-i
 import { isUpdatePreflightOutcome, preparePluginUpdate } from "./update-preflight.ts";
 import { preflightMove, swapPluginUpdate } from "./update-swap.ts";
 
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
+import type { PluginUpdateFailedOutcome, RevisionMove } from "../types.ts";
 import type { PackageInstallOps } from "./package-install.ts";
 import type {
   MaterializationPolicy,
@@ -26,9 +29,6 @@ import type {
   UpdateDependencySettlement,
   UpdateRunOutcome,
 } from "./update-swap.ts";
-import type { McpConfigNotice } from "../../shared/notification-types.ts";
-import type { StagingWarning } from "../../shared/staging-warnings.ts";
-import type { PluginUpdateFailedOutcome, RevisionMove } from "../types.ts";
 
 /**
  * UPR-03: what one target's runner reported, so a thrown failure can name the

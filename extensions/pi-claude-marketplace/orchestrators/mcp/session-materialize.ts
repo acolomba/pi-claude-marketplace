@@ -14,9 +14,9 @@ import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { openNotificationRun } from "../../shared/notification-run.ts";
 
+import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { AgentGrantsStepInput } from "./agent-grants-step.ts";
 import type { BuiltinRegistrationStepInput } from "./builtin-registration-step.ts";
-import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 
 /** Runs the MCP session steps for one `session_start`. It never rejects (NFR-2). */
 export type McpSessionMaterializer = (pi: ExtensionAPI, ctx: ExtensionContext) => Promise<void>;
