@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Plugin agents, MCP servers, skills, commands, workflows, and hooks now behave more like Claude Code. Agents and MCP servers need pi-subagents 0.87.0 or later and pi-mcp-adapter 7.0.1 or later in 7.x.
+- Plugin agents, MCP servers, skills, commands, workflows, and hooks now behave more like Claude Code. Agents and MCP servers need pi-subagents 0.87.0 or later and pi-mcp-adapter 7.0.1 or later in 7.x. (#324)
 
   - These versions fix plugin MCP grants and shorten long tool names for Pi's 64-character limit.
   - `--map-model` now writes a bare model ID, so an agent prefers the session's provider. An installed agent keeps its old ID until the next `update --map-model`.
