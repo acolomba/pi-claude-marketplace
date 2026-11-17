@@ -64,7 +64,6 @@ import {
 import { readRecordDeclarations } from "./dependency-index.ts";
 import { garbageCollectWorkflowsStaging } from "./workflows-staging-gc.ts";
 
-import type { MarketplaceStateRecord } from "./dependency-index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { ManifestBoundary } from "../../domain/manifest-containment.ts";
 import type { MaterializablePlugin, ResolveContext } from "../../domain/resolver-types.ts";
@@ -81,6 +80,7 @@ import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { MarketplaceStateRecord } from "./dependency-index.ts";
 
 /**
  * The degradation signals ONE `runInstallLedger` run produces, carried together

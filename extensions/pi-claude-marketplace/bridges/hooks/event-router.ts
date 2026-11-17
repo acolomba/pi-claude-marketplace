@@ -89,14 +89,6 @@ import {
 } from "./settle.ts";
 
 import type {
-  CompositeDispatchEvent,
-  CompositeEventFor,
-  CompositeReturnFor,
-  HookExecutor,
-} from "./dispatch.ts";
-import type { FollowUpTurnEnd } from "./event-adapters.ts";
-import type { HooksRuntime } from "./runtime.ts";
-import type {
   BeforeAgentStartEvent,
   BeforeAgentStartEventResult,
   ExtensionAPI,
@@ -106,6 +98,14 @@ import type {
   SessionShutdownEvent,
 } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
+import type {
+  CompositeDispatchEvent,
+  CompositeEventFor,
+  CompositeReturnFor,
+  HookExecutor,
+} from "./dispatch.ts";
+import type { FollowUpTurnEnd } from "./event-adapters.ts";
+import type { HooksRuntime } from "./runtime.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Cache key helper (D-59-02 + marketplace inclusion)

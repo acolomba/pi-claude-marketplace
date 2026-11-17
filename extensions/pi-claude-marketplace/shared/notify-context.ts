@@ -11,9 +11,9 @@ import {
   type WithPlugins,
 } from "./notification-types.ts";
 
+import type { NotificationContext } from "../platform/pi-api.ts";
 import type { RowPolicy } from "./notification-resolve.ts";
 import type { NotificationRun } from "./notification-run.ts";
-import type { NotificationContext } from "../platform/pi-api.ts";
 
 /** A command label and a total semantic policy for its own row statuses. */
 export interface CommandContext<Status extends string> {

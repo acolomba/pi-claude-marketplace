@@ -50,14 +50,6 @@ import { buildReconcileAppliedCascade } from "./notify.ts";
 import { planReconcile } from "./plan.ts";
 import { composeLayerMarketplaceCause, RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
 
-import type { PerEntryOutcome } from "./apply-outcomes.ts";
-import type { ScopeSatisfactionVerdict } from "./dependency-verdict.ts";
-import type {
-  McpMigrationInput,
-  McpMigrationStep,
-  ReconcilePlan,
-  ScopeReadResult,
-} from "./types.ts";
 import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
 import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
@@ -68,6 +60,14 @@ import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice, McpMigrationRow } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { InstallHooksRouting } from "../plugin/install-disable-cascade.ts";
+import type { PerEntryOutcome } from "./apply-outcomes.ts";
+import type { ScopeSatisfactionVerdict } from "./dependency-verdict.ts";
+import type {
+  McpMigrationInput,
+  McpMigrationStep,
+  ReconcilePlan,
+  ScopeReadResult,
+} from "./types.ts";
 
 /** Reads the one state snapshot selected by the reconcile read pass. */
 export interface ReconcileStateReader {

@@ -26,8 +26,8 @@ import { substituteClaudeVars } from "../../shared/vars.ts";
 
 import { preloadedSkillNames } from "./convert.ts";
 
-import type { AgentSkillSource, DiscoveredAgent, SkillPreload } from "./types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
+import type { AgentSkillSource, DiscoveredAgent, SkillPreload } from "./types.ts";
 
 /** The arguments of `readSkillPreloads`. */
 export interface ReadSkillPreloadsInput {

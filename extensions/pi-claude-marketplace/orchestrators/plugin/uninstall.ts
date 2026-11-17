@@ -136,7 +136,6 @@ import {
   UNINSTALL_CONTEXT,
 } from "./uninstall.messaging.ts";
 
-import type { IndexedRecord, ScopeDeclarationIndexResult } from "./dependency-index.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { DeclarationIndex, DeclaringLayers } from "../../domain/dependency-orphans.ts";
 import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
@@ -148,6 +147,7 @@ import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { UnstageOutcome } from "../marketplace/shared.ts";
+import type { IndexedRecord, ScopeDeclarationIndexResult } from "./dependency-index.ts";
 
 /**
  * RECON-03: controls how `uninstallPlugin` surfaces

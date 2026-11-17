@@ -32,9 +32,9 @@ import {
 } from "./config-io.ts";
 import { isRecordedButDisabled } from "./state-io.ts";
 
+import type { ParsedSource } from "../domain/source.ts";
 import type { ScopedLocations } from "./locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "./state-io.ts";
-import type { ParsedSource } from "../domain/source.ts";
 
 /**
  * MIG-02: result of a first-run migration attempt.

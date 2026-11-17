@@ -56,6 +56,18 @@ import {
   type LedgerDegradationSignals,
 } from "./shared.ts";
 
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
+import type { ClosureLookup, ClosureSubject } from "../../domain/dependency-closure.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
+import type { Scope } from "../../shared/types.ts";
+import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
+import type { LockedStateTransaction } from "../../transaction/with-state-guard.ts";
+import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { InstallPluginOutcome, MovedDependency } from "../types.ts";
 import type { CarriedAdd } from "./carried-marketplace-adds.ts";
 import type { DependencyCaller, DependencyTarget } from "./dependency-bindings.ts";
 import type { DependencyMoveContext, DependencyMoveMemos } from "./dependency-move.ts";
@@ -85,18 +97,6 @@ import type {
   InstallLedgerSummary,
 } from "./install-outcome.ts";
 import type { PreparedPluginUpdate } from "./update-preflight.ts";
-import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
-import type { ClosureLookup, ClosureSubject } from "../../domain/dependency-closure.ts";
-import type { NotificationContext } from "../../platform/pi-api.ts";
-import type { CompletionCache } from "../../shared/completion-cache.ts";
-import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { McpConfigNotice } from "../../shared/notification-types.ts";
-import type { StagingWarning } from "../../shared/staging-warnings.ts";
-import type { Scope } from "../../shared/types.ts";
-import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
-import type { LockedStateTransaction } from "../../transaction/with-state-guard.ts";
-import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type { InstallPluginOutcome, MovedDependency } from "../types.ts";
 
 /**
  * MISS-01 / D-09-05: what a reload's missing-dependency step needs to install

@@ -1,12 +1,12 @@
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { isScopeBearingListRow } from "../../shared/notification-types.ts";
 
-import type { InstalledListRow } from "./list-installed-row.ts";
-import type { ListMsg } from "./list.messaging.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { PluginNotificationMessage } from "../../shared/notification-types.ts";
 import type { MarketplaceRows } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { InstalledListRow } from "./list-installed-row.ts";
+import type { ListMsg } from "./list.messaging.ts";
 
 /** Project-scope inventory rows adopted by a cloned user marketplace. */
 export interface OrphanFold {

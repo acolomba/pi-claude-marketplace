@@ -29,14 +29,6 @@ import { buildInstalledScopeDeclarationDetail } from "./dependency-index.ts";
 import { probeDependencyTags } from "./dependency-tag-probe.ts";
 import { probeMarketplaceTags } from "./marketplace-tag-probe.ts";
 
-import type {
-  CatalogConstraintSeam,
-  ConstraintHolder,
-  ConstraintRequester,
-  UpdateConstraintVerdict,
-} from "./constraint-fold.ts";
-import type { AddressedDependency, ScopeDeclarationDetailOptions } from "./dependency-index.ts";
-import type { DependencyTagListingFailureReason } from "./dependency-tag-probe.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
@@ -46,6 +38,14 @@ import type { RemoteTag } from "../../platform/git.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type {
+  CatalogConstraintSeam,
+  ConstraintHolder,
+  ConstraintRequester,
+  UpdateConstraintVerdict,
+} from "./constraint-fold.ts";
+import type { AddressedDependency, ScopeDeclarationDetailOptions } from "./dependency-index.ts";
+import type { DependencyTagListingFailureReason } from "./dependency-tag-probe.ts";
 
 /**
  * The declaration-walk and tag-probe operations this leaf composes,

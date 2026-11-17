@@ -1,7 +1,7 @@
-import type { MockCtx, MockPi } from "./mock-pi.ts";
 import type { NotificationPresentation } from "../../../extensions/pi-claude-marketplace/shared/notification-present.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { NotificationMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import type { MockCtx, MockPi } from "./mock-pi.ts";
 
 /** The input and expectations every catalog fixture states. */
 interface CatalogFixtureBase {
