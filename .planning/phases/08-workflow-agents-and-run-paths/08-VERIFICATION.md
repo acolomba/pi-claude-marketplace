@@ -1,10 +1,10 @@
 ---
 phase: 08-workflow-agents-and-run-paths
-verified: 2026-11-17T02:16:00Z
+verified: 2026-11-17T03:49:14Z
 status: passed
 score: 48/48 must-haves verified (44 VERIFIED, 4 PASSED (override))
 covered_files: [".planning/phases/08-workflow-agents-and-run-paths/08-01-PLAN.md",".planning/phases/08-workflow-agents-and-run-paths/08-01-SUMMARY.md",".planning/phases/08-workflow-agents-and-run-paths/08-02-PLAN.md",".planning/phases/08-workflow-agents-and-run-paths/08-02-SUMMARY.md",".planning/phases/08-workflow-agents-and-run-paths/08-03-PLAN.md",".planning/phases/08-workflow-agents-and-run-paths/08-03-SUMMARY.md",".planning/phases/08-workflow-agents-and-run-paths/08-04-PLAN.md",".planning/phases/08-workflow-agents-and-run-paths/08-04-SUMMARY.md",".planning/phases/08-workflow-agents-and-run-paths/08-05-PLAN.md",".planning/phases/08-workflow-agents-and-run-paths/08-05-SUMMARY.md",".planning/phases/08-workflow-agents-and-run-paths/08-06-PLAN.md",".planning/phases/08-workflow-agents-and-run-paths/08-06-SUMMARY.md",".planning/phases/08-workflow-agents-and-run-paths/08-07-PLAN.md",".planning/phases/08-workflow-agents-and-run-paths/08-07-SUMMARY.md",".planning/phases/08-workflow-agents-and-run-paths/08-SPIKE-S5.md","CHANGELOG.md","README.es.md","README.md","docs/mcp-compatibility.md","docs/output-catalog.md","docs/prd/parity-gaps-prd.md","docs/workflows-compatibility.md","extensions/pi-claude-marketplace/bridges/agents/convert.ts","extensions/pi-claude-marketplace/bridges/workflows/discover.ts","extensions/pi-claude-marketplace/domain/name.ts","extensions/pi-claude-marketplace/domain/workflow-script.ts","extensions/pi-claude-marketplace/orchestrators/plugin/discover-names.ts","extensions/pi-claude-marketplace/orchestrators/plugin/info.ts","extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts","extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts","features/agent/frontmatter.feature","features/lib/hermetic-git.ts","features/step_definitions/project.steps.ts","features/step_definitions/workflow/runs.steps.ts","features/workflow/agent-steps.feature","features/workflow/agent-types.feature","features/workflow/collisions.feature","features/workflow/run.feature","test/architecture/catalog-uat/catalog-contract.test.ts","test/architecture/catalog-uat/catalog-parser.test.ts","test/architecture/catalog-uat/catalog-wire.test.ts","test/architecture/catalog-uat/fixtures/plugin-info.ts","test/bridges/workflows/discover.test.ts","test/domain/workflow-script.test.ts","test/integration/optional-peer-suite-versions.json","test/orchestrators/plugin/discover-names.test.ts","test/orchestrators/plugin/info.test.ts"]
-covered_digest: "v4:sha256:a909f979de052d99c9546ed7aefcb532f7e3d2a75703d4098d8c46f412f964b9"
+covered_digest: "v4:sha256:c0b9ae1e009ed2f771315ca866e2a413dd038a4f4a7ea54b3ea57db66529bf2a"
 behavior_unverified: 0
 overrides_applied: 4
 overrides:
@@ -17,7 +17,7 @@ overrides:
     accepted_by: "project decision D-PG8-11 (PROJECT.md decision log, option A); maintainer review 2026-11-16"
     accepted_at: "2026-11-16T07:32:47Z"
   - must_have: "08-07 truth: each pinned count of the catalog tests grows by exactly one state: 325 states in the contract test and in the parser test, and 325 emitted keys and 338 presented sources in the wire test; the section count and the module count stay at 22"
-    reason: "Superseded by two Phase 10 decisions that added catalog states after this phase. D-PG10-06 (unset required options; commits 1618576f, 00a9f9c8 and the gaps-mcp merge 17d7bae4) added three states, and D-PG10-25 (unreadable recorded options fail closed; commit 6d9a3cdd) added `reconcile-plugin-options-unreadable` (docs/output-catalog.md:4201). The pins now read 329 states and 55,844 bytes (catalog-contract.test.ts:21-22), 329 parsed tuples (catalog-parser.test.ts:73, :81), and 342 presented sources and 329 emitted keys (catalog-wire.test.ts:542, :752). The phase's own +1 state is intact (docs/output-catalog.md:3188, fixture plugin-info.ts:221), and the section and module counts are still 22 (catalog-contract.test.ts:19-20). The named contract and parser tests pass at 329 in this pass. Both decisions are locked by the maintainer review of 2026-11-16."
+    reason: "Superseded by two Phase 10 decisions that added catalog states after this phase. D-PG10-06 (unset required options; commits 1618576f, 00a9f9c8 and the gaps-mcp merge 17d7bae4) added three states, and D-PG10-25 (as reversed by the maintainer review of 2026-11-16: unreadable recorded options fail closed with `{unreadable}`; commit 6d9a3cdd) added `reconcile-plugin-options-unreadable` (docs/output-catalog.md:4201). The pins now read 329 states and 55,844 bytes (catalog-contract.test.ts:21-22), 329 parsed tuples (catalog-parser.test.ts:73, :81), and 342 presented sources and 329 emitted keys (catalog-wire.test.ts:542, :752). The phase's own +1 state is intact (docs/output-catalog.md:3188, fixture plugin-info.ts:221), and the section and module counts are still 22 (catalog-contract.test.ts:19-20). The named contract test passes at 329 in this pass. The maintainer review of 2026-11-16 confirmed D-PG10-06 (PROJECT.md:2435) and reversed D-PG10-25 to fail closed (PROJECT.md:2441); both rows are settled, and the reversed D-PG10-25 is the one that adds the state."
     accepted_by: "project decisions D-PG10-06 and D-PG10-25 (PROJECT.md decision log); maintainer review 2026-11-16"
     accepted_at: "2026-11-17T02:16:00Z"
   - must_have: "08-03 truth: two scripts of one plugin with one `meta.name` fail the whole install and leave no installed plugin and no declaration; the title says that Claude Code keeps the last script that parses (D-PG8-07 as measured)"
@@ -26,17 +26,18 @@ overrides:
     accepted_at: "2026-11-17T02:16:00Z"
 re_verification:
   previous_status: passed
-  previous_score: "48/48 (45 VERIFIED, 3 PASSED (override))"
-  reason: "staleness: after the previous report (328266f5, 2026-11-16T07:32:47Z), the maintainer review fixes changed covered files. b35b86d1 (D-PG8-07 changed to keep the last script) and 3488bf29 (D-PG8-18) changed domain/workflow-script.ts, features/workflow/collisions.feature, docs/workflows-compatibility.md and CHANGELOG.md. 6d9a3cdd (D-PG10-25) changed orchestrators/plugin/info.ts, docs/output-catalog.md and the three catalog pin tests. 594ea843, b5692689, 6826f6f6 and 9e3dc68b changed README.md, README.es.md, CHANGELOG.md, docs/mcp-compatibility.md, docs/output-catalog.md and docs/prd/parity-gaps-prd.md. 567585d3 closed T-08-13 and recorded the maintainer review as the acceptance of each override."
+  previous_score: "48/48 (44 VERIFIED, 4 PASSED (override))"
+  reason: "staleness: after the previous report (79f3c194, 2026-11-17T02:16:00Z), commit 421863f6 (docs: align decision wording with the maintainer review) changed two covered files, docs/mcp-compatibility.md and docs/prd/parity-gaps-prd.md. In docs/mcp-compatibility.md it dropped the `waits for maintainer review` and `pending maintainer review` wording of D-PG9-01 and D-PG9-16 (lines 142, 766-767, outside the phase) and rewrote the last sentence of the D-PG8-14 bullet (:833), which now ends `whether the converter should also exclude the two tools is tracked in BACKLOG AGTWORKFLOWAMBIENT-01` and names D-PG8-11..15. In docs/prd/parity-gaps-prd.md it rewrote the decision-14 sentence of WF-07 (:688) to say that of two scripts with one name the last one is installed and the install no longer fails (D-PG8-07). ebcce31e then changed one sentence of docs/mcp-compatibility.md:435 (the D-PG7-17 empty-model display, a Phase 7 passage). Every edit replaced lines in place, so no phase citation moved. No source, test, feature or other build input changed after 79f3c194."
   gaps_closed: []
   gaps_remaining: []
   regressions: []
-  overrides_added:
-    - "08-03 two-scripts-fail-the-install truth (D-PG8-07 as changed for E5, with D-PG8-18; maintainer review 2026-11-16)"
+  overrides_added: []
   overrides_updated:
-    - "08-07 pinned catalog counts: now 329/55,844/342/329 after D-PG10-25, which joins D-PG10-06 as the reason"
-    - "08-05 maintainer-chose clause: the reason now records the maintainer's confirmation of option A as the current state"
+    - "08-07 pinned catalog counts: the reason now says that the maintainer review confirmed D-PG10-06 and reversed D-PG10-25 to fail closed, where it said that both were locked; accepted_by and the pinned counts are unchanged"
   overrides_removed: []
+  info_resolved:
+    - "docs/prd/parity-gaps-prd.md:688 no longer says that two scripts with one name fail the whole install (421863f6)"
+    - "docs/mcp-compatibility.md:833 no longer calls the workflow tools of a no-tools child an open question for the maintainer; it points at BACKLOG AGTWORKFLOWAMBIENT-01 (421863f6)"
 human_verification: []
 ---
 
@@ -44,15 +45,22 @@ human_verification: []
 
 **Phase Goal:** A plugin workflow runs the plugin's own agents, and an install says when a script names an agent the plugin does not have. An agent whose source grants `Workflow` gets no workflow tool, as no Claude Code subagent does (D-PG8-11 option A, amended with criterion 5). The run paths with no scenario today get one, and the compatibility page says what a workflow subagent can reach.
 
-**Verified:** 2026-11-17T02:16:00Z
+**Verified:** 2026-11-17T03:49:14Z
 **Status:** passed. All five roadmap criteria hold as written on the current tree. Of the 43 counted plan truths, 39 hold as written and 4 pass by override. The overrides cover the note suffix changed by review fix WR-02, the option A choice answered by the autonomous run at the checkpoint, the catalog pins raised by D-PG10-06 and D-PG10-25, and the two-scripts truth that D-PG8-07 changed to keep the last script. The maintainer review of 2026-11-16 confirmed each decision behind the overrides. No item waits for the maintainer.
-**Re-verification:** Yes. The previous report (passed, 48/48, three overrides, commit 328266f5) became stale, because the maintainer review fixes changed its covered files.
+**Re-verification:** Yes. The previous report (passed, 48/48, four overrides, commit 79f3c194) became stale, because commit 421863f6 changed the wording of two covered docs. No source, test or feature file changed, and the score, the status and the four overrides are unchanged.
 
 ## Verification Basis
 
-This pass re-checked every roadmap criterion and every plan must-have against the current tree, `features/gaps` at `ed3193e7`. It did not reuse the earlier verdicts. Summaries were not taken as evidence. For each truth that the changed files touch, the implementing code, its callers, and the scenario or test that exercises it were read again. Citations are current line numbers. **N/** means `extensions/pi-claude-marketplace/orchestrators/plugin/`, **T/** means `features/workflow/agent-types.feature`, and **W/** means `docs/workflows-compatibility.md`.
+This pass re-checked the roadmap criteria and plan must-haves that cite the changed docs against the current tree, `features/gaps` at `bb08f312`, and re-ran three named tests. The other verdicts rest on files that did not change after 79f3c194 (`git diff --name-only 79f3c194 HEAD` lists only planning Markdown and four docs). The earlier pass at `ed3193e7` re-checked every verdict. Summaries were not taken as evidence. For each truth that the changed files touch, the implementing code, its callers, and the scenario or test that exercises it were read again. Citations are current line numbers. **N/** means `extensions/pi-claude-marketplace/orchestrators/plugin/`, **T/** means `features/workflow/agent-types.feature`, and **W/** means `docs/workflows-compatibility.md`.
 
-What changed since the previous report:
+What changed since the previous report (79f3c194):
+
+- 421863f6 rewrote the last sentence of the D-PG8-14 bullet at docs/mcp-compatibility.md:833. It used to end with "an open question for the maintainer". It now says that this extension does not remove the two tools, that a `Workflow` grant stays dropped (D-PG8-11..15), and that whether the converter should also exclude them is tracked in BACKLOG AGTWORKFLOWAMBIENT-01 (BACKLOG.md:5465). The measured facts of the 08-05 truth are unchanged: a no-tools background child is offered `workflow` and `workflow_control`, `disallowedTools: Workflow` does not remove them (D-PG8-14), and the bullet says it was measured by spike S5 on 2026-11-14 with Pi 1.5.0, pi-subagents 0.88.1 and engine 3.15.0. This matches D-PG8-11..15 as locked (PROJECT.md:2424).
+- 421863f6 rewrote the decision-14 sentence at docs/prd/parity-gaps-prd.md:688. It now says that since 2026-11-16 the last of two scripts with one name is installed, as in Claude Code, and the install no longer fails (D-PG8-07), and that all symbolic links are still refused (D-14). This agrees with D-PG8-07 as changed for E5 (PROJECT.md:2422), with the decision row at :178, and with override 4. Lines :677, :683 and :955 did not change.
+- 421863f6 also dropped the pending wording of D-PG9-01 and D-PG9-16 in docs/mcp-compatibility.md (:142, :766-767), and ebcce31e changed the D-PG7-17 sentence at :435. Neither passage is a Phase 8 citation. The D-PG8-11 passage at :415-422 is unchanged.
+- 421863f6 changed ROADMAP.md only in the Phase 10 closeout line. Phase 8's goal and criteria did not change.
+
+What the previous pass (at `ed3193e7`) recorded as changed since 328266f5:
 
 - `domain/workflow-script.ts` lost `assertNoWorkflowNameCollisions` and gained `unelideClashingWorkflowNames` (:254) and `keepLastWorkflowPerName` (:327). `bridges/workflows/discover.ts:446` applies both to the discovered scripts, so install, update, reinstall, apply and `info` (through `discoverPluginWorkflows`, N/info.ts:1266) see the same kept scripts. `WorkflowNameCollisionError` is gone from `shared/errors.ts`, and no file under `extensions/`, `features/` or `test/` names it.
 - `features/workflow/collisions.feature`: the scenario at :53 now pins keep-last, and the scenario at :81 pins D-PG8-18.
@@ -62,9 +70,9 @@ What changed since the previous report:
 - docs/prd/parity-gaps-prd.md: WF-05 gained an amendment line (:677), and the WF-04 acceptance cell now says S5 measured the adapter setting (:683).
 - CHANGELOG.md:39 now says that Claude Code stops that step, not the run (594ea843). :41-42 record the keep-last rule and D-PG8-18.
 
-**Gate G (reused, not re-run):** `npm run check` exited 0 at `333784b7` on Node v26.13.1, with a hermetic `PI_CODING_AGENT_DIR` (log `/tmp/pg-final.log`). The verifier read the log. All seven static checks passed (typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, check:features). Then the unpaired and integration tests passed, with pi-subagents 0.88.1, pi-mcp-adapter 7.0.1 and @quintinshaw/pi-dynamic-workflows 3.15.0 from `node_modules/.cache/optional-peers`. The real-child probes record `piSubagents: 0.88.1` and children in mode `background`, state `complete`. The adapter cucumber profile ran 2100/2100 scenarios and 25988/25988 steps (seed 478645). This covers every phase scenario: the four workflow features, both collision scenarios, and the untagged guard scenario at features/agent/frontmatter.feature:1338. The builtin profile ran 204/204 scenarios and 2762/2762 steps (seed 413244). Direct coverage merged 376 LCOV records. The log ends with `exit=0`. `git diff --name-only 333784b7 HEAD` lists only two planning Markdown files (06-VERIFICATION.md and 11-VERIFICATION.md), so G covers every executable input of HEAD. The suite was not repeated.
+**Gate G (reused, not re-run):** `npm run check` exited 0 at `421863f6` (log `/tmp/pg-final2.log`, which the verifier read). The adapter cucumber profile ran 2100/2100 scenarios and 25988/25988 steps (seed 115283). This covers every phase scenario: the four workflow features, both collision scenarios, and the untagged guard scenario at features/agent/frontmatter.feature:1338. The builtin profile ran 204/204 scenarios and 2762/2762 steps (seed 836824). Direct coverage merged 376 LCOV records, and the log ends with `exit=0`. `git diff --name-only 421863f6 HEAD` lists seven phase VERIFICATION.md files and docs/mcp-compatibility.md (ebcce31e, one sentence at :435). Docs are not build inputs, so G covers every executable input of HEAD. The suite was not repeated. The previous gate, at `333784b7` (`/tmp/pg-final.log`, seeds 478645 and 413244), also passed.
 
-**Independent checks (this pass):** 34 named tests, run with `node --import ./test/platform/isolated-pi-home.ts --test --test-isolation=none --test-reporter=tap --test-name-pattern '<name>' <file>` under a fresh `mktemp` HOME and `PI_CODING_AGENT_DIR` in the session scratchpad. All passed (see Behavioral Spot-Checks). `query verify.artifacts` gives 08-01 2/2, 08-02 3/3, 08-03 3/4, 08-04 1/1, 08-05 3/3, and 08-07 2/3. The 08-03 miss is the pattern `Claude Code keeps` in collisions.feature (override 4). The 08-07 miss is the pattern `EXPECTED_STATE_COUNT = 325` (override 3). 08-06 gives 0/4, which is expected, because every 08-06 artifact exists only under option B. `query verify.key-links` gives 2/2, 5/5, 3/3, 3/3, 3/3 and 3/3 for 08-01 to 08-05 and 08-07. 08-06 gives 3/4, and its one missing link is option-B only.
+**Independent checks (this pass):** three named tests, the `^PG-WF-02` set of discover-names.test.ts (23/23), the catalog contract test at 329 states (1/1), and the keep-last test of workflow-script.test.ts (1/1), run as below. All passed. **Independent checks (previous pass, ed3193e7):** 34 named tests, run with `node --import ./test/platform/isolated-pi-home.ts --test --test-isolation=none --test-reporter=tap --test-name-pattern '<name>' <file>` under a fresh `mktemp` HOME and `PI_CODING_AGENT_DIR` in the session scratchpad. All passed (see Behavioral Spot-Checks). `query verify.artifacts` gives 08-01 2/2, 08-02 3/3, 08-03 3/4, 08-04 1/1, 08-05 3/3, and 08-07 2/3. The 08-03 miss is the pattern `Claude Code keeps` in collisions.feature (override 4). The 08-07 miss is the pattern `EXPECTED_STATE_COUNT = 325` (override 3). 08-06 gives 0/4, which is expected, because every 08-06 artifact exists only under option B. `query verify.key-links` gives 2/2, 5/5, 3/3, 3/3, 3/3 and 3/3 for 08-01 to 08-05 and 08-07. 08-06 gives 3/4, and its one missing link is option-B only.
 
 ## Superseded mechanisms (later decisions)
 
@@ -127,7 +135,7 @@ What changed since the previous report:
 | 08-04 | No new engine request drafted; the summary lists the three PRD 8.4 requests (D-PG8-17) | ✓ VERIFIED | `git log --name-only e56d9386..a75956d6`: only W/. 08-04-SUMMARY.md:101 lists them; carrier BACKLOG.md:4583 (WFLENGINE-01). |
 | 08-05 | The maintainer chose option A or B at a checkpoint; the summary records the choice, decision ID and S5(a) verdicts | PASSED (override) | The autonomous run's orchestrator answered at the checkpoint, and the maintainer review of 2026-11-16 confirmed option A; see override 2. |
 | 08-05 | Option A: the agents text says the grant is dropped, Claude Code removes `Workflow` from every subagent, Pi has no main-session agent mode, commands and skills start workflows from the main session, and `tools: Workflow` alone still fails the install (AG-11) | ✓ VERIFIED | docs/mcp-compatibility.md:415-420 (one bullet each, AG-11 at :420); link to W/ `#what-a-workflow-subagent-can-reach` (:419). |
-| 08-05 | Option A: the text states, as S5 measured it, that a background child of an agent with no `tools` list is offered `workflow`, and that `disallowedTools: Workflow` does not remove it (D-PG8-14) | ✓ VERIFIED | docs/mcp-compatibility.md:833 (`measured by spike S5 on 2026-11-14`; D-PG8-14). |
+| 08-05 | Option A: the text states, as S5 measured it, that a background child of an agent with no `tools` list is offered `workflow`, and that `disallowedTools: Workflow` does not remove it (D-PG8-14) | ✓ VERIFIED | docs/mcp-compatibility.md:833 (`measured by spike S5 on 2026-11-14`; D-PG8-14). Re-read after 421863f6: the measured sentences are unchanged, and the residual now points at BACKLOG AGTWORKFLOWAMBIENT-01. |
 | 08-05 | Option A: README.md and README.es.md say in one sentence each that the grant is dropped, and the sentences agree | ✓ VERIFIED | README.md:27, README.es.md:27. |
 | 08-05 | Override candidate under option A: PG-WF-05 closes as not a gap; the orchestrator records the closure in REQUIREMENTS.md and ROADMAP.md | ✓ VERIFIED | REQUIREMENTS.md:51 and trace :196 (`Complete (not a gap, D-PG8-11)`); ROADMAP criterion 5 and the goal sentence amended (ace8c3e3). |
 | 08-05 | Every scenario runs in the harness sandbox, and the docs land with the behavior (D-PG8-16) | ✓ VERIFIED | `git log --name-only 9871a256..a179ee04`: the scenario, the passage and both READMEs in one commit. |
@@ -148,7 +156,7 @@ Not counted (option B not chosen, D-PG8-11): 08-05 truth 7 and 08-06 truths 2-9 
 | Artifact | Status | Details |
 |----------|--------|---------|
 | `.planning/phases/08-workflow-agents-and-run-paths/08-SPIKE-S5.md` | ✓ VERIFIED | 108 lines; rows and verdicts as above; versions match `test/integration/optional-peer-suite-versions.json` (`pi-subagents` 0.88.1). |
-| `docs/prd/parity-gaps-prd.md` | ✓ VERIFIED | S5 cell :955; WF-05 amendment :677. |
+| `docs/prd/parity-gaps-prd.md` | ✓ VERIFIED | S5 cell :955; WF-05 amendment :677; decision-14 sentence :688 agrees with D-PG8-07 (421863f6). |
 | N/discover-names.ts | ✓ VERIFIED | `workflowAgentNotes` exported (:272), consumed by install, update-swap and info. |
 | `features/workflow/agent-types.feature` | ✓ VERIFIED | 9 scenarios (T/:18-236). |
 | `features/workflow/{run,agent-steps}.feature`, `features/step_definitions/project.steps.ts` | ✓ VERIFIED | Four guard scenarios and the git step. |
@@ -172,7 +180,7 @@ Not counted (option B not chosen, D-PG8-11): 08-05 truth 7 and 08-06 truths 2-9 
 
 ## Behavioral Spot-Checks
 
-Each run used a fresh scratchpad `mktemp` HOME and `PI_CODING_AGENT_DIR`, with no services. Each reported `fail 0`.
+Each run used a fresh scratchpad `mktemp` HOME and `PI_CODING_AGENT_DIR`, with no services. Each reported `fail 0`. N1, N3 and the first N5 test were run again in this pass, at `bb08f312`; the others are from the pass at `ed3193e7`, and their inputs have not changed since.
 
 | ID | Named test (pattern) | File | Result |
 | --- | --- | --- | --- |
@@ -183,7 +191,7 @@ Each run used a fresh scratchpad `mktemp` HOME and `PI_CODING_AGENT_DIR`, with n
 | N5 | keeps only the last of two scripts that share one generated name; keeps the last claimant of each name and the order of the records it keeps | test/domain/workflow-script.test.ts | PASS (2/2) |
 | N6 | the four `unelideClashingWorkflowNames` cases (full name on clash, repeat until no clash, identical meta names left to keep-last, full name over the cap) | test/domain/workflow-script.test.ts | PASS (4/4) |
 | N7 | keeps the last script in file order when two files generate the same workflow name; keeps the full name of a prefixed script whose elided name another script declares (D-PG8-18) | test/bridges/workflows/discover.test.ts | PASS (2/2) |
-| G | `npm run check` at `333784b7` (same executable inputs as HEAD) | root scripts, both cucumber profiles | PASS (reused) |
+| G | `npm run check` at `421863f6` (same executable inputs as HEAD) | root scripts, both cucumber profiles | PASS (reused) |
 
 ## Probe Execution
 
@@ -210,9 +218,9 @@ No orphaned requirement: REQUIREMENTS.md maps exactly these four IDs to Phase 8,
 
 ### Info (non-blocking)
 
-- `docs/prd/parity-gaps-prd.md:688` still says that decision 14 covers "two scripts with one name fail the whole install". The decision table row 14 (:178) records that this is settled by D-PG8-07 and D-PG8-18, so only this sentence is out of date.
+- Resolved by 421863f6: `docs/prd/parity-gaps-prd.md:688` now says that the last of two scripts with one name is installed and the install no longer fails (D-PG8-07), in line with the decision table row 14 (:178).
 - `.planning/BACKLOG.md:4583` (WFLENGINE-01) names the scenario "... still runs, where Claude Code stops the step". The scenario title is "... where Claude Code fails the step" (T/:236).
-- `docs/mcp-compatibility.md:833` ends with "Whether this extension should exclude them is an open question for the maintainer". That is the residual of D-PG8-14, tracked as AGTWORKFLOWAMBIENT-01 (BACKLOG.md:5465). It is a backlog item, not a pending phase decision: D-PG8-11..15 is locked (PROJECT.md:2424).
+- Resolved by 421863f6: `docs/mcp-compatibility.md:833` no longer calls the workflow tools of a no-tools child an open question for the maintainer. It points at BACKLOG AGTWORKFLOWAMBIENT-01 (BACKLOG.md:5465), a backlog item, not a pending phase decision: D-PG8-11..15 is locked (PROJECT.md:2424).
 - 08-03-SUMMARY.md (:112-:145) and 08-05-SUMMARY.md (:37, :102, :109) are records of their plans. They describe the collision scenario as it was and the decisions as pending, which was true when they were written. PROJECT.md now holds the locked decisions.
 - The previous report noted that the goal sentence about starting a workflow was not amended. ROADMAP.md now states the goal in the delivered wording, so that item is resolved.
 
@@ -231,9 +239,9 @@ Nothing waits for the maintainer. The maintainer review of 2026-11-16 settled ev
 
 ## Gaps Summary
 
-There are no gaps and no regressions. On the current tree, all five roadmap criteria and all 43 counted plan truths of Phase 8 hold, and every citation points at a current line.
+There are no gaps and no regressions. On the current tree, all five roadmap criteria and all 43 counted plan truths of Phase 8 hold, and every citation points at a current line. Commit 421863f6 changed only wording in two covered docs. It aligned them with the locked decisions D-PG8-07 and D-PG8-11..15 and closed two of the Info items of the previous report.
 
-The maintainer review fixes touched the phase in three ways, and none breaks a criterion:
+The previous pass found that the maintainer review fixes touched the phase in three ways, and none breaks a criterion:
 
 - D-PG8-07 now keeps the last of two scripts with one name, as Claude Code does, and D-PG8-18 keeps both names that the prefix elision would merge. Criterion 3 still has a passing scenario for this run path, which now pins the new behavior. The 08-03 truth that described the old whole-install failure passes by override 4.
 - D-PG10-25 added one more catalog state, which raised the pinned catalog counts again. Override 3 now names both D-PG10-06 and D-PG10-25. The phase's own catalog state is unchanged.
@@ -243,5 +251,5 @@ The status stays `passed`, with 48/48: 44 VERIFIED and 4 PASSED (override).
 
 ---
 
-_Verified: 2026-11-17T02:16:00Z_
+_Verified: 2026-11-17T03:49:14Z_
 _Verifier: Claude (gsd-verifier)_
