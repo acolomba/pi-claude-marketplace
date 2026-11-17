@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Internal: the async hook behavioral tests no longer fail at random. (#323)
+
 - More plugin hook events now behave as in Claude Code, and the model-facing tools return what the model asks for. (#310)
 
   - A plugin's `async` hooks, Stop hooks included, now run in the background and give their JSON answer to the model's next call.

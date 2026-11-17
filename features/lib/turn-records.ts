@@ -77,34 +77,62 @@ export function isRunning(pid: number): boolean {
   }
 }
 
-interface StandInPid {
+/** One pid file in a harness directory: its name and the pid it holds. */
+export interface PidFile {
   readonly file: string;
   readonly pid: number;
 }
 
+/** Returns the text of `file`, or nothing when the file does not exist. */
+export async function readTextIfPresent(file: string): Promise<string | undefined> {
+  try {
+    return await readFile(file, "utf8");
+  } catch (error: unknown) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
+/**
+ * Reads each pid file in `directory` whose name `accepts` takes, in name
+ * order. A process removes its pid file when it exits, so a file that is gone
+ * between the listing and the read is left out: its process has exited.
+ */
+export async function readPidFiles(
+  directory: string,
+  accepts: (name: string) => boolean,
+): Promise<readonly PidFile[]> {
+  const names = (await readdir(directory)).filter(accepts).sort();
+  const texts = await Promise.all(
+    names.map((name) => readTextIfPresent(path.join(directory, name))),
+  );
+  return names.flatMap((file, index) => {
+    const text = texts[index];
+    return text === undefined ? [] : [{ file, pid: Number(text.trim()) }];
+  });
+}
+
 // A pid that is not an integer names no process to watch, so it counts as running.
-function stillRunning(standIns: readonly StandInPid[]): StandInPid[] {
+function stillRunning(standIns: readonly PidFile[]): PidFile[] {
   return standIns.filter(({ pid }) => !Number.isInteger(pid) || isRunning(pid));
 }
 
 /**
  * Asserts that every process a `*.pid` file in `directory` names has exited,
  * so a stand-in that outlived its profile Pi fails the scenario (HAR-05).
- * Each file holds one pid. The check reads the files once, then waits up to
- * `STAND_IN_EXIT_TIMEOUT_MS` for the processes to exit, because a stand-in
- * that Pi stopped tracking exits only when its stdin closes, a moment after
- * Pi exits (P2-DC-77). A process that still runs after the wait fails the
- * scenario.
+ * Each file holds one pid. The check reads the files once, through
+ * `readPidFiles()`, then waits up to `STAND_IN_EXIT_TIMEOUT_MS` for the
+ * processes to exit, because a stand-in that Pi stopped tracking exits only
+ * when its stdin closes, a moment after Pi exits (P2-DC-77). A process that
+ * still runs after the wait fails the scenario.
  */
 export async function assertStandInsStopped(directory: string): Promise<void> {
-  const names = (await readdir(directory)).filter((name) => name.endsWith(PID_SUFFIX)).sort();
-  const pids = await Promise.all(
-    names.map(async (name) => Number((await readFile(path.join(directory, name), "utf8")).trim())),
-  );
+  const standIns = await readPidFiles(directory, (name) => name.endsWith(PID_SUFFIX));
   const deadline = Date.now() + STAND_IN_EXIT_TIMEOUT_MS;
-  let running = stillRunning(
-    names.map((name, index) => ({ file: name, pid: pids[index] ?? Number.NaN })),
-  );
+  let running = stillRunning(standIns);
   while (running.length > 0 && Date.now() < deadline) {
     await delay(STAND_IN_EXIT_POLL_MS);
     running = stillRunning(running);

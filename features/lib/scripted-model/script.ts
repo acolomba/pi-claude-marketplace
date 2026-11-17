@@ -15,12 +15,13 @@
  * context tokens of its own call, so Pi starts its own compaction (D-BG-07).
  */
 
-import { readFile, writeFile } from "node:fs/promises";
+import { writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { Type } from "typebox";
 import { Compile } from "typebox/compile";
 
+import { readTextIfPresent } from "../turn-records.ts";
 import { projectToolResult, projectUserText } from "../upstream/index.ts";
 
 /**
@@ -238,24 +239,12 @@ export async function writeModelScript(
   await writeFile(modelScriptPath(harness), `${JSON.stringify(steps, null, 2)}\n`);
 }
 
-async function readOptional(file: string): Promise<string | undefined> {
-  try {
-    return await readFile(file, "utf8");
-  } catch (error: unknown) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
-      return undefined;
-    }
-
-    throw error;
-  }
-}
-
 /**
  * Returns the script in the harness directory `harness`, or no steps when no
  * script is armed. Throws when the file is not a valid script.
  */
 export async function readModelScript(harness: string): Promise<ScriptStep[]> {
-  const text = await readOptional(modelScriptPath(harness));
+  const text = await readTextIfPresent(modelScriptPath(harness));
   if (text === undefined) {
     return [];
   }
@@ -282,7 +271,7 @@ function checkCall(record: unknown): ModelCall {
  * that is not a valid call record.
  */
 export async function readModelCalls(harness: string): Promise<ModelCall[]> {
-  const text = await readOptional(modelCallsPath(harness));
+  const text = await readTextIfPresent(modelCallsPath(harness));
   const lines = (text ?? "").split("\n").filter((line) => line !== "");
   return lines.map((line): ModelCall => checkCall(JSON.parse(line)));
 }
