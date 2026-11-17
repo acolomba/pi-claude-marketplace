@@ -1,6 +1,7 @@
 ---
 phase: quick-261116-p4s
 plan: 01
+status: complete
 subsystem: hooks
 tags: [hooks, notices, parity]
 key-files:

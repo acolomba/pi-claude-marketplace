@@ -1,6 +1,7 @@
 ---
 phase: quick-261116-kw7
 plan: 01
+status: complete
 subsystem: workflows
 tags: [workflows, naming, parity]
 key-files:

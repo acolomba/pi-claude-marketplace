@@ -1,6 +1,7 @@
 ---
 phase: quick-261116-gwm
 plan: 01
+status: complete
 subsystem: hooks
 tags: [UserPromptExpansion, block-notice, parity]
 key-files:
