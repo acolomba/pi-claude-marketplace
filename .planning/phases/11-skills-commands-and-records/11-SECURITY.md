@@ -38,7 +38,7 @@ Evidence for each row (file:line and test names) is in the auditor's verdict of 
 | T-11-03 | Tampering | grown record vs `assertReadsBack` / older file | medium | mitigate | optional schema member, fixed member order; round-trip and two-member cases | closed |
 | T-11-04 | Spoofing | author text imitating another alias row | low | mitigate | text only in `description`; pi-tui `normalizeToSingleLine`; skill-aliases.test.ts | closed |
 | T-11-05 | Tampering | object hint reaching the menu | low | mitigate | `argumentHint` scalar-only; table loop in skill-alias-state.test.ts | closed |
-| T-11-06 | Info disclosure | mention in `!` text or example code | medium | mitigate | `ext/domain/file-mentions.ts` fence and span masks; file-mentions.test.ts | closed |
+| T-11-06 | Info disclosure | mention in `!` text or example code | medium | mitigate | `!` text: `findFileMentions` (`ext/domain/file-mentions.ts`) scans the body after `withoutContextInjections()` (`ext/domain/context-injection.ts`) replaces each `!` command pattern with `!` (D-PG11-02); context-injection.test.ts, the D-PG11-02 cases of file-mentions.test.ts, `slash-command/invocation.feature:397`. Example code: no longer masked; since the maintainer reversed D-PG11-03 on 2026-11-16, a mention inside a fence or code span is attached, as in Claude Code, and falls under AR-11-02 | closed |
 | T-11-07 | Denial of service | slow scan of a hostile body | medium | mitigate | linear expressions, one pass per rule; `sonarjs/slow-regex` at error | closed |
 | T-11-08 | Tampering | content holding a closing tag | low | accept | AR-11-01; pinned by file-mentions.test.ts | closed |
 | T-11-09 | Info disclosure | binary or oversized content | medium | mitigate | `renderMentionBlock` limit 262,144 bytes and NUL check; both sides tested | closed |
@@ -56,7 +56,7 @@ Evidence for each row (file:line and test names) is in the auditor's verdict of 
 | T-11-21 | Repudiation | unverified claim stated as fact | medium | mitigate | sources and versions named; codemode reach and `/reload` order marked unmeasured | closed |
 | T-11-22 | Tampering | comment edit that changes code | medium | mitigate | the three sources changed only in comment lines (253ce6db) | closed |
 | T-11-23 | Info disclosure | `bin` on `PATH` for hooks and MCP servers | low | mitigate | `docs/env-vars.md` states it as divergence D-PG11-10 | closed |
-| T-11-24 | Repudiation | pending decision recorded as settled | medium | mitigate | D-PG11-01..03 rows hold "pending maintainer review", versions, license; S8 cell says no session ran | closed |
+| T-11-24 | Repudiation | pending decision recorded as settled | medium | mitigate | D-PG11-01..03 rows held "pending maintainer review", versions, license until the maintainer review of 2026-11-16 locked D-PG11-01/02 and reversed D-PG11-03; S8 cell says no session ran | closed |
 | T-11-25 | Repudiation | stale or wrong status citation | medium | mitigate | citation check (every citation is a `Scenario` line); full gate runs each cited scenario | closed |
 | T-11-26 | Info disclosure | page understates file attachment reach | medium | mitigate | `docs/skills-commands-compatibility.md` states reach, no approval, no `PreToolUse`, and the three recorded differences | closed |
 | T-11-SC | Tampering | npm/pip/cargo installs | high | mitigate | no change to `package.json`, `package-lock.json`, `sonar-project.properties` across the phase commits | closed |
@@ -91,4 +91,4 @@ Evidence for each row (file:line and test names) is in the auditor's verdict of 
 
 **Approval:** verified 2026-11-15
 
-Citations updated 2026-11-16 to the lines after the review fixes (`slash-command/invocation.feature:377` and `:402`). The fixes changed only the code-span mask and the alias reader. They did not change the scan input, the trust order, or the read limits that the register relies on.
+Citations updated 2026-11-16 to the lines after the review fixes (`slash-command/invocation.feature:377` and `:402`). The fixes changed only the code-span mask and the alias reader. (The mask was later removed when the maintainer reversed D-PG11-03 on 2026-11-16; T-11-06 now cites `withoutContextInjections()`.) They did not change the scan input, the trust order, or the read limits that the register relies on.

@@ -373,7 +373,7 @@ A shell-form hook (a hook with no `args`) gets no text substitution. The shell e
 
 Both rules apply also to a plugin that declares no `userConfig`, as in Claude Code (D-PG10-21).
 
-The environment of each hook holds `CLAUDE_PLUGIN_OPTION_<KEY>` for each option with a default (D-PG10-10). Claude Code 2.1.323 gives a hook saved values only, so with nothing saved a hook gets no option variable (read in its binary and not run). This extension has no saved values and treats each declared default as saved. So the default that a hook gets is more than Claude Code does, licensed by a project decision (D-PG10-19, pending maintainer review). It is not parity. See [Plugin options](env-vars.md#plugin-options).
+The environment of each hook holds `CLAUDE_PLUGIN_OPTION_<KEY>` for each option with a default (D-PG10-10). Claude Code 2.1.323 gives a hook saved values only, so with nothing saved a hook gets no option variable (read in its binary and not run). This extension has no saved values and treats each declared default as saved. So the default that a hook gets is more than Claude Code does, licensed by a project decision (D-PG10-19, confirmed by the maintainer). It is not parity. See [Plugin options](env-vars.md#plugin-options).
 
 ### `onFailure`
 

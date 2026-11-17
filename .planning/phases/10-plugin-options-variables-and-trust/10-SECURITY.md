@@ -41,7 +41,7 @@ Evidence for each row (file:line and test names) is in the audit of 2026-11-15, 
 | T-10-06 | Info disclosure | project path in a user-scope skill or command | low | accept | D-PG10-16 | closed |
 | T-10-07 | EoP | scope change removing a trust gate | high | mitigate | trust checks unchanged in command/skill invocation; untrusted cases | closed |
 | T-10-08 | EoP | untrusted project bin on `PATH` | high | mitigate | `ext/orchestrators/plugin-path.ts` gate on `projectTrusted`; executables.feature | closed |
-| T-10-09 | EoP | auto-trusted repository with no saved decision | high | accept | D-PG10-01 option A, pending maintainer review | closed (accepted) |
+| T-10-09 | EoP | auto-trusted repository with no saved decision | high | accept | D-PG10-01 option A, confirmed by the maintainer review 2026-11-16 | closed (accepted) |
 | T-10-10 | Tampering | `:` or shell metacharacter in a bin path | medium | mitigate | upstream character class, path dropped | closed |
 | T-10-11 | Tampering | bin kept after other stat error / swap | low | accept | D-PG10-22; appended, never prepended | closed |
 | T-10-12 | Tampering | malformed `userConfig` via `--partial` | medium | mitigate | structural dirty -> `unavailable` | closed |
@@ -59,7 +59,7 @@ Evidence for each row (file:line and test names) is in the audit of 2026-11-15, 
 | T-10-24 | Tampering | spliced value filled twice | low | mitigate | single alternation pass | closed |
 | T-10-25 | EoP | untrusted project state in Pi's env | high | mitigate | `ext/orchestrators/plugin-options.ts` reads project only when trusted | closed |
 | T-10-26 | Tampering | ledger entry naming an unrelated variable | medium | mitigate | ledger pattern + owned-prefix filter | closed |
-| T-10-27 | Info disclosure | option variables visible to bash and children | low | accept | D-PG10-11, pending maintainer review; docs/env-vars.md | closed |
+| T-10-27 | Info disclosure | option variables visible to bash and children | low | accept | D-PG10-11, confirmed by the maintainer review 2026-11-16; docs/env-vars.md | closed |
 | T-10-28 | Info disclosure | another plugin reading an option variable | low | accept | BACKLOG USRCFG-01 precondition | closed |
 | T-10-29 | Info disclosure | raw default expanded in url/header | high | mitigate | `serializeLiteral` escape; adapter-escape.test.ts | closed |
 | T-10-30 | Tampering | server started with an unset option | medium | mitigate | five-field option block; `partitionOptionBlocked` | closed |
@@ -70,7 +70,7 @@ Evidence for each row (file:line and test names) is in the audit of 2026-11-15, 
 | T-10-35 | Tampering | `~` default at start of command/args | low | mitigate | home-path block | closed |
 | T-10-36 | Info disclosure | option reference treated as ordinary variable | medium | mitigate | option segments skip scanning | closed |
 | T-10-37 | Tampering | stage deciding caFile/auth without option vars | low | mitigate | `adapterSubstitution` env | closed |
-| T-10-38 | Repudiation | decision or release line overstating | medium | mitigate | D-PG10 rows pending review; CHANGELOG wording | closed |
+| T-10-38 | Repudiation | decision or release line overstating | medium | mitigate | D-PG10 rows locked by the maintainer review 2026-11-16; CHANGELOG wording | closed |
 | T-10-39 | Tampering | edits outside this phase's lines | low | mitigate | numstat of PROJECT/BACKLOG/CHANGELOG | closed |
 | T-10-40 | Info disclosure | upstream draft carrying a local path | low | mitigate | package-relative paths only | closed |
 | T-10-41 | Repudiation | docs read as trust gap closed | medium | mitigate | docs/env-vars.md, hooks-compatibility.md wording | closed |
@@ -96,8 +96,8 @@ Evidence for each row (file:line and test names) is in the audit of 2026-11-15, 
 
 | Risk ID | Threat Ref | Rationale | Accepted By | Date |
 |---------|------------|-----------|-------------|------|
-| AR-10-01 | T-10-09 | D-PG10-01 option A: Pi auto-trusts a folder with none of its trust paths, so a repository that ships only this extension's files runs its project plugins, `bin`, and option variables unless the user saved "Do not trust". Option B (an extension consent record) is safer and was not taken. PITRUSTPATHS-01; request to Pi drafted, not filed. **Pending maintainer review.** | autonomous discussion (D-PG10-01) | 2026-11-14 |
-| AR-10-02 | T-10-27 | D-PG10-11: option variables are in Pi's process env, so the bash tool and every child see them. **Pending maintainer review.** | autonomous discussion (D-PG10-11) | 2026-11-14 |
+| AR-10-01 | T-10-09 | D-PG10-01 option A: Pi auto-trusts a folder with none of its trust paths, so a repository that ships only this extension's files runs its project plugins, `bin`, and option variables unless the user saved "Do not trust". Option B (an extension consent record) is safer and was not taken. PITRUSTPATHS-01; request to Pi drafted, not filed. Confirmed by the maintainer review 2026-11-16. | autonomous discussion (D-PG10-01) | 2026-11-14 |
+| AR-10-02 | T-10-27 | D-PG10-11: option variables are in Pi's process env, so the bash tool and every child see them. Confirmed by the maintainer review 2026-11-16. | autonomous discussion (D-PG10-11) | 2026-11-14 |
 | AR-10-03 | T-10-06 | D-PG10-16: a user-scope skill or command gets the project path, as upstream. | plan threat model | 2026-11-14 |
 | AR-10-04 | T-10-11 | D-PG10-22: a bin kept after a non-ENOENT stat error; entries are appended only. | plan threat model | 2026-11-14 |
 | AR-10-05 | T-10-21 | Refusal message cause goes through `redactAbsolutePaths`. | plan threat model | 2026-11-14 |
@@ -123,4 +123,4 @@ Evidence for each row (file:line and test names) is in the audit of 2026-11-15, 
 - [x] `threats_open: 0` confirmed
 - [x] `status: verified` set in frontmatter
 
-**Approval:** verified 2026-11-15 (AR-10-01 and AR-10-02 pending maintainer review)
+**Approval:** verified 2026-11-15; AR-10-01 and AR-10-02 confirmed by the maintainer review 2026-11-16

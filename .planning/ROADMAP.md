@@ -494,7 +494,7 @@ Plans:
   4. In a project the user marked "Do not trust", with an enabled project-scope plugin that has `bin/hello`, the bash tool does not find `hello`; in a trusted project it does. With two enabled plugins, one of them with `bin/`, the bash tool's `PATH` holds one plugin entry (PG-CORE-06, PG-CORE-07).
   5. The decision on the trust gap of D-LOC-01 is in `PROJECT.md` with its premise and the Pi version it was checked against (PG-SEC-02).
 
-**Closeout (2026-11-15):** 6/6 truths, one by override: the maintainer's PG-SEC-02 answer to D-PG10-01 (option A, pending maintainer review) is carried, and PG-SEC-02 stays Pending. PG-CORE-03, -05, -06, and -07 are complete. `npm run check` passed (exit 0) at 16ef48af: 1983 adapter-profile and 199 builtin-profile scenarios. The review loop added D-PG10-25, pending maintainer review. See `10-VERIFICATION.md`.
+**Closeout (2026-11-15):** 6/6 truths, one by override: the maintainer's PG-SEC-02 answer to D-PG10-01 (option A) is carried; the maintainer review of 2026-11-16 confirmed it, so PG-SEC-02 is complete. PG-CORE-03, -05, -06, and -07 are complete. `npm run check` passed (exit 0) at 16ef48af: 1983 adapter-profile and 199 builtin-profile scenarios. The review loop added D-PG10-25, which the maintainer review of 2026-11-16 reversed to fail closed with `{unreadable}`. See `10-VERIFICATION.md`.
 
 **Plans**: 21/21 plans complete
 

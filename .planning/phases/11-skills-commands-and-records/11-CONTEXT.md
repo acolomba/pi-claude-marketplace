@@ -11,6 +11,13 @@ its findings are in `11-SPIKE-S8.md`, and three of them show that the locked
 text of PG-SKILL-01 is stricter than Claude Code. Those divergences are
 recorded below with their license and are also pending maintainer review.
 
+**Status note (2026-11-16):** the maintainer review locked D-PG11-01 and
+D-PG11-02 as confirmed, confirmed D-PG11-06 as deferred (BACKLOG), and
+reversed D-PG11-03: a mention inside fenced code or a code span is attached,
+as in Claude Code, and criterion 2 now covers only `!` output. The text below
+keeps the discussion as recorded; where it conflicts, `PROJECT.md` and
+`REQUIREMENTS.md` hold the current decision.
+
 <domain>
 ## Phase Boundary
 
@@ -95,9 +102,11 @@ after `!` output is inlined -- with a whitespace tokenizer that ignores
 Markdown. So upstream attaches a path that arrives through an argument or
 through `!` output, and a path inside a code span or fence. Each attached path
 first passes Claude Code's Read deny rules. The locked requirement and success
-criteria 1 and 2 say the opposite for all three.
+criteria 1 and 2 said the opposite for all three. After the D-PG11-03
+reversal, the requirement follows upstream for code and diverges only for
+arguments and `!` output (D-PG11-02).
 
-- **D-PG11-02 (pending maintainer review; divergence; PG-SKILL-01, criterion 1):**
+- **D-PG11-02 (pending maintainer review, confirmed 2026-11-16; divergence; PG-SKILL-01, criterion 1):**
   Attach only `@path` references the author wrote: mentions are found in the
   body after the path variables are filled (`${CLAUDE_PLUGIN_ROOT}`,
   `${CLAUDE_SKILL_DIR}`, `${CLAUDE_PLUGIN_DATA}`, `${CLAUDE_PROJECT_DIR}`,
@@ -239,7 +248,8 @@ criteria 1 and 2 say the opposite for all three.
 
 - **D-PG11-14:** append Key Decisions rows D-PG11-01, D-PG11-02, D-PG11-03 to
   `PROJECT.md`, each with its premise and versions and marked pending
-  maintainer review; "Amended by D-PG11-01" on D-141-01. Fill the S8 cell of
+  maintainer review (since locked: D-PG11-01/02 confirmed, D-PG11-03
+  reversed, 2026-11-16); "Amended by D-PG11-01" on D-141-01. Fill the S8 cell of
   the PRD's section 9 table with a pointer to `11-SPIKE-S8.md` for the two
   questions it answered. One CHANGELOG bullet (the `changelog` skill),
   including the restage note of D-PG11-01.
@@ -249,6 +259,9 @@ criteria 1 and 2 say the opposite for all three.
 Reversible technical choices: D-PG11-04 to D-PG11-13.
 
 ### Pending maintainer review
+
+All three were settled by the maintainer review of 2026-11-16: D-PG11-01 and
+D-PG11-02 confirmed, D-PG11-06 confirmed as deferred.
 
 - D-PG11-01 (decision 13): add Claude Code's command name as an alias;
   amends D-141-01.

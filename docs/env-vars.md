@@ -247,7 +247,7 @@ A plugin that declares no `userConfig` keeps every `${user_config.KEY}` in conte
 
 These parts differ from Claude Code:
 
-- Claude Code 2.1.323 gives hooks, skills, commands, and agents saved values only, and applies a `default` only to MCP and LSP configuration. This extension treats each declared default as a saved value for hooks and content too. So a hook gets `CLAUDE_PLUGIN_OPTION_<KEY>`, and content gets the default, where Claude Code gives nothing. This is more than Claude Code does, licensed by a project decision (D-PG10-19, pending maintainer review). It is not parity.
+- Claude Code 2.1.323 gives hooks, skills, commands, and agents saved values only, and applies a `default` only to MCP and LSP configuration. This extension treats each declared default as a saved value for hooks and content too. So a hook gets `CLAUDE_PLUGIN_OPTION_<KEY>`, and content gets the default, where Claude Code gives nothing. This is more than Claude Code does, licensed by a project decision (D-PG10-19, confirmed by the maintainer). It is not parity.
 - An option that is `required` and has no default makes the plugin partially available. `--partial` installs it with that option not set, and `info` names the option. Claude Code installs such a plugin and reports `N userConfig options not yet set`. This is a project safety rule (D-PG10-06).
 - A plugin that you installed with `--partial` before this release, because of its `userConfig`, gets its options only when it is staged again. `apply` does not stage it again. Run `/claude:plugin reinstall` once (D-PG10-15, D-PG10-24).
 - Bash and every other child of Pi inherit the pi-only option variables (D-PG10-11). See "Pi-only plugin option variables".
