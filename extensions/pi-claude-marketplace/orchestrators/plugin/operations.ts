@@ -41,6 +41,8 @@ import { loadTargetLayers, writeAdoptingConfigEntries } from "./shared.ts";
 import { createUninstallPlugin, REAL_UNINSTALL_TRANSACTION } from "./uninstall.ts";
 import { createPluginUpdateOperations } from "./update-flow.ts";
 
+import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { PluginConvergeFn } from "../types.ts";
 import type {
   EnableDisableHooksRouting,
   EnableDisableTransaction,
@@ -60,8 +62,6 @@ import type { ReinstallHooksRouting, ReinstallPluginFn } from "./reinstall-flow.
 import type { UninstallHooksRouting, UninstallPluginOperation } from "./uninstall.ts";
 import type { UpdateHooksRouting } from "./update-cascade.ts";
 import type { PluginUpdateOperations } from "./update-flow.ts";
-import type { CompletionCache } from "../../shared/completion-cache.ts";
-import type { PluginConvergeFn } from "../types.ts";
 
 // The one concrete binding of install's semantic transaction contract. It is
 // module-private so no caller can pass a half-real transaction: the only way to

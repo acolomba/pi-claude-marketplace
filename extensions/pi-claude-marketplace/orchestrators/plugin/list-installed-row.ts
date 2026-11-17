@@ -10,7 +10,6 @@ import { readRecordMcpVerdict } from "./mcp-verdict-read.ts";
 import { recordMcpDependency } from "./mcp-verdict.ts";
 import { candidateFor, classifyInstalledRecord } from "./plugin-state-classifier.ts";
 
-import type { InstalledClassification, UpgradeCandidate } from "./plugin-state-classifier.ts";
 import type { ManifestLookup, ManifestPluginEntry } from "../../domain/manifest-lookup.ts";
 import type {
   ActiveMcpImplementation,
@@ -28,6 +27,7 @@ import type {
 } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { LegacyServersSource } from "../mcp/recorded-servers.ts";
+import type { InstalledClassification, UpgradeCandidate } from "./plugin-state-classifier.ts";
 
 export type InstalledListRow =
   | PluginDisabledMessage

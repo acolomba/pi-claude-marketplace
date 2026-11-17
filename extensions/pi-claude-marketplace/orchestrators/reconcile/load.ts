@@ -71,15 +71,15 @@ import { notifyMcpMigration, notifyReconcileAborted } from "../../shared/notific
 import { composePendingReport, notifyPendingReport } from "./pending.ts";
 import { closeScopePass, notifyScopeOutcomes, openScopePass } from "./read-pass.ts";
 
-import type { PerEntryOutcome } from "./apply-outcomes.ts";
-import type { ReconcileStateReader, ScopePassAccumulators } from "./read-pass.ts";
-import type { ApplyReconcileOptions, McpMigrationStep } from "./types.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { SubagentChildEnv } from "../../platform/subagent-child.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { InstallHooksRouting } from "../plugin/install-disable-cascade.ts";
+import type { PerEntryOutcome } from "./apply-outcomes.ts";
+import type { ReconcileStateReader, ScopePassAccumulators } from "./read-pass.ts";
+import type { ApplyReconcileOptions, McpMigrationStep } from "./types.ts";
 
 export interface LoadReconcileOptions {
   readonly ctx: NotificationContext;

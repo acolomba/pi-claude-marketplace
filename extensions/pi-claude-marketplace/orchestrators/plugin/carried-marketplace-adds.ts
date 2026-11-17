@@ -16,9 +16,9 @@ import { errorMessage } from "../../shared/errors.ts";
 import { cleanupStaging, createRemovalOps } from "../../shared/fs-utils.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
 
-import type { InstallLedgerOptions } from "./install-outcome.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { InstallLedgerOptions } from "./install-outcome.ts";
 
 /** LAYER-07: the `marketplace add` seam every cascade member of one install shares. */
 export type MarketplaceAddSeam = NonNullable<InstallLedgerOptions["marketplaceAdd"]>;

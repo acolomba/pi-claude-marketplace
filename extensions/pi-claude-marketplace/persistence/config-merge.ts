@@ -39,8 +39,8 @@ import {
   type ScopeConfig,
 } from "./config-io.ts";
 
-import type { ScopedLocations } from "./locations.ts";
 import type { Scope } from "../shared/types.ts";
+import type { ScopedLocations } from "./locations.ts";
 
 /**
  * A merged entry carries the underlying entry value plus its provenance.

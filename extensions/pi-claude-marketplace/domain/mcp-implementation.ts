@@ -16,12 +16,12 @@ import { classifyBuiltinMcpServer } from "./mcp-builtin-features.ts";
 import { checkClaudeShape, classifyMcpServer } from "./mcp-server-features.ts";
 import { builtinMcpServerName, foldedMcpServerKey, generatedMcpServerKey } from "./name.ts";
 
+import type { ActiveMcpImplementation, McpImplementationId } from "../platform/pi-api.ts";
 import type {
   DroppedMcpServer,
   McpServerVerdict,
   McpUnsupportedFeature,
 } from "./mcp-server-features.ts";
-import type { ActiveMcpImplementation, McpImplementationId } from "../platform/pi-api.ts";
 
 export type { ActiveMcpImplementation, McpImplementationId } from "../platform/pi-api.ts";
 

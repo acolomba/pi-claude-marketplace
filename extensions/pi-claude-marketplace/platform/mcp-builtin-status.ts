@@ -55,9 +55,9 @@ import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
 import { redactAbsolutePaths } from "../shared/redact-absolute-paths.ts";
 
+import type { Scope } from "../shared/types.ts";
 import type { McpStatusReader } from "./mcp-status.ts";
 import type { PiInventory, PiMcpRegistry, ToolInventoryItem } from "./pi-api.ts";
-import type { Scope } from "../shared/types.ts";
 
 // Pi 1.5.0 `core/mcp-servers.js` `mcpNamespace`.
 function namespaceOf(serverName: string): string {

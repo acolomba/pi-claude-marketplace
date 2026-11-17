@@ -46,6 +46,7 @@ import { discoveryWarning } from "../../shared/staging-warnings.ts";
 import { discoverPluginCommands } from "./discover.ts";
 import { buildStagedCommand } from "./staged-command.ts";
 
+import type { RemovalOps } from "../../shared/fs-utils.ts";
 import type { StagedCommandContext } from "./staged-command.ts";
 import type {
   CommandDegradeRecord,
@@ -54,7 +55,6 @@ import type {
   StageCommandsInput,
   StagedCommandRecord,
 } from "./types.ts";
-import type { RemovalOps } from "../../shared/fs-utils.ts";
 
 /**
  * Give a filesystem failure during staging the two facts it is missing.

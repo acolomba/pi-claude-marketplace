@@ -15,13 +15,13 @@ import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts"
 import { constraintCauseFor, revisionVersionSlot, updatedRowFromOutcome } from "./update-row.ts";
 import { UPDATE_CONTEXT, type UpdateMsg } from "./update.messaging.ts";
 
-import type { DirectRenderableOutcome } from "./update-swap.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { NotificationContext, SoftDepStatus } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { PluginUpdateSkippedOutcome } from "../types.ts";
+import type { DirectRenderableOutcome } from "./update-swap.ts";
 
 /** Hook-routing capabilities consumed by successful update finalization. */
 export type UpdateHooksRouting = Pick<

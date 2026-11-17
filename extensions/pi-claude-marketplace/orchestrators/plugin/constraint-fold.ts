@@ -33,9 +33,9 @@ import { DependencyDeclarationsUnreadableError } from "../../shared/errors.ts";
 
 import { buildScopeDeclarationDetail } from "./dependency-index.ts";
 
-import type { AddressedDependency } from "./dependency-index.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { AddressedDependency } from "./dependency-index.ts";
 
 /**
  * One installed record that declares the target, with the range it declared

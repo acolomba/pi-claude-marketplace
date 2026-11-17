@@ -85,10 +85,6 @@ import {
   readInstalledCopyDeclaration,
 } from "./dependency-declaration-read.ts";
 
-import type {
-  DependencyDeclarationReader,
-  OwnManifestRefusal,
-} from "./dependency-declaration-read.ts";
 import type { DeclaredDependency } from "../../domain/dependencies.ts";
 import type { DeclarationLookupResult } from "../../domain/dependency-closure.ts";
 import type { DeclarationIndex, OrphanCandidate } from "../../domain/dependency-orphans.ts";
@@ -97,6 +93,10 @@ import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Reason } from "../../shared/notification-types.ts";
+import type {
+  DependencyDeclarationReader,
+  OwnManifestRefusal,
+} from "./dependency-declaration-read.ts";
 
 /**
  * REC-05: why a declarer's declarations could not be established, as the

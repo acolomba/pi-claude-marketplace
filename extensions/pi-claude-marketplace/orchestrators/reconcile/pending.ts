@@ -102,6 +102,14 @@ import {
   type PendingMsg,
 } from "./reconcile.messaging.ts";
 
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
+import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { ReconcilePendingEmptyMessage } from "../../shared/notification-types.ts";
+import type { Scope } from "../../shared/types.ts";
 import type { PerEntryOutcome, PluginDeclarerUnreadableOutcome } from "./apply-outcomes.ts";
 import type {
   CascadeStep,
@@ -112,14 +120,6 @@ import type {
 } from "./convergence.ts";
 import type { ScopeSatisfactionVerdict } from "./dependency-verdict.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
-import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
-import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
-import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { NotificationContext } from "../../platform/pi-api.ts";
-import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { ReconcilePendingEmptyMessage } from "../../shared/notification-types.ts";
-import type { Scope } from "../../shared/types.ts";
 
 export interface PendingReconcileOptions {
   readonly ctx: NotificationContext;

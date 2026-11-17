@@ -24,8 +24,8 @@ import {
 
 import { claudePluginPayloads } from "./pi-commands.ts";
 
-import type { NotificationPayload } from "./pi-commands.ts";
 import type { RpcGitEnvironment, RpcProfileEnvironment, RpcSandbox } from "../../test/e2e/_rpc.ts";
+import type { NotificationPayload } from "./pi-commands.ts";
 
 /** What the one-shot Pi starts with: the run's sandbox, git environment, and `TMPDIR`. */
 export interface JsonModeLaunch {

@@ -46,8 +46,8 @@ import {
   readPiMcpAdapterDist,
 } from "./pi-mcp-adapter-peer.ts";
 
-import type { PiMcpAdapterTypes } from "./pi-mcp-adapter-peer.ts";
 import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
+import type { PiMcpAdapterTypes } from "./pi-mcp-adapter-peer.ts";
 
 const CONTRACT_LINE_PREFIXES = [
   "export declare const MCP_STATUS_EVENT",

@@ -26,7 +26,6 @@ import {
 
 import { degradeBaselineOf, recordMcpDependency } from "./mcp-verdict.ts";
 
-import type { RecordDegradeBaselineReader } from "./mcp-verdict.ts";
 import type {
   ActiveMcpImplementation,
   EffectiveMcpCompatibility,
@@ -34,6 +33,7 @@ import type {
 } from "../../domain/mcp-implementation.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { McpDependency } from "../../shared/concerns/soft-dep.ts";
+import type { RecordDegradeBaselineReader } from "./mcp-verdict.ts";
 
 /**
  * A legacy record that holds pi-mcp-adapter's verdict (no basis), staged no

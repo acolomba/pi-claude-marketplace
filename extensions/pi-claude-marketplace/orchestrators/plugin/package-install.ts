@@ -63,7 +63,6 @@ import { errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { discoveryWarning } from "../../shared/staging-warnings.ts";
 
-import type { UpdateRunOutcome } from "./update-swap.ts";
 import type { LockfileCheck } from "../../domain/package-lockfile.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type {
@@ -73,6 +72,7 @@ import type {
 } from "../../platform/package-manager.ts";
 import type { DiscoveryWarning } from "../../shared/staging-warnings.ts";
 import type { Phase } from "../../transaction/phase-ledger.ts";
+import type { UpdateRunOutcome } from "./update-swap.ts";
 
 /** Runs `step` under an abort signal that the caller owns. */
 export type AbortScopedRun = <T>(signal: AbortSignal, step: () => Promise<T>) => Promise<T>;

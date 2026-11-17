@@ -44,8 +44,6 @@ import { notifyBackgroundUpdate } from "../../shared/notification-dispatch.ts";
 import { openNotificationRun, openNotificationSnapshot } from "../../shared/notification-run.ts";
 import { ownValue } from "../../shared/own-key.ts";
 
-import type { BackgroundGate } from "./background-gate.ts";
-import type { UpdateMarketplaceOptions } from "./update.ts";
 import type { ScopeLoadOutcome } from "../../persistence/config-merge.ts";
 import type { NotificationContext, PiInventory } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -59,6 +57,8 @@ import type {
   PluginUpdateSkippedOutcome,
   ScopeDependencyInstallFn,
 } from "../types.ts";
+import type { BackgroundGate } from "./background-gate.ts";
+import type { UpdateMarketplaceOptions } from "./update.ts";
 
 /** The `input` event's context; Pi's extension context satisfies it. */
 export interface BackgroundContext extends NotificationContext {

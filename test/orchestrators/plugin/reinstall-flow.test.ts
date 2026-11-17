@@ -68,7 +68,6 @@ import {
   startFifoStateServer,
 } from "./state-fifo.ts";
 
-import type { FifoStateServer } from "./state-fifo.ts";
 import type {
   GitAuthBundle,
   GitOps,
@@ -90,6 +89,7 @@ import type {
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { LockedStateTransactionDeps } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
+import type { FifoStateServer } from "./state-fifo.ts";
 
 interface NotifyRecord {
   message: string;

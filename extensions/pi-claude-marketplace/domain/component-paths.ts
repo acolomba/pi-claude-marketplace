@@ -3,9 +3,9 @@ import path from "node:path";
 import { PathContainmentError, assertPathInside } from "../shared/path-safety.ts";
 import { discoveryWarning } from "../shared/staging-warnings.ts";
 
+import type { DiscoveryWarning } from "../shared/staging-warnings.ts";
 import type { PluginEntry } from "./components/plugin.ts";
 import type { CommandMapEntry, StatKindReader } from "./resolver-types.ts";
-import type { DiscoveryWarning } from "../shared/staging-warnings.ts";
 
 const COMPONENT_PATH_KINDS = ["skills", "commands", "agents", "workflows"] as const;
 export type ComponentPathKind = (typeof COMPONENT_PATH_KINDS)[number];

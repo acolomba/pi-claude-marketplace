@@ -49,11 +49,11 @@ import { classifyInstalledForImplementation } from "./plugin/list-installed-row.
 import type { MarketplaceManifest } from "../domain/manifest.ts";
 import type { ActiveMcpImplementation } from "../domain/mcp-implementation.ts";
 import type { ResolveContext } from "../domain/resolver-types.ts";
-import type { InstalledRecordView } from "./plugin/list-installed-row.ts";
 import type { ScopedLocations } from "../persistence/locations.ts";
 import type { ExtensionState } from "../persistence/state-io.ts";
 import type { PluginIndexRow } from "../shared/completion-cache.ts";
 import type { Scope } from "../shared/types.ts";
+import type { InstalledRecordView } from "./plugin/list-installed-row.ts";
 
 // ---------------------------------------------------------------------------
 // The completions-resolver seam. BLOCK C forbids orchestrators/ from

@@ -1,3 +1,6 @@
+import type { BucketAEvent } from "../../domain/components/hook-events.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { AssistantMessage } from "../../platform/pi-api.ts";
 import type { ChildLike, TimerLadder } from "./exec-timer.ts";
 import type {
   CacheEntry,
@@ -7,9 +10,6 @@ import type {
   RoutingEntry,
 } from "./routing-state.ts";
 import type { StreamText } from "./stream-text.ts";
-import type { BucketAEvent } from "../../domain/components/hook-events.ts";
-import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { AssistantMessage } from "../../platform/pi-api.ts";
 
 /**
  * STOP-07: the consecutive Stop re-entry cap. The re-entry that reaches it does

@@ -45,6 +45,7 @@ import {
 } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type {
   LegacyMcpOwner,
   McpLeftoverPlace,
@@ -53,7 +54,6 @@ import type {
   RemoveLegacyMcpInput,
   RemoveLegacyMcpResult,
 } from "./types.ts";
-import type { McpConfigNotice } from "../../shared/notification-types.ts";
 
 /**
  * Reads the legacy file. A non-object top level reads as no document: no

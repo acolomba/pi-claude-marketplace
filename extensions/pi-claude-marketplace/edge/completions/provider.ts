@@ -47,10 +47,10 @@ import {
   splitCompletionInput,
 } from "./data.ts";
 
-import type { CatalogVerb } from "../flag-catalog.ts";
-import type { LocationsResolver } from "./data.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { CatalogVerb } from "../flag-catalog.ts";
+import type { LocationsResolver } from "./data.ts";
 import type { AutocompleteItem } from "@earendil-works/pi-tui";
 
 /**

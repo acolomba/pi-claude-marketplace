@@ -63,6 +63,7 @@ import { discoveryWarning } from "../../shared/staging-warnings.ts";
 
 import { discoverPluginWorkflows } from "./discover.ts";
 
+import type { AdmittedWorkflow } from "../../domain/workflow-script.ts";
 import type {
   CommitWorkflowsOptions,
   DiscoveredWorkflow,
@@ -71,7 +72,6 @@ import type {
   StageWorkflowsInput,
   WorkflowEnvelope,
 } from "./types.ts";
-import type { AdmittedWorkflow } from "../../domain/workflow-script.ts";
 
 const STAGING_LABEL = "workflows staging directory";
 

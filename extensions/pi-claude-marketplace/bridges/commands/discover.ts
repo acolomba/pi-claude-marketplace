@@ -75,8 +75,8 @@ import { CommandNameError } from "../../shared/errors-bridges.ts";
 import { causeChainTrailer, errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { isPlainMarkdownFile, readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 
-import type { CommandOverrides, DiscoveredCommand } from "./types.ts";
 import type { CommandMapEntry, MaterializablePlugin } from "../../domain/resolver-types.ts";
+import type { CommandOverrides, DiscoveredCommand } from "./types.ts";
 import type { Dirent, Stats } from "node:fs";
 
 /** D-07 return shape: `{ discovered, warnings }`. */

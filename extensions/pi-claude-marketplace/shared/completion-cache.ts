@@ -53,8 +53,8 @@ import { atomicWriteJson } from "./atomic-json.ts";
 import { hookDebugLog } from "./debug-log.ts";
 import { errorMessage } from "./errors.ts";
 
-import type { Scope } from "./types.ts";
 import type { ActiveMcpImplementation } from "../platform/pi-api.ts";
+import type { Scope } from "./types.ts";
 
 // ---------------------------------------------------------------------------
 // Cache file schemas (D-03 -- drop+rebuild on schemaVersion mismatch).

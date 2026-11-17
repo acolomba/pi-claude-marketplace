@@ -48,9 +48,6 @@ import {
   DEPENDENCY_VERSION_UNSATISFIED_ROW_REASONS,
 } from "./reconcile.messaging.ts";
 
-import type { UnsatisfiedKind } from "./dependency-verdict.ts";
-import type { ReconcileAppliedMsg } from "./reconcile.messaging.ts";
-import type { ReconcilePlan } from "./types.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
@@ -59,6 +56,9 @@ import type { DeclarerReadFailure } from "../plugin/dependency-index.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 import type { StagingDiagnostic } from "../plugin/staging-diagnostics.ts";
 import type { UninstallRefusedError } from "../plugin/uninstall.ts";
+import type { UnsatisfiedKind } from "./dependency-verdict.ts";
+import type { ReconcileAppliedMsg } from "./reconcile.messaging.ts";
+import type { ReconcilePlan } from "./types.ts";
 
 export interface OutcomeBase {
   readonly scope: Scope;

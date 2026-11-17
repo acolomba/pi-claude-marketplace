@@ -150,6 +150,13 @@ import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type {
+  PluginUpdateFailedOutcome,
+  PluginUpdateOutcome,
+  RevisionMove,
+  DependencyStagingDiagnostic,
+  UpdateDependencyRow,
+} from "../types.ts";
 import type { RecordDegradeBaselineReader } from "./mcp-verdict.ts";
 import type { UpdateHooksRouting } from "./update-cascade.ts";
 import type {
@@ -158,13 +165,6 @@ import type {
   PreparePluginUpdateOptions,
   UpdateCloneCacheSeam,
 } from "./update-preflight.ts";
-import type {
-  PluginUpdateFailedOutcome,
-  PluginUpdateOutcome,
-  RevisionMove,
-  DependencyStagingDiagnostic,
-  UpdateDependencyRow,
-} from "../types.ts";
 
 /**
  * UPD-DEP-D1: what settling the dependency closure of an update's new version

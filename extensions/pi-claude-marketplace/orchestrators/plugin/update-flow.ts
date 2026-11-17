@@ -117,6 +117,27 @@ import { UPDATE_MATERIALIZATION } from "./update-preflight.ts";
 import { revisionVersionSlot } from "./update-row.ts";
 import { UPDATE_CONTEXT } from "./update.messaging.ts";
 
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
+import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
+import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
+import type { GitHubSource, ParsedSource, UrlSource } from "../../domain/source.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { RemoteTag } from "../../platform/git.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
+import type { Scope } from "../../shared/types.ts";
+import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
+import type { AuthAttemptResult } from "../auth-host.ts";
+import type {
+  PluginConvergeFn,
+  PluginConvergeTarget,
+  PluginUpdateFn,
+  PluginUpdateOutcome,
+} from "../types.ts";
+import type { CandidateReport } from "./materialize-latest.ts";
+import type { StagingDiagnostic } from "./staging-diagnostics.ts";
 import type { UpdateCascadeOutcome, UpdateHooksRouting } from "./update-cascade.ts";
 import type {
   MaterializationPolicy,
@@ -133,27 +154,6 @@ import type {
   UpdatePhase3FailedOutcome,
   UpdateRunOutcome,
 } from "./update-swap.ts";
-import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
-import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
-import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
-import type { GitHubSource, ParsedSource, UrlSource } from "../../domain/source.ts";
-import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { RemoteTag } from "../../platform/git.ts";
-import type { NotificationContext } from "../../platform/pi-api.ts";
-import type { CompletionCache } from "../../shared/completion-cache.ts";
-import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { Scope } from "../../shared/types.ts";
-import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
-import type { AuthAttemptResult } from "../auth-host.ts";
-import type {
-  PluginConvergeFn,
-  PluginConvergeTarget,
-  PluginUpdateFn,
-  PluginUpdateOutcome,
-} from "../types.ts";
-import type { CandidateReport } from "./materialize-latest.ts";
-import type { StagingDiagnostic } from "./staging-diagnostics.ts";
-import type { StagingWarning } from "../../shared/staging-warnings.ts";
 
 /** Runs one prepared update target for the update flow. */
 type UpdatePluginRunner = (args: ThreePhaseArgs) => Promise<UpdateRunOutcome>;

@@ -4,6 +4,7 @@ import path from "node:path";
 
 import { errorMessage } from "../../shared/errors.ts";
 
+import type { Scope } from "../../shared/types.ts";
 import type {
   ClaudeSettingsPaths,
   ClaudeSettingsReadOptions,
@@ -11,7 +12,6 @@ import type {
   MergedClaudeSettings,
   MergedClaudeSettingsResult,
 } from "./types.ts";
-import type { Scope } from "../../shared/types.ts";
 
 type SettingsFileKind = "base" | "local";
 

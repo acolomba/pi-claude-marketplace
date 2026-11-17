@@ -160,6 +160,13 @@ import {
   runScopeIsolated,
 } from "./read-pass.ts";
 
+import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
+import type { Scope } from "../../shared/types.ts";
+import type { IndexFailure } from "../plugin/dependency-index.ts";
+import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
+import type { UninstallPluginOperation } from "../plugin/uninstall.ts";
+import type { MovedDependency, PluginUpdateOutcome, ScopeDependencyInstallFn } from "../types.ts";
 import type {
   PerEntryOutcome,
   PluginConvergedOutcome,
@@ -180,13 +187,6 @@ import type {
   ReconcilePlan,
   ScopeReadResult,
 } from "./types.ts";
-import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
-import type { Scope } from "../../shared/types.ts";
-import type { IndexFailure } from "../plugin/dependency-index.ts";
-import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
-import type { UninstallPluginOperation } from "../plugin/uninstall.ts";
-import type { MovedDependency, PluginUpdateOutcome, ScopeDependencyInstallFn } from "../types.ts";
 
 /**
  * Apply one plan's marketplacesToRemove bucket. NO outer lock around the

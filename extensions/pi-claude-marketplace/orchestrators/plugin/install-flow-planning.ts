@@ -21,6 +21,12 @@ import { cascadeFailureCause } from "./install-cascade.messaging.ts";
 import { UPDATE_MATERIALIZATION } from "./update-preflight.ts";
 import { assertUpdateNamesFree } from "./update-swap.ts";
 
+import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type { InstallPluginOutcome, MovedDependency } from "../types.ts";
 import type { CarriedAdd } from "./carried-marketplace-adds.ts";
 import type { DependencyCaller, DependencyTarget } from "./dependency-bindings.ts";
 import type { DependencyMoveContext, DependencyMoveMemos } from "./dependency-move.ts";
@@ -44,12 +50,6 @@ import type {
   UpdateDependencyResolver,
   UpdateDependencySettlement,
 } from "./update-swap.ts";
-import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
-import type { NotificationContext } from "../../platform/pi-api.ts";
-import type { CompletionCache } from "../../shared/completion-cache.ts";
-import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { McpConfigNotice } from "../../shared/notification-types.ts";
-import type { InstallPluginOutcome, MovedDependency } from "../types.ts";
 
 /**
  * Routes the cascade's non-failure arms for the plain install: a marketplace

@@ -67,8 +67,6 @@ import {
 } from "./clone-cache.ts";
 import { FETCH_CONTEXT, type FetchMsg } from "./fetch.messaging.ts";
 
-import type { makePresenceProbe } from "./git-source-probe.ts";
-import type { ListCandidate, resolveListCandidate } from "./list-candidate-version.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { ResolveContext, ResolvedPlugin } from "../../domain/resolver-types.ts";
@@ -78,6 +76,8 @@ import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { makePresenceProbe } from "./git-source-probe.ts";
+import type { ListCandidate, resolveListCandidate } from "./list-candidate-version.ts";
 
 type ManifestEntry = MarketplaceManifest["plugins"][number];
 
