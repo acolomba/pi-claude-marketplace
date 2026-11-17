@@ -66,24 +66,37 @@
  * `rewakeMessage` and `rewakeSummary`).
  *
  * A script hook that sets `async`, `async rewake`, or `waits` is a lifecycle
- * hook (D-BG-12). Right after recording, its script writes its pid to
+ * hook (D-BG-12). Before it reads its stdin, its script writes its pid to
  * `<harness dir>/hook-<name>-<pid>.pid`, which the release of the profile Pi
- * reads to stop the script and then checks as a stand-in's, and runs the
- * recorder in its lifecycle mode with
- * `start`. When it exits, it runs the recorder with `end` and its exit code,
- * then removes the pid file. Every other hook writes neither.
+ * reads to stop the script and then checks as a stand-in's. Right after
+ * recording, it runs the recorder in its lifecycle mode with `start`. When it
+ * exits, it runs the recorder with `end` and its exit code, then removes the
+ * pid file. Every other hook writes neither.
+ *
+ * A lifecycle script runs only while the hook gate of the Pi that started it
+ * is open. The gate is the file `<harness dir>/hook-gate-<id>`, and the Pi's
+ * environment holds the id in `PI_CM_HOOK_GATE`, so every hook of that Pi has
+ * it from the moment Pi starts the hook. The script checks the gate before
+ * and after it writes its pid file, and exits 0 at once when the gate is
+ * closed. The release closes the gate before it reads the pid files. So a
+ * script that Pi started just before it stopped has either written its pid
+ * file by the time the release reads them, or finds the gate closed. Without
+ * this, such a script would outlive its scenario and could take the release
+ * marker of the next one, which uses the same sandbox HOME. A Pi whose
+ * environment names no open gate runs no lifecycle script.
  *
  * A run names the hook that made it, so two hooks on one matcher are two
  * different commands. Publishing a table again replaces `hooks/hooks.json`
  * and the scripts it writes.
  */
 
-import { chmod, readdir, readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { chmod, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { HOOK_RECORDER_PATH } from "./hook-recorder.ts";
 import { writePublishedPluginFiles } from "./published-marketplace.ts";
-import { harnessDirectory } from "./turn-records.ts";
+import { harnessDirectory, readPidFiles } from "./turn-records.ts";
 
 import type { PublishedMarketplace } from "./published-marketplace.ts";
 
@@ -151,6 +164,15 @@ const MEETING_TENTHS = 30;
 
 // How long `waits` waits for its release, in tenths of a second.
 const RELEASE_TENTHS = 600;
+
+// The variable, in a Pi's environment, that holds the id of the Pi's hook
+// gate, which every hook of that Pi inherits (D-BG-12).
+const HOOK_GATE_VARIABLE = "PI_CM_HOOK_GATE";
+
+// The file whose presence opens the hook gate `id`.
+function gateFile(harness: string, id: string): string {
+  return path.join(harness, `hook-gate-${id}`);
+}
 
 function oneOf<T extends string>(cell: string, values: readonly T[], what: string): T {
   const value = values.find((candidate) => candidate === cell);
@@ -367,15 +389,32 @@ function isLifecycleHook(hook: RecordingHook): boolean {
   );
 }
 
-// The lines that write the script's pid file, then log its start. The EXIT
-// trap logs its end with the code it exits with, then removes the pid file;
-// the code the script exits with stays the trap's `$?`.
-function lifecycleLines(name: string): string[] {
-  const recorder = `"${process.execPath}" "${HOOK_RECORDER_PATH}" --lifecycle`;
+// The lines that write the script's pid file before it does anything else,
+// with an EXIT trap that removes the file. Before and after the write, the
+// script exits 0 when the hook gate of its Pi is closed. The release closes
+// the gate before it reads the pid files, so either the release finds this
+// pid file, or the second check finds the gate closed.
+function registrationLines(name: string): string[] {
+  const harness = harnessDirectory("$HOME");
+  const gate = gateFile(harness, `$${HOOK_GATE_VARIABLE}`);
+  const exitWhenClosed = '[ -e "$gate" ] || exit 0';
   return [
-    `pidfile="${harnessDirectory("$HOME")}/hook-${name}-$$.pid"`,
+    `gate="${gate}"`,
+    exitWhenClosed,
+    `pidfile="${harness}/hook-${name}-$$.pid"`,
     String.raw`printf '%s\n' "$$" > "$pidfile.tmp"`,
     'mv "$pidfile.tmp" "$pidfile"',
+    `trap 'rm -f "$pidfile"' EXIT`,
+    exitWhenClosed,
+  ];
+}
+
+// The lines that log the script's start once it has recorded. The EXIT trap
+// they set logs its end with the code it exits with, then removes the pid
+// file; the code the script exits with stays the trap's `$?`.
+function startLines(name: string): string[] {
+  const recorder = `"${process.execPath}" "${HOOK_RECORDER_PATH}" --lifecycle`;
+  return [
     `trap '${recorder} end ${name} $$ $?; rm -f "$pidfile"' EXIT`,
     `${recorder} start ${name} $$`,
   ];
@@ -421,14 +460,16 @@ function scriptText(hook: RecordingHook): string {
   const meeting = hook.meets === undefined ? [] : meetingLines(hook.name, hook.meets);
   const marker = hook.meets === undefined ? "" : ' "$meeting"';
   const recorder = `"${process.execPath}" "${HOOK_RECORDER_PATH}" ${hook.name}${marker} "$@"`;
+  const lifecycle = isLifecycleHook(hook);
   return `${[
     "#!/bin/sh",
     // An ignored signal stays ignored in every command the script runs.
     ...(hook.sigterm === "ignore" ? ["trap '' TERM"] : []),
+    ...(lifecycle ? registrationLines(hook.name) : []),
     "stdin=$(cat)",
     ...meeting,
     `printf '%s' "$stdin" | ${recorder}`,
-    ...(isLifecycleHook(hook) ? lifecycleLines(hook.name) : []),
+    ...(lifecycle ? startLines(hook.name) : []),
     ...(hook.waits === undefined ? [] : releaseLines(hook.name)),
     ...afterRecording(hook),
   ].join("\n")}\n`;
@@ -527,20 +568,41 @@ export async function publishRecordingHooks(
  * killed left it behind (D-BG-12).
  */
 export async function readHookScriptPids(harness: string): Promise<readonly number[]> {
-  const names = (await readdir(harness)).filter((name) => HOOK_PID_FILE.test(name)).sort();
-  return Promise.all(
-    names.map(async (name) => Number((await readFile(path.join(harness, name), "utf8")).trim())),
-  );
+  const files = await readPidFiles(harness, (name) => HOOK_PID_FILE.test(name));
+  return files.map(({ pid }) => pid);
+}
+
+/** A hook gate that `openHookGate()` opened in a harness directory (D-BG-12). */
+export interface HookGate {
+  readonly id: string;
+  /** The variable that a Pi's environment needs so that its lifecycle hook scripts run. */
+  readonly environment: { readonly [HOOK_GATE_VARIABLE]: string };
 }
 
 /**
- * SIGKILLs each lifecycle hook script that a pid file in `harness` names and
- * that still runs. Pi starts each hook as the leader of a process group of its
- * own, so stopping a Pi and its group leaves the hook running; a scenario's
- * release stops what the scenario left, so that a waiting script cannot take
- * the release marker of a later scenario.
+ * Opens a new hook gate in `harness`. Only a Pi whose release passes the gate
+ * to `stopHookScripts()` after the Pi stops may get its environment. The gate
+ * stays open until then, or until the next scenario's `Before()` empties the
+ * sandbox.
  */
-export async function stopHookScripts(harness: string): Promise<void> {
+export async function openHookGate(harness: string): Promise<HookGate> {
+  const id = randomUUID();
+  await writeFile(gateFile(harness, id), "", { flag: "wx" });
+  return { id, environment: { [HOOK_GATE_VARIABLE]: id } };
+}
+
+/**
+ * Closes `gate`, then SIGKILLs each lifecycle hook script that a pid file in
+ * `harness` names and that still runs. Call it once the Pi of the gate has
+ * stopped. Pi starts each hook as the leader of a process group of its own,
+ * so stopping a Pi and its group leaves the hook running. A scenario's
+ * release stops what the scenario left, so that a waiting script cannot take
+ * the release marker of a later scenario. A script of that Pi that had not
+ * written its pid file when the release read them finds the gate closed and
+ * exits, so none outlives the release. Closing a closed gate does nothing.
+ */
+export async function stopHookScripts(harness: string, gate: HookGate): Promise<void> {
+  await rm(gateFile(harness, gate.id), { force: true });
   for (const pid of await readHookScriptPids(harness)) {
     try {
       process.kill(pid, "SIGKILL");

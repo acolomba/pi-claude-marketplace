@@ -74,7 +74,8 @@ export interface RpcGitEnvironment {
 
 /**
  * The variables a profile Pi adds to the allowlist: its temporary directory
- * (HAR-05), and the background-child marker when the profile sets it.
+ * (HAR-05), the background-child marker when the profile sets it, and the
+ * id of its hook gate when it has one.
  */
 export interface RpcProfileEnvironment {
   readonly TMPDIR: string;
@@ -83,6 +84,11 @@ export interface RpcProfileEnvironment {
    * child loads, so the profile Pi starts as such a child (D-BG-10).
    */
   readonly PI_SUBAGENT_CHILD?: "1";
+  /**
+   * The id of the hook gate that lets the lifecycle hook scripts of the
+   * cucumber harness run; every hook of the Pi inherits it (D-BG-12).
+   */
+  readonly PI_CM_HOOK_GATE?: string;
 }
 
 /**
@@ -230,7 +236,7 @@ export async function resolveRpcSandbox(sandbox: RpcSandbox): Promise<RpcSandbox
 
 /**
  * Returns the allowlist environment of every Pi child, plus `git` and the
- * profile's `TMPDIR` and background-child marker when given.
+ * profile's `TMPDIR`, background-child marker, and hook gate when given.
  */
 export function rpcChildEnvironment(
   sandbox: RpcSandbox,
@@ -261,6 +267,10 @@ export function rpcChildEnvironment(
     environment.TMPDIR = profileEnvironment.TMPDIR;
     if (profileEnvironment.PI_SUBAGENT_CHILD !== undefined) {
       environment.PI_SUBAGENT_CHILD = profileEnvironment.PI_SUBAGENT_CHILD;
+    }
+
+    if (profileEnvironment.PI_CM_HOOK_GATE !== undefined) {
+      environment.PI_CM_HOOK_GATE = profileEnvironment.PI_CM_HOOK_GATE;
     }
   }
 
