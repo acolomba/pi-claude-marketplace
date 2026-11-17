@@ -27,8 +27,8 @@ const TAG_OPENER = /<(\/?persisted-output)/giu;
 
 // The end of a cut at or before `end` that splits no surrogate pair.
 function safeEnd(text: string, end: number): number {
-  const code = text.charCodeAt(end - 1);
-  return code >= 0xd800 && code <= 0xdbff ? end - 1 : end;
+  const code = Number(text.codePointAt(end - 1));
+  return code > 0xffff ? end - 1 : end;
 }
 
 // Upstream's preview: up to the last line break of the first 2,000
@@ -36,7 +36,7 @@ function safeEnd(text: string, end: number): number {
 function previewOf(text: string): string {
   const lineBreak = text.slice(0, PREVIEW_LIMIT).lastIndexOf("\n");
   const end = lineBreak > PREVIEW_LIMIT / 2 ? lineBreak : PREVIEW_LIMIT;
-  return text.slice(0, safeEnd(text, end)).replace(TAG_OPENER, "<\\$1");
+  return text.slice(0, safeEnd(text, end)).replace(TAG_OPENER, String.raw`<\$1`);
 }
 
 function oneDecimal(value: number): string {

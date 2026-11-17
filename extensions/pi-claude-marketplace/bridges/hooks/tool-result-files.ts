@@ -64,7 +64,7 @@ function hunkBody(
       oldCount++;
     } else if (row.startsWith("+")) {
       newCount++;
-    } else if (row !== "\\ No newline at end of file" || lines.length === 0) {
+    } else if (row !== String.raw`\ No newline at end of file` || lines.length === 0) {
       return undefined;
     }
 

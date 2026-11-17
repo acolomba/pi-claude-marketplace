@@ -82,8 +82,8 @@ export function ceilingBound(
 // Where to cut `text` to keep at most `limit` code units: one unit earlier
 // when the last kept unit would be the high half of a surrogate pair.
 function cutIndex(text: string, limit: number): number {
-  const last = text.charCodeAt(limit - 1);
-  return last >= 0xd800 && last <= 0xdbff ? limit - 1 : limit;
+  const last = Number(text.codePointAt(limit - 1));
+  return last > 0xffff ? limit - 1 : limit;
 }
 
 // The last `count` code units of `text`. A start that splits a surrogate pair

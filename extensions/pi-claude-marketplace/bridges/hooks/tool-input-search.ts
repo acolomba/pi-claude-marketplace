@@ -31,7 +31,7 @@ function nonnegativeInteger(value: unknown): value is number {
 }
 
 function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return value.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }
 
 /** Projects Pi's glob and content search calls into the supported hook view. */

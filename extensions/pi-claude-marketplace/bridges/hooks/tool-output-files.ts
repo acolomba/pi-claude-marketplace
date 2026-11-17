@@ -125,7 +125,7 @@ function validHunk(value: unknown): value is Fields {
   if (
     !lines.every(
       (line, index) =>
-        /^[ +-]/.test(line) || (line === "\\ No newline at end of file" && index > 0),
+        /^[ +-]/.test(line) || (line === String.raw`\ No newline at end of file` && index > 0),
     )
   ) {
     return false;
