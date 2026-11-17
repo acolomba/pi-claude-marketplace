@@ -61,7 +61,7 @@
       "phase": "8"
     },
     {
-      "decision": "Maintainer decision review done 2026-11-16: pending D-PG rows locked; D-PG4-11/12 and D-PG9-07 stay pending",
+      "decision": "Maintainer decision review done 2026-11-16: every pending D-PG row locked, D-PG4-11/12 and D-PG9-07 included; T-08-13 accepted",
       "rationale": "user answers recorded in PROJECT.md Key Decisions",
       "phase": "milestone"
     }

@@ -4581,7 +4581,7 @@ Deferred by component-features Phase 7. Trigger: `@quintinshaw/pi-dynamic-workfl
 - Engine request for D-CF7-01: a pre-run hook (or approval option) in `@quintinshaw/pi-dynamic-workflows` so a host can ask before a saved workflow runs.
 - Engine request for D-CF7-02: a raw-string `args` mode for the slash path, so a script written for Claude Code receives the typed text as one string, or `undefined` when nothing is typed.
 - Engine requests that parity-gaps Phase 8 depends on and did not draft (PRD section 8.4, D-PG8-17): an `agent()` call whose `agentType` names no agent throws, as Claude Code 2.1.323 does (the scenario "A workflow step that names an agent type the plugin does not install still runs, where Claude Code stops the step" fails on that day); `parallel()` and `pipeline()` return `null` for a failed thunk and never reject; `builtin:mcp` in `providerMiddlewareExtensions` works in subagents.
-- [workflows] Ask the pi-dynamic-workflows engine to apply Pi project trust to `<project>/.pi/workflows/settings.json` (3.15.0 `src/workflow-settings.ts:122-134` reads it untrusted; a cloned repo can set `providerMiddlewareExtensions` and `inheritMainModel`). Source: 08-REVIEW.md CR-01, 08-SECURITY.md T-08-13 (open nonblocking, pending maintainer acceptance).
+- [workflows] Ask the pi-dynamic-workflows engine to apply Pi project trust to `<project>/.pi/workflows/settings.json` (3.15.0 `src/workflow-settings.ts:122-134` reads it untrusted; a cloned repo can set `providerMiddlewareExtensions` and `inheritMainModel`). Source: 08-REVIEW.md CR-01, 08-SECURITY.md T-08-13 (closed: the maintainer accepted the risk 2026-11-16 and makes no engine request).
 
 ## WFLLIST-01: the workflow listing step assumes no engine built-in command name holds a colon
 
@@ -5480,6 +5480,8 @@ Noted 2026-11-14 (parity-gaps, Phase 9, D-PG9-08). Trigger: a published pi-mcp-a
 ## MCPOPENUI-01: write the `openUi: false` default once pi-subagents hashes `openUi`
 
 Noted 2026-11-14 (parity-gaps, Phase 9, D-PG9-07 amendment). Trigger: a pi-subagents release whose `computeMcpServerHash` includes `openUi`, as pi-mcp-adapter 7.0.1's `computeServerHash` does, and a floor raised to it. pi-subagents 0.88.1 omits it, so an entry with `openUi: false` makes background MCP grants fail (`test/integration/pi-subagents-child-identity.test.ts`). The upstream request is the maintainer's to file. The work it unlocks: write `openUi: false` on every plugin entry as a recorded default and drop the UI-extension divergence from `docs/mcp-compatibility.md`.
+
+Confirmed by the maintainer review 2026-11-16: D-PG9-07 is locked, and the default waits for this trigger.
 
 ## PITRUSTPATHS-01: gate project plugins on a trust-requiring path once Pi lets an extension register one
 

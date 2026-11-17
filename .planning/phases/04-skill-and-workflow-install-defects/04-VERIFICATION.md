@@ -10,19 +10,19 @@ overrides_applied: 4
 overrides:
   - must_have: "PG-SKILL-04 unclassified edge: a segment that starts with a sibling's folder name and continues with %, +, ~, @ or a non-ASCII letter"
     reason: "Accepted as the current behavior: the `../b` prefix is rewritten (`../b%20x/ref.md` becomes `../demo-b%20x/ref.md`). The path was dead in the staged layout before and stays dead, so no working link breaks. A boundary check is tracked as BACKLOG SIBLINGPREFIX-01 (still open, BACKLOG.md:5357; re-probed 2026-11-16, unchanged; domain/skill-sibling-paths.ts has not changed since 55a81f8e). Carries the 04-03 D-PG4-06 byte-identity truth."
-    accepted_by: "orchestrator (autonomous run, pending maintainer review)"
+    accepted_by: "maintainer review 2026-11-16 (proposed by the orchestrator in the autonomous run)"
     accepted_at: "2026-11-14T08:30:00Z"
   - must_have: "Plan 04-04 judgment-tier prohibition: no staged text claims the user opted in to workflows"
     reason: "Holds on inspection, re-checked 2026-11-16: the workflow arm of domain/skill-tokens.ts:123 still only keeps the source's slash state; no file under extensions/ holds opt-in wording about workflows (the only opt-in text is the AG-7 --map-model flag and the WLIF-03 bridge gate comments); features/workflow/references.feature:16,67 asserts the exact text the model receives."
-    accepted_by: "orchestrator (autonomous run, pending maintainer review)"
+    accepted_by: "maintainer review 2026-11-16 (proposed by the orchestrator in the autonomous run)"
     accepted_at: "2026-11-14T08:30:00Z"
   - must_have: "04-05 truth: the note appears for the upstream name `<plugin>:<agent>` and for the generated agent name, for `tools` and for `disallowedTools`, with or without pi-subagents, once for each distinct pair of script and agent type"
-    reason: "Superseded in its generated-name clause by decision D-PG8-04 (PROJECT.md:2421, Phase 8, pending maintainer review), shipped in f9ebd499: the engine's registry binds an agent only by its frontmatter `name` (`<plugin>:<agent>`), so the generated flat file name binds no agent and a restriction note for it would be false. The note now keys on the declared name only (discover-names.ts:103-123,159-166); features/workflow/agent-types.feature:135 asserts that the generated file name gets no restriction note, and docs/workflows-compatibility.md:129 records it. The other clauses still hold: `tools` and `disallowedTools` (discover-names.ts:90-98), independent of pi-subagents (pure join over discovery), and one note per distinct pair (workflow-script.ts:886-896 dedupes the literals)."
-    accepted_by: "project decision D-PG8-04 (PROJECT.md decision log, pending maintainer review)"
+    reason: "Superseded in its generated-name clause by decision D-PG8-04 (PROJECT.md:2421, Phase 8, confirmed by the maintainer review 2026-11-16), shipped in f9ebd499: the engine's registry binds an agent only by its frontmatter `name` (`<plugin>:<agent>`), so the generated flat file name binds no agent and a restriction note for it would be false. The note now keys on the declared name only (discover-names.ts:103-123,159-166); features/workflow/agent-types.feature:135 asserts that the generated file name gets no restriction note, and docs/workflows-compatibility.md:129 records it. The other clauses still hold: `tools` and `disallowedTools` (discover-names.ts:90-98), independent of pi-subagents (pure join over discovery), and one note per distinct pair (workflow-script.ts:886-896 dedupes the literals)."
+    accepted_by: "project decision D-PG8-04 (PROJECT.md decision log); maintainer review 2026-11-16"
     accepted_at: "2026-11-15T05:55:38Z"
   - must_have: "04-05 and 04-06 artifact and key-link patterns `workflowAgentRestrictionNotes` / `export function workflowAgentRestrictionNotes` (discover-names.ts, install-outcome.ts, update-swap.ts, info.ts)"
-    reason: "Renamed by decision D-PG8-05 (PROJECT.md:2421, pending maintainer review), shipped in b8ac6d91: both kinds of workflow agent note travel through one exported join, `workflowAgentNotes` (discover-names.ts:272), and the member `DiscoveredGeneratedNames.workflowAgentNotes` (:53, filled at :332-336). The wiring the patterns stood for is intact under the new name: install-outcome.ts:1257, update-swap.ts:1735, info.ts:133,1159,1317. `verify.artifacts`/`verify.key-links` report these five patterns missing only because the literal name changed."
-    accepted_by: "project decision D-PG8-05 (PROJECT.md decision log, pending maintainer review)"
+    reason: "Renamed by decision D-PG8-05 (PROJECT.md:2421, confirmed by the maintainer review 2026-11-16), shipped in b8ac6d91: both kinds of workflow agent note travel through one exported join, `workflowAgentNotes` (discover-names.ts:272), and the member `DiscoveredGeneratedNames.workflowAgentNotes` (:53, filled at :332-336). The wiring the patterns stood for is intact under the new name: install-outcome.ts:1257, update-swap.ts:1735, info.ts:133,1159,1317. `verify.artifacts`/`verify.key-links` report these five patterns missing only because the literal name changed."
+    accepted_by: "project decision D-PG8-05 (PROJECT.md decision log); maintainer review 2026-11-16"
     accepted_at: "2026-11-15T04:08:22Z"
 re_verification:
   previous_status: passed
@@ -44,7 +44,7 @@ human_verification: []
 **Phase Goal:** The official skill and workflow plugins install what Claude Code loads, and the text they install names things that exist. A root-source marketplace entry installs only its listed skills, a link to a sibling skill resolves, a command can start its plugin's workflow by name, and an install says when a workflow does not keep an agent's tool restriction.
 
 **Verified:** 2026-11-16T06:46:36Z
-**Status:** passed, with four overrides. Two are the earlier orchestrator overrides, still pending maintainer review. Two are new and record later project decisions (D-PG8-04, D-PG8-05), also pending maintainer review.
+**Status:** passed, with four overrides. Two are the earlier orchestrator overrides. Two record later project decisions (D-PG8-04, D-PG8-05). The maintainer review of 2026-11-16 accepted all four.
 **Re-verification:** Yes. The previous report (passed, 37/38, two overrides, 2026-11-14T07:37:10Z) became stale, because later work changed 20 of its 42 covered non-planning files.
 
 ## Verification Basis
@@ -59,9 +59,9 @@ This pass re-checked every roadmap criterion and every plan must-have against th
 
 | Decision | What it changed | Effect on Phase 4 must-haves |
 | --- | --- | --- |
-| D-PG4-11/12 wording (Phase 4 review WR-05 and 91b0c917, pending maintainer review) | The note names only the built-ins that the agent's restriction does not keep. It also hedges on the engine setting: `...which restricts its tools; unless the workflow engine's providerMiddlewareExtensions setting lists builtin:codemode, the engine does not keep that restriction, so the agent may use bash, edit, and write` (O/discover-names.ts:159-166). PROJECT.md:2395 records this exact wording. | SC4 holds: the note still says that the workflow does not keep the restriction. The literal note text in the folded 04-05 truth 1 ("can use read, bash, edit, and write") is the pre-review wording. The recorded decision replaces it, as the previous report noted. An agent whose `tools` keeps all four built-ins gets no note (agent-restrictions.feature:117). WFNOTETRIGGER-01 (BACKLOG.md:5361) is still open as a maintainer question. |
-| D-PG8-04 (Phase 8, pending maintainer review) | The restriction note keys on the declared `<plugin>:<agent>` name only. The generated file name binds no agent in the engine, so it gets no note (f9ebd499). A second note kind was added for an agent type of the plugin's namespace that the plugin does not install. | The 04-05 truth 3 generated-name clause is reversed. It is carried by an override (see frontmatter). Its other clauses hold. The new missing-agent note gives no false note for any 04-05 "no note" arm: a bare name, another plugin's name, a generated flat name, and a non-literal each get none (discover-names.ts:216-230, 257-264). |
-| D-PG8-05 (Phase 8, pending maintainer review) | `workflowAgentRestrictionNotes` was renamed to `workflowAgentNotes`, the one member and join that carry both note kinds. It is capped at five missing-agent notes per script, followed by a count line (b8ac6d91). | The five artifact and key-link patterns of 04-05 and 04-06 fail on the literal name only. The wiring is intact under the new name, so an override carries it (see frontmatter). |
+| D-PG4-11/12 wording (Phase 4 review WR-05 and 91b0c917, confirmed by the maintainer review 2026-11-16) | The note names only the built-ins that the agent's restriction does not keep. It also hedges on the engine setting: `...which restricts its tools; unless the workflow engine's providerMiddlewareExtensions setting lists builtin:codemode, the engine does not keep that restriction, so the agent may use bash, edit, and write` (O/discover-names.ts:159-166). PROJECT.md:2395 records this exact wording. | SC4 holds: the note still says that the workflow does not keep the restriction. The literal note text in the folded 04-05 truth 1 ("can use read, bash, edit, and write") is the pre-review wording. The recorded decision replaces it, as the previous report noted. An agent whose `tools` keeps all four built-ins gets no note (agent-restrictions.feature:117). WFNOTETRIGGER-01 (BACKLOG.md:5361) is still open as a maintainer question. |
+| D-PG8-04 (Phase 8, confirmed by the maintainer review 2026-11-16) | The restriction note keys on the declared `<plugin>:<agent>` name only. The generated file name binds no agent in the engine, so it gets no note (f9ebd499). A second note kind was added for an agent type of the plugin's namespace that the plugin does not install. | The 04-05 truth 3 generated-name clause is reversed. It is carried by an override (see frontmatter). Its other clauses hold. The new missing-agent note gives no false note for any 04-05 "no note" arm: a bare name, another plugin's name, a generated flat name, and a non-literal each get none (discover-names.ts:216-230, 257-264). |
+| D-PG8-05 (Phase 8, confirmed by the maintainer review 2026-11-16) | `workflowAgentRestrictionNotes` was renamed to `workflowAgentNotes`, the one member and join that carry both note kinds. It is capped at five missing-agent notes per script, followed by a count line (b8ac6d91). | The five artifact and key-link patterns of 04-05 and 04-06 fail on the literal name only. The wiring is intact under the new name, so an override carries it (see frontmatter). |
 | `substituteClaudeVars` -> `substituteClaudeContent` (3abe4484, plugin option defaults in skill content) | Rename and an extra options argument. | The 04-03 ordering truth still holds: the sibling rewrite runs inside `skillMarkdownRewrite` (bridges/skills/stage.ts:250-266) before `substituteClaudeContent` (:388-389). |
 
 ## Goal Achievement
@@ -212,14 +212,14 @@ No orphaned requirement: REQUIREMENTS.md maps exactly these four IDs to Phase 4,
 
 ## Maintainer Review
 
-There are no human-verification items. Four overrides wait for the maintainer, and they leave nothing unverified:
+There are no human-verification items. The maintainer review of 2026-11-16 accepted the four overrides, which leave nothing unverified:
 
 1. **SIBLINGPREFIX-01 (PG-SKILL-04 token boundary):** accept `../b%20x/ref.md` -> `../demo-b%20x/ref.md` (a dead path before and after), or add a boundary check after the token so the path stays byte-identical.
 2. **PG-WF-01 judgment prohibition (flagged):** confirm that no staged command, skill or agent gains opt-in wording about workflows. The verifier's non-authoritative verdict is that this holds.
 3. **D-PG8-04:** the generated agent file name gets no restriction note, which reverses a clause of the 04-05 truth.
 4. **D-PG8-05:** the join is renamed to `workflowAgentNotes` and carries both note kinds.
 
-Two other decisions are still pending review but are outside the overrides: D-PG4-01/02 and the D-PG4-12 note wording.
+Two other decisions are outside the overrides, and the same review locked both: D-PG4-01/02 (confirmed) and the D-PG4-12 note wording (accepted).
 
 ## Gaps Summary
 

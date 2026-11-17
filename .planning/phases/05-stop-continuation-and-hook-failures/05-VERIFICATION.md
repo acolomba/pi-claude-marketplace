@@ -10,11 +10,11 @@ overrides_applied: 4
 overrides:
   - must_have: "a reload still stops a plain async hook that is running"
     reason: "Met on Linux, where the orphan reap can prove a live process is the hook (D-62-05). On macOS and Windows a reload never stopped a live async hook process (the reap is Linux-only, async-rewake/registry.ts:886-891), and D-PG5-18 accepts that a plain async hook that never ends has no bound there. The compatibility page states this residual (docs/hooks-compatibility.md:350,351,557; 6580f5f8). Re-checked 2026-11-16: unchanged. Also carries the 05-05 truth that a /reload, the next start, and a child shutdown still stop a running plain async hook."
-    accepted_by: "orchestrator (autonomous run, pending maintainer review)"
+    accepted_by: "maintainer review 2026-11-16 (proposed by the orchestrator in the autonomous run)"
     accepted_at: "2026-11-14T18:55:15Z"
   - must_have: "The hooks bridge registers 13 `pi.on` call sites, with `agent_before_settle` between `agent_end` and `agent_settled`; a pi-subagents child registers it and runs no `Stop` hook"
-    reason: "Superseded in its count by decision D-PG6-18 (PROJECT.md:2409, Phase 6, pending maintainer review): the UserPromptExpansion dispatch is a second `input` handler registered directly after the UserPromptSubmit one, so the bridge now has 14 `pi.on` call sites (event-router.ts:1444-1650; test/architecture/hooks-lifecycle.test.ts:386-403 pins the 14-entry order). The rest holds: `agent_before_settle` sits between `agent_end` and `agent_settled` (event-router.ts:1615-1640), and a pi-subagents child registers it and runs no Stop hook (`dispatchesInCurrentSession(\"Stop\")`, :1624; :188-190; features/plugin/subagent-child.feature:247)."
-    accepted_by: "project decision D-PG6-18 (PROJECT.md decision log, pending maintainer review)"
+    reason: "Superseded in its count by decision D-PG6-18 (PROJECT.md:2409, Phase 6, confirmed by the maintainer review 2026-11-16): the UserPromptExpansion dispatch is a second `input` handler registered directly after the UserPromptSubmit one, so the bridge now has 14 `pi.on` call sites (event-router.ts:1444-1650; test/architecture/hooks-lifecycle.test.ts:386-403 pins the 14-entry order). The rest holds: `agent_before_settle` sits between `agent_end` and `agent_settled` (event-router.ts:1615-1640), and a pi-subagents child registers it and runs no Stop hook (`dispatchesInCurrentSession(\"Stop\")`, :1624; :188-190; features/plugin/subagent-child.feature:247)."
+    accepted_by: "project decision D-PG6-18 (PROJECT.md decision log); maintainer review 2026-11-16"
     accepted_at: "2026-11-16T06:58:01Z"
   - must_have: "`Stop` runs on `agent_before_settle` in `tui`, `print`, `json`, and `rpc` through one handler, with no `ctx.mode` branch and no `agent_settled` fallback path"
     reason: "The bridge side holds in code: one registration (event-router.ts:1619-1626), `requireNotificationMode` admits all four modes (shared/notification-run.ts:13-19), no `ctx.mode` comparison exists in settle.ts or event-router.ts, and `agent_settled` runs no Stop (settle.ts:311-312). That Pi raises the event and honors `continue: true` the same way in json and print mode was measured once in research (05-RESEARCH.md M2, M3, M6) and is recorded by decisions D-PG5-01/D-PG5-02 (PROJECT.md:2396, outcome Good), which name the missing committed check as the residual BACKLOG STOPMODECHECK-01 (BACKLOG.md:5373). The committed scenarios drive rpc and the terminal only."
@@ -33,6 +33,8 @@ human_verification:
   - test: "Read docs/hooks-compatibility.md:472-476 and CHANGELOG.md:23 (05-06 judgment-tier prohibition: hook output is not kept in files without telling the user)."
     expected: "A user learns that over-limit hook output is saved, the folder in each scope, that the project-scope folder lies inside the project directory (with the version-control note), and that files older than 30 days are removed."
     why_human: "Judgment-tier prohibition. The verifier's non-authoritative verdict is that it holds (unverified-prohibition, human review recommended)."
+    status: resolved
+    resolution: "passed: the maintainer reviewed it on 2026-11-16 and asked for a CHANGELOG clause, which 594ea843 added (CHANGELOG.md:23-24: files older than 30 days are removed; a project plugin's folder is inside the project under `.pi/`, with the version-control note)."
   - test: "Run CI on Node 24 (the PR's `behavioral` job) and check features/hook/failures.feature:157 \"A prompt hook that cannot start lets the prompt through and shows its error\" (research assumption A9)."
     expected: "The scenario passes on Node 24: the notice reads `... Error occurred while executing hook command: spawn missing-guard.sh ENOENT`."
     why_human: "Gate G ran on Node 26.13.1. This pass measured the spawn ENOENT message on Node 22.22.2 and 26.13.1 (both `spawn <path> ENOENT`). No Node 24 is installed here, and features/gaps has no PR, so no CI run has covered it."
@@ -42,7 +44,7 @@ human_verification:
 
 **Phase Goal:** A `Stop` hook that blocks continues the same run, as in Claude Code. A hook that fails, names a missing script, returns too much context, or runs in the background behaves as it does there.
 **Verified:** 2026-11-16T06:58:01Z
-**Status:** human_needed. The code meets every roadmap criterion. Two items wait for a human or CI: the judgment-tier prohibition and the Node 24 wording of a spawn `ENOENT` (A9). Four truths pass by override: one existing orchestrator override and three new decision overrides (D-PG6-18, D-PG5-01/02). All four are pending maintainer review, except D-PG5-01, whose outcome is Good.
+**Status:** human_needed. The code meets every roadmap criterion. One item waits for CI: the Node 24 wording of a spawn `ENOENT` (A9). The judgment-tier prohibition passed at the maintainer review of 2026-11-16. Four truths pass by override: one existing orchestrator override and three new decision overrides (D-PG6-18, D-PG5-01/02). The maintainer review of 2026-11-16 accepted all four.
 **Re-verification:** Yes. The previous report (passed, 6/6, one override, 2026-11-14T18:55:15Z) became stale, because later work changed 37 of its 69 covered non-planning files.
 
 ## Verification Basis
@@ -57,8 +59,8 @@ This pass re-checked every roadmap criterion and every plan must-have against th
 
 | Decision | What it changed | Effect on Phase 5 must-haves |
 | --- | --- | --- |
-| D-PG6-18 (Phase 6, pending maintainer review) | A second `input` handler, for `UserPromptExpansion`, registers directly after the `UserPromptSubmit` one. The bridge now has 14 `pi.on` call sites (H/event-router.ts:1444-1650). | The 05-01 count of 13 is out of date. An override carries it. The order that matters still holds: `agent_end`, `agent_before_settle`, `agent_settled` (:1615-1640), pinned by test/architecture/hooks-lifecycle.test.ts:386-403. |
-| D-PG6-19/20/21 (Phase 6, pending maintainer review) | `UserPromptExpansion` became an admitted event. It shows failure notices (H/dispatch.ts:671-687) and `Operation stopped by hook[: <reason>]` on `continue: false`. | This extends the 05-02 and 05-03 event lists and changes none of their arms. The missing-script rule still covers only `Stop` and `UserPromptSubmit` (H/wire-protocol.ts:59), so a `UserPromptExpansion` exit 2 still blocks (docs/hooks-compatibility.md:212). That keeps the 05-03 truth "no other event gets the rule". |
+| D-PG6-18 (Phase 6, confirmed by the maintainer review 2026-11-16) | A second `input` handler, for `UserPromptExpansion`, registers directly after the `UserPromptSubmit` one. The bridge now has 14 `pi.on` call sites (H/event-router.ts:1444-1650). | The 05-01 count of 13 is out of date. An override carries it. The order that matters still holds: `agent_end`, `agent_before_settle`, `agent_settled` (:1615-1640), pinned by test/architecture/hooks-lifecycle.test.ts:386-403. |
+| D-PG6-19/20/21 (Phase 6, confirmed by the maintainer review 2026-11-16) | `UserPromptExpansion` became an admitted event. It shows failure notices (H/dispatch.ts:671-687) and `Operation stopped by hook[: <reason>]` on `continue: false`. | This extends the 05-02 and 05-03 event lists and changes none of their arms. The missing-script rule still covers only `Stop` and `UserPromptSubmit` (H/wire-protocol.ts:59), so a `UserPromptExpansion` exit 2 still blocks (docs/hooks-compatibility.md:212). That keeps the 05-03 truth "no other event gets the rule". |
 | D-PG6-06 (Phase 6) | `agent_end` also drops the tool-call marks of calls that never reached a result (H/settle.ts:151). | This is additive. The cache and held-reason logic of 05-01 and 05-03 is unchanged (:152-158). |
 | D-PG10-08/10 (Phase 10) | A hook that names a plugin option with no value fails with Claude Code's message, through the same failure notice. | Additive scenarios at failures.feature:184 and :211. The 05-02 notice forms are unchanged. |
 | Review fix IN-04 (in-phase, da55855a, before the previous report) | The runtime's `claimStartFailureNotice` became `startFailureNoticeShown(key)` and `recordStartFailureNotice(key)`. The key is recorded only after the notice shows (H/dispatch.ts:767-779). | `verify.artifacts` and `verify.key-links` for 05-02 report the literal `claimStartFailureNotice` as missing. The truth still holds under the new names: one notice per load per event and resolved command, the set lives in the runtime (H/runtime.ts:340, 501-507), and a bridge load empties it (:364). This is a pattern miss, not a stub. It is a review finding, not a decision, so no override was added. |
@@ -200,7 +202,9 @@ No orphaned requirement: REQUIREMENTS.md maps exactly these four IDs to Phase 5,
 
 ## Human Verification Required
 
-### 1. Saved hook output disclosure (judgment-tier prohibition, 05-06)
+### 1. Saved hook output disclosure (judgment-tier prohibition, 05-06) -- passed
+
+**Result:** passed. The maintainer reviewed it on 2026-11-16 and asked for a CHANGELOG clause, which 594ea843 added (CHANGELOG.md:23-24).
 
 **Test:** Read docs/hooks-compatibility.md:472-476 and CHANGELOG.md:23.
 **Expected:** A user learns that over-limit hook output is saved, the folder in each scope, that the project folder lies inside the project directory, and that files older than 30 days are removed.
@@ -214,14 +218,14 @@ No orphaned requirement: REQUIREMENTS.md maps exactly these four IDs to Phase 5,
 
 ## Maintainer Review
 
-These items wait for the maintainer. None is a gap:
+The maintainer review of 2026-11-16 accepted items 1 to 3. None is a gap:
 
 1. **D-PG5-18 (existing override):** on macOS and Windows, a `/reload` does not stop a running plain `async` hook, and nothing bounds one that never ends. The page says so.
 2. **D-PG6-18 (new override):** the bridge has 14 `pi.on` sites. This replaces the 05-01 count of 13.
 3. **D-PG5-01/02 (new override, outcome Good):** json and print mode Stop continuation has no committed scenario (STOPMODECHECK-01).
-4. **The judgment prohibition and A9:** see Human Verification.
+4. **The judgment prohibition (passed 2026-11-16) and A9 (open until PR CI):** see Human Verification.
 
-D-PG5-10/11/13, D-PG5-14/15/16 and D-PG5-17/18 stay pending maintainer review as product decisions (PROJECT.md:2398-2400). They are implemented as decided.
+D-PG5-10/11/13, D-PG5-14/15/16 and D-PG5-17/18 are product decisions that the maintainer review of 2026-11-16 locked as confirmed (PROJECT.md:2398-2400). They are implemented as decided.
 
 ## Gaps Summary
 

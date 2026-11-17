@@ -44,7 +44,7 @@ Next, in order (milestone lifecycle):
 2. `/gsd-audit-milestone`, then `/gsd-complete-milestone`, then `/gsd-cleanup`, on this branch.
 3. Offer the version bump; no PR, merge, or publish without the maintainer.
 
-The maintainer decision review is done (2026-11-16): every pending D-PG row in PROJECT.md is locked, except D-PG4-11/12 (wording) and D-PG9-07, which stay pending.
+The maintainer decision review is done (2026-11-16): every pending D-PG row in PROJECT.md is locked, D-PG4-11/12 with its wording accepted and D-PG9-07 as confirmed (the `openUi: false` default waits in BACKLOG MCPOPENUI-01). T-08-13 is accepted.
 
 ### parity-gaps Phase 11 (Skills, Commands, and Records)
 
@@ -83,7 +83,7 @@ Options, Variables, and Trust, 21/21 plans) are complete.
 - Phase 10 complete 2026-11-15: 6/6 truths, PG-SEC-02 by override, PG-SEC-02 Pending; gate exit 0 at 16ef48af (adapter 1983, builtin 199).
 - Phase 10 security: 52/52 closed, threats_open 0.
 - Phase 07 security re-audited at 24de427b: 21/21 closed, threats_open 0; UF-07-02 open for maintainer decision. (3a59a8fd)
-- Phase 09 security re-audited at 25caef67: 23/23 closed, threats_open 0; T-09-09 stays an accepted residual pending D-PG9-07; UF-09-01 (low, quadratic CLAUDE_VARIABLE scan) logged, no fix. (976c4786)
+- Phase 09 security re-audited at 25caef67: 23/23 closed, threats_open 0; T-09-09 stays an accepted residual under D-PG9-07 (locked 2026-11-16); UF-09-01 (low, quadratic CLAUDE_VARIABLE scan) logged, no fix. (976c4786)
 
 Decisions (Phase 10):
 
@@ -127,8 +127,8 @@ Both verifications passed with overrides pending maintainer review: Phase 7
 criteria 3 and 4 (D-PG7-17 writes `model: ""`), Phase 8 criterion 5 (option A
 of D-PG8-11; ROADMAP criterion 5 and PG-WF-05 amended to it). The maintainer
 review of 2026-11-16 confirmed D-PG7-02/04/07/10/17/18/19 and D-PG8-04..15
-(D-PG8-07 changed to keep the last script). Still open: T-08-13 (open
-nonblocking; BACKLOG WFLENGINE-01 carries the engine-trust request).
+(D-PG8-07 changed to keep the last script). T-08-13 is closed: the maintainer
+accepted the risk on 2026-11-16, with no engine request.
 
 
 ### parity-gaps Phase 3 execution
