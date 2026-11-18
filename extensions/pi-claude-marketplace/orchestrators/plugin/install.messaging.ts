@@ -22,6 +22,8 @@ import {
   MANIFEST_ESCAPE_NOTE,
   narrowUnsupportedKinds,
   SOURCE_DIR_MISSING_NOTE,
+  USER_CONFIG_MALFORMED_NOTE,
+  USER_CONFIG_UNSET_NOTE,
 } from "../../shared/probe-classifiers.ts";
 import { redactCauseChain, redactedRollbackPartials } from "../../shared/redact-absolute-paths.ts";
 
@@ -538,6 +540,26 @@ function errnoReasonFromNote(reason: string): ContentReason | undefined {
 }
 
 /**
+ * D-PG10-05 / D-PG10-06: the two option notes, mirroring
+ * `classifyResolverNote`. The unset note follows the `contains <kind>` rule
+ * for the kind `userConfig`. Returns undefined for any other note.
+ */
+function userConfigNoteReasons(
+  reason: string,
+  partialable: boolean,
+): readonly ContentReason[] | undefined {
+  if (reason.startsWith(USER_CONFIG_MALFORMED_NOTE)) {
+    return ["invalid manifest"];
+  }
+
+  if (reason.startsWith(USER_CONFIG_UNSET_NOTE)) {
+    return partialable ? narrowUnsupportedKinds(["userConfig"]) : ["unsupported source"];
+  }
+
+  return undefined;
+}
+
+/**
  * Map ONE resolver note to its closed-set reason tokens. Arm order is
  * load-bearing and documented on `narrowResolverReasons`; returns an empty
  * list for a note that classifies to nothing.
@@ -597,6 +619,13 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
     return ["unreadable manifest"];
   }
 
+  // D-PG10-05 / D-PG10-06: option keys are author text, so the option notes
+  // run before the `includes("source")` catch-all.
+  const optionReasons = userConfigNoteReasons(reason, partialable);
+  if (optionReasons !== undefined) {
+    return optionReasons;
+  }
+
   if (reason.includes("source")) {
     return ["unsupported source"];
   }
@@ -624,8 +653,11 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
  *      mirroring `narrowResolverNotes`'s catch-all (SURF-01 / WR-01 / D-64-07)
  *   2. the `source dir does not exist` note -> `source missing` (SRC-01);
  *      the `plugin manifest resolves outside the` note -> `unreadable
- *      manifest` (D-PL2-24); any other "source" substring -> `unsupported
- *      source`
+ *      manifest` (D-PL2-24); the `malformed userConfig` note -> `invalid
+ *      manifest` (D-PG10-05); the `required userConfig options have no
+ *      default` note -> the `userConfig` kind marker when partialable and
+ *      `unsupported source` otherwise (D-PG10-06); any other "source"
+ *      substring -> `unsupported source`
  *   3. errno-like substrings (EACCES / EPERM / ENOENT / SyntaxError)
  *   4. permissive fallback: `unsupported source`
  * Steps 3-4 are defensive for notes already serialised by deeper helpers;

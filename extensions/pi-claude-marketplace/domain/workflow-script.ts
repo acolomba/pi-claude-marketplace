@@ -25,11 +25,10 @@
 
 import { parse, tokTypes } from "acorn";
 
-import { errorMessage, WorkflowNameCollisionError } from "../shared/errors.ts";
+import { errorMessage } from "../shared/errors.ts";
 
-import { assertSafeName, generatedWorkflowName } from "./name.ts";
+import { assertSafeName, generatedWorkflowName, unelidedWorkflowName } from "./name.ts";
 
-import type { WorkflowNameCollision } from "../shared/errors.ts";
 import type {
   Comment,
   Program,
@@ -91,6 +90,14 @@ export interface NamedWorkflow {
    * precisely because a gate reading may never turn into a refusal (WGATE-03).
    */
   readonly gate?: WorkflowGate;
+  /**
+   * PG-SEC-01 / D-PG4-11: each distinct string literal the script passes as an
+   * `agentType`, in first-seen order, absent when there is none. Advisory like
+   * `gate`: an orchestrator joins it with the plugin's agents to say that the
+   * workflow engine drops a restricted agent's tool list, and it never changes
+   * whether the script is admitted.
+   */
+  readonly agentTypes?: readonly string[];
 }
 
 /**
@@ -148,7 +155,7 @@ interface ParsedScript {
  * never contributes to the command name, which comes from `meta.name` alone.
  *
  * The PLUGIN name is checked before anything else, and it throws rather than
- * refusing. It is a defect of the SET, like the WNAM-05 collision: it
+ * refusing. It is a defect of the SET: it
  * disqualifies every script in the plugin at once and no file is at fault, so
  * rendering it as a per-file refusal would blame each well-formed file in turn
  * for a fact about the plugin. WNAM-06's per-file refusal covers the name the
@@ -225,51 +232,113 @@ export function admitWorkflowScript(
   // off a script that is about to be refused, and a refusal carries no gate by
   // type (WGATE-03/WGATE-04).
   const gate = readEngineGate(parsed.ast, meta.elements);
+  const agentTypes = readAgentTypes(parsed.ast);
 
-  return namedVerdict(pluginName, fileName, metaName.value, description, gate);
+  return namedVerdict(pluginName, fileName, metaName.value, description, gate, agentTypes);
 }
 
 /**
- * WNAM-05: detect two workflow scripts in one plugin whose `meta.name` resolves
- * to the same generated command name. Both FILE names are listed, because the
- * clash lives in the declared names and neither file name reveals it.
+ * D-PG8-18 (amends WNAM-06): when the `<plugin>-` elision makes two different
+ * `meta.name`s of one plugin produce one generated name, each of them keeps its
+ * full name, `<plugin>:<meta.name>`, so both are installed, as in Claude Code,
+ * which does not elide. In the plugin `demo`, `demo-scan` and `scan` install as
+ * `demo:demo-scan` and `demo:scan`. A full name can clash with the elided name
+ * of a third script (`demo-demo-scan`), so the rule repeats until no two
+ * different `meta.name`s share a name. The outcome depends on the set of
+ * `meta.name`s only, never on the order of the files.
  *
- * Single-collision message:
- *   `Generated workflow name collision detected. Rename the meta.name of one of the source scripts:
- *      "acme:deploy" <- ["deploy.workflow.js", "ship.workflow.js"]`
- *
- * Multi-collision messages join each line on a fresh `\n  ` separator.
- *
- * Takes the FULL verdict array and narrows internally, which leaves the caller
- * no opportunity to dedup first. That is the deliberate divergence from
- * `bridges/commands/stage.ts::assertNoCommandCollisions`: the commands discover
- * path first-wins-dedups by generated name (D-07) before its assert ever runs,
- * which makes that assert unreachable in practice. For commands a clash can only
- * arise from prefix elision, which the two file names make legible; for
- * workflows it arises from `meta.name`, so keeping the first silently would be
- * the misnaming WNAM-05 exists to prevent.
+ * A full name that fails the engine's screens (it can pass 128 characters) is
+ * not used, and that script keeps its elided name. Two scripts with one
+ * `meta.name` keep one name; `keepLastWorkflowPerName` then keeps the last one.
  */
-export function assertNoWorkflowNameCollisions(verdicts: readonly WorkflowVerdict[]): void {
-  const groups = new Map<string, string[]>();
+export function unelideClashingWorkflowNames<T extends { readonly verdict: WorkflowVerdict }>(
+  pluginName: string,
+  records: readonly T[],
+): T[] {
+  const admitted = records.map((record) => record.verdict).filter(isAdmitted);
+  const fullNames = new Map<string, string>();
+  const tried = new Set<string>();
+  const nameOf = (verdict: AdmittedWorkflow): string =>
+    fullNames.get(verdict.metaName) ?? verdict.generatedName;
 
-  for (const admitted of verdicts.filter(isAdmitted)) {
-    const claimants = groups.get(admitted.generatedName) ?? [];
+  for (
+    let clashing = clashingMetaNames(admitted, nameOf, tried);
+    clashing.length > 0;
+    clashing = clashingMetaNames(admitted, nameOf, tried)
+  ) {
+    for (const metaName of clashing) {
+      tried.add(metaName);
 
-    claimants.push(admitted.fileName);
-    groups.set(admitted.generatedName, claimants);
-  }
+      const fullName = screenedFullName(pluginName, metaName);
 
-  const collisions: WorkflowNameCollision[] = [];
-
-  for (const [generatedName, fileNames] of groups) {
-    if (fileNames.length > 1) {
-      collisions.push({ generatedName, fileNames });
+      if (fullName !== undefined) {
+        fullNames.set(metaName, fullName);
+      }
     }
   }
 
-  if (collisions.length > 0) {
-    throw new WorkflowNameCollisionError(collisions);
+  return records.map((record) =>
+    isAdmitted(record.verdict) && nameOf(record.verdict) !== record.verdict.generatedName
+      ? { ...record, verdict: { ...record.verdict, generatedName: nameOf(record.verdict) } }
+      : record,
+  );
+}
+
+/** The `meta.name`s not yet tried that share their current name with another `meta.name`. */
+function clashingMetaNames(
+  admitted: readonly AdmittedWorkflow[],
+  nameOf: (verdict: AdmittedWorkflow) => string,
+  tried: ReadonlySet<string>,
+): string[] {
+  const claimants = new Map<string, Set<string>>();
+
+  for (const verdict of admitted) {
+    const metaNames = claimants.get(nameOf(verdict)) ?? new Set<string>();
+
+    metaNames.add(verdict.metaName);
+    claimants.set(nameOf(verdict), metaNames);
   }
+
+  return [...claimants.values()]
+    .filter((metaNames) => metaNames.size > 1)
+    .flatMap((metaNames) => [...metaNames])
+    .filter((metaName) => !tried.has(metaName));
+}
+
+function screenedFullName(pluginName: string, metaName: string): string | undefined {
+  try {
+    return unelidedWorkflowName(pluginName, metaName);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * D-PG8-07: when two admitted scripts of one plugin share a generated name,
+ * keep the LAST one, as Claude Code 2.1.323 does. Its loader folds the
+ * plugin's scripts into a map by name, and a later script replaces the earlier
+ * one when its whole script parses; it says nothing about the one it drops.
+ *
+ * A script that does not parse never reaches the `named` arm here, so it
+ * cannot replace an earlier copy, which is Claude Code's "keep the earlier copy"
+ * branch. Records of every other arm pass through, because each already
+ * carries its own warning. The order of the records that are kept is unchanged.
+ */
+export function keepLastWorkflowPerName<T extends { readonly verdict: WorkflowVerdict }>(
+  records: readonly T[],
+): T[] {
+  const lastIndex = new Map<string, number>();
+
+  records.forEach((record, index) => {
+    if (isAdmitted(record.verdict)) {
+      lastIndex.set(record.verdict.generatedName, index);
+    }
+  });
+
+  return records.filter(
+    (record, index) =>
+      !isAdmitted(record.verdict) || lastIndex.get(record.verdict.generatedName) === index,
+  );
 }
 
 /** Only the arm that carries a `generatedName` can take part in a collision. */
@@ -307,6 +376,7 @@ function namedVerdict(
   metaName: string,
   description: string | undefined,
   gate: WorkflowGate | undefined,
+  agentTypes: readonly string[],
 ): NamedWorkflow | RefusedWorkflow {
   const generated = generateOrRefuse(pluginName, fileName, metaName);
 
@@ -321,6 +391,7 @@ function namedVerdict(
     generatedName: generated.generatedName,
     ...(description === undefined ? {} : { description }),
     ...(gate === undefined ? {} : { gate }),
+    ...(agentTypes.length === 0 ? {} : { agentTypes }),
   };
 }
 
@@ -348,11 +419,9 @@ export const WORKFLOW_SCRIPT_MAX_BYTES = 524_288;
  * one broken file in a twenty-script plugin must not block the other nineteen,
  * so an unsafe name becomes this file's own `refused` verdict.
  *
- * The collision (WNAM-05) stays a throw because it is a defect of the SET, not
- * of one file, and refusing one arbitrary member would be silent misnaming. The
- * plugin name is screened by `admitWorkflowScript` before this runs, for the
- * same reason, so what reaches this catch is always a defect of the name the
- * FILE supplies.
+ * The plugin name is screened by `admitWorkflowScript` before this runs,
+ * because it is a defect of the whole plugin, so what reaches this catch is
+ * always a defect of the name the FILE supplies.
  *
  * `declaredName` is the text the name is BUILT FROM -- the declared `meta.name`.
  * Everywhere else in this module
@@ -853,6 +922,94 @@ function gateContext(ast: Program, elements: readonly MetaElement[]): GateContex
  * `readEngineGate` is exercised by a real script rather than only inspected.
  */
 const GATE_WALK_MAX_DEPTH = 32;
+
+/**
+ * PG-SEC-01: how many nodes deep the `agentType` walk goes before it gives up
+ * on a script. Real scripts nest far less; a member chain such as
+ * `x.a.a.a...` is the cheap way to build a deeper tree, because acorn parses
+ * it in a loop. The budget keeps the walk's own recursion inside the stack.
+ */
+const AGENT_TYPE_WALK_MAX_DEPTH = 1_000;
+
+/**
+ * PG-SEC-01 / D-PG4-11: the distinct string literals the script passes as an
+ * `agentType`, in first-seen order.
+ *
+ * Contained like `readEngineGate`: the walk reads untrusted AST, so a breach of
+ * its depth budget, or a node shape it was not written for, costs the script
+ * its note and never fails the install. The walk follows no binding and
+ * evaluates nothing, so `agentType: SCAN_AGENT` gives no value: a missing
+ * note, never a false one.
+ */
+function readAgentTypes(ast: Program): readonly string[] {
+  const found = new Set<string>();
+
+  try {
+    collectAgentTypes(ast, 0, found);
+  } catch {
+    return [];
+  }
+
+  return [...found];
+}
+
+/**
+ * Visits every node under `value`, in source order, and adds the literal of
+ * each `agentType` property it finds. Arrays are walked at their parent's
+ * depth, so the budget counts nodes.
+ */
+function collectAgentTypes(value: unknown, depth: number, found: Set<string>): void {
+  if (Array.isArray(value)) {
+    for (const element of value) {
+      collectAgentTypes(element, depth, found);
+    }
+
+    return;
+  }
+
+  if (!isAstNode(value)) {
+    return;
+  }
+
+  if (depth > AGENT_TYPE_WALK_MAX_DEPTH) {
+    throw new Error("script nesting exceeds the agentType walk budget");
+  }
+
+  const agentType = isProperty(value) ? agentTypeLiteral(value) : undefined;
+
+  if (agentType !== undefined) {
+    found.add(agentType);
+  }
+
+  for (const child of Object.values(value)) {
+    collectAgentTypes(child, depth + 1, found);
+  }
+}
+
+/**
+ * The value of one `agentType` property, as the engine reads it: a string
+ * literal or a template with no substitution, decoded. A computed key is not
+ * statically known, so `{ ["agentType"]: "x" }` gives nothing; a shorthand or
+ * a method has a non-literal value and gives nothing either.
+ */
+function agentTypeLiteral(property: Property): string | undefined {
+  if (property.computed || metaPropertyKey(property) !== "agentType") {
+    return undefined;
+  }
+
+  return literalString(property.value);
+}
+
+/** An acorn node: an object carrying a string `type`. */
+function isAstNode(value: unknown): value is { readonly type: string } {
+  return (
+    typeof value === "object" && value !== null && "type" in value && typeof value.type === "string"
+  );
+}
+
+function isProperty(node: { readonly type: string }): node is Property {
+  return node.type === "Property";
+}
 
 /**
  * The `meta` key names the engine refuses outright, read from its own

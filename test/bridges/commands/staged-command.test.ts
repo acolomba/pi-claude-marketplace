@@ -20,6 +20,7 @@ const context = {
   pluginDataDir: "/data/acme",
   projectDir: undefined,
   referenceNames: { skills: [], commands: [], workflows: [] },
+  options: undefined,
 } satisfies StagedCommandContext;
 
 type FileCommand = Extract<DiscoveredCommand, { kind: "file" }>;
@@ -34,9 +35,13 @@ function inlineCommand(content: string, overrides?: CommandOverrides): Discovere
   };
 }
 
-/** The record line the writer ends every staged frontmatter with, for `context`. */
+/** The record line the writer ends the staged frontmatter of the file command `deploy` with, for `context`. */
 const RECORD_LINE =
-  '"pi-claude-marketplace": {"pluginRoot":"/plugins/acme","pluginData":"/data/acme"}\n';
+  '"pi-claude-marketplace": {"pluginRoot":"/plugins/acme","pluginData":"/data/acme","claudeName":"acme:deploy"}\n';
+
+/** The record line of the inline command `beta`, for `context`. */
+const INLINE_RECORD_LINE =
+  '"pi-claude-marketplace": {"pluginRoot":"/plugins/acme","pluginData":"/data/acme","claudeName":"acme:beta"}\n';
 
 async function commandWithSource(t: TestContext, source: string): Promise<FileCommand> {
   const root = await mkdtemp(path.join(tmpdir(), "staged-command-"));
@@ -160,7 +165,11 @@ test("rebuilds every value as one JSON line that Pi reads back unchanged, in sou
     nested: { list: [1, true, null], map: { k: "v" } },
     path: "C:\\x\\${y}",
     description: "Values.",
-    "pi-claude-marketplace": { pluginRoot: "/plugins/acme", pluginData: "/data/acme" },
+    "pi-claude-marketplace": {
+      pluginRoot: "/plugins/acme",
+      pluginData: "/data/acme",
+      claudeName: "acme:deploy",
+    },
   };
 
   // act
@@ -262,6 +271,52 @@ test("substitutes the plugin variables and rewrites references before the rebuil
   });
 });
 
+test("D-PG10-09 writes an option's default, the sensitive-option text, and an unset reference as written", async (t) => {
+  // arrange
+  const command = await commandWithSource(
+    t,
+    "---\ndescription: Mode ${user_config.mode}\n---\n" +
+      "Token ${user_config.token}, note ${user_config.note}.\n",
+  );
+
+  // act
+  const staged = await buildStagedCommand(command, {
+    ...context,
+    options: {
+      values: new Map([
+        ["mode", "fast"],
+        ["token", "abc123"],
+      ]),
+      sensitive: new Set(["token"]),
+    },
+  });
+
+  // assert
+  assert.deepStrictEqual(staged, {
+    text:
+      '---\n"description": "Mode fast"\n' +
+      RECORD_LINE +
+      "---\n" +
+      "Token [sensitive option 'token' not available in skill content], note ${user_config.note}.\n",
+  });
+});
+
+test("D-PG10-21 keeps every option reference of a plugin that declares no options", async (t) => {
+  // arrange
+  const command = await commandWithSource(t, "Mode ${user_config.mode}.\n");
+
+  // act
+  const staged = await buildStagedCommand(command, context);
+
+  // assert
+  assert.deepStrictEqual(staged, {
+    text:
+      '---\n"description": "Mode ${user_config.mode}."\n' +
+      RECORD_LINE +
+      "---\nMode ${user_config.mode}.\n",
+  });
+});
+
 test("T-03-02 adds the record after the substitution and the reference rewrite", async (t) => {
   // arrange
   const command = await commandWithSource(
@@ -281,16 +336,16 @@ test("T-03-02 adds the record after the substitution and the reference rewrite",
   assert.deepStrictEqual(staged, {
     text:
       '---\n"description": "Chains."\n' +
-      '"pi-claude-marketplace": {"pluginRoot":"/plugins/${CLAUDE_PLUGIN_DATA}","pluginData":"/data/x acme:other"}\n' +
+      '"pi-claude-marketplace": {"pluginRoot":"/plugins/${CLAUDE_PLUGIN_DATA}","pluginData":"/data/x acme:other","claudeName":"acme:deploy"}\n' +
       "---\nRun /acme:other from /plugins/${CLAUDE_PLUGIN_DATA}.\n",
   });
 });
 
-test("D-CF3-06 replaces an author's record key with the install-time record, last", async (t) => {
+test("D-CF3-06 / D-PG11-01 replaces an author's record key, a planted Claude Code name included, with the install-time record, last", async (t) => {
   // arrange
   const command = await commandWithSource(
     t,
-    "---\npi-claude-marketplace: {pluginRoot: /author}\ndescription: Planted.\n---\nBody.\n",
+    "---\npi-claude-marketplace: {pluginRoot: /author, claudeName: 'other:deploy'}\ndescription: Planted.\n---\nBody.\n",
   );
 
   // act
@@ -340,7 +395,7 @@ test("D-CF3-09 names a nested command by its source name", async (t) => {
   assert.deepStrictEqual(staged, {
     text:
       '---\n"description": "Builds the web app."\n"agent": "builder"\n' +
-      RECORD_LINE +
+      '"pi-claude-marketplace": {"pluginRoot":"/plugins/acme","pluginData":"/data/acme","claudeName":"acme:build:web"}\n' +
       "---\nBuild.\n",
     droppedFields: "[build/web] dropped fields: agent",
   });
@@ -532,7 +587,11 @@ test("propagates Pi's parse error when a repeated malformed block passes the clo
 test("D-CF3-03 stages an inline command's content as the same text as a file holding it", async (t) => {
   // arrange
   const content = "---\ndescription: FM in content\nargument-hint: <c>\n---\nFM body $ARGUMENTS";
-  const fileCommand = await commandWithSource(t, content);
+  const fileCommand = {
+    ...(await commandWithSource(t, content)),
+    sourceName: "beta",
+    generatedName: "acme:beta",
+  } satisfies DiscoveredCommand;
 
   // act
   const stagedFile = await buildStagedCommand(fileCommand, context);
@@ -545,13 +604,13 @@ test("D-CF3-03 stages an inline command's content as the same text as a file hol
       stagedFile: {
         text:
           '---\n"description": "FM in content"\n"argument-hint": "<c>"\n' +
-          RECORD_LINE +
+          INLINE_RECORD_LINE +
           "---\nFM body $ARGUMENTS",
       },
       stagedInline: {
         text:
           '---\n"description": "FM in content"\n"argument-hint": "<c>"\n' +
-          RECORD_LINE +
+          INLINE_RECORD_LINE +
           "---\nFM body $ARGUMENTS",
       },
     },
@@ -571,7 +630,7 @@ test("D-CF3-03 describes inline content without frontmatter by the manifest desc
   assert.deepStrictEqual(staged, {
     text:
       '---\n"description": "Beta from the manifest."\n' +
-      RECORD_LINE +
+      INLINE_RECORD_LINE +
       "---\nBeta inline body $ARGUMENTS",
   });
 });
@@ -663,7 +722,7 @@ test("D-CF3-09 reports no dropped field for malformed inline content with a mani
 
   // assert
   assert.deepStrictEqual(staged, {
-    text: '---\n"description": "Body."\n' + RECORD_LINE + "---\nBody.",
+    text: '---\n"description": "Body."\n' + INLINE_RECORD_LINE + "---\nBody.",
     parseError:
       "Flow sequence in block collection must be sufficiently indented and end with a ] at line 1, column 15:\n\nkey: [unclosed\n              ^\n",
   });

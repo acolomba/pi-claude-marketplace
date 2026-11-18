@@ -916,10 +916,10 @@ describe("resolveStrict", () => {
   });
 
   // D-71-02 / PHOOK-02: an intra-event matcher mix keeps the clean group and
-  // drops only the unsupportable (regex) group. The event survives partially:
-  // `partially-available` with hooksConfigPath recorded and the regex group
+  // drops only the unsupportable (invalid regex) group. The event survives partially:
+  // `partially-available` with hooksConfigPath recorded and the invalid group
   // enumerated.
-  test("D-71-02: intra-event matcher mix keeps the clean group, drops the regex group -> unsupported", async () => {
+  test("D-71-02: intra-event matcher mix keeps the clean group, drops the invalid group -> unsupported", async () => {
     // arrange
     const localRoot = pathUnderMarketplace("./local");
     const context = resolveContext(marketplaceRoot, {
@@ -950,7 +950,7 @@ describe("resolveStrict", () => {
       );
       assert.strictEqual(resolvedPlugin.hooksConfigPath, path.join("hooks", "hooks.json"));
       assert.deepStrictEqual(resolvedPlugin.droppedHooks, [
-        { kind: "group", event: "PreToolUse", matcher: ".*", cond: "regex" },
+        { kind: "group", event: "PreToolUse", matcher: "[", cond: "regex" },
       ]);
     }
   });
@@ -2531,6 +2531,35 @@ describe("resolveStrict", () => {
     );
   });
 
+  test("D-PG4-01 a root-source entry carries its refused listed skills paths and stays installable", async () => {
+    // arrange
+    const context = resolveContext(marketplaceRoot, {
+      [marketplaceRoot]: "dir",
+      [path.join(marketplaceRoot, "skills", "a")]: "dir",
+    });
+
+    // act
+    const resolvedPlugin = await resolveStrict(
+      pluginEntry({ source: "./", skills: ["./skills/a", "../outside"] }),
+      context,
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        state: resolvedPlugin.state,
+        refusedListedSkillPaths:
+          resolvedPlugin.state === "installable"
+            ? resolvedPlugin.refusedListedSkillPaths
+            : undefined,
+      },
+      {
+        state: "installable",
+        refusedListedSkillPaths: [{ path: "../outside", cause: "traversal" }],
+      },
+    );
+  });
+
   // RESV-01: a dependencies declaration is resolved, never noted
 
   test("RESV-01 strict: a valid dependencies declaration leaves the entry installable with no note", async () => {
@@ -2611,7 +2640,7 @@ describe("resolveStrict", () => {
   // subset, so a DROPPED group's orphan-rewake field cannot raise a false marker
 
   // A hooks config with one KEPT supported group (matcher "Bash") and one DROPPED
-  // unsupportable group (regex matcher ".*") whose only handler declares
+  // unsupportable group (invalid matcher "[") whose only handler declares
   // `rewakeMessage` WITHOUT `asyncRewake:true`. The orphan lives in the dropped
   // group, so it never enters the filtered subset `detectOrphanRewake` scans ->
   // `orphanRewake` stays absent even though the plugin resolves
@@ -2626,7 +2655,7 @@ describe("resolveStrict", () => {
           PreToolUse: [
             { matcher: "Bash", hooks: [{ type: "command", command: "echo ok" }] },
             {
-              matcher: ".*",
+              matcher: "[",
               hooks: [{ type: "command", command: "echo orphan", rewakeMessage: "later" }],
             },
           ],
@@ -2650,7 +2679,7 @@ describe("resolveStrict", () => {
         `supported: ${resolvedPlugin.supported.join(" / ")}`,
       );
       assert.deepStrictEqual(resolvedPlugin.droppedHooks, [
-        { kind: "group", event: "PreToolUse", matcher: ".*", cond: "regex" },
+        { kind: "group", event: "PreToolUse", matcher: "[", cond: "regex" },
       ]);
     }
   });
@@ -2670,7 +2699,7 @@ describe("resolveStrict", () => {
               matcher: "Bash",
               hooks: [{ type: "command", command: "echo orphan", rewakeMessage: "later" }],
             },
-            { matcher: ".*", hooks: [{ type: "command", command: "echo drop" }] },
+            { matcher: "[", hooks: [{ type: "command", command: "echo drop" }] },
           ],
         }),
       },
@@ -2688,7 +2717,7 @@ describe("resolveStrict", () => {
     if (resolvedPlugin.state === "partially-available") {
       assert.strictEqual(resolvedPlugin.orphanRewake, true);
       assert.deepStrictEqual(resolvedPlugin.droppedHooks, [
-        { kind: "group", event: "PreToolUse", matcher: ".*", cond: "regex" },
+        { kind: "group", event: "PreToolUse", matcher: "[", cond: "regex" },
       ]);
     }
   });
@@ -5253,4 +5282,195 @@ describe("resolutionFor", () => {
       assert.deepStrictEqual(view, neutral);
     });
   }
+});
+
+describe("resolveStrict userConfig", () => {
+  const localRoot = pathUnderMarketplace("./local");
+  const manifestPath = path.join(localRoot, ".claude-plugin", "plugin.json");
+  const modeOption = { type: "string", title: "Mode", description: "The mode.", default: "fast" };
+  const requiredOption = (title: string) => ({
+    type: "string",
+    title,
+    description: `The ${title}.`,
+    required: true,
+  });
+
+  function withManifest(manifest: Record<string, unknown>): ResolveContext {
+    return resolveContext(marketplaceRoot, {
+      [localRoot]: "dir",
+      [manifestPath]: { contents: JSON.stringify({ name: "p1", ...manifest }) },
+    });
+  }
+
+  test("D-PG10-04: options that all have a default resolve installable and carry the schema", async () => {
+    // arrange
+    const context = withManifest({ userConfig: { mode: modeOption } });
+
+    // act
+    const resolved = await resolveStrict(pluginEntry(), context);
+
+    // assert
+    assert.strictEqual(resolved.state, "installable", resolved.notes.join(" / "));
+    requireInstallable(resolved);
+    assert.deepStrictEqual(resolved.notes, []);
+    assert.deepStrictEqual(resolved.unsupported, []);
+    assert.deepStrictEqual(resolved.declaredUserConfig, { mode: modeOption });
+  });
+
+  test("D-PG10-04: an empty userConfig resolves installable with an empty declared schema", async () => {
+    // arrange
+    const context = withManifest({ userConfig: {} });
+
+    // act
+    const resolved = await resolveStrict(pluginEntry(), context);
+
+    // assert
+    requireInstallable(resolved);
+    assert.deepStrictEqual(resolved.declaredUserConfig, {});
+  });
+
+  test("D-PG10-04: a plugin that declares no userConfig carries no declared schema", async () => {
+    // arrange
+    const context = withManifest({});
+
+    // act
+    const resolved = await resolveStrict(pluginEntry(), context);
+
+    // assert
+    requireInstallable(resolved);
+    assert.strictEqual(Object.hasOwn(resolved, "declaredUserConfig"), false);
+  });
+
+  test("D-PG10-06: required options with no default keep the plugin partially available", async () => {
+    // arrange
+    const context = withManifest({
+      userConfig: {
+        token: requiredOption("Token"),
+        mode: modeOption,
+        region: requiredOption("Region"),
+      },
+    });
+
+    // act
+    const resolved = await resolveStrict(pluginEntry(), context);
+
+    // assert
+    assert.strictEqual(resolved.state, "partially-available");
+    requirePartialInstallable(resolved);
+    assert.deepStrictEqual(resolved.notes, [
+      "required userConfig options have no default: token, region",
+    ]);
+    assert.deepStrictEqual(resolved.unsupported, ["userConfig"]);
+    assert.deepStrictEqual(Object.keys(resolved.declaredUserConfig ?? {}), [
+      "token",
+      "mode",
+      "region",
+    ]);
+  });
+
+  test("D-PG10-04: a plugin that also declares themes is partially available for themes alone", async () => {
+    // arrange
+    const context = withManifest({ userConfig: { mode: modeOption }, themes: "./themes" });
+
+    // act
+    const resolved = await resolveStrict(pluginEntry(), context);
+
+    // assert
+    assert.strictEqual(resolved.state, "partially-available");
+    assert.deepStrictEqual(resolved.notes, ["contains themes"]);
+    requirePartialInstallable(resolved);
+    assert.deepStrictEqual(resolved.unsupported, ["themes"]);
+  });
+
+  for (const { shape, userConfig, detail } of [
+    {
+      shape: "the abbreviated option shape",
+      userConfig: { mode: { type: "string", default: "fast" } },
+      detail: 'userConfig option "mode": field "title" is missing, field "description" is missing',
+    },
+    { shape: "null", userConfig: null, detail: "userConfig is not an object" },
+    { shape: "false", userConfig: false, detail: "userConfig is not an object" },
+    {
+      shape: "an unknown option field",
+      userConfig: { mode: { ...modeOption, colour: "red" } },
+      detail: 'userConfig option "mode": field "colour" is not a known field',
+    },
+  ]) {
+    test(`D-PG10-05 / D-PG10-20: ${shape} makes the plugin unavailable`, async () => {
+      // arrange
+      const context = withManifest({ userConfig });
+
+      // act
+      const resolved = await resolveStrict(pluginEntry(), context);
+
+      // assert
+      assert.deepStrictEqual(resolved, {
+        state: "unavailable",
+        installable: false,
+        name: "p1",
+        notes: [`malformed userConfig: ${detail}`],
+      });
+    });
+  }
+
+  test("D-PG10-05: a malformed option wins over a required option with no default", async () => {
+    // arrange
+    const context = withManifest({
+      userConfig: { token: requiredOption("Token"), mode: { type: "string", default: "fast" } },
+    });
+
+    // act
+    const resolved = await resolveStrict(pluginEntry(), context);
+
+    // assert
+    assert.strictEqual(resolved.state, "unavailable");
+    assert.deepStrictEqual(resolved.notes, [
+      'malformed userConfig: userConfig option "mode": field "title" is missing, field "description" is missing',
+    ]);
+    assert.throws(() => {
+      requirePartialInstallable(resolved);
+    }, PluginShapeError);
+  });
+
+  test("D-PG10-05: with a plugin.json a malformed entry userConfig is ignored", async () => {
+    // arrange
+    const context = withManifest({});
+
+    // act
+    const resolved = await resolveStrict(pluginEntry({ userConfig: null }), context);
+
+    // assert
+    assert.strictEqual(resolved.state, "installable", resolved.notes.join(" / "));
+  });
+
+  test("D-PG10-05: with a plugin.json the entry's userConfig is ignored", async () => {
+    // arrange
+    const context = withManifest({});
+
+    // act
+    const resolved = await resolveStrict(
+      pluginEntry({ userConfig: { token: requiredOption("Token") } }),
+      context,
+    );
+
+    // assert
+    assert.strictEqual(resolved.state, "installable", resolved.notes.join(" / "));
+    requireInstallable(resolved);
+    assert.strictEqual(Object.hasOwn(resolved, "declaredUserConfig"), false);
+  });
+
+  test("D-PG10-05: without a plugin.json the entry's userConfig is the declared schema", async () => {
+    // arrange
+    const context = resolveContext(marketplaceRoot, { [localRoot]: "dir" });
+
+    // act
+    const resolved = await resolveStrict(
+      pluginEntry({ userConfig: { mode: modeOption } }),
+      context,
+    );
+
+    // assert
+    requireInstallable(resolved);
+    assert.deepStrictEqual(resolved.declaredUserConfig, { mode: modeOption });
+  });
 });

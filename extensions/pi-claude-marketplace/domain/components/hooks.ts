@@ -54,7 +54,7 @@ import { TOOL_EVENTS, type BucketAEvent, type ToolEvent } from "./hook-events.ts
 import { partitionHooks, type DroppedHook, type HooksPartition } from "./hooks/partition.ts";
 import { HOOKS_VALIDATOR, type HookHandlerEntry, type HooksConfig } from "./hooks/schema.ts";
 
-export { parseMatcher, type ParsedMatcher } from "./hooks/matcher.ts";
+export { parseMatcher, parseNameMatcher, type ParsedMatcher } from "./hooks/matcher.ts";
 export type { DroppedHook } from "./hooks/partition.ts";
 export type { HookHandlerEntry, HooksConfig } from "./hooks/schema.ts";
 

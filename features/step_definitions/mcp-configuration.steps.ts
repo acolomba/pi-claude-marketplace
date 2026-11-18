@@ -15,11 +15,10 @@ import { Given, Then } from "@cucumber/cucumber";
 
 import { isPlainObject } from "../lib/field-rows.ts";
 import {
+  allowProjectServersForUser,
   declarePublishedMcpServer,
-  PROJECT_SERVERS_ALLOWED_CONFIG,
   writeCommentedMcpConfig,
   writeLegacyMcpConfig,
-  writeProjectServersAllowedConfig,
 } from "../lib/mcp-configuration.ts";
 import { projectTokens } from "../lib/run-tokens.ts";
 
@@ -60,10 +59,7 @@ Given(
 Given(
   "pi-mcp-adapter allows project mcp servers for the user",
   async function (this: ScenarioWorld) {
-    const file = mcpAdapterFile(this, "user");
-    await writeProjectServersAllowedConfig(file);
-    this.onRelease(() => rm(file, { force: true }));
-    assert.strictEqual(await readFile(file, "utf8"), PROJECT_SERVERS_ALLOWED_CONFIG);
+    await allowProjectServersForUser(this);
   },
 );
 

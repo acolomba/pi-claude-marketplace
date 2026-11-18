@@ -7,6 +7,7 @@ import {
   assertSafeName,
   builtinMcpServerName,
   catalogMarketplaceNameRefusal,
+  claudeCommandName,
   declaredAgentName,
   generatedAgentName,
   generatedCommandName,
@@ -18,6 +19,7 @@ import {
   mcpServerDisplayName,
   recordedMarketplaceNameRefusal,
   reservedMarketplaceNameRefusal,
+  unelidedWorkflowName,
 } from "../../extensions/pi-claude-marketplace/domain/name.ts";
 import {
   ReservedMarketplaceNameError,
@@ -1166,6 +1168,45 @@ describe("generatedCommandName", () => {
   }
 });
 
+describe("claudeCommandName", () => {
+  const cases = [
+    { plugin: "demo", source: "demo-lint", expectedName: "demo:demo-lint" },
+    { plugin: "demo", source: "lint", expectedName: "demo:lint" },
+    { plugin: "demo", source: "build/web", expectedName: "demo:build:web" },
+    { plugin: "acme", source: "acme-tools/lint", expectedName: "acme:acme-tools:lint" },
+    { plugin: "deploy-tools", source: "about", expectedName: "deploy-tools:about" },
+  ];
+
+  for (const { plugin, source, expectedName } of cases) {
+    test(`D-PG11-01 names ${JSON.stringify(source)} of ${JSON.stringify(plugin)} ${JSON.stringify(expectedName)}`, () => {
+      // arrange
+      const pluginName = plugin;
+      const sourceName = source;
+
+      // act
+      const name = claudeCommandName(pluginName, sourceName);
+
+      // assert
+      assert.strictEqual(name, expectedName);
+    });
+  }
+
+  for (const { plugin, source, expectedName } of cases) {
+    test(`D-PG11-01 names ${JSON.stringify(source)} of ${JSON.stringify(plugin)} ${JSON.stringify(expectedName)} on win32`, (t) => {
+      // arrange
+      setCasePlatform(t, "win32");
+      const pluginName = plugin;
+      const sourceName = source;
+
+      // act
+      const name = claudeCommandName(pluginName, sourceName);
+
+      // assert
+      assert.strictEqual(name, expectedName);
+    });
+  }
+});
+
 describe("generatedAgentName", () => {
   for (const { plugin, source, expectedAgentName } of [
     {
@@ -1717,4 +1758,32 @@ describe("generatedWorkflowName", () => {
       });
     });
   }
+});
+
+describe("unelidedWorkflowName", () => {
+  test("keeps the plugin prefix of the declared name", () => {
+    // arrange
+    const sourceName = "acme-audit";
+
+    // act
+    const workflowName = unelidedWorkflowName("acme", sourceName);
+
+    // assert
+    assert.strictEqual(workflowName, "acme:acme-audit");
+  });
+
+  test("refuses a full name above the engine's 128-character cap", () => {
+    // arrange
+    const sourceName = `acme-${"a".repeat(123)}`;
+
+    // act & assert
+    assert.throws(
+      () => unelidedWorkflowName("acme", sourceName),
+      (error: unknown) => {
+        assert.ok(error instanceof UnsafeGeneratedNameError);
+        assert.strictEqual(error.attemptedName, `acme:${sourceName}`);
+        return true;
+      },
+    );
+  });
 });

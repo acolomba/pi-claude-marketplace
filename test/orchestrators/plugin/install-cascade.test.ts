@@ -7,6 +7,7 @@ import test from "node:test";
 import * as git from "isomorphic-git";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { cascadeUnstagePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import { probeDependencyTags } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts";
 import {
@@ -478,6 +479,7 @@ test("a materialized member's outcome carries what its own ledger summary report
       declaresWorkflows: false,
       pluginRoot: path.join(environment.cwd, "bar-root"),
       hooksConfigPath: "hooks/hooks.json",
+      options: resolveOptions(undefined),
       discoveryWarnings: [
         {
           kind: "discovery",
@@ -498,6 +500,7 @@ test("a materialized member's outcome carries what its own ledger summary report
       declaresWorkflows: false,
       pluginRoot: path.join(environment.cwd, "unmaterialized"),
       hooksConfigPath: undefined,
+      options: resolveOptions(undefined),
       fellBackToCurrentCopy: false,
       reEnabledFromRecord: false,
     },
@@ -506,6 +509,53 @@ test("a materialized member's outcome carries what its own ledger summary report
     cascade.root,
     fooSummary,
     "the root's summary is handed back as the ledger returned it",
+  );
+});
+
+test("D-PG10-10 each materialized member carries the options of its own resolution", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-cascade-options-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"]);
+  const locations = locationsFor("project", environment.cwd);
+  const declaredUserConfig = {
+    mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+  } as const;
+  const barBase = unmaterializedSummary(locations, environment.cwd, closureMember("bar"));
+  const barSummary: InstallLedgerSummary = {
+    ...barBase,
+    resolved: { ...barBase.resolved, declaredUserConfig },
+  };
+  const fooSummary = unmaterializedSummary(locations, environment.cwd, closureMember("foo"));
+  const seam: InstallCascadeLedgerSeam = {
+    runInstallLedger: (_state, _locations, options) =>
+      Promise.resolve({
+        kind: "installed",
+        summary: options.plugin === "bar" ? barSummary : fooSummary,
+      }),
+    cascadeUnstagePlugin,
+  };
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }], [`bar@${MARKETPLACE}`]: [] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    rootAllowedMarketplaces: new Set<string>(),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam,
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(
+    cascade.members.map(({ key, options }) => ({ key, options })),
+    [
+      { key: `bar@${MARKETPLACE}`, options: resolveOptions(declaredUserConfig) },
+      { key: `foo@${MARKETPLACE}`, options: resolveOptions(undefined) },
+    ],
   );
 });
 

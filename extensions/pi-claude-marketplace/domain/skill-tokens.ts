@@ -2,11 +2,15 @@
 //
 // Resolve references through the names selected by plugin discovery.
 //
-// A qualified sibling can be a command, a workflow, or a skill: all three are
-// `/`-invocable, and each installs under a name the upstream spelling does not
-// predict. The token grammar cannot tell the kinds apart, so a candidate is
-// resolved through each generator in turn -- command, then skill, then
-// workflow -- and replaced by the first generated name the plugin stages.
+// A qualified sibling can be a command, a workflow, or a skill, and each
+// installs under a name the upstream spelling does not predict. The token
+// grammar cannot tell the kinds apart, so a candidate is resolved through each
+// generator in turn -- command, then skill, then workflow -- and replaced by
+// the first generated name the plugin stages. A command or skill reference
+// becomes its `/` invocation. A workflow reference keeps the slash state its
+// source wrote (D-PG4-08, PG-WF-01): a bare name inside a tool call such as
+// `Workflow({ name: "plugin:wf" })` must stay the saved name the workflow
+// engine loads, which holds no slash, while `/plugin:wf` stays the command.
 
 import { errorMessage } from "../shared/errors.ts";
 import { escapeRegExp } from "../shared/regexp.ts";
@@ -61,13 +65,21 @@ export function resolveSkillReference(
 /**
  * Resolves a workflow reference, or `undefined` when the plugin stages no
  * workflow under it. A name the generator refuses is skipped rather than
- * thrown, so one malformed candidate cannot fail the whole rewrite.
+ * thrown, so one malformed candidate cannot fail the whole rewrite. The full
+ * name comes first, because a script whose elided name clashes installs under
+ * it (D-PG8-18).
  */
 function resolveWorkflowReference(
   pluginName: string,
   source: string,
   workflows: ReadonlySet<string>,
 ): string | undefined {
+  const fullName = `${pluginName}:${source}`;
+
+  if (workflows.has(fullName)) {
+    return fullName;
+  }
+
   let generated: string;
   try {
     generated = generatedWorkflowName(pluginName, source);
@@ -112,7 +124,11 @@ export function rewriteMarkdownReferences(
       }
 
       const workflowName = resolveWorkflowReference(pluginName, source, workflows);
-      return workflowName === undefined ? token : `/${workflowName}`;
+      if (workflowName === undefined) {
+        return token;
+      }
+
+      return token.startsWith("/") ? `/${workflowName}` : workflowName;
     });
 
   return content.split("\n").map(rewriteLine).join("\n");

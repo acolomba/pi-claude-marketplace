@@ -82,6 +82,31 @@ describe("computeHashVersion", () => {
     assert.strictEqual(changedContentVersion, "hash-3bc00f0d259c");
   });
 
+  test("D-PG4-02 hashes a change to only the marketplace manifest under the root", async (t) => {
+    // arrange
+    const pluginRoot = await createVersionSandbox(t);
+    const manifestPath = path.join(pluginRoot, ".claude-plugin", "marketplace.json");
+    await mkdir(path.join(pluginRoot, ".claude-plugin"));
+    await mkdir(path.join(pluginRoot, "skills", "a"), { recursive: true });
+    await writeFile(path.join(pluginRoot, "skills", "a", "SKILL.md"), "Skill a.\n");
+    await writeFile(
+      manifestPath,
+      '{"plugins":[{"name":"root","source":"./","skills":["./skills/a","./skills/b"]}]}\n',
+    );
+
+    // act
+    const listingVersion = await computeHashVersion(pluginRoot);
+    await writeFile(
+      manifestPath,
+      '{"plugins":[{"name":"root","source":"./","skills":["./skills/a"]}]}\n',
+    );
+    const droppedVersion = await computeHashVersion(pluginRoot);
+
+    // assert
+    assert.strictEqual(listingVersion, "hash-07f61ac8b5da");
+    assert.strictEqual(droppedVersion, "hash-6b95c2ddc359");
+  });
+
   test("hashes sorted nested paths and normalized bytes deterministically", async (t) => {
     // arrange
     const pluginRoot = await createVersionSandbox(t);

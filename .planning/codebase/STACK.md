@@ -12,7 +12,7 @@ last_mapped_at: 2026-10-05
 - TypeScript `^6.0.3` (strict mode) - all extension source (`extensions/pi-claude-marketplace/`) and tests (`test/`)
 
 **Secondary:**
-- YAML - agent and skill frontmatter, read and emitted line-by-line by `bridges/agents/frontmatter.ts` and `bridges/skills/frontmatter-degrade.ts` (line-based, no nested mappings), not via a YAML library. Plugin and marketplace manifests are JSON and go through `JSON.parse`
+- YAML - agent and skill frontmatter. `bridges/agents/frontmatter.ts` reads agent frontmatter as YAML through Pi's `parseFrontmatter` (re-exported by `platform/pi-api.ts`), and on a failed parse retries once after the shared line-based repair in `shared/frontmatter-repair.ts` (D-PG7-01); it still emits the generated agent frontmatter line by line. `bridges/skills/frontmatter-degrade.ts` stays line-based (no nested mappings). Plugin and marketplace manifests are JSON and go through `JSON.parse`
 - Markdown - documentation, agent/skill/command definitions consumed as plugin artifacts
 
 ## Runtime
@@ -32,8 +32,8 @@ last_mapped_at: 2026-10-05
 - `@earendil-works/pi-coding-agent` (peer dep `>=1.5.0`, dev dep `^1.5.0`) - the Pi extension host API (`ctx.ui.notify`, `resources_discover`, `session_start`, tool registration)
 - `@earendil-works/pi-tui` (peer dep `*`, dev dep `^1.5.0`) - Pi terminal UI primitives
 - `@earendil-works/pi-ai` (exact dev dep `1.5.0`) - the faux model provider that the cucumber harness loads
-- `pi-subagents` (optional peer dep `>=0.84.0`) - soft-dependency companion extension for agent artifact rendering; degrades gracefully when absent; a background child is detected by the `PI_SUBAGENT_CHILD=1` variable its runner sets (`platform/subagent-child.ts`, D-MB-12), and there the load and the agent grants step change no installation state; the integration tests install its declared floor into `node_modules/.cache/optional-peers` through `scripts/install-test-peers.mjs`
-- `pi-mcp-adapter` (optional peer dep `>=7.0.0 <8`) - soft-dependency companion extension that serves MCP servers; never a dependency, devDependency, or lockfile package (PIFL-03); the integration tests install its declared floor into `node_modules/.cache/optional-peers` through `scripts/install-test-peers.mjs`
+- `pi-subagents` (optional peer dep `>=0.87.0`) - soft-dependency companion extension for agent artifact rendering; degrades gracefully when absent; a background child is detected by the `PI_SUBAGENT_CHILD=1` variable its runner sets (`platform/subagent-child.ts`, D-MB-12), and there the load and the agent grants step change no installation state; the integration tests install pi-subagents 0.88.0, the version `test/integration/optional-peer-suite-versions.json` names, above the declared floor (D-PG1-02), into `node_modules/.cache/optional-peers` through `scripts/install-test-peers.mjs`
+- `pi-mcp-adapter` (optional peer dep `>=7.0.1 <8`) - soft-dependency companion extension that serves MCP servers; never a dependency, devDependency, or lockfile package (PIFL-03); the integration tests install its declared floor into `node_modules/.cache/optional-peers` through `scripts/install-test-peers.mjs`
 - `@quintinshaw/pi-dynamic-workflows` (optional peer dep `>=3.15.0 <4`, `pi.extensions` entry `extensions/workflow.ts`) - soft-dependency workflow engine that runs saved workflow scripts; never a dependency, devDependency, or lockfile package; `scripts/install-test-peers.mjs` installs its declared floor into `node_modules/.cache/optional-peers`
 
 **Testing:**
@@ -49,7 +49,7 @@ last_mapped_at: 2026-10-05
   - `fallow dead-code` (entry `extensions/pi-claude-marketplace/index.ts`, the one `entry` in `.fallowrc.json`, which has no `ignoreExports` key), scoped to production reachability by `production.deadCode`
   - `fallow dead-code --no-production --circular-deps --re-export-cycles`, which carries the two cycle classes across `test/` and `scripts/`
   - `fallow health` (`maxCyclomatic: 20`, `maxCognitive: 15`, plus `maxCrap: 0`, which switches CRAP OFF -- see the CRAP note in TESTING.md before touching it)
-  - `.fallowrc.json` also loads `rulePacks: ["rule-packs/architecture.json"]` (11 rules: `no-stdio`, `no-console`, `migrate-console-warn-only`, `debug-log-console-error-only`, `notify-chokepoint`, `pi-peer-chokepoint`, `isomorphic-git-chokepoint`, `proper-lockfile-chokepoint`, `write-file-atomic-chokepoint`, `no-network-modules`, `fetch-chokepoint`) enforcing output and import chokepoints
+  - `.fallowrc.json` also loads `rulePacks: ["rule-packs/architecture.json"]` (12 rules: `no-stdio`, `no-console`, `migrate-console-warn-only`, `debug-log-console-error-only`, `notify-chokepoint`, `pi-peer-chokepoint`, `isomorphic-git-chokepoint`, `proper-lockfile-chokepoint`, `write-file-atomic-chokepoint`, `child-process-chokepoint`, `no-network-modules`, `fetch-chokepoint`) enforcing output and import chokepoints
   - `fallow dupes` (since fallow 3.32 it fails on every clone group, so `.fallowrc.json` sets no `duplicates.threshold` and no `duplicates.ignoredClones` entry; reviewed clone groups carry inline `fallow-ignore-next-line code-duplication` markers)
   - `.fallowrc.json`'s `boundaries` block defines 14 architecture zones (`entry`, `edge`, `orchestrators`, `bridges-agents`, `bridges-commands`, `bridges-mcp`, `bridges-skills`, `bridges-hooks`, `bridges-workflows`, `domain`, `transaction`, `persistence`, `platform`, `shared`) with an explicit allow-list of legal import edges between zones -- finer-grained than the ESLint `no-restricted-paths` gate and the only mechanism enforcing that cross-bridge imports (e.g. `bridges-agents` -> `bridges-commands`) are forbidden. `rulePacks` loads `rule-packs/architecture.json`, the call and import bans for `extensions/pi-claude-marketplace/**` (stdio, console, direct `ctx.ui.notify`, the Pi peer, `isomorphic-git`, `proper-lockfile`, `write-file-atomic`, network modules, and `fetch`), each limited to its sanctioned files and reported as `policy-violation`
   - CI runs a separate `fallow-audit` job (`.github/workflows/lint.yml`) using the vendor action `fallow-rs/fallow@v3` with `command: audit`, `format: github-annotations` -- this gates PRs on newly-introduced findings only, distinct from the full `npm run fallow` gate that `npm run check` runs. The job installs the npm dependencies first, and it fails on a `warn` verdict or a degraded analysis as well as on `fail`
@@ -60,7 +60,7 @@ last_mapped_at: 2026-10-05
 **Critical:**
 - `isomorphic-git` `^1.41.8` - pure-JS git implementation used for marketplace clone/fetch/pull (no dependency on a `git` binary on PATH); wrapped in `extensions/pi-claude-marketplace/platform/git.ts`, paired with `isomorphic-git/http/node` as its HTTP transport (`platform/git.ts:4`)
 - `typebox` `^1.1.38` (also a peer dep `*`) - runtime schema validation and discriminated-union modeling (e.g. `installable: true | false`)
-- `write-file-atomic` `^8.0.0` - atomic JSON writes for `state.json`, `mcp.json`, `agents-index.json`
+- `write-file-atomic` `^8.0.0` - atomic JSON writes for `state.json`, `mcp.json`, `agents-index.json` (`atomicWriteJson`), and atomic text writes for saved hook output (`atomicWriteText`), both in `shared/atomic-json.ts`
 - `proper-lockfile` `^4.1.2` - cross-process file locking for `withStateGuard` concurrent-write detection
 
 **Infrastructure:**

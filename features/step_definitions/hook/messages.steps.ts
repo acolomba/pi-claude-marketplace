@@ -9,6 +9,8 @@
  * reads the notices from the records of the last turn, in emission order, each
  * valid against the published payload schema (D-CF5-14). A rewake summary is
  * a `claude-plugin` entry of kind `async-rewake-summary`, read the same way.
+ * The fix-unicode-dashes hook rewrites an em dash in a feature file, so the
+ * steps read each em dash of a payload's text as the token `{em dash}`.
  */
 
 import assert from "node:assert/strict";
@@ -28,6 +30,10 @@ const PAYLOAD_VALIDATOR = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
 const NOTICE_COLUMNS: readonly string[] = ["severity", "text"];
 
 const SUMMARY_COLUMNS: readonly string[] = ["text"];
+
+// The em dash (U+2014) of a hook notice, which a feature file cannot hold, so
+// a scenario states it as a token.
+const EM_DASH = /\u2014/gu;
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -65,7 +71,8 @@ function statedNotice(row: readonly string[]): Record<string, unknown> {
   };
 }
 
-// The hook payloads of `kind` in the last turn, with the run tokens projected.
+// The hook payloads of `kind` in the last turn, with the run tokens projected
+// and each em dash read as `{em dash}`.
 function turnPayloads(
   world: ScenarioWorld,
   kind: "hook-notice" | "async-rewake-summary",
@@ -73,7 +80,15 @@ function turnPayloads(
   return world.requireTurn().records.flatMap((record) => {
     const payload = payloadOf(record);
     return payload?.kind === kind
-      ? [{ ...payload, text: projectTokens("text", payload.text, world.tokens) }]
+      ? [
+          {
+            ...payload,
+            text: projectTokens("text", payload.text, world.tokens).replaceAll(
+              EM_DASH,
+              "{em dash}",
+            ),
+          },
+        ]
       : [];
   });
 }

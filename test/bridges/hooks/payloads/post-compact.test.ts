@@ -249,3 +249,19 @@ describe("postCompactRunOf", () => {
     });
   }
 });
+
+test("D-PG6-10: sends no effort from a context that holds one, as PostCompact carries none upstream", () => {
+  // arrange
+  const context = {
+    sessionId: "session-effort",
+    transcriptPath: "/sessions/session-effort.jsonl",
+    cwd: "/workspace/effort",
+    effort: { level: "max" },
+  } satisfies TranslationContext;
+
+  // act
+  const payload = translatePostCompact(postCompactEvent("manual"), context);
+
+  // assert
+  assert.strictEqual(Object.hasOwn(payload, "effort"), false);
+});

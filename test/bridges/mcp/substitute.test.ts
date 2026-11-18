@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
-  ADAPTER_FIELD_ENCODER,
+  adapterFieldEncoder,
   substituteAndInject,
   type McpFieldEncoder,
   type McpSubstitutionContext,
 } from "../../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 
 import { EXPANSION_BUILTINS, EXPANSION_CASES, type ExpansionField } from "./expansion-cases.ts";
 
@@ -21,6 +22,9 @@ interface FieldShape {
 }
 
 const SERVER_URL = "https://mcp.example.test";
+
+// The adapter's encoder for a plugin that declares no options.
+const ADAPTER_FIELD_ENCODER = adapterFieldEncoder(new Map());
 
 function remoteShape(entry: (value: string) => Record<string, unknown>): FieldShape {
   return { entry, writtenEntry: (value) => entry(value) };
@@ -66,7 +70,11 @@ const INJECTED_ENV = {
   CLAUDE_PLUGIN_DATA: "/data/mp/acme",
 } as const;
 
-const PROJECT_CONTEXT: McpSubstitutionContext = { ...EXPANSION_BUILTINS, env: {} };
+const PROJECT_CONTEXT: McpSubstitutionContext = {
+  ...EXPANSION_BUILTINS,
+  env: {},
+  options: undefined,
+};
 
 for (const {
   title,
@@ -81,7 +89,11 @@ for (const {
   test(title, () => {
     // arrange
     const shape = FIELD_SHAPES[field];
-    const context: McpSubstitutionContext = { ...SCOPE_BUILTINS[scope], env: installEnv };
+    const context: McpSubstitutionContext = {
+      ...SCOPE_BUILTINS[scope],
+      env: installEnv,
+      options: undefined,
+    };
 
     // act
     const substituted = substituteAndInject(shape.entry(raw), context, ADAPTER_FIELD_ENCODER);
@@ -221,7 +233,11 @@ test("MENV-02: injects the env first and in place, lets declared keys win and ke
 for (const scope of ["project", "user"] as const) {
   test(`AVAR-01: the injected stdio env is exactly CLAUDE_PLUGIN_ROOT and CLAUDE_PLUGIN_DATA at ${scope} scope`, () => {
     // arrange
-    const context: McpSubstitutionContext = { ...SCOPE_BUILTINS[scope], env: {} };
+    const context: McpSubstitutionContext = {
+      ...SCOPE_BUILTINS[scope],
+      env: {},
+      options: undefined,
+    };
 
     // act
     const { entry } = substituteAndInject({ command: "server" }, context, ADAPTER_FIELD_ENCODER);
@@ -532,6 +548,7 @@ test("BLT-02: passes each field to the encoder with its secret flag and writes l
     expanded: (segments, secret, env) =>
       `expanded ${JSON.stringify(segments)} secret=${String(secret)} env=${String(env.PI_CM_MARK)}`,
     literal: (text, secret) => `literal ${text} secret=${String(secret)}`,
+    optionForm: { kind: "text" },
   };
   const context: McpSubstitutionContext = { ...PROJECT_CONTEXT, env: { PI_CM_MARK: "m" } };
   const stdio = { command: "c", args: ["a"], env: { K: "e" } };
@@ -556,4 +573,80 @@ test("BLT-02: passes each field to the encoder with its secret flag and writes l
     headers: { H: 'expanded [{"kind":"text","text":"h"}] secret=true env=m' },
     oauth: { clientId: "literal o secret=false" },
   });
+});
+
+// D-PG10-20: the full option shape; `region` is not required and has no default.
+const TOKEN_OPTIONS = resolveOptions({
+  token: { type: "string", title: "Token", description: "The token.", default: "abc" },
+  region: { type: "string", title: "Region", description: "The region." },
+});
+
+const OWNED_TOKEN = "PI_CLAUDE_MARKETPLACE_OPTION_0123456789abcdef";
+
+const OWNED_REGION = "PI_CLAUDE_MARKETPLACE_OPTION_fedcba9876543210";
+
+const TOKEN_NAMES: ReadonlyMap<string, string> = new Map([
+  ["token", OWNED_TOKEN],
+  ["region", OWNED_REGION],
+]);
+
+// Writes each field's segments as JSON, so a case reads what the walk gave.
+function segmentsEncoder(optionForm: McpFieldEncoder["optionForm"]): McpFieldEncoder {
+  return {
+    expanded: (segments) => JSON.stringify(segments),
+    literal: (text) => text,
+    optionForm,
+  };
+}
+
+test("D-PG10-11: the adapter encoder writes each option as a reference to its process variable", () => {
+  // arrange
+  const context: McpSubstitutionContext = { ...PROJECT_CONTEXT, options: TOKEN_OPTIONS };
+  const server = {
+    command: "node",
+    args: ["--token=${user_config.token}", "${user_config.region}"],
+  };
+
+  // act
+  const substituted = substituteAndInject(server, context, adapterFieldEncoder(TOKEN_NAMES));
+
+  // assert
+  assert.deepStrictEqual(substituted, {
+    entry: {
+      command: "node",
+      args: [`--token=\${${OWNED_TOKEN}}`, `\${${OWNED_REGION}}`],
+      env: { CLAUDE_PLUGIN_ROOT: "/plugins/acme", CLAUDE_PLUGIN_DATA: "/data/mp/acme" },
+    },
+    report: { missing: [], blanked: [] },
+  });
+});
+
+test("D-PG10-21: a plugin that declares no options keeps an option reference as written", () => {
+  // arrange
+  const server = { command: "node", args: ["${user_config.token}"] };
+
+  // act
+  const substituted = substituteAndInject(
+    server,
+    PROJECT_CONTEXT,
+    adapterFieldEncoder(TOKEN_NAMES),
+  );
+
+  // assert
+  assert.deepStrictEqual(substituted.entry.args, ["${user_config.token}"]);
+});
+
+test("D-PG10-11: a text-form encoder gets each option's MCP value as a text segment", () => {
+  // arrange
+  const context: McpSubstitutionContext = { ...PROJECT_CONTEXT, options: TOKEN_OPTIONS };
+  const server = { command: "node", args: ["${user_config.token}", "${user_config.region}"] };
+
+  // act
+  const substituted = substituteAndInject(server, context, segmentsEncoder({ kind: "text" }));
+
+  // assert
+  assert.deepStrictEqual(substituted.entry.args, [
+    JSON.stringify([{ kind: "text", text: "abc" }]),
+    JSON.stringify([{ kind: "text", text: "" }]),
+  ]);
 });

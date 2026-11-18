@@ -10,6 +10,7 @@ import {
   reportDelistedPlugins,
   reportRefusedMarketplaces,
   reportUnreadableDeclarer,
+  reportUnreadableOptions,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/delisted-plugins.ts";
 
 import type { MarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
@@ -513,5 +514,71 @@ describe("reportDeclarerFailure", () => {
 
     // assert
     assert.deepStrictEqual(outcomes, [refusedCopyRow()]);
+  });
+});
+
+describe("reportUnreadableOptions", () => {
+  test("D-PG10-25: warns once about each enabled record whose stored options do not parse", () => {
+    // arrange
+    const marketplace = marketplaceRecord("mp", ["bad", "off", "good"], ["off"]);
+    const bad = marketplace.plugins.bad;
+    const off = marketplace.plugins.off;
+    const good = marketplace.plugins.good;
+    assert.ok(bad !== undefined && off !== undefined && good !== undefined);
+    bad.userConfig = "token=secret";
+    off.userConfig = "token=secret";
+    good.userConfig = { mode: { type: "string", title: "Mode", description: "M.", default: "f" } };
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    reportUnreadableOptions("project", stateOf(marketplace), outcomes);
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-declarer-unreadable",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "bad",
+        reason: "unreadable",
+        cause: new Error(
+          "The plugin options in the install record of bad@mp do not parse " +
+            "(userConfig is not an object). Run /claude:plugin reinstall bad@mp to restore them.",
+        ),
+      },
+    ]);
+  });
+
+  test("D-PG10-25: gives no second row for a plugin this pass already reported", () => {
+    // arrange
+    const marketplace = marketplaceRecord("mp", ["bad"]);
+    const bad = marketplace.plugins.bad;
+    assert.ok(bad !== undefined);
+    bad.userConfig = "token=secret";
+    const failed: PerEntryOutcome = {
+      kind: "plugin-enable-failed",
+      scope: "project",
+      marketplace: "mp",
+      plugin: "bad",
+      reason: "unreadable",
+    };
+    const outcomes: PerEntryOutcome[] = [failed];
+
+    // act
+    reportUnreadableOptions("project", stateOf(marketplace), outcomes);
+
+    // assert
+    assert.deepStrictEqual(outcomes, [failed]);
+  });
+
+  test("D-PG10-25: reports nothing for a pristine scope", () => {
+    // arrange
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    reportUnreadableOptions("user", undefined, outcomes);
+
+    // assert
+    assert.deepStrictEqual(outcomes, []);
   });
 });

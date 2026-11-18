@@ -22,15 +22,20 @@ import {
   builtinRegistrationStep,
   resyncBuiltinRegistrations,
 } from "./orchestrators/mcp/builtin-registration-step.ts";
+import { recordedMcpServerNames } from "./orchestrators/mcp/recorded-servers.ts";
 import { createMcpSessionMaterializer } from "./orchestrators/mcp/session-materialize.ts";
 import { createUpdateOperations } from "./orchestrators/plugin/operations.ts";
 import { composePackageInstallAbortScope } from "./orchestrators/plugin/package-install.ts";
+import { createPluginOptionVariables } from "./orchestrators/plugin-options.ts";
 import { recomputePluginPath } from "./orchestrators/plugin-path.ts";
 import {
   createApplyReconcile,
   createScopeDependencyInstall,
 } from "./orchestrators/reconcile/apply.ts";
 import { createLoadReconcile } from "./orchestrators/reconcile/load.ts";
+import { withholdUserOptionServersAtStartup } from "./orchestrators/reconcile/option-withhold.ts";
+import { createPluginNamesCache, loadPluginNames } from "./orchestrators/skill-alias-state.ts";
+import { createTypedExpansionResolver } from "./orchestrators/typed-expansion.ts";
 import { locationsFor } from "./persistence/locations.ts";
 import { loadState } from "./persistence/state-io.ts";
 import { createBuiltinMcpStatusReader } from "./platform/mcp-builtin-status.ts";
@@ -67,11 +72,23 @@ function applyMcpAdapterEnvFrom(readCwd: () => string): void {
 }
 
 /**
+ * D-PG10-23: runs one apply of the plugin option variables. A throw is
+ * debug-logged and never escapes (NFR-2).
+ */
+async function applyOptionVariablesWith(apply: () => Promise<void>): Promise<void> {
+  try {
+    await apply();
+  } catch (err) {
+    hookDebugLog(`plugin option variables skipped: ${errorMessage(err)}`, "env");
+  }
+}
+
+/**
  * Registers the extension's Pi hooks, tools, and slash command surface.
  */
 // DISP-01: async factory; Pi's loader awaits this Promise (loader.d.ts
-// `loadExtensionFromFactory(...): Promise<Extension>`), so the 12 pi.on
-// registrations inside `registerHooksBridge` complete BEFORE the loader
+// `loadExtensionFromFactory(...): Promise<Extension>`), so the 14 pi.on call sites
+// inside `registerHooksBridge` complete BEFORE the loader
 // proceeds to emit any session-lifecycle event. The `void` fire-and-forget
 // alternative would race against the first session_start because the loader
 // does not see the un-awaited inner Promise.
@@ -89,6 +106,13 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   // own `session_start`, so the values must exist before this extension's
   // handlers run.
   applyMcpAdapterEnvFrom(() => process.cwd());
+  // D-PG10-23: the user scope's option variables are set here, awaited, for
+  // the same reason. The project scope waits for the load's trust answer.
+  const optionVariables = createPluginOptionVariables({ loadState, env: process.env });
+  await applyOptionVariablesWith(optionVariables.applyUserScope);
+  // D-PG10-25: and for the same reason, a user-scope server that names an
+  // option of a record whose options do not parse is held back here.
+  await withholdUserOptionServersAtStartup(process.cwd(), process.env);
   const hooksRuntime = createHooksRuntime();
   const hooksRouting = createHooksRouting(hooksRuntime, { readHooksJson });
   const completionCache = createCompletionCache();
@@ -105,7 +129,13 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     builtin: createBuiltinMcpStatusReader(pi),
   };
   const pluginUpdateOperations = createUpdateOperations(hooksRouting, completionCache);
-  const hooksHydration = createHooksHydration(hooksRuntime, { loadState, readHooksJson });
+  // D-PG6-07 / MREC-02: the hooks bridge names a record's MCP servers through
+  // the one reader of them, so a record that predates the field is re-resolved.
+  const hooksHydration = createHooksHydration(hooksRuntime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: recordedMcpServerNames,
+  });
   // RECON-01..05: one reconcile apply operation and one load reconcile step
   // per extension load, both bound to the production state reader.
   // `/claude:plugin apply` (APL-01) drives the apply operation; the
@@ -148,9 +178,16 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   //      project cache. Both are idempotent against the same cwd.
   //
   // The `await` is LOAD-BEARING: Pi's loader awaits the factory Promise, so
-  // the 12 pi.on calls + user-scope cache hydrate inside `registerHooksBridge`
+  // the 14 pi.on call sites + user-scope cache hydrate inside `registerHooksBridge`
   // are guaranteed to complete BEFORE the first Pi event fires.
-  await hooksHydration.registerHooksBridge(pi, { cwd: homedir() });
+  //
+  // D-PG6-18: the bridge's resolver of a typed line and the skill alias
+  // handler read one plugin name cache, so both see the same table.
+  const pluginNames = createPluginNamesCache(pi, loadPluginNames);
+  await hooksHydration.registerHooksBridge(pi, {
+    cwd: homedir(),
+    resolveTypedExpansion: createTypedExpansionResolver(pi, pluginNames),
+  });
 
   async function prepareResources(
     event: ResourcesDiscoverEvent,
@@ -158,8 +195,9 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   ): Promise<void> {
     requireNotificationMode(ctx.mode);
     const run = openNotificationRun(pi, { kind: "load" });
-    // D-LOC-01: an untrusted project's hooks are not routed, and a load with
-    // autoapply on does not apply its scope.
+    // D-LOC-01: an untrusted project's hooks are not routed, a load with
+    // autoapply on does not apply its scope, its plugins' bin folders stay
+    // off PATH (D-PG10-02), and its option variables are not set (D-PG10-23).
     const projectTrusted = ctx.isProjectTrusted();
     try {
       await hooksHydration.hydrateProjectScopeForCwd(event.cwd, projectTrusted);
@@ -185,6 +223,15 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
       }
     }
 
+    // D-PG6-07: a plugin the load's autoapply installed or enabled names its
+    // MCP servers to the hooks in this session. NFR-2: a failure here skips
+    // only this stage.
+    try {
+      await hooksHydration.refreshMcpServers(event.cwd, projectTrusted);
+    } catch (err) {
+      hookDebugLog(`MCP server refresh skipped: ${errorMessage(err)}`, "hydrate");
+    }
+
     // D-MB-10: the built-in MCP registrations follow the records the load
     // reconcile left. NFR-2: a failure here skips only this stage.
     try {
@@ -196,7 +243,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
 
     requireNotificationMode(ctx.mode);
     try {
-      const pathResult = await recomputePluginPath(event.cwd);
+      const pathResult = await recomputePluginPath(event.cwd, projectTrusted);
       for (const skip of pathResult.skipped) {
         try {
           notifyPluginPathSkipped(ctx, run, skip.scope, skip.reason);
@@ -207,6 +254,10 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     } catch (err) {
       hookDebugLog(`plugin PATH recompute skipped: ${errorMessage(err)}`, "env");
     }
+
+    // D-PG10-23: the project scope's option variables follow the load's trust
+    // answer; the constant above is the only trust read.
+    await applyOptionVariablesWith(() => optionVariables.applyForLoad(event.cwd, projectTrusted));
   }
 
   // The peer's own `ExtensionAPI.on("resources_discover", ...)` overload checks
@@ -318,10 +369,22 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     },
     hooksRouting,
     pluginUpdateOperations.updatePlugins,
-    { runForeground: backgroundGate.runForeground },
+    {
+      // D-PG10-11: after every command, whatever its outcome, the option
+      // variables are applied again with the last load's working directory and
+      // trust answer, so an install is usable before the next `/reload`.
+      runForeground: (command) =>
+        backgroundGate.runForeground(async () => {
+          try {
+            await command();
+          } finally {
+            await applyOptionVariablesWith(optionVariables.applyAgain);
+          }
+        }),
+    },
   );
   registerClaudeMarketplaceTools(pi);
-  registerSkillAliases(pi);
+  registerSkillAliases(pi, pluginNames);
   // D-CF1-01 / D-CF1-02: Pi runs input handlers in registration order, so the
   // command invocation handler sees the text after the skill-alias rewrite.
   registerCommandInvocation(pi);

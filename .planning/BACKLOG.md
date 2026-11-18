@@ -4,6 +4,8 @@ Ideas surfaced during planning that are deferred from active scope but worth ret
 
 ## UAT-02: reconcile cascade invisible on `/reload` (host TUI limitation)
 
+**Out of date 2026-11-15** (parity-gaps Phase 11, 11-06). The premise below is out of date. On `/reload`, Pi's `handleReloadCommand` passes `beforeSessionStart: restoreChatBeforeSessionStart` to `session.reload()`, so Pi rebuilds the chat before `session_start`, and a notification sent during the reload is not erased by the rebuild. Source: `dist/modes/interactive/interactive-mode.js` of the installed Pi 1.5.0, read in code. The fix came in Pi 0.79.10, cited from the Pi changelog by `docs/research/parity-gaps/core.md`. This is unmeasured: it was read in code, not run in a live terminal, and no scenario reads a notice after a terminal `/reload`. The candidate directions and the workaround below rest on the old premise. The manual check that the last paragraph names would settle it.
+
 Surfaced by v1.12 milestone runtime UAT (2026-06-11). The load-time reconcile
 cascade (RECON-04) is emitted correctly via `ctx.ui.notify`, and IS visible at
 Pi startup -- but on `/reload`, pi's `handleReloadCommand` calls
@@ -1385,6 +1387,14 @@ Code seams: `orchestrators/plugin/info.ts` (`normalizeDependencies`),
 list-time surfacing is later decided).
 
 ## USRCFG-01: no equivalent to Claude Code's `userConfig` plugin settings
+
+Amended 2026-11-15 (parity-gaps, Phase 10, D-PG10-04). Step 1 shipped: each declared `default` reaches hooks (as `CLAUDE_PLUGIN_OPTION_<KEY>` and in exec-form `${user_config.KEY}`), MCP servers, and skill, command, and agent content, and `userConfig` is no longer an unsupported component. Hooks and content get a default as if the user had saved it, which is more than Claude Code 2.1.323 does (D-PG10-19). Steps 2 and 3, values that a user sets and the dialog, stay open behind PRD decision 30. Correction: the text below says that sensitive values need OS secret custody. That is wrong. Claude Code keeps them in `~/.claude/.credentials.json` where there is no keychain (`docs/research/parity-gaps/core.md` W4).
+
+Step 2 must settle these points first:
+
+- Content is filled at staging, and the invocation passes run later. A value that a user sets can hold `$ARGUMENTS`, `$1`, or `` !`cmd` ``, and the invocation then expands it. Move the fill to invocation, or guard the value against the argument passes.
+- The option variables `PI_CLAUDE_MARKETPLACE_OPTION_*` are visible to every hook, to the bash tool, and to another plugin's MCP entry that names one. Decide whether to withhold a reference that another plugin's entry makes.
+- `apply` does not restage a record installed with `--partial` because of `userConfig` (D-PG10-24).
 
 Surfaced 2026-08-13 reviewing `docs/competitive-analysis/` against
 `.planning/BACKLOG.md` for coverage gaps, then researching Claude Code's
@@ -3818,7 +3828,9 @@ Carried from `any-git-host` (`03-REVIEW-DISPOSITION.md`; milestone audit, 2026-0
 - Code hygiene: WR-01/WR-06/WR-07 (stale JSDoc and flow header), WR-08
   (five positional parameters), WR-09, IN-02, IN-03, IN-06, IN-07, IN-08.
 
-## WOUT-01: workflow output quality is unobserved because engine subagents declined every tool call
+## WOUT-01: workflow output quality on a real plugin is unobserved
+
+**Out of date 2026-11-15** (parity-gaps Phase 8, 08-03 and 08-04). Workflow subagents get Pi's `read`, `bash`, `edit`, and `write` since engine 3.13.1. In the scenario "A workflow step that asks for worktree isolation runs in a git worktree of the project, which the engine keeps where Claude Code removes an unchanged one" (`features/workflow/agent-steps.feature`), two workflow subagents each ran `bash` and got its result. Output quality on a real plugin is still unmeasured. The scenario ran engine 3.15.0. The 3.13.1 bound is read in the engine source by `docs/research/parity-gaps/workflows.md`, not run.
 
 Carried from the json-output close (WINDOWS #84).
 
@@ -4568,6 +4580,8 @@ Deferred by component-features Phase 7. Trigger: `@quintinshaw/pi-dynamic-workfl
 
 - Engine request for D-CF7-01: a pre-run hook (or approval option) in `@quintinshaw/pi-dynamic-workflows` so a host can ask before a saved workflow runs.
 - Engine request for D-CF7-02: a raw-string `args` mode for the slash path, so a script written for Claude Code receives the typed text as one string, or `undefined` when nothing is typed.
+- Engine requests that parity-gaps Phase 8 depends on and did not draft (PRD section 8.4, D-PG8-17): an `agent()` call whose `agentType` names no agent throws, as Claude Code 2.1.323 does (the scenario "A workflow step that names an agent type the plugin does not install still runs, where Claude Code stops the step" fails on that day); `parallel()` and `pipeline()` return `null` for a failed thunk and never reject; `builtin:mcp` in `providerMiddlewareExtensions` works in subagents.
+- [workflows] Ask the pi-dynamic-workflows engine to apply Pi project trust to `<project>/.pi/workflows/settings.json` (3.15.0 `src/workflow-settings.ts:122-134` reads it untrusted; a cloned repo can set `providerMiddlewareExtensions` and `inheritMainModel`). Source: 08-REVIEW.md CR-01, 08-SECURITY.md T-08-13 (closed: the maintainer accepted the risk 2026-11-16 and makes no engine request).
 
 ## WFLLIST-01: the workflow listing step assumes no engine built-in command name holds a colon
 
@@ -4583,7 +4597,7 @@ Deferred by component-features Phase 7 (07-REVIEW.md). Both touch files that wer
 
 ## MCPBG-01: a harness whose background subagents load the profile's companions
 
-Added 2026-11-01 (component-features Phase 6, D-CF6-10). In the cucumber harness a pi-subagents background child (`async: true`) loads neither the profile Pi's `--extension` companions nor the scripted model, so no scenario can show an agent calling a plugin MCP tool in the background. MCP-07's working call is untested. Updated 2026-11-02: pi-subagents 0.84.0 also drops every bridged server in a background child (bug A, `directTools: "search"` rejected) and mismatches the cache key of a server that uses `${VAR:-default}` (bug B); patches are drafted in `.planning/upstream/pi-subagents-mcp-direct-tools.patch` for the user's review. Trigger: a pi-subagents release with both fixes, then a harness change that passes the profile's companions and model to the detached runner. When that release ships: raise the `pi-subagents` optional-peer floor in `package.json` (and the test-peer cache in `scripts/install-test-peers.mjs`) to it, re-run the D-CF6-10 scenario in `features/mcp-server/invocation.feature` (its pinned "Unresolved MCP direct-tool selectors" text comes from bug A and will change), and update `docs/mcp-compatibility.md`, which names both bugs. Keep `async: true` for MCP agents: the foreground refusal is pi-subagents design, not one of the bugs.
+Added 2026-11-01 (component-features Phase 6, D-CF6-10). In the cucumber harness a pi-subagents background child (`async: true`) loads neither the profile Pi's `--extension` companions nor the scripted model, so no scenario can show an agent calling a plugin MCP tool in the background. MCP-07's working call is untested. Updated 2026-11-02: pi-subagents 0.84.0 also drops every bridged server in a background child (bug A, `directTools: "search"` rejected) and mismatches the cache key of a server that uses `${VAR:-default}` (bug B); patches are drafted in `.planning/upstream/pi-subagents-mcp-direct-tools.patch` for the user's review. Trigger: a pi-subagents release with both fixes, then a harness change that passes the profile's companions and model to the detached runner. When that release ships: raise the `pi-subagents` optional-peer floor in `package.json` (and the test-peer cache in `scripts/install-test-peers.mjs`) to it, re-run the D-CF6-10 scenario in `features/mcp-server/invocation.feature` (its pinned "Unresolved MCP direct-tool selectors" text comes from bug A and will change), and update `docs/mcp-compatibility.md`, which names both bugs. Keep `async: true` for MCP agents: the foreground refusal is pi-subagents design, not one of the bugs. Updated 2026-11-12 (parity-gaps, PG-AGENT-02, D-PG1-01, D-PG1-02): the release trigger is met; pi-subagents 0.87.0 has both fixes, the optional-peer range is `>=0.87.0`, and the suites run 0.88.0. The D-CF6-10 scenarios in `features/mcp-server/agent-grants.feature` are pinned to the 0.88.0 foreground results, and `docs/mcp-compatibility.md` no longer names the bugs as open. The remaining AGTASYNC-01 harness change must demonstrate a background child calling a plugin MCP tool. No live run of a background child on pi-subagents 0.88.0 is recorded. This entry remains open.
 
 ## ~~MCPSUB-01: file the pi-subagents foreground MCP gap report~~ -- CLOSED
 
@@ -4593,7 +4607,9 @@ Added 2026-11-01 (component-features Phase 6, D-CF6-10).
 
 ## MCPB-01: `.mcpb` and `.dxt` MCP bundles
 
-Added 2026-11-01 (component-features Phase 6, D-CF6-01). Claude Code unpacks an `.mcpb` or `.dxt` bundle that `mcpServers` names and runs its server. pi-mcp-adapter has no bundle runner, so such a plugin is `(partially-available) {unsupported mcp}`, and `info` does not name the bundle. Trigger: pi-mcp-adapter adds a bundle runner.
+Added 2026-11-01 (component-features Phase 6, D-CF6-01). Claude Code unpacks an `.mcpb` or `.dxt` bundle that `mcpServers` names and runs its server. pi-mcp-adapter has no bundle runner, so such a plugin is `(partially-available) {unsupported mcp}`, and `info` does not name the bundle. The original trigger was a bundle runner in pi-mcp-adapter.
+
+**Out of date 2026-11-15** (parity-gaps Phase 11, 11-06). Claude Code has no bundle runner either. It unpacks the `.mcpb` or `.dxt` bundle into `mcpb/` under the plugins root and reads a normal server config from it (Claude Code plugins reference, "MCP bundle path", fetched 2026-11-15; `docs/research/parity-gaps/mcp.md` N17). So what blocks bundles is this project's own work: an unpack step and a translation of the bundle manifest, the bundle's `user_config` included. Trigger: a decision to do that work. It does not wait for pi-mcp-adapter. Until then D-CF6-01 stays the decision that this extension never reads a bundle.
 
 ## MCPREF-01: an `mcpServers` path without `./`
 
@@ -4617,7 +4633,9 @@ Added 2026-11-01 (component-features Phase 6, D-CF6-04). `test/live-uat/mcp-adap
 
 Added 2026-11-01 (component-features Phase 6). Since pi-mcp-adapter 6.0, a call through the `mcp` proxy tool runs the real tool as a nested Pi tool call under its Claude Code name (measured on 7.0.0, Pi 1.4.0). No run has checked whether the hooks bridge fires a plugin's `PreToolUse` and `PostToolUse` matchers and `if` predicates for that nested call. Measure it with the hooks scenarios, then state the result in `docs/hooks-compatibility.md` (the two MCP matcher rows and the paragraph under "Tool name mapping") and in `docs/mcp-compatibility.md` "Hooks and agents".
 
-## AGTEXCL-01: per-tool MCP disallows beside an explicit `tools:` list
+## ~~AGTEXCL-01: per-tool MCP disallows beside an explicit `tools:` list~~ -- CLOSED
+
+**CLOSED 2026-11-14** by parity-gaps Phase 7 (D-PG7-12, D-PG7-13; PG-AGENT-09, verified in 07-VERIFICATION.md). A per-tool MCP deny under a whole-server grant is written to `excludeTools` beside `tools`, and the ANAME-02 warning and the `excludeTools` version-floor warning are removed instead of reworded, because pi-subagents 0.87.0 and later apply `excludeTools` beside an explicit list.
 
 Deferred by component-features Phase 4 (D-CF4-08). pi-subagents 0.62 and later apply `excludeTools` beside `tools`. Emit `excludeTools` beside an explicit `tools:` list for a per-tool MCP disallow, and reword the stale ANAME-02 warning `disallowedTools entry <tool> cannot narrow the whole-server grant <server> -- pi-subagents takes no excludeTools beside an explicit tools: list, so the agent keeps every tool of that server` (`bridges/agents/convert.ts`). The warning is user-visible, so the change needs a cucumber scenario. It touches MCP-07 (D-CF6-07, D-CF6-10).
 
@@ -4735,15 +4753,21 @@ Noted by component-features Phase 3. `platform/pi-api.ts` exports `ThinkingLevel
 
 Noted by component-features Phase 5 (DUBIOUS-CHOICES P5-DC-23 item 5). `test/index.test.ts` imports `TurnEndEvent` straight from the Pi peer, because `platform/pi-api.ts` does not re-export it. A re-export alone fails `fallow dead-code` as an unused type, because the `turn_end` handler in `bridges/hooks/event-router.ts` types its event with the structural `FollowUpTurnEnd`. Re-export it when a production module names the type, for example that handler.
 
-## HOOKLAUNCH-01: SessionStart `resume` and `fork` for resumed and forked launches
+## ~~HOOKLAUNCH-01: SessionStart `resume` and `fork` for resumed and forked launches~~ -- CLOSED
+
+**CLOSED 2026-11-15** by parity-gaps Phase 6 (D-PG6-14, D-PG6-15, D-PG6-17). A launch that continues a saved session sends `resume`, and a `--fork` launch sends `fork`.
 
 Deferred by component-features Phase 5 (D-CF5-06). A Pi launch with `--continue`, `--resume`, `--session`, or `--fork` sends SessionStart `startup`, where Claude Code sends `resume` or `fork`. Detect them through the session header: `parentSession` means fork, existing entries mean resume. Its scenario needs a launcher change in the cucumber harness.
 
 ## HOOKHEAL-01: let reconcile restore dropped `clear`, `compact`, and `fork` hook groups
 
+Update 2026-11-15 (parity-gaps, Phase 6, D-PG6-21): an installed plugin whose `UserPromptExpansion` group was dropped at install gets it at its next `update` or `reinstall`; a load does not restore it.
+
 Deferred by component-features Phase 5 (D-CF5-08). An install made before the session matcher change dropped these groups, and only `/claude:plugin reinstall` restores them. Add a growth move to `pending` and `apply` (the BFILL-01 planner) so reconcile heals such a plugin.
 
 ## HOOKENV-01: the remaining Claude Code hook variables
+
+Update 2026-11-15 (parity-gaps, Phase 6, D-PG6-10): the stdin field `effort` is sent; the `CLAUDE_EFFORT` variable stays deferred.
 
 Deferred by component-features Phase 5 (D-CF5-16). Set `CLAUDE_CODE_CHILD_SESSION`, `CLAUDE_CODE_SESSION_ATTENDED`, `CLAUDE_PID`, and `CLAUDE_EFFORT` in the hook env as Claude Code does. `docs/env-vars.md` "Not delivered" lists two of them today.
 
@@ -4751,7 +4775,9 @@ Deferred by component-features Phase 5 (D-CF5-16). Set `CLAUDE_CODE_CHILD_SESSIO
 
 Deferred by component-features Phase 5 (D-CF5-20). Merge a `plugin.json` `hooks` field (path, array, or inline object) with `hooks/hooks.json` per event, and apply a marketplace entry's inline `hooks` as upstream: an entry event replaces that event, and without `plugin.json` the entry replaces the whole config. Then drop the `{unsupported hooks}` report for these fields. Also decide whether `plugin info` names the declared field.
 
-## HOOKPAYLOAD-01: missing fields in the tool hook payloads
+## ~~HOOKPAYLOAD-01: missing fields in the tool hook payloads~~ -- CLOSED
+
+**CLOSED 2026-11-15** by parity-gaps Phase 6 (D-PG6-04 to D-PG6-07). The tool hooks receive `tool_use_id` on the three tool events, `duration_ms` on the result hooks, and `mcp_server` for a plugin MCP tool; `is_interrupt` shipped earlier (D-BG-401). Residual: HOOKMCPSERVERSCOPE-01.
 
 Deferred by component-features Phase 5 (D-CF5-28, 05-09 addendum). Add `tool_use_id` and `mcp_server` to the tool stdin payloads, and `tool_use_id`, `is_interrupt`, and `duration_ms` to the PostToolUseFailure payload, as Claude Code sends them.
 
@@ -4769,17 +4795,27 @@ Deferred by component-features Phase 5 (D-CF5-11). A PostToolUse or PostToolUseF
 
 ## HOOKERRNOTE-01: Claude Code's non-blocking hook error notice
 
+Narrowed 2026-11-14 (parity-gaps, Phase 5, D-PG5-10/11) to the `SessionEnd` half below. A synchronous hook that ends as a non-blocking error now shows `<label> hook error: Failed with non-blocking status code: <line>` on `PreToolUse`, `PostToolUse`, `PostToolUseFailure`, `UserPromptSubmit`, `Stop`, `SessionStart`, and `PreCompact`.
+
 Noted by component-features Phase 5. Claude Code shows `<hook name> hook error` and `Failed with non-blocking status code: ...` for a hook that exits with a code other than 0 and 2. The bridge shows nothing. No decision covers it yet.
 
 For SessionEnd, Claude Code 2.1.319 writes `SessionEnd hook [<command>] failed: <output>` to stderr for each failed hook with output after its bounded run. The bridge shows nothing for a non-blocking SessionEnd failure, and `features/hook/session-end.feature` states no notice for one (behavioral-gaps D-BG-603, P6-DC-04).
 
-## HOOKPROMPTSTOP-01: a UserPromptSubmit `continue: false` stops silently
+## ~~HOOKPROMPTSTOP-01: a UserPromptSubmit `continue: false` stops silently~~ -- CLOSED
+
+**CLOSED 2026-11-14** by parity-gaps Phase 5 (D-PG5-13, fixed). A `UserPromptSubmit` `continue: false` now shows `Operation stopped by hook: <stopReason>`, or `Operation stopped by hook` with no reason, and the prompt still does not reach the model. The reason is shown to the user only (STOPREASONCONV-01).
 
 Noted by component-features Phase 5. Claude Code shows `Operation stopped by hook: <reason>`. The bridge stops the prompt with no notice.
 
-## HOOKORIGPROMPT-01: the `Original prompt:` line of the blocked-prompt notice
+## ~~HOOKORIGPROMPT-01: the `Original prompt:` line of the blocked-prompt notice~~ -- CLOSED
+
+status: resolved
+
+**Resolved 2026-11-16** (maintainer decision). The `UserPromptSubmit` notice now ends with a blank line and `Original prompt: <prompt>` too, unless the hook's JSON sets `suppressOriginalPrompt` under its own `hookEventName` or the block comes from `onFailure: "block"`, as Claude Code 2.1.323 writes it (D-PG6-20, amending D-CF5-24). Original report follows.
 
 Noted by component-features Phase 5 (D-CF5-24). Decide whether the blocked-prompt notice adds Claude Code's third line, `Original prompt: <prompt>`.
+
+The `UserPromptExpansion` notice adds it since the maintainer review of 2026-11-16 (D-PG6-20), with `hookSpecificOutput.suppressOriginalPrompt`. The `UserPromptSubmit` notice still leaves it out.
 
 ## HOOKSTOPNOTE-01: a notice for a blocking Stop hook
 
@@ -4840,7 +4876,7 @@ Added 2026-11-03 (user request). Every `/claude:plugin` verb and every component
 No scenario at all:
 
 1. GitHub sign-in (Device Flow) and credential prompts: the interactive sign-in that `install`, `apply` and `marketplace add` run for a private GitHub repo, and the rule that a load with `autoapply` on uses stored credentials only and never prompts (D-13). Unit tests only. Needs a stand-in for GitHub's device-code endpoints.
-2. A plugin's `bin/` on `PATH` (PENV-01): at load each enabled plugin's `bin/` is appended to `PATH` and recorded in `PI_CLAUDE_MARKETPLACE_PATH`, and Pi's bash tool inherits it. No scenario shows a bash call finding a plugin executable, or the entry leaving after uninstall and `/reload`.
+2. A plugin's `bin/` on `PATH` (PENV-01): at load each enabled plugin's `bin/` is appended to `PATH` and recorded in `PI_CLAUDE_MARKETPLACE_PATH`, and Pi's bash tool inherits it. Covered by `features/plugin/executables.feature` (parity-gaps, Phase 10): a bash call finds a plugin executable, a project plugin's executable is not found in a project the user marked "do not trust", and two plugins add one entry. Still no scenario: the entry leaving after uninstall and `/reload`.
 3. Background hooks (`asyncRewake`) and the `StopFailure` event: both are supported and appear in no feature file.
 4. Upgrades from old data: the first-load migration of old `state.json` and config formats is unit-tested only. Part of it needs a harness change first, because the harness cannot record an installed plugin without `install` writing the base config (LCTEST-01).
 5. Background agent runs: an `async: true` agent, including one that calls a plugin MCP tool, and with it the working end-to-end proof of MCP-07. Blocked on the pi-subagents fixes on the user's fork (`acolomba/pi-subagents`, `fix/mcp-direct-tools-adapter-7`); see AGTASYNC-01 and MCPBG-01.
@@ -4895,7 +4931,7 @@ Noted 2026-11-05 (mcp-builtin, MCPV2-02). The extension does not map Claude deny
 
 ## MCPV2-03: let background pi-subagents children call plugin MCP tools under built-in MCP
 
-Noted 2026-11-05 (mcp-builtin, MCPV2-03, MCPBG-01). Under Pi's built-in MCP, a pi-subagents background child does not run the plugin MCP servers that the parent registered, so the child cannot call plugin MCP tools. The milestone deferred this because D-MB-12 keeps a background child from changing installation state, and the registration runs in the parent only. Candidate direction: register the recorded servers in a child without any state write, or ask pi-subagents to pass the parent's registrations to the child.
+Noted 2026-11-05 (mcp-builtin, MCPV2-03, MCPBG-01). At the time, no real background-child run showed a plugin MCP tool call under Pi's built-in MCP. The milestone deferred this because D-MB-12 forbids installation-state changes in a background child, while the registration path had not been checked for one. The proposed paths were child registration without a state write or passing the parent's registrations to the child. Updated 2026-11-12: the parent-only premise is out of date by `builtin-registration-step.ts`: a background child runs the same registration steps for its own session (D-MB-12), and the file has no `isSubagentChild` check. AGTASYNC-01 still needs a real background-child run to show the call.
 
 ## DENYPIN-01: re-pin the MCP variable deny-lists to Claude Code 2.1.318
 
@@ -4908,6 +4944,8 @@ Noted 2026-11-05 (mcp-builtin, P2-DC-08, D-MB-19, BLT-04). When an `mcp.json` en
 ## TOOLSEARCHOFF-01: a fallback when Pi's `tool_search` is turned off
 
 Noted 2026-11-05 (mcp-builtin, 02-08 item 4 (d)). Plugin MCP tools under Pi's built-in MCP reach the model through Pi's `tool_search`. When a user turns `tool_search` off, the model cannot find those tools. The milestone deferred this because no requirement covers it. Candidate direction: detect at registration that `tool_search` is off and register the plugin tools with direct exposure, or document the requirement.
+
+**Out of date 2026-11-15** (parity-gaps Phase 11, 11-06). With `tool_search` off, a `codemode` script can still call the plugin tools once the user turns `codemode` on. Pi reaches a tool with `deferred` exposure through `tool_search` or through `codemode`, and it turns `codemode` on by itself only for a server with `codemode` exposure. This extension registers plugin servers as deferred, so the user must turn `codemode` on, for example with `"defaultTools": ["+codemode"]`. Source: `docs/mcp.md` of the installed Pi 1.5.0. This is unmeasured: it was read in the docs, and no scenario calls a plugin tool from a `codemode` script. The candidate direction changes: the fallback question is now whether to register the plugin tools with direct exposure or to document that the user turns `codemode` on.
 
 ## BLTOWNER-01: tell another extension's same-name built-in registration apart in `info`
 
@@ -5176,3 +5214,299 @@ Noted 2026-11-08 (behavioral-gaps, debug session `adapter-profile-parallel-flake
 ## UNREADABLECOMPANIONS-01: should a scope whose installation record a load cannot read stop serving its MCP servers, agents, and saved workflows?
 
 Noted 2026-11-09 (behavioral-gaps, P7-DC-04, D-BG-705). When a load cannot read a scope's `state.json`, it stops offering that scope's skills and prompts. Hooks, the plugin `bin/` PATH entries, and the built-in MCP registrations already stop. Three kinds are still served, because their companions read their own files: the pi-mcp-adapter servers in `<scopeRoot>/mcp-adapter.json` (and the legacy `mcp.json`), the agents in `<scopeRoot>/agents/`, read by pi-subagents, and the saved workflows, read by the workflow engine. Claude Code loads none of a plugin's components when its registries cannot be read. Withdrawing these kinds needs a write, which a load must not make (APL-D1), to files a newer release may own. It could also need a Pi or companion hook that hides them at load. The agent grants step (`orchestrators/mcp/agent-grants-step.ts`) also never reads `state.json`, so at `session_start` it can still rewrite the generated agent files of such a scope. Open question: is there a way to withdraw them that writes nothing, such as a companion-side filter, or should the grants step at least skip a scope whose record it cannot read?
+
+## AGTLONGNAME-01: pi-subagents names a granted adapter tool without the 64-character cut
+
+Noted 2026-11-11 (parity-gaps, PG-MCP-02, D-PG1-10). Measured by `test/integration/agents-adapter-grant-conformance.test.ts` against pi-subagents 0.88.0: for `mcp:plugin_demo_warehouse_/list_every_table_in_the_warehouse_with_row_counts`, pi-subagents requires the uncut 77-character `mcp__plugin_demo_warehouse__list_every_table_in_the_warehouse_with_row_counts`, while pi-mcp-adapter 7.0.1 registers `mcp__plugin_demo_warehouse__list_every_table_in_the_war_17c0721b`. An agent whose `mcp:` grant covers that tool, including a whole-server grant, does not launch because the required name is absent from the child. `excludeTools` is unaffected; the bridge writes the registered name there. Trigger: a pi-subagents release that shortens the granted name as the adapter does. Then remove this gap from `docs/mcp-compatibility.md` and re-pin or delete the conformance test.
+
+## ~~AGTAMBIENT-01: adopt the pi-subagents fix for ambient direct MCP tools in children~~ -- ADOPTED
+
+Originally deferred by the user on 2026-11-12 (parity-gaps Phase 1,
+PG-MCP-02): installed pi-subagents 0.88.0 suppressed all direct MCP tools for
+unrestricted and exclusion-only children. The local fix passed real-child
+controls. On 2026-11-13, published pi-subagents 0.88.1 was adopted for the
+suite and local launcher. Six launch checks and three actual detached-child
+controls pass; the two positive ambient checks fail on 0.88.0 with all four
+explicit controls passing. The [quick-task summary](quick/261113-8yn-adopt-pi-subagents-0-88-1-ambient-mcp-fi/261113-8yn-SUMMARY.md)
+records the package and run evidence. PG-MCP-02 is complete after the merged-tree check. `npm run check` passed (exit 0) at `2db3b81a9cc97098bee6bc744d451aeab4fe9fad`, Node v26.13.0; log: `/tmp/subagents0881-root-check.log`. The
+[retired seed](seeds/SEED-261112-81c-adopt-pi-subagents-ambient-mcp-fix.md)
+has no release trigger. AGTLONGNAME-01 remains a separate explicit-grant
+naming defect.
+
+## HOOKRESULT-01: investigate and implement execution wrappers for full Claude-shaped hook results
+
+Update 2026-11-15 (parity-gaps, Phase 6, D-PG6-06): execution timing is no longer missing from the result hooks' stdin (`duration_ms`). The item's other facts stay open.
+
+**Status at 2026-11-13:** Open for the facts Phase 2 cannot observe during
+execution. Phase 2 already translates available per-tool result fields and
+accepted replacements, including MCP modern/legacy selection and downstream
+redaction. This follow-up is limited to complete execution capture through
+wrappers or an upstream Pi seam. See the [current contract](../docs/hooks-compatibility.md#current-tool-contract-phase-2-2026-11-13)
+and [Phase 2 validation](phases/02-hook-payloads-matchers-and-stop-limit/02-VALIDATION.md).
+
+Requested by the user on 2026-11-12 during parity-gaps Phase 2 discussion
+(PG-HOOK-01). Phase 2 includes per-tool result translation using the data Pi
+actually supplies, and the reverse mapping for hook result replacements. It must
+document missing fields rather than invent values. This item carries the further
+work to investigate and implement execution wrappers that capture the missing
+facts needed for complete Claude-shaped results.
+
+**Evidence:** Claude Code 2.1.322's output schemas and the official
+[hooks reference](https://code.claude.com/docs/en/hooks.md#posttooluse-input),
+read 2026-11-12; Pi 1.5.0's installed tool implementations and extension event
+types. Pi combines shell stdout/stderr. Its Write result has no create/update
+status or original content; Read and search events also omit some upstream
+metadata. Pi does expose `structuredContent` on result events, so use that where
+it contains the needed facts before adding instrumentation.
+
+**Scope:** inventory the fields Phase 2 cannot supply; investigate wrappers or an
+upstream Pi extension seam; then capture facts during the actual operation and
+complete both result mappings. Preserve Pi's execution, cancellation, truncation,
+file-mutation locking, and custom/remote tool behavior. Do not infer original
+content by rereading a file after the operation, label merged shell output as
+separate streams, or report unmeasured duration/count values. Check tool override
+compatibility before choosing a wrapper design.
+
+**Acceptance:** behavioral tests run real tools and real command hooks, covering
+new versus overwritten files, exact original content and edit patches, distinct
+stdout/stderr, and relevant truncation/image/search metadata. Hook replacements
+must change the model-visible result without leaving stale structured data.
+Run the complete `npm run check` gate. Update the documented limits only where
+the recorded result proves the corresponding field.
+
+**When to pick up:** the next hook-result fidelity task after Phase 2, or when Pi
+adds the required structured results or an execution-interception seam. This is
+implementation follow-up, not a decision to revisit whether translators belong
+in Phase 2; the user already required them there.
+
+## ASYNCLIFECYCLE-01: investigate intermittent hook exit, rewake and cleanup failures
+
+Observed 2026-11-13 during parity-gaps Phase 2 wave 4 verification (WINDOWS
+#114). The adapter suite reported an async hook exit code of 0 instead of 1.
+That scenario passed unchanged alone. Whole-feature reruns instead reported
+waiting hook processes after reload/restart, then a missing rewake. No assertion,
+timeout or process cleanup rule was weakened.
+
+The pre-wave commit `309a45559e9f086d76198acae906b038a4c9e1bc`, exported to an
+isolated temporary snapshot with the same installed dependencies, also failed
+the project-plugin reload cleanup scenario. That establishes a pre-existing
+cleanup failure; the exit-code and rewake failures still need a root cause.
+The snapshot used the normal eight-worker adapter runner, seed 853766:
+17/18 scenarios and 275/276 steps passed. Logs from this session are
+`/tmp/pg2-wave4-async-baseline.log`, `/tmp/pg2-wave4-async-feature.log` and
+`/tmp/pg2-wave4-async-feature-isolated.log`.
+
+The wave 6 executor's broad hook/skill run reproduced reload cleanup failure
+at `features/hook/async.feature:342`: hook PID 2258111 was still present after
+the wait (seed 367329, `/tmp/pg205-broad-final.log`). That run passed 72/74;
+its other failure was a stale skill replacement fixture corrected separately.
+Subsequent full adapter suites passed all 1,854 scenarios, including the
+corrected combined-tree gate at `a01d79d6`.
+
+**Cleanup/rewake cause fixed:** GSD debug captured a previous scenario's live
+hook writing into the next scenario's reused harness. Cleanup read only script
+PID files, missing a registered detached child before its script wrote that
+file. Its old end record could satisfy a later name-only wait and consume the
+later release marker. Commit `a01d79d6` reads both scopes' persisted PID tables,
+checks ownership markers and kills registered groups before scanning script PIDs.
+The new architecture regression failed without the fix and passed with it.
+Historical seeds 793972, 853766 and 367329 each passed all 19 async scenarios;
+the full gate passed all 1,854 adapter and 155 built-in scenarios and 359 pairs.
+Evidence: `.planning/debug/resolved/async-hook-lifecycle.md` and
+`/tmp/pg2-wave6-check-lifecycle-fixed.log`.
+
+**Still open:** the earlier exit-code mismatch (0 instead of 1) lacks a process
+snapshot and is not attributed to this fix. The possible startup-generation
+window was not exercised in these failures; no product change was made for it.
+
+**Next investigation:** preserve failed process state and hook lifecycle logs;
+check scenario-order contamination and process identity/reaping before calling
+this a load-related timeout. Reproduce with a fixed order, fix the proven cause,
+and show the reproduction fails without that fix. Revisit during the remaining
+hook-lane work and before milestone closeout. A later passing gate does not
+resolve this item or waive the full-suite requirement.
+
+## ASYNCRELOADTABLE-01: after a main-session `/reload`, the old load's late hook exits overwrite the new load's PID table
+
+Noted 2026-11-14 (parity-gaps, Phase 3 code review WR-03, iteration 2). Present at `cab4a540`, before Phase 3; the Phase 3 child-only shutdown drain (CR-01 fix `0b49ad9e`) restores that base behavior. Each load builds its own hooks runtime with its own write queue, but all loads share one PID-table file per scope. A main-session shutdown leaves the old runtime's registry intact; the new load's reap kills the old hooks and rewrites the table, then each old hook's `close` runs the old runtime's `finalizeChild` (`bridges/hooks/async-rewake/registry.ts`), which writes its leftover snapshot over the shared table with no ordering against the new runtime's writes. A hook the new load started in that window can lose its row and be orphaned after a crash. The window is short on Linux unless a grandchild holds the hook's stdio open; elsewhere the reap skips live processes, so old hooks run to their 600 s timeout and the window lasts minutes. After D-PG5-17 (parity-gaps, Phase 5) a plain `async` hook has no timer, so outside Linux nothing stops one that never ends after a quit or a crash, and the window lasts as long as that hook runs (D-PG5-18). Suggested fix: in a main session, detach the old runtime's entries at shutdown without signalling them (clear the map, keep each timeout armed), so late exits write nothing; add a router test asserting no table write and no signal after a `reload` followed by `close`.
+
+## ~~CHILDSESSIONID-01: should a child tool hook's session fields name the parent session?~~ -- CLOSED
+
+**CLOSED 2026-11-15** by parity-gaps Phase 6 (decision 26, D-PG6-01 to D-PG6-03). A child's tool hooks name the session that launched it, and `agent_id` names the child. Residuals: CHILDBASHSESSION-01, NESTEDCHILDROOT-01.
+
+Noted 2026-11-14 (parity-gaps, Phase 3 verification, PG-HOOK-07a unclassified row). In a pi-subagents child, a tool hook's `session_id`, `transcript_path` and `CLAUDE_CODE_SESSION_ID` name the child's own Pi session, so `session_id` equals `agent_id`. Claude Code appears to keep the main session in those fields: its 2.1.323 `SubagentStop` schema carries `agent_transcript_path` beside the base `transcript_path`; not confirmed for `PreToolUse`/`PostToolUse`. pi-subagents 0.88.1 sets `PI_SUBAGENT_PARENT_SESSION` in the runner environment of background children (`src/runs/background/async-execution.js:553-555`), so the parent id is reachable there; the parent's transcript path is not known to be. Carried to Phase 6 as decision 26 and success criterion 6; research the upstream contract first (`claude-code-compat-research`).
+
+## WFCMDCOLLIDE-01: a bare workflow reference that shares its name with a plugin command still gets a slash
+
+Noted 2026-11-14 (parity-gaps, Phase 4). A bare `plugin:wf` reference to a workflow whose installed name equals a command of the plugin still becomes `/plugin:wf`, because `names.commands` lists the command that staging later drops for the workflow (D-PG4-08 precedence; see `docs/workflows-compatibility.md` Naming).
+
+## WFAGENTCONST-01: a workflow that passes an agent type through a constant gets no restriction note
+
+Noted 2026-11-14 (parity-gaps, Phase 4). The PG-SEC-01 note reads only string-literal `agentType` values. claude-security's `scan.js` passes `claude-security:scan-loader` (`tools: Read`) and `claude-security:scan-researcher` through the minified constants `Ut` and `zt`, so those two agents get no note. An option is to follow a `const` whose initializer is a string literal.
+
+## PRELOADSIBLING-01: a skill body an agent preloads keeps a dead sibling path
+
+Noted 2026-11-14 (parity-gaps, Phase 4). `bridges/agents/skill-preload.ts` puts a skill's source body inside an agent without the D-PG4-07 sibling path rewrite, so a `../<sibling>/` path there stays dead. `domain/skill-sibling-paths.ts` is pure, so a fix can reuse it.
+
+## STAGEDUPMARKER-01: check whether the second code-duplication marker in the skills and commands stage modules is inert
+
+Noted 2026-11-14 (parity-gaps, Phase 4). The second `fallow-ignore-next-line code-duplication` marker in `bridges/skills/stage.ts` (above the staged `return`), and its pair in `bridges/commands/stage.ts`, appear to hide no clone group, both before and after the sibling rewrite. Delete both, run `npx fallow dupes`, and restore only if a group reappears.
+
+## WFRESTRICTGATE-01: version-gate the workflow agent restriction note once the engine keeps the restriction
+
+Noted 2026-11-14 (parity-gaps, Phase 4). When a pi-dynamic-workflows release applies the agent type's tool policy to Pi's built-in tools (draft request: `.planning/upstream/pi-dynamic-workflows-agent-tool-restriction.md`, not yet filed by the maintainer), version-gate or remove the PG-SEC-01 note.
+
+## INFOAGENTESCAPE-01: `info` on a refused plugin lists agent file names from a folder outside the plugin root
+
+Noted 2026-11-14 (parity-gaps, Phase 4). Found while adding the PG-SEC-01 note to `info`. For a refused plugin whose agents path escapes the plugin root, the lenient `agents:` line of `info` still lists file names from that outside folder (the escape case shows `agents: spy`). The new note's read is contained; the existing directory listing is not. Present before Phase 4. Apply `resolveContainedComponentPath` to the lenient listing of every component kind.
+
+## SIBLINGPREFIX-01: a sibling skill link rewrite matches a folder-name prefix
+
+Noted 2026-11-14 (parity-gaps, Phase 4 verification, PG-SKILL-04 unclassified edge). `domain/skill-sibling-paths.ts` rewrites `../b` when the next character is outside its token grammar, so `../b%20x/ref.md` becomes `../demo-b%20x/ref.md` (also `+`, `~`, `@`, non-ASCII letters). The path was dead before staging and stays dead, so no working link breaks, but the text changes where D-PG4-06 says it stays as written. Fix option: a next-character boundary check that still ends a path at a space, so prose like "see ../b for details" keeps working.
+
+## WFNOTETRIGGER-01: should the workflow restriction note fire for an agent whose tools keep all four built-ins?
+
+Noted 2026-11-14 (parity-gaps, Phase 4 review IN-05). After WR-05 the note names only built-ins among read, bash, edit and write that the agent's `tools` does not allow (plus `disallowedTools`). An agent whose `tools` keeps all four, or lists a scoped `Bash(spec)` read as full `Bash`, gets no note, though outside `builtin:codemode` the engine gives it unrestricted `bash`. A missing note is allowed by D-PG4-11; this narrows the trigger with no recorded decision. Maintainer question.
+
+## STOPFOLLOWUPCTX-01: a follow-up typed while a Stop hook runs may lose its UserPromptSubmit context
+
+Noted 2026-11-14 (parity-gaps, Phase 5 research, assumption A1; read from source, not run). When the `Stop` bucket does not continue, Pi reads a follow-up typed during the boundary with no `turn_end` between, so the follow-up's `UserPromptSubmit` context stays in the bridge's buffer (`bridges/hooks/event-adapters.ts`, the `turn_end` send) until the next prompt drops it. When the bucket continues, a `turn_end` fires first and the context goes out. A fix would send a queued follow-up's context from the boundary handler. First measure it: a `UserPromptSubmit` context hook, a slow `Stop` hook, and a follow-up sent while it runs. `docs/hooks-compatibility.md` states the edge as read from source.
+
+## STOPASYNCANSWER-01: a Stop continuation does not read a plain async hook's answer
+
+Noted 2026-11-14 (parity-gaps, Phase 5 research F4, A3, open question 7). A plain `async` hook's answer goes out with `deliverAs: "nextTurn"` (D-BG-205), which Pi adds only when a run starts. A `Stop` continuation is not a run start (D-PG5-07), so the answer reaches the model with the next user prompt instead of the continuation's model call (measured, M18). Before the change the re-entry run read it. Unknown whether Claude Code delivers it to the call after a `Stop` block (A3: read the query loop around `getAsyncHookResponseAttachments` in the binary, or run a sandboxed probe). A plain `sendMessage` with `triggerTurn: false` would reach the next model call of a running run; changing it amends D-BG-205.
+
+## STOPMODECHECK-01: no committed check of a Stop continuation in json and print mode
+
+Noted 2026-11-14 (parity-gaps, Phase 5). The cucumber harness drives Pi over RPC, and the terminal mode has the pty harness, so the committed `Stop` scenarios cover `rpc`. Research measured `json` and `print` mode on Pi 1.5.0 and 1.5.2 once (probes M1 to M20) and found them the same, but no committed test runs a `Stop` continuation in those modes. A Pi release that changes `agent_before_settle` in one of them would pass the suite.
+
+## PRETOOLSTOPREASON-01: the reason the model receives for a PreToolUse `continue: false`
+
+Noted 2026-11-14 (parity-gaps, Phase 5, research U5). The model receives `Operation stopped by hook` (`DEFAULT_STOP_REASON`, `bridges/hooks/event-adapters.ts`) for a `PreToolUse` stop. Claude Code 2.1.323 sends `Execution stopped by PreToolUse hook`, then `: <stopReason>` when a reason is set. Only the user notice changed in Phase 5 (D-PG5-13).
+
+## STOPREASONCONV-01: keep a `stopReason` in the conversation
+
+Noted 2026-11-14 (parity-gaps, Phase 5, deferred idea). The bridge shows a `continue: false` hook's `stopReason` to the user only (D-PG5-13) and adds nothing to the transcript, so the model never sees it. Claude Code keeps the reason in the conversation. Research the upstream message shape first (`claude-code-compat-research`).
+
+## ASYNCPRINTEXIT-01: async hooks left running when a print or json run ends
+
+Noted 2026-11-14 (parity-gaps, Phase 5, deferred idea). When a `print` or `json` mode run ends, the bridge leaves its `async` and `asyncRewake` hooks running. Claude Code stops them at `-p` teardown. After D-PG5-17 a plain `async` hook has no timer either, so outside Linux one that never ends keeps running (D-PG5-18, ASYNCRELOADTABLE-01).
+
+## HOOKCHAINLIMITS-01: Claude Code's per-entry and per-dispatch hook output limits
+
+Noted 2026-11-14 (parity-gaps, Phase 5, research U8; medium-high confidence). Claude Code 2.1.323 limits one entry to 100,000 characters and one dispatch to 200,000 characters (`BNt`), on top of the 10,000-character limit per context string that D-PG5-14 copies. Its callers are events of the hooks module chain (`tool.call`, `prompt.submit`, `prompt.mention`), a component kind this project does not bridge, so Phase 5 left them out. A hook can still write any amount to saved files (05-SECURITY AR-05-05). Revisit if the command-hook path is found to call `BNt`.
+
+## HOOKTIMEDOUTEXIT2-01: a timed-out hook that exits 2 with a missing-file stderr passes as a noop
+
+Noted 2026-11-14 (parity-gaps, Phase 5, 05-03 flagged assumption). A synchronous `Stop` or `UserPromptSubmit` hook that traps SIGTERM after its own timeout, then exits 2 with a missing-file stderr and no stdout, gets the missing-script noop from the wire protocol (D-PG5-08). `withoutTimeoutFailure` in `bridges/hooks/dispatch-exec.ts` then removes its failure, so the run passes as a plain noop and shows no notice. Before Phase 5 that run was an exit-2 block. With `onFailure: "block"` it still blocks as `timed out`. A run that a signal ended has `exitCode === null` and never reaches the rule. Decide whether this run keeps its block.
+
+## HOOKTIMEOUTNOTE-01: a notice for a timed-out hook
+
+Noted 2026-11-14 (parity-gaps, Phase 5, deferred idea). A synchronous hook that times out shows no notice (D-PG5-10). Claude Code reports a timeout as `hook_cancelled`, shown only for `UserPromptSubmit` (research U4). Research the upstream text before adding one.
+
+## REWAKEMISSINGSCRIPT-01: Claude Code's missing-script rule in the asyncRewake lane
+
+Noted 2026-11-14 (parity-gaps, Phase 5, research U2). The synchronous missing-script rule of D-PG5-08 does not apply in the `asyncRewake` lane, and the lane does not change (D-PG5-09). Claude Code 2.1.323 has a rule of its own there: an exit 2 whose output shows a script that cannot be opened still wakes the model once, with a `<hook> hook could not run: <script> cannot be opened ... This is a broken hook installation, not feedback on your work` text, and identical repeats are dropped. The bridge wakes the model on every such exit 2 with its usual rewake text (D-BG-201, D-BG-202).
+
+## HOOKNOTICEBIDI-01: hook notices keep Unicode format characters
+
+Noted 2026-11-14 (parity-gaps, Phase 5 security audit, advisory; present before Phase 5). `terminalSafeHookNotice` strips VT escapes and Cc controls but not Unicode format characters (Cf), such as the bidi overrides U+202A to U+202E and U+2066 to U+2069. A hook can change how its own notice reads after the bridge's label prefix, now also through the stderr line of a failure notice (D-PG5-11).
+
+## HOOKOUTLEAFLINK-01: no saveHookOutput owner case for a link at the file itself
+
+Noted 2026-11-14 (parity-gaps, Phase 5 security audit, residual). In the background lane the saved file's name holds the dispatch id, which the hook's environment carries as `PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH`, so a hook can predict it. The leaf lstat of `assertPathInside` refuses a link planted there (`test/shared/path-safety.test.ts`, the final-segment case), but no `test/bridges/hooks/hook-output-files.test.ts` case pins it for `saveHookOutput`. Add one.
+
+## HOOKOUTSWEEPDOC-01: the compatibility page does not state the limits of the saved-output sweep
+
+Noted 2026-11-14 (parity-gaps, Phase 5 security audit, residual). `docs/hooks-compatibility.md` says each load removes the files in `_shared/hook-output/` that are older than 30 days. The sweep removes only regular files named `hook-<id>-<source>.txt`, keeps links and sub-folders, and skips an untrusted project, whose old files stay until Pi trusts it again. Name these limits on the page.
+
+## HOOKMCPSERVERSCOPE-01: `mcp_server` for an MCP tool of no plugin
+
+Noted 2026-11-15 (parity-gaps, Phase 6, D-PG6-07). The bridge sends `mcp_server` only for a tool of a plugin's MCP server. For a server of the user's own Pi MCP config, Claude Code sends the config scope as `source`, and the bridge would need the Pi config scope of the server. Track only if the maintainer wants it.
+
+## CHILDBASHSESSION-01: a child's Bash-tool `CLAUDE_CODE_SESSION_ID`
+
+Noted 2026-11-15 (parity-gaps, Phase 6, research finding F12). In a pi-subagents child, `applySessionEnv` sets the child's own id in `process.env`, so the child's Bash tool sees its own session, while the child's hooks read the launching session's id (D-PG6-01). The maintainer decides whether the root id should also reach the child's `process.env`.
+
+## NESTEDCHILDROOT-01: the root session of a nested pi-subagents child
+
+Noted 2026-11-15 (parity-gaps, Phase 6, D-PG6-02). The bridge reads one hop, so a child of a child names the child that launched it. A child process could publish its resolved root pair in two variables of this extension for its own background children (06-RESEARCH.md Pattern 1). This conflicts with D-PG3-06 ("never process-global child state"), and the maintainer decides.
+
+## EXPANSIONCMDNAME-01: a bridged command's `command_name` in `UserPromptExpansion`
+
+Noted 2026-11-15 (parity-gaps, Phase 6, D-PG6-19). A bridged command's `command_name` is its Pi name, which differs from Claude Code's name for a command file named `<plugin>-…` (PG-CMD-09 covers the alias) and on Windows, where Pi joins with `.`.
+
+Update 2026-11-15 (parity-gaps, Phase 11, D-PG11-01): install now stores Claude Code's name of a command in the staged command's record (`claudeName`), so a `UserPromptExpansion` hook could be given that name where it differs from the Pi name. D-PG6-19 is unchanged, and the change would amend it.
+
+## EXPANSIONNAMETABLE-01: a typed line is not refused when the plugin name table cannot be loaded
+
+Noted 2026-11-15 (parity-gaps, Phase 6, 06-12). When the plugin name table cannot be loaded, the expansion resolver answers from Pi's command list alone, so a `UserPromptExpansion` hook that names a skill by its Claude-form name does not run. The fail-closed rule may call for a refusal instead.
+
+## EXPANSIONMCPPROMPT-01: `expansion_type` `mcp_prompt`
+
+Noted 2026-11-15 (parity-gaps, Phase 6, D-PG6-22). The bridge never sends `expansion_type` `mcp_prompt`, because Pi has no slash surface for MCP prompts. Revisit if Pi gets one.
+
+## EXPANSIONFOLLOWUPCTX-01: a queued follow-up's expansion context never reaches the model
+
+Noted 2026-11-15 (parity-gaps, Phase 6 review WR-03). The follow-up context entry keeps the typed slash line, while Pi queues the follow-up as its expanded text, so `takeFollowUpContext` never matches it, and a `UserPromptSubmit` and a `UserPromptExpansion` entry for one follow-up cannot both be taken. `docs/hooks-compatibility.md` states the loss. Sending the context at once, as a steer does, would put it on the running task's next model call, before the follow-up; a fix needs a Pi seam that names the queued text.
+
+## MCPSERVERNAMEREAD-01: the hooks bridge does not guard a server-name read that throws
+
+Noted 2026-11-15 (parity-gaps, Phase 6 re-review IN2-01). `mcpServerEntries` (`bridges/hooks/mcp-server-table.ts`) awaits the injected `readMcpServerNames` without a catch, inside the extension's startup hydrate. The production reader (`recordedMcpServerNames`) never throws, so this holds today; a later reader that throws would fail the load (NFR-2). The re-review also notes that the `mcp_server` row of `docs/hooks-compatibility.md` omits some cases where the field is left out (the plugin no longer in the manifest, an unavailable re-resolution, a root mismatch), where its `reinstall` remedy cannot help (IN2-02).
+
+## TYPEDEXPANSIONDRIFT-01: the typed-line resolver copies the alias and command handlers' rules
+
+Noted 2026-11-15 (parity-gaps, Phase 6 review IN-02). `orchestrators/typed-expansion.ts` copies the token pattern and the order in which `edge/skill-aliases.ts` and `edge/command-invocation.ts` take a line. Nothing ties the copies together, so a change to one handler can leave `UserPromptExpansion` hooks told a different command than the line expands to (T-06-27).
+
+## AGTREPAIRSET-01: widen the agents frontmatter repair to Claude Code's full retry set
+
+Noted 2026-11-14 (parity-gaps, Phase 7, D-PG7-02 residual). The agents repair quotes a single-line plain value with an unquoted `: `, or one that starts with `*`, `&`, `!`, `%`, `@`, or a backtick. Claude Code 2.1.323's retry also quotes a value that holds any of ``{}[]*&#!|>%@` `` anywhere and turns leading tabs into spaces. Widening it needs a split trigger in `shared/frontmatter-repair.ts`, so the skills bridge keeps its colon rule.
+
+## AGTWORKFLOWAMBIENT-01: a no-tools agent's child is offered the engine's workflow tools
+
+Noted 2026-11-14 (parity-gaps, Phase 8, spike S5 row a1, T-08-17). A background pi-subagents child of a bridged agent with no `tools` list is offered the engine's `workflow` and `workflow_control` tools (pi-subagents 0.88.1, engine 3.15.0), where Claude Code gives a subagent neither; `disallowedTools: Workflow` does not remove them. Decide whether the converter should write `excludeTools: workflow, workflow_control` (or map a `Workflow` deny to them) for such an agent (D-PG8-14, 08-RESEARCH.md item 12).
+
+## AGTWFDOCS-01: two documentation follow-ups from the Phase 8 review
+
+Noted 2026-11-15 (parity-gaps, Phase 8, 08-REVIEW.md IN3-01 and IN3-02).
+
+- IN3-01: `docs/mcp-compatibility.md` says AG-11 licenses refusing a plugin install that holds an agent with zero tools. AG-11's stated reason (pi-subagents could not express "no tools") no longer holds, and Claude Code refuses only that agent's launch, not the install. Reword it to say so and point at PRD decision 15 (AGENT-10), which proposes to skip such an agent, pending the maintainer's decision.
+- IN3-02: `docs/workflows-compatibility.md` says a repository's `keywordTriggerEnabled` turns on workflows mode, which is already the engine's default. Name `keywordTriggerWord` (a repository can set the trigger to an ordinary word) and `defaultAgentTimeoutMs` (`null` removes the user's own timeout) instead.
+
+## MCPSAMPLING-01: withhold sampling from plugin servers once pi-mcp-adapter has a per-server switch
+
+Noted 2026-11-14 (parity-gaps, Phase 9, D-PG9-08). Trigger: a published pi-mcp-adapter release with a per-server sampling switch. The request is drafted in `.planning/upstream/pi-mcp-adapter-per-server-sampling.md`, and the maintainer has not filed it yet. Under 7.0.1 every plugin server gets `sampling: {}` whenever the global `settings.sampling` allows it. The work it unlocks: raise or gate the pi-mcp-adapter floor on that release, write the switch on every plugin entry as a recorded default, as the stdio `lifecycle` default is written, and drop the sampling divergence from `docs/mcp-compatibility.md`.
+
+## MCPOPENUI-01: write the `openUi: false` default once pi-subagents hashes `openUi`
+
+Noted 2026-11-14 (parity-gaps, Phase 9, D-PG9-07 amendment). Trigger: a pi-subagents release whose `computeMcpServerHash` includes `openUi`, as pi-mcp-adapter 7.0.1's `computeServerHash` does, and a floor raised to it. pi-subagents 0.88.1 omits it, so an entry with `openUi: false` makes background MCP grants fail (`test/integration/pi-subagents-child-identity.test.ts`). The upstream request is the maintainer's to file. The work it unlocks: write `openUi: false` on every plugin entry as a recorded default and drop the UI-extension divergence from `docs/mcp-compatibility.md`.
+
+Confirmed by the maintainer review 2026-11-16: D-PG9-07 is locked, and the default waits for this trigger.
+
+## PITRUSTPATHS-01: gate project plugins on a trust-requiring path once Pi lets an extension register one
+
+Noted 2026-11-15 (parity-gaps, Phase 10, D-PG10-01). Trigger: a Pi release that lets an extension register a trust-requiring path, or that emits `project_trust` for every project. The request is drafted in `.planning/upstream/pi-extension-trust-paths.md`, and the maintainer has not filed it yet. Under Pi 1.5.0 and 1.5.2, a project that holds only this extension's files is trusted without a prompt unless the user saved "Do not trust". The work it unlocks: register `.pi/claude-plugins.json`, `.pi/pi-claude-marketplace/`, and `.pi/mcp-adapter.json`, so that Pi asks before a project-scope plugin is used. That closes the gap D-PG10-01 accepts.
+
+## HOOKOPTFAIL-01: an option failure before a hook starts shows `Failed to run:`
+
+Noted 2026-11-15 (parity-gaps, Phase 10, D-PG10-08). A hook that names an unset plugin option, or a shell-form hook that names `${user_config.`, fails before its process starts. The bridge records the `run` failure kind and shows `Failed to run: <message>` (D-PG5-11, `bridges/hooks/dispatch-exec.ts`, `hook-labels.ts`), and `features/hook/failures.feature` states that text. Claude Code 2.1.323, read in the binary on 2026-11-15 and not run: the hook runner's caller turns such a throw into status 1 with `spawnFailed` and the message as stderr (`BIN@312883290`). The result loop then shows `Failed with non-blocking status code: <message>` (`BIN@312955146`), and `H9n` decides whether a repeat start failure shows nothing (`BIN@312955093`). Confidence medium: a static read. Decide whether a failure before the start shows Claude Code's prefix and follows its repeat rule. Relates to HOOKERRNOTE-01.
+
+## REDACTHOOKPATH-01: a hook start-failure cause loses part of a plugin path
+
+Noted 2026-11-15 (parity-gaps, Phase 10). `redactAbsolutePaths` reads `/hooks/x.sh` in `${CLAUDE_PLUGIN_ROOT}/hooks/x.sh` as an absolute path, so a hook start-failure cause shows `${CLAUDE_PLUGIN_ROOT}x.sh`. The shell-form option refusal quotes the command, but its 200-character cut drops the `Command:` part, so no scenario shows the bug. A shorter cause can. The redaction predates Phase 10. Fix option: do not read a path that directly follows a `${...}` reference as absolute, with a scenario that shows the full text.
+
+## CMDSKILLNAME-01: a plugin command with the same name as a skill keeps the skill from staging
+
+Noted 2026-11-15 (parity-gaps, Phase 10). A plugin with a command `opts` and a skill `opts` stages the command and not the skill. This predates Phase 10. Claude Code: the skills page says that when a skill and a file in `.claude/commands/` share a name, the skill runs (the table "Resolve skills that share a name", code.claude.com/docs/en/skills, fetched 2026-11-15). The table covers the `.claude/` locations, and the plugin case is inferred, not confirmed. Grep the binary for the plugin rule, then make the skill win if upstream does, with a scenario.
+
+## MCPOPTFALLBACK-01: an option reference inside a `${NAME:-default}` default stays partly literal
+
+Noted 2026-11-15 (parity-gaps, Phase 10, D-PG10-11). In an MCP field, `${FOO:-${user_config.x}}` is split: the option becomes its own segment, and the `${FOO:-` text and the closing `}` stay as written. Claude Code 2.1.323 fills the option first and then reads `${FOO:-value}` (read in the binary). Under pi-mcp-adapter the value is not in the entry, so that read cannot run, and Pi's built-in MCP does the same for one behavior. pi-mcp-adapter 7.0.1's `interpolateEnvVars` cannot nest a reference in a fallback, because its fallback pattern stops at the first `}`. A fix needs a design for each implementation.
+
+## CMDNESTNAME-01: a frontmatter `name` on a nested command
+
+Noted 2026-11-15 (parity-gaps, Phase 11, research Open Question 2). Unverified: Claude Code 2.1.323's command builder appears to replace only the last segment of a nested command's name with a frontmatter `name` (`Ft=e.slice(0,e.lastIndexOf(":")+1)`, then `` `${Ft}${ln}` ``). So `commands/build/web.md` with `name: x` in plugin `demo` would be `demo:build:x`, where this extension gives `demo:x` (`frontmatterNameAliases`). This is a reading of one fragment of the binary, `e` was not traced, and no session ran. Confirm it in the binary or with a probe before changing the alias.
+
+## MENTIONDIR-01: attach a directory `@` mention as an `ls` listing
+
+Noted 2026-11-16 (parity-gaps, Phase 11, D-PG11-06, deferred by the maintainer review 2026-11-16). A typed command or skill whose body mentions a directory, such as `@src/`, attaches nothing: the mention stays as text, and the invocation goes on with no notice. Claude Code 2.1.323 attaches a directory as the output of `ls`. The requirement named regular text files only, so the directory case was left out. `docs/skills-commands-compatibility.md` lists it as deferred. The work: attach the listing, as Claude Code does, with a scenario that fails without the change.

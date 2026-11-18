@@ -273,3 +273,24 @@ Feature: Hook stop failure
     Then the hooks record these runs:
       | event       | session | error             | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | StopFailure | first   | max_output_tokens | {project dir} |                 | failure   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+
+  Scenario: A StopFailure hook receives the effort level of the session
+    Given pi runs with a scripted model that reasons
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event       | matcher |
+      | failure | StopFailure | *       |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the user has set the thinking level "high"
+    Given the scripted model plays these steps:
+      | reply | error                       |
+      |       | Authentication failed (401) |
+    When the user prompts "hello"
+    Then the hooks record these runs:
+      | event       | session | error                 | last assistant message      | cwd           | transcript path | effort           | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | StopFailure | first   | authentication_failed | Authentication failed (401) | {project dir} |                 | {"level":"high"} | failure   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |

@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { describe, test } from "node:test";
 
 import { parseHookStdout } from "../../../extensions/pi-claude-marketplace/bridges/hooks/wire-protocol.ts";
+import { BUCKET_A_EVENTS } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
+import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
+import type { BucketAEvent } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 
 test("blocks exit 2 with its trimmed stderr reason, marked, when stdout names no block reason", () => {
   // arrange
@@ -69,6 +72,113 @@ test("blocks exit 2 with stderr when the stdout block decision has no reason", (
   });
 });
 
+const MISSING_STDERR =
+  "python3: can't open file '/x/gone.py': [Errno 2] No such file or directory\n";
+
+describe("the exit 2 of a missing script (D-PG5-08)", () => {
+  for (const claudeEvent of ["Stop", "UserPromptSubmit"] as const) {
+    for (const { name, stdout, stderr } of [
+      { name: "an interpreter that cannot open its file", stdout: "", stderr: MISSING_STDERR },
+      { name: "a blank stdout", stdout: " \n\t", stderr: MISSING_STDERR },
+      { name: "a shell's no such file", stdout: "", stderr: "sh: /x/gone.sh: no such file" },
+      { name: "an upper-case report", stdout: "", stderr: "CAN'T OPEN /x/gone.py" },
+      {
+        name: "a capitalized No such file or directory",
+        stdout: "",
+        stderr: "bash: /x/gone.sh: No such file or directory",
+      },
+    ]) {
+      test(`passes on ${claudeEvent} with ${name}, carrying the stderr as written`, () => {
+        // act
+        const hookOutcome = parseHookStdout(2, stdout, stderr, claudeEvent);
+
+        // assert
+        assert.deepStrictEqual(hookOutcome, {
+          kind: "noop",
+          failure: { kind: "missing-script", stderr },
+        });
+      });
+    }
+  }
+
+  test("reports a missing script in a debug line", (t) => {
+    // arrange
+    const lines = captureDebugLog(t);
+
+    // act
+    parseHookStdout(2, "", MISSING_STDERR, "Stop");
+
+    // assert
+    assert.deepStrictEqual(lines, [
+      "[hooks] wire-protocol: exit 2 of a missing script on Stop; defaulting to noop",
+    ]);
+  });
+
+  for (const { name, stdout, stderr, hookOutcome } of [
+    {
+      name: "any text on stdout",
+      stdout: "partial output",
+      stderr: MISSING_STDERR,
+      hookOutcome: { kind: "block", reason: MISSING_STDERR.trim(), fromStderr: true },
+    },
+    {
+      name: "a JSON object on stdout",
+      stdout: "{}",
+      stderr: MISSING_STDERR,
+      hookOutcome: { kind: "block", reason: MISSING_STDERR.trim(), fromStderr: true },
+    },
+    {
+      name: "a stderr that names no missing file",
+      stdout: "",
+      stderr: "permission denied",
+      hookOutcome: { kind: "block", reason: "permission denied", fromStderr: true },
+    },
+    {
+      name: "an empty stderr",
+      stdout: "",
+      stderr: "",
+      hookOutcome: { kind: "block", fromStderr: true },
+    },
+  ] satisfies { name: string; stdout: string; stderr: string; hookOutcome: HookExecResult }[]) {
+    test(`keeps the exit-2 block of a prompt hook with ${name}`, () => {
+      // act
+      const outcome = parseHookStdout(2, stdout, stderr, "UserPromptSubmit");
+
+      // assert
+      assert.deepStrictEqual(outcome, hookOutcome);
+    });
+  }
+
+  for (const claudeEvent of BUCKET_A_EVENTS.filter(
+    (event) => event !== "Stop" && event !== "UserPromptSubmit",
+  )) {
+    test(`keeps the exit-2 block of a missing script on ${claudeEvent}`, () => {
+      // act
+      const hookOutcome = parseHookStdout(2, "", MISSING_STDERR, claudeEvent);
+
+      // assert
+      assert.deepStrictEqual(hookOutcome, {
+        kind: "block",
+        reason: MISSING_STDERR.trim(),
+        fromStderr: true,
+      });
+    });
+  }
+
+  for (const exitCode of [1, 127, null]) {
+    test(`reads an exit ${String(exitCode)} with a missing-file stderr as a failed exit`, () => {
+      // act
+      const hookOutcome = parseHookStdout(exitCode, "", MISSING_STDERR, "Stop");
+
+      // assert
+      assert.deepStrictEqual(hookOutcome, {
+        kind: "noop",
+        failure: { kind: "exit", stderr: MISSING_STDERR },
+      });
+    });
+  }
+});
+
 for (const { name, stdout, hookOutcome } of [
   {
     name: "a deny decision",
@@ -110,21 +220,26 @@ for (const { name, stdout, hookOutcome } of [
 }
 
 for (const { name, stdout } of [
+  { name: "empty", stdout: "" },
   { name: "plain", stdout: "denied, sort of" },
-  { name: "invalid JSON", stdout: '{"decision":"block"' },
+  { name: "unterminated JSON", stdout: '{"decision":"block"' },
+  { name: "braced text that does not parse", stdout: "{not json}" },
   { name: "a JSON array", stdout: '["deny"]' },
   { name: "JSON null", stdout: "null" },
 ]) {
-  test(`defaults exit 1 with ${name} stdout to noop`, () => {
+  test(`carries the stderr of exit 1 with ${name} stdout as a failure (D-PG5-10)`, () => {
     // act
-    const hookOutcome = parseHookStdout(1, stdout, "ignored stderr", "PreToolUse");
+    const hookOutcome = parseHookStdout(1, stdout, "\nboom \n", "PreToolUse");
 
     // assert
-    assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+    assert.deepStrictEqual(hookOutcome, {
+      kind: "noop",
+      failure: { kind: "exit", stderr: "\nboom \n" },
+    });
   });
 }
 
-test("defaults another nonzero exit to noop and reports its semantic diagnostic", (t) => {
+test("carries the failure of another nonzero exit and reports its semantic diagnostic", (t) => {
   // arrange
   const debugKey = "PI_CLAUDE_MARKETPLACE_DEBUG";
   const hadDebug = Object.hasOwn(process.env, debugKey);
@@ -140,7 +255,7 @@ test("defaults another nonzero exit to noop and reports its semantic diagnostic"
   const consoleErrorSpy = t.mock.method(console, "error", () => undefined);
   const exitCode = 7;
   const stdout = "ignored plain stdout";
-  const stderr = "ignored stderr";
+  const stderr = "exit seven";
   let hookOutcome: HookExecResult | undefined;
   let thrown: unknown;
 
@@ -153,7 +268,10 @@ test("defaults another nonzero exit to noop and reports its semantic diagnostic"
 
   // assert
   assert.equal(thrown, undefined);
-  assert.deepEqual(hookOutcome, { kind: "noop" });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "exit", stderr: "exit seven" },
+  });
   const diagnostic = String(consoleErrorSpy.mock.calls[0]?.arguments[0]);
   assert.deepEqual(
     {
@@ -173,7 +291,7 @@ test("defaults another nonzero exit to noop and reports its semantic diagnostic"
   );
 });
 
-test("defaults a signal-kill exit to noop and reports its semantic diagnostic", (t) => {
+test("carries the failure of a signal-kill exit, ignoring its JSON, and reports it", (t) => {
   // arrange
   const debugKey = "PI_CLAUDE_MARKETPLACE_DEBUG";
   const hadDebug = Object.hasOwn(process.env, debugKey);
@@ -189,7 +307,7 @@ test("defaults a signal-kill exit to noop and reports its semantic diagnostic", 
   const consoleErrorSpy = t.mock.method(console, "error", () => undefined);
   const exitCode = null;
   const stdout = '{"continue":false,"stopReason":"ignored stop"}';
-  const stderr = "ignored stderr";
+  const stderr = "killed";
   let hookOutcome: HookExecResult | undefined;
   let thrown: unknown;
 
@@ -202,7 +320,10 @@ test("defaults a signal-kill exit to noop and reports its semantic diagnostic", 
 
   // assert
   assert.equal(thrown, undefined);
-  assert.deepEqual(hookOutcome, { kind: "noop" });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "exit", stderr: "killed" },
+  });
   const diagnostic = String(consoleErrorSpy.mock.calls[0]?.arguments[0]);
   assert.deepEqual(
     {
@@ -224,7 +345,7 @@ test("defaults a signal-kill exit to noop and reports its semantic diagnostic", 
   );
 });
 
-for (const claudeEvent of ["UserPromptSubmit", "SessionStart"] as const) {
+for (const claudeEvent of ["UserPromptSubmit", "SessionStart", "UserPromptExpansion"] as const) {
   test(`reads plain stdout on exit 0 as ${claudeEvent} additional context (D-CF5-13)`, () => {
     // act
     const hookOutcome = parseHookStdout(0, "  plain words\n", "ignored stderr", claudeEvent);
@@ -562,6 +683,26 @@ test("returns updated tool output as an exact mutation", () => {
   });
 });
 
+test("keeps modern and legacy MCP output fields without choosing between them", () => {
+  // arrange
+  const stdout = JSON.stringify({
+    hookSpecificOutput: {
+      updatedToolOutput: false,
+      updatedMCPToolOutput: [{ type: "text", text: "legacy" }],
+    },
+  });
+
+  // act
+  const hookOutcome = parseHookStdout(0, stdout, "", "PostToolUse");
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "mutate",
+    updatedToolOutput: false,
+    updatedMCPToolOutput: [{ type: "text", text: "legacy" }],
+  });
+});
+
 test("returns additional context as an exact mutation", () => {
   // arrange
   const exitCode = 0;
@@ -798,6 +939,95 @@ test("keeps the stdout outputs on an exit-2 stderr block", () => {
     additionalContext: "ctx",
   });
 });
+
+for (const { name, exitCode, claudeEvent } of [
+  { name: "exit 0", exitCode: 0, claudeEvent: "UserPromptExpansion" },
+  { name: "exit 1", exitCode: 1, claudeEvent: "UserPromptExpansion" },
+  { name: "a UserPromptSubmit exit 0", exitCode: 0, claudeEvent: "UserPromptSubmit" },
+] as const) {
+  test(`marks a block on ${name} whose hook suppresses the original prompt (D-PG6-20)`, () => {
+    // act
+    const hookOutcome = parseHookStdout(
+      exitCode,
+      `{"decision":"block","reason":"r","hookSpecificOutput":{"hookEventName":"${claudeEvent}","suppressOriginalPrompt":true,"additionalContext":"ctx"}}`,
+      "ignored stderr",
+      claudeEvent,
+    );
+
+    // assert
+    assert.deepStrictEqual(hookOutcome, {
+      kind: "block",
+      reason: "r",
+      suppressOriginalPrompt: true,
+      additionalContext: "ctx",
+    });
+  });
+}
+
+for (const { name, exitCode, claudeEvent, stdout, hookOutcome } of [
+  {
+    name: "a non-true suppressOriginalPrompt on a block",
+    exitCode: 0,
+    claudeEvent: "UserPromptExpansion",
+    stdout:
+      '{"decision":"block","reason":"r","hookSpecificOutput":{"hookEventName":"UserPromptExpansion","suppressOriginalPrompt":"true"}}',
+    hookOutcome: { kind: "block", reason: "r" },
+  },
+  {
+    name: "suppressOriginalPrompt on a stop",
+    exitCode: 0,
+    claudeEvent: "UserPromptExpansion",
+    stdout:
+      '{"continue":false,"hookSpecificOutput":{"hookEventName":"UserPromptExpansion","suppressOriginalPrompt":true}}',
+    hookOutcome: { kind: "stop" },
+  },
+  {
+    name: "suppressOriginalPrompt on an exit-2 block",
+    exitCode: 2,
+    claudeEvent: "UserPromptExpansion",
+    stdout:
+      '{"decision":"block","reason":"r","hookSpecificOutput":{"hookEventName":"UserPromptExpansion","suppressOriginalPrompt":true}}',
+    hookOutcome: { kind: "block", reason: "r" },
+  },
+  {
+    name: "suppressOriginalPrompt without a hookEventName",
+    exitCode: 0,
+    claudeEvent: "UserPromptSubmit",
+    stdout:
+      '{"decision":"block","reason":"r","hookSpecificOutput":{"suppressOriginalPrompt":true}}',
+    hookOutcome: { kind: "block", reason: "r" },
+  },
+  {
+    name: "suppressOriginalPrompt under another event's hookEventName",
+    exitCode: 0,
+    claudeEvent: "UserPromptSubmit",
+    stdout:
+      '{"decision":"block","reason":"r","hookSpecificOutput":{"hookEventName":"UserPromptExpansion","suppressOriginalPrompt":true}}',
+    hookOutcome: { kind: "block", reason: "r" },
+  },
+  {
+    name: "suppressOriginalPrompt on an event that does not read it",
+    exitCode: 0,
+    claudeEvent: "PreToolUse",
+    stdout:
+      '{"decision":"block","reason":"r","hookSpecificOutput":{"hookEventName":"PreToolUse","suppressOriginalPrompt":true}}',
+    hookOutcome: { kind: "block", reason: "r" },
+  },
+] satisfies ReadonlyArray<{
+  readonly name: string;
+  readonly exitCode: number;
+  readonly claudeEvent: BucketAEvent;
+  readonly stdout: string;
+  readonly hookOutcome: HookExecResult;
+}>) {
+  test(`ignores ${name} (D-PG6-20)`, () => {
+    // act
+    const parsed = parseHookStdout(exitCode, stdout, "ignored stderr", claudeEvent);
+
+    // assert
+    assert.deepStrictEqual(parsed, hookOutcome);
+  });
+}
 
 test("ignores a non-string system message and context", () => {
   // act

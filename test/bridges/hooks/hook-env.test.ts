@@ -7,10 +7,11 @@ import {
   prepareHookEnv,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/hook-env.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
-import type { TranslationContext } from "../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
+import type { HookDispatchContext } from "../../../extensions/pi-claude-marketplace/bridges/hooks/translation-context.ts";
 
 test("applies every SessionStart environment precedence layer", async (t) => {
   // arrange
@@ -65,12 +66,14 @@ test("applies every SessionStart environment precedence layer", async (t) => {
     handlerDecl: { type: "command", command: "/bin/true" },
     declarationIndex: 4,
     ifPredicate: { kind: "match-all" },
+    options: resolveOptions(undefined),
   } satisfies RoutingEntry;
   const translationContext = {
     sessionId: "session-alpha",
     transcriptPath: "/sessions/session-alpha.jsonl",
     cwd: "/work/project-alpha",
-  } satisfies TranslationContext;
+    ownSessionId: "session-alpha",
+  } satisfies HookDispatchContext;
   const locations = locationsFor("project", "/scope/project-alpha");
   const extra = {
     PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH: "extra-marker",
@@ -177,12 +180,14 @@ test("omits event-specific keys while preserving a user-scope inherited key", as
     handlerDecl: { type: "command", command: "/bin/true" },
     declarationIndex: 7,
     ifPredicate: { kind: "match-all" },
+    options: resolveOptions(undefined),
   } satisfies RoutingEntry;
   const translationContext = {
     sessionId: "session-beta",
     transcriptPath: "/sessions/session-beta.jsonl",
     cwd: "/work/project-beta",
-  } satisfies TranslationContext;
+    ownSessionId: "session-beta",
+  } satisfies HookDispatchContext;
   const locations = locationsFor("user", "/ignored/project-root");
   const expectedEnvironment = {
     ...processInput,
@@ -252,12 +257,14 @@ test("restores exact process properties after an unsafe plugin name is refused",
     handlerDecl: { type: "command", command: "/bin/true" },
     declarationIndex: 9,
     ifPredicate: { kind: "match-all" },
+    options: resolveOptions(undefined),
   } satisfies RoutingEntry;
   const translationContext = {
     sessionId: "session-failure",
     transcriptPath: "/sessions/session-failure.jsonl",
     cwd: "/work/project-failure",
-  } satisfies TranslationContext;
+    ownSessionId: "session-failure",
+  } satisfies HookDispatchContext;
   const locations = locationsFor("project", "/scope/project-failure");
   let environmentError: unknown;
 
@@ -301,8 +308,13 @@ test("gives the three path values that the hook environment exports", async () =
     handlerDecl: { type: "command", command: "/bin/true", args: [] },
     declarationIndex: 0,
     ifPredicate: { kind: "match-all" },
+    options: resolveOptions(undefined),
   } satisfies RoutingEntry;
-  const translationContext = { sessionId: "session-paths", cwd: "/work/project-paths" };
+  const translationContext = {
+    sessionId: "session-paths",
+    ownSessionId: "session-paths",
+    cwd: "/work/project-paths",
+  };
   const locations = locationsFor("project", "/scope/project-paths");
 
   // act
@@ -329,5 +341,198 @@ test("gives the three path values that the hook environment exports", async () =
       projectDir: environment.CLAUDE_PROJECT_DIR,
     },
     vars,
+  );
+});
+
+test("names the session variables by the hook-facing session and the env file by the own session (D-PG6-03)", async () => {
+  // arrange
+  const entry = {
+    scope: "project",
+    marketplace: "catalog",
+    pluginId: "plugin-child",
+    resolvedSource: asAbsolutePluginRoot("/plugins/plugin-child"),
+    claudeEvent: "SessionStart",
+    matcher: { kind: "match-all" },
+    rawMatcher: "",
+    handlerDecl: { type: "command", command: "/bin/true" },
+    declarationIndex: 0,
+    ifPredicate: { kind: "match-all" },
+    options: resolveOptions(undefined),
+  } satisfies RoutingEntry;
+  const locations = locationsFor("project", "/scope/project-child");
+  const childContext = (ownSessionId: string): HookDispatchContext => ({
+    sessionId: "main-session",
+    transcriptPath: "/sessions/main-session.jsonl",
+    cwd: "/work/project-child",
+    ownSessionId,
+  });
+  const envFile = (sessionId: string): string =>
+    path.join(
+      "/scope/project-child",
+      ".pi",
+      "pi-claude-marketplace",
+      "data",
+      "_shared",
+      `claude-env-${sessionId}.env`,
+    );
+
+  // act
+  const environments = await Promise.all(
+    ["first-child", "second-child"].map((own) =>
+      prepareHookEnv(entry, childContext(own), locations),
+    ),
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    environments.map((environment) => ({
+      CLAUDE_CODE_SESSION_ID: environment.CLAUDE_CODE_SESSION_ID,
+      CLAUDE_SESSION_ID: environment.CLAUDE_SESSION_ID,
+      CLAUDE_ENV_FILE: environment.CLAUDE_ENV_FILE,
+    })),
+    [
+      {
+        CLAUDE_CODE_SESSION_ID: "main-session",
+        CLAUDE_SESSION_ID: "main-session",
+        CLAUDE_ENV_FILE: envFile("first-child"),
+      },
+      {
+        CLAUDE_CODE_SESSION_ID: "main-session",
+        CLAUDE_SESSION_ID: "main-session",
+        CLAUDE_ENV_FILE: envFile("second-child"),
+      },
+    ],
+  );
+});
+
+function optionEntry(options: RoutingEntry["options"]): RoutingEntry {
+  return {
+    scope: "project",
+    marketplace: "catalog",
+    pluginId: "plugin-options",
+    resolvedSource: asAbsolutePluginRoot("/plugins/plugin-options"),
+    claudeEvent: "UserPromptSubmit",
+    matcher: { kind: "match-all" },
+    rawMatcher: "",
+    handlerDecl: { type: "command", command: "/bin/true" },
+    declarationIndex: 0,
+    ifPredicate: { kind: "match-all" },
+    options,
+  };
+}
+
+function optionVariables(environment: NodeJS.ProcessEnv): Record<string, string | undefined> {
+  return Object.fromEntries(
+    Object.entries(environment).filter(([name]) => name.startsWith("CLAUDE_PLUGIN_OPTION_")),
+  );
+}
+
+const OPTION_CONTEXT = {
+  sessionId: "session-options",
+  ownSessionId: "session-options",
+  cwd: "/work/project-options",
+};
+
+test("D-PG10-10: exports each option that has a default as CLAUDE_PLUGIN_OPTION_KEY", async () => {
+  // arrange
+  const entry = optionEntry(
+    resolveOptions({
+      mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+      retries: { type: "number", title: "Retries", description: "The retries.", default: 3 },
+      "dry-run": { type: "boolean", title: "Dry", description: "Dry run.", default: false },
+      note: { type: "string", title: "Note", description: "A note." },
+    }),
+  );
+  const locations = locationsFor("project", "/scope/project-options");
+
+  // act
+  const environment = await prepareHookEnv(entry, OPTION_CONTEXT, locations);
+
+  // assert
+  assert.deepStrictEqual(optionVariables(environment), {
+    CLAUDE_PLUGIN_OPTION_MODE: "fast",
+    CLAUDE_PLUGIN_OPTION_RETRIES: "3",
+    CLAUDE_PLUGIN_OPTION_DRY_RUN: "false",
+  });
+});
+
+test("D-PG10-10: exports no option variable for a plugin that declares no options", async () => {
+  // arrange
+  const entry = optionEntry(resolveOptions(undefined));
+  const locations = locationsFor("project", "/scope/project-options");
+
+  // act
+  const environment = await prepareHookEnv(entry, OPTION_CONTEXT, locations);
+
+  // assert
+  assert.deepStrictEqual(optionVariables(environment), {});
+});
+
+test("D-PG10-10: gives two keys that differ only in letter case the later key's value", async () => {
+  // arrange
+  const entry = optionEntry(
+    resolveOptions({
+      mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+      MODE: { type: "string", title: "Mode", description: "The mode.", default: "slow" },
+    }),
+  );
+  const locations = locationsFor("project", "/scope/project-options");
+
+  // act
+  const environment = await prepareHookEnv(entry, OPTION_CONTEXT, locations);
+
+  // assert
+  assert.deepStrictEqual(optionVariables(environment), { CLAUDE_PLUGIN_OPTION_MODE: "slow" });
+});
+
+test("D-PG10-10: sets option variables over the process and under the lane and session", async (t) => {
+  // arrange
+  const mutatedKeys = ["CLAUDE_PLUGIN_OPTION_MODE", "CLAUDE_PLUGIN_OPTION_LEVEL"] as const;
+  const priorEnvironment = mutatedKeys.map((key) => ({
+    key,
+    existed: Object.hasOwn(process.env, key),
+    value: process.env[key],
+  }));
+  t.after(() => {
+    for (const prior of priorEnvironment) {
+      if (prior.existed) {
+        process.env[prior.key] = prior.value;
+      } else {
+        Reflect.deleteProperty(process.env, prior.key);
+      }
+    }
+  });
+  process.env.CLAUDE_PLUGIN_OPTION_MODE = "process-mode";
+  process.env.CLAUDE_PLUGIN_OPTION_LEVEL = "process-level";
+  const entry = optionEntry(
+    resolveOptions({
+      mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+      level: { type: "string", title: "Level", description: "The level.", default: "high" },
+      root: { type: "string", title: "Root", description: "The root.", default: "/elsewhere" },
+    }),
+  );
+  const locations = locationsFor("project", "/scope/project-options");
+
+  // act
+  const environment = await prepareHookEnv(entry, OPTION_CONTEXT, locations, {
+    CLAUDE_PLUGIN_OPTION_LEVEL: "lane-level",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      options: optionVariables(environment),
+      pluginRoot: environment.CLAUDE_PLUGIN_ROOT,
+      session: environment.CLAUDE_SESSION_ID,
+    },
+    {
+      options: {
+        CLAUDE_PLUGIN_OPTION_MODE: "fast",
+        CLAUDE_PLUGIN_OPTION_LEVEL: "lane-level",
+        CLAUDE_PLUGIN_OPTION_ROOT: "/elsewhere",
+      },
+      pluginRoot: "/plugins/plugin-options",
+      session: "session-options",
+    },
   );
 });

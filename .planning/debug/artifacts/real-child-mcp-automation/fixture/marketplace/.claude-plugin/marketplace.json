@@ -1,0 +1,14 @@
+{
+  "name": "fixtures",
+  "owner": {
+    "name": "Local Phase 1 UAT"
+  },
+  "plugins": [
+    {
+      "name": "demo",
+      "source": "./plugins/demo",
+      "version": "1.0.0",
+      "description": "Disposable MCP child validation"
+    }
+  ]
+}

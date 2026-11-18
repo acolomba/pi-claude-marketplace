@@ -6,13 +6,32 @@ import {
   hookBlockingErrorText,
   hookErrorText,
   hookEventLabel,
+  hookFailureText,
   hookMatchLabel,
   hookSaysText,
+  hookStoppedText,
   postCompactLineText,
   promptBlockedText,
+  promptStoppedText,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/hook-labels.ts";
 
+import type { HookFailure } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
+import type { FailedHook } from "../../../extensions/pi-claude-marketplace/bridges/hooks/hook-labels.ts";
+
 const GUARD_COMMAND = "$" + "{CLAUDE_PLUGIN_ROOT}/hooks/guard.sh";
+const EXIT_HEAD = "UserPromptSubmit hook error: Failed with non-blocking status code: ";
+const SPAWN_HEAD =
+  "PreToolUse:Bash hook error: Failed with non-blocking status code: Error occurred while executing hook command: ";
+const FAILED_HOOK = {
+  command: GUARD_COMMAND,
+  plugin: "demo",
+  marketplace: "fixtures",
+  scope: "user",
+} satisfies FailedHook;
+// The em dash (U+2014) of the missing-script notice, escaped because the
+// fix-unicode-dashes hook rewrites a literal one.
+const EM_DASH = "\u2014";
+const MISSING_STDERR = "python3: can't open file '/x/gone.py': [Errno 2] No such file or directory";
 
 describe("hookEventLabel", () => {
   for (const { name, claudeEvent, piToolName, label } of [
@@ -154,29 +173,77 @@ describe("hookMatchLabel", () => {
 });
 
 describe("promptBlockedText", () => {
-  for (const { name, reason, fromStderr, text } of [
+  for (const { name, claudeEvent, reason, fromStderr, text } of [
     {
       name: "an exit-2 stderr reason after the bracketed command",
+      claudeEvent: "UserPromptSubmit",
       reason: "no prompts today",
       fromStderr: true,
       text: `UserPromptSubmit operation blocked by hook:\n[${GUARD_COMMAND}]: no prompts today`,
     },
     {
       name: "a decision reason alone",
+      claudeEvent: "UserPromptSubmit",
       reason: "not now",
       fromStderr: false,
       text: "UserPromptSubmit operation blocked by hook:\nnot now",
     },
     {
       name: "Claude Code's default for a decision without a reason",
+      claudeEvent: "UserPromptSubmit",
       reason: undefined,
       fromStderr: false,
       text: "UserPromptSubmit operation blocked by hook:\nBlocked by hook",
     },
-  ]) {
+    {
+      name: "the expansion event's name before an exit-2 stderr reason (D-PG6-20)",
+      claudeEvent: "UserPromptExpansion",
+      reason: "not this command",
+      fromStderr: true,
+      text: `UserPromptExpansion operation blocked by hook:\n[${GUARD_COMMAND}]: not this command`,
+    },
+    {
+      name: "the expansion event's name before a decision reason (D-PG6-20)",
+      claudeEvent: "UserPromptExpansion",
+      reason: "not now",
+      fromStderr: false,
+      text: "UserPromptExpansion operation blocked by hook:\nnot now",
+    },
+  ] as const) {
     test(`writes ${name} (D-CF5-24)`, () => {
       // act
-      const notice = promptBlockedText(reason, GUARD_COMMAND, fromStderr);
+      const notice = promptBlockedText(claudeEvent, reason, GUARD_COMMAND, fromStderr);
+
+      // assert
+      assert.strictEqual(notice, text);
+    });
+  }
+
+  for (const { name, claudeEvent, reason, fromStderr, text } of [
+    {
+      name: "the original prompt after an expansion's exit-2 stderr reason",
+      claudeEvent: "UserPromptExpansion",
+      reason: "no deploys today",
+      fromStderr: true,
+      text: `UserPromptExpansion operation blocked by hook:\n[${GUARD_COMMAND}]: no deploys today\n\nOriginal prompt: /demo:deploy production`,
+    },
+    {
+      name: "the original prompt after an expansion's decision reason",
+      claudeEvent: "UserPromptExpansion",
+      reason: "not now",
+      fromStderr: false,
+      text: "UserPromptExpansion operation blocked by hook:\nnot now\n\nOriginal prompt: /demo:deploy production",
+    },
+  ] as const) {
+    test(`writes ${name} (D-PG6-20)`, () => {
+      // act
+      const notice = promptBlockedText(
+        claudeEvent,
+        reason,
+        GUARD_COMMAND,
+        fromStderr,
+        "/demo:deploy production",
+      );
 
       // assert
       assert.strictEqual(notice, text);
@@ -246,6 +313,180 @@ describe("postCompactLineText", () => {
 
       // assert
       assert.strictEqual(line, text);
+    });
+  }
+});
+
+describe("hookFailureText", () => {
+  for (const { name, label, failure, text } of [
+    {
+      name: "a failed exit with its stderr",
+      label: "UserPromptSubmit",
+      failure: { kind: "exit", stderr: "boom" },
+      text: `${EXIT_HEAD}boom`,
+    },
+    {
+      name: "a failed exit with the first line of its stderr only",
+      label: "UserPromptSubmit",
+      failure: { kind: "exit", stderr: "first line\nsecond line" },
+      text: `${EXIT_HEAD}first line`,
+    },
+    {
+      name: "a failed exit without the blank lines and white space around its stderr",
+      label: "UserPromptSubmit",
+      failure: { kind: "exit", stderr: "\n  \n  boom  \n" },
+      text: `${EXIT_HEAD}boom`,
+    },
+    {
+      name: "a failed exit with no stderr as Claude Code's default",
+      label: "UserPromptSubmit",
+      failure: { kind: "exit", stderr: "" },
+      text: `${EXIT_HEAD}No stderr output`,
+    },
+    {
+      name: "a failed exit with blank stderr as Claude Code's default",
+      label: "UserPromptSubmit",
+      failure: { kind: "exit", stderr: " \n\t\n" },
+      text: `${EXIT_HEAD}No stderr output`,
+    },
+    {
+      name: "a failed exit whose line holds 200 characters whole",
+      label: "UserPromptSubmit",
+      failure: { kind: "exit", stderr: "x".repeat(162) },
+      text: `${EXIT_HEAD}${"x".repeat(162)}`,
+    },
+    {
+      name: "a failed exit whose line holds 201 characters cut to 200 and an ellipsis",
+      label: "UserPromptSubmit",
+      failure: { kind: "exit", stderr: "x".repeat(163) },
+      text: `${EXIT_HEAD}${"x".repeat(162)}…`,
+    },
+    {
+      name: "a command that cannot be spawned with its error",
+      label: "PreToolUse:Bash",
+      failure: { kind: "spawn", error: "spawn guard.sh ENOENT" },
+      text: `${SPAWN_HEAD}spawn guard.sh ENOENT`,
+    },
+    {
+      name: "a command that cannot be spawned with the first line of its error",
+      label: "PreToolUse:Bash",
+      failure: { kind: "spawn", error: "spawn guard.sh ENOENT\n    at spawn" },
+      text: `${SPAWN_HEAD}spawn guard.sh ENOENT`,
+    },
+    {
+      name: "a command that cannot be spawned cut to 200 characters and an ellipsis",
+      label: "PreToolUse:Bash",
+      failure: { kind: "spawn", error: "e".repeat(118) },
+      text: `${SPAWN_HEAD}${"e".repeat(117)}…`,
+    },
+    {
+      name: "an exception in the runner with its error",
+      label: "SessionStart:startup",
+      failure: { kind: "run", error: "bad root" },
+      text: "SessionStart:startup hook error: Failed to run: bad root",
+    },
+    {
+      name: "an exception in the runner with the first line of its error",
+      label: "SessionStart:startup",
+      failure: { kind: "run", error: "bad root\n    at runner" },
+      text: "SessionStart:startup hook error: Failed to run: bad root",
+    },
+    {
+      name: "an exception in the runner whose line holds 200 characters whole",
+      label: "SessionStart:startup",
+      failure: { kind: "run", error: "r".repeat(185) },
+      text: `SessionStart:startup hook error: Failed to run: ${"r".repeat(185)}`,
+    },
+    {
+      name: "an exception in the runner cut to 200 characters and an ellipsis",
+      label: "SessionStart:startup",
+      failure: { kind: "run", error: "r".repeat(186) },
+      text: `SessionStart:startup hook error: Failed to run: ${"r".repeat(185)}…`,
+    },
+  ] satisfies { name: string; label: string; failure: HookFailure; text: string }[]) {
+    test(`writes ${name} (D-PG5-11)`, () => {
+      // act
+      const notice = hookFailureText(label, failure, FAILED_HOOK);
+
+      // assert
+      assert.strictEqual(notice, text);
+    });
+  }
+
+  for (const { name, stderr, hook, text } of [
+    {
+      name: "the trimmed stderr and the reinstall command of a user-scope hook",
+      stderr: `\n  ${MISSING_STDERR}  \n`,
+      hook: FAILED_HOOK,
+      text: `Stop hook error: Hook script appears to be missing ${EM_DASH} "${GUARD_COMMAND}" exited 2 with: ${MISSING_STDERR}. Treating as non-blocking. Run /claude:plugin reinstall demo@fixtures --scope user to reinstall it.`,
+    },
+    {
+      name: "the plugin, marketplace, and scope of a project-scope hook",
+      stderr: "no such file",
+      hook: { command: "./run.sh", plugin: "lint", marketplace: "tools", scope: "project" },
+      text: `Stop hook error: Hook script appears to be missing ${EM_DASH} "./run.sh" exited 2 with: no such file. Treating as non-blocking. Run /claude:plugin reinstall lint@tools --scope project to reinstall it.`,
+    },
+    {
+      name: "a stderr of 400 characters whole",
+      stderr: "n".repeat(400),
+      hook: FAILED_HOOK,
+      text: `Stop hook error: Hook script appears to be missing ${EM_DASH} "${GUARD_COMMAND}" exited 2 with: ${"n".repeat(400)}. Treating as non-blocking. Run /claude:plugin reinstall demo@fixtures --scope user to reinstall it.`,
+    },
+  ] satisfies { name: string; stderr: string; hook: FailedHook; text: string }[]) {
+    test(`writes the missing-script notice with ${name} (D-PG5-08, D-PG5-11)`, () => {
+      // act
+      const notice = hookFailureText("Stop", { kind: "missing-script", stderr }, hook);
+
+      // assert
+      assert.strictEqual(notice, text);
+    });
+  }
+});
+
+describe("hookStoppedText", () => {
+  for (const { name, reason, text } of [
+    {
+      name: "the stop reason",
+      reason: "halt",
+      text: "PreToolUse:Bash hook stopped continuation: halt",
+    },
+    {
+      name: "Claude Code's default for no reason",
+      reason: undefined,
+      text: "PreToolUse:Bash hook stopped continuation: Execution stopped by hook",
+    },
+    {
+      name: "Claude Code's default for an empty reason",
+      reason: "",
+      text: "PreToolUse:Bash hook stopped continuation: Execution stopped by hook",
+    },
+  ]) {
+    test(`writes ${name} (D-PG5-13)`, () => {
+      // act
+      const notice = hookStoppedText("PreToolUse:Bash", reason);
+
+      // assert
+      assert.strictEqual(notice, text);
+    });
+  }
+});
+
+describe("promptStoppedText", () => {
+  for (const { name, stopReason, text } of [
+    { name: "the stop reason", stopReason: "not now", text: "Operation stopped by hook: not now" },
+    {
+      name: "no reason as the bare text",
+      stopReason: undefined,
+      text: "Operation stopped by hook",
+    },
+    { name: "an empty reason as the bare text", stopReason: "", text: "Operation stopped by hook" },
+  ]) {
+    test(`writes ${name} (D-PG5-13)`, () => {
+      // act
+      const notice = promptStoppedText(stopReason);
+
+      // assert
+      assert.strictEqual(notice, text);
     });
   }
 });

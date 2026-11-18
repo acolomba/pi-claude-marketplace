@@ -1,0 +1,1 @@
+No external API integration: This phase changes an existing local bridge. Companion SDK use is confined to loopback acceptance fixtures; no external API client, authentication flow or new SDK surface is added.

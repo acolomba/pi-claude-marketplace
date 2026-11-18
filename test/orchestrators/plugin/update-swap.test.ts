@@ -16,10 +16,15 @@ import path from "node:path";
 import test from "node:test";
 
 import {
+  needsAgentGrantRewrite,
+  rewriteAgentGrantForms,
+} from "../../../extensions/pi-claude-marketplace/bridges/agents/grant-rewrite.ts";
+import {
   createHooksRouting,
   createHooksRuntime,
   readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { preparePluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import {
   assertUpdateNamesFree,
@@ -34,6 +39,7 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { AgentTargetOccupiedError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { PluginUpdateConcurrencyError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import {
@@ -53,6 +59,7 @@ import type {
   ThreePhaseArgs,
   ThreePhaseArgsBase,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
+import type { PluginInstallRecord } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { TestContext } from "node:test";
 
@@ -249,7 +256,7 @@ async function assertAgentsMigrated(params: {
     });
     assert.strictEqual(
       await readFile(targetPath, "utf8"),
-      `---\nname: hello:${agent.sourceName}\ndescription: ${agent.description}\naliases: ${agent.generatedName}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${agentSourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
+      `---\nname: hello:${agent.sourceName}\ndescription: ${agent.description}\naliases: ${agent.generatedName}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${agentSourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
     );
   }
 
@@ -775,6 +782,351 @@ test("MREC-01: a failed swap keeps the previous MCP servers beside the intent ma
   );
 });
 
+const MODE_OPTION = { type: "string", title: "Mode", description: "The mode." } as const;
+
+/**
+ * D-PG10-15: seeds `hello` 1.0.0 -> 2.0.0, gives the 1.0.0 record the
+ * `previous` options, and writes the 2.0.0 manifest with the `declared` ones.
+ */
+async function seedOptionsUpdate(
+  cwd: string,
+  previous: Record<string, unknown>,
+  declared: Record<string, unknown> | undefined,
+): Promise<ThreePhaseArgsBase & { readonly cascade: true }> {
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "2.0.0", hasSkill: true } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  await writeFile(
+    path.join(marketplaceRoot, "plugins", "hello", ".claude-plugin", "plugin.json"),
+    JSON.stringify({
+      name: "hello",
+      version: "2.0.0",
+      ...(declared !== undefined && { userConfig: declared }),
+    }),
+  );
+  const args = cascadeSwapArgs(cwd);
+  const state = await loadState(args.locations.extensionRoot);
+  const record = state.marketplaces.mp?.plugins.hello;
+  assert.ok(record !== undefined);
+  record.userConfig = previous;
+  await saveState(args.locations.extensionRoot, state);
+  return args;
+}
+
+async function swapOptionsUpdate(
+  args: ThreePhaseArgsBase & { readonly cascade: true },
+): Promise<{ readonly partition: string; readonly record: PluginInstallRecord | undefined }> {
+  const preflight = await preparePluginUpdate({ policy: UPDATE_POLICY, ...args });
+  assert.ok(!("partition" in preflight));
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+  const record = (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  return { partition: outcome.partition, record };
+}
+
+test("D-PG10-15: an all-success swap records the options the new version declares", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-options-");
+  const args = await seedOptionsUpdate(
+    cwd,
+    { mode: { ...MODE_OPTION, default: "fast" } },
+    { mode: { ...MODE_OPTION, default: "slow" } },
+  );
+
+  // act
+  const { partition, record } = await swapOptionsUpdate(args);
+
+  // assert
+  assert.deepStrictEqual(
+    { partition, userConfig: record?.userConfig },
+    { partition: "updated", userConfig: { mode: { ...MODE_OPTION, default: "slow" } } },
+  );
+});
+
+test("D-PG10-15: a swap to a version that declares no options removes the recorded options", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-options-drop-");
+  const args = await seedOptionsUpdate(
+    cwd,
+    { mode: { ...MODE_OPTION, default: "fast" } },
+    undefined,
+  );
+
+  // act
+  const { partition, record } = await swapOptionsUpdate(args);
+
+  // assert
+  assert.deepStrictEqual(
+    { partition, hasUserConfig: record !== undefined && Object.hasOwn(record, "userConfig") },
+    { partition: "updated", hasUserConfig: false },
+  );
+});
+
+/** Swaps `hello` to 2.0.0, which ships a hook, and returns the options of its routing entries. */
+async function swapOptionHooks(
+  cwd: string,
+  declared: Record<string, unknown> | undefined,
+): Promise<readonly unknown[]> {
+  const args = await seedOptionsUpdate(
+    cwd,
+    { mode: { ...MODE_OPTION, default: "fast" } },
+    declared,
+  );
+  const hooksDir = path.join(cwd, "mp-src", "plugins", "hello", "hooks");
+  await mkdir(hooksDir, { recursive: true });
+  await writeFile(
+    path.join(hooksDir, "hooks.json"),
+    JSON.stringify({
+      PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hook" }] }],
+    }),
+  );
+  const runtime = createHooksRuntime();
+  runtime.recordProjectTrust(cwd, true);
+  await swapOptionsUpdate({
+    ...args,
+    hooksRouting: createHooksRouting(runtime, { readHooksJson }),
+  });
+  return runtime.getRoutingBucket("PreToolUse").map((entry) => entry.options);
+}
+
+test("D-PG10-15: a swap gives the plugin's routing entries the options the new version declares", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-hook-options-");
+  const declared = { mode: { ...MODE_OPTION, default: "slow" } };
+
+  // act
+  const options = await swapOptionHooks(cwd, declared);
+
+  // assert
+  assert.deepStrictEqual(options, [resolveOptions(declared)]);
+});
+
+test("D-PG10-15: a swap to a version that declares no options gives its routing entries none", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-hook-options-drop-");
+
+  // act
+  const options = await swapOptionHooks(cwd, undefined);
+
+  // assert
+  assert.deepStrictEqual(options, [resolveOptions(undefined)]);
+});
+
+/**
+ * Swaps `hello` to 2.0.0, whose skill `tool`, command `opts`, and agent
+ * `opts` name `${user_config.mode}`, and returns their staged bodies.
+ */
+async function swapOptionContent(
+  cwd: string,
+  declared: Record<string, unknown> | undefined,
+): Promise<{
+  readonly skill: string | undefined;
+  readonly command: string | undefined;
+  readonly agent: string | undefined;
+}> {
+  const args = await seedOptionsUpdate(
+    cwd,
+    { mode: { ...MODE_OPTION, default: "fast" } },
+    declared,
+  );
+  await writeFile(
+    path.join(cwd, "mp-src", "plugins", "hello", "skills", "tool", "SKILL.md"),
+    "---\nname: tool\n---\nMode ${user_config.mode}.\n",
+  );
+  const commandsDir = path.join(cwd, "mp-src", "plugins", "hello", "commands");
+  await mkdir(commandsDir, { recursive: true });
+  await writeFile(path.join(commandsDir, "opts.md"), "Mode ${user_config.mode}.\n");
+  const agentsDir = path.join(cwd, "mp-src", "plugins", "hello", "agents");
+  await mkdir(agentsDir, { recursive: true });
+  await writeFile(
+    path.join(agentsDir, "opts.md"),
+    "---\nname: opts\ndescription: Opts\n---\nMode ${user_config.mode}.\n",
+  );
+  await swapOptionsUpdate(args);
+  const bodyOf = async (file: string): Promise<string | undefined> =>
+    (await readFile(file, "utf8")).split("---\n").at(-1);
+  return {
+    skill: await bodyOf(path.join(args.locations.skillsTargetDir, "hello-tool", "SKILL.md")),
+    command: await bodyOf(path.join(args.locations.promptsTargetDir, "hello:opts.md")),
+    agent: await bodyOf(path.join(args.locations.agentsDir, "pi-claude-marketplace-hello-opts.md")),
+  };
+}
+
+test("D-PG10-13: a swap writes the options the new version declares into its skill", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-skill-options-");
+
+  // act
+  const { skill } = await swapOptionContent(cwd, { mode: { ...MODE_OPTION, default: "slow" } });
+
+  // assert
+  assert.strictEqual(skill, "Mode slow.\n");
+});
+
+test("D-PG10-21: a swap to a version that declares no options keeps its skill's references", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-skill-no-options-");
+
+  // act
+  const { skill } = await swapOptionContent(cwd, undefined);
+
+  // assert
+  assert.strictEqual(skill, "Mode ${user_config.mode}.\n");
+});
+
+test("D-PG10-13: a swap writes the options the new version declares into its command", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-command-options-");
+
+  // act
+  const { command } = await swapOptionContent(cwd, { mode: { ...MODE_OPTION, default: "slow" } });
+
+  // assert
+  assert.strictEqual(command, "Mode slow.\n");
+});
+
+test("D-PG10-21: a swap to a version that declares no options keeps its command's references", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-command-no-options-");
+
+  // act
+  const { command } = await swapOptionContent(cwd, undefined);
+
+  // assert
+  assert.strictEqual(command, "Mode ${user_config.mode}.\n");
+});
+
+test("D-PG10-13: a swap writes the options the new version declares into its agent", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-agent-options-");
+
+  // act
+  const { agent } = await swapOptionContent(cwd, { mode: { ...MODE_OPTION, default: "slow" } });
+
+  // assert
+  assert.strictEqual(agent, "\nMode slow.\n");
+});
+
+test("D-PG10-21: a swap to a version that declares no options keeps its agent's references", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-agent-no-options-");
+
+  // act
+  const { agent } = await swapOptionContent(cwd, undefined);
+
+  // assert
+  assert.strictEqual(agent, "\nMode ${user_config.mode}.\n");
+});
+
+/**
+ * Swaps `hello` to 2.0.0, whose `keyed` server names `${user_config.region}`
+ * beside a `plain` one, and returns what the swap staged, reported, and wrote.
+ */
+async function swapOptionServers(
+  cwd: string,
+  declared: Record<string, unknown> | undefined,
+): Promise<{
+  readonly staged: readonly string[] | undefined;
+  readonly notices: unknown;
+  readonly entries: readonly string[];
+}> {
+  const args = await seedOptionsUpdate(
+    cwd,
+    { mode: { ...MODE_OPTION, default: "fast" } },
+    declared,
+  );
+  await writeFile(
+    path.join(cwd, "mp-src", "plugins", "hello", ".mcp.json"),
+    JSON.stringify({
+      mcpServers: {
+        keyed: { command: "srv", args: ["--region", "${user_config.region}"] },
+        plain: { command: "srv" },
+      },
+    }),
+  );
+  const preflight = await preparePluginUpdate({ policy: UPDATE_POLICY, ...args });
+  assert.ok(!("partition" in preflight));
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+  assert.strictEqual(outcome.partition, "updated");
+  const file = JSON.parse(await readFile(args.locations.mcpAdapterJsonPath, "utf8")) as {
+    readonly mcpServers: Record<string, unknown>;
+  };
+  return {
+    staged: outcome.stagedMcpServerNames,
+    notices: outcome.mcpConfigNotices,
+    entries: Object.keys(file.mcpServers),
+  };
+}
+
+test("D-PG10-21: a swap leaves out a server that names an option the new version does not set, and reports it", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-mcp-options-");
+
+  // act
+  const swapped = await swapOptionServers(cwd, { mode: { ...MODE_OPTION, default: "slow" } });
+
+  // assert
+  assert.deepStrictEqual(swapped, {
+    staged: ["plain"],
+    notices: [
+      {
+        kind: "option-blocked",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "keyed",
+        names: ["region"],
+        reason: "unset",
+      },
+    ],
+    entries: ["plugin_hello_plain_"],
+  });
+});
+
+test("D-PG10-21: a swap to a version that declares no options stages a server that names an option", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-mcp-no-options-");
+
+  // act
+  const swapped = await swapOptionServers(cwd, undefined);
+
+  // assert
+  assert.deepStrictEqual(swapped, {
+    staged: ["keyed", "plain"],
+    notices: undefined,
+    entries: ["plugin_hello_keyed_", "plugin_hello_plain_"],
+  });
+});
+
+test("D-PG10-23: a failed swap keeps the previous options beside the intent mark", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-options-failure-");
+  const args = await seedOptionsUpdate(
+    cwd,
+    { mode: { ...MODE_OPTION, default: "fast" } },
+    { mode: { ...MODE_OPTION, default: "slow" } },
+  );
+  await mkdir(args.locations.skillsTargetDir, { recursive: true });
+  await writeFile(path.join(args.locations.skillsTargetDir, "hello-tool"), "old-resource-tree");
+
+  // act
+  const { partition, record } = await swapOptionsUpdate(args);
+
+  // assert
+  assert.deepStrictEqual(
+    { partition, notes: record?.compatibility.notes, userConfig: record?.userConfig },
+    {
+      partition: "failed",
+      notes: ["update-in-progress"],
+      userConfig: { mode: { ...MODE_OPTION, default: "fast" } },
+    },
+  );
+});
+
 test("D-P3-02: an all-success swap of a legacy record records the neutral verdict with its basis", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "update-swap-mcp-basis-");
@@ -1133,7 +1485,7 @@ test("D-18-15: an overwrite policy commits over a previous agent file a user edi
   });
   assert.strictEqual(
     await readFile(target, "utf8"),
-    `---\nname: hello:bot\ndescription: Agent from hello plugin\naliases: pi-claude-marketplace-hello-bot\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: bot\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings:\n    - source description was missing or empty -- using fallback\n---\n\nBody.\n`,
+    `---\nname: hello:bot\ndescription: Agent from hello plugin\naliases: pi-claude-marketplace-hello-bot\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: bot\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings:\n    - source description was missing or empty -- using fallback\n---\n\nBody.\n`,
   );
   assert.deepStrictEqual(JSON.parse(await readFile(args.locations.agentsIndexPath, "utf8")), {
     schemaVersion: 1,
@@ -1430,6 +1782,152 @@ test("D-CF1-06: a swap to a version whose declared commands path leaves commands
       },
     ],
   });
+});
+
+test("D-PG4-01: a swap to a root-source version that lists an escaping skills path warns about it and updates", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-refused-listed-");
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "2.0.0", hasSkill: false } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  await writeFile(
+    path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: "mp",
+      plugins: [
+        { name: "hello", source: "./", version: "2.0.0", skills: ["./skills/a", "../outside"] },
+      ],
+    }),
+  );
+  await mkdir(path.join(marketplaceRoot, "skills", "a"), { recursive: true });
+  await writeFile(
+    path.join(marketplaceRoot, "skills", "a", "SKILL.md"),
+    "---\nname: a\ndescription: Skill a.\n---\n\nSkill a body.\n",
+  );
+  const args = directSwapArgs(cwd);
+  const preflight = await preflightOf(args);
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  assert.ok(outcome.partition === "updated");
+  assert.deepStrictEqual(outcome.stagingWarnings, [
+    { kind: "discovery", message: "skills path escapes plugin directory: ../outside" },
+  ]);
+});
+
+/**
+ * PG-SEC-01: seeds an update to a version that leaves commands/ unread, ships
+ * two agents that share a name, an agent `reader` with the given frontmatter
+ * fields, and a workflow script that runs the agent type `hello:reader`.
+ */
+async function seedWorkflowAgentUpdate(cwd: string, readerFields: string) {
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: {
+      hello: {
+        version: "2.0.0",
+        hasSkill: false,
+        hasCommand: true,
+        agents: [
+          { sourceName: "first", frontmatterName: "helper", description: "First" },
+          { sourceName: "second", frontmatterName: "helper", description: "Second" },
+        ],
+      },
+    },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "hello", version: "2.0.0", commands: "./custom" }),
+  );
+  await mkdir(path.join(pluginRoot, "custom"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, "agents", "reader.md"),
+    `---\nname: reader\ndescription: Reads.\n${readerFields}---\n\nRead.\n`,
+  );
+  await mkdir(path.join(pluginRoot, "workflows"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, "workflows", "scan.js"),
+    'export const meta = { name: "scan", description: "d" };\nawait agent("run", { agentType: "hello:reader" });\n',
+  );
+  return { agentsDir: path.join(pluginRoot, "agents") };
+}
+
+function helperDuplicateWarning(agentsDir: string) {
+  return {
+    kind: "discovery",
+    message: `agent source "helper" at "${path.join(agentsDir, "second.md")}" duplicates generated name "pi-claude-marketplace-hello-helper" already produced by agent source "helper" at "${path.join(agentsDir, "first.md")}"; keeping first discovered source.`,
+  } as const;
+}
+
+const SHADOWED_COMMANDS_WARNING = {
+  kind: "discovery",
+  message: 'Default commands/ folder is ignored because the manifest sets "commands"',
+} as const;
+
+test("PG-SEC-01: a swap to a version whose workflow runs a tool-restricted agent adds one note between the folder and bridge warnings", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-restriction-note-");
+  const { agentsDir } = await seedWorkflowAgentUpdate(cwd, "tools: Read\n");
+  const args = directSwapArgs(cwd);
+  const preflight = await preflightOf(args);
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      partition: outcome.partition,
+      stagingWarnings: "stagingWarnings" in outcome ? outcome.stagingWarnings : undefined,
+    },
+    {
+      partition: "updated",
+      stagingWarnings: [
+        SHADOWED_COMMANDS_WARNING,
+        {
+          kind: "discovery",
+          message: `workflow script "scan.js" in "workflows" runs agent type "hello:reader", which restricts its tools; unless the workflow engine's providerMiddlewareExtensions setting lists builtin:codemode, the engine does not keep that restriction, so the agent may use bash, edit, and write`,
+        },
+        helperDuplicateWarning(agentsDir),
+      ],
+    },
+  );
+});
+
+test("PG-SEC-01: a swap to a version whose workflow runs an unrestricted agent adds no note", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-no-restriction-");
+  const { agentsDir } = await seedWorkflowAgentUpdate(cwd, "");
+  const args = directSwapArgs(cwd);
+  const preflight = await preflightOf(args);
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      partition: outcome.partition,
+      stagingWarnings: "stagingWarnings" in outcome ? outcome.stagingWarnings : undefined,
+    },
+    {
+      partition: "updated",
+      stagingWarnings: [SHADOWED_COMMANDS_WARNING, helperDuplicateWarning(agentsDir)],
+    },
+  );
 });
 
 test("a swap to a version whose workflow takes a command's name warns and stages no prompt for it", async (t) => {
@@ -2305,7 +2803,13 @@ test("AMIG-02: a legacy removal that fails records an mcp phase failure and keep
             },
             directTools: "search",
             toolPrefix: "mcp",
-            _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+            requestTimeoutMs: 1800000,
+            lifecycle: "lazy-keep-alive",
+            _piClaudeMarketplace: {
+              plugin: "hello",
+              marketplace: "mp",
+              defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
+            },
           },
         },
       });
@@ -2633,4 +3137,212 @@ test("MGRT-01 / D-MB-03: a swap whose arguments name no MCP implementation resta
       },
     ],
   });
+});
+
+/**
+ * D-PG3-03: seeds `hello` 2.0.0 shipping the ordinary agent `bot`, and an
+ * install of 1.0.0 whose generated file and index row hold the bytes an
+ * earlier release wrote, with the generated `async: false` line.
+ */
+async function seedEarlierOrdinaryAgentUpdate(t: TestContext, prefix: string) {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { cwd } = await createHermeticEnvironment(t, prefix);
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: {
+      hello: {
+        version: "2.0.0",
+        hasSkill: false,
+        agents: [{ sourceName: "bot", description: "Bot", body: "Body.\n" }],
+      },
+    },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const args = cascadeSwapArgs(cwd);
+  const { locations } = args;
+  const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+  const sourcePath = path.join(pluginRoot, "agents", "bot.md");
+  const target = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
+  const earlierBytes = `---\nname: hello:bot\ndescription: Bot\naliases: pi-claude-marketplace-hello-bot\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: bot\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nBody.\n`;
+  await mkdir(locations.agentsDir, { recursive: true });
+  await writeFile(target, earlierBytes);
+  const earlierRow = {
+    plugin: "hello",
+    marketplace: "mp",
+    sourceAgent: "bot",
+    generatedName: "pi-claude-marketplace-hello-bot",
+    sourcePath,
+    targetPath: target,
+    sourceHash: "a".repeat(64),
+    droppedFields: [],
+    droppedTools: [],
+    warnings: [],
+  };
+  const indexBytes = JSON.stringify({ schemaVersion: 1, agents: [earlierRow] });
+  await writeFile(locations.agentsIndexPath, indexBytes);
+  const state = await loadState(locations.extensionRoot);
+  const oldRecord = state.marketplaces.mp?.plugins.hello;
+  assert.ok(oldRecord !== undefined);
+  oldRecord.resources = {
+    skills: [],
+    prompts: [],
+    agents: ["pi-claude-marketplace-hello-bot"],
+    mcpServers: [],
+    hooks: [],
+    workflows: [],
+  };
+  await saveState(locations.extensionRoot, state);
+  return { args, pluginRoot, sourcePath, target, earlierBytes, indexBytes, oldRecord };
+}
+
+/**
+ * D-PG3-01 / D-PG3-03: the file and index row an update writes for the
+ * ordinary agent `bot`: no launch preference, so pi-subagents chooses.
+ */
+async function assertOrdinaryAgentRegenerated(
+  fixture: Awaited<ReturnType<typeof seedEarlierOrdinaryAgentUpdate>>,
+): Promise<void> {
+  const { args, sourcePath, target } = fixture;
+  assert.strictEqual(
+    await readFile(target, "utf8"),
+    `---\nname: hello:bot\ndescription: Bot\naliases: pi-claude-marketplace-hello-bot\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: bot\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nBody.\n`,
+  );
+  assert.deepStrictEqual(JSON.parse(await readFile(args.locations.agentsIndexPath, "utf8")), {
+    schemaVersion: 1,
+    agents: [
+      {
+        plugin: "hello",
+        marketplace: "mp",
+        sourceAgent: "bot",
+        generatedName: "pi-claude-marketplace-hello-bot",
+        sourcePath,
+        targetPath: target,
+        sourceHash: createHash("sha256")
+          .update("---\nname: bot\ndescription: Bot\ntools: Read,Grep\n---\n\nBody.\n")
+          .digest("hex"),
+        droppedFields: [],
+        droppedTools: [],
+        warnings: [],
+      },
+    ],
+  });
+}
+
+/** The record of `hello` 2.0.0 after an update finalized at `updatedAt`. */
+function ordinaryAgentRecord(
+  fixture: Awaited<ReturnType<typeof seedEarlierOrdinaryAgentUpdate>>,
+  updatedAt: string,
+) {
+  return {
+    ...fixture.oldRecord,
+    version: "2.0.0",
+    resolvedSource: fixture.pluginRoot,
+    compatibility: { installable: true, notes: [], supported: ["agents"], unsupported: [] },
+    compatibilityBasis: "neutral",
+    mcpServerConfigs: [],
+    updatedAt,
+  };
+}
+
+const ORDINARY_AGENT_UPDATED = {
+  partition: "updated",
+  resourcesChanged: true,
+  name: "hello",
+  fromVersion: "1.0.0",
+  toVersion: "2.0.0",
+  stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
+  stagedMcpServerNames: [],
+  declaresAgents: true,
+  declaresMcp: false,
+  constraint: undefined,
+  declaresWorkflows: false,
+} as const;
+
+test("D-PG3-03: a load keeps an earlier ordinary agent's async false bytes and an update regenerates the agent without a launch preference", async (t) => {
+  // arrange
+  const fixture = await seedEarlierOrdinaryAgentUpdate(t, "update-swap-delegated-");
+  const { args, target, earlierBytes, indexBytes } = fixture;
+
+  // act: the agent grant pass is the only step of a load that rewrites an agent file
+  const rewriteNeeded = [
+    await needsAgentGrantRewrite(args.locations, "adapter"),
+    await needsAgentGrantRewrite(args.locations, "builtin"),
+  ];
+  await rewriteAgentGrantForms(args.locations, "builtin", createRemovalOps(), () => undefined);
+
+  // assert
+  assert.deepStrictEqual(rewriteNeeded, [false, false]);
+  assert.strictEqual(await readFile(target, "utf8"), earlierBytes);
+  assert.strictEqual(await readFile(args.locations.agentsIndexPath, "utf8"), indexBytes);
+
+  // act
+  const outcome = await swapPluginUpdate(args, await preflightOf(args), UPDATE_POLICY);
+
+  // assert
+  assert.deepStrictEqual(outcome, ORDINARY_AGENT_UPDATED);
+  await assertOrdinaryAgentRegenerated(fixture);
+  assert.deepStrictEqual(
+    (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello,
+    ordinaryAgentRecord(fixture, "2026-01-02T00:00:00.001Z"),
+  );
+});
+
+test("D-PG3-03 / NFR-3: an update whose workflows commit fails keeps its intent mark, and its retry finalizes the agent without a launch preference", async (t) => {
+  // arrange
+  const fixture = await seedEarlierOrdinaryAgentUpdate(t, "update-swap-delegated-retry-");
+  const { args, pluginRoot, oldRecord } = fixture;
+  const foreignPath = await seedRefusedWorkflowTarget(args.locations, pluginRoot);
+  const refusal = `Cannot replace workflow target with non-previous content at ${foreignPath}`;
+
+  // act
+  const failed = await swapPluginUpdate(args, await preflightOf(args), UPDATE_POLICY);
+
+  // assert
+  assert.deepStrictEqual(failed, {
+    partition: "failed",
+    name: "hello",
+    fromVersion: "1.0.0",
+    toVersion: "2.0.0",
+    notes: [
+      'Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it.',
+      `workflows: ${refusal}`,
+    ],
+    reasons: ["rollback partial"],
+    phaseFailures: [{ phase: "workflows", msg: refusal }],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  });
+  await assertOrdinaryAgentRegenerated(fixture);
+  assert.deepStrictEqual(
+    (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello,
+    {
+      ...oldRecord,
+      compatibility: {
+        installable: false,
+        notes: ["update-in-progress"],
+        supported: [],
+        unsupported: [],
+      },
+      updatedAt: "2026-01-02T00:00:00.001Z",
+    },
+  );
+
+  // arrange: the foreign workflow and the source's workflow are gone
+  await rm(foreignPath);
+  await rm(path.join(pluginRoot, "workflows"), { recursive: true });
+
+  // act
+  const retried = await swapPluginUpdate(args, await preflightOf(args), UPDATE_POLICY);
+
+  // assert
+  assert.deepStrictEqual(retried, ORDINARY_AGENT_UPDATED);
+  await assertOrdinaryAgentRegenerated(fixture);
+  assert.deepStrictEqual(
+    (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello,
+    ordinaryAgentRecord(fixture, "2026-01-02T00:00:00.003Z"),
+  );
 });

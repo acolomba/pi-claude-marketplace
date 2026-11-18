@@ -365,6 +365,7 @@ test("same-runtime reload makes every retained registration inert before argumen
       return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
     },
     readHooksJson,
+    readMcpServerNames: () => Promise.resolve([]),
   };
   const registrations: Array<{ readonly event: string; readonly handler: unknown }> = [];
   const messages: unknown[] = [];
@@ -382,19 +383,21 @@ test("same-runtime reload makes every retained registration inert before argumen
   const projectRoot = path.join(root, "project");
   await hydration.registerHooksBridge(pi, { cwd: factoryRoot });
   await hydration.registerHooksBridge(pi, { cwd: factoryRoot });
-  const staleRegistrations = registrations.slice(0, 12);
-  const liveRegistrations = registrations.slice(12);
+  const staleRegistrations = registrations.slice(0, 14);
+  const liveRegistrations = registrations.slice(14);
   const registrationOrder = [
     "session_start",
     "session_shutdown",
     "session_before_compact",
     "session_compact",
     "input",
+    "input",
     "tool_call",
     "tool_result",
     "before_agent_start",
     "turn_end",
     "agent_end",
+    "agent_before_settle",
     "agent_settled",
     "input",
   ];

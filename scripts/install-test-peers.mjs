@@ -2,11 +2,11 @@
 // node_modules/.cache/optional-peers. PIFL-03 keeps pi-mcp-adapter,
 // pi-subagents, and @quintinshaw/pi-dynamic-workflows out of package.json
 // dependencies and package-lock.json, so the tests read them from this cache.
-// Each peer is the lowest version that its package.json `peerDependencies`
-// range admits (PIFL-02).
+// Each peer uses its suite version when named, or the lowest version its
+// declared range admits (PIFL-02, D-PG1-02).
 //
 // With no lockfile, the peers' own dependency ranges would resolve to the
-// newest release on each run. `--before` caps resolution at the newest floor's
+// newest release on each run. `--before` caps resolution at the newest installed peer's
 // registry publish time, so every machine gets the same tree and a release
 // published later cannot enter. `--omit=peer` keeps the peers' own peers out;
 // the modules the tests import link none of them. `npm run --silent` exports a
@@ -20,7 +20,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, renameSync, rmSync } 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { minVersion } from "semver";
+import { minVersion, satisfies } from "semver";
 
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 // test/integration/optional-peer.ts reads this directory; change the two together.
@@ -33,8 +33,11 @@ function readJson(file) {
   return JSON.parse(readFileSync(file, "utf8"));
 }
 
-function readFloors() {
+function readSuiteVersions() {
   const { peerDependencies = {} } = readJson(path.join(projectRoot, "package.json"));
+  const suiteVersions = readJson(
+    path.join(projectRoot, "test/integration/optional-peer-suite-versions.json"),
+  );
 
   return peerNames.map((name) => {
     const range = peerDependencies[name];
@@ -47,15 +50,20 @@ function readFloors() {
       throw new Error(`package.json declares no usable ${name} peer range: ${range}`);
     }
 
-    return { name, version: floor.version };
+    const version = suiteVersions[name] ?? floor.version;
+    if (!satisfies(version, range)) {
+      throw new Error(`${name} suite version ${version} is outside declared peer range ${range}`);
+    }
+
+    return { name, version };
   });
 }
 
-function toSpecs(floors) {
-  return floors.map(({ name, version }) => `${name}@${version}`);
+function toSpecs(peers) {
+  return peers.map(({ name, version }) => `${name}@${version}`);
 }
 
-function holdsFloor(dir, { name, version }) {
+function holdsVersion(dir, { name, version }) {
   const manifestPath = path.join(dir, "node_modules", name, "package.json");
   if (!existsSync(manifestPath)) {
     return false;
@@ -70,8 +78,8 @@ function holdsFloor(dir, { name, version }) {
   }
 }
 
-function holdsFloors(dir, floors) {
-  return floors.every((floor) => holdsFloor(dir, floor));
+function holdsVersions(dir, peers) {
+  return peers.every((peer) => holdsVersion(dir, peer));
 }
 
 function runNpm(args) {
@@ -101,8 +109,8 @@ function readPublishTime({ name, version }) {
   return published;
 }
 
-function readCutoff(floors) {
-  const times = floors.map((floor) => readPublishTime(floor).getTime());
+function readCutoff(peers) {
+  const times = peers.map((peer) => readPublishTime(peer).getTime());
   return new Date(Math.max(...times)).toISOString();
 }
 
@@ -121,7 +129,7 @@ function assertRegistryIntegrity(dir) {
   }
 }
 
-function installInto(dir, floors, cutoff) {
+function installInto(dir, peers, cutoff) {
   runNpm([
     "install",
     "--prefix",
@@ -134,37 +142,37 @@ function installInto(dir, floors, cutoff) {
     "--no-fund",
     "--loglevel=warn",
     `--before=${cutoff}`,
-    ...toSpecs(floors),
+    ...toSpecs(peers),
   ]);
 
-  if (!holdsFloors(dir, floors)) {
-    throw new Error(`npm did not install ${toSpecs(floors).join(" ")} into ${dir}.`);
+  if (!holdsVersions(dir, peers)) {
+    throw new Error(`npm did not install ${toSpecs(peers).join(" ")} into ${dir}.`);
   }
 
   assertRegistryIntegrity(dir);
 }
 
-function swapIntoCache(tmpDir, floors) {
+function swapIntoCache(tmpDir, peers) {
   rmSync(cacheDir, { recursive: true, force: true });
 
   try {
     renameSync(tmpDir, cacheDir);
   } catch (error) {
     // A concurrent run can put its verified cache in place first.
-    if (!holdsFloors(cacheDir, floors)) {
+    if (!holdsVersions(cacheDir, peers)) {
       throw error;
     }
   }
 }
 
-function installPeers(floors) {
-  const cutoff = readCutoff(floors);
+function installPeers(peers) {
+  const cutoff = readCutoff(peers);
   mkdirSync(cacheParent, { recursive: true });
   const tmpDir = mkdtempSync(path.join(cacheParent, "optional-peers-"));
 
   try {
-    installInto(tmpDir, floors, cutoff);
-    swapIntoCache(tmpDir, floors);
+    installInto(tmpDir, peers, cutoff);
+    swapIntoCache(tmpDir, peers);
   } finally {
     rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -173,10 +181,10 @@ function installPeers(floors) {
 }
 
 function main() {
-  const floors = readFloors();
-  const specs = toSpecs(floors).join(" ");
+  const peers = readSuiteVersions();
+  const specs = toSpecs(peers).join(" ");
 
-  if (holdsFloors(cacheDir, floors)) {
+  if (holdsVersions(cacheDir, peers)) {
     if (process.env.CI) {
       process.stdout.write(`Optional test peers ${specs} are cached.\n`);
     }
@@ -184,7 +192,7 @@ function main() {
     return;
   }
 
-  const cutoff = installPeers(floors);
+  const cutoff = installPeers(peers);
   process.stdout.write(
     `Installed optional test peers ${specs} (published by ${cutoff}) into ${path.relative(projectRoot, cacheDir)}.\n`,
   );

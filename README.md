@@ -24,7 +24,7 @@ This extension installs plugins from Claude plugin marketplaces that contain the
 
 - Commands.
 - Skills.
-- Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents). An agent's MCP grants follow the MCP implementation in use. Agents in subfolders get their folder names, as in Claude Code, for example `demo:review:security`.
+- Agents. Requires [pi-subagents](https://pi.dev/packages/pi-subagents). An agent's MCP grants follow the MCP implementation in use. An agent's `Workflow` grant is dropped, because Claude Code gives the Workflow tool to no subagent. Agents in subfolders get their folder names, as in Claude Code, for example `demo:review:security`.
 - Hooks. Partial support. For more information, see [Hook compatibility](docs/hooks-compatibility.md).
 - MCP servers. Uses Pi's built-in MCP or, for more MCP features, [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). For more information, see [MCP compatibility](docs/mcp-compatibility.md).
 - Workflows. Requires [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). For more information, see [Workflow compatibility](docs/workflows-compatibility.md).
@@ -36,8 +36,9 @@ The `/claude:plugin` command manages Claude marketplaces and plugins, like Claud
 ## Prerequisites
 
 - [Pi Coding Agent](https://pi.dev) 1.5.0 or newer
-- [pi-subagents](https://pi.dev/packages/pi-subagents) 0.84.0 or newer (optional but recommended, `pi install npm:pi-subagents`)
-- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.0 or a later 7.x release (optional, `pi install npm:pi-mcp-adapter`). It supports more MCP features than Pi's built-in MCP.
+- [pi-subagents](https://pi.dev/packages/pi-subagents) 0.87.0 or newer (optional but recommended, `pi install npm:pi-subagents`)
+  - Ambient direct MCP tools in unrestricted and exclusion-only background agents require pi-subagents 0.88.1 or newer.
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.1 or a later 7.x release (optional, `pi install npm:pi-mcp-adapter`). It supports more MCP features than Pi's built-in MCP.
 - [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) 3.15.0 or newer (optional but recommended, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
 ## Usage
@@ -110,7 +111,7 @@ Commands use a colon (`:`) on POSIX and a dot (`.`) on Windows:
 | `foo`       | `foo-bar`    | `/foo:bar`      | `/foo.bar`        |
 | `foo`       | `foo`        | `/foo:foo`      | `/foo.foo`        |
 
-A command also has aliases in interactive sessions and over RPC. If the command's frontmatter sets `name`, the command also answers to `/<plugin>:<name>`, and to `/<name>` when the name has no colon. For example, `bar` with frontmatter `name: baz` in plugin `foo` also answers to `/foo:baz` and `/baz`. If two commands set the same `name`, the first command gets the alias. A skill keeps an alias that it already has. Command aliases use a colon on every platform.
+A command also has aliases in interactive sessions and over RPC. Claude Code names a command with the plugin name, a colon, and the path of the command file in `commands/` without `.md`, with each `/` changed to a colon. When that name is different from the Pi name and the command's frontmatter does not set `name`, the command also answers to it. For example, `foo-bar` in plugin `foo` is listed as `/foo:bar` and also answers to `/foo:foo-bar`. If the command's frontmatter sets `name`, the command also answers to `/<plugin>:<name>`, and to `/<name>` when the name has no colon. For example, `bar` with frontmatter `name: baz` in plugin `foo` also answers to `/foo:baz` and `/baz`, as Claude Code names it `/foo:baz`. If two commands set the same `name`, the first command gets the alias. An alias that is the Pi name of another command is not added. A skill keeps an alias that it already has. Command aliases use a colon on every platform.
 
 Skills use Pi's `/skill:` form and also have aliases in interactive sessions and over RPC:
 
@@ -121,7 +122,7 @@ Skills use Pi's `/skill:` form and also have aliases in interactive sessions and
 | `foo`       | `foo`                               | `/skill:foo`     | `/foo:foo`                     |
 | `foo`       | `bar`, with frontmatter `name: baz` | `/skill:foo-bar` | `/foo:bar`, `/foo:baz`, `/baz` |
 
-The aliases are the names that Claude Code gives a skill. The skill name is the name of the skill's folder. If the skill's frontmatter sets `name`, the skill also answers to `/<plugin>:<name>`, and to `/<name>` when the name has no colon.
+The aliases are the names that Claude Code gives a skill. The skill name is the name of the skill's folder. If the skill's frontmatter sets `name`, the skill also answers to `/<plugin>:<name>`, and to `/<name>` when the name has no colon. For more information, see [Skill and command compatibility](docs/skills-commands-compatibility.md).
 
 Plugin MCP servers get the names that Claude Code gives them. The model sees each tool as `mcp__plugin_<plugin>_<server>__<tool>`. pi-mcp-adapter stores each server under a key that ends with `_`. Pi's built-in MCP registers each server as `plugin_<plugin>_<server>`, with no `_` at the end. Under Pi's built-in MCP, the model sees each `-` of a tool name as `_`, and Pi cuts a tool name that is longer than 64 characters. For more information, see [Name length](docs/mcp-compatibility.md#name-length). `/claude:plugin info` shows each server as `plugin:<plugin>:<server>`. Plugin hooks see the server part of a tool name as Claude Code writes it. For more information, see [Tool name mapping](docs/hooks-compatibility.md#tool-name-mapping).
 
@@ -375,7 +376,7 @@ Update one installed plugin, every installed plugin from one marketplace, or all
 ```
 
 > [!NOTE]
-> Agent definitions in plugins can name a preferred model for the agent, for example "sonnet" or "opus". This extension discards these models by default. To map them to Pi models as a best effort, use the `--map-model` option with `install` and `update`. It maps `sonnet`, `opus`, `haiku`, `fable`, `best`, and `opusplan`, with or without `[1m]`, to the current Claude models, for example `anthropic/claude-sonnet-5-5`. It keeps full `claude-` model IDs.
+> Agent definitions in plugins can name a preferred model for the agent, for example "sonnet" or "opus". This extension discards these models by default. To map them to Pi models as a best effort, use the `--map-model` option with `install` and `update`. It maps `sonnet`, `opus`, `haiku`, `fable`, `best`, and `opusplan`, with or without `[1m]`, to the current Claude models, for example `claude-sonnet-5-5`. It keeps full `claude-` model IDs. An agent with `model: inherit` always gets `model: ""`, with or without `--map-model`. So it runs on the session's model, also in a workflow step. A `tools` entry `Agent` or `Task` lets an agent start any subagent, even if the entry names agent types, as in `Agent(helper)`. For more information, see [Customizing generated agents](docs/mcp-compatibility.md#customizing-generated-agents).
 
 Reinstall one installed plugin, every installed plugin from one marketplace, or all installed plugins.
 

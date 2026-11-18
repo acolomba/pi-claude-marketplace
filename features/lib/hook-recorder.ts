@@ -115,6 +115,23 @@ function recordRun(): void {
     environment: claudeEnvironment(process.env),
   };
   appendHarnessLine(HOOK_RUNS_LOG, run);
+  const whenOldString = process.env.HOOK_WHEN_OLD_STRING;
+  const whenLastMessage = process.env.HOOK_WHEN_LAST_MESSAGE;
+  if (whenOldString === undefined && whenLastMessage === undefined) {
+    return;
+  }
+
+  const input = stdin.tool_input;
+  const oldString =
+    input !== null && typeof input === "object" && !Array.isArray(input)
+      ? (input as Record<string, unknown>).old_string
+      : undefined;
+  const matched =
+    (whenOldString === undefined || oldString === whenOldString) &&
+    (whenLastMessage === undefined || stdin.last_assistant_message === whenLastMessage);
+  process.stdout.write(
+    matched ? (process.env.HOOK_MATCHED_OUTPUT ?? "") : (process.env.HOOK_DEFAULT_OUTPUT ?? ""),
+  );
 }
 
 function wholeNumber(text: string | undefined, what: string): number {

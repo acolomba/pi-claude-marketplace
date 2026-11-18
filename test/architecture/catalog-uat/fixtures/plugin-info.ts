@@ -215,6 +215,36 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
       },
     },
 
+    // PG-WF-02: a workflow script names an agent type the plugin does not
+    // install. The note has no tense, because install and `info` print the
+    // same text (D-PG8-05). Free text: an empty brace and `info` severity.
+    "installed-with-workflow-missing-agent-note": {
+      pi: piWithAllLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "claude-plugins-official",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: true },
+        plugin: {
+          status: "installed",
+          name: "commit-commands",
+          version: "1.2.0",
+          description: "Helpful git commit commands for everyday use.",
+          notes: [
+            'workflow script "changelog.js" in "workflows" runs agent type ' +
+              '"commit-commands:reviewer", which this plugin does not install; the workflow ' +
+              "engine runs a default agent in its place, where Claude Code fails the step",
+          ],
+          componentsResolved: true,
+          components: {
+            skills: ["commit-summary"],
+            workflows: ["commit-commands:changelog"],
+          },
+          requires: [{ companion: "pi-dynamic-workflows", missing: false }],
+        },
+      },
+    },
+
     "state-only-installed-single-scope": {
       pi: piWithBothLoaded(),
       message: {
@@ -531,6 +561,29 @@ export const PLUGIN_INFO_FIXTURES: FixtureMap = {
             ],
           },
           requires: [{ companion: "mcp", missing: false }],
+        },
+      },
+    },
+
+    // D-PG10-06: a required option has no default, so the not-installed row
+    // reads `{options not set}`, the same token install and list give. The
+    // token cannot hold a key, so the advisory line names the unset keys.
+    "partially-available-with-unset-options": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "plugin-info",
+        marketplaceName: "community-mp",
+        marketplaceScope: "user",
+        marketplaceDetails: { autoupdate: false },
+        plugin: {
+          status: "partially-available",
+          name: "deploy-tools",
+          version: "1.0.0",
+          description: "Deployment tools for everyday releases.",
+          reasons: ["options not set"],
+          notes: ['required options "token", "region" have no default, so they are not set'],
+          componentsResolved: true,
+          components: { skills: ["deploy"] },
         },
       },
     },

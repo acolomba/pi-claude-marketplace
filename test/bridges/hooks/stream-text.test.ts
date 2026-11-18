@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
+import { constants } from "node:buffer";
 import { once } from "node:events";
 import { PassThrough } from "node:stream";
-import { test } from "node:test";
+import { test, type TestContext } from "node:test";
 
-import { collectStreamText } from "../../../extensions/pi-claude-marketplace/bridges/hooks/stream-text.ts";
+import {
+  ceilingBound,
+  collectStreamText,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/stream-text.ts";
+
+const WHOLE = ceilingBound("stdout", "demo/Stop");
 
 function rejectError(err: Error): void {
   throw new Error(`unexpected stream error: ${err.message}`);
@@ -13,7 +19,7 @@ test("joins a UTF-8 character split across two chunks", async () => {
   // arrange
   const stream = new PassThrough();
   const euro = Buffer.from("€", "utf8");
-  const output = collectStreamText(stream, rejectError);
+  const output = collectStreamText(stream, rejectError, WHOLE);
 
   // act
   stream.write(Buffer.concat([Buffer.from("a"), euro.subarray(0, 1)]));
@@ -27,7 +33,7 @@ test("joins a UTF-8 character split across two chunks", async () => {
 test("keeps string chunks in order", () => {
   // arrange
   const stream = new PassThrough();
-  const output = collectStreamText(stream, rejectError);
+  const output = collectStreamText(stream, rejectError, WHOLE);
 
   // act
   stream.emit("data", "first ");
@@ -40,7 +46,7 @@ test("keeps string chunks in order", () => {
 test("keeps every byte of an output past 1 MB", async () => {
   // arrange
   const stream = new PassThrough();
-  const output = collectStreamText(stream, rejectError);
+  const output = collectStreamText(stream, rejectError, WHOLE);
 
   // act
   stream.write(Buffer.alloc(1024 * 1024, 0x78));
@@ -51,10 +57,209 @@ test("keeps every byte of an output past 1 MB", async () => {
   assert.strictEqual(output.text(), `${"x".repeat(1024 * 1024)}tail`);
 });
 
+test("keeps the first code units up to its bound and drops later chunks", async () => {
+  // arrange
+  const stream = new PassThrough();
+  let limitCalls = 0;
+  const output = collectStreamText(stream, rejectError, {
+    limit: 5,
+    onLimit: () => {
+      limitCalls += 1;
+    },
+  });
+
+  // act
+  stream.write("abc");
+  stream.write("defg");
+  stream.end("hij");
+  await once(stream, "end");
+
+  // assert
+  assert.deepStrictEqual({ text: output.text(), limitCalls }, { text: "abcde", limitCalls: 1 });
+});
+
+test("cuts before a character that its bound would split in half", async () => {
+  // arrange
+  const stream = new PassThrough();
+  let limitCalls = 0;
+  const output = collectStreamText(stream, rejectError, {
+    limit: 3,
+    onLimit: () => {
+      limitCalls += 1;
+    },
+  });
+
+  // act
+  stream.end("ab\u{1F600}c");
+  await once(stream, "end");
+
+  // assert
+  assert.deepStrictEqual({ text: output.text(), limitCalls }, { text: "ab", limitCalls: 1 });
+});
+
+test("keeps a character whose two code units end at its bound", async () => {
+  // arrange
+  const stream = new PassThrough();
+  const output = collectStreamText(stream, rejectError, { limit: 4, onLimit: () => undefined });
+
+  // act
+  stream.end("ab\u{1F600}c");
+  await once(stream, "end");
+
+  // assert
+  assert.strictEqual(output.text(), "ab\u{1F600}");
+});
+
+test("keeps the whole lines of the end of a stream past its cut after a line break", async () => {
+  // arrange
+  const stream = new PassThrough();
+  let limitCalls = 0;
+  const output = collectStreamText(stream, rejectError, {
+    limit: 3,
+    tail: 5,
+    onLimit: () => {
+      limitCalls += 1;
+    },
+  });
+
+  // act
+  stream.write("abcd");
+  stream.write("ef\ngh");
+  stream.end("\nij");
+  await once(stream, "end");
+
+  // assert
+  assert.deepStrictEqual({ text: output.text(), limitCalls }, { text: "abc\nij", limitCalls: 1 });
+});
+
+test("returns a stream exactly when it passes its cut by less than its tail", async () => {
+  // arrange
+  const stream = new PassThrough();
+  let limitCalls = 0;
+  const output = collectStreamText(stream, rejectError, {
+    limit: 3,
+    tail: 8,
+    onLimit: () => {
+      limitCalls += 1;
+    },
+  });
+
+  // act
+  stream.end("abcdef");
+  await once(stream, "end");
+
+  // assert
+  assert.deepStrictEqual({ text: output.text(), limitCalls }, { text: "abcdef", limitCalls: 0 });
+});
+
+test("keeps a line that its cut splits whole when the tail holds the rest of the stream", async () => {
+  // arrange
+  const stream = new PassThrough();
+  const stdout = 'progress line\n{"systemMessage":"the real answer"}\n';
+  const output = collectStreamText(stream, rejectError, {
+    limit: 19,
+    tail: 1000,
+    onLimit: () => undefined,
+  });
+
+  // act
+  stream.end(stdout);
+  await once(stream, "end");
+
+  // assert
+  assert.strictEqual(output.text(), stdout);
+});
+
+test("drops the partial first line of its kept end once units are dropped", async () => {
+  // arrange
+  const stream = new PassThrough();
+  const output = collectStreamText(stream, rejectError, {
+    limit: 2,
+    tail: '{"a":1}\n{"ok":1}\n'.length,
+    onLimit: () => undefined,
+  });
+
+  // act
+  stream.end('abcdx {"a":1}\n{"ok":1}\n');
+  await once(stream, "end");
+
+  // assert
+  assert.strictEqual(output.text(), 'ab\n{"ok":1}\n');
+});
+
+test("keeps nothing of its kept end when that end holds no line break", async () => {
+  // arrange
+  const stream = new PassThrough();
+  const output = collectStreamText(stream, rejectError, {
+    limit: 2,
+    tail: 2,
+    onLimit: () => undefined,
+  });
+
+  // act
+  stream.end("abc\u{1F600}d");
+  await once(stream, "end");
+
+  // assert
+  assert.strictEqual(output.text(), "ab");
+});
+
+test("keeps a stream that ends at its bound whole and drops nothing", async () => {
+  // arrange
+  const stream = new PassThrough();
+  let limitCalls = 0;
+  const output = collectStreamText(stream, rejectError, {
+    limit: 5,
+    onLimit: () => {
+      limitCalls += 1;
+    },
+  });
+
+  // act
+  stream.end("abcde");
+  await once(stream, "end");
+
+  // assert
+  assert.deepStrictEqual({ text: output.text(), limitCalls }, { text: "abcde", limitCalls: 0 });
+});
+
+test("adds no unfinished UTF-8 tail once its bound is reached", async () => {
+  // arrange
+  const stream = new PassThrough();
+  const output = collectStreamText(stream, rejectError, { limit: 2, onLimit: () => undefined });
+
+  // act
+  stream.write(Buffer.from("abc"));
+  stream.end(Buffer.from([0xe2, 0x82]));
+  await once(stream, "end");
+
+  // assert
+  assert.strictEqual(output.text(), "ab");
+});
+
+test("bounds an unfinished UTF-8 tail that passes its bound", async () => {
+  // arrange
+  const stream = new PassThrough();
+  let limitCalls = 0;
+  const output = collectStreamText(stream, rejectError, {
+    limit: 2,
+    onLimit: () => {
+      limitCalls += 1;
+    },
+  });
+
+  // act
+  stream.end(Buffer.from([0x6f, 0x6b, 0xe2, 0x82]));
+  await once(stream, "end");
+
+  // assert
+  assert.deepStrictEqual({ text: output.text(), limitCalls }, { text: "ok", limitCalls: 1 });
+});
+
 test("adds an unfinished UTF-8 sequence at the end as a replacement character", async () => {
   // arrange
   const stream = new PassThrough();
-  const output = collectStreamText(stream, rejectError);
+  const output = collectStreamText(stream, rejectError, WHOLE);
 
   // act
   stream.end(Buffer.from([0x6f, 0x6b, 0xe2, 0x82]));
@@ -68,9 +273,13 @@ test("hands a stream error to the error listener", () => {
   // arrange
   const stream = new PassThrough();
   const errors: string[] = [];
-  collectStreamText(stream, (err) => {
-    errors.push(err.message);
-  });
+  collectStreamText(
+    stream,
+    (err) => {
+      errors.push(err.message);
+    },
+    WHOLE,
+  );
 
   // act
   stream.emit("error", new Error("EPIPE"));
@@ -81,8 +290,64 @@ test("hands a stream error to the error listener", () => {
 
 test("collects nothing from a missing stream", () => {
   // act
-  const output = collectStreamText(null, rejectError);
+  const output = collectStreamText(null, rejectError, WHOLE);
 
   // assert
   assert.strictEqual(output.text(), "");
+});
+
+test("keeps its ceiling below V8's longest string, with room for a 1 MiB chunk (NFR-2)", () => {
+  // act
+  const { limit } = ceilingBound("stdout", "demo/Stop");
+
+  // assert
+  assert.ok(limit + 1024 * 1024 < constants.MAX_STRING_LENGTH, `ceiling ${limit}`);
+});
+
+test("keeps its ceiling at 2 ** 28 code units where the runtime's longest string allows it (NFR-2)", () => {
+  // act
+  const { limit } = ceilingBound("stdout", "demo/Stop", 2 ** 29 - 24);
+
+  // assert
+  assert.strictEqual(limit, 2 ** 28);
+});
+
+test("lowers its ceiling to 1 MiB below a 32-bit runtime's longest string (NFR-2)", () => {
+  // act
+  const { limit } = ceilingBound("stdout", "demo/Stop", 2 ** 28 - 16);
+
+  // assert
+  assert.strictEqual(limit, 2 ** 28 - 16 - 1024 * 1024);
+});
+
+/** Collects the OBS-01 debug lines a case emits, restoring the flag after. */
+function observeHookDebug(t: TestContext): () => string[] {
+  const previous = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  t.after(() => {
+    if (previous === undefined) {
+      Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_DEBUG");
+    } else {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previous;
+    }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  const diagnostics: string[] = [];
+  t.mock.method(console, "error", (diagnostic: unknown) => {
+    diagnostics.push(String(diagnostic));
+  });
+  return () => [...diagnostics];
+}
+
+test("names the stream and the hook in its debug line once a stream passes the ceiling (NFR-2)", (t) => {
+  // arrange
+  const debugLines = observeHookDebug(t);
+  const bound = ceilingBound("stderr", "demo/Stop");
+
+  // act
+  bound.onLimit();
+
+  // assert
+  assert.deepStrictEqual(debugLines(), [
+    "[hooks] hook output: stderr past 268435456 UTF-16 code units dropped (demo/Stop)",
+  ]);
 });

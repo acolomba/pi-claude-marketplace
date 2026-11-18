@@ -43,6 +43,7 @@ import path from "node:path";
 
 import writeFileAtomic from "write-file-atomic";
 
+import { mcpOptionBlock } from "../../domain/claude-mcp-variables.ts";
 import { unenforcedToolRules } from "../../domain/mcp-server-features.ts";
 import { foldedMcpServerKey, generatedMcpServerKey } from "../../domain/name.ts";
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
@@ -56,6 +57,8 @@ import { hygieneWarning } from "../../shared/staging-warnings.ts";
 
 import {
   ADAPTER_SERVER_KEYS,
+  assertOwnedMarkersReadable,
+  leavingCaFileServers,
   partitionServers,
   readMcpConfigDoc,
   restoredOverrideNames,
@@ -64,6 +67,7 @@ import {
   type McpConfigDoc,
 } from "./adapter-doc.ts";
 import { inactiveOverrideFields, stampServers } from "./adapter-entry.ts";
+import { ownedOptionVariables } from "./adapter-escape.ts";
 import { walkMcpSources, type McpSourceWalk } from "./collision-slots.ts";
 import {
   leftoverNames,
@@ -74,12 +78,15 @@ import {
 } from "./legacy.ts";
 import { isOwnedBy, isPlainObject, pluginSetFieldsOf } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
+import { adapterFieldEncoder } from "./substitute.ts";
 
 import type {
+  McpCaFileRemovedNotice,
   McpConfigFileNotice,
   McpConfigNotice,
   McpCredentialsBlankedNotice,
   McpLeftoverRemovedNotice,
+  McpOptionBlockedNotice,
   McpOverrideKeptNotice,
   McpOverrideRestoredNotice,
   McpToolRulesUnenforcedNotice,
@@ -87,7 +94,7 @@ import type {
 } from "../../shared/notification-types.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { McpSubstitutionContext, VariableReport } from "./substitute.ts";
+import type { McpFieldEncoder, McpSubstitutionContext, VariableReport } from "./substitute.ts";
 import type {
   McpReplacement,
   PreparedMcpStaged,
@@ -244,6 +251,65 @@ function leftoverNotices(
   }));
 }
 
+/** D-PG9-14: one notice per server whose entry leaves out the user's `caFile`, with why. */
+function caFileRemovedNotices(
+  removals: ReadonlyArray<Pick<McpCaFileRemovedNotice, "server" | "reason">>,
+  scope: Scope,
+  pluginName: string,
+): McpCaFileRemovedNotice[] {
+  return removals.map(({ server, reason }) => ({
+    kind: "ca-file-removed",
+    scope,
+    file: "mcp-adapter.json",
+    plugin: pluginName,
+    server,
+    reason,
+  }));
+}
+
+/** A server the stage leaves out for its options, by its declared name (D-PG10-21). */
+type OptionBlockedServer = Pick<McpOptionBlockedNotice, "server" | "names" | "reason">;
+
+/**
+ * D-PG10-21: the servers the stage writes, and those it leaves out because
+ * their fields name options with no value, each in declared order. A left-out
+ * server takes no part in the keys, the collision check, or the record.
+ */
+function partitionOptionBlocked(input: StageMcpInput): {
+  readonly servers: Record<string, unknown>;
+  readonly blocked: readonly OptionBlockedServer[];
+} {
+  const servers: Record<string, unknown> = {};
+  const blocked: OptionBlockedServer[] = [];
+  for (const [server, config] of Object.entries(input.servers)) {
+    const block = mcpOptionBlock(config, input.options);
+    if (block === undefined) {
+      safeSet(servers, server, config);
+    } else {
+      blocked.push({ server, names: block.keys, reason: block.reason });
+    }
+  }
+
+  return { servers, blocked };
+}
+
+/** D-PG10-21: one notice per server the stage left out for its options. */
+function optionBlockedNotices(
+  blocked: readonly OptionBlockedServer[],
+  scope: Scope,
+  pluginName: string,
+): McpOptionBlockedNotice[] {
+  return blocked.map(({ server, names, reason }) => ({
+    kind: "option-blocked",
+    scope,
+    file: "mcp-adapter.json",
+    plugin: pluginName,
+    server,
+    names,
+    reason,
+  }));
+}
+
 /**
  * AFILE-06: one notice per staged name, in the plugin's declared order, that
  * absorbs a marker-less override holding fields the new entry does not carry
@@ -388,14 +454,18 @@ function noopStaging(notices: readonly McpConfigNotice[]): PreparedMcpStaging {
 /**
  * Reads the target config. With nothing to stage, an unreadable file comes
  * back as its refusal so prepare can leave the file alone and report it; a
- * plugin with servers refuses (AFILE-02).
+ * plugin with servers refuses (AFILE-02). A file in which one of the plugin's
+ * entries holds a malformed marker member is unreadable too.
  */
 async function readTargetConfig(
   filePath: string,
   hasServers: boolean,
+  owner: { readonly pluginName: string; readonly marketplaceName: string },
 ): Promise<McpConfigDoc | McpConfigFileError> {
   try {
-    return await readMcpConfigDoc(filePath, ADAPTER_SERVER_KEYS);
+    const config = await readMcpConfigDoc(filePath, ADAPTER_SERVER_KEYS);
+    assertOwnedMarkersReadable(config, filePath, owner.pluginName, owner.marketplaceName);
+    return config;
   } catch (err) {
     if (err instanceof McpConfigFileError && !hasServers) {
       return err;
@@ -424,6 +494,44 @@ function overStoredChoices(
 }
 
 /**
+ * The substitution and the encoder of one plugin's adapter entries. The
+ * CLAUDE_PROJECT_DIR arm is decided here, once (MENV-03): project scope
+ * resolves `${CLAUDE_PROJECT_DIR}` at install to the project root `cwd` (NOT
+ * scopeRoot); user scope carries `undefined`, so the reference stays in the
+ * entry for Pi's process to supply at runtime (AVAR-01). `env` is the
+ * caller's environment, which Claude's rule reads to decide which variables
+ * are set (AVAR-02, D-08-06).
+ *
+ * D-PG10-11 / D-PG10-23: each option becomes a reference to its owned process
+ * variable, and `env` gains each such variable with the escaped text Pi's
+ * process holds for it, so the `caFile` origin rule and the OAuth decision
+ * read an option as the adapter will. The name and the text come from the
+ * function the process variables use, so a restage of an unchanged plugin
+ * writes the same reference.
+ */
+function adapterSubstitution(input: StageMcpInput): {
+  readonly substitution: McpSubstitutionContext;
+  readonly encoder: McpFieldEncoder;
+} {
+  const { locations, cwd, options } = input;
+  const variables = ownedOptionVariables(
+    { scope: locations.scope, marketplace: input.marketplaceName, plugin: input.pluginName },
+    options?.mcpValues ?? new Map<string, string>(),
+  );
+  const owned = [...variables.values()];
+  return {
+    substitution: {
+      pluginRoot: input.pluginRoot,
+      pluginData: input.pluginData,
+      projectDir: locations.scope === "project" ? cwd : undefined,
+      env: { ...input.env, ...Object.fromEntries(owned.map(({ name, value }) => [name, value])) },
+      options,
+    },
+    encoder: adapterFieldEncoder(new Map([...variables].map(([key, { name }]) => [key, name]))),
+  };
+}
+
+/**
  * MC-6 prepare: in-memory only. Reads the scope's `mcp-adapter.json`,
  * partitions existing entries by marker across both server keys, checks each
  * new key against the full definitions in pi-mcp-adapter's nine config
@@ -436,7 +544,12 @@ function overStoredChoices(
  * `variables-missing` notice for unset variables with no default, then its
  * `credentials-blanked` notice for set credentials blanked in `url` or
  * `headers` (AVAR-04, AVAR-05), then one `tool-rules-unenforced` notice per
- * server that declares tool permission rules (ANAME-07). AS-8 noop
+ * server that declares tool permission rules (ANAME-07), then one
+ * `ca-file-removed` notice per server whose entry leaves out the user's
+ * `caFile`, or that the stage removes with a `caFile` nothing keeps
+ * (D-PG9-14), then one `option-blocked` notice per server left out because
+ * its fields name a plugin option with no value; such a server is in no
+ * entry, collision check, or record (D-PG10-21). AS-8 noop
  * short-circuits when there is nothing new, nothing previously-ours and no
  * marked entry in the legacy `mcp.json` (AMIG-01) -- in that case
  * `commitPreparedMcp` writes no file (PRD success criterion: AS-8 noop
@@ -447,14 +560,19 @@ function overStoredChoices(
  * source defines a new key in full.
  */
 export async function prepareStageMcpServers(input: StageMcpInput): Promise<PreparedMcpStaging> {
-  const { locations, cwd, marketplaceName, pluginName, servers, pluginRoot, pluginData } = input;
+  const { locations, cwd, marketplaceName, pluginName } = input;
+  const { servers, blocked } = partitionOptionBlocked(input);
+  const blockedNotices = optionBlockedNotices(blocked, locations.scope, pluginName);
   // ANAME-01: entries, collisions and notices use the generated keys; the
   // record keeps the declared names.
   const declaredNames = Object.keys(servers);
   const keyed = keyedServers(pluginName, servers);
   const newKeys = Object.keys(keyed);
 
-  const config = await readTargetConfig(locations.mcpAdapterJsonPath, newKeys.length > 0);
+  const config = await readTargetConfig(locations.mcpAdapterJsonPath, newKeys.length > 0, {
+    pluginName,
+    marketplaceName,
+  });
   if (config instanceof McpConfigFileError) {
     // AS-8 / AFILE-02: nothing is written, so the unreadable file keeps its
     // bytes, and the orchestrator tells the user it was left unchanged.
@@ -463,7 +581,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
       scope: locations.scope,
       file: "mcp-adapter.json",
     };
-    return noopStaging([leftUnchanged]);
+    return noopStaging([leftUnchanged, ...blockedNotices]);
   }
 
   // Partition existing into ours-vs-theirs by marker (MC-5).
@@ -492,7 +610,7 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   // materialize the file; commit returns the noop result without touching
   // disk. A leftover sits under a legacy name, so none can exist here.
   if (newKeys.length === 0 && Object.keys(ours).length === 0 && legacyNames.length === 0) {
-    return noopStaging([]);
+    return noopStaging(blockedNotices);
   }
 
   // AMIG-01: an override stub under a name another source still defines
@@ -509,18 +627,6 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
     (name) => !stubs.includes(name) || deadStubs.includes(name),
   );
 
-  // The CLAUDE_PROJECT_DIR arm is decided HERE, once (MENV-03): project scope
-  // resolves `${CLAUDE_PROJECT_DIR}` at install to the project root `cwd` (NOT
-  // scopeRoot); user scope carries `undefined`, so the reference stays in the
-  // entry for Pi's process to supply at runtime (AVAR-01). `env` is the
-  // caller's environment, which Claude's rule reads to decide which
-  // variables are set (AVAR-02, D-08-06).
-  const substitution: McpSubstitutionContext = {
-    pluginRoot,
-    pluginData,
-    projectDir: locations.scope === "project" ? cwd : undefined,
-    env: input.env,
-  };
   // AFILE-06: each new entry carries the user's fields from the entry it
   // replaces. A marker-less override stub under the selected key wins over the
   // plugin's previous marked entry. The new entry keeps the absorbed stub, or
@@ -535,11 +641,12 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
     stamped,
     warnings: stampWarnings,
     variableReports,
+    caFileRemoved,
   } = stampServers({
     servers: keyed,
     pluginName,
     marketplaceName,
-    substitution,
+    ...adapterSubstitution(input),
     previous: { ...stored, ...ours, ...overStoredChoices(overlays, stored) },
     keptOverrides: { ...keptOverrides, ...overlays },
     description: input.description,
@@ -576,7 +683,10 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
   // does not carry is reported after them, then each override a dropped entry
   // writes back. AVAR-04 / AVAR-05: each server's missing-variable and
   // withheld-credential notices follow, then ANAME-07: each server's
-  // unenforced tool-rule notice. AMIG-01: each dropped leftover comes last.
+  // unenforced tool-rule notice. AMIG-01: each dropped leftover follows.
+  // D-PG9-14: each server whose entry left out the user's caFile follows,
+  // then each entry the stage removed with a caFile the stored choices do not
+  // keep. D-PG10-21: each server left out for its options comes last.
   const notices = Object.freeze<McpConfigNotice[]>([
     ...commentsDroppedNotices(rewritesTarget && config.hadComments, locations.scope),
     ...overrideKeptNotices(stamped, overlays, locations.scope, pluginName),
@@ -588,6 +698,18 @@ export async function prepareStageMcpServers(input: StageMcpInput): Promise<Prep
     ...variableNotices(variableReports, locations.scope, pluginName),
     ...toolRuleNotices(keyed, locations.scope, pluginName),
     ...leftoverNotices(leftovers, locations.scope, pluginName),
+    ...caFileRemovedNotices(
+      [
+        ...caFileRemoved,
+        ...leavingCaFileServers(config, pluginName, marketplaceName, stamped).map((server) => ({
+          server,
+          reason: "entry-removed" as const,
+        })),
+      ],
+      locations.scope,
+      pluginName,
+    ),
+    ...blockedNotices,
   ]);
   const result: StageMcpCommitResult = {
     stagedNames: Object.freeze([...declaredNames]),

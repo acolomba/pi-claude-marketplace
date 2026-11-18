@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawn, type ChildProcess, type SpawnOptions } from "node:child_process";
 import { EventEmitter } from "node:events";
 import * as fs from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
@@ -24,6 +24,7 @@ import {
   createHooksHydration,
   createHooksRouting,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import { saveHookOutput } from "../../../extensions/pi-claude-marketplace/bridges/hooks/hook-output-files.ts";
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import { readHooksJson } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import {
@@ -37,19 +38,29 @@ import {
 } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
+import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { adapterCommand } from "../../platform/pi-inventory-seed.ts";
 
 import type { SpawnDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import type { HookExecutor } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
-import type { HooksHydrationDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
-import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
+import type {
+  HooksHydrationDeps,
+  TypedExpansionResolver,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
+import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
+import type { McpServerNamesReader } from "../../../extensions/pi-claude-marketplace/bridges/hooks/mcp-server-table.ts";
+import type {
+  HooksRuntime,
+  HooksRuntimeChildEntry,
+} from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type { HooksConfig } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -58,11 +69,12 @@ import type {
   BeforeAgentStartEvent,
   ExtensionAPI,
   ExtensionContext,
+  InputEvent,
   SessionCompactEvent,
   ToolCallEvent,
   ToolResultEvent,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import type { SlashCommandInfo, ToolInfo } from "@earendil-works/pi-coding-agent";
+import type { SessionHeader, SlashCommandInfo, ToolInfo } from "@earendil-works/pi-coding-agent";
 
 /**
  * Unit tests for `bridges/hooks/event-router.ts` -- the hooks-bridge
@@ -180,7 +192,7 @@ test(
     });
     const { root } = await createHermeticEnvironment(t, "hooks-router-reload-");
     const projectRoot = path.join(root, "project");
-    shutdownInMemoryChildren(runtime);
+    await shutdownInMemoryChildren(runtime);
     const userLocations = locationsFor("user", projectRoot);
     const projectLocations = locationsFor("project", projectRoot);
     const hydration = createHooksHydration(runtime, {
@@ -193,6 +205,7 @@ test(
         return loadState(extensionRoot);
       },
       readHooksJson,
+      readMcpServerNames: readStoredServerNames,
     });
     const userHooksPath = path.join(userLocations.hooksDir, "user-hooks", "hooks.json");
     const projectHooksPath = path.join(projectLocations.hooksDir, "project-hooks", "hooks.json");
@@ -445,6 +458,7 @@ test(
       handlerDecl: { type: "command", command: "router-child", asyncRewake: true },
       declarationIndex: 0,
       ifPredicate: MATCH_ALL_IF,
+      options: resolveOptions(undefined),
     } satisfies RoutingEntry;
     const toolCall = {
       type: "tool_call",
@@ -520,6 +534,10 @@ test(
       throw new Error("persisted orphan row could not be read before reload");
     }
 
+    for (let index = 0; index < 4; index += 1) {
+      runtime.recordStopReentry();
+    }
+
     traceReload = true;
 
     // act
@@ -530,9 +548,12 @@ test(
       { type: "session_start", reason: "reload" },
       { mode: "unknown" },
     );
+    const allowedAfterReload = Array.from({ length: 8 }, () => runtime.recordStopReentry());
     if (typeof staleToolCallHandler === "function") {
       await Reflect.apply(staleToolCallHandler, undefined, [toolCall, context]);
     }
+
+    const capAfterStaleTool = runtime.recordStopReentry();
 
     const staleBeforeAgentResult = await staleBeforeAgentStartHandler(
       {
@@ -601,11 +622,13 @@ test(
       "register:session_before_compact",
       "register:session_compact",
       "register:input",
+      "register:input",
       "register:tool_call",
       "register:tool_result",
       "register:before_agent_start",
       "register:turn_end",
       "register:agent_end",
+      "register:agent_before_settle",
       "register:agent_settled",
       "register:input",
     ]);
@@ -617,11 +640,13 @@ test(
         { event: "session_before_compact", handlerType: "function" },
         { event: "session_compact", handlerType: "function" },
         { event: "input", handlerType: "function" },
+        { event: "input", handlerType: "function" },
         { event: "tool_call", handlerType: "function" },
         { event: "tool_result", handlerType: "function" },
         { event: "before_agent_start", handlerType: "function" },
         { event: "turn_end", handlerType: "function" },
         { event: "agent_end", handlerType: "function" },
+        { event: "agent_before_settle", handlerType: "function" },
         { event: "agent_settled", handlerType: "function" },
         { event: "input", handlerType: "function" },
       ],
@@ -641,6 +666,11 @@ test(
       },
     ]);
     assert.strictEqual(epochAfterReload, previousEpoch + 1);
+    assert.deepStrictEqual(
+      allowedAfterReload,
+      Array.from({ length: 8 }, () => ({ reenter: true, notifyCap: false })),
+    );
+    assert.deepStrictEqual(capAfterStaleTool, { reenter: false, notifyCap: true });
     assert.deepStrictEqual(pendingAfterReload, []);
     assert.strictEqual(childKilled, true);
     assert.strictEqual(orphanTableExistsAfterReload, false);
@@ -794,11 +824,16 @@ async function makeProjectHookFixture(
   };
 }
 
-function makeContext(cwd: string, sessionRoot: string, projectTrusted = true): ExtensionContext {
+function makeContext(
+  cwd: string,
+  sessionRoot: string,
+  projectTrusted = true,
+  notices: string[] = [],
+): ExtensionContext {
   return {
     ui: {
       notify(message: string, severity?: "info" | "warning" | "error"): void {
-        void message;
+        notices.push(message);
         void severity;
       },
     } as ExtensionContext["ui"],
@@ -915,12 +950,24 @@ function assistantForBookkeeping(): AssistantMessage {
   };
 }
 
+/**
+ * D-PG6-07: names a record's stored MCP servers, as the production reader
+ * does for a record whose plugin root is contained.
+ */
+function readStoredServerNames(
+  ...[, marketplace, plugin]: Parameters<McpServerNamesReader>
+): Promise<readonly string[]> {
+  const stored = marketplace.plugins[plugin]?.mcpServerConfigs ?? [];
+  return Promise.resolve(stored.map(({ name }) => name));
+}
+
 /** An empty-state reader, so registration hydrates without touching disk state. */
 const EMPTY_STATE_READER: HooksHydrationDeps = {
   loadState(): Promise<ExtensionState> {
     return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
   },
   readHooksJson,
+  readMcpServerNames: readStoredServerNames,
 };
 
 for (const mode of ["tui", "print", "json", "rpc"]) {
@@ -1071,7 +1118,7 @@ for (const mode of ["tui", "print", "json", "rpc"]) {
         await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
           cwd: root,
         });
-        const handler = registeredHandler(registrations, "input", 1);
+        const handler = registeredHandler(registrations, "input", 2);
         const event = { type: "input", text: "hello", source: "interactive" };
         runtime.recordStopReentry();
 
@@ -1090,8 +1137,8 @@ for (const mode of ["tui", "print", "json", "rpc"]) {
         assert.strictEqual(supportedActive, false);
         assert.strictEqual(runtime.isStopHookActive(), true);
         assert.deepStrictEqual(runtime.recordStopReentry(), {
-          reenter: false,
-          notifyCap: reentries === 7,
+          reenter: reentries === 7,
+          notifyCap: reentries === 8,
         });
       });
     }
@@ -1106,6 +1153,7 @@ function seedPluginConfig(
   resolvedSource: ReturnType<typeof asAbsolutePluginRoot>,
   config: HooksConfig,
   ifPredicates: ReadonlyMap<string, RoutingEntry["ifPredicate"]>,
+  options: RoutingEntry["options"] = resolveOptions(undefined),
 ): void {
   const routingState = createRoutingStateOperations(runtime);
   routingState.setParsedConfig(`${scope}\u0000${marketplace}\u0000${pluginId}`, {
@@ -1115,6 +1163,7 @@ function seedPluginConfig(
     resolvedSource,
     config,
     ifPredicates,
+    options,
   });
 }
 
@@ -1201,6 +1250,7 @@ test("readAndCachePluginHooks reads and parses one case-owned config", async (t)
     hooksJsonPath,
     cwd: root,
     logPrefix: "install",
+    options: resolveOptions(undefined),
   });
   const cache = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
     scope: entry.scope,
@@ -1209,6 +1259,7 @@ test("readAndCachePluginHooks reads and parses one case-owned config", async (t)
     resolvedSource: entry.resolvedSource,
     commands: entry.config.PreToolUse?.[0]?.hooks.map((handler) => handler.command),
     predicateKeys: [...entry.ifPredicates.keys()],
+    options: entry.options,
   }));
 
   // assert
@@ -1220,8 +1271,53 @@ test("readAndCachePluginHooks reads and parses one case-owned config", async (t)
       resolvedSource: path.join(root, "plugin"),
       commands: ["echo read"],
       predicateKeys: ["PreToolUse|0|0"],
+      options: resolveOptions(undefined),
     },
   ]);
+});
+
+test("D-PG10-10 readAndCachePluginHooks gives the entry and each routing entry the options of its input", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const { root } = await createHermeticEnvironment(t, "hooks-router-options-");
+  const hooksJsonPath = path.join(root, "hooks.json");
+  await writeFile(
+    hooksJsonPath,
+    JSON.stringify({
+      PreToolUse: [{ hooks: [{ type: "command", command: "echo first" }] }],
+      Stop: [{ hooks: [{ type: "command", command: "echo second" }] }],
+    }),
+    "utf8",
+  );
+  const options = resolveOptions({
+    mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+    note: { type: "string", title: "Note", description: "A note.", required: false },
+  });
+  const routing = createHooksRouting(runtime, { readHooksJson });
+
+  // act
+  await routing.readAndCachePluginHooks({
+    scope: "user",
+    marketplace: "catalog",
+    plugin: "optioned",
+    resolvedSource: asAbsolutePluginRoot(path.join(root, "plugin")),
+    hooksJsonPath,
+    cwd: root,
+    logPrefix: "install",
+    options,
+  });
+  routing.rebuildRoutingTables();
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      cached: Array.from(runtime.parsedConfigEntries().values(), (entry) => entry.options),
+      routed: Array.from(runtime.routingTableEntries()).flatMap(([, entries]) =>
+        entries.map((entry) => entry.options),
+      ),
+    },
+    { cached: [options], routed: [options, options] },
+  );
 });
 
 test("runtime-bound routing mutations update only their supplied lifecycle owner", async (t) => {
@@ -1251,6 +1347,7 @@ test("runtime-bound routing mutations update only their supplied lifecycle owner
     hooksJsonPath,
     cwd: root,
     logPrefix: "owner-test",
+    options: resolveOptions(undefined),
   });
   routing.rebuildRoutingTables();
 
@@ -1285,6 +1382,7 @@ test("readAndCachePluginHooks leaves the cache unchanged after a read failure", 
     hooksJsonPath: path.join(root, "missing-hooks.json"),
     cwd: root,
     logPrefix: "reinstall",
+    options: resolveOptions(undefined),
   });
 
   // assert
@@ -1308,6 +1406,7 @@ test("readAndCachePluginHooks leaves the cache unchanged after a parse failure",
     hooksJsonPath,
     cwd: root,
     logPrefix: "update",
+    options: resolveOptions(undefined),
   });
 
   // assert
@@ -1386,6 +1485,504 @@ const PROMPT_TURN = {
   systemPromptOptions: {},
 } as BeforeAgentStartEvent;
 
+// The bridge's debug line for a child session whose launching session no source names (D-PG6-02).
+const CHILD_ROOT_LINE =
+  "[hooks] Child hook root session unavailable: neither the companion's launch variable nor the child's session header names its launching session";
+
+const RUNNER_TURN = {
+  ...PROMPT_TURN,
+  systemPromptOptions: { customPrompt: '<active_agent name="demo:runner"/>\n\nagent body' },
+} as BeforeAgentStartEvent;
+
+// Sets the process variable `name` to `value` for the case, or unsets it.
+function setVariable(t: TestContext, name: string, value: string | undefined): void {
+  const previous = process.env[name];
+  t.after(() => {
+    if (previous === undefined) {
+      Reflect.deleteProperty(process.env, name);
+    } else {
+      process.env[name] = previous;
+    }
+  });
+  if (value === undefined) {
+    Reflect.deleteProperty(process.env, name);
+  } else {
+    process.env[name] = value;
+  }
+}
+
+function setParentSessionVariable(t: TestContext, value: string | undefined): void {
+  setVariable(t, "PI_SUBAGENT_PARENT_SESSION", value);
+}
+
+// Marks this process as a pi-subagents child for the case, with `parentSession`
+// as its launch variable.
+function enterChild(t: TestContext, parentSession: string | undefined): void {
+  setVariable(t, "PI_SUBAGENT_CHILD", "1");
+  setParentSessionVariable(t, parentSession);
+}
+
+// A Pi context of the session `router-child`, whose header names
+// `parentSession`, and its session manager.
+function childSessionContext(
+  root: string,
+  parentSession: string | undefined,
+): {
+  readonly context: ExtensionContext;
+  readonly sessionManager: SessionManager;
+} {
+  const sessionManager = SessionManager.inMemory(root, {
+    id: "router-child",
+    ...(parentSession === undefined ? {} : { parentSession }),
+  });
+  return { context: Object.assign(makeContext(root, root), { sessionManager }), sessionManager };
+}
+
+// A launching session's file in `root` whose header holds `id`.
+async function launchingSessionFile(root: string, id: string): Promise<string> {
+  const file = path.join(root, "main.jsonl");
+  await writeFile(file, `${JSON.stringify({ type: "session", id, cwd: root })}\n`);
+  return file;
+}
+
+test(
+  "D-PG6-02: a child's first run keeps the launching session the variable and the header name",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const { runtime, handler, context: fixtureContext } = await beforeAgentStartFixture(t);
+    const file = await launchingSessionFile(fixtureContext.cwd, "main-session");
+    const { context } = childSessionContext(fixtureContext.cwd, file);
+    enterChild(t, "main-session");
+
+    // act
+    await handler(RUNNER_TURN, context);
+
+    // assert
+    assert.deepStrictEqual(runtime.childIdentityFor("router-child"), {
+      kind: "known",
+      agentType: "demo:runner",
+      childId: "router-child",
+      root: { sessionId: "main-session", transcriptPath: file },
+    });
+  },
+);
+
+test(
+  "D-PG6-02: a second run of a child session reads no header and no file",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const { runtime, handler, context: fixtureContext } = await beforeAgentStartFixture(t);
+    const file = await launchingSessionFile(fixtureContext.cwd, "main-session");
+    const { context, sessionManager } = childSessionContext(fixtureContext.cwd, file);
+    const getHeaderSpy = t.mock.method(sessionManager, "getHeader");
+    enterChild(t, undefined);
+    const readDiagnostics = observeRouterDebug(t);
+    await handler(RUNNER_TURN, context);
+    await rm(file);
+
+    // act
+    await handler(RUNNER_TURN, context);
+
+    // assert
+    assert.deepStrictEqual(runtime.childIdentityFor("router-child"), {
+      kind: "known",
+      agentType: "demo:runner",
+      childId: "router-child",
+      root: { sessionId: "main-session", transcriptPath: file },
+    });
+    assert.deepStrictEqual(readDiagnostics(), []);
+    assert.strictEqual(getHeaderSpy.mock.callCount(), 1);
+  },
+);
+
+test(
+  "D-PG6-02: a child with no root source writes the root diagnostic once for its session",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const { runtime, handler, context: fixtureContext } = await beforeAgentStartFixture(t);
+    const { context } = childSessionContext(fixtureContext.cwd, undefined);
+    enterChild(t, undefined);
+    const readDiagnostics = observeRouterDebug(t);
+
+    // act
+    await handler(RUNNER_TURN, context);
+    await handler(RUNNER_TURN, context);
+
+    // assert
+    assert.deepStrictEqual(runtime.childIdentityFor("router-child"), {
+      kind: "known",
+      agentType: "demo:runner",
+      childId: "router-child",
+    });
+    assert.deepStrictEqual(readDiagnostics(), [CHILD_ROOT_LINE]);
+  },
+);
+
+test(
+  "D-PG6-02: an unavailable child identity resolves no root",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const { runtime, handler, context: fixtureContext } = await beforeAgentStartFixture(t);
+    const { context, sessionManager } = childSessionContext(fixtureContext.cwd, undefined);
+    const getHeaderSpy = t.mock.method(sessionManager, "getHeader");
+    enterChild(t, "main-session");
+
+    // act
+    await handler(PROMPT_TURN, context);
+
+    // assert
+    assert.deepStrictEqual(runtime.childIdentityFor("router-child"), { kind: "unavailable" });
+    assert.strictEqual(runtime.childRootResolved("router-child"), false);
+    assert.strictEqual(getHeaderSpy.mock.callCount(), 0);
+  },
+);
+
+test(
+  "D-PG6-02: a failed header read leaves no root and the run still drains its context",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const { runtime, handler, context: fixtureContext } = await beforeAgentStartFixture(t);
+    const { context, sessionManager } = childSessionContext(fixtureContext.cwd, undefined);
+    t.mock.method(sessionManager, "getHeader", () => {
+      throw new Error("header unreadable");
+    });
+    runtime.appendPendingSessionStartContext({
+      context: "start context",
+      scope: "user",
+      marketplace: "catalog",
+      pluginId: "demo",
+    });
+    enterChild(t, "main-session");
+    const readDiagnostics = observeRouterDebug(t);
+
+    // act
+    const message = await handler(RUNNER_TURN, context);
+
+    // assert
+    assert.deepStrictEqual(message, {
+      message: {
+        customType: "claude-hook-additional-context",
+        content: [{ type: "text", text: "SessionStart hook additional context: start context" }],
+        display: false,
+      },
+    });
+    assert.deepStrictEqual(runtime.childIdentityFor("router-child"), {
+      kind: "known",
+      agentType: "demo:runner",
+      childId: "router-child",
+    });
+    assert.strictEqual(runtime.childRootResolved("router-child"), true);
+    assert.deepStrictEqual(readDiagnostics(), [
+      "[hooks] before_agent_start root session read failed: header unreadable",
+      CHILD_ROOT_LINE,
+    ]);
+  },
+);
+
+test("D-PG6-02: a main session reads no root", { concurrency: false }, async (t) => {
+  // arrange
+  const { runtime, handler, context: fixtureContext } = await beforeAgentStartFixture(t);
+  const { context, sessionManager } = childSessionContext(fixtureContext.cwd, undefined);
+  const getHeaderSpy = t.mock.method(sessionManager, "getHeader");
+  setVariable(t, "PI_SUBAGENT_CHILD", undefined);
+  setParentSessionVariable(t, "main-session");
+
+  // act
+  await handler(RUNNER_TURN, context);
+
+  // assert
+  assert.deepStrictEqual(runtime.childIdentityFor("router-child"), { kind: "main" });
+  assert.strictEqual(runtime.childRootResolved("router-child"), false);
+  assert.strictEqual(getHeaderSpy.mock.callCount(), 0);
+});
+
+test(
+  "D-PG6-02: a registration that went stale during the root read changes nothing more",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const { runtime, handler, context: fixtureContext } = await beforeAgentStartFixture(t);
+    const { context } = childSessionContext(fixtureContext.cwd, undefined);
+    const pending = {
+      context: "start context",
+      scope: "user",
+      marketplace: "catalog",
+      pluginId: "demo",
+    } as const;
+    runtime.appendPendingSessionStartContext(pending);
+    enterChild(t, "main-session");
+
+    // act
+    const started = handler(RUNNER_TURN, context);
+    runtime.advanceGeneration();
+    const message = await started;
+
+    // assert
+    assert.strictEqual(message, undefined);
+    assert.strictEqual(runtime.childRootResolved("router-child"), false);
+    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [pending]);
+  },
+);
+
+test(
+  "before_agent_start captures the companion prefix while draining pending context",
+  { concurrency: false },
+  async (t) => {
+    const previous = process.env.PI_SUBAGENT_CHILD;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previous;
+      }
+    });
+    const { runtime, handler, context } = await beforeAgentStartFixture(t);
+    runtime.appendPendingSessionStartContext({
+      context: "start context",
+      scope: "user",
+      marketplace: "catalog",
+      pluginId: "demo",
+    });
+    process.env.PI_SUBAGENT_CHILD = "1";
+    const event = {
+      ...PROMPT_TURN,
+      systemPromptOptions: { customPrompt: '<active_agent name="demo:runner"/>\n\nagent body' },
+    } as BeforeAgentStartEvent;
+
+    const result = await handler(event, context);
+
+    assert.deepStrictEqual(result, {
+      message: {
+        customType: "claude-hook-additional-context",
+        content: [{ type: "text", text: "SessionStart hook additional context: start context" }],
+        display: false,
+      },
+    });
+    assert.deepStrictEqual(runtime.childIdentityFor(context.sessionManager.getSessionId()), {
+      kind: "known",
+      agentType: "demo:runner",
+      childId: context.sessionManager.getSessionId(),
+    });
+  },
+);
+
+test(
+  "before_agent_start clears invalid child metadata and emits one fixed diagnostic per capture",
+  { concurrency: false },
+  async (t) => {
+    const previous = process.env.PI_SUBAGENT_CHILD;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previous;
+      }
+    });
+    const { runtime, handler, context } = await beforeAgentStartFixture(t);
+    const readDiagnostics = observeRouterDebug(t);
+    process.env.PI_SUBAGENT_CHILD = "1";
+    setParentSessionVariable(t, undefined);
+    const valid = {
+      ...PROMPT_TURN,
+      systemPromptOptions: { appendSystemPrompt: '<active_agent name="demo:runner"/>\n\n' },
+    } as BeforeAgentStartEvent;
+    const malformed = {
+      ...PROMPT_TURN,
+      systemPromptOptions: { customPrompt: '<active_agent name="bad"/>\n' },
+    } as BeforeAgentStartEvent;
+
+    await handler(valid, context);
+    await handler(malformed, context);
+    await handler(PROMPT_TURN, context);
+
+    assert.deepStrictEqual(runtime.childIdentityFor(context.sessionManager.getSessionId()), {
+      kind: "unavailable",
+    });
+    assert.deepStrictEqual(readDiagnostics(), [
+      CHILD_ROOT_LINE,
+      "[hooks] Child hook identity unavailable: companion launch metadata is missing or malformed",
+      "[hooks] Child hook identity unavailable: companion launch metadata is missing or malformed",
+    ]);
+  },
+);
+
+test(
+  "before_agent_start leaves a new session unavailable until its own callback",
+  { concurrency: false },
+  async (t) => {
+    const previous = process.env.PI_SUBAGENT_CHILD;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previous;
+      }
+    });
+    const { runtime, handler, context } = await beforeAgentStartFixture(t);
+    process.env.PI_SUBAGENT_CHILD = "1";
+    const secondContext = makeContext(path.join(context.cwd, "next-session"), context.cwd);
+    const event = {
+      ...PROMPT_TURN,
+      systemPromptOptions: { customPrompt: '<active_agent name="demo:first"/>\n\n' },
+    } as BeforeAgentStartEvent;
+
+    await handler(event, context);
+    const beforeSecondRun = runtime.childIdentityFor(secondContext.sessionManager.getSessionId());
+    await handler(
+      {
+        ...event,
+        systemPromptOptions: {
+          appendSystemPrompt: '<active_agent name="demo:second"/>\n\n',
+        },
+      },
+      secondContext,
+    );
+
+    assert.deepStrictEqual(beforeSecondRun, { kind: "unavailable" });
+    assert.deepStrictEqual(runtime.childIdentityFor(context.sessionManager.getSessionId()), {
+      kind: "unavailable",
+    });
+    assert.deepStrictEqual(runtime.childIdentityFor(secondContext.sessionManager.getSessionId()), {
+      kind: "known",
+      agentType: "demo:second",
+      childId: secondContext.sessionManager.getSessionId(),
+    });
+  },
+);
+
+test(
+  "reload resets child identity and stale before-run callbacks cannot restore it",
+  { concurrency: false },
+  async (t) => {
+    const { root } = await createHermeticEnvironment(t, "hooks-router-child-identity-reload-");
+    const previous = process.env.PI_SUBAGENT_CHILD;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previous;
+      }
+    });
+    const runtime = createHooksRuntime();
+    const { pi, registrations } = makeRecordingPi();
+    const hydration = createHooksHydration(runtime, EMPTY_STATE_READER);
+    const context = makeContext(root, root);
+    await hydration.registerHooksBridge(pi, { cwd: root });
+    process.env.PI_SUBAGENT_CHILD = "1";
+    setParentSessionVariable(t, undefined);
+    const staleHandler = registeredHandler(registrations, "before_agent_start");
+    const event = {
+      ...PROMPT_TURN,
+      systemPromptOptions: { customPrompt: '<active_agent name="demo:old"/>\n\n' },
+    } as BeforeAgentStartEvent;
+    await staleHandler(event, context);
+    assert.deepStrictEqual(runtime.childIdentityFor(context.sessionManager.getSessionId()), {
+      kind: "known",
+      agentType: "demo:old",
+      childId: context.sessionManager.getSessionId(),
+    });
+    await hydration.registerHooksBridge(pi, { cwd: root });
+    const readDiagnostics = observeRouterDebug(t);
+
+    await staleHandler(event, context);
+    const afterStale = runtime.childIdentityFor(context.sessionManager.getSessionId());
+    await registeredHandler(
+      registrations,
+      "before_agent_start",
+      1,
+    )(
+      {
+        ...event,
+        systemPromptOptions: { appendSystemPrompt: '<active_agent name="demo:new"/>\n\n' },
+      },
+      context,
+    );
+
+    assert.deepStrictEqual(afterStale, { kind: "unavailable" });
+    assert.deepStrictEqual(runtime.childIdentityFor(context.sessionManager.getSessionId()), {
+      kind: "known",
+      agentType: "demo:new",
+      childId: context.sessionManager.getSessionId(),
+    });
+    assert.deepStrictEqual(readDiagnostics(), [CHILD_ROOT_LINE]);
+  },
+);
+
+test(
+  "two before-run bridges in one child process keep distinct agent types",
+  { concurrency: false },
+  async (t) => {
+    const { root } = await createHermeticEnvironment(t, "hooks-router-child-two-runtimes-");
+    const previous = process.env.PI_SUBAGENT_CHILD;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previous;
+      }
+    });
+    const first = createHooksRuntime();
+    const second = createHooksRuntime();
+    const firstPi = makeRecordingPi();
+    const secondPi = makeRecordingPi();
+    await createHooksHydration(first, EMPTY_STATE_READER).registerHooksBridge(firstPi.pi, {
+      cwd: root,
+    });
+    await createHooksHydration(second, EMPTY_STATE_READER).registerHooksBridge(secondPi.pi, {
+      cwd: root,
+    });
+    process.env.PI_SUBAGENT_CHILD = "1";
+    const context = makeContext(root, root);
+    const firstHandler = registeredHandler(firstPi.registrations, "before_agent_start");
+    const secondHandler = registeredHandler(secondPi.registrations, "before_agent_start");
+
+    await firstHandler(
+      {
+        ...PROMPT_TURN,
+        systemPromptOptions: {
+          customPrompt: '<active_agent name="demo:first"/>\n\n',
+        },
+      },
+      context,
+    );
+    await secondHandler(
+      {
+        ...PROMPT_TURN,
+        systemPromptOptions: {
+          appendSystemPrompt: '<active_agent name="demo:second"/>\n\n',
+        },
+      },
+      context,
+    );
+    await firstHandler(
+      {
+        ...PROMPT_TURN,
+        systemPromptOptions: {
+          customPrompt: '<active_agent name="demo:first-new"/>\n\n',
+        },
+      },
+      context,
+    );
+
+    const sessionId = context.sessionManager.getSessionId();
+    assert.deepStrictEqual(first.childIdentityFor(sessionId), {
+      kind: "known",
+      agentType: "demo:first-new",
+      childId: sessionId,
+    });
+    assert.deepStrictEqual(second.childIdentityFor(sessionId), {
+      kind: "known",
+      agentType: "demo:second",
+      childId: sessionId,
+    });
+  },
+);
+
 test("before_agent_start sends buffered prompt context as one message after the prompt (D-CF5-13)", async (t) => {
   // arrange
   const { runtime, handler, context } = await beforeAgentStartFixture(t);
@@ -1394,12 +1991,14 @@ test("before_agent_start sends buffered prompt context as one message after the 
     scope: "project",
     marketplace: "catalog",
     pluginId: "alpha",
+    event: "UserPromptSubmit",
   });
   runtime.appendPendingPromptContext({
     context: "ctx-b",
     scope: "user",
     marketplace: "catalog",
     pluginId: "beta",
+    event: "UserPromptSubmit",
   });
 
   // act
@@ -1426,6 +2025,7 @@ test("before_agent_start adds no message for prompt context that is only whitesp
     scope: "project",
     marketplace: "catalog",
     pluginId: "alpha",
+    event: "UserPromptSubmit",
   });
 
   // act
@@ -1444,6 +2044,7 @@ test("before_agent_start sends session start context first and prompt context se
     scope: "user",
     marketplace: "catalog",
     pluginId: "beta",
+    event: "UserPromptSubmit",
   });
   runtime.appendPendingSessionStartContext({
     context: "ss-ctx",
@@ -1481,6 +2082,7 @@ test("before_agent_start of a reloaded bridge sends no context buffered before t
     scope: "project",
     marketplace: "catalog",
     pluginId: "alpha",
+    event: "UserPromptSubmit",
   } as const;
   runtime.appendPendingSessionStartContext(entry);
   runtime.appendPendingPromptContext(entry);
@@ -1602,22 +2204,27 @@ test("registered handlers give stop_hook_active to the Stop hooks of the woken r
       handlerDecl: { type: "command", command: "stop-hook" },
       declarationIndex: 0,
       ifPredicate: MATCH_ALL_IF,
+      options: resolveOptions(undefined),
     },
   ]);
   const startRun = registeredHandler(registrations, "before_agent_start");
   const endRun = registeredHandler(registrations, "agent_end");
+  const boundaryRun = registeredHandler(registrations, "agent_before_settle");
   const settleRun = registeredHandler(registrations, "agent_settled");
   const runEnding = {
     type: "agent_end",
     messages: [{ ...assistantForBookkeeping(), stopReason: "stop" }],
   } as AgentEndEvent;
+  const boundary = { type: "agent_before_settle", entries: [], continue: false };
 
   // act
   await startRun(customTurn("claude-hook-rewake"), context);
   await endRun(runEnding, context);
+  await boundaryRun(boundary, context);
   await settleRun({ type: "agent_settled" }, context);
   await startRun(customTurn("another-extension-message"), context);
   await endRun(runEnding, context);
+  await boundaryRun(boundary, context);
   await settleRun({ type: "agent_settled" }, context);
 
   // assert
@@ -1640,6 +2247,7 @@ test("registered turn_end sends a follow-up's context before the agent reads it 
     scope: "project",
     marketplace: "catalog",
     pluginId: "live",
+    event: "UserPromptSubmit",
     prompt: "also say hi",
   });
   const event = {
@@ -1674,7 +2282,7 @@ test("registered turn_end sends a follow-up's context before the agent reads it 
   assert.deepStrictEqual(runtime.drainFollowUpContext(), []);
 });
 
-test("rebuildRoutingTables preserves stable plugin and declaration order in all ten buckets", () => {
+test("rebuildRoutingTables preserves stable plugin and declaration order in all eleven buckets", () => {
   // arrange
   const runtime = createHooksRuntime();
   const eventInventory = [
@@ -1687,6 +2295,7 @@ test("rebuildRoutingTables preserves stable plugin and declaration order in all 
     "SessionStart",
     "Stop",
     "StopFailure",
+    "UserPromptExpansion",
     "UserPromptSubmit",
   ] satisfies readonly BucketAEvent[];
   const configFor = (label: string): HooksConfig =>
@@ -1799,6 +2408,139 @@ test("rebuildRoutingTables preserves stable plugin and declaration order in all 
   }
 });
 
+test("rebuildRoutingTables ignores prompt and Stop matcher text on every rebuild", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const config: HooksConfig = {
+    UserPromptSubmit: [
+      { matcher: "[", hooks: [{ type: "command", command: "prompt-invalid" }] },
+      { hooks: [{ type: "command", command: "prompt-absent" }] },
+    ],
+    Stop: [
+      { matcher: "[", hooks: [{ type: "command", command: "stop-invalid" }] },
+      { matcher: "", hooks: [{ type: "command", command: "stop-empty" }] },
+    ],
+  };
+  seedPluginConfig(
+    runtime,
+    "project",
+    "catalog",
+    "ignored",
+    asAbsolutePluginRoot("/router/project/ignored"),
+    config,
+    new Map(),
+  );
+  const routing = createHooksRouting(runtime, { readHooksJson });
+  const events = ["UserPromptSubmit", "Stop"] as const satisfies readonly BucketAEvent[];
+
+  // act
+  routing.rebuildRoutingTables();
+  const first = events.map((event) =>
+    runtime.getRoutingBucket(event).map((entry) => ({
+      command: entry.handlerDecl.command,
+      rawMatcher: entry.rawMatcher,
+      matcher: entry.matcher,
+    })),
+  );
+  routing.rebuildRoutingTables();
+  const second = events.map((event) =>
+    runtime.getRoutingBucket(event).map((entry) => ({
+      command: entry.handlerDecl.command,
+      rawMatcher: entry.rawMatcher,
+      matcher: entry.matcher,
+    })),
+  );
+
+  // assert
+  assert.deepStrictEqual(first, [
+    [
+      { command: "prompt-invalid", rawMatcher: "[", matcher: { kind: "match-all" } },
+      { command: "prompt-absent", rawMatcher: "", matcher: { kind: "match-all" } },
+    ],
+    [
+      { command: "stop-invalid", rawMatcher: "[", matcher: { kind: "match-all" } },
+      { command: "stop-empty", rawMatcher: "", matcher: { kind: "match-all" } },
+    ],
+  ]);
+  assert.deepStrictEqual(second, first);
+});
+
+test("D-PG6-19: rebuildRoutingTables parses a UserPromptExpansion matcher as a command name", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const config: HooksConfig = {
+    UserPromptExpansion: [
+      { matcher: "", hooks: [{ type: "command", command: "expansion-empty" }] },
+      { matcher: "*", hooks: [{ type: "command", command: "expansion-star" }] },
+      { matcher: "deploy, ship | test", hooks: [{ type: "command", command: "expansion-list" }] },
+      { matcher: "demo:deploy", hooks: [{ type: "command", command: "expansion-regex" }] },
+    ],
+    PreToolUse: [{ matcher: "Bash", hooks: [{ type: "command", command: "tool-list" }] }],
+  };
+  seedPluginConfig(
+    runtime,
+    "project",
+    "catalog",
+    "expansion",
+    asAbsolutePluginRoot("/router/project/expansion"),
+    config,
+    new Map(),
+  );
+
+  // act
+  createHooksRouting(runtime, { readHooksJson }).rebuildRoutingTables();
+  const routed = (["UserPromptExpansion", "PreToolUse"] as const).map((event) =>
+    runtime.getRoutingBucket(event).map((entry) => ({
+      command: entry.handlerDecl.command,
+      matcher: entry.matcher,
+    })),
+  );
+
+  // assert
+  assert.deepStrictEqual(routed, [
+    [
+      { command: "expansion-empty", matcher: { kind: "match-all" } },
+      { command: "expansion-star", matcher: { kind: "match-all" } },
+      {
+        command: "expansion-list",
+        matcher: { kind: "name-set", names: new Set(["deploy", "ship", "test"]) },
+      },
+      { command: "expansion-regex", matcher: { kind: "regex", pattern: /demo:deploy/ } },
+    ],
+    [{ command: "tool-list", matcher: { kind: "tool-set", toolNames: new Set(["bash"]) } }],
+  ]);
+});
+
+test("D-PG10-10 rebuildRoutingTables gives every routing entry of a plugin its options", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const options = resolveOptions({
+    mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+  });
+  seedPluginConfig(
+    runtime,
+    "user",
+    "catalog",
+    "optioned",
+    asAbsolutePluginRoot("/router/user/optioned"),
+    makeConfig([
+      { event: "PreToolUse", handlers: 2 },
+      { event: "SessionStart", handlers: 1 },
+    ]),
+    new Map(),
+    options,
+  );
+
+  // act
+  createHooksRouting(runtime, { readHooksJson }).rebuildRoutingTables();
+  const routed = Array.from(runtime.routingTableEntries()).flatMap(([, entries]) =>
+    entries.map((entry) => entry.options),
+  );
+
+  // assert
+  assert.deepStrictEqual(routed, [options, options, options]);
+});
+
 test("rebuildRoutingTables tolerates valid record keys and sparse arrays defensively", () => {
   // arrange
   const runtime = createHooksRuntime();
@@ -1840,6 +2582,7 @@ test("rebuildRoutingTables tolerates valid record keys and sparse arrays defensi
     { event: "SessionStart", commands: [] },
     { event: "Stop", commands: [] },
     { event: "StopFailure", commands: [] },
+    { event: "UserPromptExpansion", commands: [] },
     { event: "UserPromptSubmit", commands: [] },
   ]);
 });
@@ -1938,10 +2681,11 @@ test(
     await saveState(locations.extensionRoot, state);
 
     // act
-    await createHooksHydration(runtime, { loadState, readHooksJson }).hydrateProjectScopeForCwd(
-      root,
-      true,
-    );
+    await createHooksHydration(runtime, {
+      loadState,
+      readHooksJson,
+      readMcpServerNames: readStoredServerNames,
+    }).hydrateProjectScopeForCwd(root, true);
     createHooksRouting(runtime, { readHooksJson }).rebuildRoutingTables();
     const cache = Array.from(runtime.parsedConfigEntries().values()).map((entry) => ({
       scope: entry.scope,
@@ -1995,6 +2739,7 @@ test(
         return Promise.reject(loadError);
       },
       readHooksJson,
+      readMcpServerNames: readStoredServerNames,
     };
     const config = makeConfig([{ event: "PreToolUse", handlers: 1, prefix: "cached" }]);
     const runtime = createHooksRuntime();
@@ -2005,6 +2750,7 @@ test(
       resolvedSource: asAbsolutePluginRoot(path.join(root, "old", "first")),
       config,
       ifPredicates: new Map(),
+      options: resolveOptions(undefined),
     });
     runtime.setParsedConfig("project\x00beta\x00second", {
       scope: "project",
@@ -2013,6 +2759,7 @@ test(
       resolvedSource: asAbsolutePluginRoot(path.join(root, "old", "second")),
       config,
       ifPredicates: new Map(),
+      options: resolveOptions(undefined),
     });
     runtime.setParsedConfig("user\x00alpha\x00first", {
       scope: "user",
@@ -2021,6 +2768,7 @@ test(
       resolvedSource: asAbsolutePluginRoot(path.join(root, "user", "first")),
       config,
       ifPredicates: new Map(),
+      options: resolveOptions(undefined),
     });
     seedPluginConfig(
       runtime,
@@ -2077,6 +2825,7 @@ test(
         return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
       },
       readHooksJson,
+      readMcpServerNames: readStoredServerNames,
     };
     const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
     process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
@@ -2111,7 +2860,7 @@ test(
     assert.strictEqual(sessionStartUpdate, undefined);
     assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
     assert.deepStrictEqual(messages, []);
-    assert.strictEqual(registrations.length, 12);
+    assert.strictEqual(registrations.length, 14);
     assert.deepStrictEqual(diagnostics, [
       `[hooks] hydrate: loadState failed for scope=project extensionRoot=${factoryProjectLocations.extensionRoot}: factory project state refused`,
     ]);
@@ -2135,6 +2884,7 @@ test("same-runtime registration invalidates an earlier callback before lazy hydr
       return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
     },
     readHooksJson,
+    readMcpServerNames: readStoredServerNames,
   };
   const runtime = createHooksRuntime();
   const hooksHydration = createHooksHydration(runtime, hydrationReader);
@@ -2164,7 +2914,7 @@ test("same-runtime registration invalidates an earlier callback before lazy hydr
     locationsFor("project", projectRoot).extensionRoot,
   ]);
   assert.deepStrictEqual(messages, []);
-  assert.strictEqual(registrations.length, 24);
+  assert.strictEqual(registrations.length, 28);
 });
 
 test(
@@ -2229,6 +2979,7 @@ test(
         return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
       },
       readHooksJson,
+      readMcpServerNames: readStoredServerNames,
     };
     const runtime = createHooksRuntime();
     const hydration = createHooksHydration(runtime, reader);
@@ -2253,7 +3004,7 @@ test(
     assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
     assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
     assert.deepStrictEqual(messages, []);
-    assert.strictEqual(registrations.length, 24);
+    assert.strictEqual(registrations.length, 28);
   },
 );
 
@@ -2272,6 +3023,7 @@ test(
         );
       },
       readHooksJson,
+      readMcpServerNames: readStoredServerNames,
     };
     const runtime = createHooksRuntime();
     const hydration = createHooksHydration(runtime, reader);
@@ -2327,6 +3079,7 @@ test("runtime hydration stops before mirroring when registration advances its ge
       return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
     },
     readHooksJson,
+    readMcpServerNames: readStoredServerNames,
   };
   const runtime = createHooksRuntime();
   const hydration = createHooksHydration(runtime, reader);
@@ -2367,6 +3120,7 @@ test(
         return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
       },
       readHooksJson,
+      readMcpServerNames: readStoredServerNames,
     };
     const runtime = createHooksRuntime();
     const hydration = createHooksHydration(runtime, reader);
@@ -2404,6 +3158,7 @@ test("project hydration parses a plugin's hooks.json into the parsed-config cach
       );
     },
     readHooksJson,
+    readMcpServerNames: readStoredServerNames,
   };
   const runtime = createHooksRuntime();
 
@@ -2427,6 +3182,46 @@ test("project hydration parses a plugin's hooks.json into the parsed-config cach
   assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
 });
 
+test("D-PG10-23 project hydration caches the options its record holds", async (t) => {
+  // arrange
+  const fixture = await makeProjectHookFixture(t, "options-project-hydration", "PreToolUse");
+  const userConfig = {
+    mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+  } as const;
+  const state = makeScopeState({
+    scope: "project",
+    cwd: fixture.projectRoot,
+    plugins: {
+      owner: {
+        ...makeStoredPlugin({
+          root: path.join(fixture.root, "plugins", "owner"),
+          hooks: ["owner-hooks"],
+        }),
+        userConfig,
+      },
+    },
+  });
+  const runtime = createHooksRuntime();
+
+  // act
+  await createHooksHydration(runtime, {
+    loadState: (extensionRoot) =>
+      Promise.resolve(
+        extensionRoot === fixture.locations.extensionRoot
+          ? state
+          : { schemaVersion: 2, marketplaces: {} },
+      ),
+    readHooksJson,
+    readMcpServerNames: readStoredServerNames,
+  }).hydrateProjectScopeForCwd(fixture.projectRoot, true);
+
+  // assert
+  assert.deepStrictEqual(
+    Array.from(runtime.parsedConfigEntries().values(), (entry) => entry.options),
+    [resolveOptions(userConfig)],
+  );
+});
+
 /** A hydration reader that serves `fixture.state` for its project and no plugins elsewhere. */
 function fixtureStateReader(fixture: ProjectHookFixture): HooksHydrationDeps {
   return {
@@ -2438,6 +3233,7 @@ function fixtureStateReader(fixture: ProjectHookFixture): HooksHydrationDeps {
       );
     },
     readHooksJson,
+    readMcpServerNames: readStoredServerNames,
   };
 }
 
@@ -2496,6 +3292,7 @@ for (const { title, hydratedCwd, trusted } of [
       hooksJsonPath: fixture.hookPath,
       cwd: fixture.projectRoot,
       logPrefix: "install",
+      options: resolveOptions(undefined),
     });
 
     // assert
@@ -2510,6 +3307,7 @@ test("D-LOC-01 readAndCachePluginHooks caches a project config once the hydrate 
   await createHooksHydration(runtime, {
     loadState: () => Promise.resolve({ schemaVersion: 2, marketplaces: {} }),
     readHooksJson,
+    readMcpServerNames: readStoredServerNames,
   }).hydrateProjectScopeForCwd(fixture.projectRoot, true);
 
   // act
@@ -2521,6 +3319,7 @@ test("D-LOC-01 readAndCachePluginHooks caches a project config once the hydrate 
     hooksJsonPath: fixture.hookPath,
     cwd: fixture.projectRoot,
     logPrefix: "install",
+    options: resolveOptions(undefined),
   });
 
   // assert
@@ -2562,6 +3361,7 @@ test("project hydration stops before parsing a plugin's hooks.json read under a 
           : { schemaVersion: 2, marketplaces: {} },
       );
     },
+    readMcpServerNames: readStoredServerNames,
     readHooksJson(hooksJsonPath: string): Promise<string> {
       if (hooksJsonPath === fixture.hookPath) {
         runtime.advanceGeneration();
@@ -2583,6 +3383,28 @@ test("project hydration stops before parsing a plugin's hooks.json read under a 
   assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
 });
 
+test("D-PG6-07: project hydration names no server when the server read advances the generation", async (t) => {
+  // arrange
+  const fixture = await makeProjectHookFixture(t, "stale-after-server-read", "PreToolUse");
+  const runtime = createHooksRuntime();
+  const reader: HooksHydrationDeps = {
+    ...fixtureStateReader(fixture),
+    readMcpServerNames(): Promise<readonly string[]> {
+      runtime.advanceGeneration();
+      return Promise.resolve(["stub"]);
+    },
+  };
+
+  // act
+  await createHooksHydration(runtime, reader).hydrateProjectScopeForCwd(fixture.projectRoot, true);
+
+  // assert
+  assert.strictEqual(
+    runtime.mcpServerFor({ piName: "mcp__plugin_owner_stub__echo", builtinServer: undefined }),
+    undefined,
+  );
+});
+
 test(
   "SessionStart stops after preparing the shared data dir when the routing read advances the generation",
   { concurrency: false },
@@ -2598,6 +3420,7 @@ test(
         );
       },
       readHooksJson,
+      readMcpServerNames: readStoredServerNames,
     };
     const runtime = createHooksRuntime();
     let advanceOnTheSessionStartRead = false;
@@ -2648,6 +3471,7 @@ test("separate runtimes keep their current callbacks live and route through thei
       return Promise.resolve({ schemaVersion: 2, marketplaces: {} });
     },
     readHooksJson,
+    readMcpServerNames: readStoredServerNames,
   };
   const firstRuntime = createHooksRuntime();
   const secondRuntime = createHooksRuntime();
@@ -2688,6 +3512,7 @@ test("separate runtimes keep their current callbacks live and route through thei
     handlerDecl: { type: "command", command: `run-${pluginId}` },
     declarationIndex: 0,
     ifPredicate: MATCH_ALL_IF,
+    options: resolveOptions(undefined),
   });
   firstRuntime.setRoutingBucket("PreToolUse", [entryFor("first-plugin", firstCwd)]);
   secondRuntime.setRoutingBucket("PreToolUse", [entryFor("second-plugin", secondCwd)]);
@@ -2697,18 +3522,28 @@ test("separate runtimes keep their current callbacks live and route through thei
     toolName: "bash",
     input: { command: "printf isolated" },
   } satisfies ToolCallEvent;
+  for (let index = 0; index < 8; index += 1) {
+    firstRuntime.recordStopReentry();
+    secondRuntime.recordStopReentry();
+  }
 
   // act
   await registeredHandler(firstPi.registrations, "tool_call")(
     toolCall,
     makeContext(firstCwd, root),
   );
+  const firstAfterTool = firstRuntime.recordStopReentry();
+  const secondWithoutTool = secondRuntime.recordStopReentry();
   await registeredHandler(secondPi.registrations, "tool_call")(
     toolCall,
     makeContext(secondCwd, root),
   );
+  const secondAfterTool = secondRuntime.recordStopReentry();
 
   // assert
+  assert.deepStrictEqual(firstAfterTool, { reenter: true, notifyCap: false });
+  assert.deepStrictEqual(secondWithoutTool, { reenter: false, notifyCap: true });
+  assert.deepStrictEqual(secondAfterTool, { reenter: true, notifyCap: false });
   assert.deepStrictEqual(firstDispatched, ["first-plugin"]);
   assert.deepStrictEqual(secondDispatched, ["second-plugin"]);
   assert.deepStrictEqual(firstPi.messages, []);
@@ -2754,6 +3589,7 @@ function setMatchAllToolBuckets(runtime: HooksRuntime, cwd: string): void {
         handlerDecl: { type: "command", command: "guard" },
         declarationIndex: 0,
         ifPredicate: MATCH_ALL_IF,
+        options: resolveOptions(undefined),
       },
     ]);
   }
@@ -2877,7 +3713,11 @@ test(
     const { pi, registrations, messages } = makeRecordingPi();
 
     // act
-    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    await createHooksHydration(runtime, {
+      loadState,
+      readHooksJson,
+      readMcpServerNames: readStoredServerNames,
+    }).registerHooksBridge(pi, {
       cwd: projectRoot,
     });
     const sharedState = {
@@ -2894,11 +3734,13 @@ test(
         { event: "session_before_compact", handlerType: "function" },
         { event: "session_compact", handlerType: "function" },
         { event: "input", handlerType: "function" },
+        { event: "input", handlerType: "function" },
         { event: "tool_call", handlerType: "function" },
         { event: "tool_result", handlerType: "function" },
         { event: "before_agent_start", handlerType: "function" },
         { event: "turn_end", handlerType: "function" },
         { event: "agent_end", handlerType: "function" },
+        { event: "agent_before_settle", handlerType: "function" },
         { event: "agent_settled", handlerType: "function" },
         { event: "input", handlerType: "function" },
       ],
@@ -2926,7 +3768,11 @@ test(
     const { pi, registrations } = makeRecordingPi();
 
     // act
-    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    await createHooksHydration(runtime, {
+      loadState,
+      readHooksJson,
+      readMcpServerNames: readStoredServerNames,
+    }).registerHooksBridge(pi, {
       cwd: projectRoot,
       executor: (entry) => {
         dispatched.push(entry.scope);
@@ -2946,7 +3792,7 @@ test(
     assert.deepStrictEqual(dispatched, ["project", "user"]);
     assert.strictEqual(userSharedBytes, "regular-file-boundary");
     assert.strictEqual(projectSharedStat.isDirectory(), true);
-    assert.strictEqual(registrations.length, 12);
+    assert.strictEqual(registrations.length, 14);
   },
 );
 
@@ -2971,7 +3817,11 @@ for (const mode of ["tui", "print", "json", "rpc"] as const) {
         return Reflect.get(target, property, receiver);
       },
     });
-    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    await createHooksHydration(runtime, {
+      loadState,
+      readHooksJson,
+      readMcpServerNames: readStoredServerNames,
+    }).registerHooksBridge(pi, {
       cwd: projectRoot,
       executor: (entry) => {
         observations.push({ scope: entry.scope, directories: sharedPaths.map(fs.existsSync) });
@@ -2995,7 +3845,7 @@ for (const mode of ["tui", "print", "json", "rpc"] as const) {
     assert.deepStrictEqual(messages, []);
     assert.deepStrictEqual(capture.entries, []);
     capture.assertValid();
-    assert.strictEqual(registrations.length, 12);
+    assert.strictEqual(registrations.length, 14);
   });
 }
 
@@ -3025,7 +3875,11 @@ for (const failure of ["unknown-mode", "stale-mode"] as const) {
         return capture.ui;
       },
     };
-    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    await createHooksHydration(runtime, {
+      loadState,
+      readHooksJson,
+      readMcpServerNames: readStoredServerNames,
+    }).registerHooksBridge(pi, {
       cwd: projectRoot,
       executor: (entry) => {
         dispatches.push(entry.scope);
@@ -3075,7 +3929,11 @@ for (const { rejectedRead, directories } of [
         return Reflect.get(target, property, receiver);
       },
     });
-    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    await createHooksHydration(runtime, {
+      loadState,
+      readHooksJson,
+      readMcpServerNames: readStoredServerNames,
+    }).registerHooksBridge(pi, {
       cwd: projectRoot,
       executor: (entry) => {
         dispatches.push(entry.scope);
@@ -3103,7 +3961,11 @@ test("SessionStart contains a dispatch failure after preparing both directories"
   const { pi, registrations, messages } = makeRecordingPi();
   const runtime = createHooksRuntime();
   const dispatched: string[] = [];
-  await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+  await createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: readStoredServerNames,
+  }).registerHooksBridge(pi, {
     cwd: projectRoot,
     executor: (entry) => {
       dispatched.push(entry.scope);
@@ -3130,7 +3992,11 @@ test("SessionStart runs once when Pi repeats the same session start (SSDEDUP-01)
   const { pi, registrations } = makeRecordingPi();
   const runtime = createHooksRuntime();
   const dispatched: string[] = [];
-  await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+  await createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: readStoredServerNames,
+  }).registerHooksBridge(pi, {
     cwd: projectRoot,
     executor: (entry, event, ctx) => {
       dispatched.push(
@@ -3179,7 +4045,11 @@ for (const { reason, source } of [
     const { pi, registrations } = makeRecordingPi();
     const runtime = createHooksRuntime();
     const dispatched: unknown[] = [];
-    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    await createHooksHydration(runtime, {
+      loadState,
+      readHooksJson,
+      readMcpServerNames: readStoredServerNames,
+    }).registerHooksBridge(pi, {
       cwd: projectRoot,
       executor: (entry, event) => {
         dispatched.push({ scope: entry.scope, event });
@@ -3201,13 +4071,234 @@ for (const { reason, source } of [
   });
 }
 
+const LAUNCH_HEADER_TIME = "2026-11-14T10:00:00.000Z";
+
+// A session Pi opened at `startup`: its header, the setting entries every
+// launch writes, and a user message when the session continued one.
+function launchSession(
+  cwd: string,
+  header: Pick<SessionHeader, "timestamp" | "parentSession">,
+  holdsMessage: boolean,
+): SessionManager {
+  const sessionManager = SessionManager.inMemory(cwd, undefined, [
+    { type: "session", version: 3, id: "router-launch-session", cwd, ...header },
+  ]);
+  sessionManager.appendModelChange("faux", "faux-1");
+  sessionManager.appendThinkingLevelChange("off");
+  if (holdsMessage) {
+    sessionManager.appendMessage({ role: "user", content: "hello", timestamp: 0 });
+  }
+
+  return sessionManager;
+}
+
+// The router context with `sessionManager` in place of its in-memory one.
+function withSessionManager(
+  context: ExtensionContext,
+  sessionManager: ExtensionContext["sessionManager"],
+): ExtensionContext {
+  return new Proxy(context, {
+    get(target, property, receiver): unknown {
+      return property === "sessionManager"
+        ? sessionManager
+        : Reflect.get(target, property, receiver);
+    },
+  });
+}
+
+// Registers the bridge with `processStartedAt` and returns its session_start
+// handler and the scope and event of each SessionStart dispatch.
+async function launchRouter(
+  t: TestContext,
+  processStartedAt: number,
+): Promise<{
+  readonly root: string;
+  readonly projectRoot: string;
+  readonly sessionStart: (...args: unknown[]) => unknown;
+  readonly dispatched: readonly unknown[];
+}> {
+  const { root, projectRoot } = await makeSessionStartFixture(t);
+  const { pi, registrations } = makeRecordingPi();
+  const dispatched: unknown[] = [];
+  await createHooksHydration(createHooksRuntime(), {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: readStoredServerNames,
+  }).registerHooksBridge(pi, {
+    cwd: projectRoot,
+    processStartedAt,
+    executor: (entry, event) => {
+      dispatched.push({ scope: entry.scope, event });
+      return Promise.resolve({ kind: "noop" });
+    },
+  });
+  return {
+    root,
+    projectRoot,
+    sessionStart: registeredHandler(registrations, "session_start"),
+    dispatched,
+  };
+}
+
+for (const { launch, header, holdsMessage, processStartedAt, source } of [
+  {
+    launch: "a new session that holds only its model and thinking level entries",
+    header: { timestamp: LAUNCH_HEADER_TIME },
+    holdsMessage: false,
+    processStartedAt: 0,
+    source: "startup",
+  },
+  {
+    launch: "a session that holds a message",
+    header: { timestamp: LAUNCH_HEADER_TIME },
+    holdsMessage: true,
+    processStartedAt: 0,
+    source: "resume",
+  },
+  {
+    launch: "a parent session and a header written at the process start",
+    header: { timestamp: LAUNCH_HEADER_TIME, parentSession: "/sessions/parent.jsonl" },
+    holdsMessage: true,
+    processStartedAt: Date.parse(LAUNCH_HEADER_TIME),
+    source: "fork",
+  },
+  {
+    launch: "a parent session, a header older than the process, and a message",
+    header: { timestamp: LAUNCH_HEADER_TIME, parentSession: "/sessions/parent.jsonl" },
+    holdsMessage: true,
+    processStartedAt: Date.parse(LAUNCH_HEADER_TIME) + 1,
+    source: "resume",
+  },
+  {
+    launch: "a parent session and a header timestamp that does not parse",
+    header: { timestamp: "not a time", parentSession: "/sessions/parent.jsonl" },
+    holdsMessage: false,
+    processStartedAt: 0,
+    source: "startup",
+  },
+] as const) {
+  test(`session_start at Pi startup dispatches SessionStart with source ${source} for ${launch} (D-PG6-14, D-PG6-15)`, async (t) => {
+    // arrange
+    const { root, projectRoot, sessionStart, dispatched } = await launchRouter(t, processStartedAt);
+    const context = withSessionManager(
+      makeContext(projectRoot, root),
+      launchSession(root, header, holdsMessage),
+    );
+
+    // act
+    await sessionStart({ type: "session_start", reason: "startup" }, context);
+
+    // assert
+    assert.deepStrictEqual(dispatched, [
+      { scope: "project", event: { source } },
+      { scope: "user", event: { source } },
+    ]);
+  });
+}
+
+for (const read of ["getHeader", "getEntries"] as const) {
+  test(`session_start at Pi startup debug-logs a ${read} that throws and dispatches SessionStart with source startup (NFR-2)`, async (t) => {
+    // arrange
+    const debugLines = observeRouterDebug(t);
+    const { root, projectRoot, sessionStart, dispatched } = await launchRouter(t, 0);
+    const sessionManager = new Proxy(launchSession(root, { timestamp: LAUNCH_HEADER_TIME }, true), {
+      get(target, property, receiver): unknown {
+        if (property === read) {
+          return (): never => {
+            throw new Error("session unreadable");
+          };
+        }
+
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const context = withSessionManager(makeContext(projectRoot, root), sessionManager);
+
+    // act
+    const update = await sessionStart({ type: "session_start", reason: "startup" }, context);
+
+    // assert
+    assert.deepStrictEqual(
+      { update, dispatched, debugLines: debugLines() },
+      {
+        update: undefined,
+        dispatched: [
+          { scope: "project", event: { source: "startup" } },
+          { scope: "user", event: { source: "startup" } },
+        ],
+        debugLines: [
+          "[hooks] session_start launch read failed, source stays startup: session unreadable",
+        ],
+      },
+    );
+  });
+}
+
+test("session_start at Pi startup dispatches a continued session once when Pi repeats its start (SSDEDUP-01)", async (t) => {
+  // arrange
+  const { root, projectRoot, sessionStart, dispatched } = await launchRouter(t, 0);
+  const context = withSessionManager(
+    makeContext(projectRoot, root),
+    launchSession(root, { timestamp: LAUNCH_HEADER_TIME }, true),
+  );
+
+  // act
+  await sessionStart({ type: "session_start", reason: "startup" }, context);
+  await sessionStart({ type: "session_start", reason: "startup" }, context);
+
+  // assert
+  assert.deepStrictEqual(dispatched, [
+    { scope: "project", event: { source: "resume" } },
+    { scope: "user", event: { source: "resume" } },
+  ]);
+});
+
+test(
+  "session_start at Pi startup in a pi-subagents child reads no launch fact and runs no SessionStart (D-PG6-14)",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const previous = process.env.PI_SUBAGENT_CHILD;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previous;
+      }
+    });
+    const { root, projectRoot, sessionStart, dispatched } = await launchRouter(t, 0);
+    const reads: string[] = [];
+    const sessionManager = new Proxy(launchSession(root, { timestamp: LAUNCH_HEADER_TIME }, true), {
+      get(target, property, receiver): unknown {
+        if (property === "getEntries" || property === "getHeader") {
+          reads.push(property);
+        }
+
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const context = withSessionManager(makeContext(projectRoot, root), sessionManager);
+    process.env.PI_SUBAGENT_CHILD = "1";
+
+    // act
+    await sessionStart({ type: "session_start", reason: "startup" }, context);
+
+    // assert
+    assert.deepStrictEqual({ reads, dispatched }, { reads: [], dispatched: [] });
+  },
+);
+
 test("session_start on Pi reload prepares the shared directories and runs no SessionStart (D-CF5-03)", async (t) => {
   // arrange
   const { root, projectRoot, sharedPaths } = await makeSessionStartFixture(t);
   const { pi, registrations, messages } = makeRecordingPi();
   const runtime = createHooksRuntime();
   const dispatched: string[] = [];
-  await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+  await createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: readStoredServerNames,
+  }).registerHooksBridge(pi, {
     cwd: projectRoot,
     executor: (entry) => {
       dispatched.push(entry.scope);
@@ -3321,7 +4412,11 @@ test("SessionStart runs a repeat whose first event was skipped for its mode", as
   const { pi, registrations } = makeRecordingPi();
   const runtime = createHooksRuntime();
   const dispatched: string[] = [];
-  await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+  await createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: readStoredServerNames,
+  }).registerHooksBridge(pi, {
     cwd: projectRoot,
     executor: (entry) => {
       dispatched.push(entry.scope);
@@ -3390,7 +4485,11 @@ test(
       });
     };
 
-    await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+    await createHooksHydration(runtime, {
+      loadState,
+      readHooksJson,
+      readMcpServerNames: readStoredServerNames,
+    }).registerHooksBridge(pi, {
       cwd: factoryRoot,
       executor,
     });
@@ -3491,7 +4590,11 @@ test("D-LOC-01 session_start in a project Pi does not trust runs no project Sess
     return Promise.resolve({ kind: "noop" });
   };
 
-  await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+  await createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: readStoredServerNames,
+  }).registerHooksBridge(pi, {
     cwd: path.join(root, "factory-cwd"),
     executor,
   });
@@ -3531,7 +4634,11 @@ test("session_start contains a lazy project cwd failure and still delegates safe
     return Promise.resolve({ kind: "noop" });
   };
 
-  await createHooksHydration(runtime, { loadState, readHooksJson }).registerHooksBridge(pi, {
+  await createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: readStoredServerNames,
+  }).registerHooksBridge(pi, {
     cwd: projectRoot,
     executor,
   });
@@ -3549,7 +4656,7 @@ test("session_start contains a lazy project cwd failure and still delegates safe
   assert.strictEqual(sessionStartUpdate, undefined);
   assert.deepStrictEqual(dispatches, []);
   assert.deepStrictEqual(messages, []);
-  assert.strictEqual(registrations.length, 12);
+  assert.strictEqual(registrations.length, 14);
 });
 
 /** A manual compaction event whose entry carries `summary`. */
@@ -3930,6 +5037,7 @@ function preToolUseEntry(pluginId: string, cwd: string): RoutingEntry {
     handlerDecl: { type: "command", command: `run-${pluginId}` },
     declarationIndex: 0,
     ifPredicate: MATCH_ALL_IF,
+    options: resolveOptions(undefined),
   };
 }
 
@@ -3992,11 +5100,14 @@ test(
       makeContext(suppliedCwd, root),
     );
     const afterSupplied = readDiagnostics().slice(registrationDiagnostics);
+    const notices: string[] = [];
     const defaultedOutput = await registeredHandler(defaultedPi.registrations, "tool_call")(
       refusingToolCall(),
-      makeContext(defaultedCwd, root),
+      makeContext(defaultedCwd, root, true, notices),
     );
-    const afterDefaulted = readDiagnostics().slice(registrationDiagnostics + afterSupplied.length);
+    const afterDefaulted = readDiagnostics()
+      .slice(registrationDiagnostics + afterSupplied.length)
+      .filter((diagnostic) => diagnostic.startsWith("[hooks]"));
 
     // assert
     assert.deepStrictEqual([suppliedOutput, defaultedOutput], [undefined, undefined]);
@@ -4005,6 +5116,8 @@ test(
     assert.deepStrictEqual(afterDefaulted, [
       "[hooks] exec: caught (defaulted-executor-plugin/PreToolUse): executor seam input refused",
     ]);
+    assert.equal(notices.length, 1);
+    assert.match(notices[0] ?? "", /executor seam input refused/);
     assert.deepStrictEqual(suppliedPi.messages, []);
     assert.deepStrictEqual(defaultedPi.messages, []);
   },
@@ -4069,3 +5182,1087 @@ for (const trusted of [true, false]) {
     assert.deepStrictEqual(await readPidTable(locations), trusted ? [] : [deadRow]);
   });
 }
+
+test("child input does not dispatch a UserPromptSubmit hook", { concurrency: false }, async (t) => {
+  const { root } = await createHermeticEnvironment(t, "hooks-router-child-input-");
+  const previous = process.env.PI_SUBAGENT_CHILD;
+  t.after(() => {
+    if (previous === undefined) {
+      delete process.env.PI_SUBAGENT_CHILD;
+    } else {
+      process.env.PI_SUBAGENT_CHILD = previous;
+    }
+  });
+  const runtime = createHooksRuntime();
+  const { pi, registrations } = makeRecordingPi();
+  const dispatched: BucketAEvent[] = [];
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor: (entry) => {
+      dispatched.push(entry.claudeEvent);
+      return Promise.resolve({ kind: "noop" });
+    },
+  });
+  runtime.setRoutingBucket("UserPromptSubmit", [
+    { ...preToolUseEntry("child-input", root), claudeEvent: "UserPromptSubmit" },
+  ]);
+  process.env.PI_SUBAGENT_CHILD = "1";
+
+  await registeredHandler(registrations, "input")(
+    { type: "input", text: "hello", source: "interactive" },
+    makeContext(root, root),
+  );
+
+  assert.deepStrictEqual(dispatched, []);
+});
+
+test(
+  "a child's boundary handler runs no Stop hook and leaves the cached ending (D-PG5-01)",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const { root } = await createHermeticEnvironment(t, "hooks-router-child-boundary-");
+    const previous = process.env.PI_SUBAGENT_CHILD;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previous;
+      }
+    });
+    const runtime = createHooksRuntime();
+    const { pi, registrations, messages } = makeRecordingPi();
+    const dispatched: BucketAEvent[] = [];
+    await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+      cwd: root,
+      executor: (entry) => {
+        dispatched.push(entry.claudeEvent);
+        return Promise.resolve({ kind: "block", reason: "continue" });
+      },
+    });
+    runtime.setRoutingBucket("Stop", [
+      {
+        ...preToolUseEntry("child-stop", root),
+        claudeEvent: "Stop",
+        matcher: parseMatcher(""),
+        rawMatcher: "",
+      },
+    ]);
+    const ending: AssistantMessage = { ...assistantForBookkeeping(), stopReason: "stop" };
+    runtime.recordLastAssistant(ending);
+    process.env.PI_SUBAGENT_CHILD = "1";
+
+    // act
+    const boundaryResult = await registeredHandler(registrations, "agent_before_settle")(
+      { type: "agent_before_settle", entries: [], continue: false, outcome: "completed" },
+      makeContext(root, root),
+    );
+
+    // assert
+    assert.strictEqual(boundaryResult, undefined);
+    assert.deepStrictEqual(dispatched, []);
+    assert.strictEqual(runtime.takeLastAssistant(), ending);
+    assert.deepStrictEqual(messages, []);
+  },
+);
+
+// D-PG6-18: no registration dispatches UserPromptExpansion yet, in any session.
+function policyRuns(claudeEvent: BucketAEvent, child: boolean): BucketAEvent[] {
+  if (child) {
+    return (["PreToolUse", "PostToolUse", "PostToolUseFailure"] as BucketAEvent[]).includes(
+      claudeEvent,
+    )
+      ? [claudeEvent]
+      : [];
+  }
+
+  return claudeEvent === "PostCompact" ? ["SessionStart", "PostCompact"] : [claudeEvent];
+}
+
+for (const child of [false, true]) {
+  for (const claudeEvent of BUCKET_A_EVENTS) {
+    test(
+      `${child ? "child" : "main"} routes ${claudeEvent} by the eleven-event policy`,
+      { concurrency: false },
+      async (t) => {
+        const { root } = await createHermeticEnvironment(t, "hooks-router-event-policy-");
+        const previous = process.env.PI_SUBAGENT_CHILD;
+        t.after(() => {
+          if (previous === undefined) {
+            delete process.env.PI_SUBAGENT_CHILD;
+          } else {
+            process.env.PI_SUBAGENT_CHILD = previous;
+          }
+        });
+        const runtime = createHooksRuntime();
+        const { pi, registrations, messages } = makeRecordingPi();
+        const dispatched: BucketAEvent[] = [];
+        await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+          cwd: root,
+          executor: (entry) => {
+            dispatched.push(entry.claudeEvent);
+            return Promise.resolve({ kind: "noop" });
+          },
+          resolveTypedExpansion: () =>
+            Promise.resolve({ commandName: "demo:deploy", commandArgs: "staging" }),
+        });
+        const entry: RoutingEntry = {
+          ...preToolUseEntry("policy-plugin", root),
+          scope: "user",
+          claudeEvent,
+          matcher: parseMatcher(""),
+          rawMatcher: "",
+        };
+        runtime.setRoutingBucket(claudeEvent, [entry]);
+        if (claudeEvent === "SessionStart") {
+          seedPluginConfig(
+            runtime,
+            "user",
+            "catalog",
+            "policy-plugin",
+            entry.resolvedSource,
+            makeConfig([{ event: "SessionStart", handlers: 1 }]),
+            new Map(),
+          );
+        }
+
+        if (claudeEvent === "PostCompact") {
+          runtime.setRoutingBucket("SessionStart", [{ ...entry, claudeEvent: "SessionStart" }]);
+        }
+
+        process.env.PI_SUBAGENT_CHILD = child ? "1" : "0";
+        const context = makeContext(root, root);
+        switch (claudeEvent) {
+          case "SessionStart":
+            await registeredHandler(registrations, "session_start")(
+              { type: "session_start", reason: "new" },
+              context,
+            );
+            break;
+          case "UserPromptSubmit":
+            await registeredHandler(registrations, "input")(
+              { type: "input", text: "hello", source: "interactive" },
+              context,
+            );
+            break;
+          case "UserPromptExpansion":
+            await registeredHandler(
+              registrations,
+              "input",
+              1,
+            )({ type: "input", text: "/demo:deploy staging", source: "interactive" }, context);
+            break;
+          case "PreToolUse":
+            await registeredHandler(registrations, "tool_call")(
+              { type: "tool_call", toolCallId: "policy-call", toolName: "bash", input: {} },
+              context,
+            );
+            break;
+          case "PostToolUse":
+          case "PostToolUseFailure":
+            await registeredHandler(registrations, "tool_result")(
+              {
+                type: "tool_result",
+                toolCallId: "policy-call",
+                toolName: "bash",
+                input: {},
+                content: [],
+                isError: claudeEvent === "PostToolUseFailure",
+              },
+              context,
+            );
+            break;
+          case "PreCompact":
+            await registeredHandler(registrations, "session_before_compact")(
+              { type: "session_before_compact", reason: "manual" },
+              context,
+            );
+            break;
+          case "PostCompact":
+            await registeredHandler(registrations, "session_compact")(
+              compactionEvent("policy summary"),
+              context,
+            );
+            break;
+          case "SessionEnd":
+            await registeredHandler(registrations, "session_shutdown")(
+              { type: "session_shutdown", reason: "quit" },
+              context,
+            );
+            break;
+          case "Stop":
+          case "StopFailure":
+            await registeredHandler(registrations, "agent_end")(
+              {
+                type: "agent_end",
+                messages: [
+                  {
+                    ...assistantForBookkeeping(),
+                    stopReason: claudeEvent === "Stop" ? "stop" : "error",
+                  },
+                ],
+              },
+              context,
+            );
+            await registeredHandler(registrations, "agent_before_settle")(
+              { type: "agent_before_settle", entries: [], continue: false, outcome: "completed" },
+              context,
+            );
+            await registeredHandler(registrations, "agent_settled")(
+              { type: "agent_settled" },
+              context,
+            );
+            break;
+        }
+
+        assert.deepStrictEqual(dispatched, policyRuns(claudeEvent, child));
+        assert.deepStrictEqual(messages, []);
+      },
+    );
+  }
+}
+
+test(
+  "child hydrates user tool hooks without executing untrusted project hooks",
+  { concurrency: false },
+  async (t) => {
+    const { root } = await createHermeticEnvironment(t, "hooks-router-child-trust-");
+    const previous = process.env.PI_SUBAGENT_CHILD;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previous;
+      }
+    });
+    for (const scope of ["user", "project"] as const) {
+      const loc = locationsFor(scope, root);
+      const hooksDirectory = path.join(loc.hooksDir, `${scope}-hooks`);
+      await mkdir(hooksDirectory, { recursive: true });
+      await writeFile(
+        path.join(hooksDirectory, "hooks.json"),
+        JSON.stringify(makeConfig([{ event: "PreToolUse", matcher: "Bash", handlers: 1 }])),
+      );
+      await saveState(
+        loc.extensionRoot,
+        makeScopeState({
+          scope,
+          cwd: root,
+          plugins: {
+            [scope]: makeStoredPlugin({ root: path.join(root, scope), hooks: [`${scope}-hooks`] }),
+          },
+        }),
+      );
+    }
+
+    const runtime = createHooksRuntime();
+    const { pi, registrations } = makeRecordingPi();
+    const dispatched: string[] = [];
+    await createHooksHydration(runtime, {
+      loadState,
+      readHooksJson,
+      readMcpServerNames: readStoredServerNames,
+    }).registerHooksBridge(pi, {
+      cwd: root,
+      executor: (entry) => {
+        dispatched.push(`${entry.scope}:${entry.pluginId}`);
+        return Promise.resolve({ kind: "noop" });
+      },
+    });
+    process.env.PI_SUBAGENT_CHILD = "1";
+    const context = makeContext(root, root, false);
+
+    await registeredHandler(registrations, "session_start")(
+      { type: "session_start", reason: "new" },
+      context,
+    );
+    await registeredHandler(registrations, "tool_call")(
+      { type: "tool_call", toolCallId: "trust-call", toolName: "bash", input: {} },
+      context,
+    );
+
+    assert.deepStrictEqual(dispatched, ["user:user"]);
+    assert.deepStrictEqual(
+      runtime.getRoutingBucket("PreToolUse").map((entry) => entry.scope),
+      ["user"],
+    );
+  },
+);
+
+test(
+  "child session shutdown cleans up on reload, quit, and rejected mode",
+  { concurrency: false },
+  async (t) => {
+    const { root } = await createHermeticEnvironment(t, "hooks-router-child-shutdown-");
+    const previous = process.env.PI_SUBAGENT_CHILD;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previous;
+      }
+    });
+    const state = createHooksRuntime();
+    let shutdownCalls = 0;
+    const runtime = new Proxy(state, {
+      get(target, property, receiver): unknown {
+        if (property === "shutdownChildren") {
+          return (): ReturnType<typeof target.shutdownChildren> => {
+            shutdownCalls += 1;
+            return target.shutdownChildren();
+          };
+        }
+
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const { pi, registrations } = makeRecordingPi();
+    const dispatched: BucketAEvent[] = [];
+    await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+      cwd: root,
+      executor: (entry) => {
+        dispatched.push(entry.claudeEvent);
+        return Promise.resolve({ kind: "noop" });
+      },
+    });
+    runtime.setRoutingBucket("SessionEnd", [
+      { ...preToolUseEntry("shutdown", root), claudeEvent: "SessionEnd" },
+    ]);
+    process.env.PI_SUBAGENT_CHILD = "1";
+    const shutdown = registeredHandler(registrations, "session_shutdown");
+
+    await shutdown({ type: "session_shutdown", reason: "reload" }, makeContext(root, root));
+    await shutdown({ type: "session_shutdown", reason: "quit" }, makeContext(root, root));
+    const rejectedContext = new Proxy(makeContext(root, root), {
+      get(target, property, receiver): unknown {
+        return property === "mode" ? "unknown" : Reflect.get(target, property, receiver);
+      },
+    });
+    await shutdown({ type: "session_shutdown", reason: "quit" }, rejectedContext);
+
+    assert.strictEqual(shutdownCalls, 4);
+    assert.deepStrictEqual(dispatched, []);
+  },
+);
+
+function runningAsyncHook(
+  dispatchId: string,
+  claudeEvent: BucketAEvent,
+  loc: HooksRuntimeChildEntry["loc"],
+  signals: string[],
+): HooksRuntimeChildEntry {
+  return {
+    dispatchId,
+    pid: 47_000 + signals.length,
+    scope: "project",
+    marketplace: "catalog",
+    pluginId: dispatchId,
+    claudeEvent,
+    spawnedAt: "2026-11-13T00:00:00.000Z",
+    rewakeMessage: undefined,
+    rewakeSummary: undefined,
+    child: {
+      kill(signal?: NodeJS.Signals | number): boolean {
+        signals.push(`${dispatchId}:${String(signal)}`);
+        return true;
+      },
+    },
+    ladder: { cancel: () => undefined, fired: () => false },
+    stdout: { text: () => "" },
+    stderr: { text: () => "" },
+    capturedGeneration: 0,
+    loc,
+  };
+}
+
+for (const scenario of [
+  {
+    name: "main session quit leaves running async hooks and async SessionEnd hooks alive",
+    child: false,
+    signals: [],
+    running: ["post-tool-use-async", "session-end-async", "session-end-rewake"],
+  },
+  {
+    name: "child session quit stops its running async hooks",
+    child: true,
+    signals: ["post-tool-use-async:SIGKILL"],
+    running: [],
+  },
+] as const) {
+  test(scenario.name, { concurrency: false }, async (t) => {
+    // arrange
+    const { root } = await createHermeticEnvironment(t, "hooks-router-shutdown-async-");
+    const previous = process.env.PI_SUBAGENT_CHILD;
+    const runtime = createHooksRuntime();
+    t.after(async () => {
+      if (previous === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previous;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+    });
+    const loc = locationsFor("project", root);
+    const signals: string[] = [];
+    const { pi, registrations } = makeRecordingPi();
+    await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+      cwd: root,
+      // Registers the hook as `spawnAndRegister` does before the dispatch returns.
+      executor: (entry) => {
+        runtime.registerChild(runningAsyncHook(entry.pluginId, entry.claudeEvent, loc, signals));
+        return Promise.resolve({ kind: "noop" });
+      },
+    });
+    runtime.setRoutingBucket(
+      "SessionEnd",
+      (["async", "rewake"] as const).map((kind) => ({
+        ...preToolUseEntry(`session-end-${kind}`, root),
+        claudeEvent: "SessionEnd",
+        matcher: parseMatcher(""),
+        rawMatcher: "",
+        handlerDecl: {
+          type: "command",
+          command: `run-session-end-${kind}`,
+          ...(kind === "async" ? { async: true } : { asyncRewake: true }),
+        },
+      })),
+    );
+    runtime.registerChild(runningAsyncHook("post-tool-use-async", "PostToolUse", loc, signals));
+    if (scenario.child) {
+      process.env.PI_SUBAGENT_CHILD = "1";
+    } else {
+      delete process.env.PI_SUBAGENT_CHILD;
+    }
+
+    // act
+    await registeredHandler(registrations, "session_shutdown")(
+      { type: "session_shutdown", reason: "quit" },
+      makeContext(root, root),
+    );
+
+    // assert
+    assert.deepStrictEqual(signals, scenario.signals);
+    assert.deepStrictEqual(
+      runtime.pidTableEntries(loc).map((row) => row.dispatchId),
+      scenario.running,
+    );
+  });
+}
+
+// Saves one hook output of `loc` that is 31 days old, and returns the names
+// of its folder after `load` runs (D-PG5-15).
+async function hookOutputAfterLoad(
+  loc: ReturnType<typeof locationsFor>,
+  load: () => Promise<void>,
+): Promise<string[]> {
+  const savedPath = await saveHookOutput(loc, "old-output", "additionalContext", "saved");
+  const old = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);
+  await utimes(savedPath, old, old);
+  await load();
+  return readdir(path.dirname(savedPath));
+}
+
+test("a bridge load removes the old saved hook output of each scope it reaps (D-PG5-15)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "event-router-output-sweep-");
+  const runtime = createHooksRuntime();
+  const { pi } = makeRecordingPi();
+  const load = (): Promise<void> =>
+    createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, { cwd: root });
+
+  // act
+  const userNames = await hookOutputAfterLoad(locationsFor("user", root), load);
+  const projectNames = await hookOutputAfterLoad(locationsFor("project", root), load);
+
+  // assert
+  assert.deepStrictEqual({ userNames, projectNames }, { userNames: [], projectNames: [] });
+});
+
+for (const trusted of [true, false]) {
+  test(`a project hydrate with trust ${String(trusted)} sweeps only a trusted project's saved hook output (D-PG5-15)`, async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "event-router-project-sweep-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const runtime = createHooksRuntime();
+
+    // act
+    const names = await hookOutputAfterLoad(locationsFor("project", root), () =>
+      createHooksHydration(runtime, EMPTY_STATE_READER).hydrateProjectScopeForCwd(root, trusted),
+    );
+
+    // assert
+    assert.deepStrictEqual(names, trusted ? [] : ["hook-old-output-additionalContext.txt"]);
+  });
+}
+
+// D-PG6-07: a reader that gives each extension root its state and refuses
+// every other root.
+function mcpStateReader(states: ReadonlyMap<string, ExtensionState>): HooksHydrationDeps {
+  return {
+    loadState(extensionRoot: string): Promise<ExtensionState> {
+      const state = states.get(extensionRoot);
+      return state === undefined
+        ? Promise.reject(new Error(`no state at ${extensionRoot}`))
+        : Promise.resolve(state);
+    },
+    readHooksJson,
+    readMcpServerNames: readStoredServerNames,
+  };
+}
+
+function mcpServerState(scope: "user" | "project", cwd: string, plugin: string): ExtensionState {
+  return makeScopeState({
+    scope,
+    cwd,
+    plugins: {
+      [plugin]: {
+        ...makeStoredPlugin({ root: path.join(cwd, "plugins", plugin), hooks: [] }),
+        mcpServerConfigs: [{ name: "stub", config: { command: "stub" } }],
+      },
+    },
+  });
+}
+
+const MCP_SERVER_ENTRY = {
+  builtinServer: "plugin_seeded_stub",
+  adapterKey: "plugin_seeded_stub_",
+  server: { name: "plugin:seeded:stub", source: "plugin" },
+} as const;
+
+function mcpServerOf(runtime: HooksRuntime, plugin: string): unknown {
+  return runtime.mcpServerFor({
+    piName: `mcp__plugin_${plugin}_stub__echo`,
+    builtinServer: undefined,
+  });
+}
+
+test("a load names the user scope's plugin MCP servers, also of a plugin with no hooks (D-PG6-07)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-mcp-load-");
+  const runtime = createHooksRuntime();
+  const reader = mcpStateReader(
+    new Map([
+      [locationsFor("user", root).extensionRoot, mcpServerState("user", root, "demo")],
+      [locationsFor("project", root).extensionRoot, { schemaVersion: 2, marketplaces: {} }],
+    ]),
+  );
+
+  // act
+  await createHooksHydration(runtime, reader).registerHooksBridge(makeRecordingPi().pi, {
+    cwd: root,
+  });
+
+  // assert
+  assert.deepStrictEqual(mcpServerOf(runtime, "demo"), {
+    name: "plugin:demo:stub",
+    source: "plugin",
+  });
+});
+
+test("a load whose user state fails to load names no user server (D-PG6-07)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-mcp-load-failure-");
+  const runtime = createHooksRuntime();
+  runtime.setMcpServers("user", [MCP_SERVER_ENTRY]);
+  const reader = mcpStateReader(
+    new Map([
+      [locationsFor("project", root).extensionRoot, { schemaVersion: 2, marketplaces: {} }],
+    ]),
+  );
+
+  // act
+  await createHooksHydration(runtime, reader).registerHooksBridge(makeRecordingPi().pi, {
+    cwd: root,
+  });
+
+  // assert
+  assert.strictEqual(mcpServerOf(runtime, "seeded"), undefined);
+});
+
+for (const { name, trusted, hasState } of [
+  { name: "an untrusted project", trusted: false, hasState: true },
+  { name: "a project whose state fails to load", trusted: true, hasState: false },
+]) {
+  test(`the project hydrate of ${name} names no project server (D-PG6-07)`, async (t) => {
+    // arrange
+    const { root } = await createHermeticEnvironment(t, "hooks-router-mcp-project-none-");
+    const runtime = createHooksRuntime();
+    runtime.setMcpServers("project", [MCP_SERVER_ENTRY]);
+    const states = new Map(
+      hasState
+        ? [[locationsFor("project", root).extensionRoot, mcpServerState("project", root, "demo")]]
+        : [],
+    );
+
+    // act
+    await createHooksHydration(runtime, mcpStateReader(states)).hydrateProjectScopeForCwd(
+      root,
+      trusted,
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      [mcpServerOf(runtime, "seeded"), mcpServerOf(runtime, "demo")],
+      [undefined, undefined],
+    );
+  });
+}
+
+test("the project hydrate of a trusted project names its plugin MCP servers (D-PG6-07)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-mcp-project-");
+  const runtime = createHooksRuntime();
+  runtime.setMcpServers("user", [MCP_SERVER_ENTRY]);
+  const reader = mcpStateReader(
+    new Map([
+      [locationsFor("project", root).extensionRoot, mcpServerState("project", root, "demo")],
+    ]),
+  );
+
+  // act
+  await createHooksHydration(runtime, reader).hydrateProjectScopeForCwd(root, true);
+
+  // assert
+  assert.deepStrictEqual(
+    [mcpServerOf(runtime, "demo"), mcpServerOf(runtime, "seeded")],
+    [
+      { name: "plugin:demo:stub", source: "plugin" },
+      { name: "plugin:seeded:stub", source: "plugin" },
+    ],
+  );
+});
+
+test("a refresh replaces both scopes' servers with the ones their state names now (D-PG6-07)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-mcp-refresh-");
+  const runtime = createHooksRuntime();
+  runtime.setMcpServers("user", [MCP_SERVER_ENTRY]);
+  const reader = mcpStateReader(
+    new Map([
+      [locationsFor("user", root).extensionRoot, mcpServerState("user", root, "installed")],
+      [locationsFor("project", root).extensionRoot, mcpServerState("project", root, "enabled")],
+    ]),
+  );
+
+  // act
+  await createHooksHydration(runtime, reader).refreshMcpServers(root, true);
+
+  // assert
+  assert.deepStrictEqual(
+    [
+      mcpServerOf(runtime, "seeded"),
+      mcpServerOf(runtime, "installed"),
+      mcpServerOf(runtime, "enabled"),
+    ],
+    [
+      undefined,
+      { name: "plugin:installed:stub", source: "plugin" },
+      { name: "plugin:enabled:stub", source: "plugin" },
+    ],
+  );
+});
+
+test("a refresh names no server of a project Pi does not trust, nor of a scope whose state fails to load (D-PG6-07)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-mcp-refresh-none-");
+  const runtime = createHooksRuntime();
+  runtime.setMcpServers("user", [MCP_SERVER_ENTRY]);
+  runtime.setMcpServers("project", [{ ...MCP_SERVER_ENTRY, adapterKey: "plugin_other_stub_" }]);
+  const reader = mcpStateReader(
+    new Map([
+      [locationsFor("project", root).extensionRoot, mcpServerState("project", root, "demo")],
+    ]),
+  );
+
+  // act
+  await createHooksHydration(runtime, reader).refreshMcpServers(root, false);
+
+  // assert
+  assert.deepStrictEqual(
+    [mcpServerOf(runtime, "seeded"), mcpServerOf(runtime, "other"), mcpServerOf(runtime, "demo")],
+    [undefined, undefined, undefined],
+  );
+});
+
+test("a refresh changes no server table when a server read advances the generation (D-PG6-07)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-mcp-refresh-stale-");
+  const runtime = createHooksRuntime();
+  runtime.setMcpServers("user", [MCP_SERVER_ENTRY]);
+  const reader: HooksHydrationDeps = {
+    ...mcpStateReader(
+      new Map([
+        [locationsFor("user", root).extensionRoot, mcpServerState("user", root, "demo")],
+        [locationsFor("project", root).extensionRoot, { schemaVersion: 2, marketplaces: {} }],
+      ]),
+    ),
+    readMcpServerNames(): Promise<readonly string[]> {
+      runtime.advanceGeneration();
+      return Promise.resolve(["stub"]);
+    },
+  };
+
+  // act
+  await createHooksHydration(runtime, reader).refreshMcpServers(root, true);
+
+  // assert
+  assert.deepStrictEqual(
+    [mcpServerOf(runtime, "seeded"), mcpServerOf(runtime, "demo")],
+    [{ name: "plugin:seeded:stub", source: "plugin" }, undefined],
+  );
+});
+
+const EXPANSION_LINE = {
+  type: "input",
+  text: "/demo:deploy staging",
+  source: "interactive",
+} satisfies InputEvent;
+
+const DEPLOY_EXPANSION = {
+  commandName: "demo:deploy",
+  commandArgs: "staging",
+  commandSource: "plugin",
+} as const;
+
+interface ExpansionRun {
+  readonly claudeEvent: BucketAEvent;
+  readonly event: unknown;
+}
+
+// A registered bridge whose executor records each hook it runs and answers
+// `results` by event, with one match-all hook routed for each prompt event.
+async function expansionFixture(
+  t: TestContext,
+  resolve: TypedExpansionResolver | undefined,
+  results: Partial<Record<BucketAEvent, HookExecResult>> = {},
+): Promise<{
+  readonly runtime: HooksRuntime;
+  readonly registrations: RecordedRegistration[];
+  readonly runs: ExpansionRun[];
+  readonly context: ExtensionContext;
+  readonly register: () => Promise<void>;
+}> {
+  const { root } = await createHermeticEnvironment(t, "hooks-router-expansion-");
+  const runtime = createHooksRuntime();
+  const { pi, registrations } = makeRecordingPi();
+  const runs: ExpansionRun[] = [];
+  const register = (): Promise<void> =>
+    createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+      cwd: root,
+      executor: (entry, event) => {
+        runs.push({ claudeEvent: entry.claudeEvent, event: structuredClone(event) });
+        return Promise.resolve(results[entry.claudeEvent] ?? { kind: "noop" });
+      },
+      ...(resolve === undefined ? {} : { resolveTypedExpansion: resolve }),
+    });
+  await register();
+  for (const claudeEvent of ["UserPromptSubmit", "UserPromptExpansion"] as const) {
+    runtime.setRoutingBucket(claudeEvent, [
+      {
+        ...preToolUseEntry(`${claudeEvent}-plugin`, root),
+        claudeEvent,
+        matcher: parseMatcher(""),
+        rawMatcher: "",
+      },
+    ]);
+  }
+
+  return { runtime, registrations, runs, context: makeContext(root, root), register };
+}
+
+// Walks the bridge's `input` handlers as Pi does: in registration order,
+// stopping at the first that answers `handled`.
+async function runInputHandlers(
+  registrations: readonly RecordedRegistration[],
+  event: InputEvent,
+  context: ExtensionContext,
+): Promise<unknown[]> {
+  const answers: unknown[] = [];
+  for (const { handler } of registrations.filter(
+    (registration) => registration.event === "input",
+  )) {
+    const answer = await (handler as (...args: unknown[]) => unknown)(event, context);
+    answers.push(answer);
+    if ((answer as { readonly action?: string } | undefined)?.action === "handled") {
+      break;
+    }
+  }
+
+  return answers;
+}
+
+function recordingResolver(
+  calls: string[],
+  answer: () => Promise<Awaited<ReturnType<TypedExpansionResolver>>>,
+): TypedExpansionResolver {
+  return (text) => {
+    calls.push(text);
+    return answer();
+  };
+}
+
+test("runs the expansion hooks for a line the resolver names, with the synthetic event (D-PG6-18)", async (t) => {
+  // arrange
+  const resolved: string[] = [];
+  const { registrations, runs, context } = await expansionFixture(
+    t,
+    recordingResolver(resolved, () => Promise.resolve(DEPLOY_EXPANSION)),
+    { UserPromptExpansion: { kind: "block", reason: "not now" } },
+  );
+
+  // act
+  const answer = await registeredHandler(registrations, "input", 1)(EXPANSION_LINE, context);
+
+  // assert
+  assert.deepStrictEqual(
+    { answer, resolved, runs },
+    {
+      answer: { action: "handled" },
+      resolved: ["/demo:deploy staging"],
+      runs: [
+        {
+          claudeEvent: "UserPromptExpansion",
+          event: {
+            command_name: "demo:deploy",
+            command_args: "staging",
+            command_source: "plugin",
+            input: EXPANSION_LINE,
+          },
+        },
+      ],
+    },
+  );
+});
+
+test("leaves out command_source when the resolver gives none (D-PG6-19)", async (t) => {
+  // arrange
+  const { registrations, runs, context } = await expansionFixture(t, () =>
+    Promise.resolve({ commandName: "deploy", commandArgs: "" }),
+  );
+
+  // act
+  const answer = await registeredHandler(
+    registrations,
+    "input",
+    1,
+  )({ type: "input", text: "/deploy", source: "rpc" }, context);
+
+  // assert
+  assert.deepStrictEqual(
+    { answer, runs },
+    {
+      answer: undefined,
+      runs: [
+        {
+          claudeEvent: "UserPromptExpansion",
+          event: {
+            command_name: "deploy",
+            command_args: "",
+            input: { type: "input", text: "/deploy", source: "rpc" },
+          },
+        },
+      ],
+    },
+  );
+});
+
+for (const { name, line, answer, resolverCalls } of [
+  {
+    name: "input from an extension",
+    line: { ...EXPANSION_LINE, source: "extension" },
+    answer: (): Promise<undefined> => Promise.resolve(undefined),
+    resolverCalls: [],
+  },
+  {
+    name: "a line the resolver does not name",
+    line: EXPANSION_LINE,
+    answer: (): Promise<undefined> => Promise.resolve(undefined),
+    resolverCalls: ["/demo:deploy staging"],
+  },
+] satisfies ReadonlyArray<{
+  readonly name: string;
+  readonly line: InputEvent;
+  readonly answer: () => Promise<undefined>;
+  readonly resolverCalls: readonly string[];
+}>) {
+  test(`runs no expansion hook for ${name} (D-PG6-18)`, async (t) => {
+    // arrange
+    const resolved: string[] = [];
+    const { registrations, runs, context } = await expansionFixture(
+      t,
+      recordingResolver(resolved, answer),
+    );
+
+    // act
+    const output = await registeredHandler(registrations, "input", 1)(line, context);
+
+    // assert
+    assert.deepStrictEqual(
+      { output, resolved, runs },
+      { output: undefined, resolved: resolverCalls, runs: [] },
+    );
+  });
+}
+
+test("runs no expansion hook for a registration with no resolver (D-PG6-18)", async (t) => {
+  // arrange
+  const { registrations, runs, context } = await expansionFixture(t, undefined);
+
+  // act
+  const output = await registeredHandler(registrations, "input", 1)(EXPANSION_LINE, context);
+
+  // assert
+  assert.deepStrictEqual({ output, runs }, { output: undefined, runs: [] });
+});
+
+test("asks the resolver nothing when no expansion hook is routed (D-PG6-18)", async (t) => {
+  // arrange
+  const resolved: string[] = [];
+  const { runtime, registrations, runs, context } = await expansionFixture(
+    t,
+    recordingResolver(resolved, () => Promise.resolve(DEPLOY_EXPANSION)),
+  );
+  runtime.setRoutingBucket("UserPromptExpansion", []);
+
+  // act
+  const output = await registeredHandler(registrations, "input", 1)(EXPANSION_LINE, context);
+
+  // assert
+  assert.deepStrictEqual({ output, resolved, runs }, { output: undefined, resolved: [], runs: [] });
+});
+
+test(
+  "runs no expansion hook in a pi-subagents child (D-PG6-18)",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const previous = process.env.PI_SUBAGENT_CHILD;
+    t.after(() => {
+      if (previous === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previous;
+      }
+    });
+    const resolved: string[] = [];
+    const { registrations, runs, context } = await expansionFixture(
+      t,
+      recordingResolver(resolved, () => Promise.resolve(DEPLOY_EXPANSION)),
+    );
+    process.env.PI_SUBAGENT_CHILD = "1";
+
+    // act
+    const output = await registeredHandler(registrations, "input", 1)(EXPANSION_LINE, context);
+
+    // assert
+    assert.deepStrictEqual(
+      { output, resolved, runs },
+      { output: undefined, resolved: [], runs: [] },
+    );
+  },
+);
+
+test("runs no expansion hook through a registration a reload replaced (D-PG6-18)", async (t) => {
+  // arrange
+  const resolved: string[] = [];
+  const { registrations, runs, context, register } = await expansionFixture(
+    t,
+    recordingResolver(resolved, () => Promise.resolve(DEPLOY_EXPANSION)),
+  );
+  const staleHandler = registeredHandler(registrations, "input", 1);
+  await register();
+
+  // act
+  const output = await staleHandler(EXPANSION_LINE, context);
+
+  // assert
+  assert.deepStrictEqual({ output, resolved, runs }, { output: undefined, resolved: [], runs: [] });
+});
+
+test("runs no expansion hook when the resolver rejects, and logs one debug line (D-PG6-18)", async (t) => {
+  // arrange
+  const logged = captureDebugLog(t);
+  const { registrations, runs, context } = await expansionFixture(t, () =>
+    Promise.reject(new Error("alias table unreadable")),
+  );
+
+  // act
+  const output = await registeredHandler(registrations, "input", 1)(EXPANSION_LINE, context);
+
+  // assert
+  assert.deepStrictEqual(
+    { output, runs, logged },
+    {
+      output: undefined,
+      runs: [],
+      logged: ["[hooks] input: typed expansion not resolved: alias table unreadable"],
+    },
+  );
+});
+
+test("a blocked prompt asks the expansion resolver nothing, by registration order (D-PG6-18)", async (t) => {
+  // arrange
+  const resolved: string[] = [];
+  const { registrations, runs, context } = await expansionFixture(
+    t,
+    recordingResolver(resolved, () => Promise.resolve(DEPLOY_EXPANSION)),
+    { UserPromptSubmit: { kind: "block", reason: "no prompts" } },
+  );
+
+  // act
+  const answers = await runInputHandlers(registrations, EXPANSION_LINE, context);
+
+  // assert
+  assert.deepStrictEqual(
+    { answers, resolved, events: runs.map((run) => run.claudeEvent) },
+    { answers: [{ action: "handled" }], resolved: [], events: ["UserPromptSubmit"] },
+  );
+});
+
+test("runs the prompt hooks before the expansion hooks of one line (D-PG6-18)", async (t) => {
+  // arrange
+  const { registrations, runs, context } = await expansionFixture(t, () =>
+    Promise.resolve(DEPLOY_EXPANSION),
+  );
+
+  // act
+  const answers = await runInputHandlers(registrations, EXPANSION_LINE, context);
+
+  // assert
+  assert.deepStrictEqual(
+    { answers, events: runs.map((run) => run.claudeEvent) },
+    {
+      answers: [undefined, undefined, undefined],
+      events: ["UserPromptSubmit", "UserPromptExpansion"],
+    },
+  );
+});
+
+test("before_agent_start sends the prompt context, then the expansion context, of one line (D-PG6-20)", async (t) => {
+  // arrange
+  const { registrations, context } = await expansionFixture(
+    t,
+    () => Promise.resolve(DEPLOY_EXPANSION),
+    {
+      UserPromptSubmit: { kind: "mutate", additionalContext: "prompt context" },
+      UserPromptExpansion: { kind: "mutate", additionalContext: "expansion context" },
+    },
+  );
+  await runInputHandlers(registrations, EXPANSION_LINE, context);
+
+  // act
+  const turn = await registeredHandler(registrations, "before_agent_start")(PROMPT_TURN, context);
+
+  // assert
+  assert.deepStrictEqual(turn, {
+    message: {
+      customType: "claude-hook-additional-context",
+      content: [
+        { type: "text", text: "UserPromptSubmit hook additional context: prompt context" },
+        { type: "text", text: "UserPromptExpansion hook additional context: expansion context" },
+      ],
+      display: false,
+    },
+  });
+});

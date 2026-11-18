@@ -47,6 +47,7 @@ const stageMcpInput: StageMcpInput = {
   pluginData: "/data/official/acme",
   sourcePath: "/plugins/acme/.mcp.json",
   env: {},
+  options: undefined,
 } satisfies StageMcpInput;
 void stageMcpInput;
 

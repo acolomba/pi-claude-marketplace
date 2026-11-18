@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { listedToolNames as definingListedToolNames } from "../../../extensions/pi-claude-marketplace/bridges/agents/convert.ts";
 import { discoverPluginAgents as definingDiscoverPluginAgents } from "../../../extensions/pi-claude-marketplace/bridges/agents/discover.ts";
 import {
   needsAgentGrantRewrite as definingNeedsAgentGrantRewrite,
@@ -12,6 +13,7 @@ import {
   assertAgentTargetsFree,
   commitPreparedAgents,
   discoverPluginAgents,
+  listedToolNames,
   needsAgentGrantRewrite,
   prepareStagePluginAgents,
   rewriteAgentGrantForms,
@@ -156,6 +158,19 @@ describe("rewriteAgentGrantForms", () => {
 
     // assert
     assert.strictEqual(agentsRewriteAgentGrantForms, expectedRewriteAgentGrantForms);
+  });
+});
+
+describe("listedToolNames", () => {
+  test("re-exports the defining binding", () => {
+    // arrange
+    const expectedListedToolNames = definingListedToolNames;
+
+    // act
+    const agentsListedToolNames = listedToolNames;
+
+    // assert
+    assert.strictEqual(agentsListedToolNames, expectedListedToolNames);
   });
 });
 

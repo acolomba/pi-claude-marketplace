@@ -1,6 +1,7 @@
 import type { DroppedHook } from "./components/hooks.ts";
 import type { DroppedMcpServer } from "./mcp-server-features.ts";
 import type { GitHubSource, GitSubdirSource, PathSource, UrlSource } from "./source.ts";
+import type { UserConfigSchema } from "./user-config.ts";
 import type Type from "typebox";
 
 // D-CF3-03: the fields every command map entry may carry beside its body.
@@ -151,6 +152,19 @@ interface MaterializableFields {
       >
     >
   >;
+  // D-PG4-01: the listed skills paths of a root-source entry that do not load,
+  // each with the cause Claude Code 2.1.323 reports. A traversal is kept as
+  // written; a missing or file path is relative to the plugin root.
+  refusedListedSkillPaths: Type.TOptional<
+    Type.TArray<
+      Type.TObject<{
+        path: Type.TString;
+        cause: Type.TUnion<
+          [Type.TLiteral<"traversal">, Type.TLiteral<"missing">, Type.TLiteral<"file">]
+        >;
+      }>
+    >
+  >;
   // MSEL-04: the subset pi-mcp-adapter supports, which the mcp phase stages
   // under every MCP implementation.
   mcpServers: McpServersFieldSchema;
@@ -178,6 +192,9 @@ interface MaterializableFields {
         : never
     >
   >;
+  // D-PG10-23: the parsed option schema as declared, present only when the
+  // plugin declares `userConfig`. It holds no value a user typed.
+  declaredUserConfig: Type.TOptional<Type.TUnsafe<UserConfigSchema>>;
   defaultEnabled: Type.TBoolean;
   // ANAME-06: written on every MCP server entry of the plugin.
   description: Type.TOptional<Type.TString>;
@@ -227,6 +244,11 @@ export type MaterializablePlugin = ResolvedPluginInstallable | ResolvedPluginPar
 /** D-CF3-03: one validated entry of an object-map `commands` declaration. */
 export type CommandMapEntry = NonNullable<
   MaterializablePlugin["componentPaths"]["commandMap"]
+>[number];
+
+/** D-PG4-01: one listed skills path of a root-source entry that does not load. */
+export type RefusedListedSkillPath = NonNullable<
+  MaterializablePlugin["refusedListedSkillPaths"]
 >[number];
 
 /** Filesystem shape read by the resolver. */

@@ -6,6 +6,7 @@ import { SessionManager } from "@earendil-works/pi-coding-agent";
 import {
   collectBucketOutcomes,
   compositeHandlerFor,
+  failureNotices,
   matcherFiresOnClosedSetValue,
   toolResultCompositeHandler,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
@@ -13,9 +14,14 @@ import {
   compileIfPredicate,
   MATCH_ALL_IF,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
+import { createHookToolView } from "../../../extensions/pi-claude-marketplace/bridges/hooks/mcp-tool-view.ts";
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
-import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
+import {
+  parseMatcher,
+  parseNameMatcher,
+} from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 
 import type {
@@ -27,7 +33,9 @@ import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/b
 import type { HookToolView } from "../../../extensions/pi-claude-marketplace/bridges/hooks/mcp-tool-view.ts";
 import type { ClaudeSessionEndEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-end.ts";
 import type { ClaudeSessionStartEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts";
+import type { UserPromptExpansionEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-expansion.ts";
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type { BucketAEvent } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import type { McpToolIdentity } from "../../../extensions/pi-claude-marketplace/domain/components/hooks/builtin-mcp-tool-names.ts";
 import type {
@@ -47,6 +55,7 @@ void ([
   "SessionEnd",
   "PreCompact",
   "PostCompact",
+  "UserPromptExpansion",
 ] satisfies readonly CompositeDispatchEvent[]);
 // @ts-expect-error PostToolUse belongs to toolResultCompositeHandler
 void ("PostToolUse" satisfies CompositeDispatchEvent);
@@ -180,6 +189,7 @@ function createRoutingEntry(input: {
     },
     declarationIndex: input.declarationIndex,
     ifPredicate: input.ifPredicate ?? MATCH_ALL_IF,
+    options: resolveOptions(undefined),
   };
 }
 
@@ -316,6 +326,7 @@ describe("compositeHandlerFor", () => {
       },
       declarationIndex: 0,
       ifPredicate: compileIfPredicate("Bash(git status)", "PreToolUse", compileContext),
+      options: resolveOptions(undefined),
     } satisfies RoutingEntry;
     const ifSkippedEntry = {
       scope: "user",
@@ -334,6 +345,7 @@ describe("compositeHandlerFor", () => {
       },
       declarationIndex: 1,
       ifPredicate: compileIfPredicate("Bash(npm test)", "PreToolUse", compileContext),
+      options: resolveOptions(undefined),
     } satisfies RoutingEntry;
     const firstMutationEntry = {
       scope: "user",
@@ -352,6 +364,7 @@ describe("compositeHandlerFor", () => {
       },
       declarationIndex: 2,
       ifPredicate: compileIfPredicate("Bash(git status)", "PreToolUse", compileContext),
+      options: resolveOptions(undefined),
     } satisfies RoutingEntry;
     const secondMutationEntry = {
       scope: "user",
@@ -370,6 +383,7 @@ describe("compositeHandlerFor", () => {
       },
       declarationIndex: 3,
       ifPredicate: compileIfPredicate("Bash(git status)", "PreToolUse", compileContext),
+      options: resolveOptions(undefined),
     } satisfies RoutingEntry;
     const routingBucket = [
       matcherSkippedEntry,
@@ -385,11 +399,11 @@ describe("compositeHandlerFor", () => {
     } satisfies ToolCallEvent;
     const firstMutation = {
       kind: "mutate",
-      updatedInput: { firstMutation: "visible", shared: "first" },
+      updatedInput: { command: "first" },
     } satisfies HookExecResult;
     const secondMutation = {
       kind: "mutate",
-      updatedInput: { secondMutation: "composed", shared: "second" },
+      updatedInput: { command: "second" },
     } satisfies HookExecResult;
     const executorCalls: ExecutorCall[] = [];
     const executorEntries: RoutingEntry[] = [];
@@ -447,7 +461,7 @@ describe("compositeHandlerFor", () => {
         pi: undefined,
         returned: {
           kind: "mutate",
-          updatedInput: { firstMutation: "visible", shared: "first" },
+          updatedInput: { command: "first" },
         },
       },
       {
@@ -479,7 +493,7 @@ describe("compositeHandlerFor", () => {
         pi: undefined,
         returned: {
           kind: "mutate",
-          updatedInput: { secondMutation: "composed", shared: "second" },
+          updatedInput: { command: "second" },
         },
       },
     ];
@@ -487,7 +501,7 @@ describe("compositeHandlerFor", () => {
       type: "tool_call",
       toolCallId: "dispatch-call",
       toolName: "bash",
-      input: { secondMutation: "composed", shared: "second" },
+      input: { command: "second" },
     } satisfies ToolCallEvent;
     const expectedAdaptedOutput: CompositeReturnFor<"PreToolUse"> = undefined;
 
@@ -955,8 +969,8 @@ describe("composite dispatch reduction", () => {
     const executorCalls: RecordedCall[] = [];
     const executor = createRecordingExecutor(
       {
-        "mutation-a": { kind: "mutate", updatedInput: { first: 1, shared: "first" } },
-        "mutation-b": { kind: "mutate", updatedInput: { second: 2, shared: "second" } },
+        "mutation-a": { kind: "mutate", updatedInput: { command: "first" } },
+        "mutation-b": { kind: "mutate", updatedInput: { command: "second" } },
       },
       executorCalls,
     );
@@ -968,7 +982,7 @@ describe("composite dispatch reduction", () => {
       undefined,
       executor,
     );
-    const expectedEvent = createToolCallEvent("bash", { second: 2, shared: "second" });
+    const expectedEvent = createToolCallEvent("bash", { command: "second" });
     const expectedOutput: CompositeReturnFor<"PreToolUse"> = undefined;
     const expectedCalls: RecordedCall[] = [
       {
@@ -1108,7 +1122,114 @@ describe("composite dispatch closure partitions", () => {
     assert.deepStrictEqual(output, expectedOutput);
   });
 
-  test("dispatches only match-all and exact MCP tool matchers", async () => {
+  test("a native tool call resets a Stop-only runtime before the empty bucket exits", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    for (let index = 0; index < 8; index += 1) {
+      runtime.recordStopReentry();
+    }
+
+    const handler = compositeHandlerFor(runtime, "PreToolUse", runtime.currentGeneration());
+
+    // act
+    const output = await handler(
+      createToolCallEvent(),
+      createExtensionContext("/workspace/stop-only"),
+    );
+    const nextStop = runtime.recordStopReentry();
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(nextStop, { reenter: true, notifyCap: false });
+    assert.strictEqual(runtime.isStopHookActive(), true);
+  });
+
+  test("a stale native tool callback cannot reset the current Stop budget", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const staleHandler = compositeHandlerFor(runtime, "PreToolUse", runtime.currentGeneration());
+    runtime.advanceGeneration();
+    for (let index = 0; index < 8; index += 1) {
+      runtime.recordStopReentry();
+    }
+
+    // act
+    const output = await staleHandler(
+      createToolCallEvent(),
+      createExtensionContext("/workspace/stale-tool"),
+    );
+    const nextStop = runtime.recordStopReentry();
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(nextStop, { reenter: false, notifyCap: true });
+  });
+
+  test("a blocked native tool call resets the Stop budget before its hook decision", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    for (let index = 0; index < 8; index += 1) {
+      runtime.recordStopReentry();
+    }
+
+    runtime.setRoutingBucket("PreToolUse", [
+      createRoutingEntry({
+        pluginId: "blocker",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Bash",
+        declarationIndex: 0,
+      }),
+    ]);
+    const calls: RecordedCall[] = [];
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor({ blocker: { kind: "block", reason: "denied" } }, calls),
+    );
+
+    // act
+    const output = await handler(
+      createToolCallEvent(),
+      createExtensionContext("/workspace/blocked-tool"),
+    );
+    const nextStop = runtime.recordStopReentry();
+
+    // assert
+    assert.deepStrictEqual(output, { block: true, reason: "PreToolUse:Bash hook error: denied" });
+    assert.deepStrictEqual(calls, [{ pluginId: "blocker", event: createToolCallEvent() }]);
+    assert.deepStrictEqual(nextStop, { reenter: true, notifyCap: false });
+  });
+
+  test("a native tool call that later fails still resets the Stop budget", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    for (let index = 0; index < 8; index += 1) {
+      runtime.recordStopReentry();
+    }
+
+    const generation = runtime.currentGeneration();
+    const before = compositeHandlerFor(runtime, "PreToolUse", generation);
+    const after = toolResultCompositeHandler(runtime, generation);
+    const context = createExtensionContext("/workspace/failed-tool");
+
+    // act
+    const callOutput = await before(createToolCallEvent(), context);
+    const failedOutput = await after(createToolResultEvent(true), context);
+    const nextStop = runtime.recordStopReentry();
+
+    // assert
+    assert.strictEqual(callOutput, undefined);
+    assert.strictEqual(failedOutput, undefined);
+    assert.deepStrictEqual(nextStop, { reenter: true, notifyCap: false });
+  });
+
+  test("dispatches match-all, exact MCP, and whole regex matchers in declaration order", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -1139,9 +1260,9 @@ describe("composite dispatch closure partitions", () => {
         declarationIndex: 3,
       }),
       createRoutingEntry({
-        pluginId: "regex-miss",
+        pluginId: "regex-match",
         claudeEvent: "PreToolUse",
-        rawMatcher: "Bash.*",
+        rawMatcher: ".*catalog__fetch",
         declarationIndex: 4,
       }),
       createRoutingEntry({
@@ -1157,6 +1278,7 @@ describe("composite dispatch closure partitions", () => {
       {
         "match-all": { kind: "noop" },
         "mcp-exact": { kind: "noop" },
+        "regex-match": { kind: "noop" },
       },
       executorCalls,
     );
@@ -1178,6 +1300,10 @@ describe("composite dispatch closure partitions", () => {
         pluginId: "mcp-exact",
         event: createToolCallEvent("mcp__catalog__fetch", { query: "hooks" }),
       },
+      {
+        pluginId: "regex-match",
+        event: createToolCallEvent("mcp__catalog__fetch", { query: "hooks" }),
+      },
     ];
 
     // act
@@ -1187,6 +1313,85 @@ describe("composite dispatch closure partitions", () => {
     assert.deepStrictEqual(output, expectedOutput);
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
+
+  test("never runs a tool event's entry whose matcher is a name set", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const entry: RoutingEntry = {
+      ...createRoutingEntry({
+        pluginId: "name-set",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Bash",
+        declarationIndex: 0,
+      }),
+      matcher: parseNameMatcher("Bash"),
+    };
+    const executorCalls: RecordedCall[] = [];
+    const executor = createRecordingExecutor({ "name-set": { kind: "noop" } }, executorCalls);
+    runtime.setRoutingBucket("PreToolUse", [entry]);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    const output = await handler(
+      createToolCallEvent(),
+      createExtensionContext("/workspace/name-set"),
+    );
+
+    // assert
+    assert.deepStrictEqual({ output, executorCalls }, { output: undefined, executorCalls: [] });
+  });
+
+  for (const { pattern, toolName, fires } of [
+    { pattern: "^Ba.*", toolName: "bash", fires: true },
+    { pattern: "^ba.*", toolName: "bash", fires: false },
+    { pattern: "(Read|Write)", toolName: "read", fires: true },
+    { pattern: "(Read|Write)", toolName: "write", fires: true },
+    { pattern: "(Read|Write)", toolName: "bash", fires: false },
+    { pattern: "é", toolName: "bash", fires: false },
+    { pattern: "ash$", toolName: "bash", fires: true },
+    { pattern: "[", toolName: "bash", fires: false },
+  ]) {
+    test(`tests whole regex ${JSON.stringify(pattern)} against Claude-form ${toolName}`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const entry = createRoutingEntry({
+        pluginId: "regex",
+        claudeEvent: "PreToolUse",
+        rawMatcher: pattern,
+        declarationIndex: 0,
+      });
+      const calls: RecordedCall[] = [];
+      const handler = compositeHandlerFor(
+        runtime,
+        "PreToolUse",
+        runtime.currentGeneration(),
+        undefined,
+        createRecordingExecutor({ regex: { kind: "noop" } }, calls),
+      );
+      runtime.setRoutingBucket("PreToolUse", [entry]);
+
+      // act
+      await handler(createToolCallEvent(toolName), createExtensionContext("/workspace/regex"));
+      await handler(createToolCallEvent(toolName), createExtensionContext("/workspace/regex"));
+
+      // assert
+      const expectedCalls: RecordedCall[] = fires
+        ? [
+            { pluginId: "regex", event: createToolCallEvent(toolName) },
+            { pluginId: "regex", event: createToolCallEvent(toolName) },
+          ]
+        : [];
+      assert.deepStrictEqual(calls, expectedCalls);
+    });
+  }
 
   for (const { toolName, fires } of [
     { toolName: "write", fires: true },
@@ -1630,6 +1835,152 @@ describe("toolResultCompositeHandler", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
+  test("delivers one actual edit result to each pair before folding replacements", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUse", [
+      createRoutingEntry({
+        pluginId: "first",
+        claudeEvent: "PostToolUse",
+        rawMatcher: "Edit",
+        declarationIndex: 0,
+      }),
+      createRoutingEntry({
+        pluginId: "second",
+        claudeEvent: "PostToolUse",
+        rawMatcher: "Edit",
+        declarationIndex: 1,
+      }),
+    ]);
+    const event: ToolResultEvent = {
+      ...createToolResultEvent(false, "edit"),
+      input: {
+        path: "document.txt",
+        edits: [
+          { oldText: "first", newText: "one" },
+          { oldText: "second", newText: "two" },
+        ],
+      },
+      content: [{ type: "text", text: "Successfully replaced 2 blocks" }],
+      details: { path: "document.txt", replacements: 2 },
+      structuredContent: { replacements: 2 },
+    };
+    const original = structuredClone(event);
+    const received: ToolResultEvent[] = [];
+    const executor: HookExecutor = (entry, hookEvent) => {
+      received.push(hookEvent as ToolResultEvent);
+      return Promise.resolve({
+        kind: "mutate",
+        updatedToolOutput: {
+          filePath: "/workspace/edit-results/document.txt",
+          newString: `${entry.pluginId} replacement`,
+        },
+      });
+    };
+
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    const output = await handler(event, createExtensionContext("/workspace/edit-results"));
+
+    // assert
+    assert.deepStrictEqual(
+      received.map((seen) => seen.input),
+      [
+        {
+          file_path: "/workspace/edit-results/document.txt",
+          old_string: "first",
+          new_string: "one",
+        },
+        {
+          file_path: "/workspace/edit-results/document.txt",
+          old_string: "first",
+          new_string: "one",
+        },
+        {
+          file_path: "/workspace/edit-results/document.txt",
+          old_string: "second",
+          new_string: "two",
+        },
+        {
+          file_path: "/workspace/edit-results/document.txt",
+          old_string: "second",
+          new_string: "two",
+        },
+      ],
+    );
+    assert.deepStrictEqual(
+      received.map((seen) => seen.toolCallId),
+      ["dispatch-call#1", "dispatch-call#1", "dispatch-call#2", "dispatch-call#2"],
+    );
+    for (const seen of received) {
+      assert.strictEqual(seen.content, event.content);
+      assert.strictEqual(seen.details, event.details);
+      assert.strictEqual(seen.structuredContent, event.structuredContent);
+    }
+
+    assert.deepStrictEqual(output, {
+      content: [{ type: "text", text: "/workspace/edit-results/document.txt: second replacement" }],
+      details: null,
+    });
+    assert.deepStrictEqual(event, original);
+  });
+
+  test("drops every edit pair result when the hook generation changes", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUse", [
+      createRoutingEntry({
+        pluginId: "late",
+        claudeEvent: "PostToolUse",
+        rawMatcher: "Edit",
+        declarationIndex: 0,
+      }),
+    ]);
+    const event: ToolResultEvent = {
+      ...createToolResultEvent(false, "edit"),
+      input: {
+        path: "document.txt",
+        edits: [
+          { oldText: "first", newText: "one" },
+          { oldText: "second", newText: "two" },
+        ],
+      },
+    };
+    const original = structuredClone(event);
+    let calls = 0;
+    const executor: HookExecutor = () => {
+      calls += 1;
+      runtime.advanceGeneration();
+      return Promise.resolve({
+        kind: "mutate",
+        updatedToolOutput: { content: [{ type: "text", text: "stale" }] },
+      });
+    };
+
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    const output = await handler(event, createExtensionContext("/workspace/stale-edit"));
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.strictEqual(calls, 1);
+    assert.deepStrictEqual(event, original);
+  });
+
   test("routes a failed result only through the PostToolUseFailure bucket", async () => {
     // arrange
     const runtime = createHooksRuntime();
@@ -1676,6 +2027,80 @@ describe("toolResultCompositeHandler", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
+  test("gives duplicate edit pairs the same failure without accepting output changes", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUseFailure", [
+      createRoutingEntry({
+        pluginId: "failure",
+        claudeEvent: "PostToolUseFailure",
+        rawMatcher: "Edit",
+        declarationIndex: 0,
+      }),
+    ]);
+    const event: ToolResultEvent = {
+      ...createToolResultEvent(true, "edit"),
+      input: {
+        path: "document.txt",
+        edits: [
+          { oldText: "missing", newText: "one" },
+          { oldText: "missing", newText: "one" },
+        ],
+      },
+      content: [
+        { type: "text", text: "Could not find edits[0]" },
+        { type: "image", data: "aGVsbG8=", mimeType: "image/png" },
+      ],
+      details: { failedIndex: 0 },
+    };
+    const original = structuredClone(event);
+    const received: ToolResultEvent[] = [];
+    const executor: HookExecutor = (_entry, hookEvent) => {
+      received.push(hookEvent as ToolResultEvent);
+      return Promise.resolve({
+        kind: "mutate",
+        updatedToolOutput: { content: [{ type: "text", text: "replaced" }], isError: false },
+      });
+    };
+
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    const output = await handler(event, createExtensionContext("/workspace/failed-edit"));
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.strictEqual(received.length, 2);
+    assert.deepStrictEqual(
+      received.map((seen) => seen.input),
+      [
+        {
+          file_path: "/workspace/failed-edit/document.txt",
+          old_string: "missing",
+          new_string: "one",
+        },
+        {
+          file_path: "/workspace/failed-edit/document.txt",
+          old_string: "missing",
+          new_string: "one",
+        },
+      ],
+    );
+    for (const seen of received) {
+      assert.strictEqual(seen.content, event.content);
+      assert.strictEqual(seen.details, event.details);
+      assert.strictEqual(seen.isError, true);
+    }
+
+    assert.deepStrictEqual(event, original);
+  });
+
   test("adapts a block without a reason to the tool output and the default feedback", async () => {
     // arrange
     const runtime = createHooksRuntime();
@@ -1704,6 +2129,7 @@ describe("toolResultCompositeHandler", () => {
           text: 'PostToolUse:Bash hook blocking error from command: "printf block-empty": Blocked by hook',
         },
       ],
+      isError: false,
     };
     const expectedCalls: RecordedCall[] = [
       { pluginId: "block-empty", event: createToolResultEvent(false) },
@@ -1757,6 +2183,7 @@ describe("toolResultCompositeHandler", () => {
           text: 'PostToolUse:Bash hook blocking error from command: "printf block-first": tool denied',
         },
       ],
+      isError: false,
     };
     const expectedCalls: RecordedCall[] = [
       { pluginId: "block-first", event: createToolResultEvent(false) },
@@ -1789,9 +2216,7 @@ describe("toolResultCompositeHandler", () => {
         "result-mutation": {
           kind: "mutate",
           updatedToolOutput: {
-            content: [{ type: "text", text: "patched output" }],
-            isError: true,
-            toolName: "must-not-change",
+            stdout: "patched output",
           },
         },
       },
@@ -1806,7 +2231,7 @@ describe("toolResultCompositeHandler", () => {
     );
     const expectedOutput = {
       content: [{ type: "text", text: "patched output" }],
-      isError: true,
+      details: null,
     };
     const expectedEvent: ToolResultEvent = createToolResultEvent(false);
     const expectedCalls: RecordedCall[] = [
@@ -1975,6 +2400,7 @@ describe("toolResultCompositeHandler", () => {
           text: `PostToolUseFailure:${ADAPTER_TOOL} hook blocking error from command: "printf failure-observer": look again`,
         },
       ],
+      isError: true,
     });
   });
 
@@ -2269,6 +2695,7 @@ describe("composite per-event adapters", () => {
       scope: "user",
       marketplace: "stale-marketplace",
       pluginId: "stale-plugin",
+      event: "UserPromptSubmit",
     });
     const entry = createRoutingEntry({
       pluginId: "input-context",
@@ -2301,6 +2728,7 @@ describe("composite per-event adapters", () => {
         scope: entry.scope,
         marketplace: entry.marketplace,
         pluginId: "input-context",
+        event: "UserPromptSubmit",
       },
     ]);
   });
@@ -2314,6 +2742,7 @@ describe("composite per-event adapters", () => {
       scope: "project",
       marketplace: "stale-marketplace",
       pluginId: "stale-plugin",
+      event: "UserPromptSubmit",
     });
     const handler = compositeHandlerFor(
       runtime,
@@ -2345,6 +2774,7 @@ describe("composite per-event adapters", () => {
           scope: "project",
           marketplace: "stale-marketplace",
           pluginId: "stale-plugin",
+          event: "UserPromptSubmit",
           prompt: "an earlier follow-up",
         },
       ],
@@ -2359,6 +2789,7 @@ describe("composite per-event adapters", () => {
         scope: "project",
         marketplace: "stale-marketplace",
         pluginId: "stale-plugin",
+        event: "UserPromptSubmit",
         prompt: "an earlier follow-up",
       });
       const handler = compositeHandlerFor(
@@ -3507,6 +3938,14 @@ describe("mcp proxy calls (D-CF5-12, MHK-02)", () => {
       runs: true,
       reads: ["identify mcp__plugin_demo_stub__echo"],
     },
+    {
+      name: "a shortened adapter tool whose input names a tool (D-PG1-08)",
+      toolName: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3",
+      input: { text: "ping", tool: "echo" },
+      applies: true,
+      runs: true,
+      reads: ["identify mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3"],
+    },
   ];
 
   for (const row of PROXY_ROWS) {
@@ -3543,8 +3982,8 @@ describe("mcp proxy calls (D-CF5-12, MHK-02)", () => {
       // assert
       assert.strictEqual(output, undefined);
       assert.deepStrictEqual(
-        calls.map(({ pluginId }) => pluginId),
-        runs ? ["any"] : [],
+        calls,
+        runs ? [{ pluginId: "any", event: createToolCallEvent(toolName, { ...input }) }] : [],
       );
       assert.deepStrictEqual(reads, expectedReads);
     });
@@ -3580,8 +4019,15 @@ describe("mcp proxy calls (D-CF5-12, MHK-02)", () => {
       // assert
       assert.strictEqual(output, undefined);
       assert.deepStrictEqual(
-        calls.map(({ pluginId }) => pluginId),
-        runs ? ["after"] : [],
+        calls,
+        runs
+          ? [
+              {
+                pluginId: "after",
+                event: { ...createToolResultEvent(false, toolName), input: { ...input } },
+              },
+            ]
+          : [],
       );
       assert.deepStrictEqual(reads, expectedReads);
     });
@@ -3610,6 +4056,47 @@ describe("mcp proxy calls (D-CF5-12, MHK-02)", () => {
     // assert
     assert.strictEqual(output, undefined);
     assert.deepStrictEqual(reads, []);
+  });
+
+  test("a proxy call resets the Stop budget before its PreToolUse view is skipped", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreToolUse", [
+      createRoutingEntry({
+        pluginId: "before",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "*",
+        declarationIndex: 0,
+      }),
+    ]);
+    for (let index = 0; index < 8; index += 1) {
+      runtime.recordStopReentry();
+    }
+
+    const reads: string[] = [];
+    const calls: RecordedCall[] = [];
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor({}, calls),
+      createProxyRuleView(true, reads),
+    );
+
+    // act
+    const output = await handler(
+      createToolCallEvent("mcp", { tool: "mcp__plugin_demo_stub__echo" }),
+      createExtensionContext("/workspace/proxy-reset"),
+    );
+    const nextStop = runtime.recordStopReentry();
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(reads, ["proxyRuleApplies"]);
+    assert.deepStrictEqual(calls, []);
+    assert.deepStrictEqual(nextStop, { reenter: true, notifyCap: false });
   });
 
   test("reads neither the proxy rule nor the tool for a proxy-shaped result when the bucket is empty", async () => {
@@ -3732,8 +4219,8 @@ describe("routing-order fold of mutations", () => {
     );
     const executor = createRecordingExecutor(
       {
-        first: { kind: "mutate", updatedToolOutput: { content: [{ type: "text", text: "one" }] } },
-        second: { kind: "mutate", updatedToolOutput: { content: [{ type: "text", text: "two" }] } },
+        first: { kind: "mutate", updatedToolOutput: { stdout: "one" } },
+        second: { kind: "mutate", updatedToolOutput: { stdout: "two" } },
       },
       [],
     );
@@ -3749,7 +4236,114 @@ describe("routing-order fold of mutations", () => {
     const output = await handler(event, createExtensionContext("/workspace/outputs"));
 
     // assert
-    assert.deepStrictEqual(output, { content: [{ type: "text", text: "two" }] });
+    assert.deepStrictEqual(output, { content: [{ type: "text", text: "two" }], details: null });
+  });
+
+  test("applies a legacy output only to a recovered MCP tool", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUse", routedEntries("PostToolUse", ["legacy"]));
+    const executor = createRecordingExecutor(
+      {
+        legacy: {
+          kind: "mutate",
+          updatedMCPToolOutput: { content: [{ type: "text", text: "safe" }] },
+        },
+      },
+      [],
+    );
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+      createBuiltinToolView([]),
+    );
+
+    // act
+    const mcpOutput = await handler(
+      builtinToolResultEvent(false),
+      createExtensionContext("/workspace"),
+    );
+    const customOutput = await handler(
+      createToolResultEvent(false, "owner-tool"),
+      createExtensionContext("/workspace"),
+    );
+
+    // assert
+    assert.deepStrictEqual(mcpOutput, { content: [{ type: "text", text: "safe" }], details: null });
+    assert.strictEqual(customOutput, undefined);
+  });
+
+  test("uses a modern false output as data without falling back to legacy output", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUse", routedEntries("PostToolUse", ["both"]));
+    const executor = createRecordingExecutor(
+      {
+        both: {
+          kind: "mutate",
+          updatedToolOutput: false,
+          updatedMCPToolOutput: { content: [{ type: "text", text: "legacy" }] },
+        },
+      },
+      [],
+    );
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+      createBuiltinToolView([]),
+    );
+
+    // act
+    const output = await handler(
+      builtinToolResultEvent(false),
+      createExtensionContext("/workspace"),
+    );
+
+    // assert
+    assert.deepStrictEqual(output, { content: [{ type: "text", text: "false" }], details: null });
+  });
+
+  test("keeps an accepted replacement when a later output is invalid or unchanged", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket(
+      "PostToolUse",
+      routedEntries("PostToolUse", ["first", "noop", "invalid", "echo"]),
+    );
+    const executor = createRecordingExecutor(
+      {
+        first: { kind: "mutate", updatedToolOutput: { content: [{ type: "text", text: "safe" }] } },
+        noop: { kind: "noop" },
+        invalid: { kind: "mutate", updatedToolOutput: { content: "invalid" } },
+        echo: {
+          kind: "mutate",
+          updatedToolOutput: { content: [{ type: "text", text: "original output" }] },
+        },
+      },
+      [],
+    );
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    const output = await handler(
+      createToolResultEvent(false, "owner-tool"),
+      createExtensionContext("/workspace"),
+    );
+
+    // assert
+    assert.deepStrictEqual(output, { content: [{ type: "text", text: "safe" }], details: null });
   });
 });
 
@@ -3838,6 +4432,49 @@ function promptEntries(pluginIds: readonly string[]): RoutingEntry[] {
 const PROMPT_EVENT = { type: "input", text: "hello", source: "interactive" } as InputEvent;
 
 describe("hook notices (HOOK-05 / D-CF5-14)", () => {
+  test("reports an unsupported Read rewrite without revealing its fields or values", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreToolUse", [
+      createRoutingEntry({
+        pluginId: "rewrite",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "Read",
+        declarationIndex: 0,
+      }),
+    ]);
+    const host = createNoticeHost("/workspace/notices");
+    const event = createToolCallEvent("read", { path: "original.txt", offset: 1 });
+    const executor = createRecordingExecutor(
+      {
+        rewrite: {
+          kind: "mutate",
+          updatedInput: { file_path: "replacement.txt", pages: "secret-value" },
+        },
+      },
+      [],
+    );
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      host.pi,
+      executor,
+    );
+
+    // act
+    const output = await handler(event, host.context);
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(event, createToolCallEvent("read", { path: "original.txt", offset: 1 }));
+    assert.deepStrictEqual(host.capture.entries, [
+      hookNoticeEntry("PreToolUse:Read ignored input rewrite (field)"),
+    ]);
+    host.capture.assertValid();
+  });
+
   test("shows each prompt hook's non-empty system message in routing order whatever order the hooks finish in", async () => {
     // arrange
     const runtime = createHooksRuntime();
@@ -3963,18 +4600,25 @@ describe("hook notices (HOOK-05 / D-CF5-14)", () => {
       },
       notices: [
         "UserPromptSubmit says: said",
-        "UserPromptSubmit operation blocked by hook:\n[printf first]: r1",
+        "UserPromptSubmit operation blocked by hook:\n[printf first]: r1\n\nOriginal prompt: hello",
       ],
     },
     {
-      name: "no blocked-prompt notice for a prompt a hook stops",
+      name: "a blocked prompt's notice without the prompt that its hook suppressed (D-PG6-20)",
+      claudeEvent: "UserPromptSubmit",
+      event: PROMPT_EVENT,
+      results: { guard: { kind: "block", reason: "no", suppressOriginalPrompt: true } },
+      notices: ["UserPromptSubmit operation blocked by hook:\nno"],
+    },
+    {
+      name: "the stop notice and no blocked-prompt notice for a prompt a hook stops (D-PG5-13)",
       claudeEvent: "UserPromptSubmit",
       event: PROMPT_EVENT,
       results: {
         stopper: { kind: "stop", stopReason: "enough" },
         guard: { kind: "block", reason: "no" },
       },
-      notices: [],
+      notices: ["Operation stopped by hook: enough"],
     },
     {
       name: "a hook error for each SessionStart block in routing order",
@@ -4161,6 +4805,654 @@ describe("hook notices (HOOK-05 / D-CF5-14)", () => {
       host.capture.assertValid();
     });
   }
+});
+
+const EXIT_FAILURE = { kind: "noop", failure: { kind: "exit", stderr: "boom\n" } } as const;
+
+describe("failure notices (D-PG5-10 / D-PG5-12)", () => {
+  const SESSION_START = { source: "startup" } satisfies ClaudeSessionStartEvent;
+  const SESSION_END = { reason: "clear" } satisfies ClaudeSessionEndEvent;
+  const PRE_COMPACT = { reason: "manual" } as SessionBeforeCompactEvent;
+  const POST_COMPACT = { reason: "manual" } as SessionCompactEvent;
+
+  for (const { name, claudeEvent, event, results, notices } of [
+    {
+      name: "a PreToolUse hook that exited with an error",
+      claudeEvent: "PreToolUse",
+      event: createToolCallEvent(),
+      results: { failer: EXIT_FAILURE },
+      notices: ["PreToolUse:Bash hook error: Failed with non-blocking status code: boom"],
+    },
+    {
+      name: "a UserPromptSubmit hook that exited with an error",
+      claudeEvent: "UserPromptSubmit",
+      event: PROMPT_EVENT,
+      results: { failer: EXIT_FAILURE },
+      notices: ["UserPromptSubmit hook error: Failed with non-blocking status code: boom"],
+    },
+    {
+      name: "a SessionStart hook that exited with an error",
+      claudeEvent: "SessionStart",
+      event: SESSION_START,
+      results: { failer: EXIT_FAILURE },
+      notices: ["SessionStart:startup hook error: Failed with non-blocking status code: boom"],
+    },
+    {
+      name: "a PreCompact hook that exited with an error",
+      claudeEvent: "PreCompact",
+      event: PRE_COMPACT,
+      results: { failer: EXIT_FAILURE },
+      notices: ["PreCompact:manual hook error: Failed with non-blocking status code: boom"],
+    },
+    {
+      name: "no notice for a SessionEnd hook that exited with an error",
+      claudeEvent: "SessionEnd",
+      event: SESSION_END,
+      results: { failer: EXIT_FAILURE },
+      notices: [],
+    },
+    {
+      name: "no notice for a PostCompact hook that exited with an error",
+      claudeEvent: "PostCompact",
+      event: POST_COMPACT,
+      results: { failer: EXIT_FAILURE },
+      notices: [],
+    },
+    {
+      name: "the system messages, then the block notice, then the failure notices",
+      claudeEvent: "UserPromptSubmit",
+      event: PROMPT_EVENT,
+      results: {
+        failer: EXIT_FAILURE,
+        speaker: { kind: "noop", systemMessage: "said" },
+        guard: { kind: "block", reason: "no" },
+      },
+      notices: [
+        "UserPromptSubmit says: said",
+        "UserPromptSubmit operation blocked by hook:\nno\n\nOriginal prompt: hello",
+        "UserPromptSubmit hook error: Failed with non-blocking status code: boom",
+      ],
+    },
+    {
+      name: "two notices for two hooks that fail with the same text, in routing order",
+      claudeEvent: "SessionStart",
+      event: SESSION_START,
+      results: {
+        first: EXIT_FAILURE,
+        quiet: { kind: "noop" },
+        second: EXIT_FAILURE,
+      },
+      notices: [
+        "SessionStart:startup hook error: Failed with non-blocking status code: boom",
+        "SessionStart:startup hook error: Failed with non-blocking status code: boom",
+      ],
+    },
+    {
+      name: "the failure of a hook beside a hook that blocks",
+      claudeEvent: "PreToolUse",
+      event: createToolCallEvent(),
+      results: { failer: EXIT_FAILURE, guard: { kind: "block", reason: "no" } },
+      notices: ["PreToolUse:Bash hook error: Failed with non-blocking status code: boom"],
+    },
+    {
+      name: "the failure of a hook beside a hook that mutates",
+      claudeEvent: "PreToolUse",
+      event: createToolCallEvent(),
+      results: {
+        failer: { kind: "noop", failure: { kind: "exit", stderr: "" } },
+        allower: { kind: "mutate", permissionDecision: "allow" },
+      },
+      notices: [
+        "PreToolUse:Bash hook error: Failed with non-blocking status code: No stderr output",
+      ],
+    },
+  ] satisfies ReadonlyArray<{
+    readonly name: string;
+    readonly claudeEvent: CompositeDispatchEvent;
+    readonly event: unknown;
+    readonly results: Readonly<Record<string, HookExecResult>>;
+    readonly notices: readonly string[];
+  }>) {
+    test(`shows ${name}`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket(claudeEvent, routedEntries(claudeEvent, Object.keys(results)));
+      const host = createNoticeHost("/workspace/failure-notices");
+      const handler = compositeHandlerFor(
+        runtime,
+        claudeEvent,
+        runtime.currentGeneration(),
+        host.pi,
+        createRecordingExecutor(results, []),
+      );
+
+      // act
+      await handler(event, host.context);
+
+      // assert
+      assert.deepStrictEqual(
+        host.capture.entries,
+        notices.map((text) => hookNoticeEntry(text)),
+      );
+      host.capture.assertValid();
+    });
+  }
+
+  for (const { isError, notice } of [
+    {
+      isError: false,
+      notice: "PostToolUse:Bash hook error: Failed with non-blocking status code: boom",
+    },
+    {
+      isError: true,
+      notice: "PostToolUseFailure:Bash hook error: Failed with non-blocking status code: boom",
+    },
+  ]) {
+    test(`shows ${notice} from the tool-result composite`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const claudeEvent = isError ? "PostToolUseFailure" : "PostToolUse";
+      runtime.setRoutingBucket(claudeEvent, routedEntries(claudeEvent, ["failer", "guard"]));
+      const host = createNoticeHost("/workspace/tool-result-failures");
+      const handler = toolResultCompositeHandler(
+        runtime,
+        runtime.currentGeneration(),
+        host.pi,
+        createRecordingExecutor(
+          { failer: EXIT_FAILURE, guard: { kind: "block", reason: "check the output" } },
+          [],
+        ),
+      );
+
+      // act
+      await handler(createToolResultEvent(isError), host.context);
+
+      // assert
+      assert.deepStrictEqual(host.capture.entries, [hookNoticeEntry(notice)]);
+      host.capture.assertValid();
+    });
+  }
+});
+
+const MISSING_SCRIPT_STDERR =
+  "python3: can't open file '/x/gone.py': [Errno 2] No such file or directory\n";
+// The em dash (U+2014) of the missing-script notice, escaped because the
+// fix-unicode-dashes hook rewrites a literal one.
+const MISSING_SCRIPT_NOTICE = `UserPromptSubmit hook error: Hook script appears to be missing \u2014 "printf gone" exited 2 with: ${MISSING_SCRIPT_STDERR.trim()}. Treating as non-blocking. Run /claude:plugin reinstall gone@dispatch-catalog --scope user to reinstall it.`;
+
+describe("missing-script notices (D-PG5-08 / D-PG5-11)", () => {
+  const missing = {
+    kind: "noop",
+    failure: { kind: "missing-script", stderr: MISSING_SCRIPT_STDERR },
+  } as const;
+
+  for (const { name, results, outcome, notices } of [
+    {
+      name: "lets the prompt go on with the other hooks' results and shows the notice",
+      results: { gone: missing, quiet: { kind: "noop" } },
+      outcome: undefined,
+      notices: [MISSING_SCRIPT_NOTICE],
+    },
+    {
+      name: "blocks the prompt beside a hook that blocks and shows both notices",
+      results: { gone: missing, guard: { kind: "block", reason: "no" } },
+      outcome: { action: "handled" },
+      notices: [
+        "UserPromptSubmit operation blocked by hook:\nno\n\nOriginal prompt: hello",
+        MISSING_SCRIPT_NOTICE,
+      ],
+    },
+  ] satisfies ReadonlyArray<{
+    readonly name: string;
+    readonly results: Readonly<Record<string, HookExecResult>>;
+    readonly outcome: unknown;
+    readonly notices: readonly string[];
+  }>) {
+    test(name, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket(
+        "UserPromptSubmit",
+        routedEntries("UserPromptSubmit", Object.keys(results)),
+      );
+      const host = createNoticeHost("/workspace/missing-script");
+      const handler = compositeHandlerFor(
+        runtime,
+        "UserPromptSubmit",
+        runtime.currentGeneration(),
+        host.pi,
+        createRecordingExecutor(results, []),
+      );
+
+      // act
+      const result = await handler(PROMPT_EVENT, host.context);
+
+      // assert
+      assert.deepStrictEqual(result, outcome);
+      assert.deepStrictEqual(
+        host.capture.entries,
+        notices.map((text) => hookNoticeEntry(text)),
+      );
+      host.capture.assertValid();
+    });
+  }
+
+  test("shows the notice of a missing script on every prompt", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptSubmit", routedEntries("UserPromptSubmit", ["gone"]));
+
+    // act
+    const entries = await promptNotices(runtime, { gone: missing }, 2);
+
+    // assert
+    assert.deepStrictEqual(entries, [
+      hookNoticeEntry(MISSING_SCRIPT_NOTICE),
+      hookNoticeEntry(MISSING_SCRIPT_NOTICE),
+    ]);
+  });
+});
+
+describe("failureNotices for the Stop event (D-PG5-10)", () => {
+  test("builds a Stop hook's failure notice with the Stop label", () => {
+    // arrange
+    const [entry] = routedEntries("Stop", ["failer"]);
+    assert.ok(entry !== undefined);
+
+    // act
+    const notices = failureNotices("Stop", "Stop", [{ entry, result: EXIT_FAILURE }]);
+
+    // assert
+    assert.deepStrictEqual(notices, [
+      { text: "Stop hook error: Failed with non-blocking status code: boom" },
+    ]);
+  });
+});
+
+const SPAWN_FAILURE = {
+  kind: "noop",
+  failure: { kind: "spawn", error: "spawn guard.sh ENOENT" },
+} as const;
+const SPAWN_NOTICE =
+  "UserPromptSubmit hook error: Failed with non-blocking status code: Error occurred while executing hook command: spawn guard.sh ENOENT";
+
+// Prompt entries of `pluginIds` in routing order that all declare `command`.
+function promptEntriesWithCommand(pluginIds: readonly string[], command: string): RoutingEntry[] {
+  return promptEntries(pluginIds).map((entry) => ({
+    ...entry,
+    handlerDecl: { ...entry.handlerDecl, command },
+  }));
+}
+
+// Runs the prompt handler of `runtime` once for each of `prompts` and returns
+// the entries of every notice the runs show.
+async function promptNotices(
+  runtime: HooksRuntime,
+  results: Readonly<Record<string, HookExecResult>>,
+  prompts: number,
+): Promise<readonly unknown[]> {
+  const host = createNoticeHost("/workspace/start-failures");
+  const handler = compositeHandlerFor(
+    runtime,
+    "UserPromptSubmit",
+    runtime.currentGeneration(),
+    host.pi,
+    createRecordingExecutor(results, []),
+  );
+  for (let prompt = 0; prompt < prompts; prompt += 1) {
+    await handler(PROMPT_EVENT, host.context);
+  }
+
+  host.capture.assertValid();
+  return host.capture.entries;
+}
+
+describe("start failure notices (D-PG5-12)", () => {
+  test("shows a hook that cannot start on the first event and not on the second", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptSubmit", promptEntries(["starter"]));
+
+    // act
+    const notices = await promptNotices(runtime, { starter: SPAWN_FAILURE }, 2);
+
+    // assert
+    assert.deepStrictEqual(notices, [hookNoticeEntry(SPAWN_NOTICE)]);
+  });
+
+  test("shows a start failure at the next event when its notice failed to show", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptSubmit", promptEntries(["starter"]));
+    const host = createNoticeHost("/workspace/start-failures");
+    let appends = 0;
+    const pi = {
+      ...host.pi,
+      appendEntry: (...entry: Parameters<ExtensionAPI["appendEntry"]>): void => {
+        appends += 1;
+        if (appends === 1) {
+          throw new Error("append failed");
+        }
+
+        host.pi.appendEntry(...entry);
+      },
+    };
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      runtime.currentGeneration(),
+      pi,
+      createRecordingExecutor({ starter: SPAWN_FAILURE }, []),
+    );
+
+    // act
+    await handler(PROMPT_EVENT, host.context);
+    await handler(PROMPT_EVENT, host.context);
+    await handler(PROMPT_EVENT, host.context);
+
+    // assert
+    assert.deepStrictEqual(host.capture.entries, [hookNoticeEntry(SPAWN_NOTICE)]);
+  });
+
+  test("shows an exception in the runner once", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptSubmit", promptEntries(["starter"]));
+
+    // act
+    const notices = await promptNotices(
+      runtime,
+      { starter: { kind: "noop", failure: { kind: "run", error: "bad root" } } },
+      2,
+    );
+
+    // assert
+    assert.deepStrictEqual(notices, [
+      hookNoticeEntry("UserPromptSubmit hook error: Failed to run: bad root"),
+    ]);
+  });
+
+  test("shows a hook that exits with an error on every event", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptSubmit", promptEntries(["failer"]));
+
+    // act
+    const notices = await promptNotices(runtime, { failer: EXIT_FAILURE }, 2);
+
+    // assert
+    assert.deepStrictEqual(notices, [
+      hookNoticeEntry("UserPromptSubmit hook error: Failed with non-blocking status code: boom"),
+      hookNoticeEntry("UserPromptSubmit hook error: Failed with non-blocking status code: boom"),
+    ]);
+  });
+
+  test("shows the same command once more on another event", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptSubmit", promptEntries(["starter"]));
+    runtime.setRoutingBucket("SessionStart", routedEntries("SessionStart", ["starter"]));
+    const host = createNoticeHost("/workspace/start-failures");
+    const executor = createRecordingExecutor({ starter: SPAWN_FAILURE }, []);
+    const generation = runtime.currentGeneration();
+    const promptHandler = compositeHandlerFor(
+      runtime,
+      "UserPromptSubmit",
+      generation,
+      host.pi,
+      executor,
+    );
+    const sessionHandler = compositeHandlerFor(
+      runtime,
+      "SessionStart",
+      generation,
+      host.pi,
+      executor,
+    );
+
+    // act
+    await promptHandler(PROMPT_EVENT, host.context);
+    await sessionHandler({ source: "startup" } satisfies ClaudeSessionStartEvent, host.context);
+    await sessionHandler({ source: "startup" } satisfies ClaudeSessionStartEvent, host.context);
+
+    // assert
+    assert.deepStrictEqual(host.capture.entries, [
+      hookNoticeEntry(SPAWN_NOTICE),
+      hookNoticeEntry(
+        "SessionStart:startup hook error: Failed with non-blocking status code: Error occurred while executing hook command: spawn guard.sh ENOENT",
+      ),
+    ]);
+    host.capture.assertValid();
+  });
+
+  test("shows a hook that declares no command and cannot start once", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket(
+      "UserPromptSubmit",
+      promptEntries(["bare"]).map((entry) => ({
+        ...entry,
+        handlerDecl: { type: "command", timeout: 1 },
+      })),
+    );
+
+    // act
+    const notices = await promptNotices(runtime, { bare: SPAWN_FAILURE }, 2);
+
+    // assert
+    assert.deepStrictEqual(notices, [hookNoticeEntry(SPAWN_NOTICE)]);
+  });
+
+  test("shows a new runtime's start failure again", async () => {
+    // arrange
+    const firstRuntime = createHooksRuntime();
+    const secondRuntime = createHooksRuntime();
+    for (const runtime of [firstRuntime, secondRuntime]) {
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket("UserPromptSubmit", promptEntries(["starter"]));
+    }
+
+    // act
+    const firstNotices = await promptNotices(firstRuntime, { starter: SPAWN_FAILURE }, 1);
+    const secondNotices = await promptNotices(secondRuntime, { starter: SPAWN_FAILURE }, 1);
+
+    // assert
+    assert.deepStrictEqual(
+      [firstNotices, secondNotices],
+      [[hookNoticeEntry(SPAWN_NOTICE)], [hookNoticeEntry(SPAWN_NOTICE)]],
+    );
+  });
+
+  for (const { name, command, notices } of [
+    {
+      name: "one notice for two hooks of one event with the same command",
+      command: "guard.sh",
+      notices: [SPAWN_NOTICE],
+    },
+    {
+      name: "a notice for each plugin root a braced plugin root command names",
+      command: "$" + "{CLAUDE_PLUGIN_ROOT}/hooks/guard.sh",
+      notices: [SPAWN_NOTICE, SPAWN_NOTICE],
+    },
+    {
+      name: "a notice for each plugin root a bare plugin root command names",
+      command: "$CLAUDE_PLUGIN_ROOT/hooks/guard.sh",
+      notices: [SPAWN_NOTICE, SPAWN_NOTICE],
+    },
+    {
+      name: "one notice for a command whose variable only starts with the plugin root name",
+      command: "$CLAUDE_PLUGIN_ROOTS/hooks/guard.sh",
+      notices: [SPAWN_NOTICE],
+    },
+  ]) {
+    test(`shows ${name}`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket(
+        "UserPromptSubmit",
+        promptEntriesWithCommand(["first", "second"], command),
+      );
+
+      // act
+      const shown = await promptNotices(
+        runtime,
+        { first: SPAWN_FAILURE, second: SPAWN_FAILURE },
+        1,
+      );
+
+      // assert
+      assert.deepStrictEqual(
+        shown,
+        notices.map((text) => hookNoticeEntry(text)),
+      );
+    });
+  }
+});
+
+const EDIT_INPUT = {
+  path: "document.txt",
+  edits: [
+    { oldText: "first", newText: "one" },
+    { oldText: "second", newText: "two" },
+  ],
+};
+
+// An executor whose result for a pair is the one `resultFor` gives the pair's
+// old string.
+function pairExecutor(resultFor: (oldString: unknown) => HookExecResult): HookExecutor {
+  return (_entry, event) => {
+    const input = (event as { readonly input: Record<string, unknown> }).input;
+    return Promise.resolve(resultFor(input.old_string));
+  };
+}
+
+describe("failure notices of a multi-pair edit (D-PG5-12)", () => {
+  for (const { name, resultFor, notices } of [
+    {
+      name: "one notice for a hook that exits with the same error for both pairs",
+      resultFor: (): HookExecResult => EXIT_FAILURE,
+      notices: ["PreToolUse:Edit hook error: Failed with non-blocking status code: boom"],
+    },
+    {
+      name: "a notice for each first line of a hook that fails differently for each pair",
+      resultFor: (oldString: unknown): HookExecResult => ({
+        kind: "noop",
+        failure: { kind: "exit", stderr: `bad ${String(oldString)}\ntrace` },
+      }),
+      notices: [
+        "PreToolUse:Edit hook error: Failed with non-blocking status code: bad first",
+        "PreToolUse:Edit hook error: Failed with non-blocking status code: bad second",
+      ],
+    },
+    {
+      name: "one notice for a hook that cannot start for both pairs",
+      resultFor: (): HookExecResult => SPAWN_FAILURE,
+      notices: [
+        "PreToolUse:Edit hook error: Failed with non-blocking status code: Error occurred while executing hook command: spawn guard.sh ENOENT",
+      ],
+    },
+  ]) {
+    test(`shows ${name} before the edit`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket("PreToolUse", routedEntries("PreToolUse", ["guard"]));
+      const host = createNoticeHost("/workspace/edit-failures");
+      const handler = compositeHandlerFor(
+        runtime,
+        "PreToolUse",
+        runtime.currentGeneration(),
+        host.pi,
+        pairExecutor(resultFor),
+      );
+
+      // act
+      const output = await handler(createToolCallEvent("edit", EDIT_INPUT), host.context);
+
+      // assert
+      assert.strictEqual(output, undefined);
+      assert.deepStrictEqual(
+        host.capture.entries,
+        notices.map((text) => hookNoticeEntry(text)),
+      );
+      host.capture.assertValid();
+    });
+  }
+
+  test("shows the system messages of each pair before the failure notice", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PreToolUse", routedEntries("PreToolUse", ["failer", "speaker"]));
+    const host = createNoticeHost("/workspace/edit-failures");
+    const executor: HookExecutor = (entry, event) => {
+      const input = (event as { readonly input: Record<string, unknown> }).input;
+      return Promise.resolve(
+        entry.pluginId === "failer"
+          ? EXIT_FAILURE
+          : { kind: "noop", systemMessage: `saw ${String(input.old_string)}` },
+      );
+    };
+
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      host.pi,
+      executor,
+    );
+
+    // act
+    await handler(createToolCallEvent("edit", EDIT_INPUT), host.context);
+
+    // assert
+    assert.deepStrictEqual(host.capture.entries, [
+      hookNoticeEntry("PreToolUse:Edit says: saw first"),
+      hookNoticeEntry("PreToolUse:Edit says: saw second"),
+      hookNoticeEntry("PreToolUse:Edit hook error: Failed with non-blocking status code: boom"),
+    ]);
+    host.capture.assertValid();
+  });
+
+  test("shows one notice for a hook that fails for both pairs after the edit", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUse", routedEntries("PostToolUse", ["guard"]));
+    const host = createNoticeHost("/workspace/edit-failures");
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      host.pi,
+      pairExecutor(() => EXIT_FAILURE),
+    );
+    const event: ToolResultEvent = {
+      ...createToolResultEvent(false, "edit"),
+      input: EDIT_INPUT,
+      content: [{ type: "text", text: "Successfully replaced 2 blocks" }],
+      details: { path: "document.txt", replacements: 2 },
+    };
+
+    // act
+    await handler(event, host.context);
+
+    // assert
+    assert.deepStrictEqual(host.capture.entries, [
+      hookNoticeEntry("PostToolUse:Edit hook error: Failed with non-blocking status code: boom"),
+    ]);
+    host.capture.assertValid();
+  });
 });
 
 describe("PostCompact notices (D-BG-501 / D-BG-502 / D-BG-504)", () => {
@@ -4473,7 +5765,7 @@ describe("tool hook context (HOOK-04 / D-CF5-13)", () => {
           looker: {
             kind: "mutate",
             additionalContext: "seen",
-            updatedToolOutput: { content: [{ type: "text", text: "kept" }] },
+            updatedToolOutput: { stdout: "kept" },
           },
         },
         [],
@@ -4487,7 +5779,7 @@ describe("tool hook context (HOOK-04 / D-CF5-13)", () => {
     );
 
     // assert
-    assert.deepStrictEqual(output, { content: [{ type: "text", text: "kept" }] });
+    assert.deepStrictEqual(output, { content: [{ type: "text", text: "kept" }], details: null });
     assert.deepStrictEqual(debugLines(), [
       "[hooks] dispatch: tool hook context failed: session closed",
     ]);
@@ -4548,7 +5840,755 @@ function builtinToolEntries(
   );
 }
 
+test("native Read path condition selects a hook before its input is translated", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  const cwd = "/workspace/if";
+  runtime.setRoutingBucket("PreToolUse", [
+    createRoutingEntry({
+      pluginId: "path-match",
+      claudeEvent: "PreToolUse",
+      rawMatcher: "Read",
+      declarationIndex: 0,
+      ifPredicate: compileIfPredicate("Read(original.txt)", "PreToolUse", {
+        homedir: "/home/tester",
+        cwd,
+        projectRoot: cwd,
+      }),
+    }),
+  ]);
+  const calls: RecordedCall[] = [];
+  const event = createToolCallEvent("read", { path: "original.txt" });
+  const handler = compositeHandlerFor(
+    runtime,
+    "PreToolUse",
+    runtime.currentGeneration(),
+    undefined,
+    createRecordingExecutor({ "path-match": { kind: "noop" } }, calls),
+  );
+
+  // act
+  const result = await handler(event, createExtensionContext(cwd));
+
+  // assert
+  assert.strictEqual(result, undefined);
+  assert.deepStrictEqual(calls, [
+    { pluginId: "path-match", event: createToolCallEvent("read", { path: "original.txt" }) },
+  ]);
+  assert.deepStrictEqual(event, createToolCallEvent("read", { path: "original.txt" }));
+});
+
+test("native edit runs a hook for each pair before replacing one batch", async () => {
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket(
+    "PreToolUse",
+    builtinToolEntries("PreToolUse", [{ pluginId: "rewrite", rawMatcher: "Edit" }]),
+  );
+  const input = {
+    path: "document.txt",
+    edits: [
+      { oldText: "first", newText: "one" },
+      { oldText: "second", newText: "two" },
+    ],
+  };
+  const event = createToolCallEvent("edit", input);
+  const received: unknown[] = [];
+  const handler = compositeHandlerFor(
+    runtime,
+    "PreToolUse",
+    runtime.currentGeneration(),
+    undefined,
+    (_entry, pairEvent) => {
+      received.push(structuredClone(pairEvent));
+      assert.deepStrictEqual(input.edits, [
+        { oldText: "first", newText: "one" },
+        { oldText: "second", newText: "two" },
+      ]);
+      const pair = editInput(pairEvent as ToolCallEvent);
+      return Promise.resolve(
+        pair.old_string === "first"
+          ? {
+              kind: "mutate",
+              updatedInput: {
+                file_path: "/workspace/edit/document.txt",
+                old_string: "first",
+                new_string: "ONE",
+              },
+            }
+          : { kind: "noop" },
+      );
+    },
+  );
+
+  assert.strictEqual(await handler(event, createExtensionContext("/workspace/edit")), undefined);
+  assert.deepStrictEqual(received, [
+    {
+      ...createToolCallEvent("edit", {
+        file_path: "/workspace/edit/document.txt",
+        old_string: "first",
+        new_string: "one",
+      }),
+      toolCallId: "dispatch-call#1",
+    },
+    {
+      ...createToolCallEvent("edit", {
+        file_path: "/workspace/edit/document.txt",
+        old_string: "second",
+        new_string: "two",
+      }),
+      toolCallId: "dispatch-call#2",
+    },
+  ]);
+  assert.strictEqual(event.toolCallId, "dispatch-call");
+  assert.deepStrictEqual(event.input, {
+    path: "/workspace/edit/document.txt",
+    edits: [
+      { oldText: "first", newText: "ONE" },
+      { oldText: "second", newText: "two" },
+    ],
+  });
+});
+
+test("a native edit with one pair keeps the call's tool use id before and after the call", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket(
+    "PreToolUse",
+    builtinToolEntries("PreToolUse", [{ pluginId: "pre", rawMatcher: "Edit" }]),
+  );
+  runtime.setRoutingBucket(
+    "PostToolUse",
+    builtinToolEntries("PostToolUse", [{ pluginId: "post", rawMatcher: "Edit" }]),
+  );
+  const input = { path: "document.txt", edits: [{ oldText: "first", newText: "one" }] };
+  const received: string[] = [];
+  const executor: HookExecutor = (_entry, hookEvent) => {
+    received.push((hookEvent as ToolCallEvent | ToolResultEvent).toolCallId);
+    return Promise.resolve({ kind: "noop" });
+  };
+
+  const preflight = compositeHandlerFor(
+    runtime,
+    "PreToolUse",
+    runtime.currentGeneration(),
+    undefined,
+    executor,
+  );
+  const result = toolResultCompositeHandler(
+    runtime,
+    runtime.currentGeneration(),
+    undefined,
+    executor,
+  );
+  const ctx = createExtensionContext("/workspace/edit");
+
+  // act
+  await preflight(createToolCallEvent("edit", input), ctx);
+  await result({ ...createToolResultEvent(false, "edit"), input }, ctx);
+
+  // assert
+  assert.deepStrictEqual(received, ["dispatch-call", "dispatch-call"]);
+});
+
+function editPreflight(
+  decide: (
+    input: Record<string, unknown>,
+    runtime: HooksRuntime,
+  ) => HookExecResult | Promise<HookExecResult>,
+  input: Record<string, unknown> = {
+    path: "document.txt",
+    edits: [
+      { oldText: "first", newText: "one" },
+      { oldText: "second", newText: "two" },
+    ],
+  },
+  ctx = createExtensionContext("/workspace/edit"),
+) {
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket(
+    "PreToolUse",
+    builtinToolEntries("PreToolUse", [{ pluginId: "guard", rawMatcher: "Edit" }]),
+  );
+  const received: string[] = [];
+  const event = createToolCallEvent("edit", input);
+  const handler = compositeHandlerFor(
+    runtime,
+    "PreToolUse",
+    runtime.currentGeneration(),
+    undefined,
+    (_entry, pairEvent) => {
+      const pairInput = editInput(pairEvent as ToolCallEvent);
+      received.push(String(pairInput.old_string));
+      return Promise.resolve(decide(pairInput, runtime));
+    },
+  );
+  return { runtime, event, handler, received, ctx };
+}
+
+function editInput(event: ToolCallEvent): Record<string, unknown> {
+  return event.input;
+}
+
+function deferred<T>() {
+  let resolve: ((value: T) => void) | undefined;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  assert.ok(resolve);
+  return { promise, resolve };
+}
+
+test("zero and malformed edit pairs leave native validation and input intact", async () => {
+  for (const edits of [[], [null], [{ oldText: 1, newText: "two" }]]) {
+    const input = { path: "document.txt", edits };
+    const run = editPreflight(() => ({ kind: "noop" }), input);
+    assert.strictEqual(await run.handler(run.event, run.ctx), undefined);
+    assert.deepStrictEqual(run.received, []);
+    assert.deepStrictEqual(run.event.input, input);
+  }
+});
+
+test("null native edit input reaches Pi validation without a bridge exception", async () => {
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket(
+    "PreToolUse",
+    builtinToolEntries("PreToolUse", [{ pluginId: "guard", rawMatcher: "Edit" }]),
+  );
+  const event = { ...createToolCallEvent("edit"), input: null } as unknown as ToolCallEvent;
+  const calls: RecordedCall[] = [];
+  const handler = compositeHandlerFor(
+    runtime,
+    "PreToolUse",
+    runtime.currentGeneration(),
+    undefined,
+    createRecordingExecutor({ guard: { kind: "noop" } }, calls),
+  );
+
+  assert.strictEqual(await handler(event, createExtensionContext("/workspace/edit")), undefined);
+  assert.strictEqual(event.input, null);
+});
+
+test("one native edit pair produces one hook invocation and one accepted rewrite", async () => {
+  const run = editPreflight(
+    () => ({
+      kind: "mutate",
+      updatedInput: {
+        file_path: "document.txt",
+        old_string: "first",
+        new_string: "ONE",
+      },
+    }),
+    { path: "document.txt", edits: [{ oldText: "first", newText: "one" }] },
+  );
+  assert.strictEqual(await run.handler(run.event, run.ctx), undefined);
+  assert.deepStrictEqual(run.received, ["first"]);
+  assert.deepStrictEqual(editInput(run.event), {
+    path: "/workspace/edit/document.txt",
+    edits: [{ oldText: "first", newText: "ONE" }],
+  });
+});
+
+test("equal edit pair values still produce two hook invocations", async () => {
+  const run = editPreflight(() => ({ kind: "noop" }), {
+    path: "document.txt",
+    edits: [
+      { oldText: "same", newText: "same" },
+      { oldText: "same", newText: "same" },
+    ],
+  });
+  assert.strictEqual(await run.handler(run.event, run.ctx), undefined);
+  assert.deepStrictEqual(run.received, ["same", "same"]);
+});
+
+test("edit if conditions compare the original native input", async () => {
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  const cwd = "/workspace/edit";
+  runtime.setRoutingBucket("PreToolUse", [
+    createRoutingEntry({
+      pluginId: "original-path",
+      claudeEvent: "PreToolUse",
+      rawMatcher: "Edit",
+      declarationIndex: 0,
+      ifPredicate: compileIfPredicate("Edit(document.txt)", "PreToolUse", {
+        homedir: "/home/tester",
+        cwd,
+        projectRoot: cwd,
+      }),
+    }),
+  ]);
+  const calls: RecordedCall[] = [];
+  const event = createToolCallEvent("edit", {
+    path: "document.txt",
+    edits: [{ oldText: "first", newText: "one" }],
+  });
+  const handler = compositeHandlerFor(
+    runtime,
+    "PreToolUse",
+    runtime.currentGeneration(),
+    undefined,
+    createRecordingExecutor({ "original-path": { kind: "noop" } }, calls),
+  );
+  assert.strictEqual(await handler(event, createExtensionContext(cwd)), undefined);
+  assert.strictEqual(calls.length, 1);
+  assert.deepStrictEqual((calls[0]?.event as ToolCallEvent).input, {
+    file_path: `${cwd}/document.txt`,
+    old_string: "first",
+    new_string: "one",
+  });
+  assert.strictEqual(editInput(event).path, "document.txt");
+});
+
+test("reversed hook completion still commits pair rewrites in native order", async () => {
+  const first = deferred<HookExecResult>();
+  const second = deferred<HookExecResult>();
+  const run = editPreflight((input) =>
+    input.old_string === "first" ? first.promise : second.promise,
+  );
+  const completion = run.handler(run.event, run.ctx);
+  assert.deepStrictEqual(run.received, ["first", "second"]);
+  second.resolve({
+    kind: "mutate",
+    updatedInput: {
+      file_path: "document.txt",
+      old_string: "second",
+      new_string: "TWO",
+    },
+  });
+  await Promise.resolve();
+  first.resolve({
+    kind: "mutate",
+    updatedInput: {
+      file_path: "document.txt",
+      old_string: "first",
+      new_string: "ONE",
+    },
+  });
+  assert.strictEqual(await completion, undefined);
+  assert.deepStrictEqual(editInput(run.event).edits, [
+    { oldText: "first", newText: "ONE" },
+    { oldText: "second", newText: "TWO" },
+  ]);
+});
+
+test("a later edit stop dominates a prior rewrite without changing the native input", async () => {
+  const run = editPreflight((input) =>
+    input.old_string === "first"
+      ? {
+          kind: "mutate",
+          updatedInput: { file_path: "document.txt", old_string: "first", new_string: "ONE" },
+        }
+      : { kind: "stop", stopReason: "stop edit" },
+  );
+  assert.deepStrictEqual(await run.handler(run.event, run.ctx), {
+    block: true,
+    reason: "stop edit",
+    terminate: true,
+  });
+  assert.deepStrictEqual(run.received, ["first", "second"]);
+  assert.deepStrictEqual(editInput(run.event).edits, [
+    { oldText: "first", newText: "one" },
+    { oldText: "second", newText: "two" },
+  ]);
+});
+
+test("a later edit block dominates a prior rewrite", async () => {
+  const run = editPreflight((input) =>
+    input.old_string === "first"
+      ? {
+          kind: "mutate",
+          updatedInput: { file_path: "document.txt", old_string: "first", new_string: "ONE" },
+        }
+      : { kind: "block", reason: "deny edit" },
+  );
+  assert.deepStrictEqual(await run.handler(run.event, run.ctx), {
+    block: true,
+    reason: "PreToolUse:Edit hook error: deny edit",
+  });
+  assert.deepStrictEqual(run.received, ["first", "second"]);
+  assert.strictEqual((editInput(run.event).edits as { newText: string }[])[0]?.newText, "one");
+});
+
+test("an edit ask rejection blocks before any pair rewrite", async () => {
+  const run = editPreflight((input) =>
+    input.old_string === "first"
+      ? {
+          kind: "mutate",
+          updatedInput: { file_path: "document.txt", old_string: "first", new_string: "ONE" },
+        }
+      : { kind: "mutate", permissionDecision: "ask", permissionDecisionReason: "approve edit?" },
+  );
+  assert.deepStrictEqual(await run.handler(run.event, run.ctx), {
+    block: true,
+    reason: "approve edit?",
+  });
+  assert.strictEqual((editInput(run.event).edits as { newText: string }[])[0]?.newText, "one");
+});
+
+test("conflicting edit targets block even when an unsupported proposal follows", async () => {
+  const run = editPreflight((input) =>
+    input.old_string === "first"
+      ? {
+          kind: "mutate",
+          updatedInput: { file_path: "other.txt", old_string: "first", new_string: "ONE" },
+        }
+      : {
+          kind: "mutate",
+          updatedInput: {
+            file_path: "document.txt",
+            old_string: "second",
+            new_string: "TWO",
+            replace_all: true,
+          },
+        },
+  );
+  assert.deepStrictEqual(await run.handler(run.event, run.ctx), {
+    block: true,
+    reason: "PreToolUse:Edit hook error: conflicting edit targets",
+  });
+  assert.strictEqual(editInput(run.event).path, "document.txt");
+});
+
+test("an unsupported later rewrite discards a supported earlier edit rewrite", async () => {
+  const run = editPreflight((input) =>
+    input.old_string === "first"
+      ? {
+          kind: "mutate",
+          updatedInput: { file_path: "document.txt", old_string: "first", new_string: "ONE" },
+        }
+      : {
+          kind: "mutate",
+          updatedInput: {
+            file_path: "document.txt",
+            old_string: "second",
+            new_string: "TWO",
+            replace_all: true,
+          },
+        },
+  );
+  assert.strictEqual(await run.handler(run.event, run.ctx), undefined);
+  assert.strictEqual(editInput(run.event).path, "document.txt");
+  assert.strictEqual((editInput(run.event).edits as { newText: string }[])[0]?.newText, "one");
+});
+
+test("a batch with no edit rewrite keeps native input unchanged", async () => {
+  const run = editPreflight(() => ({ kind: "noop" }));
+  assert.strictEqual(await run.handler(run.event, run.ctx), undefined);
+  assert.strictEqual(editInput(run.event).path, "document.txt");
+});
+
+test("reload during an edit hook cannot commit a stale rewrite", async () => {
+  const pending = deferred<HookExecResult>();
+  const run = editPreflight(() => pending.promise);
+  const completion = run.handler(run.event, run.ctx);
+  run.runtime.advanceGeneration();
+  pending.resolve({
+    kind: "mutate",
+    updatedInput: { file_path: "document.txt", old_string: "first", new_string: "ONE" },
+  });
+  assert.strictEqual(await completion, undefined);
+  assert.strictEqual(editInput(run.event).path, "document.txt");
+});
+
+test("cancellation during an edit hook cannot commit a rewrite", async () => {
+  const pending = deferred<HookExecResult>();
+  const controller = new AbortController();
+  const ctx = Object.defineProperty(createExtensionContext("/workspace/edit"), "signal", {
+    value: controller.signal,
+  });
+  const run = editPreflight(() => pending.promise, undefined, ctx);
+  const completion = run.handler(run.event, run.ctx);
+  controller.abort();
+  pending.resolve({
+    kind: "mutate",
+    updatedInput: { file_path: "document.txt", old_string: "first", new_string: "ONE" },
+  });
+  assert.strictEqual(await completion, undefined);
+  assert.strictEqual(editInput(run.event).path, "document.txt");
+});
+
+for (const invalidation of ["reload", "cancellation"] as const) {
+  test(`${invalidation} while an edit ask awaits cannot commit a rewrite`, async () => {
+    const answer = deferred<boolean>();
+    const asked = deferred<undefined>();
+    const controller = new AbortController();
+    const ctx = Object.defineProperties(createExtensionContext("/workspace/edit"), {
+      mode: { value: "tui" },
+      signal: { value: controller.signal },
+      ui: {
+        get: () => ({
+          confirm: () => {
+            asked.resolve(undefined);
+            return answer.promise;
+          },
+        }),
+      },
+    });
+    const run = editPreflight(
+      (input) =>
+        input.old_string === "first"
+          ? {
+              kind: "mutate",
+              permissionDecision: "ask",
+              updatedInput: {
+                file_path: "document.txt",
+                old_string: "first",
+                new_string: "ONE",
+              },
+            }
+          : { kind: "noop" },
+      undefined,
+      ctx,
+    );
+    const completion = run.handler(run.event, run.ctx);
+    await asked.promise;
+    if (invalidation === "reload") {
+      run.runtime.advanceGeneration();
+    } else {
+      controller.abort();
+    }
+
+    answer.resolve(true);
+    assert.strictEqual(await completion, undefined);
+    assert.strictEqual(editInput(run.event).path, "document.txt");
+  });
+}
+
 describe("built-in MCP tool names (MHK-01)", () => {
+  test("gives the adapter's full name to every PreToolUse hook when one spells it (D-PG1-08)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const fullName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo";
+    const piName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3";
+    runtime.setRoutingBucket(
+      "PreToolUse",
+      builtinToolEntries("PreToolUse", [
+        { pluginId: "literal", rawMatcher: fullName },
+        { pluginId: "any", rawMatcher: "*" },
+      ]),
+    );
+    const received: ReceivedEvent[] = [];
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      createEventKeepingExecutor({}, received),
+      createBuiltinToolView([]),
+    );
+    const event = createToolCallEvent(piName, { text: "ping" });
+
+    // act
+    await handler(event, createExtensionContext("/workspace/adapter"));
+
+    // assert
+    assert.deepStrictEqual(received, [
+      { pluginId: "literal", event: createToolCallEvent(fullName, { text: "ping" }) },
+      { pluginId: "any", event: createToolCallEvent(fullName, { text: "ping" }) },
+    ]);
+  });
+
+  test("names a shortened adapter tool in a block reason and notice by its full name (D-PG1-08)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const fullName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo";
+    const piName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3";
+    runtime.setRoutingBucket(
+      "PreToolUse",
+      builtinToolEntries("PreToolUse", [{ pluginId: "guard", rawMatcher: fullName }]),
+    );
+    const host = createNoticeHost("/workspace/adapter-labels");
+    const sent: SentMessage[] = [];
+    const pi = Object.assign(host.pi, {
+      sendMessage: (message: unknown, options: unknown): void => {
+        sent.push({ message, options });
+      },
+    });
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      pi,
+      createEventKeepingExecutor(
+        {
+          guard: {
+            kind: "block",
+            reason: "no",
+            systemMessage: "checked",
+            additionalContext: "why",
+          },
+        },
+        [],
+      ),
+      createBuiltinToolView([]),
+    );
+
+    // act
+    const output = await handler(createToolCallEvent(piName, { text: "ping" }), host.context);
+
+    // assert
+    assert.deepStrictEqual(output, {
+      block: true,
+      reason: `PreToolUse:${fullName} hook error: no`,
+    });
+    assert.deepStrictEqual(host.capture.entries, [
+      hookNoticeEntry(`PreToolUse:${fullName} says: checked`),
+    ]);
+    assert.deepStrictEqual(sent, [
+      toolContextMessage(`PreToolUse:${fullName} hook additional context: why`),
+    ]);
+    host.capture.assertValid();
+  });
+
+  test("lands a full-name adapter hook's input rewrite on Pi's own input (D-PG1-08)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const fullName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo";
+    const piName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3";
+    runtime.setRoutingBucket(
+      "PreToolUse",
+      builtinToolEntries("PreToolUse", [{ pluginId: "rewriter", rawMatcher: fullName }]),
+    );
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      createEventKeepingExecutor(
+        { rewriter: { kind: "mutate", updatedInput: { text: "pong" } } },
+        [],
+      ),
+      createBuiltinToolView([]),
+    );
+    const event = createToolCallEvent(piName, { text: "ping" });
+
+    // act
+    const output = await handler(event, createExtensionContext("/workspace/adapter-rewrite"));
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(event, createToolCallEvent(piName, { text: "pong" }));
+  });
+
+  test("recovers the adapter's full name from an if literal for all PreToolUse hooks (D-PG1-08)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const fullName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo";
+    const piName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3";
+    runtime.setRoutingBucket("PreToolUse", [
+      createRoutingEntry({
+        pluginId: "iffed",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "*",
+        declarationIndex: 0,
+        ifPredicate: { kind: "mcp-literal", toolName: fullName },
+      }),
+      createRoutingEntry({
+        pluginId: "any",
+        claudeEvent: "PreToolUse",
+        rawMatcher: "*",
+        declarationIndex: 1,
+      }),
+    ]);
+    const received: ReceivedEvent[] = [];
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      createEventKeepingExecutor({}, received),
+      createBuiltinToolView([]),
+    );
+
+    // act
+    await handler(
+      createToolCallEvent(piName, { text: "ping" }),
+      createExtensionContext("/workspace/adapter"),
+    );
+
+    // assert
+    assert.deepStrictEqual(received, [
+      { pluginId: "iffed", event: createToolCallEvent(fullName, { text: "ping" }) },
+      { pluginId: "any", event: createToolCallEvent(fullName, { text: "ping" }) },
+    ]);
+  });
+
+  test("recovers the adapter's full name from another tool event's hook (D-PG1-08)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const fullName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo";
+    const piName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3";
+    runtime.setRoutingBucket(
+      "PreToolUse",
+      builtinToolEntries("PreToolUse", [{ pluginId: "any", rawMatcher: "*" }]),
+    );
+    runtime.setRoutingBucket(
+      "PostToolUseFailure",
+      builtinToolEntries("PostToolUseFailure", [{ pluginId: "literal", rawMatcher: fullName }]),
+    );
+    const received: ReceivedEvent[] = [];
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      createEventKeepingExecutor({}, received),
+      createBuiltinToolView([]),
+    );
+
+    // act
+    await handler(
+      createToolCallEvent(piName, { text: "ping" }),
+      createExtensionContext("/workspace/adapter"),
+    );
+
+    // assert
+    assert.deepStrictEqual(received, [
+      { pluginId: "any", event: createToolCallEvent(fullName, { text: "ping" }) },
+    ]);
+  });
+
+  test("reads no other tool-event bucket for a name without an adapter cut (D-PG1-08)", async (t) => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket(
+      "PreToolUse",
+      builtinToolEntries("PreToolUse", [{ pluginId: "any", rawMatcher: "*" }]),
+    );
+    const getRoutingBucketSpy = t.mock.method(runtime, "getRoutingBucket");
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      createEventKeepingExecutor({}, []),
+      createBuiltinToolView([]),
+    );
+
+    // act
+    await handler(
+      createToolCallEvent("mcp__plugin_demo_stub__echo", { text: "ping" }),
+      createExtensionContext("/workspace/adapter"),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      getRoutingBucketSpy.mock.calls.map((call) => call.arguments[0]),
+      ["PreToolUse"],
+    );
+  });
+
   test("runs the Claude-form literal, server prefix, and match-all hooks and not the folded-server ones (D-P5-04)", async () => {
     // arrange
     const runtime = createHooksRuntime();
@@ -4815,6 +6855,227 @@ function builtinToolResultEvent(isError: boolean, toolName = BUILTIN_PI_NAME): T
 }
 
 describe("built-in MCP tool names in tool results and if fields (MHK-01)", () => {
+  test("runs the server-prefix hook for a verified 64-character adapter name", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const server = `plugin_demo_${"x".repeat(37)}_`;
+    const piName = `mcp__${server}_deadbeef`;
+    runtime.setRoutingBucket(
+      "PostToolUse",
+      builtinToolEntries("PostToolUse", [
+        { pluginId: "prefixed", rawMatcher: `mcp__${server}_.*` },
+      ]),
+    );
+    const received: ReceivedEvent[] = [];
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      createEventKeepingExecutor({}, received),
+      createBuiltinToolView([]),
+    );
+    const event = {
+      ...builtinToolResultEvent(false, piName),
+      details: { server, tool: "deadbeef" },
+    };
+
+    // act
+    const output = await handler(event, createExtensionContext("/workspace/adapter"));
+
+    // assert
+    assert.strictEqual(piName.length, 64);
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(received, [{ pluginId: "prefixed", event }]);
+  });
+
+  test("recovers a shortened adapter result name from its details for every PostToolUse hook (D-PG1-08)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const fullName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo";
+    const piName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3";
+    runtime.setRoutingBucket(
+      "PostToolUse",
+      builtinToolEntries("PostToolUse", [
+        { pluginId: "any", rawMatcher: "*" },
+        {
+          pluginId: "prefixed",
+          rawMatcher: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__.*",
+        },
+      ]),
+    );
+    const received: ReceivedEvent[] = [];
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      createEventKeepingExecutor({}, received),
+      createBuiltinToolView([]),
+    );
+    const event = {
+      ...builtinToolResultEvent(false, piName),
+      details: {
+        server: "plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server_",
+        tool: "echo",
+      },
+    };
+
+    // act
+    const output = await handler(event, createExtensionContext("/workspace/adapter"));
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(received, [
+      { pluginId: "any", event: { ...event, toolName: fullName } },
+      { pluginId: "prefixed", event: { ...event, toolName: fullName } },
+    ]);
+  });
+
+  for (const { title, details } of [
+    { title: "missing details", details: undefined },
+    { title: "null details", details: null },
+    { title: "non-object details", details: "server" },
+    { title: "missing server", details: { tool: "echo" } },
+    { title: "missing tool", details: { server: "plugin_demo_stub_" } },
+    { title: "non-string server", details: { server: 1, tool: "echo" } },
+    { title: "non-string tool", details: { server: "plugin_demo_stub_", tool: 1 } },
+    { title: "another server", details: { server: "plugin_other_stub_", tool: "echo" } },
+    {
+      title: "another tool",
+      details: {
+        server: "plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server_",
+        tool: "other",
+      },
+    },
+  ]) {
+    test(`keeps Pi's cut name for adapter result ${title} (D-PG1-08)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const piName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3";
+      runtime.setRoutingBucket(
+        "PostToolUse",
+        builtinToolEntries("PostToolUse", [{ pluginId: "any", rawMatcher: "*" }]),
+      );
+      const received: ReceivedEvent[] = [];
+      const handler = toolResultCompositeHandler(
+        runtime,
+        runtime.currentGeneration(),
+        undefined,
+        createEventKeepingExecutor({}, received),
+        createBuiltinToolView([]),
+      );
+      const event = { ...builtinToolResultEvent(false, piName), details };
+
+      // act
+      const output = await handler(event, createExtensionContext("/workspace/adapter"));
+
+      // assert
+      assert.strictEqual(output, undefined);
+      assert.deepStrictEqual(received, [{ pluginId: "any", event }]);
+    });
+  }
+
+  for (const { title, matcher, name, tool } of [
+    {
+      title: "without a full-name literal",
+      matcher: "*",
+      name: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3",
+      tool: undefined,
+    },
+    {
+      title: "with a full-name literal",
+      matcher: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo",
+      name: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo",
+      tool: undefined,
+    },
+    {
+      title: "with a tool detail but no full-name literal",
+      matcher: "*",
+      name: "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3",
+      tool: "echo",
+    },
+  ]) {
+    test(`names an adapter PostToolUseFailure ${title} (D-PG1-08)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const piName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3";
+      runtime.setRoutingBucket(
+        "PostToolUseFailure",
+        builtinToolEntries("PostToolUseFailure", [{ pluginId: "failure", rawMatcher: matcher }]),
+      );
+      const received: ReceivedEvent[] = [];
+      const reads: string[] = [];
+      const handler = toolResultCompositeHandler(
+        runtime,
+        runtime.currentGeneration(),
+        undefined,
+        createEventKeepingExecutor({}, received),
+        createProxyRuleView(true, reads),
+      );
+      const event = {
+        ...builtinToolResultEvent(false, piName),
+        details: {
+          error: "tool_error",
+          server: "plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server_",
+          ...(tool === undefined ? {} : { tool }),
+        },
+      };
+
+      // act
+      const output = await handler(event, createExtensionContext("/workspace/adapter"));
+
+      // assert
+      assert.strictEqual(output, undefined);
+      assert.deepStrictEqual(received, [
+        { pluginId: "failure", event: { ...event, isError: true, toolName: name } },
+      ]);
+      assert.deepStrictEqual(reads, ["proxyRuleApplies", `identify ${piName}`]);
+    });
+  }
+
+  for (const claudeEvent of ["PostToolUse", "PostToolUseFailure"] as const) {
+    test(`gives every ${claudeEvent} hook the recovered adapter name (D-PG1-08)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const fullName =
+        "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plugin_stub-server__echo";
+      const piName = "mcp__plugin_hook-proxy-shaped-tool-names-of-a-long-plug_aa6b8bc3";
+      runtime.setRoutingBucket(
+        claudeEvent,
+        builtinToolEntries(claudeEvent, [
+          { pluginId: "literal", rawMatcher: fullName },
+          { pluginId: "any", rawMatcher: "*" },
+        ]),
+      );
+      const received: ReceivedEvent[] = [];
+      const handler = toolResultCompositeHandler(
+        runtime,
+        runtime.currentGeneration(),
+        undefined,
+        createEventKeepingExecutor({}, received),
+        createBuiltinToolView([]),
+      );
+      const isError = claudeEvent === "PostToolUseFailure";
+
+      // act
+      const output = await handler(
+        builtinToolResultEvent(isError, piName),
+        createExtensionContext("/workspace/adapter"),
+      );
+
+      // assert
+      assert.strictEqual(output, undefined);
+      assert.deepStrictEqual(received, [
+        { pluginId: "literal", event: builtinToolResultEvent(isError, fullName) },
+        { pluginId: "any", event: builtinToolResultEvent(isError, fullName) },
+      ]);
+    });
+  }
+
   for (const claudeEvent of ["PostToolUse", "PostToolUseFailure"] as const) {
     test(`runs the Claude-form ${claudeEvent} literal and server prefix and not the folded-server literal (D-P5-04)`, async () => {
       // arrange
@@ -4915,6 +7176,7 @@ describe("built-in MCP tool names in tool results and if fields (MHK-01)", () =>
             text: `${label} hook blocking error from command: "printf guard": no`,
           },
         ],
+        isError: claudeEvent === "PostToolUseFailure",
       });
       assert.deepStrictEqual(host.capture.entries, [hookNoticeEntry(`${label} says: checked`)]);
       assert.deepStrictEqual(sent, [toolContextMessage(`${label} hook additional context: why`)]);
@@ -5059,3 +7321,712 @@ async function runAdapterToolResult(
   const output = await handler(adapterToolResult(details), context);
   return { output, calls };
 }
+
+// A clock that reads `value` and counts its reads.
+function countingClock(value: number): {
+  readonly now: () => number;
+  readonly reads: () => number;
+} {
+  let reads = 0;
+  return {
+    now: () => {
+      reads += 1;
+      return value;
+    },
+    reads: () => reads,
+  };
+}
+
+describe("duration marks (D-PG6-06)", () => {
+  for (const { name, result, entries } of [
+    { name: "an empty PreToolUse bucket", result: { kind: "noop" } as const, entries: [] },
+    {
+      name: "a blocked call",
+      result: { kind: "block", reason: "denied" } as const,
+      entries: ["guard"],
+    },
+    { name: "a call whose executor rejects", result: "reject" as const, entries: ["guard"] },
+    { name: "a call with hooks", result: { kind: "noop" } as const, entries: ["guard"] },
+  ]) {
+    test(`marks the call when its PreToolUse handler ends, after ${name}`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket("PreToolUse", preToolUseEntries(entries));
+      const clock = countingClock(100);
+      const readsWhenHooksRan: number[] = [];
+      const executor: HookExecutor = () => {
+        readsWhenHooksRan.push(clock.reads());
+        return result === "reject"
+          ? Promise.reject(new Error("injected executor refused"))
+          : Promise.resolve(result);
+      };
+
+      const handler = compositeHandlerFor(
+        runtime,
+        "PreToolUse",
+        runtime.currentGeneration(),
+        undefined,
+        executor,
+        createHookToolView(undefined),
+        clock.now,
+      );
+
+      // act
+      await handler(createToolCallEvent(), createExtensionContext("/workspace/marks")).catch(
+        (error: unknown) => error,
+      );
+
+      // assert
+      assert.deepStrictEqual(
+        readsWhenHooksRan,
+        entries.map(() => 0),
+      );
+      assert.strictEqual(clock.reads(), 1);
+      assert.strictEqual(runtime.takeToolDuration("dispatch-call", 175), 75);
+    });
+  }
+
+  test("marks a call another tool issued with its parent's id", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.recordToolCallPrepared("a", undefined, 100);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor({}, []),
+      createHookToolView(undefined),
+      () => 200,
+    );
+
+    // act
+    await handler(
+      { ...createToolCallEvent(), toolCallId: "a/1", parentToolCallId: "a" },
+      createExtensionContext("/workspace/marks"),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      [runtime.takeToolDuration("a/1", 230), runtime.takeToolDuration("a", 400)],
+      [30, 300],
+    );
+  });
+
+  test("keeps no mark for a PreToolUse handler of a stale generation", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const stale = runtime.currentGeneration();
+    runtime.advanceGeneration();
+    const clock = countingClock(100);
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      stale,
+      undefined,
+      createRecordingExecutor({}, []),
+      createHookToolView(undefined),
+      clock.now,
+    );
+
+    // act
+    const output = await handler(createToolCallEvent(), createExtensionContext("/workspace/marks"));
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.strictEqual(clock.reads(), 0);
+    assert.strictEqual(runtime.takeToolDuration("dispatch-call", 175), undefined);
+  });
+
+  test("gives every result hook the time since the call's mark", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUse", routedEntries("PostToolUse", ["first", "second"]));
+    runtime.recordToolCallPrepared("dispatch-call", undefined, 100);
+    const calls: RecordedCall[] = [];
+    const executor = createRecordingExecutor(
+      { first: { kind: "noop" }, second: { kind: "noop" } },
+      calls,
+    );
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+      createHookToolView(undefined),
+      () => 175,
+    );
+
+    // act
+    await handler(createToolResultEvent(false), createExtensionContext("/workspace/marks"));
+
+    // assert
+    assert.deepStrictEqual(
+      calls.map(({ event }) => event),
+      [
+        { ...createToolResultEvent(false), hookDurationMs: 75 },
+        { ...createToolResultEvent(false), hookDurationMs: 75 },
+      ],
+    );
+    assert.strictEqual(runtime.takeToolDuration("dispatch-call", 300), undefined);
+  });
+
+  test("gives each pair of a multi-pair edit the call's duration", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUse", [
+      createRoutingEntry({
+        pluginId: "edits",
+        claudeEvent: "PostToolUse",
+        rawMatcher: "Edit",
+        declarationIndex: 0,
+      }),
+    ]);
+    runtime.recordToolCallPrepared("dispatch-call", undefined, 100);
+    const received: unknown[] = [];
+    const executor: HookExecutor = (_entry, event) => {
+      received.push(event);
+      return Promise.resolve({ kind: "noop" });
+    };
+
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+      createHookToolView(undefined),
+      () => 175,
+    );
+
+    // act
+    await handler(
+      { ...createToolResultEvent(false, "edit"), input: EDIT_INPUT },
+      createExtensionContext("/workspace/marks"),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      received.map((event) => [
+        (event as ToolResultEvent).toolCallId,
+        (event as { readonly hookDurationMs?: number }).hookDurationMs,
+      ]),
+      [
+        ["dispatch-call#1", 75],
+        ["dispatch-call#2", 75],
+      ],
+    );
+  });
+
+  test("removes the mark of a result with an empty bucket", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.recordToolCallPrepared("dispatch-call", undefined, 100);
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor({}, []),
+      createHookToolView(undefined),
+      () => 175,
+    );
+
+    // act
+    const output = await handler(
+      createToolResultEvent(false),
+      createExtensionContext("/workspace/marks"),
+    );
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.strictEqual(runtime.takeToolDuration("dispatch-call", 300), undefined);
+  });
+
+  test("runs no hook for a cancelled call's failure and still removes its mark (D-BG-402)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUseFailure", routedEntries("PostToolUseFailure", ["fail"]));
+    runtime.recordToolCallPrepared("dispatch-call", undefined, 100);
+    const calls: RecordedCall[] = [];
+    const context = createExtensionContext("/workspace/marks");
+    context.signal = AbortSignal.abort();
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor({ fail: { kind: "noop" } }, calls),
+      createHookToolView(undefined),
+      () => 175,
+    );
+
+    // act
+    const output = await handler(createToolResultEvent(true), context);
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(calls, []);
+    assert.strictEqual(runtime.takeToolDuration("dispatch-call", 300), undefined);
+  });
+
+  test("gives a result with no mark no duration (D-PG6-04)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("PostToolUse", routedEntries("PostToolUse", ["first"]));
+    const received: unknown[] = [];
+    const executor: HookExecutor = (_entry, event) => {
+      received.push(event);
+      return Promise.resolve({ kind: "noop" });
+    };
+
+    const event = createToolResultEvent(false);
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+      createHookToolView(undefined),
+      () => 175,
+    );
+
+    // act
+    await handler(event, createExtensionContext("/workspace/marks"));
+
+    // assert
+    assert.deepStrictEqual(received, [event]);
+    assert.strictEqual(received[0], event);
+  });
+});
+
+describe("MCP server facts (D-PG6-07)", () => {
+  const mcpTool = "mcp__plugin_demo_stub__echo";
+  const demoServer = { name: "plugin:demo:stub", source: "plugin" } as const;
+
+  function runtimeWithDemoServer(): HooksRuntime {
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setMcpServers("user", [
+      { builtinServer: "plugin_demo_stub", adapterKey: "plugin_demo_stub_", server: demoServer },
+    ]);
+    return runtime;
+  }
+
+  test("gives a PreToolUse hook of a plugin MCP tool the tool's server", async () => {
+    // arrange
+    const runtime = runtimeWithDemoServer();
+    runtime.setRoutingBucket(
+      "PreToolUse",
+      builtinToolEntries("PreToolUse", [{ pluginId: "guard", rawMatcher: mcpTool }]),
+    );
+    const received: ReceivedEvent[] = [];
+    const handler = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      createEventKeepingExecutor({}, received),
+      createHookToolView(undefined),
+    );
+    const event = createToolCallEvent(mcpTool, { text: "ping" });
+
+    // act
+    await handler(event, createExtensionContext("/workspace/servers"));
+
+    // assert
+    assert.deepStrictEqual(received, [
+      {
+        pluginId: "guard",
+        event: { ...createToolCallEvent(mcpTool, { text: "ping" }), hookMcpServer: demoServer },
+      },
+    ]);
+    assert.strictEqual((received[0]?.event as ToolCallEvent).input, event.input);
+  });
+
+  test("gives a result hook of a plugin MCP tool the tool's server beside its duration", async () => {
+    // arrange
+    const runtime = runtimeWithDemoServer();
+    runtime.setRoutingBucket("PostToolUse", routedEntries("PostToolUse", ["after"]));
+    runtime.recordToolCallPrepared("dispatch-call", undefined, 100);
+    const received: ReceivedEvent[] = [];
+    const handler = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      createEventKeepingExecutor({}, received),
+      createHookToolView(undefined),
+      () => 175,
+    );
+
+    // act
+    await handler(
+      createToolResultEvent(false, mcpTool),
+      createExtensionContext("/workspace/servers"),
+    );
+
+    // assert
+    assert.deepStrictEqual(received, [
+      {
+        pluginId: "after",
+        event: {
+          ...createToolResultEvent(false, mcpTool),
+          hookDurationMs: 75,
+          hookMcpServer: demoServer,
+        },
+      },
+    ]);
+  });
+
+  test("hands the hooks Pi's own events for a tool with no server", async () => {
+    // arrange
+    const runtime = runtimeWithDemoServer();
+    runtime.setRoutingBucket(
+      "PreToolUse",
+      builtinToolEntries("PreToolUse", [{ pluginId: "guard", rawMatcher: "*" }]),
+    );
+    runtime.setRoutingBucket("PostToolUse", routedEntries("PostToolUse", ["after"]));
+    const received: ReceivedEvent[] = [];
+    const executor = createEventKeepingExecutor({}, received);
+    const tools = createHookToolView(undefined);
+    const preToolUse = compositeHandlerFor(
+      runtime,
+      "PreToolUse",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+      tools,
+    );
+    const toolResult = toolResultCompositeHandler(
+      runtime,
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+      tools,
+    );
+    const callEvent = createToolCallEvent("mcp__other__echo", { text: "ping" });
+    const resultEvent = { ...createToolResultEvent(false, "bash"), toolCallId: "unmarked-call" };
+
+    // act
+    await preToolUse(callEvent, createExtensionContext("/workspace/servers"));
+    await toolResult(resultEvent, createExtensionContext("/workspace/servers"));
+
+    // assert
+    assert.deepStrictEqual(
+      received.map(({ event }) => event),
+      [callEvent, resultEvent],
+    );
+    assert.strictEqual(received[0]?.event, callEvent);
+    assert.strictEqual(received[1]?.event, resultEvent);
+  });
+});
+
+const EXPANSION_INPUT = {
+  type: "input",
+  text: "/demo:deploy staging",
+  source: "interactive",
+} satisfies InputEvent;
+
+function expansionEvent(commandName: string): UserPromptExpansionEvent {
+  return {
+    command_name: commandName,
+    command_args: "staging",
+    command_source: "plugin",
+    input: EXPANSION_INPUT,
+  };
+}
+
+function expansionEntry(pluginId: string, rawMatcher: string, declarationIndex = 0): RoutingEntry {
+  return {
+    ...createRoutingEntry({
+      pluginId,
+      claudeEvent: "UserPromptExpansion",
+      rawMatcher,
+      declarationIndex,
+    }),
+    matcher: parseNameMatcher(rawMatcher),
+  };
+}
+
+describe("UserPromptExpansion dispatch (D-PG6-19 / D-PG6-20)", () => {
+  const MATCHED = ["listed", "pattern", "every", "unlisted"] as const;
+
+  for (const { commandName, ran } of [
+    { commandName: "demo:deploy", ran: ["pattern", "every"] },
+    { commandName: "ship", ran: ["listed", "every"] },
+    { commandName: "Demo:Deploy", ran: ["every"] },
+  ]) {
+    test(`runs the hooks whose matcher selects the command ${commandName} (D-PG6-19)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket("UserPromptExpansion", [
+        expansionEntry("listed", "deploy, ship", 0),
+        expansionEntry("pattern", "^demo:", 1),
+        expansionEntry("every", "*", 2),
+        expansionEntry("unlisted", "build", 3),
+      ]);
+      const calls: RecordedCall[] = [];
+      const handler = compositeHandlerFor(
+        runtime,
+        "UserPromptExpansion",
+        runtime.currentGeneration(),
+        undefined,
+        createRecordingExecutor(
+          Object.fromEntries(MATCHED.map((pluginId) => [pluginId, { kind: "noop" } as const])),
+          calls,
+        ),
+      );
+
+      // act
+      const output = await handler(
+        expansionEvent(commandName),
+        createExtensionContext("/workspace/expansion"),
+      );
+
+      // assert
+      assert.strictEqual(output, undefined);
+      assert.deepStrictEqual(
+        calls,
+        ran.map((pluginId) => ({ pluginId, event: expansionEvent(commandName) })),
+      );
+    });
+  }
+
+  test("runs no hook whose matcher is a tool matcher (D-PG6-19)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket("UserPromptExpansion", [
+      createRoutingEntry({
+        pluginId: "tool",
+        claudeEvent: "UserPromptExpansion",
+        rawMatcher: "Bash",
+        declarationIndex: 0,
+      }),
+    ]);
+    const calls: RecordedCall[] = [];
+    const handler = compositeHandlerFor(
+      runtime,
+      "UserPromptExpansion",
+      runtime.currentGeneration(),
+      undefined,
+      createRecordingExecutor({ tool: { kind: "noop" } }, calls),
+    );
+
+    // act
+    const output = await handler(
+      expansionEvent("Bash"),
+      createExtensionContext("/workspace/expansion"),
+    );
+
+    // assert
+    assert.strictEqual(output, undefined);
+    assert.deepStrictEqual(calls, []);
+  });
+
+  test("answers nothing and runs no hook for an empty bucket or a stale generation", async () => {
+    // arrange
+    const empty = createHooksRuntime();
+    empty.advanceGeneration();
+    const stale = createHooksRuntime();
+    const capturedGeneration = stale.advanceGeneration();
+    stale.setRoutingBucket("UserPromptExpansion", [expansionEntry("every", "")]);
+    stale.advanceGeneration();
+    const calls: RecordedCall[] = [];
+    const executor = createRecordingExecutor({ every: { kind: "noop" } }, calls);
+    const context = createExtensionContext("/workspace/expansion");
+
+    // act
+    const outputs = [
+      await compositeHandlerFor(
+        empty,
+        "UserPromptExpansion",
+        empty.currentGeneration(),
+        undefined,
+        executor,
+      )(expansionEvent("demo:deploy"), context),
+      await compositeHandlerFor(
+        stale,
+        "UserPromptExpansion",
+        capturedGeneration,
+        undefined,
+        executor,
+      )(expansionEvent("demo:deploy"), context),
+    ];
+
+    // assert
+    assert.deepStrictEqual(outputs, [undefined, undefined]);
+    assert.deepStrictEqual(calls, []);
+  });
+
+  for (const { name, results, output, notices } of [
+    {
+      name: "the event's block notice with a decision reason",
+      results: { guard: { kind: "block", reason: "not now" } },
+      output: { action: "handled" },
+      notices: [
+        "UserPromptExpansion operation blocked by hook:\nnot now\n\nOriginal prompt: /demo:deploy staging",
+      ],
+    },
+    {
+      name: "the event's block notice with an exit-2 stderr",
+      results: { guard: { kind: "block", reason: "denied", fromStderr: true } },
+      output: { action: "handled" },
+      notices: [
+        "UserPromptExpansion operation blocked by hook:\n[printf guard]: denied\n\nOriginal prompt: /demo:deploy staging",
+      ],
+    },
+    {
+      name: "Claude Code's default reason for a block without one",
+      results: { guard: { kind: "block" } },
+      output: { action: "handled" },
+      notices: [
+        "UserPromptExpansion operation blocked by hook:\nBlocked by hook\n\nOriginal prompt: /demo:deploy staging",
+      ],
+    },
+    {
+      name: "the default text of an exit 2 without stderr",
+      results: { guard: { kind: "block", fromStderr: true } },
+      output: { action: "handled" },
+      notices: [
+        "UserPromptExpansion operation blocked by hook:\n[printf guard]: No stderr output\n\nOriginal prompt: /demo:deploy staging",
+      ],
+    },
+    {
+      name: "only the first block in routing order",
+      results: {
+        first: { kind: "block", reason: "r1" },
+        second: { kind: "block", reason: "r2", fromStderr: true },
+      },
+      output: { action: "handled" },
+      notices: [
+        "UserPromptExpansion operation blocked by hook:\nr1\n\nOriginal prompt: /demo:deploy staging",
+      ],
+    },
+    {
+      name: "the block notice without the original prompt that its hook suppressed",
+      results: { guard: { kind: "block", reason: "not now", suppressOriginalPrompt: true } },
+      output: { action: "handled" },
+      notices: ["UserPromptExpansion operation blocked by hook:\nnot now"],
+    },
+    {
+      name: "the original prompt when only a later block's hook suppressed it",
+      results: {
+        first: { kind: "block", reason: "r1" },
+        second: { kind: "block", reason: "r2", suppressOriginalPrompt: true },
+      },
+      output: { action: "handled" },
+      notices: [
+        "UserPromptExpansion operation blocked by hook:\nr1\n\nOriginal prompt: /demo:deploy staging",
+      ],
+    },
+    {
+      name: "the stop notice with its reason",
+      results: { stopper: { kind: "stop", stopReason: "enough" } },
+      output: { action: "handled" },
+      notices: ["Operation stopped by hook: enough"],
+    },
+    {
+      name: "the stop notice without a reason",
+      results: { stopper: { kind: "stop" } },
+      output: { action: "handled" },
+      notices: ["Operation stopped by hook"],
+    },
+    {
+      name: "a system message after the event's name",
+      results: { speaker: { kind: "noop", systemMessage: "said" } },
+      output: undefined,
+      notices: ["UserPromptExpansion says: said"],
+    },
+    {
+      name: "the failure of a hook that exited with an error, and lets the expansion run",
+      results: { failer: EXIT_FAILURE },
+      output: undefined,
+      notices: ["UserPromptExpansion hook error: Failed with non-blocking status code: boom"],
+    },
+  ] satisfies ReadonlyArray<{
+    readonly name: string;
+    readonly results: Readonly<Record<string, HookExecResult>>;
+    readonly output: unknown;
+    readonly notices: readonly string[];
+  }>) {
+    test(`shows ${name} (D-PG6-20)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      runtime.setRoutingBucket(
+        "UserPromptExpansion",
+        routedEntries("UserPromptExpansion", Object.keys(results)),
+      );
+      const host = createNoticeHost("/workspace/expansion-notices");
+      const handler = compositeHandlerFor(
+        runtime,
+        "UserPromptExpansion",
+        runtime.currentGeneration(),
+        host.pi,
+        createRecordingExecutor(results, []),
+      );
+
+      // act
+      const answer = await handler(expansionEvent("demo:deploy"), host.context);
+
+      // assert
+      assert.deepStrictEqual(
+        { answer, entries: host.capture.entries },
+        { answer: output, entries: notices.map((text) => hookNoticeEntry(text)) },
+      );
+      host.capture.assertValid();
+    });
+  }
+
+  for (const { name, additionalContext, added } of [
+    { name: "a context", additionalContext: "expansion context", added: ["expansion context"] },
+    { name: "an empty context", additionalContext: "", added: [] },
+  ]) {
+    test(`buffers ${name} under the event and keeps the prompt's context of the line (D-PG6-20)`, async () => {
+      // arrange
+      const runtime = createHooksRuntime();
+      runtime.advanceGeneration();
+      const promptContext = {
+        context: "prompt context",
+        scope: "project",
+        marketplace: "dispatch-catalog",
+        pluginId: "prompter",
+        event: "UserPromptSubmit",
+      } as const;
+      runtime.appendPendingPromptContext(promptContext);
+      runtime.setRoutingBucket("UserPromptExpansion", [expansionEntry("adder", "")]);
+      const handler = compositeHandlerFor(
+        runtime,
+        "UserPromptExpansion",
+        runtime.currentGeneration(),
+        undefined,
+        createRecordingExecutor({ adder: { kind: "mutate", additionalContext } }, []),
+      );
+
+      // act
+      const output = await handler(
+        expansionEvent("demo:deploy"),
+        createExtensionContext("/workspace/expansion-context"),
+      );
+
+      // assert
+      assert.strictEqual(output, undefined);
+      assert.deepStrictEqual(runtime.pendingPromptContextEntries(), [
+        promptContext,
+        ...added.map((context) => ({
+          context,
+          scope: "user",
+          marketplace: "dispatch-catalog",
+          pluginId: "adder",
+          event: "UserPromptExpansion",
+        })),
+      ]);
+    });
+  }
+});

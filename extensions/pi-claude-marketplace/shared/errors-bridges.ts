@@ -5,6 +5,7 @@
 // refusal categories via instanceof and so user-visible error messages are
 // uniform.
 
+import { printable } from "./notification-mcp.ts";
 import { redactAbsolutePaths } from "./redact-absolute-paths.ts";
 
 import type { McpConfigNotice } from "./notification-types.ts";
@@ -135,6 +136,7 @@ const MCP_CONFIG_DEFECT_TEXT: Readonly<Record<McpConfigFileError["defect"], stri
   "top-level-not-object": "does not hold a JSON object",
   "mcpServers-not-object": 'has an "mcpServers" value that is not an object',
   "mcp-servers-not-object": 'has an "mcp-servers" value that is not an object',
+  "marker-not-valid": 'has a plugin entry whose "_piClaudeMarketplace" marker is not valid',
 };
 
 /**
@@ -143,19 +145,38 @@ const MCP_CONFIG_DEFECT_TEXT: Readonly<Record<McpConfigFileError["defect"], stri
  *
  * The message names the file and the defect only, and the error carries no
  * `cause`: Node's `JSON.parse` message can quote file content, and MCP
- * configs hold tokens.
+ * configs hold tokens. A `marker-not-valid` refusal also names the entry's key
+ * and the marker member to fix, escaped as a notice escapes a name.
  */
 export class McpConfigFileError extends Error {
   readonly filePath: string;
   readonly defect:
-    "invalid-jsonc" | "top-level-not-object" | "mcpServers-not-object" | "mcp-servers-not-object";
+    | "invalid-jsonc"
+    | "top-level-not-object"
+    | "mcpServers-not-object"
+    | "mcp-servers-not-object"
+    | "marker-not-valid";
+  readonly marker?: McpMarkerDefect;
 
-  constructor(filePath: string, defect: McpConfigFileError["defect"]) {
-    super(`MCP config ${filePath} ${MCP_CONFIG_DEFECT_TEXT[defect]}; it was left unchanged.`);
+  constructor(filePath: string, defect: McpConfigFileError["defect"], marker?: McpMarkerDefect) {
+    const text =
+      marker === undefined
+        ? MCP_CONFIG_DEFECT_TEXT[defect]
+        : `has the entry "${printable(marker.server)}" whose "_piClaudeMarketplace.${marker.member}" is not valid`;
+    super(`MCP config ${filePath} ${text}; it was left unchanged.`);
     this.name = "McpConfigFileError";
     this.filePath = filePath;
     this.defect = defect;
+    if (marker !== undefined) {
+      this.marker = marker;
+    }
   }
+}
+
+/** The entry and the marker member a `marker-not-valid` refusal names. */
+export interface McpMarkerDefect {
+  readonly server: string;
+  readonly member: string;
 }
 
 /**
@@ -293,5 +314,64 @@ export class SkillFrontmatterNodeError extends Error {
     this.line = line;
     this.keys = Object.freeze([...keys]);
     this.skill = skill;
+  }
+}
+
+/**
+ * D-PG10-08: an exec-form hook names `${user_config.KEY}` for a key with no
+ * value, so the run fails before the spawn. The text is Claude Code 2.1.323's,
+ * verbatim.
+ */
+export class UnsetPluginOptionError extends Error {
+  readonly key: string;
+  constructor(key: string) {
+    super(
+      `Plugin option "${key}" isn't set. Open /plugin manage to configure it, or check that ` +
+        `the plugin's userConfig schema declares "${key}".`,
+    );
+    this.name = "UnsetPluginOptionError";
+    this.key = key;
+  }
+}
+
+/**
+ * D-PG10-25: an exec-form hook names `${user_config.KEY}`, and the install
+ * record's stored `userConfig` does not parse, so no option has a value and
+ * the run fails before the spawn. `plugin` is `<plugin>@<marketplace>`.
+ * Claude Code has no install record, so the text is this extension's.
+ */
+export class UnreadablePluginOptionsError extends Error {
+  readonly plugin: string;
+  readonly key: string;
+  constructor(plugin: string, key: string) {
+    super(
+      `Plugin option "${key}" can't be read: the options in the install record of ${plugin} ` +
+        `do not parse. Run /claude:plugin reinstall ${plugin} to restore them.`,
+    );
+    this.name = "UnreadablePluginOptionsError";
+    this.plugin = plugin;
+    this.key = key;
+  }
+}
+
+/**
+ * D-PG10-10: a shell-form hook command names `${user_config.*}`, set or not,
+ * so it is not run: a spliced value would be parsed again by the shell.
+ * `plugin` is `<plugin>@<marketplace>`. The text is Claude Code 2.1.323's,
+ * verbatim.
+ */
+export class ShellFormOptionReferenceError extends Error {
+  readonly plugin: string;
+  readonly command: string;
+  constructor(plugin: string, command: string) {
+    super(
+      `Hook from plugin ${plugin} references \${user_config.*} in a shell-form command. ` +
+        "The substituted value would be re-parsed by the shell. Use exec form instead \u2014 " +
+        '{"command": "<executable>", "args": ["${user_config.KEY}", ...]} \u2014 or read ' +
+        `$CLAUDE_PLUGIN_OPTION_<KEY> from the hook's environment. Command: ${command}`,
+    );
+    this.name = "ShellFormOptionReferenceError";
+    this.plugin = plugin;
+    this.command = command;
   }
 }

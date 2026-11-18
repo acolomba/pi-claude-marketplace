@@ -5,10 +5,12 @@
  * stub receives (HAR-04, HAR-07, D-CF6-05).
  *
  * When a session starts, pi-mcp-adapter connects to a server whose tools it
- * has not cached, lists them, and disconnects, in the background. A model
- * turn that started meanwhile could share or lose that connection, so a
- * scenario waits for the listing before its turn, and the messages step reads
- * the stub's whole log for the scenario, not only the lines of the turn.
+ * has not cached and lists them, in the background. It keeps the connection
+ * of a stdio server, whose entry holds `lifecycle: "lazy-keep-alive"`, for
+ * the session (D-PG9-01), and closes any other. A model turn that started
+ * meanwhile could share or lose that connection, so a scenario waits for the
+ * listing before its turn, and the messages step reads the stub's whole log
+ * for the scenario, not only the lines of the turn.
  */
 
 import assert from "node:assert/strict";
@@ -17,6 +19,7 @@ import path from "node:path";
 
 import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
+import { profileFor } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 import { registryAfterListing, waitForStubListing } from "../../lib/mcp-implementation.ts";
 import {
   LATE_TAG_ENVIRONMENT,
@@ -135,10 +138,12 @@ Given(
   },
 );
 
-// Done once the stub logged a tools/list and no stub is running, which means
-// the adapter closed the listing connection. The plugin is the argument the
-// stub logs, with run tokens expanded, so a stub started with
-// `${CLAUDE_PLUGIN_ROOT}` is named by `{home}/marketplaces/<name>/plugins/<plugin>`.
+// Done once the stub logged a tools/list for the server and either no stub is
+// running or Pi has a tool of the server, which pi-mcp-adapter registers after
+// its listing whether it closes the connection or keeps it (D-PG9-01). The
+// plugin is the argument the stub logs, with run tokens expanded, so a stub
+// started with `${CLAUDE_PLUGIN_ROOT}` is named by
+// `{home}/marketplaces/<name>/plugins/<plugin>`.
 Given(
   "pi-mcp-adapter has listed the tools of the stub mcp server {string} of the plugin {string}",
   async function (this: ScenarioWorld, server: string, pluginText: string) {
@@ -232,6 +237,24 @@ Then("pi offers these plugin mcp tools:", function (this: ScenarioWorld, table: 
     .map((name) => [name, active.has(name) ? "yes" : "no"]);
   assert.deepStrictEqual([["tool", "active"], ...rows], table.raw());
 });
+
+Then(
+  "pi offers the tool {string} of the plugin {string} server {string} under its adapter name {string}",
+  function (this: ScenarioWorld, tool: string, plugin: string, server: string, name: string) {
+    const snapshot = this.registrySnapshot;
+    if (snapshot === undefined) {
+      assert.fail("no step listed the mcp tools pi offers");
+    }
+
+    assert.deepStrictEqual(
+      {
+        predicted: profileFor("adapter").toolName(plugin, server, tool),
+        offered: snapshot.allTools.some((entry) => entry.name === name),
+      },
+      { predicted: name, offered: true },
+    );
+  },
+);
 
 // The stub's whole log for the scenario is empty: no server was started.
 Then("no stub mcp server receives a message", async function (this: ScenarioWorld) {

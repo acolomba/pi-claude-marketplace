@@ -16,7 +16,13 @@
 // the ~99% happy path. `setDescriptionScalar` instead replaces exactly the
 // `description` node span and leaves every sibling key byte-identical.
 
-import { frontmatterBlockEnd, keyValueEnd, topLevelNodeIndex } from "./frontmatter-scan.ts";
+import {
+  emitSafeDoubleQuotedScalar,
+  frontmatterBlockEnd,
+  keyValueEnd,
+} from "../../shared/frontmatter-repair.ts";
+
+import { topLevelNodeIndex } from "./frontmatter-scan.ts";
 
 /**
  * SKILL-01 / D-86-02 / A4: the fixed placeholder description synthesized onto an
@@ -79,19 +85,6 @@ export function truncate1536(text: string): string {
   return text.length <= LISTING_CAP ? text : text.slice(0, LISTING_CAP);
 }
 
-/**
- * Emit `value` as a safe double-quoted single-line YAML scalar. Embedded
- * newlines collapse to spaces, then `\` and `"` are escaped, so the emitted
- * scalar cannot re-form a new YAML key on a following line (the AG-8
- * provenance-injection class). Backslashes are escaped BEFORE quotes so an
- * author `"` is not double-processed.
- */
-function emitSafeDoubleQuotedScalar(value: string): string {
-  const oneLine = value.replaceAll(/\r?\n/g, " ");
-  const escaped = oneLine.replaceAll("\\", String.raw`\\`).replaceAll('"', String.raw`\"`);
-  return `"${escaped}"`;
-}
-
 /** A first line that is `---` once surrounding whitespace is trimmed. */
 const FIRST_LINE_FENCE = /^[^\S\n]*---[^\S\n]*(?:\n|$)/;
 
@@ -138,91 +131,4 @@ export function setDescriptionScalar(content: string, value: string): string {
   const lastReplaced = keyValueEnd(lines, keyIndex, blockEnd);
   const rebuilt = [...lines.slice(0, keyIndex), replacement, ...lines.slice(lastReplaced + 1)];
   return rebuilt.join("\n");
-}
-
-/** An opening `---` fence anchored at the very start of the document. */
-const OPENING_FENCE = /^---[ \t]*\r?\n/;
-
-/** A column-0 key -- no whitespace, colon or `#` -- followed by a colon and a space or tab. */
-const TOP_LEVEL_KEY = /^[^\s:#]+:[ \t]/;
-
-/** Value openers a colon repair leaves alone: already quoted, flow collection, block scalar. */
-const UNREPAIRABLE_VALUE = /^["'[{|>]/;
-
-/**
- * Read a frontmatter line as a plain scalar whose only YAML defect is an
- * unquoted colon, returning its key and its whitespace-trimmed value. Returns
- * `undefined` for every other line shape, so the caller copies that line
- * byte-identically. The key pattern admits no colon, so the first `:` in an
- * accepted line is always the key separator.
- */
-function repairableScalar(line: string): { key: string; value: string } | undefined {
-  if (!TOP_LEVEL_KEY.test(line)) {
-    return undefined;
-  }
-
-  const separator = line.indexOf(":");
-  const value = line.slice(separator + 1).trim();
-  if (value === "" || UNREPAIRABLE_VALUE.test(value) || !value.includes(":")) {
-    return undefined;
-  }
-
-  return { key: line.slice(0, separator), value };
-}
-
-/**
- * SKFM-01: repair the one frontmatter defect class that is safe to rewrite -- a
- * single-line plain scalar carrying an unquoted colon, such as
- * `description: Use this: when reviewing`. YAML forbids `: ` inside a plain
- * scalar, so Pi's strict parser rejects the whole block and the author loses
- * every key in it to the SKILL-01 / D-86-02 placeholder. Re-emitting just that
- * line through the shared safe double-quoted scalar emitter recovers the
- * author's real text and leaves every sibling byte untouched.
- *
- * A line is repaired only when it sits inside the frontmatter block, starts at
- * column 0 with a whitespace-, colon- and `#`-free key followed by a colon and a
- * space or tab, spans exactly one line (`keyValueEnd`), and carries a non-empty
- * value containing a colon. Every other form is copied byte-identically, because
- * quoting it would change what the document MEANS rather than what it parses as:
- * an already-quoted value needs no repair, `[` and `{` open a flow collection
- * whose members would collapse into one string, `|` and `>` open a block scalar
- * whose continuation lines would be orphaned, and a multi-line plain scalar
- * likewise spans lines a single-line re-emit cannot see. Eligibility is decided
- * per line, so an excluded sibling never vetoes a repairable one. Content
- * without an opening fence, without a closing fence, or with no eligible line at
- * all is returned unchanged, and the caller degrades as before.
- *
- * The repair is SILENT by design: no warning, no notification, no result field.
- * It restores what the author wrote, so there is nothing for the user to act on,
- * and the notification layer renders state that commands decide rather than
- * probing for it. This is deliberately MORE lenient than Claude Code, which
- * strict-parses these same bytes to empty metadata. PARSE-01 still decides the
- * degrade from the SOURCE parse, and PARSE-02 still re-parses whatever bytes the
- * repair produces.
- */
-export function repairSingleLineScalars(content: string): string {
-  if (!OPENING_FENCE.test(content)) {
-    return content;
-  }
-
-  const lines = content.split("\n");
-  const blockEnd = frontmatterBlockEnd(lines);
-  if (blockEnd === lines.length) {
-    return content;
-  }
-
-  const repaired = [...lines];
-  let changed = false;
-  for (const [offset, line] of lines.slice(1, blockEnd).entries()) {
-    const index = offset + 1;
-    const scalar = repairableScalar(line);
-    if (scalar === undefined || keyValueEnd(lines, index, blockEnd) !== index) {
-      continue;
-    }
-
-    repaired[index] = `${scalar.key}: ${emitSafeDoubleQuotedScalar(scalar.value)}`;
-    changed = true;
-  }
-
-  return changed ? repaired.join("\n") : content;
 }

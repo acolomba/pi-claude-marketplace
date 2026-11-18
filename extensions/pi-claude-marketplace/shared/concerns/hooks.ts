@@ -64,7 +64,8 @@ export type ClaudeHookEvent =
   | "PostCompact"
   | "SessionEnd"
   | "Stop"
-  | "StopFailure";
+  | "StopFailure"
+  | "UserPromptExpansion";
 
 /**
  * The tool-event subset of `ClaudeHookEvent` -- the events that statically

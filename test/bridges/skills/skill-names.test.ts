@@ -7,6 +7,7 @@ import { describe, test, type TestContext } from "node:test";
 import {
   commandUpstreamNames,
   createSkillNameClaims,
+  declaresFrontmatterName,
   frontmatterNameAliases,
   skillIdentityName,
   writeSkillRecord,
@@ -68,6 +69,29 @@ describe("frontmatterNameAliases", () => {
 
       // assert
       assert.deepStrictEqual(aliases, expectedAliases);
+    });
+  }
+});
+
+describe("declaresFrontmatterName", () => {
+  for (const { label, frontmatterName, expected } of [
+    { label: "a plain name", frontmatterName: "fancy", expected: true },
+    { label: "a name with whitespace", frontmatterName: "my skill", expected: true },
+    { label: "a number", frontmatterName: 0, expected: true },
+    { label: "a list", frontmatterName: ["a", "b"], expected: true },
+    { label: "a mapping", frontmatterName: { a: 1 }, expected: true },
+    { label: "a 256-character name", frontmatterName: "n".repeat(256), expected: true },
+    { label: "a 257-character name", frontmatterName: "n".repeat(257), expected: false },
+    { label: "an empty name", frontmatterName: "", expected: false },
+    { label: "null", frontmatterName: null, expected: false },
+    { label: "an absent name", frontmatterName: undefined, expected: false },
+  ]) {
+    test(`D-PG11-01: reads ${label} as ${expected ? "a set" : "no"} name, as Claude Code does`, () => {
+      // act
+      const declared = declaresFrontmatterName(frontmatterName);
+
+      // assert
+      assert.strictEqual(declared, expected);
     });
   }
 });

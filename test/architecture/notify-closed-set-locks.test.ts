@@ -120,6 +120,7 @@ const REASON_ENROLLMENT: Record<Reason, true> = {
   "already added": true,
   "requires mcp": true,
   "requires builtin mcp": true,
+  "options not set": true,
 };
 
 const STATUS_TOKEN_ENROLLMENT: Record<StatusToken, true> = {
@@ -220,7 +221,7 @@ const NOTIFICATION_KIND_ENROLLMENT: Record<
   "reconcile-applied-cascade": true,
 };
 
-test("OUT-08: Reason is the closed 80-entry reason set", () => {
+test("OUT-08: Reason is the closed 81-entry reason set", () => {
   // The set is append-only and its declared order is catalog-stable, so this
   // length is a tripwire: an additive drift has to be a deliberate bump made
   // here, in the same edit as the member. The MEMBERSHIP is pinned separately by
@@ -234,7 +235,7 @@ test("OUT-08: Reason is the closed 80-entry reason set", () => {
   const memberCount = Object.keys(REASON_ENROLLMENT).length;
 
   // assert
-  assert.strictEqual(memberCount, 80);
+  assert.strictEqual(memberCount, 81);
 });
 
 test("SNM-02: StatusToken is the closed 27-entry token set", () => {

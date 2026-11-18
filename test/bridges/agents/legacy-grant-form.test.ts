@@ -24,6 +24,61 @@ const ADAPTER_NARROW =
 const BUILTIN_NARROW =
   "disallowedTools entry mcp__plugin_demo_my-db__drop cannot narrow the whole-server grant " +
   `mcp:plugin_demo_my-db${NARROW_TAIL}`;
+const CORRECTED_ADAPTER =
+  "tools include MCP tools, which require a pi-subagents background child -- " +
+  "the agent runs in the background (`async: true`); " +
+  "a launch before pi-mcp-adapter has cached the server's tools still fails";
+const CORRECTED_BUILTIN =
+  "tools include MCP tools, which require a pi-subagents background child -- " +
+  "the agent runs in the background (`async: true`); " +
+  "a launch before Pi's built-in MCP has listed the server's tools still fails";
+
+test("a stored corrected warning keeps its generation and unrelated provenance", () => {
+  // arrange
+  const warnings = [CORRECTED_ADAPTER, "a warning that stays"];
+  const adapter = agentBlock("tools: read,mcp:plugin_demo_stub_/echo", warnings);
+  const row = legacyRow(TARGET, warnings, ["WebFetch"]);
+
+  // act
+  const recorded = deriveLegacyGrantForms(adapter + PLAIN_BODY, row);
+
+  // assert
+  assert.deepStrictEqual(recorded, {
+    ...row,
+    mcpImplementation: "adapter",
+    mcpForms: {
+      adapter: { frontmatter: adapter, warnings, droppedTools: ["WebFetch"] },
+      builtin: {
+        frontmatter: agentBlock("tools: read,mcp:plugin_demo_stub/echo", [
+          CORRECTED_BUILTIN,
+          "a warning that stays",
+        ]),
+        warnings: [CORRECTED_BUILTIN, "a warning that stays"],
+        droppedTools: ["WebFetch"],
+      },
+    },
+  });
+});
+
+test("a stored warning near an exact MCP value stays byte identical", () => {
+  // arrange
+  const nearMatch = `${CORRECTED_ADAPTER}!`;
+  const adapter = agentBlock("tools: read,mcp:plugin_demo_stub_/echo", [nearMatch]);
+  const row = legacyRow(TARGET, [nearMatch]);
+
+  // act
+  const recorded = deriveLegacyGrantForms(adapter + PLAIN_BODY, row);
+
+  // assert
+  assert.deepStrictEqual(recorded?.mcpForms, {
+    adapter: { frontmatter: adapter, warnings: [nearMatch], droppedTools: [] },
+    builtin: {
+      frontmatter: agentBlock("tools: read,mcp:plugin_demo_stub/echo", [nearMatch]),
+      warnings: [nearMatch],
+      droppedTools: [],
+    },
+  });
+});
 
 test("MGRT-01: each mcp: entry of the plugin loses its key's last underscore; other entries stay", () => {
   // arrange
@@ -138,6 +193,51 @@ test("D-CF6-10 / ANAME-02: the async and cannot-narrow warnings take the built-i
     warnings: builtinWarnings,
     droppedTools: [],
   });
+});
+
+for (const { label, adapterAsync, builtinAsync } of [
+  { label: "first", adapterAsync: ADAPTER_ASYNC, builtinAsync: BUILTIN_ASYNC },
+  { label: "corrected", adapterAsync: CORRECTED_ADAPTER, builtinAsync: CORRECTED_BUILTIN },
+]) {
+  test(`D-CF6-10 / T-07-05: a double-quoted ${label} async warning item takes the quoted built-in text`, () => {
+    // arrange
+    const warnings = [adapterAsync, ADAPTER_NARROW];
+    const adapter = agentBlock(
+      "tools: read,mcp:plugin_demo_my-db_",
+      warnings.map((warning) => `"${warning}"`),
+    );
+    const row = legacyRow(TARGET, warnings);
+    const builtinWarnings = [builtinAsync, BUILTIN_NARROW];
+
+    // act
+    const recorded = deriveLegacyGrantForms(adapter + PLAIN_BODY, row);
+
+    // assert
+    assert.deepStrictEqual(recorded?.mcpForms?.builtin, {
+      frontmatter: agentBlock(
+        "tools: read,mcp:plugin_demo_my-db",
+        builtinWarnings.map((warning) => `"${warning}"`),
+      ),
+      warnings: builtinWarnings,
+      droppedTools: [],
+    });
+  });
+}
+
+test("D-CF6-10: an async warning item with a mismatched closing quote stays byte identical", () => {
+  // arrange
+  const item = `"${CORRECTED_ADAPTER}'`;
+  const adapter = agentBlock("tools: read,mcp:plugin_demo_stub_/echo", [item]);
+  const row = legacyRow(TARGET, [CORRECTED_ADAPTER]);
+
+  // act
+  const recorded = deriveLegacyGrantForms(adapter + PLAIN_BODY, row);
+
+  // assert
+  assert.strictEqual(
+    recorded?.mcpForms?.builtin?.frontmatter,
+    agentBlock("tools: read,mcp:plugin_demo_stub/echo", [item]),
+  );
 });
 
 test("AG-6: a body holding a --- line does not move the end of the block", () => {

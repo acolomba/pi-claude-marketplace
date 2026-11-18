@@ -163,6 +163,7 @@ const REASONS = {
   "already added": true,
   "requires mcp": true,
   "requires builtin mcp": true,
+  "options not set": true,
 } as const satisfies Record<Reason, true>;
 
 const SEVERITIES = {
@@ -736,8 +737,9 @@ const MCP_NOTICE_SUBJECT_FIELDS = {
 };
 
 /**
- * AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01: one MCP config notice. It
- * names fields and variables, never their values (AVAR-05).
+ * AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01 / D-PG10-21: one MCP config
+ * notice. It names fields, variables, and option keys, never their values
+ * (AVAR-05).
  */
 const MCP_CONFIG_NOTICE = Type.Union([
   Type.Object(
@@ -762,6 +764,28 @@ const MCP_CONFIG_NOTICE = Type.Union([
   ),
   Type.Object(
     { kind: Type.Literal("leftover-removed"), ...MCP_NOTICE_SUBJECT_FIELDS },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      kind: Type.Literal("ca-file-removed"),
+      ...MCP_NOTICE_SUBJECT_FIELDS,
+      reason: Type.Union([
+        Type.Literal("not-https"),
+        Type.Literal("origin-changed"),
+        Type.Literal("url-unresolved"),
+        Type.Literal("entry-removed"),
+      ]),
+    },
+    { additionalProperties: false },
+  ),
+  Type.Object(
+    {
+      kind: Type.Literal("option-blocked"),
+      ...MCP_NOTICE_SUBJECT_FIELDS,
+      names: STRINGS,
+      reason: Type.Union([Type.Literal("unset"), Type.Literal("home-path")]),
+    },
     { additionalProperties: false },
   ),
 ]);

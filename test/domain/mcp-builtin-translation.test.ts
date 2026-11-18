@@ -34,9 +34,9 @@ const TRANSLATION_ROWS: readonly TranslationRow[] = [
     },
   },
   {
-    title: "BLT-02: a stdio server typed stdio gives no type",
+    title: "BLT-02 / PG-MCP-01: a stdio server typed stdio gets the idle default and no type",
     server: { type: "stdio", command: "node" },
-    config: { command: "node", exposure: "deferred" },
+    config: { command: "node", timeout: 1800, exposure: "deferred" },
   },
   {
     title:
@@ -70,9 +70,9 @@ const TRANSLATION_ROWS: readonly TranslationRow[] = [
     },
   },
   {
-    title: "BLT-02: a streamable-http server is written as type http",
+    title: "BLT-02 / PG-MCP-01: a streamable-http server gets the remote idle default",
     server: { type: "streamable-http", url: SERVER_URL },
-    config: { type: "http", url: SERVER_URL, exposure: "deferred" },
+    config: { type: "http", url: SERVER_URL, timeout: 300, exposure: "deferred" },
   },
   {
     title: "P2-DC-20: an oauth block without callbackPort gives no callbackUrl",
@@ -81,13 +81,14 @@ const TRANSLATION_ROWS: readonly TranslationRow[] = [
       type: "http",
       url: SERVER_URL,
       oauth: { clientId: "client-1" },
+      timeout: 300,
       exposure: "deferred",
     },
   },
   {
-    title: "P2-DC-05: a timeout below one second gives no timeout",
+    title: "P2-DC-05 / D-PG1-11: a timeout below one second gets the idle default",
     server: { command: "node", timeout: 999 },
-    config: { command: "node", exposure: "deferred" },
+    config: { command: "node", timeout: 1800, exposure: "deferred" },
   },
   {
     title: "P2-DC-05: request_timeout_ms stands in for a remote timeout, capped at five minutes",
@@ -97,22 +98,22 @@ const TRANSLATION_ROWS: readonly TranslationRow[] = [
   {
     title: "D-MB-02: alwaysLoad true gives exposure direct",
     server: { command: "node", alwaysLoad: true },
-    config: { command: "node", exposure: "direct" },
+    config: { command: "node", timeout: 1800, exposure: "direct" },
   },
   {
     title: "D-MB-02: alwaysLoad false gives exposure deferred",
     server: { command: "node", alwaysLoad: false },
-    config: { command: "node", exposure: "deferred" },
+    config: { command: "node", timeout: 1800, exposure: "deferred" },
   },
   {
     title: "D-MB-02: alwaysLoad as the string true gives exposure deferred",
     server: { command: "node", alwaysLoad: "true" },
-    config: { command: "node", exposure: "deferred" },
+    config: { command: "node", timeout: 1800, exposure: "deferred" },
   },
   {
     title: "D-MB-02: alwaysLoad as the number 1 gives exposure deferred",
     server: { command: "node", alwaysLoad: 1 },
-    config: { command: "node", exposure: "deferred" },
+    config: { command: "node", timeout: 1800, exposure: "deferred" },
   },
   {
     title: "CC-1: a stdio server's Pi-only fields and adapter fields never appear",
@@ -126,7 +127,7 @@ const TRANSLATION_ROWS: readonly TranslationRow[] = [
       directTools: true,
       toolPrefix: "none",
     },
-    config: { command: "node", exposure: "deferred" },
+    config: { command: "node", timeout: 1800, exposure: "deferred" },
   },
   {
     title: "D-MB-11: a remote server's Pi-only oauth keys and adapter fields never appear",
@@ -143,7 +144,38 @@ const TRANSLATION_ROWS: readonly TranslationRow[] = [
         callbackUrl: "http://localhost:1/callback",
       },
     },
-    config: { type: "http", url: SERVER_URL, headers: { "X-Key": "k" }, exposure: "deferred" },
+    config: {
+      type: "http",
+      url: SERVER_URL,
+      headers: { "X-Key": "k" },
+      timeout: 300,
+      exposure: "deferred",
+    },
+  },
+  {
+    title: "PG-MCP-01: an untyped stdio server gets 30 minutes",
+    server: { command: "node" },
+    config: { command: "node", timeout: 1800, exposure: "deferred" },
+  },
+  {
+    title: "PG-MCP-01: an http server gets 5 minutes",
+    server: { type: "http", url: SERVER_URL },
+    config: { type: "http", url: SERVER_URL, timeout: 300, exposure: "deferred" },
+  },
+  {
+    title: "D-PG1-11: a declared timeout of one second wins over the idle default",
+    server: { command: "node", timeout: 1000 },
+    config: { command: "node", timeout: 1, exposure: "deferred" },
+  },
+  {
+    title: "D-PG1-11: a remote request_timeout_ms stands in when timeout is absent",
+    server: { type: "http", url: SERVER_URL, request_timeout_ms: 5000 },
+    config: { type: "http", url: SERVER_URL, timeout: 5, exposure: "deferred" },
+  },
+  {
+    title: "PG-MCP-01: an unknown server type gets no idle default",
+    server: { type: "ws" },
+    config: { exposure: "deferred" },
   },
 ];
 

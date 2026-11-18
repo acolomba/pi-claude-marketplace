@@ -111,6 +111,16 @@ export interface TimerLadder {
 }
 
 /**
+ * The ladder of a hook that has no timeout: it sets no timer, so `cancel()`
+ * has nothing to clear and `fired()` is always `false`. A plain `async` hook
+ * runs until it ends, as in Claude Code, and holds this ladder (D-PG5-17).
+ */
+export const INERT_TIMER_LADDER: TimerLadder = {
+  cancel: () => undefined,
+  fired: () => false,
+};
+
+/**
  * Normalize a caller's seconds into a delay `setTimeout` can represent.
  *
  * Self-contained rather than trusting `resolveTimeoutSeconds` upstream: this

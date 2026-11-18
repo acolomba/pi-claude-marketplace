@@ -65,7 +65,11 @@ import { networkCloneUrl } from "../../domain/clone-key.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
-import { AgentTargetOccupiedError, BridgeStagingError } from "../../shared/errors-bridges.ts";
+import {
+  AgentTargetOccupiedError,
+  BridgeStagingError,
+  McpConfigFileError,
+} from "../../shared/errors-bridges.ts";
 import {
   CleanupContextError,
   cleanupFailuresFromError,
@@ -967,9 +971,15 @@ const PLUGIN_CLONE_RULE: Parameters<typeof classifyGitFailure>[1] = {
 /**
  * The reason of a failure no typed error names: the git host's answer under
  * the plugin-clone rule first, then the errno (D-13: a bridge's staging
- * error reads its filesystem cause), then `unreadable manifest`.
+ * error reads its filesystem cause), then `unreadable manifest`. An MCP config
+ * the stage refused is a local file, as the errno arm for it says, so naming
+ * the marketplace manifest would blame the wrong file (AFILE-02).
  */
 function untypedUpdateFailReason(primary: unknown, unknownGitFailure: boolean): ContentReason {
+  if (primary instanceof McpConfigFileError) {
+    return "unreadable";
+  }
+
   return (
     classifyGitFailure(primary, {
       ...PLUGIN_CLONE_RULE,

@@ -8,7 +8,7 @@
 //
 // PIFL-02, PIFL-03: pi-mcp-adapter is an optional peer and never a
 // dependency, a devDependency, or a lockfile package. The tests read its
-// declared floor from the optional peer cache.
+// suite version from the optional peer cache.
 //
 // The adapter's `exports` map does not expose `dist/utils.js`,
 // `dist/mcp-auth-flow.js`, `dist/mcp-auth-fetch.js` or `dist/config.js`, so
@@ -28,6 +28,7 @@ type AdapterEnvironment = Readonly<Record<string, string | undefined>>;
 
 /** The `dist/utils.js` functions the conformance test drives. */
 export interface PiMcpAdapterUtils {
+  readonly supportsOAuth: (definition: Readonly<Record<string, unknown>>) => boolean;
   readonly interpolateEnvVars: (value: string, environment?: AdapterEnvironment) => string;
   readonly expandHomePath: (value: string) => string;
   readonly resolveConfigPath: (value: string, environment?: AdapterEnvironment) => string;
@@ -52,7 +53,6 @@ export interface PiMcpAdapterAuthFlow {
   readonly extractOAuthConfig: (definition: {
     readonly oauth: Readonly<Record<string, string>>;
   }) => PiMcpAdapterOAuthConfig;
-  readonly supportsOAuth: (definition: Readonly<Record<string, unknown>>) => boolean;
 }
 
 /** The `dist/mcp-auth-fetch.js` function the entry conformance test drives. */
@@ -70,14 +70,15 @@ export interface PiMcpAdapterConfig {
   ) => { readonly mcpServers: Readonly<Record<string, unknown>> };
 }
 
-/** The `dist/types.js` constants the status conformance test reads. */
+/** The `dist/types.js` status constants and tool-name formatter the conformance tests read. */
 export interface PiMcpAdapterTypes {
   readonly MCP_STATUS_EVENT: string;
   readonly MCP_STATUS_SNAPSHOT_VERSION: number;
+  readonly formatToolName: (toolName: string, serverName: string, prefix: "mcp") => string;
 }
 
 /**
- * Returns pi-mcp-adapter at the declared floor from the optional peer cache.
+ * Returns pi-mcp-adapter at its suite version from the optional peer cache.
  * Throws, naming the repair command, when the cache does not hold it.
  */
 export async function findPiMcpAdapterPackage(): Promise<OptionalPeer> {

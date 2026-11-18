@@ -89,6 +89,17 @@ knowledge base itself. The marker keeps it out of the open-session count.
 - **Recurrence guard:** The `|| true` scenarios in features/hook/async.feature (dead-Pi reap, reload, "A background hook process that ignores SIGTERM stops at its timeout") and the `["||","true"]` rows (plain and `sigterm ignore`) of both SessionEnd outlines in features/hook/session-end.feature; unit pins in test/bridges/hooks/process-group.test.ts and the group cases of exec-timer, dispatch-exec, and registry tests. Remaining gaps: BACKLOG HKDR-01.
 ---
 
+## async-hook-lifecycle — registered hook survives fixture reset and contaminates the next scenario
+- **Date:** 2026-11-13
+- **Error patterns:** intermittent missing async rewake summary, live wake.sh after scenario cleanup, prior hook end consumed by later scenario, exit-code mismatch unproven
+- **Root cause(s):** The Cucumber fixture scanned script PID files once, missing registered detached children that had not yet written a script PID file; eight-worker scheduling let a prior child survive into the reused sandbox, where a name-only lifecycle wait accepted its end as the current hook's end.
+- **Fix:** Fixture cleanup now reads both scopes' persisted async-hook PID tables, verifies the registry marker on Linux, and signals owned process groups before scanning script PID files. Commit a01d79d6.
+- **Files changed:** features/lib/hook-files.ts, features/support/world.ts, test/architecture/hook-script-cleanup.test.ts
+- **Why not caught:** No existing regression covered a registered child before its script PID file appeared; broad Cucumber runs exposed it only when timing and scenario order aligned.
+- **Recurrence guard:** `test/architecture/hook-script-cleanup.test.ts` holds a registered child without a script PID file and requires fixture cleanup to stop it. It failed on the old helper and passed on the fixed helper; full `npm run check` passed at a01d79d6.
+- **Separate lead:** The older exit-code mismatch and a possible `spawnAndRegister` generation window remain unproven and should be investigated if they recur.
+---
+
 ## flaky-async-hook-scenarios — a different async-hook scenario fails now and then, and a rerun passes
 - **Date:** 2026-11-17
 - **Error patterns:** cucumber flake, different scenario each run, `the hook wake logged no end within`, `these hook processes are still running`, `scenario releases failed`, release marker taken but no end line, random order, same sandbox HOME, leftover hook script, late pid file, async rewake, `waits`

@@ -8,7 +8,7 @@ import {
   type ToolEvent,
 } from "../hook-events.ts";
 
-import { parseMatcher } from "./matcher.ts";
+import { parseMatcher, parseNameMatcher } from "./matcher.ts";
 
 import type { HookHandlerEntry, HooksConfig } from "./schema.ts";
 
@@ -34,7 +34,7 @@ const TOOL_EVENT_MEMBERS = new Set<string>(TOOL_EVENTS);
 
 function toolMatcherCondition(rawMatcher: string): MatcherCondition | null {
   const matcher = parseMatcher(rawMatcher);
-  if (matcher.kind === "regex") {
+  if (matcher.kind === "invalid-pattern") {
     return "regex";
   }
 
@@ -49,8 +49,13 @@ function nonToolMatcherCondition(
   event: Exclude<BucketAEvent, ToolEvent>,
   rawMatcher: string,
 ): MatcherCondition | null {
+  // D-PG6-19: a command name has no closed set; only an invalid pattern drops.
+  if (event === "UserPromptExpansion") {
+    return parseNameMatcher(rawMatcher).kind === "invalid-pattern" ? "regex" : null;
+  }
+
   if (NON_TOOL_EVENT_FIELDS[event] === null) {
-    return "no-matcher-support";
+    return null;
   }
 
   // D-BG-302, CLOSEDLIST-01: a list is kept when one listed value is in the set.

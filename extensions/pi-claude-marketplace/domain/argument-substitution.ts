@@ -12,9 +12,14 @@
 // - Pi writes `${CLAUDE_PLUGIN_ROOT}`, `${CLAUDE_PLUGIN_DATA}`,
 //   `${CLAUDE_SKILL_DIR}`, and `${CLAUDE_PROJECT_DIR}` into the body at
 //   install. Upstream fills them here and wraps them, so a path holding `$1`
-//   or `$ARGUMENTS` is read by the `$` passes only in Pi.
-// - `${user_config.*}` stays literal: plugin user configuration is not a
-//   supported component, so Pi has no value for it.
+//   or `$ARGUMENTS` is read by the `$` passes only in Pi. At user scope the
+//   staged body keeps `${CLAUDE_PROJECT_DIR}`, and this pass fills it
+//   (D-PG10-16).
+// - `${user_config.KEY}` is written into the body at staging (D-PG10-13), so
+//   this pass leaves any that remain. As with the path variables, an option
+//   default that holds `$1`, `$ARGUMENTS`, or a context command is read by the
+//   later passes only in Pi. In step 1 every value is a default, so that text
+//   is the plugin author's own.
 // - `${CLAUDE_EFFORT}` follows Pi's session thinking level alone; frontmatter
 //   `effort` has no effect on bridged skills and commands (D-CF1-05).
 
@@ -41,19 +46,19 @@ const VARIABLE_NAMES = [
   "CLAUDE_EFFORT",
 ] as const;
 
+// The effort levels Claude Code 2.1.316 gives `${CLAUDE_EFFORT}`, each also
+// a Pi thinking level of the same name.
+const CLAUDE_EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+
 /** The effort levels Claude Code 2.1.316 gives `${CLAUDE_EFFORT}`. */
-export type ClaudeEffort = "low" | "medium" | "high" | "xhigh" | "max";
+export type ClaudeEffort = (typeof CLAUDE_EFFORTS)[number];
 
 // Pi thinking levels with no Claude counterpart (`off`, `minimal`) map to the
 // lowest effort (D-CF1-01).
 const EFFORT_BY_THINKING_LEVEL = new Map<string, ClaudeEffort>([
   ["off", "low"],
   ["minimal", "low"],
-  ["low", "low"],
-  ["medium", "medium"],
-  ["high", "high"],
-  ["xhigh", "xhigh"],
-  ["max", "max"],
+  ...CLAUDE_EFFORTS.map((effort) => [effort, effort] as const),
 ]);
 
 /**
@@ -285,4 +290,16 @@ export function parseArgumentNames(frontmatterArguments: unknown): readonly stri
  */
 export function claudeEffort(thinkingLevel: string | undefined): ClaudeEffort {
   return EFFORT_BY_THINKING_LEVEL.get(thinkingLevel ?? "") ?? "high";
+}
+
+/**
+ * The `effort` level a hook receives for Pi's session thinking level
+ * (D-PG6-10): `low`, `medium`, `high`, `xhigh`, and `max` map to themselves,
+ * and `off`, `minimal`, an unset level, and an unknown level give none, so
+ * the hook gets no `effort`. Unlike `claudeEffort`, which reads `off` and
+ * `minimal` as `low` and an unknown level as `high` (D-CF1-01), this rule
+ * sends a level only when Pi's level is one of Claude's.
+ */
+export function hookEffortLevel(thinkingLevel: string | undefined): ClaudeEffort | undefined {
+  return CLAUDE_EFFORTS.find((effort) => effort === thinkingLevel);
 }

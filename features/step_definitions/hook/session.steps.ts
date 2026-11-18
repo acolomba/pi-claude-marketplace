@@ -33,6 +33,15 @@
  * and asserts that every hook process a pid file names still runs. The
  * restart step starts the same launch again and keeps the new session's
  * results and what the start added as the last turn.
+ *
+ * A profile Pi that saves its session keeps it in the sandbox's sessions
+ * folder, and its release removes that folder (D-PG6-16). The new-session
+ * restart stops that Pi and starts it again in a new saved session; the
+ * continue, open, and fork restarts start it with `--continue`, or with
+ * `--session` or `--fork` on the newest file of that folder, which is the
+ * session the stopped Pi was in. Each records the turn as the restart after
+ * a crash does. The fork setup `Given` performs the fork restart and records
+ * no turn.
  */
 
 import assert from "node:assert/strict";
@@ -47,6 +56,7 @@ import { readHookScriptPids } from "../../lib/hook-files.ts";
 import { HOOK_RUNS_LOG, waitForHookLifecycle } from "../../lib/hook-recorder.ts";
 import { startSession } from "../../lib/pi-commands.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
+import { latestSessionFile, sessionsFolder } from "../../lib/saved-sessions.ts";
 import { modelCallsOf, readModelCalls } from "../../lib/scripted-model/script.ts";
 import { isRunning, readLogLengths, readLogLinesSince } from "../../lib/turn-records.ts";
 import { PROFILE_PI_START_TIMEOUT_MS } from "../../support/world.ts";
@@ -54,7 +64,7 @@ import { PROFILE_PI_START_TIMEOUT_MS } from "../../support/world.ts";
 import type { HookRun } from "../../lib/hook-recorder.ts";
 import type { RpcRecord } from "../../lib/pi-process.ts";
 import type { ModelCall } from "../../lib/scripted-model/script.ts";
-import type { ScenarioWorld } from "../../support/world.ts";
+import type { PiRestart, ScenarioWorld } from "../../support/world.ts";
 
 // Pi keeps this many tokens of recent history out of a compaction. One token
 // makes a one-turn session compactable.
@@ -223,11 +233,52 @@ async function assertHookProcessesRunning(harness: string, when: string): Promis
   );
 }
 
-// RPC `compact` answers after Pi ran its `session_compact` handlers.
-async function compactSession(world: ScenarioWorld): Promise<void> {
-  const { response } = await world.pi.request({ type: "compact" });
+// Restarts the profile Pi with `restart` and keeps the new session's results
+// and what the stop and the start added as the last turn. The new Pi's
+// records all come from its start, so the turn keeps every one.
+async function recordRestart(world: ScenarioWorld, restart: PiRestart): Promise<void> {
+  const harness = world.profileHarness();
+  const lengths = await readLogLengths(harness);
+  const report = await world.restartPi(restart);
+  world.recordResults(report.payloads, "session");
+  world.skills = report.skills;
+  const records = world.pi.recordsSince(0);
+  assert.deepStrictEqual(faultsOf(records), []);
+  const logs = await readLogLinesSince(harness, lengths);
+  world.recordTurn({ prompt: "restart", disposition: "handled", records, logs });
+}
+
+// RPC `compact` answers after Pi ran its `session_compact` handlers. Pi
+// passes `customInstructions` to the compaction as the user's `/compact` text.
+async function compactSession(world: ScenarioWorld, customInstructions?: string): Promise<void> {
+  const { response } = await world.pi.request({
+    type: "compact",
+    ...(customInstructions === undefined ? {} : { customInstructions }),
+  });
   assert.strictEqual(response.success, true, JSON.stringify(response));
 }
+
+// The file of the session the profile Pi is in, as Pi's RPC state names it.
+async function currentSessionFile(world: ScenarioWorld): Promise<string | undefined> {
+  const { response } = await world.pi.request({ type: "get_state" });
+  assert.strictEqual(response.success, true, JSON.stringify(response));
+  return (response.data as { readonly sessionFile?: string }).sessionFile;
+}
+
+// The scripted-model start with a saved session: Pi names the session's file
+// in the sandbox's sessions folder.
+Given(
+  "pi runs with the scripted model and saves its session",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    await this.usePiWithProfile({ companions: [], session: "saved" });
+    const sessionFile = await currentSessionFile(this);
+    assert.strictEqual(
+      sessionFile === undefined ? undefined : path.dirname(sessionFile),
+      sessionsFolder(this.tokens),
+    );
+  },
+);
 
 // Pi reads the agent settings when it starts, so this precedes the profile
 // Pi. The file is new in the sandbox, and its release removes it.
@@ -270,6 +321,19 @@ Given(
   async function (this: ScenarioWorld) {
     this.profileHarness();
     await compactSession(this);
+  },
+);
+
+// RPC `set_session_name` names the session Pi is in, and Pi's state then
+// reports that name.
+Given(
+  "the user has named the session {string}",
+  async function (this: ScenarioWorld, name: string) {
+    const named = await this.pi.request({ type: "set_session_name", name });
+    assert.strictEqual(named.response.success, true, JSON.stringify(named.response));
+    const { response } = await this.pi.request({ type: "get_state" });
+    assert.strictEqual(response.success, true, JSON.stringify(response));
+    assert.strictEqual((response.data as { readonly sessionName?: string }).sessionName, name);
   },
 );
 
@@ -317,6 +381,23 @@ Given(
   },
 );
 
+// Pi writes a fork to a new file whose header names the forked file as its
+// parent, so the step reads that header from the session the new Pi is in.
+Given(
+  "the user has started pi again and forked the last session",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    const folder = sessionsFolder(this.tokens);
+    const forked = await latestSessionFile(folder);
+    await this.restartPi("fork-session");
+    const sessionFile = await currentSessionFile(this);
+    assert.strictEqual(sessionFile, await latestSessionFile(folder));
+    const [header = ""] = (await readFile(sessionFile, "utf8")).split("\n");
+    const { parentSession } = JSON.parse(header) as { readonly parentSession?: string };
+    assert.strictEqual(parentSession, forked);
+  },
+);
+
 Given(
   "pi's process has died, leaving its hook processes running",
   async function (this: ScenarioWorld) {
@@ -343,6 +424,13 @@ When(
   "the user compacts the session with the hooks recording",
   async function (this: ScenarioWorld) {
     await recordSessionAction(this, "compact", () => compactSession(this));
+  },
+);
+
+When(
+  "the user compacts the session with the instructions {string} and the hooks recording",
+  async function (this: ScenarioWorld, instructions: string) {
+    await recordSessionAction(this, "compact", () => compactSession(this, instructions));
   },
 );
 
@@ -388,20 +476,43 @@ When(
   },
 );
 
-// The new Pi's records all come from its start, so the turn keeps every one.
 When(
   "the user starts pi again with the hooks recording",
   { timeout: PROFILE_PI_START_TIMEOUT_MS },
   async function (this: ScenarioWorld) {
-    const harness = this.profileHarness();
-    const lengths = await readLogLengths(harness);
-    const report = await this.restartPi("after-crash");
-    this.recordResults(report.payloads, "session");
-    this.skills = report.skills;
-    const records = this.pi.recordsSince(0);
-    assert.deepStrictEqual(faultsOf(records), []);
-    const logs = await readLogLinesSince(harness, lengths);
-    this.recordTurn({ prompt: "restart", disposition: "handled", records, logs });
+    await recordRestart(this, "after-crash");
+  },
+);
+
+When(
+  "the user starts pi again in a new session with the hooks recording",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    await recordRestart(this, "new-session");
+  },
+);
+
+When(
+  "the user starts pi again and continues the last session with the hooks recording",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    await recordRestart(this, "continue-session");
+  },
+);
+
+When(
+  "the user starts pi again and opens the file of the last session with the hooks recording",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    await recordRestart(this, "open-session");
+  },
+);
+
+When(
+  "the user starts pi again and forks the last session with the hooks recording",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    await recordRestart(this, "fork-session");
   },
 );
 

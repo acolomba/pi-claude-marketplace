@@ -1211,6 +1211,53 @@ describe("resolver reason narrowing through the install failure row", () => {
     assert.deepStrictEqual(narrowedReasons, ["unreadable manifest"]);
   });
 
+  for (const key of ["mode", "lspServers", "source"]) {
+    test(`D-PG10-05: maps a malformed userConfig note naming ${key} to invalid manifest`, () => {
+      // arrange
+      const reasons = [`malformed userConfig: userConfig option "${key}" is not an object`];
+
+      // act
+      const narrowedReasons = installFailureReasons(reasons);
+
+      // assert
+      assert.deepStrictEqual(narrowedReasons, ["invalid manifest"]);
+    });
+  }
+
+  test("D-PG10-06: maps an unset userConfig note to options not set when partialable", () => {
+    // arrange
+    const reasons = ["required userConfig options have no default: lspServers, source"];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons, [], true);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["options not set"]);
+  });
+
+  test("D-PG10-06: gives options not set once for the unset note and its userConfig kind", () => {
+    // arrange
+    const reasons = ["required userConfig options have no default: token"];
+    const unsupportedKinds = ["userConfig"];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons, unsupportedKinds, true);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["options not set"]);
+  });
+
+  test("D-PG10-06: maps an unset userConfig note to unsupported source on the structural arm", () => {
+    // arrange
+    const reasons = ["required userConfig options have no default: lspServers, source"];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["unsupported source"]);
+  });
+
   test("maps a source note to unsupported source", () => {
     // arrange
     const reasons = ["unsupported source kind: npm"];

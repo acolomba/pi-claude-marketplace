@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { EventEmitter, once } from "node:events";
-import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
@@ -22,6 +24,7 @@ import {
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import { createHooksRuntime } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createJsonCapture } from "../../../edge/json-capture.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
@@ -30,17 +33,138 @@ import type {
   OrphanProbes,
   SpawnDeps,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
+import type { UserPromptExpansionEvent } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-expansion.ts";
 import type { RoutingEntry } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import type { HooksRuntime } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type { BucketAEvent } from "../../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import type {
   ExtensionAPI,
   ExtensionContext,
+  BeforeAgentStartEvent,
   ToolCallEvent,
+  ToolResultEvent,
 } from "../../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { ChildProcess, SpawnOptions } from "node:child_process";
 
 const PLAIN_ANSWER =
   '{"systemMessage":"remember","hookSpecificOutput":{"additionalContext":"context"}}';
+
+for (const eventName of ["PostToolUse", "PostToolUseFailure"] as const) {
+  test(`serializes translated Read input for ${eventName} rewake`, async (t) => {
+    const root = await mkdtemp(path.join(tmpdir(), "async-read-input-"));
+    const runtime = createHooksRuntime();
+    const locations = locationsFor("project", root);
+    const child = createChild(31_090);
+    const chunks: Buffer[] = [];
+    child.stdin?.on("data", (chunk: Buffer) => {
+      chunks.push(Buffer.from(chunk));
+    });
+    const stdinEnd = child.stdin === null ? Promise.resolve([]) : once(child.stdin, "end");
+    t.after(async () => {
+      shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await rm(root, { recursive: true, force: true });
+    });
+
+    await spawnAndRegister(
+      runtime,
+      createEntry(root, { claudeEvent: eventName }),
+      {
+        type: "tool_result",
+        toolCallId: "read-rewake",
+        toolName: "read",
+        input: { path: "missing.txt" },
+        content: [{ type: "text", text: "missing file" }],
+        isError: eventName === "PostToolUseFailure",
+        details: undefined,
+      },
+      createContext(root, "read-rewake-session", true).context,
+      createPi().pi,
+      locations,
+      { spawnImpl: createSpawn(child.child, []), dispatchId: () => "read-rewake-dispatch" },
+    );
+    await stdinEnd;
+
+    const payload: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+    const common = {
+      session_id: "read-rewake-session",
+      transcript_path: "",
+      cwd: root,
+      hook_event_name: eventName,
+      tool_name: "Read",
+      tool_input: { file_path: path.join(root, "missing.txt") },
+      tool_use_id: "read-rewake",
+    };
+    assert.deepStrictEqual(
+      payload,
+      eventName === "PostToolUse"
+        ? {
+            ...common,
+            tool_response: {
+              type: "text",
+              file: {
+                filePath: path.join(root, "missing.txt"),
+                content: "missing file",
+                startLine: 1,
+                numLines: 1,
+                totalLines: 1,
+              },
+            },
+          }
+        : { ...common, error: "missing file", is_interrupt: false },
+    );
+  });
+}
+
+test("D-PG6-19: serializes the UserPromptExpansion stdin for a background hook", async (t) => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "async-expansion-"));
+  const runtime = createHooksRuntime();
+  const locations = locationsFor("project", root);
+  const child = createChild(31_091);
+  const chunks: Buffer[] = [];
+  child.stdin?.on("data", (chunk: Buffer) => {
+    chunks.push(Buffer.from(chunk));
+  });
+  const stdinEnd = child.stdin === null ? Promise.resolve([]) : once(child.stdin, "end");
+  t.after(async () => {
+    shutdownInMemoryChildren(runtime);
+    destroyChild(child);
+    await rm(root, { recursive: true, force: true });
+  });
+  const event = {
+    command_name: "demo:deploy",
+    command_args: "staging",
+    command_source: "plugin",
+    input: { type: "input", text: "/demo:deploy staging", source: "interactive" },
+  } satisfies UserPromptExpansionEvent;
+
+  // act
+  await spawnAndRegister(
+    runtime,
+    createEntry(root, { claudeEvent: "UserPromptExpansion" }),
+    event,
+    createContext(root, "expansion-session", true).context,
+    createPi().pi,
+    locations,
+    { spawnImpl: createSpawn(child.child, []), dispatchId: () => "expansion-dispatch" },
+  );
+  await stdinEnd;
+  const payload: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    session_id: "expansion-session",
+    transcript_path: "",
+    cwd: root,
+    hook_event_name: "UserPromptExpansion",
+    expansion_type: "slash_command",
+    command_name: "demo:deploy",
+    command_args: "staging",
+    command_source: "plugin",
+    prompt: "/demo:deploy staging",
+  });
+});
 
 interface SpawnCall {
   readonly command: string;
@@ -625,6 +749,7 @@ function createEntry(root: string, overrides: EntryOverrides = {}): RoutingEntry
       } satisfies RoutingEntry["handlerDecl"]),
     declarationIndex: 3,
     ifPredicate: { kind: "match-all" },
+    options: resolveOptions(undefined),
   } satisfies RoutingEntry;
 }
 
@@ -770,6 +895,1713 @@ function filesystemErrorCode(error: unknown): string | undefined {
 
   return undefined;
 }
+
+async function foreignJournal(
+  loc: ReturnType<typeof locationsFor>,
+  entries: readonly PidTableEntry[],
+  ownerPid = 42,
+): Promise<string> {
+  const sessionId = "foreign-session";
+  const ownerToken = "foreign-token";
+  const key = createHash("sha256")
+    .update(JSON.stringify([ownerPid, sessionId, ownerToken]))
+    .digest("hex");
+  const filePath = path.join(loc.dataRoot, "_shared", "async-rewake-children", `${key}.json`);
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFile(
+    filePath,
+    JSON.stringify({ version: 1, ownerPid, sessionId, ownerToken, entries }),
+  );
+  return filePath;
+}
+
+function foreignRow(): PidTableEntry {
+  return {
+    pid: 29_151,
+    dispatchId: "foreign-dispatch",
+    scope: "project",
+    marketplace: "catalog",
+    plugin: "plugin",
+    spawnedAt: "2026-11-13T00:00:00.000Z",
+  };
+}
+
+test(
+  "keeps a waiting parent hook and its table intact while a child hook runs",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-ownership-"));
+    const locations = locationsFor("project", root);
+    const parentRuntime = createHooksRuntime();
+    const childRuntime = createHooksRuntime();
+    const parent = createChild(29_101);
+    const child = createChild(29_102);
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(parentRuntime);
+      await shutdownInMemoryChildren(childRuntime);
+      destroyChild(parent);
+      destroyChild(child);
+      await rm(root, { recursive: true, force: true });
+    });
+    delete process.env.PI_SUBAGENT_CHILD;
+    await spawnAndRegister(
+      parentRuntime,
+      createEntry(root),
+      {},
+      createContext(root, "parent-session", true).context,
+      createPi().pi,
+      locations,
+      { spawnImpl: createSpawn(parent.child, []), dispatchId: () => "parent-dispatch" },
+    );
+    const parentBytes = await readFile(pidTablePath(locations));
+
+    // act
+    process.env.PI_SUBAGENT_CHILD = "1";
+    await spawnAndRegister(
+      childRuntime,
+      createEntry(root),
+      {},
+      createContext(root, "child-session", true).context,
+      createPi().pi,
+      locations,
+      { spawnImpl: createSpawn(child.child, []), dispatchId: () => "child-dispatch" },
+    );
+    await reapOrphans(childRuntime, locations, deadOrphanProbes());
+    const parentBytesAfterChild = await readFile(pidTablePath(locations));
+    child.stdout.end();
+    child.stderr.end();
+    await Promise.all([once(child.stdout, "end"), once(child.stderr, "end")]);
+    child.emitExit(0);
+    child.emitClose();
+    const parentBytesAfterExit = await readFile(pidTablePath(locations));
+
+    // assert
+    assert.deepStrictEqual(parentBytesAfterChild, parentBytes);
+    assert.deepStrictEqual(parentBytesAfterExit, parentBytes);
+    assert.deepStrictEqual(
+      parentRuntime.pidTableEntries(locations).map((row) => row.dispatchId),
+      ["parent-dispatch"],
+    );
+    assert.deepStrictEqual(parent.signals, []);
+  },
+);
+
+test(
+  "isolates two child runtime journals in one PID through plain and rewake exits",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-siblings-"));
+    const loc = locationsFor("project", root);
+    const firstRuntime = createHooksRuntime();
+    const secondRuntime = createHooksRuntime();
+    const first = createChild(29_111);
+    const second = createChild(29_112);
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = "1";
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(firstRuntime);
+      await shutdownInMemoryChildren(secondRuntime);
+      destroyChild(first);
+      destroyChild(second);
+      await rm(root, { recursive: true, force: true });
+    });
+    const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+
+    // act
+    await spawnAndRegister(
+      firstRuntime,
+      createEntry(root),
+      {},
+      createContext(root, "shared-session", true).context,
+      createPi().pi,
+      loc,
+      {
+        spawnImpl: createSpawn(first.child, []),
+        dispatchId: () => "first-child-dispatch",
+      },
+    );
+    await spawnAndRegister(
+      secondRuntime,
+      createEntry(root, {
+        handlerDecl: { type: "command", command: "/opt/hooks/plain", async: true },
+      }),
+      {},
+      createContext(root, "shared-session", true).context,
+      createPi().pi,
+      loc,
+      {
+        spawnImpl: createSpawn(second.child, []),
+        dispatchId: () => "second-child-dispatch",
+      },
+    );
+    const names = await readdir(journalDir);
+    const before = await Promise.all(names.map((name) => readFile(path.join(journalDir, name))));
+    const stdoutEnd = once(first.stdout, "end");
+    const stderrEnd = once(first.stderr, "end");
+    first.stdout.end();
+    first.stderr.end();
+    await Promise.all([stdoutEnd, stderrEnd]);
+    first.emitExit(0);
+    first.emitClose();
+    const firstName = names.find((_name, index) =>
+      before[index]?.toString("utf8").includes("first-child-dispatch"),
+    );
+    assert.ok(firstName);
+    await firstRuntime.runPidTableOperation(path.join(journalDir, firstName), () =>
+      Promise.resolve(),
+    );
+    const remainingNames = await readdir(journalDir);
+    const remaining = await readFile(path.join(journalDir, remainingNames[0] ?? ""));
+
+    // assert
+    assert.strictEqual(names.length, 2);
+    assert.ok(names.every((name) => /^[a-f0-9]{64}\.json$/.test(name)));
+    assert.notDeepStrictEqual(before[0], before[1]);
+    assert.strictEqual(remainingNames.length, 1);
+    assert.match(remaining.toString("utf8"), /second-child-dispatch/);
+    assert.deepStrictEqual(await stat(pidTablePath(loc)).catch(filesystemErrorCode), "ENOENT");
+    assert.deepStrictEqual(second.signals, []);
+  },
+);
+
+test(
+  "plain async and asyncRewake hooks share their captured runtime journal",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-shared-owner-"));
+    const loc = locationsFor("project", root);
+    const runtime = createHooksRuntime();
+    const rewake = createChild(29_118);
+    const plain = createChild(29_119);
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = "1";
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+      destroyChild(rewake);
+      destroyChild(plain);
+      await rm(root, { recursive: true, force: true });
+    });
+    const ctx = createContext(root, "shared-owner-session", true).context;
+    const pi = createPi().pi;
+    const event = {
+      type: "tool_call",
+      toolCallId: "shared-owner-call",
+      toolName: "bash",
+      input: { command: "printf shared" },
+    } satisfies ToolCallEvent;
+    const rewakeChunks: Buffer[] = [];
+    const plainChunks: Buffer[] = [];
+    rewake.stdin?.on("data", (chunk: Buffer) => rewakeChunks.push(Buffer.from(chunk)));
+    plain.stdin?.on("data", (chunk: Buffer) => plainChunks.push(Buffer.from(chunk)));
+    const rewakeEnd = once(rewake.stdin!, "end");
+    const plainEnd = once(plain.stdin!, "end");
+    runtime.captureChildIdentity(
+      {
+        type: "before_agent_start",
+        systemPromptOptions: { customPrompt: '<active_agent name="shared-runner"/>\n\n' },
+      } as BeforeAgentStartEvent,
+      "shared-owner-session",
+    );
+
+    // act
+    await spawnAndRegister(runtime, createEntry(root), event, ctx, pi, loc, {
+      spawnImpl: createSpawn(rewake.child, []),
+      dispatchId: () => "rewake-dispatch",
+    });
+    await spawnAndRegister(
+      runtime,
+      createEntry(root, {
+        handlerDecl: { type: "command", command: "/opt/hooks/plain", async: true },
+      }),
+      event,
+      ctx,
+      pi,
+      loc,
+      {
+        spawnImpl: createSpawn(plain.child, []),
+        dispatchId: () => "plain-dispatch",
+      },
+    );
+    runtime.captureChildIdentity(
+      {
+        type: "before_agent_start",
+        systemPromptOptions: { customPrompt: '<active_agent name="later-runner"/>\n\n' },
+      } as BeforeAgentStartEvent,
+      "later-session",
+    );
+    await Promise.all([rewakeEnd, plainEnd]);
+    const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+    const names = await readdir(journalDir);
+    const journal: unknown = JSON.parse(
+      await readFile(path.join(journalDir, names[0] ?? ""), "utf8"),
+    );
+
+    // assert
+    assert.strictEqual(names.length, 1);
+    const expectedPayload = {
+      session_id: "shared-owner-session",
+      transcript_path: "",
+      cwd: root,
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command: "printf shared" },
+      tool_use_id: "shared-owner-call",
+      agent_type: "shared-runner",
+      agent_id: "shared-owner-session",
+    };
+    assert.deepStrictEqual(
+      JSON.parse(Buffer.concat(rewakeChunks).toString("utf8")),
+      expectedPayload,
+    );
+    assert.deepStrictEqual(
+      JSON.parse(Buffer.concat(plainChunks).toString("utf8")),
+      expectedPayload,
+    );
+    assert.deepStrictEqual(
+      (journal as { entries: PidTableEntry[] }).entries.map((row) => row.dispatchId),
+      ["rewake-dispatch", "plain-dispatch"],
+    );
+  },
+);
+
+// D-PG6-03: two children of one launching session read one `session_id`, and
+// each keeps the journal owner of its own session id.
+test(
+  "keys the journal owners of two children of one launching session by their own sessions",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-rooted-owner-"));
+    const loc = locationsFor("project", root);
+    const runtime = createHooksRuntime();
+    const children = [createChild(29_121), createChild(29_122)];
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = "1";
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+      children.forEach(destroyChild);
+      await rm(root, { recursive: true, force: true });
+    });
+    const launching = {
+      sessionId: "launching-session",
+      transcriptPath: "/sessions/launching.jsonl",
+    };
+    const payloads: unknown[] = [];
+
+    // act
+    for (const [index, sessionId] of ["first-child", "second-child"].entries()) {
+      const harness = children[index];
+      assert.ok(harness !== undefined);
+      const chunks: Buffer[] = [];
+      harness.stdin?.on("data", (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+      const stdinEnd = once(harness.stdin!, "end");
+      runtime.captureChildIdentity(
+        {
+          type: "before_agent_start",
+          systemPromptOptions: { customPrompt: '<active_agent name="rooted-runner"/>\n\n' },
+        } as BeforeAgentStartEvent,
+        sessionId,
+      );
+      runtime.recordChildRoot(sessionId, launching);
+      await spawnAndRegister(
+        runtime,
+        createEntry(root),
+        {
+          type: "tool_call",
+          toolCallId: `${sessionId}-call`,
+          toolName: "bash",
+          input: { command: "printf rooted" },
+        } satisfies ToolCallEvent,
+        createContext(root, sessionId, true).context,
+        createPi().pi,
+        loc,
+        { spawnImpl: createSpawn(harness.child, []), dispatchId: () => `${sessionId}-dispatch` },
+      );
+      await stdinEnd;
+      payloads.push(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+    }
+
+    // assert
+    assert.deepStrictEqual(
+      runtime.persistenceOwners().map((owner) => owner.sessionId),
+      ["first-child", "second-child"],
+    );
+    assert.deepStrictEqual(
+      payloads,
+      ["first-child", "second-child"].map((sessionId) => ({
+        session_id: "launching-session",
+        transcript_path: "/sessions/launching.jsonl",
+        cwd: root,
+        hook_event_name: "PreToolUse",
+        tool_name: "Bash",
+        tool_input: { command: "printf rooted" },
+        tool_use_id: `${sessionId}-call`,
+        agent_type: "rooted-runner",
+        agent_id: sessionId,
+      })),
+    );
+  },
+);
+
+for (const { name, marker, handlerDecl } of [
+  {
+    name: "main plain async",
+    marker: "0",
+    handlerDecl: { type: "command", command: "/opt/hooks/plain", async: true },
+  },
+  {
+    name: "main asyncRewake",
+    marker: "0",
+    handlerDecl: { type: "command", command: "/opt/hooks/rewake", asyncRewake: true },
+  },
+  {
+    name: "unavailable child plain async",
+    marker: "1",
+    handlerDecl: { type: "command", command: "/opt/hooks/plain", async: true },
+  },
+  {
+    name: "unavailable child asyncRewake",
+    marker: "1",
+    handlerDecl: { type: "command", command: "/opt/hooks/rewake", asyncRewake: true },
+  },
+] as const) {
+  test(`omits identity from ${name} stdin`, { concurrency: false }, async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-identity-absent-"));
+    const loc = locationsFor("project", root);
+    const runtime = createHooksRuntime();
+    const child = createChild(29_120);
+    const chunks: Buffer[] = [];
+    child.stdin?.on("data", (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
+    const stdinEnd = once(child.stdin!, "end");
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = marker;
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await rm(root, { recursive: true, force: true });
+    });
+
+    // act
+    await spawnAndRegister(
+      runtime,
+      createEntry(root, { handlerDecl }),
+      {
+        type: "tool_call",
+        toolCallId: "identity-absent-call",
+        toolName: "bash",
+        input: { command: "printf absent" },
+      } satisfies ToolCallEvent,
+      createContext(root, "identity-absent-session", true).context,
+      createPi().pi,
+      loc,
+      { spawnImpl: createSpawn(child.child, []), dispatchId: () => "identity-absent-dispatch" },
+    );
+    await stdinEnd;
+    const payload: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+
+    // assert
+    assert.deepStrictEqual(payload, {
+      session_id: "identity-absent-session",
+      transcript_path: "",
+      cwd: root,
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command: "printf absent" },
+      tool_use_id: "identity-absent-call",
+    });
+    assert.strictEqual(Object.hasOwn(payload, "agent_type"), false);
+    assert.strictEqual(Object.hasOwn(payload, "agent_id"), false);
+  });
+}
+
+test(
+  "a delayed exit after reload removes only its captured session row",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-delayed-exit-"));
+    const loc = locationsFor("project", root);
+    const runtime = createHooksRuntime();
+    const oldChild = createChild(29_114);
+    const newChild = createChild(29_115);
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = "1";
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+      destroyChild(oldChild);
+      destroyChild(newChild);
+      await rm(root, { recursive: true, force: true });
+    });
+    await spawnAndRegister(
+      runtime,
+      createEntry(root),
+      {},
+      createContext(root, "old-session", true).context,
+      createPi().pi,
+      loc,
+      {
+        spawnImpl: createSpawn(oldChild.child, []),
+        dispatchId: () => "old-dispatch",
+      },
+    );
+    const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+    const [oldName] = await readdir(journalDir);
+    assert.ok(oldName);
+    const oldBytes = await readFile(path.join(journalDir, oldName));
+    await shutdownInMemoryChildren(runtime);
+    // The journal still lists the old row, as when shutdown could not rewrite it.
+    await writeFile(path.join(journalDir, oldName), oldBytes);
+    runtime.advanceGeneration();
+    await spawnAndRegister(
+      runtime,
+      createEntry(root),
+      {},
+      createContext(root, "new-session", true).context,
+      createPi().pi,
+      loc,
+      {
+        spawnImpl: createSpawn(newChild.child, []),
+        dispatchId: () => "new-dispatch",
+      },
+    );
+    const before = await readdir(journalDir);
+    const newName = before.find((name) => name !== oldName);
+    assert.ok(newName);
+    const newBytes = await readFile(path.join(journalDir, newName));
+    const stdoutEnd = once(oldChild.stdout, "end");
+    const stderrEnd = once(oldChild.stderr, "end");
+    oldChild.stdout.end();
+    oldChild.stderr.end();
+    await Promise.all([stdoutEnd, stderrEnd]);
+
+    // act
+    oldChild.emitExit(0);
+    oldChild.emitClose();
+    await runtime.runPidTableOperation(path.join(journalDir, oldName), () => Promise.resolve());
+
+    // assert
+    assert.deepStrictEqual(
+      await stat(path.join(journalDir, oldName)).catch(filesystemErrorCode),
+      "ENOENT",
+    );
+    assert.deepStrictEqual(await readFile(path.join(journalDir, newName)), newBytes);
+    assert.deepStrictEqual(
+      runtime.persistenceOwners().map((owner) => owner.sessionId),
+      ["new-session"],
+    );
+  },
+);
+
+test("contains a retired child journal cleanup error", { concurrency: false }, async (t) => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "async-child-retired-error-"));
+  const loc = locationsFor("project", root);
+  const innerRuntime = createHooksRuntime();
+  let rejectOperations = false;
+  const runtime = new Proxy(innerRuntime, {
+    get(target, property, receiver): unknown {
+      if (property === "runPidTableOperation" && rejectOperations) {
+        return (): Promise<void> => Promise.reject(new Error("journal unavailable"));
+      }
+
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  const child = createChild(29_116);
+  const previousMarker = process.env.PI_SUBAGENT_CHILD;
+  process.env.PI_SUBAGENT_CHILD = "1";
+  t.after(async () => {
+    if (previousMarker === undefined) {
+      delete process.env.PI_SUBAGENT_CHILD;
+    } else {
+      process.env.PI_SUBAGENT_CHILD = previousMarker;
+    }
+
+    rejectOperations = false;
+    await shutdownInMemoryChildren(runtime);
+    destroyChild(child);
+    await rm(root, { recursive: true, force: true });
+  });
+  await spawnAndRegister(
+    runtime,
+    createEntry(root),
+    {},
+    createContext(root, "retired-session", true).context,
+    createPi().pi,
+    loc,
+    {
+      spawnImpl: createSpawn(child.child, []),
+      dispatchId: () => "retired-dispatch",
+    },
+  );
+  const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+  const [name] = await readdir(journalDir);
+  assert.ok(name);
+  const journalBytes = await readFile(path.join(journalDir, name));
+  await shutdownInMemoryChildren(runtime);
+  // The journal still lists the retired row, as when shutdown could not rewrite it.
+  await writeFile(path.join(journalDir, name), journalBytes);
+  const stdoutEnd = once(child.stdout, "end");
+  const stderrEnd = once(child.stderr, "end");
+  child.stdout.end();
+  child.stderr.end();
+  await Promise.all([stdoutEnd, stderrEnd]);
+  rejectOperations = true;
+
+  // act
+  child.emitExit(0);
+  child.emitClose();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  // assert
+  assert.notStrictEqual(
+    await stat(path.join(journalDir, name)).catch(filesystemErrorCode),
+    "ENOENT",
+  );
+});
+
+test(
+  "a retired child's late exit tolerates an already removed journal",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-retired-absent-"));
+    const loc = locationsFor("project", root);
+    const runtime = createHooksRuntime();
+    const child = createChild(29_117);
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = "1";
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await rm(root, { recursive: true, force: true });
+    });
+    await spawnAndRegister(
+      runtime,
+      createEntry(root),
+      {},
+      createContext(root, "retired-absent-session", true).context,
+      createPi().pi,
+      loc,
+      {
+        spawnImpl: createSpawn(child.child, []),
+        dispatchId: () => "retired-absent-dispatch",
+      },
+    );
+    const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+    const [name] = await readdir(journalDir);
+    assert.ok(name);
+    await shutdownInMemoryChildren(runtime);
+    const stdoutEnd = once(child.stdout, "end");
+    const stderrEnd = once(child.stderr, "end");
+    child.stdout.end();
+    child.stderr.end();
+    await Promise.all([stdoutEnd, stderrEnd]);
+
+    // act
+    child.emitExit(0);
+    child.emitClose();
+    await runtime.runPidTableOperation(path.join(journalDir, name), () => Promise.resolve());
+
+    // assert
+    assert.deepStrictEqual(await readdir(journalDir), []);
+  },
+);
+
+test(
+  "preserves a real waiting parent process through a real child spawn and exit",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-real-parent-child-"));
+    const loc = locationsFor("project", root);
+    const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+    await mkdir(journalDir, { recursive: true });
+    const parentRuntime = createHooksRuntime();
+    const childRuntime = createHooksRuntime();
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(parentRuntime);
+      await shutdownInMemoryChildren(childRuntime);
+      await rm(root, { recursive: true, force: true });
+    });
+    delete process.env.PI_SUBAGENT_CHILD;
+    const parentEntry = createEntry(root, {
+      handlerDecl: {
+        type: "command",
+        command: process.execPath,
+        args: ["-e", "setInterval(() => undefined, 1000)"],
+        async: true,
+      },
+    });
+    await spawnAndRegister(
+      parentRuntime,
+      parentEntry,
+      {},
+      createContext(root, "real-parent", true).context,
+      createPi().pi,
+      loc,
+    );
+    const parentBytes = await readFile(pidTablePath(loc));
+    const [parentRow] = await readPidTable(loc);
+    assert.ok(parentRow);
+    process.env.PI_SUBAGENT_CHILD = "1";
+    const childEntry = createEntry(root, {
+      handlerDecl: {
+        type: "command",
+        command: process.execPath,
+        args: ["-e", "process.exit(0)"],
+        async: true,
+      },
+    });
+
+    // act
+    await spawnAndRegister(
+      childRuntime,
+      childEntry,
+      {},
+      createContext(root, "real-child", true).context,
+      createPi().pi,
+      loc,
+    );
+    const [childOwner] = childRuntime.persistenceOwners();
+    assert.ok(childOwner);
+    const deadline = Date.now() + 3000;
+    while (childRuntime.pidTableEntries(loc, childOwner).length > 0) {
+      assert.ok(Date.now() < deadline, "real child did not exit and clear its journal");
+
+      await new Promise<void>((resolve) => setTimeout(resolve, 10));
+    }
+
+    const settlingNames = await readdir(journalDir);
+    await Promise.all(
+      settlingNames.map((name) =>
+        childRuntime.runPidTableOperation(path.join(journalDir, name), () => Promise.resolve()),
+      ),
+    );
+    const names = await readdir(journalDir);
+    const parentBytesAfter = await readFile(pidTablePath(loc));
+    process.kill(parentRow.pid, 0);
+
+    // assert
+    assert.deepStrictEqual(parentBytesAfter, parentBytes);
+    assert.deepStrictEqual(names, []);
+    assert.deepStrictEqual(
+      parentRuntime.pidTableEntries(loc).map((row) => row.pid),
+      [parentRow.pid],
+    );
+  },
+);
+
+// D-PG3-07: the three tool events a child dispatches, each with the event Pi
+// fires and the fields its translator adds to the common envelope.
+const IDENTITY_TOOL_EVENTS = [
+  {
+    claudeEvent: "PreToolUse",
+    event: {
+      type: "tool_call",
+      toolCallId: "recording-call",
+      toolName: "bash",
+      input: { command: "pwd" },
+    } satisfies ToolCallEvent,
+    fields: { tool_name: "Bash", tool_input: { command: "pwd" }, tool_use_id: "recording-call" },
+  },
+  {
+    claudeEvent: "PostToolUse",
+    event: {
+      type: "tool_result",
+      toolCallId: "recording-call",
+      toolName: "bash",
+      input: { command: "pwd" },
+      content: [{ type: "text", text: "recorded\n" }],
+      isError: false,
+      details: { durationMs: 3 },
+    } satisfies ToolResultEvent,
+    fields: {
+      tool_name: "Bash",
+      tool_input: { command: "pwd" },
+      tool_use_id: "recording-call",
+      tool_response: {
+        interrupted: false,
+        structuredContent: [{ type: "text", text: "recorded\n" }],
+      },
+    },
+  },
+  {
+    claudeEvent: "PostToolUseFailure",
+    event: {
+      type: "tool_result",
+      toolCallId: "recording-call",
+      toolName: "bash",
+      input: { command: "pwd" },
+      content: [{ type: "text", text: "pwd failed" }],
+      isError: true,
+      details: { exitCode: 1 },
+    } satisfies ToolResultEvent,
+    fields: {
+      tool_name: "Bash",
+      tool_input: { command: "pwd" },
+      tool_use_id: "recording-call",
+      error: "pwd failed",
+      is_interrupt: false,
+    },
+  },
+] as const;
+
+const IDENTITY_ROLES = [
+  {
+    role: "child",
+    marker: "1",
+    identity: { agent_type: "recording-agent", agent_id: "recording-session" },
+  },
+  { role: "main", marker: "0", identity: {} },
+] as const;
+
+const IDENTITY_LANES = [
+  { lane: "plain async", background: { async: true } },
+  { lane: "asyncRewake", background: { asyncRewake: true } },
+] as const;
+
+for (const {
+  claudeEvent,
+  event,
+  fields,
+  role,
+  marker,
+  identity,
+  lane,
+  background,
+} of IDENTITY_TOOL_EVENTS.flatMap((toolEvent) =>
+  IDENTITY_ROLES.flatMap((identityRole) =>
+    IDENTITY_LANES.map((identityLane) => ({ ...toolEvent, ...identityRole, ...identityLane })),
+  ),
+)) {
+  test(
+    `records ${role} ${lane} ${claudeEvent} stdin through a real background process`,
+    { concurrency: false, timeout: 15_000 },
+    async (t) => {
+      // arrange
+      const root = await mkdtemp(path.join(tmpdir(), "async-real-identity-"));
+      const loc = locationsFor("project", root);
+      const runtime = createHooksRuntime();
+      const recordingPath = path.join(root, "stdin.json");
+      let ready: Promise<unknown[]> | undefined;
+      let closed: Promise<unknown[]> | undefined;
+      let child: ChildProcess | undefined;
+      const previousMarker = process.env.PI_SUBAGENT_CHILD;
+      t.after(async () => {
+        await shutdownInMemoryChildren(runtime);
+        if (child !== undefined) {
+          await closed;
+        }
+
+        // The hook's exit queues a PID table write that must land before the removal.
+        await runtime.runPidTableOperation(pidTablePath(loc), () => Promise.resolve());
+
+        if (previousMarker === undefined) {
+          delete process.env.PI_SUBAGENT_CHILD;
+        } else {
+          process.env.PI_SUBAGENT_CHILD = previousMarker;
+        }
+
+        await rm(root, { recursive: true, force: true });
+      });
+      process.env.PI_SUBAGENT_CHILD = marker;
+      const beforeRun: BeforeAgentStartEvent = {
+        type: "before_agent_start",
+        messageType: "user",
+        prompt: "record stdin",
+        systemPrompt: "",
+        systemPromptOptions: {
+          cwd: root,
+          customPrompt: '<active_agent name="recording-agent"/>\n\n',
+          appendSystemPrompt: "",
+          selectedTools: [],
+          hiddenTools: [],
+          toolSnippets: {},
+          toolGuidelines: {},
+          promptGuidelines: [],
+          sections: {},
+          contextFiles: [],
+          skills: [],
+        },
+      };
+      runtime.captureChildIdentity(beforeRun, "recording-session");
+      const recordingSpawn = t.mock.fn(
+        (command: string, args: readonly string[], options: SpawnOptions): ChildProcess => {
+          child = spawn(command, [...args], options);
+          assert.ok(child.stdout);
+          ready = once(child.stdout, "data");
+          closed = once(child, "close");
+          return child;
+        },
+      );
+      const entry = createEntry(root, {
+        claudeEvent,
+        handlerDecl: {
+          type: "command",
+          command: process.execPath,
+          args: [
+            "-e",
+            'const fs = require("node:fs"); let text = ""; ' +
+              'process.on("SIGTERM", () => process.exit(0)); ' +
+              "setInterval(() => undefined, 1000); " +
+              'process.stdin.setEncoding("utf8"); ' +
+              'process.stdin.on("data", (chunk) => { text += chunk; }); ' +
+              'process.stdin.on("end", () => { fs.writeFileSync(process.argv[1], text); ' +
+              'process.stdout.write("ready"); });',
+            recordingPath,
+          ],
+          ...background,
+        },
+      });
+
+      // act
+      await spawnAndRegister(
+        runtime,
+        entry,
+        event,
+        createContext(root, "recording-session", true).context,
+        createPi().pi,
+        loc,
+        // The registry uses only spawn's three-argument overload with piped streams.
+        { spawnImpl: recordingSpawn as unknown as NonNullable<SpawnDeps["spawnImpl"]> },
+      );
+      assert.ok(ready);
+      assert.ok(closed);
+      await ready;
+      runtime.captureChildIdentity(
+        {
+          ...beforeRun,
+          systemPromptOptions: {
+            ...beforeRun.systemPromptOptions,
+            customPrompt: '<active_agent name="later-agent"/>\n\n',
+          },
+        },
+        "later-session",
+      );
+      assert.ok(child);
+      assert.strictEqual(child.exitCode, null);
+      child.kill("SIGTERM");
+      const exit = await closed;
+      const recorded: unknown = JSON.parse(await readFile(recordingPath, "utf8"));
+
+      // assert
+      assert.deepStrictEqual(recorded, {
+        session_id: "recording-session",
+        transcript_path: "",
+        cwd: root,
+        hook_event_name: claudeEvent,
+        ...fields,
+        ...identity,
+      });
+      assert.strictEqual(Object.hasOwn(recorded as object, "agent_type"), role === "child");
+      assert.strictEqual(Object.hasOwn(recorded as object, "agent_id"), role === "child");
+      assert.deepStrictEqual(exit, [0, null]);
+    },
+  );
+}
+
+for (const scenario of [
+  { name: "live owner", ownerSignal: "alive", marker: "matching", reaped: false },
+  { name: "permission-denied owner", ownerSignal: "EPERM", marker: "matching", reaped: false },
+  { name: "unknown owner probe", ownerSignal: "EIO", marker: "matching", reaped: false },
+  {
+    name: "dead owner with wrong hook marker",
+    ownerSignal: "ESRCH",
+    marker: "wrong",
+    reaped: false,
+  },
+  {
+    name: "dead owner with matched hook marker",
+    ownerSignal: "ESRCH",
+    marker: "matching",
+    reaped: process.platform === "linux",
+  },
+] as const) {
+  test(`recovers child journal only for ${scenario.name}`, { concurrency: false }, async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-recovery-"));
+    const loc = locationsFor("project", root);
+    const runtime = createHooksRuntime();
+    const child = createChild(29_121);
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = "1";
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await rm(root, { recursive: true, force: true });
+    });
+    await spawnAndRegister(
+      runtime,
+      createEntry(root),
+      {},
+      createContext(root, "owner-session", true).context,
+      createPi().pi,
+      loc,
+      {
+        spawnImpl: createSpawn(child.child, []),
+        dispatchId: () => "owned-dispatch",
+      },
+    );
+    const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+    const [name] = await readdir(journalDir);
+    assert.ok(name);
+    const journalPath = path.join(journalDir, name);
+    const journalBytes = await readFile(journalPath);
+    delete process.env.PI_SUBAGENT_CHILD;
+    const probes: Array<{ pid: number; signal: number | NodeJS.Signals }> = [];
+
+    // act
+    await reapOrphans(createHooksRuntime(), loc, {
+      killProbe(pid, signal): void {
+        probes.push({ pid, signal });
+        if (pid === process.pid && signal === 0 && scenario.ownerSignal !== "alive") {
+          throw Object.assign(new Error("owner unavailable"), { code: scenario.ownerSignal });
+        }
+      },
+      environReader(): Promise<string> {
+        return Promise.resolve(
+          `PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=${scenario.marker === "matching" ? "owned-dispatch" : "other-dispatch"}\0`,
+        );
+      },
+    });
+    const journalState = await stat(journalPath).catch(filesystemErrorCode);
+
+    // assert
+    if (scenario.reaped) {
+      assert.strictEqual(journalState, "ENOENT");
+    } else {
+      assert.notStrictEqual(journalState, "ENOENT");
+    }
+
+    if (!scenario.reaped) {
+      assert.deepStrictEqual(await readFile(journalPath), journalBytes);
+    }
+
+    assert.strictEqual(
+      probes.some((call) => call.signal === "SIGKILL"),
+      scenario.reaped,
+    );
+  });
+}
+
+for (const scenario of [
+  { name: "invalid JSON", mutate: () => "{" },
+  { name: "null envelope", mutate: () => "null" },
+  {
+    name: "unknown version",
+    mutate: (value: Record<string, unknown>) => JSON.stringify({ ...value, version: 2 }),
+  },
+  {
+    name: "invalid owner PID",
+    mutate: (value: Record<string, unknown>) => JSON.stringify({ ...value, ownerPid: -1 }),
+  },
+  {
+    name: "mismatched filename digest",
+    mutate: (value: Record<string, unknown>) =>
+      JSON.stringify({ ...value, ownerToken: "changed-token" }),
+  },
+  {
+    name: "invalid row",
+    mutate: (value: Record<string, unknown>) => JSON.stringify({ ...value, entries: [{ pid: 0 }] }),
+  },
+  {
+    name: "null row",
+    mutate: (value: Record<string, unknown>) => JSON.stringify({ ...value, entries: [null] }),
+  },
+  { name: "oversized file", mutate: () => "x".repeat(1024 * 1024 + 1) },
+] as const) {
+  test(
+    `preserves a foreign child journal with ${scenario.name}`,
+    { concurrency: false },
+    async (t) => {
+      // arrange
+      const root = await mkdtemp(path.join(tmpdir(), "async-child-invalid-"));
+      const loc = locationsFor("project", root);
+      const runtime = createHooksRuntime();
+      const child = createChild(29_131);
+      const previousMarker = process.env.PI_SUBAGENT_CHILD;
+      process.env.PI_SUBAGENT_CHILD = "1";
+      t.after(async () => {
+        if (previousMarker === undefined) {
+          delete process.env.PI_SUBAGENT_CHILD;
+        } else {
+          process.env.PI_SUBAGENT_CHILD = previousMarker;
+        }
+
+        await shutdownInMemoryChildren(runtime);
+        destroyChild(child);
+        await rm(root, { recursive: true, force: true });
+      });
+      await spawnAndRegister(
+        runtime,
+        createEntry(root),
+        {},
+        createContext(root, "invalid-session", true).context,
+        createPi().pi,
+        loc,
+        {
+          spawnImpl: createSpawn(child.child, []),
+          dispatchId: () => "invalid-dispatch",
+        },
+      );
+      const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+      const [name] = await readdir(journalDir);
+      assert.ok(name);
+      const journalPath = path.join(journalDir, name);
+      const original: unknown = JSON.parse(await readFile(journalPath, "utf8"));
+      assert.ok(original !== null && typeof original === "object");
+      const altered = scenario.mutate(original as Record<string, unknown>);
+      await writeFile(journalPath, altered);
+      delete process.env.PI_SUBAGENT_CHILD;
+      const signals: Array<number | NodeJS.Signals> = [];
+
+      // act
+      await reapOrphans(createHooksRuntime(), loc, {
+        killProbe(_pid, signal): void {
+          signals.push(signal);
+          throw Object.assign(new Error("dead"), { code: "ESRCH" });
+        },
+        environReader(): Promise<string> {
+          return Promise.resolve("PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=invalid-dispatch\0");
+        },
+      });
+
+      // assert
+      assert.strictEqual(await readFile(journalPath, "utf8"), altered);
+      assert.deepStrictEqual(signals, []);
+    },
+  );
+}
+
+test("ignores unsafe journal names and symlinks", async (t) => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "async-child-unsafe-"));
+  const loc = locationsFor("project", root);
+  const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+  await mkdir(journalDir, { recursive: true });
+  const unsafePath = path.join(journalDir, "not-a-digest.json");
+  const linkPath = path.join(journalDir, `${"a".repeat(64)}.json`);
+  await writeFile(unsafePath, "unsafe");
+  await symlink(unsafePath, linkPath);
+  t.after(async () => rm(root, { recursive: true, force: true }));
+  const signals: Array<number | NodeJS.Signals> = [];
+
+  // act
+  await reapOrphans(createHooksRuntime(), loc, {
+    killProbe(_pid, signal): void {
+      signals.push(signal);
+    },
+    environReader(): Promise<string> {
+      return Promise.resolve("");
+    },
+  });
+
+  // assert
+  assert.strictEqual(await readFile(unsafePath, "utf8"), "unsafe");
+  assert.deepStrictEqual(signals, []);
+});
+
+test("bounds startup journal scanning at 1024 regular JSON entries", async (t) => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "async-child-scan-limit-"));
+  const loc = locationsFor("project", root);
+  const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+  await mkdir(journalDir, { recursive: true });
+  await Promise.all(
+    Array.from({ length: 1025 }, (_, index) =>
+      writeFile(path.join(journalDir, `${index.toString(16).padStart(64, "0")}.json`), "null"),
+    ),
+  );
+  t.after(async () => rm(root, { recursive: true, force: true }));
+
+  // act
+  await reapOrphans(createHooksRuntime(), loc);
+  const remaining = await readdir(journalDir);
+
+  // assert
+  assert.strictEqual(remaining.length, 1025);
+});
+
+test("preserves a journal namespace that cannot be opened as a directory", async (t) => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "async-child-scan-error-"));
+  const loc = locationsFor("project", root);
+  const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+  await mkdir(path.dirname(journalDir), { recursive: true });
+  await writeFile(journalDir, "occupied");
+  t.after(async () => rm(root, { recursive: true, force: true }));
+
+  // act
+  await reapOrphans(createHooksRuntime(), loc);
+
+  // assert
+  assert.strictEqual(await readFile(journalDir, "utf8"), "occupied");
+});
+
+test(
+  "kills an unrecorded child when its journal cannot persist",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-capacity-"));
+    const loc = locationsFor("project", root);
+    const runtime = createHooksRuntime();
+    const child = createChild(29_141);
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = "1";
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await rm(root, { recursive: true, force: true });
+    });
+
+    // act
+    await spawnAndRegister(
+      runtime,
+      createEntry(root),
+      {},
+      createContext(root, "capacity-session", true).context,
+      createPi().pi,
+      loc,
+      {
+        spawnImpl: createSpawn(child.child, []),
+        dispatchId: () => "x".repeat(257),
+      },
+    );
+
+    // assert
+    assert.deepStrictEqual(runtime.pidTableEntries(loc), []);
+    assert.deepStrictEqual(child.signals, ["SIGKILL"]);
+    assert.deepStrictEqual(await stat(pidTablePath(loc)).catch(filesystemErrorCode), "ENOENT");
+  },
+);
+
+test(
+  "contains a kill failure after child journal persistence rejects",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-kill-failed-"));
+    const loc = locationsFor("project", root);
+    const runtime = createHooksRuntime();
+    const child = createChild(29_142, { killError: new Error("already gone") });
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = "1";
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await rm(root, { recursive: true, force: true });
+    });
+
+    // act
+    await spawnAndRegister(
+      runtime,
+      createEntry(root),
+      {},
+      createContext(root, "kill-failure-session", true).context,
+      createPi().pi,
+      loc,
+      {
+        spawnImpl: createSpawn(child.child, []),
+        dispatchId: () => "x".repeat(257),
+      },
+    );
+
+    // assert
+    assert.deepStrictEqual(runtime.pidTableEntries(loc), []);
+    assert.deepStrictEqual(child.signals, ["SIGKILL"]);
+  },
+);
+
+test(
+  "signals no child hook that ended before its journal write failed",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-ended-unrecorded-"));
+    const loc = locationsFor("project", root);
+    const runtime = createHooksRuntime();
+    const child = createChild(29_172);
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = "1";
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await rm(root, { recursive: true, force: true });
+    });
+    const key = createHash("sha256")
+      .update(JSON.stringify([process.pid, "ended-session", "ended-dispatch"]))
+      .digest("hex");
+    const journalPath = path.join(loc.dataRoot, "_shared", "async-rewake-children", `${key}.json`);
+    // A directory at the journal path makes the hook's journal write fail.
+    await mkdir(journalPath, { recursive: true });
+    let openQueue!: () => void;
+    const queueHeld = runtime.runPidTableOperation(
+      journalPath,
+      () =>
+        new Promise<void>((resolve) => {
+          openQueue = resolve;
+        }),
+    );
+    let reportSpawn!: () => void;
+    const spawned = new Promise<void>((resolve) => {
+      reportSpawn = resolve;
+    });
+    const baseSpawn = createSpawn(child.child, []);
+    const spawnImpl = ((command: string, args: readonly string[], options: SpawnOptions) => {
+      reportSpawn();
+      return baseSpawn(command, args, options);
+    }) as NonNullable<SpawnDeps["spawnImpl"]>;
+    const registration = spawnAndRegister(
+      runtime,
+      createEntry(root),
+      {},
+      createContext(root, "ended-session", true).context,
+      createPi().pi,
+      loc,
+      { spawnImpl, dispatchId: () => "ended-dispatch" },
+    );
+    await spawned;
+
+    // act
+    child.emitError(new Error("case-owned early end"));
+    openQueue();
+    await Promise.all([queueHeld, registration]);
+
+    // assert
+    assert.deepStrictEqual(child.signals, []);
+    assert.deepStrictEqual(runtime.pidTableEntries(loc), []);
+  },
+);
+
+test(
+  "rejects a journal over one MiB without losing its previously recorded hooks",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-byte-cap-"));
+    const loc = locationsFor("project", root);
+    const runtime = createHooksRuntime();
+    const owner = runtime.persistenceOwner(loc, "byte-cap-session", "byte-cap-dispatch");
+    const child = createChild(29_143);
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = "1";
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await rm(root, { recursive: true, force: true });
+    });
+    for (let index = 0; index < 1300; index += 1) {
+      runtime.registerChild({
+        dispatchId: String(index).padStart(256, "x"),
+        pid: 30_000 + index,
+        scope: "project",
+        marketplace: "m".repeat(256),
+        pluginId: "p".repeat(256),
+        claudeEvent: "PreToolUse",
+        spawnedAt: "2026-11-13T00:00:00.000Z",
+        rewakeMessage: undefined,
+        rewakeSummary: undefined,
+        child: { kill: () => true },
+        ladder: { cancel: () => undefined, fired: () => false },
+        stdout: { text: () => "" },
+        stderr: { text: () => "" },
+        capturedGeneration: 0,
+        loc,
+        persistenceOwner: owner,
+      });
+    }
+
+    // act
+    await spawnAndRegister(
+      runtime,
+      createEntry(root),
+      {},
+      createContext(root, "byte-cap-session", true).context,
+      createPi().pi,
+      loc,
+      {
+        spawnImpl: createSpawn(child.child, []),
+        dispatchId: () => "byte-cap-dispatch",
+      },
+    );
+
+    // assert
+    assert.strictEqual(runtime.pidTableEntries(loc, owner).length, 1300);
+    assert.deepStrictEqual(child.signals, ["SIGKILL"]);
+    assert.deepStrictEqual(await stat(pidTablePath(loc)).catch(filesystemErrorCode), "ENOENT");
+  },
+);
+
+test("shutdown drains and removes a confirmed empty child journal", async (t) => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "async-child-empty-shutdown-"));
+  const loc = locationsFor("project", root);
+  const runtime = createHooksRuntime();
+  const owner = runtime.persistenceOwner(loc, "foreign-session", "foreign-token");
+  const journalPath = await foreignJournal(loc, [], owner.ownerPid);
+  t.after(async () => rm(root, { recursive: true, force: true }));
+
+  // act
+  await shutdownInMemoryChildren(runtime);
+
+  // assert
+  assert.deepStrictEqual(await stat(journalPath).catch(filesystemErrorCode), "ENOENT");
+  assert.deepStrictEqual(runtime.persistenceOwners(), []);
+});
+
+test("shutdown preserves a nonregular child journal target", async (t) => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "async-child-directory-"));
+  const loc = locationsFor("project", root);
+  const runtime = createHooksRuntime();
+  runtime.persistenceOwner(loc, "foreign-session", "foreign-token");
+  const journalPath = await foreignJournal(loc, [], process.pid);
+  await rm(journalPath);
+  await mkdir(journalPath);
+  t.after(async () => rm(root, { recursive: true, force: true }));
+
+  // act
+  await shutdownInMemoryChildren(runtime);
+
+  // assert
+  assert.strictEqual((await stat(journalPath)).isDirectory(), true);
+});
+
+for (const scenario of [
+  { name: "removes the journal of the hooks it stopped", extraRows: [], remaining: "ENOENT" },
+  {
+    name: "keeps a journal row of a hook it did not stop",
+    extraRows: [foreignRow()],
+    remaining: ["foreign-dispatch"],
+  },
+] as const) {
+  test(`child shutdown ${scenario.name} before any close event`, async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-stopped-rows-"));
+    const loc = locationsFor("project", root);
+    const runtime = createHooksRuntime();
+    const rewake = createChild(29_161);
+    const plain = createChild(29_162);
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    process.env.PI_SUBAGENT_CHILD = "1";
+    t.after(async () => {
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      destroyChild(rewake);
+      destroyChild(plain);
+      await rm(root, { recursive: true, force: true });
+    });
+    const ctx = createContext(root, "stopped-rows-session", true).context;
+    for (const [child, dispatchId, handlerDecl] of [
+      [
+        rewake,
+        "rewake-dispatch",
+        { type: "command", command: "/opt/hooks/rewake", asyncRewake: true },
+      ],
+      [plain, "plain-dispatch", { type: "command", command: "/opt/hooks/plain", async: true }],
+    ] as const) {
+      await spawnAndRegister(
+        runtime,
+        createEntry(root, { handlerDecl }),
+        {},
+        ctx,
+        createPi().pi,
+        loc,
+        {
+          spawnImpl: createSpawn(child.child, []),
+          dispatchId: () => dispatchId,
+        },
+      );
+    }
+
+    const journalDir = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+    const [journalName] = await readdir(journalDir);
+    const journalPath = path.join(journalDir, journalName ?? "");
+    const journal = JSON.parse(await readFile(journalPath, "utf8")) as {
+      readonly entries: readonly PidTableEntry[];
+    };
+    await writeFile(
+      journalPath,
+      JSON.stringify({ ...journal, entries: [...journal.entries, ...scenario.extraRows] }),
+    );
+
+    // act
+    await shutdownInMemoryChildren(runtime);
+
+    // assert
+    assert.deepStrictEqual([rewake.signals, plain.signals], [["SIGKILL"], ["SIGKILL"]]);
+    const remaining = await readFile(journalPath, "utf8").then(
+      (text) =>
+        (JSON.parse(text) as { readonly entries: readonly PidTableEntry[] }).entries.map(
+          (row) => row.dispatchId,
+        ),
+      filesystemErrorCode,
+    );
+    assert.deepStrictEqual(remaining, scenario.remaining);
+  });
+}
+
+for (const scenario of [
+  {
+    name: "missing hook PID",
+    hookSignal: "ESRCH",
+    ownerRevives: false,
+    killed: false,
+    remains: false,
+  },
+  {
+    name: "permission-denied hook PID",
+    hookSignal: "EPERM",
+    ownerRevives: false,
+    killed: false,
+    remains: true,
+  },
+  {
+    name: "unknown hook probe",
+    hookSignal: "EIO",
+    ownerRevives: false,
+    killed: false,
+    remains: true,
+  },
+  {
+    name: "reused owner PID",
+    hookSignal: "alive",
+    ownerRevives: true,
+    killed: false,
+    remains: true,
+  },
+  {
+    name: "failed hook group signal",
+    hookSignal: "failed-kill",
+    ownerRevives: false,
+    killed: false,
+    remains: true,
+  },
+] as const) {
+  test(
+    `preserves or removes the foreign row for ${scenario.name}`,
+    { concurrency: false },
+    async (t) => {
+      // arrange
+      const root = await mkdtemp(path.join(tmpdir(), "async-child-foreign-row-"));
+      const loc = locationsFor("project", root);
+      const journalPath = await foreignJournal(loc, [foreignRow()]);
+      const original = await readFile(journalPath);
+      t.after(async () => rm(root, { recursive: true, force: true }));
+      let ownerProbes = 0;
+      const signals: Array<number | NodeJS.Signals> = [];
+
+      // act
+      await reapOrphans(createHooksRuntime(), loc, {
+        killProbe(pid, signal): void {
+          signals.push(signal);
+          if (pid === 42 && signal === 0) {
+            ownerProbes += 1;
+            if (scenario.ownerRevives && ownerProbes > 1) {
+              return;
+            }
+
+            throw Object.assign(new Error("dead"), { code: "ESRCH" });
+          }
+
+          if (
+            signal === 0 &&
+            scenario.hookSignal !== "alive" &&
+            scenario.hookSignal !== "failed-kill"
+          ) {
+            throw Object.assign(new Error("hook probe"), { code: scenario.hookSignal });
+          }
+
+          if (signal === "SIGKILL" && scenario.hookSignal === "failed-kill") {
+            throw new Error("group signal denied");
+          }
+        },
+        environReader(): Promise<string> {
+          return Promise.resolve("PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=foreign-dispatch\0");
+        },
+      });
+
+      // assert
+      assert.strictEqual(
+        (await stat(journalPath).catch(filesystemErrorCode)) === "ENOENT",
+        !scenario.remains,
+      );
+      if (scenario.remains) {
+        assert.deepStrictEqual(await readFile(journalPath), original);
+      }
+
+      assert.strictEqual(
+        signals.includes("SIGKILL"),
+        scenario.hookSignal === "failed-kill" && process.platform === "linux",
+      );
+    },
+  );
+}
+
+test(
+  "skips a foreign hook when the owner revives after hook marker proof",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-owner-reuse-"));
+    const loc = locationsFor("project", root);
+    const journalPath = await foreignJournal(loc, [foreignRow()]);
+    const original = await readFile(journalPath);
+    t.after(async () => rm(root, { recursive: true, force: true }));
+    let ownerProbes = 0;
+    const signals: Array<number | NodeJS.Signals> = [];
+
+    // act
+    await reapOrphans(createHooksRuntime(), loc, {
+      killProbe(pid, signal): void {
+        signals.push(signal);
+        if (pid === 42 && signal === 0) {
+          ownerProbes += 1;
+          if (ownerProbes === 3) {
+            return;
+          }
+
+          throw Object.assign(new Error("dead"), { code: "ESRCH" });
+        }
+      },
+      environReader(): Promise<string> {
+        return Promise.resolve("PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=foreign-dispatch\0");
+      },
+    });
+
+    // assert
+    assert.deepStrictEqual(await readFile(journalPath), original);
+    assert.deepStrictEqual(
+      signals.filter((signal) => signal === "SIGKILL"),
+      [],
+    );
+  },
+);
+
+test(
+  "preserves a dead owner's live hook on a platform without a process marker",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "async-child-nonlinux-"));
+    const loc = locationsFor("project", root);
+    const journalPath = await foreignJournal(loc, [foreignRow()]);
+    const original = await readFile(journalPath);
+    t.mock.property(process, "platform", "darwin");
+    t.after(async () => rm(root, { recursive: true, force: true }));
+    const signals: Array<number | NodeJS.Signals> = [];
+
+    // act
+    await reapOrphans(createHooksRuntime(), loc, {
+      killProbe(pid, signal): void {
+        signals.push(signal);
+        if (pid === 42 && signal === 0) {
+          throw Object.assign(new Error("dead"), { code: "ESRCH" });
+        }
+      },
+      environReader(): Promise<string> {
+        throw new Error("non-Linux recovery must not read /proc");
+      },
+    });
+
+    // assert
+    assert.deepStrictEqual(await readFile(journalPath), original);
+    assert.deepStrictEqual(
+      signals.filter((signal) => signal === "SIGKILL"),
+      [],
+    );
+  },
+);
 
 test(
   "keeps same-shaped child persistence and stale completion isolated by runtime",
@@ -954,6 +2786,7 @@ test(
       hook_event_name: "PreToolUse",
       tool_name: "Bash",
       tool_input: { command: "printf ready" },
+      tool_use_id: "tool-call-lifecycle",
     });
     const tablePath = pidTablePath(locations);
     const expectedRegisteredBytes =
@@ -1185,6 +3018,70 @@ test("spawns an async-rewake hook with Claude's path variables filled in", async
   }
 });
 
+test(
+  "keeps a main-session hook running when its PID table write fails",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const root = await mkdtemp(path.join(tmpdir(), "async-registry-table-failure-"));
+    const child = createChild(29_171);
+    const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    const previousMarker = process.env.PI_SUBAGENT_CHILD;
+    t.after(async () => {
+      if (previousDebug === undefined) {
+        delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+      } else {
+        process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
+      }
+
+      if (previousMarker === undefined) {
+        delete process.env.PI_SUBAGENT_CHILD;
+      } else {
+        process.env.PI_SUBAGENT_CHILD = previousMarker;
+      }
+
+      await shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await rm(root, { recursive: true, force: true, maxRetries: 3 });
+    });
+    process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+    delete process.env.PI_SUBAGENT_CHILD;
+    const diagnostics: string[] = [];
+    t.mock.method(console, "error", (...parts: unknown[]) => {
+      diagnostics.push(parts.map(String).join(" "));
+    });
+    const locations = locationsFor("project", root);
+
+    // act
+    await spawnAndRegister(
+      runtime,
+      createEntry(root),
+      {},
+      createContext(root, "table-failure-session", true).context,
+      createPi().pi,
+      locations,
+      {
+        spawnImpl: createSpawn(child.child, []),
+        dispatchId: () => "table-failure-dispatch",
+        pidTableWriter: () => Promise.reject(new Error("pid table unavailable")),
+      },
+    );
+
+    // assert
+    assert.deepStrictEqual(child.signals, []);
+    assert.deepStrictEqual(
+      runtime.pidTableEntries(locations).map((row) => row.dispatchId),
+      ["table-failure-dispatch"],
+    );
+    assert.strictEqual(diagnostics.length, 1);
+    assert.match(
+      diagnostics[0] ?? "",
+      /async-rewake: pid table persistence failed \(plugin-lifecycle\/PreToolUse\): pid table unavailable/,
+    );
+  },
+);
+
 test("contains a synchronous spawn failure with semantic diagnostics", async (t) => {
   // arrange
   const runtime = createHooksRuntime();
@@ -1227,6 +3124,63 @@ test("contains a synchronous spawn failure with semantic diagnostics", async (t)
     assert.match(diagnostics[0] ?? "", /spawn threw/);
     assert.match(diagnostics[0] ?? "", /plugin-lifecycle\/PreToolUse/);
     assert.match(diagnostics[0] ?? "", /spawn denied by case boundary/);
+  } finally {
+    shutdownInMemoryChildren(runtime);
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  }
+});
+
+test("D-PG10-10: spawns no shell-form async hook that names a plugin option and logs the refusal", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const root = await mkdtemp(path.join(tmpdir(), "async-registry-shell-option-"));
+  const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  t.after(() => {
+    if (previousDebug === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    } else {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
+    }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  const diagnostics: string[] = [];
+  t.mock.method(console, "error", (...parts: unknown[]) => {
+    diagnostics.push(parts.map(String).join(" "));
+  });
+  shutdownInMemoryChildren(runtime);
+  const locations = locationsFor("project", root);
+  const context = createContext(root, "session-shell-option", true);
+  const pi = createPi();
+  const spawnCalls: SpawnCall[] = [];
+  const entry = createEntry(root, {
+    handlerDecl: {
+      type: "command",
+      command: "/opt/hooks/scan ${user_config.mode}",
+      asyncRewake: true,
+    },
+  });
+
+  try {
+    // act
+    await spawnAndRegister(runtime, entry, {}, context.context, pi.pi, locations, {
+      spawnImpl: createSpawn(createChild(4242).child, spawnCalls),
+      dispatchId: () => "dispatch-shell-option",
+    });
+    const tableState = await stat(pidTablePath(locations)).catch(filesystemErrorCode);
+
+    // assert
+    assert.deepStrictEqual(spawnCalls, []);
+    assert.strictEqual(tableState, "ENOENT");
+    assert.deepStrictEqual(pi.messages, []);
+    assert.deepStrictEqual(context.notifications, []);
+    assert.deepStrictEqual(diagnostics, [
+      "[hooks] async-rewake: spawnAndRegister threw (plugin-lifecycle/PreToolUse): Hook from " +
+        "plugin plugin-lifecycle@catalog-lifecycle references ${user_config.*} in a shell-form " +
+        "command. The substituted value would be re-parsed by the shell. Use exec form instead " +
+        '\u2014 {"command": "<executable>", "args": ["${user_config.KEY}", ...]} \u2014 or read ' +
+        "$CLAUDE_PLUGIN_OPTION_<KEY> from the hook's environment. Command: /opt/hooks/scan " +
+        "${user_config.mode}",
+    ]);
   } finally {
     shutdownInMemoryChildren(runtime);
     await rm(root, { recursive: true, force: true, maxRetries: 3 });
@@ -1729,6 +3683,235 @@ test("sends SIGKILL to the group of a background hook whose shell its SIGTERM en
   assert.deepStrictEqual(child.signals, []);
 });
 
+interface LaneSpawn {
+  readonly runtime: HooksRuntime;
+  readonly child: ChildHarness;
+  readonly locations: ReturnType<typeof locationsFor>;
+  readonly pi: PiHarness;
+  readonly diagnostics: readonly string[];
+  readonly timers: TimerObservation;
+}
+
+// Writes each debug line of the case to `lines`.
+function captureDebugLines(t: TestContext): string[] {
+  const lines: string[] = [];
+  const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  t.after(() => {
+    if (previousDebug === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    } else {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previousDebug;
+    }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  t.mock.method(console, "error", (...parts: unknown[]) => {
+    lines.push(parts.map(String).join(" "));
+  });
+  return lines;
+}
+
+// Spawns one UserPromptSubmit background child of `handlerDecl` under mocked
+// timers, with the debug lines captured, and stops it when the case ends.
+async function spawnLaneChild(
+  t: TestContext,
+  handlerDecl: RoutingEntry["handlerDecl"],
+): Promise<LaneSpawn> {
+  const timers = observeTimers(t, Date.parse("2026-11-14T09:00:00.000Z"));
+  const diagnostics = captureDebugLines(t);
+  const runtime = createHooksRuntime();
+  const root = await mkdtemp(path.join(tmpdir(), "async-registry-lane-"));
+  const locations = locationsFor("project", root);
+  const context = createContext(root, "session-lane", true);
+  const pi = createPi();
+  const child = createChild(24_720);
+  t.after(async () => {
+    shutdownInMemoryChildren(runtime);
+    destroyChild(child);
+    await reapOrphans(runtime, locations, deadOrphanProbes());
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  });
+  await spawnAndRegister(
+    runtime,
+    createEntry(root, { claudeEvent: "UserPromptSubmit", handlerDecl }),
+    { type: "input", text: "prompt", source: "interactive" },
+    context.context,
+    pi.pi,
+    locations,
+    { spawnImpl: createSpawn(child.child, []), dispatchId: () => "dispatch-lane" },
+  );
+  return { runtime, child, locations, pi, diagnostics, timers };
+}
+
+test("a plain async hook receives no signal past its declared timeout (D-PG5-17)", async (t) => {
+  // arrange
+  const spawned = await spawnLaneChild(t, {
+    type: "command",
+    command: "/opt/hooks/note",
+    timeout: 1,
+    async: true,
+  });
+
+  // act
+  t.mock.timers.tick(6_000);
+  const entry = spawned.runtime.takeChild("dispatch-lane");
+
+  // assert
+  assert.deepStrictEqual(spawned.child.signals, []);
+  assert.deepStrictEqual(spawned.timers.handles, []);
+  assert.strictEqual(entry?.ladder.fired(), false);
+});
+
+test("the reload walk sends SIGKILL to a plain async hook and forgets it (D-PG5-18)", async (t) => {
+  // arrange
+  const spawned = await spawnLaneChild(t, {
+    type: "command",
+    command: "/opt/hooks/note",
+    timeout: 1,
+    async: true,
+  });
+
+  // act
+  await shutdownInMemoryChildren(spawned.runtime);
+
+  // assert
+  assert.deepStrictEqual(spawned.child.signals, ["SIGKILL"]);
+  assert.strictEqual(spawned.runtime.takeChild("dispatch-lane"), undefined);
+  assert.deepStrictEqual(spawned.runtime.pidTableEntries(spawned.locations), []);
+});
+
+test("the reap of a later load stops a recorded plain async hook (D-PG5-18)", async (t) => {
+  // arrange
+  setCasePlatform(t, "linux");
+  const spawned = await spawnLaneChild(t, {
+    type: "command",
+    command: "/opt/hooks/note",
+    timeout: 1,
+    async: true,
+  });
+  const signals: Array<readonly [number, number | NodeJS.Signals]> = [];
+
+  // act
+  await reapOrphans(createHooksRuntime(), spawned.locations, {
+    killProbe(pid, signal): void {
+      signals.push([pid, signal]);
+    },
+    environReader(): Promise<string> {
+      return Promise.resolve("PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=dispatch-lane\0");
+    },
+  });
+
+  // assert
+  assert.deepStrictEqual(signals, [
+    [24_720, 0],
+    [-24_720, "SIGKILL"],
+  ]);
+  assert.deepStrictEqual(spawned.child.signals, []);
+});
+
+test("a plain async hook's child error finalizes it and sends no answer (D-PG5-17)", async (t) => {
+  // arrange
+  const spawned = await spawnLaneChild(t, {
+    type: "command",
+    command: "/opt/hooks/note",
+    timeout: 1,
+    async: true,
+  });
+
+  // act
+  spawned.child.emitError(new Error("lost the hook"));
+  spawned.child.emitExit(0);
+  spawned.child.emitClose(0);
+
+  // assert
+  assert.strictEqual(spawned.runtime.takeChild("dispatch-lane"), undefined);
+  assert.deepStrictEqual(spawned.pi.messages, []);
+  assert.deepStrictEqual(spawned.child.signals, []);
+});
+
+for (const declared of [
+  {
+    name: "a declared timeout",
+    writes: "one debug line",
+    timeout: 1,
+    lines: [
+      "[hooks] async-hook: timeout 1 ignored (plugin-lifecycle/UserPromptSubmit); " +
+        "a plain async hook runs until it ends",
+    ],
+  },
+  { name: "no timeout", writes: "no debug line", timeout: undefined, lines: [] },
+  {
+    name: "an unusable timeout",
+    writes: "only the ignored-timeout line",
+    timeout: "soon",
+    lines: [
+      '[hooks] async-hook: timeout "soon" ignored (plugin-lifecycle/UserPromptSubmit); ' +
+        "a plain async hook runs until it ends",
+    ],
+  },
+] as const) {
+  test(`a plain async hook with ${declared.name} writes ${declared.writes} (D-PG5-17)`, async (t) => {
+    // arrange
+    const handlerDecl = {
+      type: "command",
+      command: "/opt/hooks/note",
+      async: true,
+      ...(declared.timeout === undefined ? {} : { timeout: declared.timeout }),
+    } satisfies RoutingEntry["handlerDecl"];
+
+    // act
+    const spawned = await spawnLaneChild(t, handlerDecl);
+
+    // assert
+    assert.deepStrictEqual(spawned.diagnostics, declared.lines);
+  });
+}
+
+for (const lane of [
+  { name: "an async rewake hook", flags: { asyncRewake: true } },
+  { name: "a hook with both flags", flags: { async: true, asyncRewake: true } },
+] as const) {
+  test(`${lane.name} receives SIGTERM at its declared timeout (D-PG5-17)`, async (t) => {
+    // arrange
+    const spawned = await spawnLaneChild(t, {
+      type: "command",
+      command: "/opt/hooks/scan",
+      timeout: 1,
+      ...lane.flags,
+    });
+
+    // act
+    t.mock.timers.tick(999);
+    const beforeTimeout = [...spawned.child.signals];
+    t.mock.timers.tick(1);
+
+    // assert
+    assert.deepStrictEqual(beforeTimeout, []);
+    assert.deepStrictEqual(spawned.child.signals, ["SIGTERM"]);
+    assert.strictEqual(spawned.runtime.takeChild("dispatch-lane")?.ladder.fired(), true);
+  });
+}
+
+test("an async rewake hook with no timeout receives SIGTERM at 600 seconds (D-PG5-17)", async (t) => {
+  // arrange
+  const spawned = await spawnLaneChild(t, {
+    type: "command",
+    command: "/opt/hooks/scan",
+    asyncRewake: true,
+  });
+
+  // act
+  t.mock.timers.tick(599_999);
+  const beforeTimeout = [...spawned.child.signals];
+  t.mock.timers.tick(1);
+
+  // assert
+  assert.deepStrictEqual(beforeTimeout, []);
+  assert.deepStrictEqual(spawned.child.signals, ["SIGTERM"]);
+  assert.deepStrictEqual(spawned.diagnostics, [
+    "[hooks] exec-timer: SIGTERM after 600s (plugin-lifecycle/UserPromptSubmit)",
+  ]);
+});
+
 function destroyChild(child: ChildHarness): void {
   child.child.removeAllListeners();
   child.stdin?.destroy();
@@ -2006,6 +4189,71 @@ test(
     }
   },
 );
+
+for (const [index, { title, prepare, marked }] of [
+  {
+    title: "marks the next Stop run when an exit two wakes the model inside the stop boundary",
+    prepare: (runtime: HooksRuntime): void => {
+      runtime.openStopBoundary();
+    },
+    marked: true,
+  },
+  {
+    title:
+      "leaves the next Stop run unmarked when an exit two wakes the model outside the stop boundary",
+    prepare: (): void => undefined,
+    marked: false,
+  },
+  {
+    title: "leaves the next Stop run unmarked when the wake inside the stop boundary fails to send",
+    prepare: (runtime: HooksRuntime, pi: PiHarness): void => {
+      runtime.openStopBoundary();
+      pi.setSendError(new Error("send unavailable"));
+    },
+    marked: false,
+  },
+].entries()) {
+  test(`${title} (D-BG-210 / D-PG5-06)`, { concurrency: false }, async (t) => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const root = await mkdtemp(path.join(tmpdir(), "async-registry-boundary-mark-"));
+    observeTimers(t, Date.parse("2026-08-31T10:40:00.000Z"));
+    shutdownInMemoryChildren(runtime);
+    const locations = locationsFor("project", root);
+    const context = createContext(root, `session-boundary-mark-${index}`, false);
+    const pi = createPi();
+    const child = createChild(24_700 + index);
+    prepare(runtime, pi);
+
+    try {
+      await spawnAndRegister(
+        runtime,
+        createEntry(root, { claudeEvent: "Stop" }),
+        { last_assistant_message: "done", stop_hook_active: false },
+        context.context,
+        pi.pi,
+        locations,
+        {
+          spawnImpl: createSpawn(child.child, []),
+          dispatchId: () => `dispatch-boundary-mark-${index}`,
+        },
+      );
+
+      // act
+      child.emitExit(2);
+      child.emitClose();
+      await waitForPidTable(locations, []);
+
+      // assert
+      assert.strictEqual(runtime.isStopHookActive(), marked);
+    } finally {
+      shutdownInMemoryChildren(runtime);
+      destroyChild(child);
+      await reapOrphans(runtime, locations, deadOrphanProbes());
+      await rm(root, { recursive: true, force: true, maxRetries: 3 });
+    }
+  });
+}
 
 test("sends ordered stdout after a declared empty message", { concurrency: false }, async (t) => {
   // arrange
@@ -3411,3 +5659,494 @@ test(
     }
   },
 );
+
+const BIG_TEXT = "x".repeat(12_000);
+
+// The wrapper Claude Code 2.1.323 sends for 12,000 `x` characters saved at
+// `filePath` (D-PG5-15).
+function savedBigText(filePath: string): string {
+  return (
+    "<persisted-output>\n" +
+    `Output too large (11.7KB). Full output saved to: ${filePath}\n\n` +
+    `Preview (first 2KB):\n${"x".repeat(2_000)}\n...\n</persisted-output>`
+  );
+}
+
+// A Pi double whose `sent(count)` resolves once it has received `count`
+// messages.
+function createCountingPi(): {
+  readonly pi: ExtensionAPI;
+  readonly messages: { readonly message: unknown; readonly options: unknown }[];
+  sent(count: number): Promise<void>;
+} {
+  const messages: { readonly message: unknown; readonly options: unknown }[] = [];
+  const waiters: { readonly count: number; readonly resolve: () => void }[] = [];
+  const sendMessage: ExtensionAPI["sendMessage"] = (message, options) => {
+    messages.push({ message, options });
+    for (const waiter of waiters.filter(({ count }) => count === messages.length)) {
+      waiter.resolve();
+    }
+  };
+
+  return {
+    pi: { sendMessage, getAllTools: () => [] } as unknown as ExtensionAPI,
+    messages,
+    sent: (count) =>
+      messages.length >= count
+        ? Promise.resolve()
+        : new Promise((resolve) => {
+            waiters.push({ count, resolve });
+          }),
+  };
+}
+
+// A writer double that records each save and settles as `outcome` gives for
+// its source; `called` resolves at the first save.
+function createAnswerSaver(
+  outcome: (source: string) => Promise<string> = (source) =>
+    Promise.resolve(`/saved/${source}.txt`),
+) {
+  const saves: { dataRoot: string; id: string; source: string; text: string }[] = [];
+  let announce: () => void = () => undefined;
+  const called = new Promise<void>((resolve) => {
+    announce = resolve;
+  });
+  const saveHookOutput: NonNullable<SpawnDeps["saveHookOutput"]> = (loc, id, source, text) => {
+    saves.push({ dataRoot: loc.dataRoot, id, source, text });
+    announce();
+    return outcome(source);
+  };
+
+  return { saves, called, saveHookOutput };
+}
+
+// Resolves when the hooks debug channel writes a line that holds `line`.
+function hookDebugLineWritten(t: TestContext, line: string): Promise<void> {
+  const debugBefore = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  t.after(() => {
+    if (debugBefore === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+      return;
+    }
+
+    process.env.PI_CLAUDE_MARKETPLACE_DEBUG = debugBefore;
+  });
+  return new Promise((resolve) => {
+    t.mock.method(console, "error", (...parts: unknown[]): void => {
+      if (parts.map(String).join(" ").includes(line)) {
+        resolve();
+      }
+    });
+  });
+}
+
+// Runs a plain async hook whose answer is `stdout` to its exit, with the PID
+// table writes kept off the disk.
+async function endPlainAnswer(
+  t: TestContext,
+  stdout: string,
+  pi: ExtensionAPI,
+  saveHookOutput: NonNullable<SpawnDeps["saveHookOutput"]>,
+): Promise<{ readonly runtime: HooksRuntime; readonly dataRoot: string }> {
+  const runtime = createHooksRuntime();
+  const root = await mkdtemp(path.join(tmpdir(), "async-registry-cap-"));
+  const locations = locationsFor("project", root);
+  const child = createChild(24_801);
+  t.after(async () => {
+    shutdownInMemoryChildren(runtime);
+    destroyChild(child);
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  });
+  await spawnAndRegister(
+    runtime,
+    createEntry(root, {
+      claudeEvent: "UserPromptSubmit",
+      handlerDecl: { type: "command", command: "/opt/hooks/note", async: true },
+    }),
+    { type: "input", text: "prompt", source: "interactive" },
+    createContext(root, "session-cap", true).context,
+    pi,
+    locations,
+    {
+      spawnImpl: createSpawn(child.child, []),
+      dispatchId: () => "dispatch-cap",
+      pidTableWriter: () => Promise.resolve(),
+      saveHookOutput,
+    },
+  );
+  child.stdout.end(stdout);
+  await once(child.stdout, "end");
+  child.emitExit(0);
+  child.emitClose(0);
+  return { runtime, dataRoot: locations.dataRoot };
+}
+
+function answerMessage(content: string): { readonly message: unknown; readonly options: unknown } {
+  return {
+    message: {
+      customType: "claude-hook-async-response",
+      content,
+      display: false,
+      details: { pluginId: "plugin-lifecycle", dispatchId: "dispatch-cap" },
+    },
+    options: { deliverAs: "nextTurn" },
+  };
+}
+
+function answerOf(systemMessage: string, additionalContext: string): string {
+  return JSON.stringify({ systemMessage, hookSpecificOutput: { additionalContext } });
+}
+
+test("sends a plain async answer under the limit as it is and saves nothing (D-PG5-14)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  const saver = createAnswerSaver();
+
+  // act
+  await endPlainAnswer(t, PLAIN_ANSWER, pi.pi, saver.saveHookOutput);
+  await pi.sent(2);
+
+  // assert
+  assert.deepStrictEqual(
+    { messages: pi.messages, saves: saver.saves },
+    { messages: [answerMessage("remember"), answerMessage("context")], saves: [] },
+  );
+});
+
+test("sends a 12,000-character async systemMessage as the saved wrapper (D-PG5-15)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  const saver = createAnswerSaver();
+
+  // act
+  const { dataRoot } = await endPlainAnswer(
+    t,
+    JSON.stringify({ systemMessage: BIG_TEXT }),
+    pi.pi,
+    saver.saveHookOutput,
+  );
+  await pi.sent(1);
+
+  // assert
+  assert.deepStrictEqual(
+    { messages: pi.messages, saves: saver.saves },
+    {
+      messages: [answerMessage(savedBigText("/saved/systemMessage.txt"))],
+      saves: [{ dataRoot, id: "dispatch-cap", source: "systemMessage", text: BIG_TEXT }],
+    },
+  );
+});
+
+test("saves each over-limit text of one async answer under its own source (D-PG5-15)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  const saver = createAnswerSaver();
+
+  // act
+  const { dataRoot } = await endPlainAnswer(
+    t,
+    answerOf(BIG_TEXT, BIG_TEXT),
+    pi.pi,
+    saver.saveHookOutput,
+  );
+  await pi.sent(2);
+
+  // assert
+  assert.deepStrictEqual(
+    { messages: pi.messages, saves: saver.saves },
+    {
+      messages: [
+        answerMessage(savedBigText("/saved/systemMessage.txt")),
+        answerMessage(savedBigText("/saved/additionalContext.txt")),
+      ],
+      saves: [
+        { dataRoot, id: "dispatch-cap", source: "systemMessage", text: BIG_TEXT },
+        { dataRoot, id: "dispatch-cap", source: "additionalContext", text: BIG_TEXT },
+      ],
+    },
+  );
+});
+
+test("sends the async systemMessage first while only its save is pending (D-PG5-16)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  let releaseSave: (filePath: string) => void = () => undefined;
+  const held = new Promise<string>((resolve) => {
+    releaseSave = resolve;
+  });
+  const saver = createAnswerSaver(() => held);
+
+  // act
+  await endPlainAnswer(t, answerOf(BIG_TEXT, "context"), pi.pi, saver.saveHookOutput);
+  await saver.called;
+  const sentDuringSave = pi.messages.length;
+  releaseSave("/saved/systemMessage.txt");
+  await pi.sent(2);
+
+  // assert
+  assert.deepStrictEqual(
+    { sentDuringSave, messages: pi.messages },
+    {
+      sentDuringSave: 0,
+      messages: [answerMessage(savedBigText("/saved/systemMessage.txt")), answerMessage("context")],
+    },
+  );
+});
+
+test("sends the cut async text with the failure line when the save rejects (D-PG5-15)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  const saver = createAnswerSaver(() => Promise.reject(new Error("disk full")));
+  const marker =
+    "\n\n[Hook systemMessage truncated at 10000 chars \u2014 persist-to-disk failed: disk full]";
+
+  // act
+  await endPlainAnswer(t, JSON.stringify({ systemMessage: BIG_TEXT }), pi.pi, saver.saveHookOutput);
+  await pi.sent(1);
+
+  // assert
+  assert.deepStrictEqual(pi.messages, [answerMessage("x".repeat(10_000 - marker.length) + marker)]);
+});
+
+test("sends no async answer when a reload comes during its save (D-62-03)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  const dropped = hookDebugLineWritten(
+    t,
+    "async-hook: answer dropped after a reload (plugin-lifecycle/UserPromptSubmit)",
+  );
+  let releaseSave: (filePath: string) => void = () => undefined;
+  const held = new Promise<string>((resolve) => {
+    releaseSave = resolve;
+  });
+  const saver = createAnswerSaver(() => held);
+
+  // act
+  const { runtime } = await endPlainAnswer(
+    t,
+    JSON.stringify({ systemMessage: BIG_TEXT }),
+    pi.pi,
+    saver.saveHookOutput,
+  );
+  await saver.called;
+  runtime.advanceGeneration();
+  releaseSave("/saved/systemMessage.txt");
+  await dropped;
+
+  // assert
+  assert.deepStrictEqual(pi.messages, []);
+});
+
+// The UTF-16 code units a plain async hook keeps of its stdout, and of its
+// stdout's end past that.
+const PLAIN_STREAM_LIMIT = 8 * 1024 * 1024;
+const PLAIN_STREAM_TAIL = 64 * 1024;
+
+test("parses a plain async answer whose stdout runs past its bound and drops the rest (D-PG5-17)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  const saver = createAnswerSaver();
+  const debugBefore = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  t.after(() => {
+    if (debugBefore === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+      return;
+    }
+
+    process.env.PI_CLAUDE_MARKETPLACE_DEBUG = debugBefore;
+  });
+  const lines: string[] = [];
+  t.mock.method(console, "error", (...parts: unknown[]): void => {
+    lines.push(parts.map(String).join(" "));
+  });
+
+  // act
+  await endPlainAnswer(
+    t,
+    `${PLAIN_ANSWER}\n${"x".repeat(PLAIN_STREAM_LIMIT + PLAIN_STREAM_TAIL)}`,
+    pi.pi,
+    saver.saveHookOutput,
+  );
+  await pi.sent(2);
+
+  // assert
+  assert.deepStrictEqual(
+    { messages: pi.messages, dropped: lines.filter((line) => line.includes("code units dropped")) },
+    {
+      messages: [answerMessage("remember"), answerMessage("context")],
+      dropped: [
+        `[hooks] async-hook: stdout past ${PLAIN_STREAM_LIMIT} UTF-16 code units dropped; the last ${PLAIN_STREAM_TAIL} kept (plugin-lifecycle/UserPromptSubmit)`,
+      ],
+    },
+  );
+});
+
+test("gives a plain async answer on the last line after more progress than its stdout bound keeps (D-BG-205)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  const saver = createAnswerSaver();
+  const progress = "progress line\n".repeat(
+    Math.ceil((PLAIN_STREAM_LIMIT + PLAIN_STREAM_TAIL) / 14) + 1,
+  );
+
+  // act
+  await endPlainAnswer(t, `${progress}${PLAIN_ANSWER}\n`, pi.pi, saver.saveHookOutput);
+  await pi.sent(2);
+
+  // assert
+  assert.deepStrictEqual(pi.messages, [answerMessage("remember"), answerMessage("context")]);
+});
+
+test("gives a plain async answer whose line its stdout bound splits when the kept end holds the rest (D-BG-205)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  const saver = createAnswerSaver();
+  const progress = `${"x".repeat(PLAIN_STREAM_LIMIT - 10)}\n`;
+
+  // act
+  await endPlainAnswer(t, `${progress}${PLAIN_ANSWER}\n`, pi.pi, saver.saveHookOutput);
+  await pi.sent(2);
+
+  // assert
+  assert.deepStrictEqual(pi.messages, [answerMessage("remember"), answerMessage("context")]);
+});
+
+test("gives a plain async answer, not the line fragment that the kept end of its stdout starts with (D-BG-205)", async (t) => {
+  // arrange
+  const pi = createCountingPi();
+  const saver = createAnswerSaver();
+  const fragment = '{"systemMessage":"wrong"}';
+  const padding = "p".repeat(PLAIN_STREAM_TAIL - fragment.length - PLAIN_ANSWER.length - 3);
+  const keptEnd = `${fragment}\n${padding}\n${PLAIN_ANSWER}\n`;
+
+  // act
+  await endPlainAnswer(
+    t,
+    `${"x".repeat(PLAIN_STREAM_LIMIT)}\nnote ${keptEnd}`,
+    pi.pi,
+    saver.saveHookOutput,
+  );
+  await pi.sent(2);
+
+  // assert
+  assert.deepStrictEqual(pi.messages, [answerMessage("remember"), answerMessage("context")]);
+});
+
+test("drains a plain async hook's stderr, keeps none of it, and still gives its answer (D-PG5-17)", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const root = await mkdtemp(path.join(tmpdir(), "async-registry-plain-stderr-"));
+  const locations = locationsFor("project", root);
+  const pi = createCountingPi();
+  const saver = createAnswerSaver();
+  const child = createChild(24_803);
+  t.after(async () => {
+    shutdownInMemoryChildren(runtime);
+    destroyChild(child);
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  });
+  const debugBefore = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  t.after(() => {
+    if (debugBefore === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+      return;
+    }
+
+    process.env.PI_CLAUDE_MARKETPLACE_DEBUG = debugBefore;
+  });
+  const lines: string[] = [];
+  t.mock.method(console, "error", (...parts: unknown[]): void => {
+    lines.push(parts.map(String).join(" "));
+  });
+  await spawnAndRegister(
+    runtime,
+    createEntry(root, {
+      claudeEvent: "UserPromptSubmit",
+      handlerDecl: { type: "command", command: "/opt/hooks/note", async: true },
+    }),
+    { type: "input", text: "prompt", source: "interactive" },
+    createContext(root, "session-plain-stderr", true).context,
+    pi.pi,
+    locations,
+    {
+      spawnImpl: createSpawn(child.child, []),
+      dispatchId: () => "dispatch-cap",
+      pidTableWriter: () => Promise.resolve(),
+      saveHookOutput: saver.saveHookOutput,
+    },
+  );
+
+  // act
+  child.stderr.write("first warning\n");
+  child.stderr.end("second warning\n");
+  child.stdout.end(PLAIN_ANSWER);
+  await Promise.all([once(child.stderr, "end"), once(child.stdout, "end")]);
+  child.emitExit(0);
+  child.emitClose(0);
+  await pi.sent(2);
+
+  // assert
+  assert.deepStrictEqual(
+    { messages: pi.messages, stderr: lines.filter((line) => line.includes("stderr")) },
+    {
+      messages: [answerMessage("remember"), answerMessage("context")],
+      stderr: [
+        "[hooks] async-hook: stderr not kept; a plain async hook's stderr is unread (plugin-lifecycle/UserPromptSubmit)",
+      ],
+    },
+  );
+});
+
+test("keeps every character of an async rewake hook's stderr past the plain lane's bound", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const root = await mkdtemp(path.join(tmpdir(), "async-registry-rewake-whole-"));
+  const locations = locationsFor("project", root);
+  const pi = createPi();
+  const child = createChild(24_802);
+  const stderrText = `${"x".repeat(PLAIN_STREAM_LIMIT)}tail`;
+
+  try {
+    await spawnAndRegister(
+      runtime,
+      createEntry(root, {
+        handlerDecl: {
+          type: "command",
+          command: "/opt/hooks/rewake",
+          asyncRewake: true,
+          rewakeMessage: "woken:",
+        },
+      }),
+      {},
+      createContext(root, "session-rewake-whole", true).context,
+      pi.pi,
+      locations,
+      {
+        spawnImpl: createSpawn(child.child, []),
+        dispatchId: () => "dispatch-rewake-whole",
+        pidTableWriter: () => Promise.resolve(),
+      },
+    );
+    child.stderr.end(stderrText);
+    child.stdout.end();
+    await Promise.all([once(child.stderr, "end"), once(child.stdout, "end")]);
+
+    // act
+    child.emitExit(2);
+    child.emitClose(2);
+
+    // assert
+    const sent = pi.messages.map(({ message }) => (message as { content: string }).content);
+    assert.deepStrictEqual(
+      sent.map((content) => ({ length: content.length, tail: content.slice(-4) })),
+      [{ length: "woken: ".length + stderrText.length, tail: "tail" }],
+    );
+  } finally {
+    shutdownInMemoryChildren(runtime);
+    destroyChild(child);
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  }
+});

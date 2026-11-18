@@ -153,6 +153,11 @@ function mcpImplementationRows(): McpImplementationRow[] {
   ];
 }
 
+void (true satisfies Same<PiBoundary.AgentBeforeSettleEvent, Peer.AgentBeforeSettleEvent>);
+void (true satisfies Same<
+  PiBoundary.AgentBeforeSettleEventResult,
+  Peer.AgentBeforeSettleEventResult
+>);
 void (true satisfies Same<PiBoundary.AgentEndEvent, Peer.AgentEndEvent>);
 void (true satisfies Same<PiBoundary.AgentSettledEvent, Peer.AgentSettledEvent>);
 void (true satisfies Same<PiBoundary.BeforeAgentStartEvent, Peer.BeforeAgentStartEvent>);

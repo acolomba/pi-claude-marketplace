@@ -16,9 +16,9 @@
 //
 // D-CF5-23: an `if` set on an event that has no tool (SessionStart,
 // SessionEnd, UserPromptSubmit, PreCompact, PostCompact, Stop,
-// StopFailure) compiles to `{ kind: "tool-less-event" }`, which never
-// fires, so the hook never runs, as in Claude Code. A blank `if` still
-// compiles to `MATCH_ALL_IF`.
+// StopFailure, UserPromptExpansion) compiles to
+// `{ kind: "tool-less-event" }`, which never fires, so the hook never runs,
+// as in Claude Code. A blank `if` still compiles to `MATCH_ALL_IF`.
 //
 // NFR-7: the `IfPredicate` union has seven arms; the dispatch switch over
 // `predicate.kind` lists every arm and carries no default. Adding an eighth
@@ -103,13 +103,16 @@ import type { CompiledBashGlob, CompiledPathGlob, CompiledPowerShellGlob } from 
  *                            cross-tool `piEvents` set, then consult
  *                            `pathGlob.testAbsolute(event.input.path
  *                            ?? ctx.cwd)`.
- *   - `mcp-literal`       -- exact equality on `event.toolName`; for a
- *                            tool of Pi's built-in MCP, the server segment
+ *   - `mcp-literal`       -- names `event.toolName`; for a tool pi-mcp-adapter
+ *                            shortened, the full name the adapter cut also
+ *                            names it (D-PG1-08). For a tool of Pi's
+ *                            built-in MCP, the server segment
  *                            equals the registered server name and Pi's
  *                            name for the tool segment is the event's
  *                            (D-P5-04).
- *   - `mcp-server-prefix` -- `event.toolName.startsWith(serverPrefix)`
- *                            where `serverPrefix` includes the trailing
+ *   - `mcp-server-prefix` -- compares the recovered full name when dispatch
+ *                            has one (D-PG1-08), otherwise `event.toolName`;
+ *                            `serverPrefix` includes the trailing
  *                            `"__"` (e.g. `"mcp__puppeteer__"`); for a tool
  *                            of Pi's built-in MCP, the prefix names the
  *                            registered server name (D-P5-04).
@@ -483,10 +486,13 @@ function resolveTarget(p: string, ctx: ExtensionContext): string {
  *     against `ctx.cwd` and call `pathGlob.testAbsolute`.
  *   - `mcp-literal` -- the literal names `tool`: exact equality on its Pi
  *     name, or, for a tool of Pi's built-in MCP, the comparison under the
- *     registered server name the matcher uses (D-P5-04).
+ *     registered server name the matcher uses (D-P5-04). For a tool the
+ *     adapter shortened, the full name it cut also names it (D-PG1-08).
  *   - `mcp-server-prefix` -- the prefix names `tool`'s server: a
  *     `startsWith` probe on its Pi name, or, for a tool of Pi's built-in
- *     MCP, equality with the registered server's prefix (D-P5-04).
+ *     MCP, equality with the registered server's prefix (D-P5-04). When
+ *     dispatch recovered the adapter's full name, the prefix compares it
+ *     instead (D-PG1-08).
  *
  * `tool` is the event's tool as the dispatch named it once for the event
  * (D-P5-01). Without it, the event's own tool name, with no built-in

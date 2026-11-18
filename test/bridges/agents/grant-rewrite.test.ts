@@ -40,6 +40,15 @@ import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/
 import type { RemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import type { TestContext } from "node:test";
 
+const CORRECTED_ADAPTER =
+  "tools include MCP tools, which require a pi-subagents background child -- " +
+  "the agent runs in the background (`async: true`); " +
+  "a launch before pi-mcp-adapter has cached the server's tools still fails";
+const CORRECTED_BUILTIN =
+  "tools include MCP tools, which require a pi-subagents background child -- " +
+  "the agent runs in the background (`async: true`); " +
+  "a launch before Pi's built-in MCP has listed the server's tools still fails";
+
 /** The caller's lock check while the state lock is held. */
 function lockHeld(): void {
   // The lock is held, so the check passes.
@@ -234,6 +243,44 @@ describe("needsAgentGrantRewrite", () => {
     assert.strictEqual(needed, true);
   });
 
+  test("an implementation-less row with the exact corrected adapter warning is a candidate", async (t) => {
+    // arrange
+    const locations = await userScope(t);
+    const target = agentPath(locations);
+    await writeAgent(
+      target,
+      agentBlock("tools: mcp:plugin_demo_stub_/echo", [CORRECTED_ADAPTER]) + BODY,
+    );
+    await writeIndex(locations, [legacyRow(target, [CORRECTED_ADAPTER])]);
+
+    // act
+    const needed = await needsAgentGrantRewrite(locations, "builtin");
+
+    // assert
+    assert.strictEqual(needed, true);
+  });
+
+  for (const { label, warning } of [
+    { label: "truncated", warning: ADAPTER_ASYNC.slice(0, -1) },
+    { label: "prefixed", warning: `note: ${CORRECTED_ADAPTER}` },
+    { label: "suffixed", warning: `${CORRECTED_ADAPTER}!` },
+    { label: "case changed", warning: CORRECTED_ADAPTER.replace("MCP", "mcp") },
+  ]) {
+    test(`an implementation-less row with a ${label} warning is not a candidate`, async (t) => {
+      // arrange
+      const locations = await userScope(t);
+      const target = agentPath(locations);
+      await writeAgent(target, agentBlock("tools: mcp:plugin_demo_stub_/echo", [warning]) + BODY);
+      await writeIndex(locations, [legacyRow(target, [warning])]);
+
+      // act
+      const needed = await needsAgentGrantRewrite(locations, "builtin");
+
+      // assert
+      assert.strictEqual(needed, false);
+    });
+  }
+
   test("P4-DC-06: a legacy row without the adapter async warning is never a candidate", async (t) => {
     // arrange
     const locations = await userScope(t);
@@ -347,6 +394,28 @@ describe("rewriteAgentGrantForms", () => {
     assert.strictEqual(await readFile(edited, "utf8"), editedText);
     assert.strictEqual(await readFile(target, "utf8"), builtinBlock() + BODY);
     assert.deepStrictEqual(await readIndexRows(locations), [editedRow, swappedRow(row, "builtin")]);
+  });
+
+  test("a one-byte user edit preserves the file and recorded provenance", async (t) => {
+    // arrange
+    const locations = await userScope(t);
+    const target = agentPath(locations);
+    const row = storedRow(target, "adapter");
+    const edited = adapterBlock().replace("Helps", "helps") + BODY;
+    await writeAgent(target, edited);
+    await writeIndex(locations, [row]);
+    const originalIndex = await readFile(indexPath(locations), "utf8");
+    const debugLines = captureDebugLog(t);
+
+    // act
+    const needed = await needsAgentGrantRewrite(locations, "builtin");
+    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps(), lockHeld);
+
+    // assert
+    assert.strictEqual(needed, false);
+    assert.strictEqual(await readFile(target, "utf8"), edited);
+    assert.strictEqual(await readFile(indexPath(locations), "utf8"), originalIndex);
+    assert.deepStrictEqual(debugLines, [`[mcp] agent ${NAME}: the file holds neither stored form`]);
   });
 
   for (const { held, active, heldBlock, activeBlock } of [
@@ -592,6 +661,40 @@ describe("rewriteAgentGrantForms", () => {
           builtin: { frontmatter: builtinBlock(), warnings: [BUILTIN_ASYNC], droppedTools: [] },
         },
       },
+    ]);
+  });
+
+  test("an implementation-less corrected warning switches twice and retains exact provenance", async (t) => {
+    // arrange
+    const locations = await userScope(t);
+    const target = agentPath(locations);
+    const adapter = agentBlock("tools: mcp:plugin_demo_stub_/echo", [CORRECTED_ADAPTER]);
+    const builtin = agentBlock("tools: mcp:plugin_demo_stub/echo", [CORRECTED_BUILTIN]);
+    const row = legacyRow(target, [CORRECTED_ADAPTER]);
+    await writeAgent(target, adapter + BODY);
+    await writeIndex(locations, [row]);
+
+    // act
+    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps(), lockHeld);
+    const builtinText = await readFile(target, "utf8");
+    const builtinRows = await readIndexRows(locations);
+    await rewriteAgentGrantForms(locations, "builtin", createRemovalOps(), lockHeld);
+    const repeatedRows = await readIndexRows(locations);
+    await rewriteAgentGrantForms(locations, "adapter", createRemovalOps(), lockHeld);
+
+    // assert
+    const forms = {
+      adapter: { frontmatter: adapter, warnings: [CORRECTED_ADAPTER], droppedTools: [] },
+      builtin: { frontmatter: builtin, warnings: [CORRECTED_BUILTIN], droppedTools: [] },
+    };
+    assert.strictEqual(builtinText, builtin + BODY);
+    assert.deepStrictEqual(builtinRows, [
+      { ...row, warnings: [CORRECTED_BUILTIN], mcpImplementation: "builtin", mcpForms: forms },
+    ]);
+    assert.deepStrictEqual(repeatedRows, builtinRows);
+    assert.strictEqual(await readFile(target, "utf8"), adapter + BODY);
+    assert.deepStrictEqual(await readIndexRows(locations), [
+      { ...row, mcpImplementation: "adapter", mcpForms: forms },
     ]);
   });
 

@@ -41,6 +41,8 @@ import {
   MANIFEST_ESCAPE_NOTE,
   narrowUnsupportedKinds,
   SOURCE_DIR_MISSING_NOTE,
+  USER_CONFIG_MALFORMED_NOTE,
+  USER_CONFIG_UNSET_NOTE,
 } from "../shared/probe-classifiers.ts";
 
 import { collectStrictComponentPaths, type ComponentPathResolution } from "./component-paths.ts";
@@ -66,6 +68,7 @@ import {
   type UrlSource,
 } from "./source.ts";
 import { collectUnsupportedKinds } from "./unsupported-components.ts";
+import { parseUserConfig, resolveOptions, type UserConfigSchema } from "./user-config.ts";
 
 import type {
   GitPluginRootResult,
@@ -113,7 +116,9 @@ function readFileTextOf(ctx: ResolveContext): (p: string) => Promise<string> {
 // Helpers
 // ──────────────────────────────────────────────────────────────────────────
 
-interface PartialResolution extends ComponentPathResolution, McpResolution, HooksResolution {}
+interface PartialResolution extends ComponentPathResolution, McpResolution, HooksResolution {
+  declaredUserConfig?: UserConfigSchema;
+}
 
 function emptyResolution(): PartialResolution {
   // hooksConfigPath is left absent (not `undefined`) to satisfy
@@ -171,11 +176,17 @@ function materializableFields(
     componentPaths: partial.componentPaths,
     // D-CF1-06: component-path collection creates the list only to add a kind.
     ...(partial.shadowedFolders !== undefined && { shadowedFolders: partial.shadowedFolders }),
+    ...(partial.refusedListedSkillPaths !== undefined && {
+      refusedListedSkillPaths: partial.refusedListedSkillPaths,
+    }),
     mcpServers: partial.mcpServers,
     // MREC-01: every non-malformed declared server, for the install record.
     declaredMcpServers: partial.declaredMcpServers,
     ...(partial.mcpBundle !== undefined && { mcpBundle: partial.mcpBundle }),
     ...(partial.hooksConfigPath !== undefined && { hooksConfigPath: partial.hooksConfigPath }),
+    ...(partial.declaredUserConfig !== undefined && {
+      declaredUserConfig: partial.declaredUserConfig,
+    }),
     ...(partial.orphanRewake !== undefined && { orphanRewake: partial.orphanRewake }),
     ...(partial.droppedHooks !== undefined && { droppedHooks: partial.droppedHooks }),
     ...(partial.droppedMcpServers !== undefined && {
@@ -719,6 +730,39 @@ async function addUnsupportedKindNotes(
 }
 
 /**
+ * D-PG10-05 / D-PG10-06: the plugin's options. As for `mcpServers`, they come
+ * from `plugin.json` when one exists and from the marketplace entry otherwise.
+ * A malformed declaration is structural and returns true, so the plugin is
+ * unavailable and `--partial` cannot admit it. Required options with no
+ * default keep the plugin partially available.
+ */
+function resolveUserConfig(
+  entry: PluginEntry,
+  manifest: Record<string, unknown> | null,
+  partial: PartialResolution,
+): boolean {
+  const declared = manifest === null ? entry.userConfig : manifest.userConfig;
+  if (declared === undefined) {
+    return false;
+  }
+
+  const parsed = parseUserConfig(declared);
+  if (parsed.kind === "malformed") {
+    partial.notes.push(`${USER_CONFIG_MALFORMED_NOTE}: ${parsed.detail}`);
+    return true;
+  }
+
+  partial.declaredUserConfig = parsed.schema;
+  const { unsetRequired } = resolveOptions(parsed.schema);
+  if (unsetRequired.length > 0) {
+    partial.notes.push(`${USER_CONFIG_UNSET_NOTE}: ${unsetRequired.join(", ")}`);
+    partial.unsupported.push("userConfig");
+  }
+
+  return false;
+}
+
+/**
  * MM-5 strict: union of entry + manifest + implicit-by-convention + standalone-file
  * declarations.
  */
@@ -734,6 +778,7 @@ export async function resolveStrict(
 
   const { pluginRoot, manifest, partial, metadata } = pre;
   const dirty = await runStructuralStages({ entry, ctx, pluginRoot, manifest, partial });
+  const optionsDirty = resolveUserConfig(entry, manifest, partial);
 
   // Step 9 (PR-3 / PR-4): unsupported components declared explicitly or via
   // Claude Code default locations (.lsp.json, monitors/monitors.json, etc.).
@@ -744,7 +789,7 @@ export async function resolveStrict(
   // in the decision below.
   await addUnsupportedKindNotes(entry, manifest, pluginRoot, ctx, partial);
 
-  return decideResolution(entry.name, pluginRoot, partial, dirty, metadata);
+  return decideResolution(entry.name, pluginRoot, partial, dirty || optionsDirty, metadata);
 }
 
 /**

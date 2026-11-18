@@ -2096,6 +2096,29 @@ describe("resolveRawSurface", () => {
         server: "srv",
       },
     },
+    {
+      requirement: "D-PG9-14",
+      notice: {
+        kind: "ca-file-removed",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "plugin_hello_srv_",
+        reason: "not-https",
+      },
+    },
+    {
+      requirement: "D-PG10-21",
+      notice: {
+        kind: "option-blocked",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "srv",
+        names: ["token"],
+        reason: "unset",
+      },
+    },
   ] as const) {
     test(`${requirement}: a repeated ${notice.kind} notice resolves once`, () => {
       // arrange
@@ -2149,6 +2172,45 @@ describe("resolveRawSurface", () => {
           plugin: "https://***@h/p",
           server: "https://***@h/s",
           fields: ["https://***@h/f"],
+        },
+      ],
+    });
+  });
+
+  test("PMOD-04 redacts a credential in each name an option-blocked notice carries (D-PG10-21)", () => {
+    // arrange
+    const surface = {
+      kind: "mcp-config-notices",
+      section: "option-blocked",
+      notices: [
+        {
+          kind: "option-blocked",
+          scope: "user",
+          file: "mcp-adapter.json",
+          plugin: "https://u:tok@h/p",
+          server: "https://u:tok@h/s",
+          names: ["https://u:tok@h/k"],
+          reason: "unset",
+        },
+      ],
+    } as const;
+
+    // act
+    const resolved = resolveRawSurface(surface);
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      kind: "mcp-config-notices",
+      section: "option-blocked",
+      notices: [
+        {
+          kind: "option-blocked",
+          scope: "user",
+          file: "mcp-adapter.json",
+          plugin: "https://***@h/p",
+          server: "https://***@h/s",
+          names: ["https://***@h/k"],
+          reason: "unset",
         },
       ],
     });
@@ -2378,6 +2440,29 @@ describe("resolveRawSurface", () => {
         plugin: "acme",
         server: "plugin_acme_srv_",
         fields: ["toolPermissions"],
+      },
+      severity: "warning",
+    },
+    {
+      notice: {
+        kind: "ca-file-removed",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "acme",
+        server: "plugin_acme_srv_",
+        reason: "not-https",
+      },
+      severity: "warning",
+    },
+    {
+      notice: {
+        kind: "option-blocked",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "acme",
+        server: "srv",
+        names: ["token"],
+        reason: "unset",
       },
       severity: "warning",
     },
@@ -3188,6 +3273,64 @@ describe("mcpConfigNoticeSurfaces", () => {
         section: "leftover-removed",
         notices: [acmeLeftover, helloLeftover],
       },
+    ]);
+  });
+
+  test("D-PG9-14: ca-file-removed notices group after the leftover-removed section", () => {
+    // arrange
+    const caFile = {
+      kind: "ca-file-removed",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "acme",
+      server: "plugin_acme_srv_",
+      reason: "not-https",
+    } as const;
+    const leftover = {
+      kind: "leftover-removed",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "acme",
+      server: "srv",
+    } as const;
+
+    // act
+    const surfaces = mcpConfigNoticeSurfaces([caFile, leftover]);
+
+    // assert
+    assert.deepStrictEqual(surfaces, [
+      { kind: "mcp-config-notices", section: "leftover-removed", notices: [leftover] },
+      { kind: "mcp-config-notices", section: "ca-file-removed", notices: [caFile] },
+    ]);
+  });
+
+  test("D-PG10-21: option-blocked notices group after the ca-file-removed section", () => {
+    // arrange
+    const blocked = {
+      kind: "option-blocked",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "acme",
+      server: "srv",
+      names: ["token"],
+      reason: "unset",
+    } as const;
+    const caFile = {
+      kind: "ca-file-removed",
+      scope: "user",
+      file: "mcp-adapter.json",
+      plugin: "acme",
+      server: "plugin_acme_srv_",
+      reason: "not-https",
+    } as const;
+
+    // act
+    const surfaces = mcpConfigNoticeSurfaces([blocked, caFile]);
+
+    // assert
+    assert.deepStrictEqual(surfaces, [
+      { kind: "mcp-config-notices", section: "ca-file-removed", notices: [caFile] },
+      { kind: "mcp-config-notices", section: "option-blocked", notices: [blocked] },
     ]);
   });
 });

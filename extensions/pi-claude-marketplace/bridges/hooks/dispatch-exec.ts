@@ -26,28 +26,38 @@
 //      process group.
 //   5. Arm the SIGTERM -> 5s -> SIGKILL ladder (EXEC-02) against that
 //      process group (`./process-group.ts`). `ladder.cancel()`
-//      runs from the shared `settle()` closure, which both `child.once(
-//      "close", ...)` and `child.once("error", ...)` call, to close the
-//      TOCTOU window against the timer firing on a recycled pid.
+//      runs from the shared `claim()` closure, which both `child.once(
+//      "close", ...)` and `child.once("error", ...)` call synchronously, to
+//      close the TOCTOU window against the timer firing on a recycled pid;
+//      the first call claims the one settle.
 //   6. Collect the whole of stdout and stderr through `./stream-text.ts`. As
-//      in Claude Code, no size limit applies, so a JSON answer of any size
-//      decides (EXEC-02).
+//      in Claude Code, a JSON answer of any size decides (EXEC-02); only the
+//      collector's NFR-2 ceiling, far past what a hook prints, bounds it.
 //   7. Stream stdin: attach `child.stdin.on("error", hookDebugLog)` BEFORE
 //      `child.stdin.end(payload)` so an EPIPE from a fast-exiting child
 //      cannot escape as an unhandled exception.
-//   8. On `close`, route stderr through `hookDebugLog` (EXEC-03 sole sink;
-//      NO `ctx.ui.notify`) then return `parseHookStdout(code, stdout,
-//      stderr, entry.claudeEvent)`, unless the hook failed and sets `onFailure: "block"`
-//      (D-CF5-18, `./on-failure.ts`): then a start failure (`error`), an exit
-//      other than 0 and 2, a timeout, or broken JSON stdout is a block. A JSON
-//      deny still wins over that block. At every end of the process, a
-//      PostCompact result also carries how the hook ended (D-BG-503).
+//   8. On `close`, write stderr to `hookDebugLog` (EXEC-03) and return
+//      `parseHookStdout(code, stdout, stderr, entry.claudeEvent)`. A failed
+//      exit carries its stderr as a failure, which the dispatch notices show
+//      (D-PG5-10); the exec layer shows nothing itself, and a hook that its
+//      own timeout ended carries no failure. A failed hook that sets
+//      `onFailure: "block"` blocks instead (D-CF5-18, `./on-failure.ts`): a
+//      start failure (`error`), an exit other than 0 and 2, a timeout, or
+//      broken JSON stdout. A JSON deny still wins over that block. At every
+//      end of the process, a PostCompact result also carries how the hook
+//      ended (D-BG-503). Before the result settles, its `additionalContext`
+//      passes the 10,000-character cap of `./context-cap.ts`, which saves a
+//      longer string to a file and sends a preview in its place (D-PG5-14,
+//      D-PG5-15); only the resolve of the `close` path waits for the save.
 //
-// Never-throws contract: every error path resolves to `{ kind: "noop" }` +
+// Never-throws contract: every error path resolves to a noop +
 // `hookDebugLog`, or to the onFailure block when the hook asks for one. The
 // outer `try/catch` wraps setup and spawn-time errors (ENOENT, containment
 // violation, etc.) so the composite handler never crashes against malformed
-// configs; a hook that cannot start blocks under `onFailure: "block"`.
+// configs; a hook that cannot start blocks under `onFailure: "block"`, and
+// otherwise its noop carries a `spawn` failure (a child `error` event) or a
+// `run` failure (an exception in the runner), with absolute paths redacted
+// from the error text (D-PG5-10).
 //
 // Whitelist note: this is one of exactly FIVE sanctioned
 // `node:child_process` import sites in the extension tree (the others are
@@ -60,6 +70,7 @@
 // justification in the docstring header.
 
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 
 import { locationsFor } from "../../persistence/locations.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -67,8 +78,10 @@ import { errorMessage } from "../../shared/errors.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 
 import { spawnAndRegister } from "./async-rewake/registry.ts";
+import { capHookContext } from "./context-cap.ts";
 import { installTimerLadder } from "./exec-timer.ts";
 import { hookPathVars, prepareHookEnv } from "./hook-env.ts";
+import { saveHookOutput } from "./hook-output-files.ts";
 import { onFailureBlock } from "./on-failure.ts";
 import { postCompactRunOf, translatePostCompact } from "./payloads/post-compact.ts";
 import { translatePostToolUseFailure } from "./payloads/post-tool-use-failure.ts";
@@ -79,18 +92,25 @@ import { translateSessionEnd } from "./payloads/session-end.ts";
 import { translateSessionStart } from "./payloads/session-start.ts";
 import { translateStopFailure } from "./payloads/stop-failure.ts";
 import { translateStop } from "./payloads/stop.ts";
+import { translateUserPromptExpansion } from "./payloads/user-prompt-expansion.ts";
 import { translateUserPromptSubmit } from "./payloads/user-prompt-submit.ts";
 import { asGroupLeader } from "./process-group.ts";
 import { planSpawn, serializeWithTruncation } from "./spawn-helpers.ts";
-import { collectStreamText } from "./stream-text.ts";
+import { ceilingBound, collectStreamText } from "./stream-text.ts";
 import { resolveTimeoutSeconds } from "./timeout.ts";
-import { buildTranslationContext, type TranslationContext } from "./translation-context.ts";
+import {
+  buildTranslationContext,
+  childHookIdentityOf,
+  type TranslationContext,
+} from "./translation-context.ts";
 import { parseHookStdout } from "./wire-protocol.ts";
 
 import type { DispatchableEvent } from "../../domain/components/hook-events.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../platform/pi-api.ts";
 import type { ClaudePluginVars } from "../../shared/vars.ts";
 import type { SpawnDeps } from "./async-rewake/registry.ts";
+import type { HookContextSource } from "./context-cap.ts";
 import type { HookExecResult } from "./exec-result.ts";
 import type { HookExitFacts } from "./on-failure.ts";
 import type { RoutingEntry } from "./routing-state.ts";
@@ -132,6 +152,7 @@ const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationCont
   SessionEnd: translateSessionEnd,
   Stop: translateStop,
   StopFailure: translateStopFailure,
+  UserPromptExpansion: translateUserPromptExpansion,
 };
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -141,10 +162,11 @@ const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationCont
 /**
  * EXEC-01..04 + PAYL-01 + HOOK-05 + D-60-01 + D-60-06 execution layer.
  *
- * NEVER throws. Every error / timeout / parse failure path resolves to
- * `{ kind: "noop" }` + `hookDebugLog`, except that a hook with
- * `onFailure: "block"` turns a start failure, an unexpected exit, a timeout,
- * or broken JSON stdout into a block (D-CF5-18). The composite handler
+ * NEVER throws. Every error / timeout / parse failure path resolves to a
+ * noop + `hookDebugLog`, which carries the failure of a failed exit or start
+ * (D-PG5-10), except that a hook with `onFailure: "block"` turns a start
+ * failure, an unexpected exit, a timeout, or broken JSON stdout into a block
+ * (D-CF5-18). The composite handler
  * runs the bucket in parallel, folds the returned arms in
  * routing order (D-CF5-09), and dispatches to the per-Pi-event adapter
  * (D-60-03).
@@ -203,24 +225,27 @@ export async function dispatchHookExec(
   }
 
   try {
-    const transCtx = buildTranslationContext(ctx);
+    const identity = runtime.childIdentityFor(ctx.sessionManager.getSessionId());
+    const transCtx = buildTranslationContext(ctx, childHookIdentityOf(identity));
     const stdinPayload = buildPayload(entry.claudeEvent, event, transCtx);
     const stdinJson = serializeWithTruncation(stdinPayload);
     const loc = locationsFor(entry.scope, transCtx.cwd);
     const env = await prepareHookEnv(entry, transCtx, loc);
     const vars = hookPathVars(entry, transCtx, loc);
-    return await spawnAndCollect(entry, vars, env, stdinJson, deps);
+    return await spawnAndCollect(entry, vars, env, stdinJson, loc, deps);
   } catch (err) {
     hookDebugLog(`exec: caught (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`);
     // D-CF5-18: a hook that cannot start blocks when it sets onFailure "block".
-    // The cause goes in as stderr, so the block reason ends with it.
-    const noop: HookExecResult = { kind: "noop" };
+    // The cause goes in as stderr, so the block reason ends with it; without
+    // the block, the noop carries the cause as a runner failure (D-PG5-10).
+    const error = redactAbsolutePaths(errorMessage(err));
+    const noop: HookExecResult = { kind: "noop", failure: { kind: "run", error } };
     const facts: HookExitFacts = {
       startFailed: true,
       timedOut: false,
       exitCode: null,
       stdout: "",
-      stderr: redactAbsolutePaths(errorMessage(err)),
+      stderr: error,
     };
     return endedResult(entry, facts, noop, onFailureBlock(entry, facts, noop));
   }
@@ -246,6 +271,44 @@ function endedResult(
   return { ...result, postCompactRun: postCompactRunOf(facts, answer, failure !== undefined) };
 }
 
+/**
+ * D-PG5-14 / D-PG5-16: the parsed result with its `additionalContext` capped
+ * alone, before any join with another hook's. The string saves as `stdout`
+ * when it is the trimmed plain stdout, and as `additionalContext` otherwise.
+ * Never rejects, because the cap never does.
+ */
+async function withCappedContext(
+  parsed: HookExecResult,
+  stdout: string,
+  loc: ScopedLocations,
+  deps: SpawnDeps,
+): Promise<HookExecResult> {
+  const context = parsed.additionalContext;
+  if (context === undefined) {
+    return parsed;
+  }
+
+  const source: HookContextSource = context === stdout.trim() ? "stdout" : "additionalContext";
+  const save = deps.saveHookOutput ?? saveHookOutput;
+  const makeId = deps.dispatchId ?? randomUUID;
+  const capped = await capHookContext(context, source, (text) => save(loc, makeId(), source, text));
+  return { ...parsed, additionalContext: capped };
+}
+
+/**
+ * D-PG5-10: a hook that its own timeout ended shows no failure notice, as
+ * Claude Code reports a timeout with a text of its own, so its result drops
+ * the failure the wire protocol read from the signal. The wire protocol's
+ * failure noop holds nothing else.
+ */
+function withoutTimeoutFailure(parsed: HookExecResult, timedOut: boolean): HookExecResult {
+  if (timedOut && parsed.kind === "noop" && parsed.failure !== undefined) {
+    return { kind: "noop" };
+  }
+
+  return parsed;
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Translator dispatch
 // ──────────────────────────────────────────────────────────────────────────
@@ -264,14 +327,15 @@ function endedResult(
 const REQUIRED_EVENT_FIELDS: Record<DispatchableEvent, readonly string[]> = {
   SessionStart: [],
   UserPromptSubmit: ["text"],
-  PreToolUse: ["toolName", "input"],
-  PostToolUse: ["toolName", "input"],
-  PostToolUseFailure: ["toolName", "input"],
+  PreToolUse: ["toolName", "input", "toolCallId"],
+  PostToolUse: ["toolName", "input", "toolCallId"],
+  PostToolUseFailure: ["toolName", "input", "toolCallId"],
   PreCompact: [],
   PostCompact: [],
   SessionEnd: [],
   Stop: [],
   StopFailure: [],
+  UserPromptExpansion: ["command_name", "command_args"],
 };
 
 function buildPayload(
@@ -320,6 +384,7 @@ async function spawnAndCollect(
   vars: ClaudePluginVars,
   env: NodeJS.ProcessEnv,
   stdinJson: string,
+  loc: ScopedLocations,
   deps: SpawnDeps,
 ): Promise<HookExecResult> {
   const spawnImpl = deps.spawnImpl ?? spawn;
@@ -349,29 +414,41 @@ async function spawnAndCollect(
 
     const ladder = installTimerLadder(asGroupLeader(child, deps), timeoutSeconds, ladderLabel);
 
-    const settle = (result: HookExecResult): void => {
+    // The first end of the process claims the one settle and stops the timer
+    // at once; a later end finds it claimed.
+    const claim = (): boolean => {
       if (settled) {
-        return;
+        return false;
       }
 
       settled = true;
       ladder.cancel();
-      resolve(result);
+      return true;
     };
 
-    const stdout = collectStreamText(child.stdout, (err) => {
-      hookDebugLog(`exec: stdout error (${ladderLabel}): ${errorMessage(err)}`);
-    });
-    const stderr = collectStreamText(child.stderr, (err) => {
-      hookDebugLog(`exec: stderr error (${ladderLabel}): ${errorMessage(err)}`);
-    });
+    const stdout = collectStreamText(
+      child.stdout,
+      (err) => {
+        hookDebugLog(`exec: stdout error (${ladderLabel}): ${errorMessage(err)}`);
+      },
+      ceilingBound("stdout", ladderLabel),
+    );
+    const stderr = collectStreamText(
+      child.stderr,
+      (err) => {
+        hookDebugLog(`exec: stderr error (${ladderLabel}): ${errorMessage(err)}`);
+      },
+      ceilingBound("stderr", ladderLabel),
+    );
 
     child.once("error", (err) => {
       hookDebugLog(
         `exec: spawn error (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
       );
-      // D-CF5-18: a hook that cannot start blocks when it sets onFailure "block".
-      const noop: HookExecResult = { kind: "noop" };
+      // D-CF5-18: a hook that cannot start blocks when it sets onFailure "block";
+      // without the block, the noop carries the spawn failure (D-PG5-10).
+      const error = redactAbsolutePaths(errorMessage(err));
+      const noop: HookExecResult = { kind: "noop", failure: { kind: "spawn", error } };
       const facts: HookExitFacts = {
         startFailed: true,
         timedOut: false,
@@ -381,29 +458,44 @@ async function spawnAndCollect(
       };
       const failure = onFailureBlock(entry, facts, noop);
       // A PostCompact run reads the start error, redacted as the outer catch does.
-      const started = { ...facts, stderr: redactAbsolutePaths(errorMessage(err)) };
-      settle(endedResult(entry, started, noop, failure));
+      const started = { ...facts, stderr: error };
+      const result = endedResult(entry, started, noop, failure);
+      if (claim()) {
+        resolve(result);
+      }
     });
 
     child.once("close", (code) => {
       const errText = stderr.text();
-      // EXEC-03: stderr sole-sink through hookDebugLog. NO ctx.ui.notify.
+      // EXEC-03: stderr goes to hookDebugLog; a failed exit also carries it to
+      // the dispatch notices (D-PG5-10).
       if (errText.length > 0) {
         hookDebugLog(`exec: stderr (${entry.pluginId}/${entry.claudeEvent}): ${errText.trim()}`);
       }
 
       const outText = stdout.text();
-      const parsed = parseHookStdout(code, outText, errText, entry.claudeEvent);
+      const timedOut = ladder.fired();
+      const parsed = withoutTimeoutFailure(
+        parseHookStdout(code, outText, errText, entry.claudeEvent),
+        timedOut,
+      );
       // D-CF5-18: a failed hook that sets onFailure "block" blocks whatever its
       // stdout says, except that a JSON deny keeps its own reason.
       const facts: HookExitFacts = {
         startFailed: false,
-        timedOut: ladder.fired(),
+        timedOut,
         exitCode: code,
         stdout: outText,
         stderr: errText,
       };
-      settle(endedResult(entry, facts, parsed, onFailureBlock(entry, facts, parsed)));
+      if (!claim()) {
+        return;
+      }
+
+      // Only the resolve waits for the cap, which never rejects.
+      void withCappedContext(parsed, outText, loc, deps).then((capped) => {
+        resolve(endedResult(entry, facts, capped, onFailureBlock(entry, facts, capped)));
+      });
     });
 
     // EPIPE defense: attach the error listener BEFORE write so a child

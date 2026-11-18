@@ -92,7 +92,10 @@ import {
   commitPreparedWorkflows,
   prepareStageWorkflows,
 } from "../../bridges/workflows/index.ts";
-import { shadowedFolderDiscoveryWarnings } from "../../domain/component-paths.ts";
+import {
+  refusedListedSkillPathMessages,
+  shadowedFolderDiscoveryWarnings,
+} from "../../domain/component-paths.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import {
   UPDATE_IN_PROGRESS_NOTE,
@@ -100,7 +103,13 @@ import {
 } from "../../domain/mcp-implementation.ts";
 import { resolutionFor } from "../../domain/plugin-resolver.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
-import { mcpServerConfigsOf, replaceCompatibility } from "../../persistence/state-io.ts";
+import { declaredOptions, resolveOptions } from "../../domain/user-config.ts";
+import {
+  mcpServerConfigsOf,
+  replaceCompatibility,
+  replaceUserConfig,
+  userConfigFieldsOf,
+} from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   CleanupContextError,
@@ -117,6 +126,7 @@ import { createRemovalOps, type RemovalOps } from "../../shared/fs-utils.ts";
 import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../shared/markers.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { ownValue } from "../../shared/own-key.ts";
+import { discoveryWarning } from "../../shared/staging-warnings.ts";
 import {
   withStateGuard,
   type LockedStateTransactionDeps,
@@ -149,6 +159,7 @@ import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { ClaudeContentOptions } from "../../shared/vars.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type {
   PluginUpdateFailedOutcome,
@@ -392,6 +403,7 @@ async function prepareUpdateHandles(
   const { plugin, marketplace, cwd, locations } = args;
   const { installable, record } = preflight;
   const pluginDataDir = await locations.pluginDataDir(marketplace, plugin);
+  const options = declaredOptions(resolveOptions(installable.declaredUserConfig));
   const handles: Partial<PrepHandles> = {};
 
   try {
@@ -406,6 +418,8 @@ async function prepareUpdateHandles(
       knownWorkflowNames: referenceNames.workflows,
       // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
       cwd,
+      // D-PG10-13: the new version's options are written into skill content.
+      options,
     });
     handles.commands = await prepareStageCommands(ops, {
       locations,
@@ -419,12 +433,15 @@ async function prepareUpdateHandles(
       workflowNames: referenceNames.workflows,
       // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
       cwd,
+      // D-PG10-13: the new version's options are written into command content.
+      options,
     });
     handles.agents = await prepareUpdateAgents(ops, args, preflight, {
       pluginDataDir,
       agentsDirs,
       referenceNames,
       skills: handles.skills,
+      options,
     });
     handles.mcp = await prepareStageMcpServers({
       locations,
@@ -437,6 +454,8 @@ async function prepareUpdateHandles(
       sourcePath: `${installable.pluginRoot}#mcpServers`,
       description: installable.description,
       env: args.env,
+      // D-PG10-21: a server that names an option the new version leaves unset is left out.
+      options,
     });
     handles.workflows = await prepareStageWorkflows({
       locations,
@@ -464,6 +483,8 @@ interface UpdateAgentsInputs {
   readonly agentsDirs: readonly string[];
   readonly referenceNames: InstalledReferenceNames;
   readonly skills: PreparedSkillsStaging;
+  /** D-PG10-13: the new version's options, written into agent content. */
+  readonly options: ClaudeContentOptions | undefined;
 }
 
 /**
@@ -503,6 +524,7 @@ async function prepareUpdateAgents(
     },
     // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
     cwd: args.cwd,
+    options: inputs.options,
   });
 }
 
@@ -950,6 +972,8 @@ function applyAllSuccessRecordFields(sRecord: PluginStateRecord, preflight: Plug
   // beside `compatibility` so a failed update keeps the previous servers next
   // to the intent mark.
   sRecord.mcpServerConfigs = mcpServerConfigsOf(installable.declaredMcpServers);
+  // D-PG10-15: the options `toVersion` declares, written beside it too.
+  replaceUserConfig(sRecord, userConfigFieldsOf(installable.declaredUserConfig));
   if (installable.mcpBundle === true) {
     sRecord.mcpBundle = true;
   } else {
@@ -1013,6 +1037,7 @@ async function refreshHooksCacheAfterUpdate(
         hooksJsonPath: path.join(installable.pluginRoot, installable.hooksConfigPath),
         cwd: args.cwd,
         logPrefix: "update",
+        options: resolveOptions(installable.declaredUserConfig),
       });
     }
 
@@ -1699,8 +1724,15 @@ export async function swapPluginUpdate(
     preflight.record.resources.workflows,
     handles.workflows.result.stagedNames,
   );
+  // PG-SEC-01 and PG-WF-02: the workflow agent notes, for an agent type that
+  // restricts its tools and for one the plugin does not install, join the
+  // folder warnings here and nowhere else in this file, so an update, a
+  // reinstall, and an apply move each print a note once, and so do the
+  // D-PG4-01 refused listed skills paths.
   const stagingWarnings = [
     ...shadowedFolderDiscoveryWarnings(installable.shadowedFolders),
+    ...refusedListedSkillPathMessages(installable.refusedListedSkillPaths).map(discoveryWarning),
+    ...generatedNames.workflowAgentNotes.map(discoveryWarning),
     ...collectUpdateWarnings(handles),
   ];
   await dropPluginCompletionCache(args);

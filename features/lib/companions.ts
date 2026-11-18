@@ -2,21 +2,21 @@
  * @fileoverview The companion extensions a profile Pi can load, found in the
  * optional peer cache (HAR-01, D-CF1-15).
  *
- * `scripts/install-test-peers.mjs` installs the declared floor of each
+ * `scripts/install-test-peers.mjs` installs the suite version of each
  * optional peer into `node_modules/.cache/optional-peers`. A companion loads
  * from the first `pi.extensions` entry of its `package.json`, as Pi loads an
  * installed package, never from a hard-coded file, and its version must be
- * the floor of its peer range in this repository's `package.json`. The
+ * admitted by its peer range in this repository's `package.json`. The
  * resolver reads the cache when a step asks, never at import, so a run with
  * no cache loads this module. `features/` may not import
- * `test/integration/optional-peer.ts`, so the floor check is repeated here.
+ * `test/integration/optional-peer.ts`, so the version check is repeated here.
  */
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { minVersion } from "semver";
+import { minVersion, satisfies } from "semver";
 
 /** A companion extension by the name its scenarios use. */
 export type CompanionName = "pi-subagents" | "pi-mcp-adapter" | "pi-dynamic-workflows";
@@ -37,6 +37,10 @@ const PEER_CACHE_MODULES = fileURLToPath(
 );
 
 const REPOSITORY_MANIFEST = new URL("../../package.json", import.meta.url);
+const SUITE_VERSIONS = new URL(
+  "../../test/integration/optional-peer-suite-versions.json",
+  import.meta.url,
+);
 
 const PEER_CACHE_REMEDY = "Run `node scripts/install-test-peers.mjs`.";
 
@@ -84,24 +88,32 @@ async function readJson(file: string | URL): Promise<unknown> {
   return JSON.parse(await readFile(file, "utf8"));
 }
 
-async function declaredFloor(packageName: string): Promise<string> {
+async function suiteVersion(packageName: string): Promise<string> {
   const manifest = (await readJson(REPOSITORY_MANIFEST)) as {
     readonly peerDependencies?: Readonly<Record<string, string>>;
   };
   const range = manifest.peerDependencies?.[packageName];
   const floor = range === undefined ? null : minVersion(range);
-  if (floor === null) {
+  if (range === undefined || floor === null) {
     throw new Error(`package.json declares no usable ${packageName} peer range`);
   }
 
-  return floor.version;
+  const suiteVersions = (await readJson(SUITE_VERSIONS)) as Readonly<Record<string, string>>;
+  const version = suiteVersions[packageName] ?? floor.version;
+  if (!satisfies(version, range)) {
+    throw new Error(
+      `${packageName} suite version ${version} is outside declared peer range ${range}`,
+    );
+  }
+
+  return version;
 }
 
 /**
  * Returns the companion `name` as the peer cache holds it: its package root,
  * its first `pi.extensions` entry, and its version. Throws, naming the
  * install command, when the cache holds no such package, when the package
- * declares no extension, or when its version is not the declared floor.
+ * declares no extension, or when its version is not the suite version.
  */
 export async function resolveCompanion(name: CompanionName): Promise<Companion> {
   const packageName = PACKAGES[name];
@@ -121,12 +133,12 @@ export async function resolveCompanion(name: CompanionName): Promise<Companion> 
     throw new Error(`the peer cache's ${packageName} declares no extension. ${PEER_CACHE_REMEDY}`);
   }
 
-  const floor = await declaredFloor(packageName);
-  if (manifest.version !== floor) {
+  const version = await suiteVersion(packageName);
+  if (manifest.version !== version) {
     throw new Error(
-      `the peer cache holds ${packageName} ${String(manifest.version)}, not the floor ${floor}. ${PEER_CACHE_REMEDY}`,
+      `the peer cache holds ${packageName} ${String(manifest.version)}, not suite version ${version}. ${PEER_CACHE_REMEDY}`,
     );
   }
 
-  return { name, root, entry: path.resolve(root, entry), version: floor };
+  return { name, root, entry: path.resolve(root, entry), version };
 }

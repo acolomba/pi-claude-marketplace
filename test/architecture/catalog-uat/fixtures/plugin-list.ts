@@ -713,6 +713,30 @@ export const PLUGIN_LIST_FIXTURES: FixtureMap = {
       },
     },
 
+    // D-PG10-06: list-surface inventory row for a plugin installed with
+    // `--partial` while a required option has no default. The typed
+    // `userConfig` kind rides `{options not set}`; the keys ride `info`.
+    "partially-installed-inventory-options": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            details: { autoupdate: true },
+            plugins: [
+              {
+                status: "partially-installed",
+                name: "deploy-tools",
+                version: "1.0.0",
+                reasons: ["options not set"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // FSTAT-04 / D-66-02 / D-66-03: list-surface inventory row for a
     // currently-clean installed plugin whose newer no-network candidate would
     // newly degrade it. The derived `partially-upgradable` token REUSES the `●`

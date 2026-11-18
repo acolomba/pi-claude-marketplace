@@ -11,7 +11,7 @@
 // compiled `src/agents/skills.js` in place through the shared loader in
 // pi-subagents-peer.ts.
 //
-// The test reads the declared floor from the optional peer cache. A missing
+// The test reads the version the suites run from the optional peer cache. A missing
 // or wrong-version package fails the test, and so does a module that is
 // missing or fails to import. A run reports the proven version as a
 // diagnostic.

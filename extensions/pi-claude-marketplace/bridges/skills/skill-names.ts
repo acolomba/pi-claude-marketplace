@@ -26,9 +26,10 @@ import { Compile } from "typebox/compile";
 import { generatedCommandName } from "../../domain/name.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { commandMapKeyRefusal } from "../../shared/command-map-key.ts";
+import { frontmatterBlockEnd, keyValueEnd } from "../../shared/frontmatter-repair.ts";
 import { isPlainMarkdownFile, readDirEntriesTolerant } from "../../shared/fs-utils.ts";
 
-import { frontmatterBlockEnd, keyValueEnd, topLevelNodeIndex } from "./frontmatter-scan.ts";
+import { topLevelNodeIndex } from "./frontmatter-scan.ts";
 
 import type { CommandMapEntry } from "../../domain/resolver-types.ts";
 import type { Dirent, Stats } from "node:fs";
@@ -105,6 +106,22 @@ export function frontmatterNameAliases(
   const prefix = `${pluginName}:`;
   const qualified = name.startsWith(prefix) ? name : `${prefix}${name}`;
   return name.includes(":") ? [qualified] : [qualified, name];
+}
+
+/**
+ * D-PG11-01: whether Claude Code 2.1.323 reads `frontmatterName` as a set
+ * `name`, which replaces a command's path name (`dBt`). It reads any present
+ * value with `String()` and ignores an empty or over-long result, so a name
+ * that adds no alias here, such as one with whitespace, still counts.
+ */
+export function declaresFrontmatterName(frontmatterName: unknown): boolean {
+  if (frontmatterName === undefined || frontmatterName === null) {
+    return false;
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-base-to-string -- Claude Code reads a mapping as `[object Object]` too, so it is a set name there
+  const name = String(frontmatterName);
+  return name !== "" && name.length <= NAME_LIMIT;
 }
 
 /**

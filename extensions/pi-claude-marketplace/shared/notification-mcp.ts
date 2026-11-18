@@ -1,4 +1,5 @@
 import type {
+  McpCaFileRemovedNotice,
   McpConfigFileNotice,
   McpConfigNoticeSection,
   McpCredentialsBlankedNotice,
@@ -9,6 +10,7 @@ import type {
   McpMigrationRemovedRow,
   McpMigrationRow,
   McpMigrationStoppedRow,
+  McpOptionBlockedNotice,
   McpOverrideKeptNotice,
   McpToolRulesUnenforcedNotice,
   McpVariablesMissingNotice,
@@ -38,6 +40,8 @@ const MCP_CONFIG_NOTICE_SUMMARIES = {
   "credentials-blanked": "MCP server credentials withheld.",
   "tool-rules-unenforced": "MCP server tool rules not enforced.",
   "leftover-removed": "Old MCP server settings removed.",
+  "ca-file-removed": "MCP server caFile removed.",
+  "option-blocked": "MCP server left out.",
 } as const satisfies Record<McpConfigNoticeSection, string>;
 
 const MCP_MIGRATION_MOVED_SUMMARY = "Plugin MCP servers moved from mcp.json to mcp-adapter.json.";
@@ -100,8 +104,35 @@ function mcpLeftoverRemovedLine(notice: McpLeftoverRemovedNotice): string {
   return `Removed "${printable(notice.server)}" from the ${notice.scope}-scope ${notice.file}: pi-mcp-adapter had written it under the old name of a server from ${printable(notice.plugin)}, for example for /mcp-adapter disable, and it no longer applies.`;
 }
 
+// D-PG9-14: what the line says about the server for each reason.
+const CA_FILE_REMOVED_CAUSES = {
+  "not-https":
+    "is not an https server, so its entry no longer holds your caFile: pi-mcp-adapter accepts a caFile only on an https server.",
+  "origin-changed":
+    "is now an https server, but your caFile was set for another origin or for a server with no url, so its entry no longer holds it: pi-mcp-adapter uses a caFile only for the origin of the server's url. Set it on the entry again if the server at the new origin needs it.",
+  "url-unresolved":
+    "has a new url, and its old or new url names a variable that is not set or does not read as a url, so the two origins could not be compared and its entry no longer holds your caFile. Set it on the entry again if the server needs it.",
+  "entry-removed":
+    "was removed, and your caFile on it was not kept with your other fields: a caFile applies only to the url it was set for, and this extension keeps no url for a removed server. Set it on the entry again if the server comes back.",
+} as const satisfies Record<McpCaFileRemovedNotice["reason"], string>;
+
+function mcpCaFileRemovedLine(notice: McpCaFileRemovedNotice): string {
+  return `Server "${printable(notice.server)}" from ${printable(notice.plugin)} in the ${notice.scope}-scope ${notice.file} ${CA_FILE_REMOVED_CAUSES[notice.reason]}`;
+}
+
+// D-PG10-21 / D-PG10-11: why the line says the server was left out, for each
+// reason.
+const OPTION_BLOCKED_CAUSES = {
+  unset: "it names plugin options that have no value",
+  "home-path": "plugin options at the start of its command or arguments hold a home path",
+} as const satisfies Record<McpOptionBlockedNotice["reason"], string>;
+
+function mcpOptionBlockedLine(notice: McpOptionBlockedNotice): string {
+  return `Server "${printable(notice.server)}" from ${printable(notice.plugin)} was left out of the ${notice.scope}-scope ${notice.file}, because ${OPTION_BLOCKED_CAUSES[notice.reason]}: ${notice.names.map(printable).join(", ")}.`;
+}
+
 /**
- * AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01: the one line a notice
+ * AFILE-04 / AFILE-06 / AVAR-04 / ANAME-07 / AMIG-01 / D-PG9-14 / D-PG10-21: the one line a notice
  * renders. Resolve also keys duplicate removal on it, so two notices that
  * read the same render once.
  */
@@ -120,6 +151,10 @@ export function mcpConfigNoticeLine(notice: RenderedMcpConfigNotice): string {
       return mcpToolRulesUnenforcedLine(notice);
     case "leftover-removed":
       return mcpLeftoverRemovedLine(notice);
+    case "ca-file-removed":
+      return mcpCaFileRemovedLine(notice);
+    case "option-blocked":
+      return mcpOptionBlockedLine(notice);
   }
 }
 

@@ -2,7 +2,8 @@
 //
 // MREC-01 / D-MB-04: the one reader of a plugin record's `mcpServerConfigs`.
 // Every reader of a record's MCP servers goes through here: the built-in
-// registration, the effective compatibility read, info, and mcp-migration.
+// registration, the effective compatibility read, info, mcp-migration, and
+// the hooks bridge's server table.
 //
 // MREC-02: a record without the field predates it. Absence never means "no
 // servers": the legacy reader re-resolves the declaration from the recorded
@@ -90,6 +91,24 @@ export async function recordedMcpServers(
       reason: error instanceof RecordedServersUnreadableError ? error.reason : "read-failed",
     };
   }
+}
+
+/**
+ * D-PG6-07: the names of the MCP servers of the plugin that `marketplace`
+ * lists under `pluginName`, read with `locations` through `recordedMcpServers`
+ * and the production legacy reader, for the hooks bridge's server table. A
+ * record whose servers are unreadable names none.
+ */
+export async function recordedMcpServerNames(
+  locations: ScopedLocations,
+  marketplace: Parameters<typeof legacyServersSourceFor>[1],
+  pluginName: string,
+): Promise<readonly string[]> {
+  const recorded = await recordedMcpServers(
+    legacyServersSourceFor(locations, marketplace, pluginName),
+    readLegacyServers,
+  );
+  return recorded.kind === "unreadable" ? [] : recorded.servers.map(({ name }) => name);
 }
 
 /** The servers `recordedMcpServers` answers with; throws for every `unreadable` answer. */

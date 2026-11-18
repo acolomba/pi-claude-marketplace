@@ -9,14 +9,13 @@
 // but its marker's owner.
 //
 // The marked legacy entries are the only trigger (COMPAT-01): no flag is
-// stored. Per scope the step writes `mcp-adapter.json` for every movable
-// plugin first, then `state.json` once when a record's MCP inventory changed,
-// then, for the user scope, the project `mcp-adapter.json` disable stubs under
-// the moved old names, then removes the plugins' marked entries from
-// `mcp.json`. The trigger goes
-// last, so a crash at any point leaves it in place, the next `/reload` runs
-// the step again, and the rerun converges to the same bytes. With no marked
-// entry the step takes no lock and writes nothing.
+// stored. Per scope the step writes `mcp-adapter.json` for every movable plugin
+// first, then `state.json` once when a record's MCP inventory or options
+// changed, then, for the user scope, the project `mcp-adapter.json` disable
+// stubs under the moved old names, then removes the plugins' marked entries
+// from `mcp.json`. The trigger goes last, so a crash at any point leaves it in
+// place, the next `/reload` runs the step again, and the rerun converges to the
+// same bytes. With no marked entry the step takes no lock and writes nothing.
 //
 // AMIG-01: the move also removes what the installed plugin no longer
 // provides, in the same `mcp.json` write. A legacy name the re-staged source
@@ -63,7 +62,8 @@
 // the git surface. A path source is read from the marketplace's current
 // checkout, as reinstall reads it, so a newer plugin version there can stage
 // under the recorded version (reinstall parity); the record's verdict and
-// server configs still come from the recorded version only. A git source is
+// server configs still come from the recorded version only, while its
+// `userConfig` follows the staged source (D-PG10-23). A git source is
 // read from the warm clone of the record's sha through the fs-only presence
 // probe; a cold cache leaves the entries in place.
 
@@ -86,8 +86,14 @@ import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { effectiveMcpCompatibility } from "../../domain/mcp-implementation.ts";
 import { generatedMcpServerKey } from "../../domain/name.ts";
 import { resolutionFor, resolveStrict } from "../../domain/plugin-resolver.ts";
+import { declaredOptions, resolveOptions } from "../../domain/user-config.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { isRecordedButDisabled, replaceCompatibility } from "../../persistence/state-io.ts";
+import {
+  isRecordedButDisabled,
+  replaceCompatibility,
+  replaceUserConfig,
+  userConfigFieldsOf,
+} from "../../persistence/state-io.ts";
 import { McpConfigFileError, McpServerCollisionError } from "../../shared/errors-bridges.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
@@ -115,6 +121,7 @@ import type {
   ResolvedPlugin,
 } from "../../domain/resolver-types.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
+import type { ResolvedOptions } from "../../domain/user-config.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type {
@@ -453,21 +460,30 @@ function pushStoppedRow(input: McpMigrationInput, owner: LegacyMcpOwner, err: un
 
 /**
  * The servers an owner's stage writes: a moving owner's supported servers
- * from its source, none for a malformed or disabled owner, whose stage only
+ * from its source, with the options its resolution declares, so a server
+ * that names an option with no value is left out as at an install
+ * (D-PG10-21); none for a malformed or disabled owner, whose stage only
  * drops the plugin's old-name leftovers.
  */
 function stagedSource(action: OwnerAction): {
   readonly servers: Record<string, unknown>;
   readonly pluginRoot: string;
   readonly description: string | undefined;
+  readonly options: ResolvedOptions | undefined;
 } {
   return action.arm === "move"
     ? {
         servers: action.resolved.mcpServers,
         pluginRoot: action.resolved.pluginRoot,
         description: action.resolved.description,
+        options: declaredOptions(resolveOptions(action.resolved.declaredUserConfig)),
       }
-    : { servers: {}, pluginRoot: action.record.resolvedSource, description: undefined };
+    : {
+        servers: {},
+        pluginRoot: action.record.resolvedSource,
+        description: undefined,
+        options: undefined,
+      };
 }
 
 /**
@@ -484,7 +500,7 @@ async function stageOwner(
   env: ClaudeEnv,
 ): Promise<readonly string[] | undefined> {
   const { owner } = action;
-  const { servers, pluginRoot, description } = stagedSource(action);
+  const { servers, pluginRoot, description, options } = stagedSource(action);
   try {
     const prepared = await operations.prepareStageMcpServers({
       locations,
@@ -497,6 +513,7 @@ async function stageOwner(
       sourcePath: `${pluginRoot}#mcpServers`,
       description,
       env,
+      options,
     });
     const result = await operations.commitPreparedMcp(prepared);
     input.notices.push(...result.notices);
@@ -587,8 +604,28 @@ function applyNeutralVerdict(action: OwnerAction): boolean {
 }
 
 /**
+ * D-PG10-23: a moving owner's record holds the options its stage resolved, so
+ * the load sets a variable for every option reference the staged entries hold.
+ * They come from the staged source, whatever the verdict, because the record
+ * must agree with the entries the move wrote, as a reinstall's record does.
+ * Returns whether the record changed.
+ */
+function applyStagedOptions(action: Extract<OwnerAction, { arm: "move" }>): boolean {
+  const fields = userConfigFieldsOf(action.resolved.declaredUserConfig);
+  if (
+    JSON.stringify(action.record.userConfig ?? null) === JSON.stringify(fields.userConfig ?? null)
+  ) {
+    return false;
+  }
+
+  replaceUserConfig(action.record, fields);
+  return true;
+}
+
+/**
  * Records what the owner's stage wrote and stamps `updatedAt` when anything
- * differs. Nothing else on the record changes: the move is MCP-only. A
+ * differs. Besides the MCP inventory, only `userConfig` changes: it follows
+ * the options the stage used (D-PG10-23), and the hooks read it too. A
  * disabled record is never changed. Returns whether the record changed.
  */
 function recordAction(
@@ -601,8 +638,9 @@ function recordAction(
   }
 
   const namesChanged = applyStagedNames(action.record, stagedNames);
+  const optionsChanged = action.arm === "move" && applyStagedOptions(action);
   const compatibilityChanged = applyNeutralVerdict(action);
-  if (!namesChanged && !compatibilityChanged) {
+  if (!namesChanged && !optionsChanged && !compatibilityChanged) {
     return false;
   }
 

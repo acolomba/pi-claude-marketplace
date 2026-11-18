@@ -1,43 +1,29 @@
 import { hookDebugLog } from "../../../shared/debug-log.ts";
 import { CLAUDE_TO_PI_TOOL_NAMES, type PiToolName } from "../hook-tool-names.ts";
 
-const SAFE_MATCHER_CHARS = /^[A-Za-z0-9_|-]+$/;
+const SAFE_MATCHER_CHARS = /^[A-Za-z0-9_ ,|-]+$/;
 const MCP_SEGMENT = /^[A-Za-z0-9_-]+$/;
 const CLAUDE_TO_PI_TOOL_NAME_LOOKUP: ReadonlyMap<string, PiToolName> = new Map(
   Object.entries(CLAUDE_TO_PI_TOOL_NAMES),
 );
 
 /**
- * A tool-set matcher fires on a tool whose name is in `toolNames` or starts
- * with one of `toolPrefixes`. `toolPrefixes` is present only when at least
- * one alternative was an MCP server prefix (ANAME-02).
+ * A parsed matcher ready for support checks and runtime dispatch. A tool
+ * matcher never holds `name-set`, and a name matcher never holds `tool-set`
+ * or `unmapped`.
  */
 export type ParsedMatcher =
   | { kind: "match-all" }
-  | { kind: "tool-set"; toolNames: ReadonlySet<string>; toolPrefixes?: readonly string[] }
-  | { kind: "regex" }
+  | { kind: "tool-set"; toolNames: ReadonlySet<string> }
+  | { kind: "name-set"; names: ReadonlySet<string> }
+  | { kind: "regex"; pattern: RegExp }
+  | { kind: "invalid-pattern" }
   | { kind: "unmapped"; token: string };
 
+type PatternMatcher = Extract<ParsedMatcher, { kind: "match-all" | "regex" | "invalid-pattern" }>;
+
 type Alternative =
-  | { readonly kind: "regex" }
-  | { readonly kind: "tool"; readonly toolName: string }
-  | { readonly kind: "prefix"; readonly prefix: string }
-  | { readonly kind: "discarded" };
-
-/**
- * ANAME-02: returns `mcp__<server>__` for the server-prefix form
- * `mcp__<server>__.*`, or undefined for any other token. Only string
- * operations read the token, so no regular expression is built from
- * plugin-supplied text.
- */
-function mcpServerPrefix(token: string): string | undefined {
-  if (!token.startsWith("mcp__") || !token.endsWith("__.*")) {
-    return undefined;
-  }
-
-  const server = token.slice("mcp__".length, -"__.*".length);
-  return MCP_SEGMENT.test(server) ? `mcp__${server}__` : undefined;
-}
+  { readonly kind: "tool"; readonly toolName: string } | { readonly kind: "discarded" };
 
 function isMcpLiteral(raw: string): boolean {
   if (!raw.startsWith("mcp__")) {
@@ -57,21 +43,10 @@ function isMcpLiteral(raw: string): boolean {
 }
 
 /**
- * MATCH-02: the server-prefix form is the one regex-shaped alternative
- * accepted. Any other alternative that is empty or holds a character
- * outside `SAFE_MATCHER_CHARS` is one a plugin author could use to smuggle
- * a regex, and it makes the whole matcher `regex`.
+ * Classifies an exact-list member after separators and surrounding spaces
+ * have been removed.
  */
 function classifyAlternative(token: string): Alternative {
-  const prefix = mcpServerPrefix(token);
-  if (prefix !== undefined) {
-    return { kind: "prefix", prefix };
-  }
-
-  if (!SAFE_MATCHER_CHARS.test(token)) {
-    return { kind: "regex" };
-  }
-
   const piTool = CLAUDE_TO_PI_TOOL_NAME_LOOKUP.get(token);
   if (piTool !== undefined) {
     return { kind: "tool", toolName: piTool };
@@ -81,36 +56,52 @@ function classifyAlternative(token: string): Alternative {
 }
 
 /**
- * Parses a Claude hook matcher into its dispatch-safe form. A pipe-OR
- * matcher degrades per alternative (TOOL-02, MATCH-02, #217): each
- * alternative is classified on its own, a mapped Claude tool or an MCP
- * literal joins `toolNames`, an MCP server prefix joins `toolPrefixes`
- * (ANAME-02), and any other alternative is discarded. The matcher itself
- * only degrades to `unmapped` when every alternative was discarded, so
- * `Write|Edit|apply_patch` keeps firing on `write` and `edit` while
- * `apply_patch` alone still drops.
+ * The match-all and pattern states of a whole matcher, before an exact list
+ * is split. A text outside the safe characters is a JavaScript RegExp without
+ * flags or anchors. An invalid regex has a distinct state so admission can
+ * drop only its group. An exact list gives `undefined`.
  */
-export function parseMatcher(raw: string): ParsedMatcher {
+function parsePattern(raw: string): PatternMatcher | undefined {
   if (raw === "" || raw === "*") {
     return { kind: "match-all" };
   }
 
+  if (SAFE_MATCHER_CHARS.test(raw)) {
+    return undefined;
+  }
+
+  try {
+    return { kind: "regex", pattern: new RegExp(raw) };
+  } catch {
+    return { kind: "invalid-pattern" };
+  }
+}
+
+/** The members of an exact list, split on `|` or `,`, trimmed, empty ones dropped. */
+function exactListMembers(raw: string): string[] {
+  return raw
+    .split(/[|,]/)
+    .map((token) => token.trim())
+    .filter((token) => token !== "");
+}
+
+/**
+ * Parses a whole tool matcher before splitting exact-list alternatives, each
+ * of which maps to a Pi tool name.
+ */
+export function parseMatcher(raw: string): ParsedMatcher {
+  const pattern = parsePattern(raw);
+  if (pattern !== undefined) {
+    return pattern;
+  }
+
   const toolNames = new Set<string>();
-  const toolPrefixes: string[] = [];
-  // The empty-string sentinel for "no alternative discarded yet" is safe:
-  // an empty alternative classifies as `regex` and returns before reaching
-  // the discard arm, so no real discarded alternative is ever `""`.
   let firstDiscarded = "";
-  for (const token of raw.split("|")) {
+  for (const token of exactListMembers(raw)) {
     const alternative = classifyAlternative(token);
     switch (alternative.kind) {
-      case "regex":
-        return { kind: "regex" };
       case "tool":
         toolNames.add(alternative.toolName);
-        break;
-      case "prefix":
-        toolPrefixes.push(alternative.prefix);
         break;
       case "discarded":
         hookDebugLog(
@@ -124,11 +115,18 @@ export function parseMatcher(raw: string): ParsedMatcher {
     }
   }
 
-  if (toolNames.size === 0 && toolPrefixes.length === 0) {
+  if (toolNames.size === 0 && firstDiscarded !== "") {
     return { kind: "unmapped", token: firstDiscarded };
   }
 
-  return toolPrefixes.length === 0
-    ? { kind: "tool-set", toolNames }
-    : { kind: "tool-set", toolNames, toolPrefixes };
+  return { kind: "tool-set", toolNames };
+}
+
+/**
+ * D-PG6-19: parses a matcher on a command name by the rules of a tool matcher,
+ * with no tool name map. An exact-list member is kept as written,
+ * case-sensitive and not normalized.
+ */
+export function parseNameMatcher(raw: string): ParsedMatcher {
+  return parsePattern(raw) ?? { kind: "name-set", names: new Set(exactListMembers(raw)) };
 }

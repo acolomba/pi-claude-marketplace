@@ -32,11 +32,11 @@ last_mapped_at: 2026-10-05
 - Impact: if a fallow upgrade rewords the warning, the check passes vacuously and a dead rule goes unnoticed.
 - Fix approach: after every fallow upgrade, re-prove the check against a deliberately empty glob (do not commit the control); see the fallow upgrade checklist.
 
-**`write-file-atomic` has three excluded direct callers:**
-- Issue: `write-file-atomic-chokepoint` excludes `shared/atomic-json.ts` (the chokepoint) plus `bridges/agents/stage.ts`, `bridges/mcp/stage.ts`, and `orchestrators/plugin/prune-rollback.ts`, which restore saved bytes on rollback and import `write-file-atomic` directly.
-- Files: `extensions/pi-claude-marketplace/bridges/agents/stage.ts`, `extensions/pi-claude-marketplace/bridges/mcp/stage.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/prune-rollback.ts`
-- Impact: NFR-1 atomicity is enforced by convention in these three; any new exclusion widens the hole silently.
-- Fix approach: keep the list at three; route new writes through `atomicWriteJson`.
+**`write-file-atomic` has two excluded direct callers:**
+- Issue: `write-file-atomic-chokepoint` excludes `shared/atomic-json.ts` (the chokepoint) plus `bridges/mcp/stage.ts` and `orchestrators/plugin/prune-rollback.ts`, which restore saved bytes on rollback and import `write-file-atomic` directly.
+- Files: `extensions/pi-claude-marketplace/bridges/mcp/stage.ts`, `extensions/pi-claude-marketplace/orchestrators/plugin/prune-rollback.ts`
+- Impact: NFR-1 atomicity is enforced by convention in these two; any new exclusion widens the hole silently.
+- Fix approach: keep the list at two; route new writes through `atomicWriteJson` or `atomicWriteText`.
 
 **`domain/github-auth.ts` calls `fetch` though domain/ is described as network-free:**
 - Issue: `extensions/pi-claude-marketplace/domain/github-auth.ts` performs Device Flow HTTP calls (`fetch(deviceCodeUrl, ...)`, default adapter over `globalThis.fetch`). ARCHITECTURE.md calls domain/ pure and network-free. It is the sole `fetch` exemption in `fetch-chokepoint` and is on the NFR-5 exemption list in `eslint.config.js`.

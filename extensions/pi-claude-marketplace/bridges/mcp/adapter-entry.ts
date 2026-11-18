@@ -10,41 +10,56 @@
 // `mcp__plugin_<plugin>_<server>__<tool>` whatever the user's global
 // `settings.toolPrefix` says (ANAME-01). The user's own fields carry over from
 // the entry it replaces (AFILE-06), except a carried field the plugin's entry
-// sets, which belongs to the plugin (ANAME-07). The MC-5 marker goes last. It
-// names the carried fields the plugin set and may keep the user override the
-// entry replaced, verbatim and inert (AFILE-06). Every change to entry content
-// belongs in this module or the table.
+// sets, which belongs to the plugin (ANAME-07). This extension's defaults
+// (`requestTimeoutMs`, `lifecycle`) fill only what neither the plugin nor the
+// user set (D-PG1-11, D-PG9-01), and a user `idleTimeout` also counts as the
+// user's `lifecycle` (D-PG9-15); the MC-5 marker goes last.
+// It names the fields the plugin set and the defaults this extension wrote,
+// which a restage computes again and never carries (D-PG1-13, D-PG9-03), and
+// may keep the user override the entry replaced, verbatim and inert
+// (AFILE-06). Every change to entry content belongs in this module or the
+// table.
 
-import { translateMcpServer } from "../../domain/mcp-server-features.ts";
+import { adapterEntryDefaults, translateMcpServer } from "../../domain/mcp-server-features.ts";
 import { ADAPTER_EMPTY_ENV } from "../../shared/session-env.ts";
 
 import {
   CLAUDE_MARKETPLACE_MARKER_KEY,
   buildMarker,
+  defaultFieldsOf,
   isPlainObject,
   keptOverrideOf,
   pluginSetFieldsOf,
+  withheldOf,
 } from "./marker.ts";
 import { safeSet } from "./safe-set.ts";
 import {
-  ADAPTER_FIELD_ENCODER,
   substituteAndInject,
+  type McpFieldEncoder,
   type McpSubstitutionContext,
   type SubstitutedEntry,
   type VariableReport,
 } from "./substitute.ts";
 
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
+import type { AdapterEntryDefaultValue } from "../../domain/mcp-server-features.ts";
+import type { McpCaFileRemovedReason } from "../../shared/notification-types.ts";
 
 // AFILE-06: the user's choices in pi-mcp-adapter's `ServerEntry` that survive
 // a re-stage. `directTools`, `toolPrefix` and `description` are owned by this
 // extension, and every other field comes from the plugin's translated entry.
 // The closed table can set `requestTimeoutMs` from the plugin's `timeout`
-// (ANAME-07); a carried field the plugin sets is the plugin's. No
-// credential-bearing field is in the set, so a previous entry or a user stub
-// never leaks one into the new entry. D-CF1-14: `appendStructuredContent` and
-// `roots` have no Claude field, so they are the user's choices and survive
-// update and reinstall like the other user keys.
+// (ANAME-07); a carried field the plugin sets is the plugin's. The set holds
+// no secret, so a previous entry or a user stub never leaks one into the new
+// entry. D-CF1-14: `appendStructuredContent` and `roots` have no Claude field,
+// so they are the user's choices and survive update and reinstall like the
+// other user keys. D-PG9-05: neither do `protocolVersion`, `tasks`,
+// `exposeResources`, and `caFile`, so the closed table never writes one and
+// each value is the user's. `caFile` is the path of a PEM bundle that replaces
+// the default roots for the entry's origin, so the entry trusts exactly that
+// bundle there. pi-mcp-adapter binds it to the server's url like a credential
+// (`URL_BOUND_AUTH_FIELDS` in its `config.ts`), so it is carried only while the
+// entry stays an https server at the same origin (D-PG9-14).
 const CARRIED_FIELDS = [
   "disabled",
   "approveTools",
@@ -59,6 +74,10 @@ const CARRIED_FIELDS = [
   "trace",
   "appendStructuredContent",
   "roots",
+  "protocolVersion",
+  "tasks",
+  "exposeResources",
+  "caFile",
 ] as const;
 
 const CARRIED_FIELD_SET: ReadonlySet<string> = new Set(CARRIED_FIELDS);
@@ -70,6 +89,8 @@ export interface StampServersInput {
   readonly pluginName: string;
   readonly marketplaceName: string;
   readonly substitution: McpSubstitutionContext;
+  /** pi-mcp-adapter's encoder for the plugin, with its option names (D-PG10-11). */
+  readonly encoder: McpFieldEncoder;
   /**
    * The entry each server name replaces in the target file: a user override
    * stub or the plugin's previous marked entry. A name without one is absent.
@@ -166,8 +187,7 @@ function withOAuthDecision(substituted: SubstitutedEntry, env: ClaudeEnv): Subst
 function translatedEntry(
   name: string,
   entry: unknown,
-  substitution: McpSubstitutionContext,
-  description: string | undefined,
+  { substitution, encoder, description }: StampServersInput,
   warnings: string[],
 ): SubstitutedEntry {
   if (!isPlainObject(entry)) {
@@ -185,11 +205,7 @@ function translatedEntry(
   }
 
   return withOAuthDecision(
-    substituteAndInject(
-      translateMcpServer(entry, description),
-      substitution,
-      ADAPTER_FIELD_ENCODER,
-    ),
+    substituteAndInject(translateMcpServer(entry, description), substitution, encoder),
     substitution.env,
   );
 }
@@ -206,7 +222,39 @@ function pluginSetFieldsIn(translated: Readonly<Record<string, unknown>>): reado
  * (ANAME-07). A field the previous entry's marker lists as plugin-set holds
  * the plugin's old value, so it comes from the override that marker keeps,
  * if any, and a timeout a later version drops leaves no stale value behind.
+ * A value matching the previous marker's recorded default is recomputed, not
+ * carried as the user's (D-PG1-13).
  */
+function isRecordedDefault(
+  previous: Record<string, unknown>,
+  source: Readonly<Record<string, unknown>>,
+  field: string,
+  defaults: Readonly<Record<string, AdapterEntryDefaultValue>>,
+): boolean {
+  return source === previous && Object.hasOwn(defaults, field) && source[field] === defaults[field];
+}
+
+/**
+ * Where a carried field's user value lives: the override the marker keeps for
+ * a plugin-set field (ANAME-07), the marker's withheld fields for the
+ * `disabled` the load set on a withheld entry (D-PG10-25), else the entry.
+ */
+function carrySource(
+  field: string,
+  previous: Record<string, unknown>,
+  marker: {
+    readonly previousPluginSet: readonly string[];
+    readonly kept: Readonly<Record<string, unknown>>;
+    readonly withheld: Readonly<Record<string, unknown>> | undefined;
+  },
+): Readonly<Record<string, unknown>> {
+  if (field === "disabled" && marker.withheld !== undefined) {
+    return marker.withheld;
+  }
+
+  return marker.previousPluginSet.includes(field) ? marker.kept : previous;
+}
+
 function carriedFields(previous: unknown, pluginSet: readonly string[]): Record<string, unknown> {
   const carried: Record<string, unknown> = {};
   if (!isPlainObject(previous)) {
@@ -214,15 +262,165 @@ function carriedFields(previous: unknown, pluginSet: readonly string[]): Record<
   }
 
   const previousPluginSet = pluginSetFieldsOf(previous);
+  const defaults = defaultFieldsOf(previous);
   const kept = keptOverrideOf(previous) ?? {};
+  const withheld = withheldOf(previous);
   for (const field of CARRIED_FIELDS) {
-    const source = previousPluginSet.includes(field) ? kept : previous;
-    if (!pluginSet.includes(field) && Object.hasOwn(source, field)) {
+    const source = carrySource(field, previous, { previousPluginSet, kept, withheld });
+    if (
+      !pluginSet.includes(field) &&
+      Object.hasOwn(source, field) &&
+      !isRecordedDefault(previous, source, field, defaults)
+    ) {
       carried[field] = source[field];
     }
   }
 
   return carried;
+}
+
+// pi-mcp-adapter's scan for the references in a url that must name a set
+// variable (`getMissingEnvVars` in its `utils.ts`): each one without a default.
+const URL_REFERENCE = /\$\{(\w+)(:-[^}]*)?\}|\$env:(\w+)|\{env:(\w+)\}/g;
+
+// Pi's process sets the split token's variable to the empty string.
+function adapterValue(env: ClaudeEnv, name: string): string | undefined {
+  if (name === ADAPTER_EMPTY_ENV) {
+    return "";
+  }
+
+  return Object.hasOwn(env, name) ? env[name] : undefined;
+}
+
+// Exactly one name group matches, and `join` writes the others as "".
+function namesUnsetVariable(url: string, env: ClaudeEnv): boolean {
+  return [...url.matchAll(URL_REFERENCE)].some(
+    (match) =>
+      match[2] === undefined &&
+      adapterValue(env, [match[1], match[3], match[4]].join("")) === undefined,
+  );
+}
+
+/**
+ * D-PG9-14: the url as pi-mcp-adapter 7.0.1 reads it (`resolveServerUrl` in
+ * its `utils.ts`), or none when a reference without a default names an unset
+ * variable or the result is not a url. The adapter replaces the three
+ * reference forms in three passes, each from the environment, a `${NAME:-x}`
+ * default only for an unset variable.
+ */
+function resolvedUrl(url: string, env: ClaudeEnv): URL | undefined {
+  if (namesUnsetVariable(url, env)) {
+    return undefined;
+  }
+
+  const resolved = url
+    .replace(
+      /\$\{(\w+)(?::-([^}]*))?\}/g,
+      // The scan above leaves each unset variable a default.
+      (_reference, name: string, fallback: string) => adapterValue(env, name) ?? fallback,
+    )
+    .replace(/\$env:(\w+)/g, (_reference, name: string) => adapterValue(env, name) ?? "")
+    .replace(/\{env:(\w+)\}/g, (_reference, name: string) => adapterValue(env, name) ?? "");
+  return URL.parse(resolved) ?? undefined;
+}
+
+// The url of a remote entry: no `command`, no `socket`, a string `url`.
+function remoteUrlOf(entry: Readonly<Record<string, unknown>>): string | undefined {
+  const { command, socket, url } = entry;
+  return command === undefined && socket === undefined && typeof url === "string" ? url : undefined;
+}
+
+function definesServer(entry: Readonly<Record<string, unknown>>): boolean {
+  return ["command", "url", "socket"].some((field) => Object.hasOwn(entry, field));
+}
+
+// A scheme written before any reference; `${BASE}/mcp` has none.
+const LITERAL_SCHEME = /^\s*([a-z][a-z\d+.-]*):/i;
+
+// The resolved url's scheme, or the literal one of a url that gives none.
+function schemeOf(url: string, resolved: URL | undefined): string | undefined {
+  if (resolved !== undefined) {
+    return resolved.protocol;
+  }
+
+  const literal = LITERAL_SCHEME.exec(url)?.[1];
+  return literal === undefined ? undefined : `${literal.toLowerCase()}:`;
+}
+
+/**
+ * D-PG9-14: why a carried `caFile` no longer applies to the new entry, or
+ * none when it still does. pi-mcp-adapter 7.0.1 refuses to connect an entry
+ * whose `caFile` sits beside `command` or `socket` or a url that is not https
+ * (`validateCaFile` in its `http-ca.ts`), and it uses the bundle only for the
+ * url's `URL.origin`. So the new entry must be an https server, and, when the
+ * entry it replaces defines a server, at that entry's origin. An override stub
+ * defines none. A url read with the stage's environment as the adapter reads
+ * it gives the origin and the scheme. A url that names an unset variable, or
+ * that does not parse, gives no origin, and a scheme only when its text starts
+ * with one: the adapter decides the rest at connect time, and against a
+ * previous url the `caFile` stays only while the url text is unchanged.
+ */
+function caFileRemovalReason(
+  previous: Readonly<Record<string, unknown>>,
+  translated: Readonly<Record<string, unknown>>,
+  env: ClaudeEnv,
+): McpCaFileRemovedReason | undefined {
+  const url = remoteUrlOf(translated);
+  if (url === undefined) {
+    return "not-https";
+  }
+
+  const resolved = resolvedUrl(url, env);
+  const scheme = schemeOf(url, resolved);
+  if (scheme !== undefined && scheme !== "https:") {
+    return "not-https";
+  }
+
+  if (!definesServer(previous)) {
+    return undefined;
+  }
+
+  const previousUrl = remoteUrlOf(previous);
+  if (previousUrl === undefined) {
+    return resolved === undefined ? "url-unresolved" : "origin-changed";
+  }
+
+  const previousResolved = resolvedUrl(previousUrl, env);
+  if (resolved === undefined || previousResolved === undefined) {
+    return url === previousUrl ? undefined : "url-unresolved";
+  }
+
+  return resolved.origin === previousResolved.origin ? undefined : "origin-changed";
+}
+
+/**
+ * The carried fields the new entry writes: all of them, minus a `caFile` that
+ * no longer applies (D-PG9-14). `caFileRemoved` says why the user's value was
+ * left out, when it was.
+ */
+function appliedCarriedFields(
+  previous: unknown,
+  translated: Readonly<Record<string, unknown>>,
+  pluginSet: readonly string[],
+  env: ClaudeEnv,
+): {
+  readonly carried: Record<string, unknown>;
+  readonly caFileRemoved?: McpCaFileRemovedReason;
+} {
+  const carried = carriedFields(previous, pluginSet);
+  if (!isPlainObject(previous) || !Object.hasOwn(carried, "caFile")) {
+    return { carried };
+  }
+
+  const reason = caFileRemovalReason(previous, translated, env);
+  if (reason === undefined) {
+    return { carried };
+  }
+
+  const applied = Object.fromEntries(
+    Object.entries(carried).filter(([field]) => field !== "caFile"),
+  );
+  return { carried: applied, caFileRemoved: reason };
 }
 
 /**
@@ -298,47 +496,97 @@ function keptOverrideFor(
 }
 
 /**
+ * D-PG9-15: a user `idleTimeout` is the user's choice of the server's
+ * lifetime, so it also stands for `lifecycle`. pi-mcp-adapter 7.0.1 never
+ * stops a started `lazy-keep-alive` server for idle time, whatever
+ * `idleTimeout` says (`checkConnections` in its `lifecycle.ts`). It registers
+ * every entry `idleTimeout` but `null` in place of the global idle time
+ * (`idleTimeout ?? ...` in its `init.ts` and `index.ts`), so only `null` leaves
+ * the lifetime to the default.
+ */
+function userHolds(carried: Readonly<Record<string, unknown>>, field: string): boolean {
+  return Object.hasOwn(carried, field) || (field === "lifecycle" && carried.idleTimeout != null);
+}
+
+/**
+ * D-PG1-11 / D-PG9-01: fill only a default neither the plugin's
+ * translated entry nor the user's carried fields hold, in the order of the
+ * defaults table.
+ */
+function defaultFieldsFor(
+  entry: unknown,
+  translated: Readonly<Record<string, unknown>>,
+  carried: Readonly<Record<string, unknown>>,
+): Readonly<Record<string, AdapterEntryDefaultValue>> {
+  if (!isPlainObject(entry)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(adapterEntryDefaults(entry)).filter(
+      ([field]) => !Object.hasOwn(translated, field) && !userHolds(carried, field),
+    ),
+  );
+}
+
+/**
  * Builds the entry for each plugin server: the translated and expanded plugin
  * entry with its owned fields (ANAME-04, ANAME-06, ANAME-07), then the fields
- * carried from the entry it replaces in carried-set order, then the MC-5
- * marker. The marker names the carried fields the plugin's entry sets and
- * keeps the server's user override when there is one. A carried field the
- * plugin sets takes the plugin's value, so a timeout change in a later version
- * applies (ANAME-07). Carried fields come from `previous` and the override its
- * marker keeps, so a credential-bearing field of an override stays inside the
- * marker (AFILE-06). `variableReports` holds each server's variable report,
- * keyed by server key in declared order (AVAR-02).
+ * carried from the entry it replaces in carried-set order, then the defaults
+ * the extension owns (D-PG1-11, D-PG9-01), then the MC-5 marker. The
+ * marker names the fields the plugin sets and the defaults to recompute, never
+ * carry (D-PG1-13, D-PG9-03), and keeps the
+ * server's user override when there is one. A carried field the plugin sets
+ * takes the plugin's value, so a timeout change in a later version applies
+ * (ANAME-07). Carried fields come from `previous` and the override its marker
+ * keeps, so a credential-bearing field of an override stays inside the marker
+ * (AFILE-06). `variableReports` holds each server's variable report,
+ * keyed by server key in declared order (AVAR-02). `caFileRemoved` names, in
+ * declared order, each server whose entry leaves out the user's `caFile`, and
+ * why it no longer applies (D-PG9-14).
  */
 export function stampServers(input: StampServersInput): {
   readonly stamped: Record<string, unknown>;
   readonly warnings: string[];
   readonly variableReports: ReadonlyMap<string, VariableReport>;
+  readonly caFileRemoved: ReadonlyArray<{
+    readonly server: string;
+    readonly reason: McpCaFileRemovedReason;
+  }>;
 } {
   const stamped: Record<string, unknown> = {};
   const warnings: string[] = [];
   const variableReports = new Map<string, VariableReport>();
+  const caFileRemoved: Array<{ server: string; reason: McpCaFileRemovedReason }> = [];
   for (const [name, entry] of Object.entries(input.servers)) {
-    const { entry: translated, report } = translatedEntry(
-      name,
-      entry,
-      input.substitution,
-      input.description,
-      warnings,
-    );
+    const { entry: translated, report } = translatedEntry(name, entry, input, warnings);
     variableReports.set(name, report);
     const pluginSetFields = pluginSetFieldsIn(translated);
+    const { carried, caFileRemoved: removed } = appliedCarriedFields(
+      input.previous[name],
+      translated,
+      pluginSetFields,
+      input.substitution.env,
+    );
+    if (removed !== undefined) {
+      caFileRemoved.push({ server: name, reason: removed });
+    }
+
+    const defaultFields = defaultFieldsFor(entry, translated, carried);
     // safeSet copies a server literally named `__proto__` as an own key, so
     // it is stamped and written rather than dropped through the inherited
     // setter (WR-01).
     safeSet(stamped, name, {
       ...translated,
-      ...carriedFields(input.previous[name], pluginSetFields),
+      ...carried,
+      ...defaultFields,
       [CLAUDE_MARKETPLACE_MARKER_KEY]: buildMarker(input.pluginName, input.marketplaceName, {
         pluginSetFields,
+        defaultFields,
         keptOverride: keptOverrideFor(input.keptOverrides, name),
       }),
     });
   }
 
-  return { stamped, warnings, variableReports };
+  return { stamped, warnings, variableReports, caFileRemoved };
 }

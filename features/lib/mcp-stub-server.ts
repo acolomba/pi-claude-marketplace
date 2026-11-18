@@ -3,17 +3,22 @@
  * (HAR-04, D-CF1-17).
  *
  * pi-mcp-adapter starts it with Node and talks newline-delimited JSON-RPC
- * over its stdin and stdout. It answers `initialize`, lists one `echo` tool,
- * and answers a `tools/call` with `echo:<text>`, or `<tag>:echo:<text>` when
- * its environment sets `STUB_TAG`. Any other request gets an empty result,
+ * over its stdin and stdout. It answers `initialize`, lists one tool named by
+ * its optional fourth argument (`echo` by default), and answers a `tools/call`
+ * with `<tool>:<text>`, or `<tag>:<tool>:<text>` when its environment sets
+ * `STUB_TAG`. When its environment sets `STUB_RESOURCE` to a name, it also
+ * declares the `resources` capability and offers one static text resource,
+ * `stub://<name>` with the text `stub <name>`, through `resources/list` and
+ * `resources/read` (D-PG9-10). Any other request gets an empty result,
  * and a notification gets no reply. It appends every message
  * it receives to `<harness dir>/mcp-stub-requests.jsonl`, with the plugin and
- * server names it was started for, writes its pid to
- * `<harness dir>/mcp-stub-<pid>.pid`, and exits when its stdin closes. The
- * harness directory lies in the sandbox home, which the adapter passes on as
- * `HOME`, so each scenario's stub logs into that scenario's directory, and
- * the profile release finds a stub that outlived Pi by its pid. The module is
- * both the stub and the place the steps read its path and its log from.
+ * server names it was started for and the name of the tool it lists, writes
+ * its pid to `<harness dir>/mcp-stub-<pid>.pid`, and exits when its stdin
+ * closes. The harness directory lies in the sandbox home, which the adapter
+ * passes on as `HOME`, so each scenario's stub logs into that scenario's
+ * directory, and the profile release finds a stub that outlived Pi by its
+ * pid. The module is both the stub and the place the steps read its path and
+ * its log from.
  */
 
 import { appendFileSync, rmSync, writeFileSync } from "node:fs";
@@ -32,14 +37,18 @@ const REQUESTS_FILE = "mcp-stub-requests.jsonl";
 // The protocol version the stub answers when a client names none.
 const FALLBACK_PROTOCOL_VERSION = "2025-06-18";
 
+/** The variable of the stub's environment that names its one text resource. */
+export const STUB_RESOURCE_VARIABLE = "STUB_RESOURCE";
+
 /**
  * One message a stub received, as it logged it: the plugin and server it was
- * started for, whether the message was a notification, and the message's
- * method and params, as sent.
+ * started for, the tool it lists, whether the message was a notification,
+ * and the message's method and params, as sent.
  */
 export interface StubRequest {
   readonly plugin: string;
   readonly server: string;
+  readonly tool: string;
   readonly notification: boolean;
   readonly method: unknown;
   readonly params: unknown;
@@ -60,6 +69,7 @@ function checkRequest(record: unknown): StubRequest {
     !isRecord(record) ||
     typeof record.plugin !== "string" ||
     typeof record.server !== "string" ||
+    typeof record.tool !== "string" ||
     typeof record.notification !== "boolean"
   ) {
     throw new Error(`invalid MCP stub request record: ${JSON.stringify(record)}`);
@@ -68,6 +78,7 @@ function checkRequest(record: unknown): StubRequest {
   return {
     plugin: record.plugin,
     server: record.server,
+    tool: record.tool,
     notification: record.notification,
     method: record.method,
     params: record.params,
@@ -97,18 +108,20 @@ export async function readStubRequests(harness: string): Promise<StubRequest[]> 
 }
 
 /**
- * Returns whether the stub started for `plugin` and `server` logged a
- * `tools/list` request among `requests`.
+ * Returns the tool of each `tools/list` request among `requests` that the
+ * stub started for `plugin` and `server` logged, or none when it logged none.
  */
 export function listedTools(
   requests: readonly StubRequest[],
   plugin: string,
   server: string,
-): boolean {
-  return requests.some(
-    (request) =>
-      request.plugin === plugin && request.server === server && request.method === "tools/list",
-  );
+): string[] {
+  return requests
+    .filter(
+      (request) =>
+        request.plugin === plugin && request.server === server && request.method === "tools/list",
+    )
+    .map((request) => request.tool);
 }
 
 /**
@@ -119,6 +132,23 @@ export async function stubPidFiles(harness: string): Promise<string[]> {
   return (await readdir(harness)).filter((name) => /^mcp-stub-\d+\.pid$/u.test(name)).sort();
 }
 
+interface StubResource {
+  readonly uri: string;
+  readonly name: string;
+  readonly mimeType: string;
+  readonly text: string;
+}
+
+// The one text resource that a non-empty `STUB_RESOURCE` names, or none.
+function stubResource(): StubResource | undefined {
+  const name = process.env[STUB_RESOURCE_VARIABLE];
+  if (name === undefined || name === "") {
+    return undefined;
+  }
+
+  return { uri: `stub://${name}`, name, mimeType: "text/plain", text: `stub ${name}` };
+}
+
 function initializeResult(params: unknown): unknown {
   const version =
     isRecord(params) && typeof params.protocolVersion === "string"
@@ -126,9 +156,30 @@ function initializeResult(params: unknown): unknown {
       : FALLBACK_PROTOCOL_VERSION;
   return {
     protocolVersion: version,
-    capabilities: { tools: {} },
+    capabilities: stubResource() === undefined ? { tools: {} } : { tools: {}, resources: {} },
     serverInfo: { name: "stub", version: "1.0.0" },
   };
+}
+
+function resourcesListResult(): unknown {
+  const resource = stubResource();
+  if (resource === undefined) {
+    return {};
+  }
+
+  const { uri, name, mimeType } = resource;
+  return { resources: [{ uri, name, mimeType }] };
+}
+
+function resourcesReadResult(params: unknown): unknown {
+  const resource = stubResource();
+  if (resource === undefined) {
+    return {};
+  }
+
+  const { uri, mimeType, text } = resource;
+  const read = isRecord(params) && params.uri === uri;
+  return { contents: read ? [{ uri, mimeType, text }] : [] };
 }
 
 const ECHO_TOOL = {
@@ -141,27 +192,28 @@ const ECHO_TOOL = {
   },
 };
 
-// A non-empty `STUB_TAG` in the stub's environment prefixes the echo, so a
+// A non-empty `STUB_TAG` in the stub's environment prefixes the answer, so a
 // scenario sees the value the adapter passed when it started the stub.
-function callResult(params: unknown): unknown {
+function callResult(params: unknown, tool: string): unknown {
   const args = isRecord(params) && isRecord(params.arguments) ? params.arguments : {};
   const text = typeof args.text === "string" ? args.text : "";
   const tag = process.env.STUB_TAG;
-  const echoed = tag === undefined || tag === "" ? `echo:${text}` : `${tag}:echo:${text}`;
+  const echoed = tag === undefined || tag === "" ? `${tool}:${text}` : `${tag}:${tool}:${text}`;
   return { content: [{ type: "text", text: echoed }] };
 }
 
-/** The names of the tools the stub lists. */
-export const STUB_TOOL_NAMES: readonly string[] = [ECHO_TOOL.name];
-
-function resultFor(method: unknown, params: unknown): unknown {
+function resultFor(method: unknown, params: unknown, tool: string): unknown {
   switch (method) {
     case "initialize":
       return initializeResult(params);
     case "tools/list":
-      return { tools: [ECHO_TOOL] };
+      return { tools: [{ ...ECHO_TOOL, name: tool }] };
     case "tools/call":
-      return callResult(params);
+      return callResult(params, tool);
+    case "resources/list":
+      return resourcesListResult();
+    case "resources/read":
+      return resourcesReadResult(params);
     default:
       return {};
   }
@@ -169,7 +221,7 @@ function resultFor(method: unknown, params: unknown): unknown {
 
 // The stub: logs each message, answers each one that has an id, and leaves
 // when its stdin closes.
-function serve(plugin: string, server: string): void {
+function serve(plugin: string, server: string, tool: string): void {
   const home = process.env.HOME;
   if (home === undefined || home === "") {
     throw new Error("the MCP stub needs HOME to find its harness directory");
@@ -187,10 +239,17 @@ function serve(plugin: string, server: string): void {
 
     const message = JSON.parse(line) as JsonRpcMessage;
     const notification = message.id === undefined;
-    const record = { plugin, server, notification, method: message.method, params: message.params };
+    const record = {
+      plugin,
+      server,
+      tool,
+      notification,
+      method: message.method,
+      params: message.params,
+    };
     appendFileSync(log, `${JSON.stringify(record)}\n`);
     if (!notification) {
-      const result = resultFor(message.method, message.params);
+      const result = resultFor(message.method, message.params, tool);
       process.stdout.write(`${JSON.stringify({ jsonrpc: "2.0", id: message.id, result })}\n`);
     }
   });
@@ -201,10 +260,10 @@ function serve(plugin: string, server: string): void {
 }
 
 if (process.argv[1] === MCP_STUB_SERVER) {
-  const [, , plugin, server] = process.argv;
+  const [, , plugin, server, tool = ECHO_TOOL.name] = process.argv;
   if (plugin === undefined || server === undefined) {
     throw new Error("usage: mcp-stub-server.ts <plugin> <server>");
   }
 
-  serve(plugin, server);
+  serve(plugin, server, tool);
 }

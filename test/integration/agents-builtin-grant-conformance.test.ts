@@ -11,9 +11,9 @@
 // that every adapter selector of the same agent stays unresolved.
 //
 // pi-subagents is an optional peer. The test imports its compiled
-// `src/runs/shared/mcp-direct-tool-allowlist.js` in place from the declared
-// floor in the optional peer cache. A missing or wrong-version package fails
-// the test. A run reports the proven version as a diagnostic.
+// `src/runs/shared/mcp-direct-tool-allowlist.js` in place from the suite
+// version (D-PG1-02) in the optional peer cache. A missing or wrong-version
+// package fails the test. A run reports the proven version as a diagnostic.
 
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
@@ -102,6 +102,7 @@ function grantSelectors(mcpImplementation: McpImplementationId): string[] {
     },
     sourceHash: "abc",
     mapModel: false,
+    options: undefined,
     mcpServerNames: ["db", "my-db", "warehouse"],
     mcpImplementation,
   });
@@ -111,6 +112,47 @@ function grantSelectors(mcpImplementation: McpImplementationId): string[] {
     .slice("tools: ".length)
     .split(",")
     .map((entry) => entry.replace(/^mcp:/, ""));
+}
+
+/**
+ * The values of the `tools:` and `excludeTools:` lines of an agent that grants
+ * the whole server `stub` and `Read` and denies the server's tool `drop`.
+ */
+function excludingAgentLines(mcpImplementation: McpImplementationId): {
+  readonly tools: string[];
+  readonly excludeTools: string[];
+} {
+  const agent = convertAgent({
+    pluginName: "demo",
+    pluginRoot: "/root",
+    pluginDataDir: "/data",
+    options: undefined,
+    knownSkills: [],
+    discovered: {
+      sourceName: "runner",
+      generatedName: "pi-claude-marketplace-demo-runner",
+      sourcePath: "/abs/runner.md",
+      sourceHash: "abc",
+      raw: {
+        description: "d",
+        tools: "Read, mcp__plugin_demo_stub",
+        disallowedTools: "mcp__plugin_demo_stub__drop",
+      },
+      body: "Body.\n",
+    },
+    sourceHash: "abc",
+    mapModel: false,
+    mcpServerNames: ["stub"],
+    mcpImplementation,
+  });
+  const lines = agent.fileContent.split("\n");
+  const value = (key: string): string[] => {
+    const found = lines.filter((line) => line.startsWith(`${key}: `));
+    assert.strictEqual(found.length, 1);
+    return (found[0] ?? "").slice(`${key}: `.length).split(",");
+  };
+
+  return { tools: value("tools"), excludeTools: value("excludeTools") };
 }
 
 /** Imports pi-subagents' selector resolver from the optional peer cache and reports the proven version. */
@@ -167,4 +209,31 @@ test("MGRT-01: pi-subagents resolves no adapter grant selector of the same agent
     ],
     builtin: true,
   });
+});
+
+test("PG-AGENT-09: the built-in exclude name is the name pi-subagents resolves for the denied tool of a whole-server grant", async (t) => {
+  // arrange
+  const allowlist = await loadAllowlist(t);
+  const { tools, excludeTools } = excludingAgentLines("builtin");
+  const host: ResolverHost = {
+    ...BUILTIN_HOST,
+    getAllTools: () => [piTool("plugin_demo_stub", "echo"), piTool("plugin_demo_stub", "drop")],
+  };
+  const selectors = tools
+    .filter((entry) => entry.startsWith("mcp:"))
+    .map((entry) => entry.slice("mcp:".length));
+
+  // act
+  const resolution = allowlist.resolveMcpDirectToolResolution(selectors, os.tmpdir(), host);
+
+  // assert
+  assert.deepStrictEqual(resolution, {
+    selections: [
+      { name: "mcp__plugin_demo_stub__echo", selector: "plugin_demo_stub" },
+      { name: "mcp__plugin_demo_stub__drop", selector: "plugin_demo_stub" },
+    ],
+    unresolvedSelectors: [],
+    builtin: true,
+  });
+  assert.deepStrictEqual(excludeTools, [piToolName("plugin_demo_stub", "drop")]);
 });

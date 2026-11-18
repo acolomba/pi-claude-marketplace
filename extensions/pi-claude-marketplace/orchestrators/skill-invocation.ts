@@ -20,6 +20,13 @@
 // equivalent. It fills only a text that is still the skill's own, never one a PostToolUse hook
 // wrote (D-CF1-03). A skill outside this extension's two staged skills directories, such as the
 // user's own Pi skill, is `not-bridged` and keeps Pi's expansion.
+//
+// PG-SKILL-01 / D-PG11-07: a typed skill, by `/skill:` or by an alias, gets the files its body
+// mentions, read after its `!` commands ran, so an aborted invocation reads none. The mentions
+// come from the body with its variables filled and no argument substituted (D-PG11-02). The file
+// blocks go inside the skill block, before the closing line, because Pi shows text after that
+// line as the user's own message (D-PG11-05). The model's read of a staged `SKILL.md` attaches
+// nothing.
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -43,8 +50,11 @@ import {
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
 
+import { appendMentionedFiles, NODE_MENTION_FILE_READER } from "./mention-attachments.ts";
+
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 import type { PromptShellHost, PromptShellRunner } from "../platform/prompt-shell.ts";
+import type { MentionFileReader } from "./mention-attachments.ts";
 
 /** One typed invocation of `/skill:<generatedName>` or of an alias of it. */
 export interface SkillInvocationRequest {
@@ -76,6 +86,8 @@ export interface SkillInvocationDependencies {
   /** The machine facts that choose a shell and give the commands their environment. */
   readonly host: PromptShellHost;
   readonly runShell: PromptShellRunner;
+  /** D-PG11-08: the reads of the files a typed skill's body mentions. */
+  readonly mentions: MentionFileReader;
 }
 
 const DEFAULT_DEPENDENCIES: SkillInvocationDependencies = {
@@ -86,6 +98,7 @@ const DEFAULT_DEPENDENCIES: SkillInvocationDependencies = {
     spawn: NODE_PROMPT_SHELL_SPAWN,
     host: NODE_PROMPT_SHELL_HOST,
   }),
+  mentions: NODE_MENTION_FILE_READER,
 };
 
 /** A staged skill that Pi loaded, with the scope root it was staged under. */
@@ -148,7 +161,8 @@ function invocationVariables(
     CLAUDE_SESSION_ID: request.sessionId,
     CLAUDE_EFFORT: claudeEffort(request.thinkingLevel),
     CLAUDE_SKILL_DIR: skill.baseDir,
-    ...(skill.projectScope ? { CLAUDE_PROJECT_DIR: request.cwd } : {}),
+    // D-PG10-16: a user skill's staged file keeps the literal, so this step fills it.
+    CLAUDE_PROJECT_DIR: request.cwd,
     ...(record === undefined
       ? {}
       : { CLAUDE_PLUGIN_ROOT: record.pluginRoot, CLAUDE_PLUGIN_DATA: record.pluginData }),
@@ -171,7 +185,9 @@ interface ParsedSkill {
 
 /**
  * D-CF2-06: substitutes, then runs the `!` commands with the shell the
- * frontmatter `shell` chooses (D-CF1-01, D-CF1-02). Throws the cores' errors.
+ * frontmatter `shell` chooses (D-CF1-01, D-CF1-02). PG-SKILL-01: then puts the
+ * files that the body with only its variables filled mentions inside the skill
+ * block (D-PG11-02, D-PG11-05). Throws the cores' errors.
  */
 async function fillSkill(
   request: SkillInvocationRequest,
@@ -179,11 +195,14 @@ async function fillSkill(
   parsed: ParsedSkill,
   dependencies: SkillInvocationDependencies,
 ): Promise<SkillInvocationOutcome> {
+  const body = parsed.body.trim();
+  const variables = invocationVariables(request, skill, parsed.frontmatter);
+  const authored = substituteArguments({ body, args: undefined, argumentNames: [], variables });
   const substituted = substituteArguments({
-    body: parsed.body.trim(),
+    body,
     args: request.args,
     argumentNames: parseArgumentNames(parsed.frontmatter.arguments),
-    variables: invocationVariables(request, skill, parsed.frontmatter),
+    variables,
   });
   const requested = parsed.frontmatter.shell;
   const choice = selectPromptShell(
@@ -202,7 +221,11 @@ async function fillSkill(
       env: dependencies.host.env,
     }),
   );
-  return { kind: "ok", text: skillBlock(skill, expanded) };
+  const attached = await appendMentionedFiles(
+    { authored, rendered: expanded, cwd: request.cwd },
+    dependencies.mentions,
+  );
+  return { kind: "ok", text: skillBlock(skill, attached) };
 }
 
 /** The abort message for a project skill in a project Pi does not trust. */

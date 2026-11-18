@@ -20,6 +20,7 @@ import {
 import { dispatchHookExec } from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts";
 import { createHooksRuntime } from "../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 import type { SpawnDeps } from "../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
@@ -231,6 +232,7 @@ function createEntry(
         },
     declarationIndex: 0,
     ifPredicate: { kind: "match-all" },
+    options: resolveOptions(undefined),
   } satisfies RoutingEntry;
 }
 

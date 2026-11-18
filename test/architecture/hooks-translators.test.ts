@@ -20,6 +20,7 @@ const LOCAL_DISPATCHABLE: readonly DispatchableEvent[] = [
   "SessionEnd",
   "Stop",
   "StopFailure",
+  "UserPromptExpansion",
 ];
 
 const EVENT_TO_KEBAB: Readonly<Record<DispatchableEvent, string>> = {
@@ -33,6 +34,7 @@ const EVENT_TO_KEBAB: Readonly<Record<DispatchableEvent, string>> = {
   SessionEnd: "session-end",
   Stop: "stop",
   StopFailure: "stop-failure",
+  UserPromptExpansion: "user-prompt-expansion",
 };
 
 const TOOL_EVENTS: readonly ToolEvent[] = ["PreToolUse", "PostToolUse", "PostToolUseFailure"];
@@ -53,6 +55,7 @@ const EVENT_TO_TRANSLATOR_EXPORT: Readonly<Record<DispatchableEvent, string>> = 
   SessionEnd: "translateSessionEnd",
   Stop: "translateStop",
   StopFailure: "translateStopFailure",
+  UserPromptExpansion: "translateUserPromptExpansion",
 };
 
 type Translator = (event: unknown, context: TranslationContext) => unknown;
@@ -98,6 +101,7 @@ test("keeps one translator module for every dispatchable event", async () => {
     { event: "SessionEnd", exportType: "function" },
     { event: "Stop", exportType: "function" },
     { event: "StopFailure", exportType: "function" },
+    { event: "UserPromptExpansion", exportType: "function" },
   ];
   const expectedAdmission = [
     "SessionStart",
@@ -110,6 +114,7 @@ test("keeps one translator module for every dispatchable event", async () => {
     "SessionEnd",
     "Stop",
     "StopFailure",
+    "UserPromptExpansion",
   ];
 
   // act
@@ -156,4 +161,77 @@ test("keeps shared built-in and custom tool-name mapping across all tool transla
 
   // assert
   assert.deepStrictEqual(mappings, expectedMappings);
+});
+
+test("gives all three plain tool translators the same translated Read input", async () => {
+  const context = {
+    sessionId: "input-session",
+    transcriptPath: "/sessions/input.jsonl",
+    cwd: "/workspace/plain",
+  } satisfies TranslationContext;
+  const payloads: Array<{ event: ToolEvent; name: unknown; input: unknown }> = [];
+
+  for (const event of TOOL_EVENTS) {
+    const translate = (await loadTranslator(event)) as Translator;
+    const source =
+      event === "PreToolUse"
+        ? {
+            type: "tool_call",
+            toolCallId: "read-input",
+            toolName: "read",
+            input: { path: "note.txt" },
+          }
+        : {
+            type: "tool_result",
+            toolCallId: "read-input",
+            toolName: "read",
+            input: { path: "note.txt" },
+            content: [{ type: "text", text: "content" }],
+            isError: event === "PostToolUseFailure",
+            details: undefined,
+          };
+    const payload = translate(source, context) as Record<string, unknown>;
+    payloads.push({ event, name: payload.tool_name, input: payload.tool_input });
+  }
+
+  assert.deepStrictEqual(
+    payloads,
+    TOOL_EVENTS.map((event) => ({
+      event,
+      name: "Read",
+      input: { file_path: "/workspace/plain/note.txt" },
+    })),
+  );
+});
+
+test("keeps successful file results on the shared translator boundary", async () => {
+  const context = {
+    sessionId: "file-result-session",
+    transcriptPath: "/sessions/file-result.jsonl",
+    cwd: "/workspace/plain",
+  } satisfies TranslationContext;
+  const translate = (await loadTranslator("PostToolUse")) as Translator;
+  const payload = translate(
+    {
+      type: "tool_result",
+      toolCallId: "read-file-result",
+      toolName: "read",
+      input: { path: "note.txt" },
+      content: [{ type: "text", text: "content" }],
+      details: undefined,
+      isError: false,
+    },
+    context,
+  ) as Record<string, unknown>;
+
+  assert.deepStrictEqual(payload.tool_response, {
+    type: "text",
+    file: {
+      filePath: "/workspace/plain/note.txt",
+      content: "content",
+      startLine: 1,
+      numLines: 1,
+      totalLines: 1,
+    },
+  });
 });

@@ -333,6 +333,37 @@ export async function writeMcpAdapterOverride(
   return text;
 }
 
+/**
+ * Writes an installed entry as release 0.23.0 left it (D-PG9-04). That release
+ * wrote no default: the `[0.23.0]` section of `CHANGELOG.md` predates the
+ * request timeout and `lifecycle` defaults, so its entry holds neither of them
+ * and its marker records no `defaultFields`.
+ */
+export async function writeRelease0230McpAdapterEntry(
+  file: string,
+  serverKey: string,
+): Promise<string> {
+  const document = await readAdapterConfig(file);
+  const servers: unknown = document.mcpServers;
+  if (!isRecord(servers) || !isRecord(servers[serverKey])) {
+    throw new Error(`the entry "${serverKey}" of ${file} is not an object`);
+  }
+
+  const entry: Record<string, unknown> = { ...servers[serverKey] };
+  delete entry.requestTimeoutMs;
+  delete entry.lifecycle;
+  if (isRecord(entry._piClaudeMarketplace)) {
+    const marker: Record<string, unknown> = { ...entry._piClaudeMarketplace };
+    delete marker.defaultFields;
+    entry._piClaudeMarketplace = marker;
+  }
+
+  const mcpServers = { ...servers, [serverKey]: entry };
+  const text = `${JSON.stringify({ ...document, mcpServers }, null, 2)}\n`;
+  await writeFile(file, text);
+  return text;
+}
+
 // The parsed `mcp-adapter.json` at `file`, or an empty one when it is missing.
 async function readAdapterConfig(file: string): Promise<Readonly<Record<string, unknown>>> {
   let text: string;

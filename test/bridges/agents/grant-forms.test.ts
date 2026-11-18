@@ -7,10 +7,14 @@ import type { GrantFormInput } from "../../../extensions/pi-claude-marketplace/b
 import type { RawAgentFrontmatter } from "../../../extensions/pi-claude-marketplace/bridges/agents/types.ts";
 
 const ADAPTER_ASYNC_WARNING =
-  "tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before pi-mcp-adapter has cached the server's tools still fails";
+  "tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before pi-mcp-adapter has cached the server's tools still fails";
 
 const BUILTIN_ASYNC_WARNING =
-  "tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before Pi's built-in MCP has listed the server's tools still fails";
+  "tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before Pi's built-in MCP has listed the server's tools still fails";
+
+/** The warning items as the generated file writes them: double-quoted, because each holds `: `. */
+const ADAPTER_ASYNC_WARNING_ITEM = `"${ADAPTER_ASYNC_WARNING}"`;
+const BUILTIN_ASYNC_WARNING_ITEM = `"${BUILTIN_ASYNC_WARNING}"`;
 
 const BODY = "\nBody content.\n";
 
@@ -30,6 +34,7 @@ function agentInput(raw: RawAgentFrontmatter): GrantFormInput {
     },
     sourceHash: "abc",
     mapModel: false,
+    options: undefined,
   };
 }
 
@@ -37,10 +42,11 @@ function yamlList(items: readonly string[]): string {
   return items.length === 0 ? " []" : items.map((item) => `\n    - ${item}`).join("");
 }
 
+/** The frontmatter block, with each provenance list item given as the file writes it. */
 function expectedFrontmatter(expected: {
   readonly toolsLine?: string;
   readonly inheritSkills: boolean;
-  readonly async: boolean;
+  readonly async?: true;
   readonly droppedTools: readonly string[];
   readonly warnings: readonly string[];
 }): string {
@@ -53,8 +59,7 @@ ${toolsLine}systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: ${expected.inheritSkills}
 advertise: true
-async: ${expected.async}
-provenance:
+${expected.async === true ? "async: true\n" : ""}provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
   sourceAgent: bot
@@ -71,7 +76,7 @@ const ADAPTER_QUERY_FRONTMATTER = expectedFrontmatter({
   inheritSkills: false,
   async: true,
   droppedTools: [],
-  warnings: [ADAPTER_ASYNC_WARNING],
+  warnings: [ADAPTER_ASYNC_WARNING_ITEM],
 });
 
 /** A stdio server that asks for elicitation, which pi-mcp-adapter cannot run, and a plain one. */
@@ -85,7 +90,7 @@ const BUILTIN_QUERY_FRONTMATTER = expectedFrontmatter({
   inheritSkills: false,
   async: true,
   droppedTools: [],
-  warnings: [BUILTIN_ASYNC_WARNING],
+  warnings: [BUILTIN_ASYNC_WARNING_ITEM],
 });
 
 test("MGRT-01: a built-in run writes the built-in form and records both forms on the row", () => {
@@ -149,13 +154,56 @@ for (const active of ["adapter", "none"] as const) {
   });
 }
 
+for (const { label, options, body } of [
+  {
+    label: "D-PG10-13: the file's form holds the filled body after the block the swap replaces",
+    options: { values: new Map([["mode", "fast"]]), sensitive: new Set<string>() },
+    body: "\nMode fast.\n",
+  },
+  {
+    label: "D-PG10-21: a plugin with no options keeps the reference after either form's block",
+    options: undefined,
+    body: "\nMode ${user_config.mode}.\n",
+  },
+]) {
+  test(label, () => {
+    // arrange
+    const base = agentInput({ description: "d", tools: "Read, mcp__plugin_acme_db__query" });
+    const input: GrantFormInput = {
+      ...base,
+      discovered: { ...base.discovered, body: "Mode ${user_config.mode}.\n" },
+      options,
+    };
+
+    // act
+    const { agent, recorded } = convertAgentGrantForms(input, {
+      active: "builtin",
+      declaredMcpServers: { db: { command: "node" } },
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        fileContent: agent.fileContent,
+        recordedBlocks: [
+          recorded.mcpForms?.builtin?.frontmatter,
+          recorded.mcpForms?.adapter?.frontmatter,
+        ],
+      },
+      {
+        fileContent: BUILTIN_QUERY_FRONTMATTER + body,
+        recordedBlocks: [BUILTIN_QUERY_FRONTMATTER, ADAPTER_QUERY_FRONTMATTER],
+      },
+    );
+  });
+}
+
 test("MGRT-01: an agent that renders the same in both forms records neither field", () => {
   // arrange
   const expectedFileContent =
     expectedFrontmatter({
       toolsLine: "tools: read",
       inheritSkills: false,
-      async: false,
       droppedTools: [],
       warnings: [],
     }) + BODY;
@@ -172,19 +220,68 @@ test("MGRT-01: an agent that renders the same in both forms records neither fiel
   assert.deepStrictEqual(recorded, {});
 });
 
+test("D-PG7-12: a whole-server grant with a per-tool deny records each form with its own selector and exclude name", () => {
+  // arrange
+  const adapterFrontmatter = expectedFrontmatter({
+    toolsLine: "tools: read,mcp:plugin_acme_my-db_\nexcludeTools: mcp__plugin_acme_my-db__a_b",
+    inheritSkills: false,
+    async: true,
+    droppedTools: [],
+    warnings: [ADAPTER_ASYNC_WARNING_ITEM],
+  });
+  const builtinFrontmatter = expectedFrontmatter({
+    toolsLine: "tools: read,mcp:plugin_acme_my-db\nexcludeTools: mcp__plugin_acme_my_db__a_b",
+    inheritSkills: false,
+    async: true,
+    droppedTools: [],
+    warnings: [BUILTIN_ASYNC_WARNING_ITEM],
+  });
+  const input = agentInput({
+    description: "d",
+    tools: "Read, mcp__plugin_acme_my-db",
+    disallowedTools: "mcp__plugin_acme_my-db__a.b",
+  });
+
+  // act
+  const { agent, recorded } = convertAgentGrantForms(input, {
+    active: "adapter",
+    declaredMcpServers: { "my-db": { command: "node" } },
+  });
+
+  // assert
+  assert.strictEqual(agent.fileContent, adapterFrontmatter + BODY);
+  assert.deepStrictEqual(recorded, {
+    mcpImplementation: "adapter",
+    mcpForms: {
+      adapter: {
+        frontmatter: adapterFrontmatter,
+        warnings: [ADAPTER_ASYNC_WARNING],
+        droppedTools: [],
+      },
+      builtin: {
+        frontmatter: builtinFrontmatter,
+        warnings: [BUILTIN_ASYNC_WARNING],
+        droppedTools: [],
+      },
+    },
+  });
+});
+
 test("D-CF6-10: an omitted tools list in a plugin with a stdio server records both forms for their async warnings", () => {
   // arrange
   const adapterFrontmatter = expectedFrontmatter({
+    toolsLine: "allowNestedSubagents: true",
     inheritSkills: true,
     async: true,
     droppedTools: [],
-    warnings: [ADAPTER_ASYNC_WARNING],
+    warnings: [ADAPTER_ASYNC_WARNING_ITEM],
   });
   const builtinFrontmatter = expectedFrontmatter({
+    toolsLine: "allowNestedSubagents: true",
     inheritSkills: true,
     async: true,
     droppedTools: [],
-    warnings: [BUILTIN_ASYNC_WARNING],
+    warnings: [BUILTIN_ASYNC_WARNING_ITEM],
   });
   const input = agentInput({ description: "d" });
 
@@ -218,7 +315,6 @@ test("MGRT-01: an sse grant stays in the adapter form and is dropped from the bu
   const builtinFrontmatter = expectedFrontmatter({
     toolsLine: "tools: read",
     inheritSkills: false,
-    async: false,
     droppedTools: ["mcp__plugin_acme_web__get"],
     warnings: [],
   });
@@ -227,7 +323,7 @@ test("MGRT-01: an sse grant stays in the adapter form and is dropped from the bu
     inheritSkills: false,
     async: true,
     droppedTools: [],
-    warnings: [ADAPTER_ASYNC_WARNING],
+    warnings: [ADAPTER_ASYNC_WARNING_ITEM],
   });
   const input = agentInput({ description: "d", tools: "Read, mcp__plugin_acme_web__get" });
 
@@ -282,7 +378,7 @@ for (const active of ["adapter", "none"] as const) {
       inheritSkills: false,
       async: true,
       droppedTools: [],
-      warnings: [ADAPTER_ASYNC_WARNING],
+      warnings: [ADAPTER_ASYNC_WARNING_ITEM],
     });
     const input = agentInput({ description: "d", tools: "mcp__plugin_acme_web__get" });
 
@@ -314,14 +410,14 @@ test("ANAME-02 / MGRT-01: each form maps only the declared servers its implement
     inheritSkills: false,
     async: true,
     droppedTools: ["mcp__plugin_acme_asker__ask"],
-    warnings: [ADAPTER_ASYNC_WARNING],
+    warnings: [ADAPTER_ASYNC_WARNING_ITEM],
   });
   const builtinFrontmatter = expectedFrontmatter({
     toolsLine: "tools: read,mcp:plugin_acme_asker/ask,mcp:plugin_acme_db/query",
     inheritSkills: false,
     async: true,
     droppedTools: [],
-    warnings: [BUILTIN_ASYNC_WARNING],
+    warnings: [BUILTIN_ASYNC_WARNING_ITEM],
   });
   const input = agentInput({
     description: "d",
@@ -361,7 +457,7 @@ test("AG-11: a built-in run leaves out an adapter form that maps an explicit too
     inheritSkills: false,
     async: true,
     droppedTools: [],
-    warnings: [BUILTIN_ASYNC_WARNING],
+    warnings: [BUILTIN_ASYNC_WARNING_ITEM],
   });
   const input = agentInput({ description: "d", tools: "mcp__plugin_acme_asker__ask" });
 
@@ -391,7 +487,6 @@ test("ANAME-02 / MGRT-01: without grant forms the agent maps no MCP server and t
     expectedFrontmatter({
       toolsLine: "tools: read",
       inheritSkills: false,
-      async: false,
       droppedTools: ["mcp__plugin_acme_db__query"],
       warnings: [],
     }) + BODY;
@@ -412,7 +507,7 @@ test("MGRT-01: the built-in form maps every supported declared server, one named
     inheritSkills: false,
     async: true,
     droppedTools: ["mcp__plugin_acme_web"],
-    warnings: [BUILTIN_ASYNC_WARNING],
+    warnings: [BUILTIN_ASYNC_WARNING_ITEM],
   });
   const declaredMcpServers = {
     zed: { command: "zed" },

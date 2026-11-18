@@ -23,6 +23,7 @@ import {
   createHooksRuntime,
   readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { recordedMcpServerNames } from "../../extensions/pi-claude-marketplace/orchestrators/mcp/recorded-servers.ts";
 import { createApplyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -100,7 +101,11 @@ function buildStateWithSingleHooksPlugin(opts: {
 test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hooks-plugin entries in BOTH scopes", async () => {
   const runtime = createHooksRuntime();
   const hooksRouting = createHooksRouting(runtime, { readHooksJson });
-  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
+  const hooksHydration = createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: recordedMcpServerNames,
+  });
   const completionCache = createCompletionCache();
 
   return withHermeticEnvironment("hooks-cross-scope-recon-", async ({ root: tmpRoot }) => {
@@ -174,6 +179,7 @@ test("RECON / cross-scope: applyReconcile's per-scope rebuild loop preserves hoo
       sessionManager: {
         getSessionId: () => "hooks-cross-scope-recon",
         getSessionFile: () => undefined,
+        getSessionName: () => undefined,
       },
     } as unknown as ExtensionContext;
     await hooksHydration.registerHooksBridge(makeMockPi(), {

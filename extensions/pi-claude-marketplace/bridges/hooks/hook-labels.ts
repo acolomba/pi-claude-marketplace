@@ -11,16 +11,46 @@
 // A session or compaction hook is named by the value its matcher selects on:
 // `SessionStart:startup`. After `/compact`, each PostCompact hook shows as
 // `PostCompact [<command>] completed successfully` or `... failed` (D-BG-501).
+// A synchronous hook that fails without blocking shows the user one line, as
+// Claude Code 2.1.323 words it (D-PG5-11): `<label> hook error: Failed with
+// non-blocking status code: <stderr>` for a failed exit, with `Error occurred
+// while executing hook command: <error>` after the prefix for a command that
+// cannot be spawned, and `<label> hook error: Failed to run: <error>` for an
+// exception in the runner. The exit 2 of a missing script shows its whole
+// text, `<label> hook error: Hook script appears to be missing` and the
+// reinstall command of the hook's plugin (D-PG5-08, D-PG5-11). A hook's
+// `continue: false` shows `<label> hook stopped continuation: <reason>`, and
+// on UserPromptSubmit `Operation stopped by hook: <reason>` (D-PG5-13).
 //
 // A leaf: no Pi and no runtime imports, so every adapter and every output
 // carrier can share one wording.
 
 import { mapPiToClaudeToolName } from "../../domain/components/hook-tool-names.ts";
 
+import type { Scope } from "../../shared/types.ts";
+import type { HookFailure } from "./exec-result.ts";
+
 // Claude Code's reason for a block that names none: an exit 2 with no stderr,
 // and a block or deny decision with no reason.
 const NO_STDERR_REASON = "No stderr output";
 const NO_DECISION_REASON = "Blocked by hook";
+
+// D-PG5-11: Claude Code 2.1.323's head of a non-blocking failure, and the
+// length at which its renderer cuts the line it shows.
+const NON_BLOCKING_PREFIX = "Failed with non-blocking status code: ";
+const FAILURE_LINE_LIMIT = 200;
+
+// D-PG5-13: Claude Code 2.1.323's reason in the stop notice of a hook whose
+// `continue: false` gives none.
+const NO_STOP_REASON = "Execution stopped by hook";
+
+// D-PG5-13: Claude Code 2.1.323's notice of a prompt that a hook's
+// `continue: false` stopped.
+const PROMPT_STOPPED = "Operation stopped by hook";
+
+// D-PG5-11: the em dash of Claude Code 2.1.323's missing-script notice. It
+// stays escaped because the fix-unicode-dashes hook rewrites a literal one.
+const MISSING_SCRIPT_DASH = "\u2014";
 
 /**
  * D-CF5-11: the label Claude Code gives a hook outcome: `<Event>`, or
@@ -73,6 +103,8 @@ export interface HookBlock {
   readonly reason: string | undefined;
   readonly command: string;
   readonly fromStderr: boolean;
+  /** D-PG6-20: the hook asked to leave the original prompt out of the notice. */
+  readonly suppressOriginalPrompt?: true;
 }
 
 /**
@@ -97,17 +129,21 @@ export function hookSaysText(label: string, text: string): string {
 }
 
 /**
- * D-CF5-11 / D-CF5-24: the notice a blocked prompt shows the user,
- * `UserPromptSubmit operation blocked by hook:\n<message>`, the message as
- * `hookErrorText` writes it. Claude Code adds a third line,
- * `Original prompt: <prompt>`, which this notice leaves out (D-CF5-24).
+ * D-CF5-11 / D-CF5-24 / D-PG6-20: the notice a blocked prompt or expansion
+ * shows the user, `<event> operation blocked by hook:\n<message>`, the
+ * message as `hookErrorText` writes it. With `originalPrompt`, a blank line
+ * and `Original prompt: <originalPrompt>` follow, as Claude Code 2.1.323 ends
+ * the notice on both events.
  */
 export function promptBlockedText(
+  claudeEvent: "UserPromptSubmit" | "UserPromptExpansion",
   reason: string | undefined,
   command: string,
   fromStderr: boolean,
+  originalPrompt?: string,
 ): string {
-  return `UserPromptSubmit operation blocked by hook:\n${blockMessage(reason, command, fromStderr)}`;
+  const notice = `${claudeEvent} operation blocked by hook:\n${blockMessage(reason, command, fromStderr)}`;
+  return originalPrompt === undefined ? notice : `${notice}\n\nOriginal prompt: ${originalPrompt}`;
 }
 
 /**
@@ -134,4 +170,88 @@ export function hookErrorText(
   fromStderr: boolean,
 ): string {
   return `${label} hook error: ${blockMessage(reason, command, fromStderr)}`;
+}
+
+// D-PG5-11: the line Claude Code 2.1.323 shows for a failure text: its first
+// line that is not blank, trimmed, and cut to 200 string units and then `…`.
+// The text is trimmed first, so its first line is that line.
+function failureLine(text: string): string {
+  const trimmed = text.trim();
+  const end = trimmed.indexOf("\n");
+  const line = (end === -1 ? trimmed : trimmed.slice(0, end)).trim();
+  return line.length > FAILURE_LINE_LIMIT ? `${line.slice(0, FAILURE_LINE_LIMIT)}…` : line;
+}
+
+// D-PG5-11: the whole failure text before the cut, as Claude Code 2.1.323
+// builds it for each kind of failure that is cut.
+function failureMessage(failure: Exclude<HookFailure, { kind: "missing-script" }>): string {
+  switch (failure.kind) {
+    case "exit": {
+      const stderr = failure.stderr.trim();
+      return `${NON_BLOCKING_PREFIX}${stderr === "" ? NO_STDERR_REASON : stderr}`;
+    }
+
+    case "spawn":
+      return `${NON_BLOCKING_PREFIX}Error occurred while executing hook command: ${failure.error}`;
+    case "run":
+      return `Failed to run: ${failure.error}`;
+  }
+}
+
+/** The hook a failure notice names: its declared command and its plugin. */
+export interface FailedHook {
+  readonly command: string;
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly scope: Scope;
+}
+
+// D-PG5-08 / D-PG5-11: Claude Code 2.1.323's text for the exit 2 of a missing
+// script, with this extension's reinstall command for the hook's own plugin
+// and scope in place of upstream's `/plugin` sentence.
+function missingScriptMessage(stderr: string, hook: FailedHook): string {
+  return (
+    `Hook script appears to be missing ${MISSING_SCRIPT_DASH} "${hook.command}" exited 2 with: ` +
+    `${stderr.trim()}. Treating as non-blocking. Run /claude:plugin reinstall ` +
+    `${hook.plugin}@${hook.marketplace} --scope ${hook.scope} to reinstall it.`
+  );
+}
+
+/**
+ * D-PG5-11: the notice of a synchronous hook that failed without blocking, as
+ * Claude Code 2.1.323 shows it, on one line: `<label> hook error: ` and the
+ * first line of the failure text that is not blank, cut to 200 characters,
+ * prefix included. A failed exit reads `Failed with non-blocking status code:
+ * <stderr>`, or `No stderr output`; a command that cannot be spawned adds
+ * `Error occurred while executing hook command: <error>` after that prefix;
+ * an exception in the runner reads `Failed to run: <error>`. The exit 2 of a
+ * missing script shows its whole text, which names `hook` (D-PG5-08).
+ */
+export function hookFailureText(label: string, failure: HookFailure, hook: FailedHook): string {
+  if (failure.kind === "missing-script") {
+    return `${label} hook error: ${missingScriptMessage(failure.stderr, hook)}`;
+  }
+
+  return `${label} hook error: ${failureLine(failureMessage(failure))}`;
+}
+
+/**
+ * D-PG5-13: the notice of a hook's `continue: false`, as Claude Code 2.1.323
+ * shows it: `<label> hook stopped continuation: <reason>`, with `Execution
+ * stopped by hook` for an undefined or empty reason.
+ */
+export function hookStoppedText(label: string, reason: string | undefined): string {
+  return `${label} hook stopped continuation: ${reason === undefined || reason === "" ? NO_STOP_REASON : reason}`;
+}
+
+/**
+ * D-PG5-13: the notice of a prompt that a UserPromptSubmit hook's `continue:
+ * false` stopped, as Claude Code 2.1.323 shows it: `Operation stopped by hook:
+ * <stopReason>`, or `Operation stopped by hook` for an undefined or empty
+ * reason.
+ */
+export function promptStoppedText(stopReason: string | undefined): string {
+  return stopReason === undefined || stopReason === ""
+    ? PROMPT_STOPPED
+    : `${PROMPT_STOPPED}: ${stopReason}`;
 }

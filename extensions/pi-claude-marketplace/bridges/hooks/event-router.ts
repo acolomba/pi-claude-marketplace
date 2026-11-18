@@ -49,14 +49,22 @@ import { homedir } from "node:os";
 import path from "node:path";
 
 import { BUCKET_A_EVENTS, type BucketAEvent } from "../../domain/components/hook-events.ts";
-import { parseHooksConfig, parseMatcher, type HooksConfig } from "../../domain/components/hooks.ts";
+import {
+  parseHooksConfig,
+  parseMatcher,
+  parseNameMatcher,
+  type HooksConfig,
+  type ParsedMatcher,
+} from "../../domain/components/hooks.ts";
 import { asAbsolutePluginRoot, type AbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import {
   DEFAULT_STATE,
   isRecordedButDisabled,
+  recordedOptionsOf,
   type ExtensionState,
 } from "../../persistence/state-io.ts";
+import { isSubagentChild, subagentParentSessionId } from "../../platform/subagent-child.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -69,35 +77,54 @@ import {
   REWAKE_CUSTOM_TYPE,
   shutdownInMemoryChildren,
 } from "./async-rewake/registry.ts";
+import { resolveChildRootSession } from "./child-root-session.ts";
 import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
-import { HOOK_CONTEXT_MESSAGE_TYPE, sendDueFollowUpContext } from "./event-adapters.ts";
+import {
+  HOOK_CONTEXT_MESSAGE_TYPE,
+  hookContextPart,
+  sendDueFollowUpContext,
+} from "./event-adapters.ts";
+import { FILE_SYSTEM_SWEEP_OPS, sweepHookOutput } from "./hook-output-files.ts";
 import { compileIfPredicate, MATCH_ALL_IF } from "./if-field/index.ts";
+import {
+  mcpServerEntries,
+  type McpServerEntry,
+  type McpServerNamesReader,
+} from "./mcp-server-table.ts";
 import { createHookToolView } from "./mcp-tool-view.ts";
 import { claudeSessionEndReason } from "./payloads/session-end.ts";
 import { claudeSessionStartSource } from "./payloads/session-start.ts";
 import {
   createRoutingStateOperations,
+  PROMPT_CONTEXT_EVENTS,
   type CacheEntry,
+  type PendingPromptContext,
+  type PromptContextEvent,
   type RoutingEntry,
   type RoutingStateOperations,
 } from "./routing-state.ts";
 import {
   agentEndCacheHandler,
+  beforeSettleHandlerFor,
   inputResetHandlerFor,
   resetSettleState,
   settleHandlerFor,
 } from "./settle.ts";
 
+import type { ResolvedOptions } from "../../domain/user-config.ts";
 import type {
   BeforeAgentStartEvent,
   BeforeAgentStartEventResult,
   ExtensionAPI,
   ExtensionContext,
   ExtensionMode,
+  InputEvent,
+  InputEventResult,
   SessionCompactEvent,
   SessionShutdownEvent,
 } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { ChildRootSession } from "./child-root-session.ts";
 import type {
   CompositeDispatchEvent,
   CompositeEventFor,
@@ -105,6 +132,7 @@ import type {
   HookExecutor,
 } from "./dispatch.ts";
 import type { FollowUpTurnEnd } from "./event-adapters.ts";
+import type { SessionLaunchFacts } from "./payloads/session-start.ts";
 import type { HooksRuntime } from "./runtime.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -128,9 +156,62 @@ type EventRouterRoutingState = Pick<
   | "isProjectTrusted"
   | "parsedConfigEntries"
   | "recordProjectTrust"
+  | "setMcpServers"
   | "setParsedConfig"
   | "setRoutingBucket"
 >;
+
+type ChildEventOutcome = "dispatch" | "suppress" | "SubagentStart" | "SubagentStop";
+
+const CHILD_EVENT_POLICY = {
+  SessionStart: "SubagentStart",
+  UserPromptSubmit: "suppress",
+  PreToolUse: "dispatch",
+  PostToolUse: "dispatch",
+  PostToolUseFailure: "dispatch",
+  PreCompact: "suppress",
+  PostCompact: "suppress",
+  SessionEnd: "suppress",
+  Stop: "SubagentStop",
+  StopFailure: "suppress",
+  // D-PG6-18: the event runs in the main session only.
+  UserPromptExpansion: "suppress",
+} as const satisfies Record<BucketAEvent, ChildEventOutcome>;
+
+const CHILD_IDENTITY_DIAGNOSTIC =
+  "Child hook identity unavailable: companion launch metadata is missing or malformed";
+
+// D-PG6-02: the line for a child session whose launching session no source names.
+const CHILD_ROOT_DIAGNOSTIC =
+  "Child hook root session unavailable: neither the companion's launch variable nor the child's session header names its launching session";
+
+function dispatchesInCurrentSession(event: BucketAEvent): boolean {
+  return !isSubagentChild(process.env) || CHILD_EVENT_POLICY[event] === "dispatch";
+}
+
+const NO_LAUNCH_FACTS: SessionLaunchFacts = { holdsMessages: false, forkedByThisLaunch: false };
+
+// D-PG6-13..15: read from Pi's session manager only, never from a file or
+// the command line. A new session already holds setting entries, so only a
+// `message` entry marks a continued one. A header timestamp that does not
+// parse marks no fork. Claude Code always runs SessionStart, so a read that
+// throws keeps Pi's `startup` and the hooks still run (NFR-2).
+function readSessionLaunchFacts(
+  sessionManager: ExtensionContext["sessionManager"],
+  processStartedAt: number,
+): SessionLaunchFacts {
+  try {
+    const header = sessionManager.getHeader();
+    return {
+      holdsMessages: sessionManager.getEntries().some((entry) => entry.type === "message"),
+      forkedByThisLaunch:
+        header?.parentSession !== undefined && Date.parse(header.timestamp) >= processStartedAt,
+    };
+  } catch (err) {
+    hookDebugLog(`session_start launch read failed, source stays startup: ${errorMessage(err)}`);
+    return NO_LAUNCH_FACTS;
+  }
+}
 
 /**
  * Read `hooks.json` from disk, parse via `parseHooksConfig`, and
@@ -155,6 +236,8 @@ export interface ReadAndCachePluginHooksOptions {
   readonly hooksJsonPath: string;
   readonly cwd: string;
   readonly logPrefix: string;
+  /** D-PG10-10: the options of the resolution the caller staged the hooks from. */
+  readonly options: ResolvedOptions;
 }
 
 async function readAndCachePluginHooksWith(
@@ -198,28 +281,13 @@ async function readAndCachePluginHooksWith(
     resolvedSource: opts.resolvedSource,
     config: parsed.value,
     ifPredicates: parsed.ifPredicates,
+    options: opts.options,
   });
 }
 
 // ──────────────────────────────────────────────────────────────────────────
 // Hook additionalContext bridge (D-CF5-13)
 // ──────────────────────────────────────────────────────────────────────────
-
-// HOOK-05: one `<Event> hook additional context: <values>` text part, the
-// values joined by `\n` in buffer order, as Claude Code 2.1.316 words it. A
-// value that is empty or only whitespace adds nothing, so a buffer without
-// text gives no part.
-function contextPart(
-  claudeEvent: "SessionStart" | "UserPromptSubmit",
-  entries: readonly { readonly context: string }[],
-): { readonly type: "text"; readonly text: string } | undefined {
-  const values = entries.map((entry) => entry.context).filter((text) => text.trim().length > 0);
-  if (values.length === 0) {
-    return undefined;
-  }
-
-  return { type: "text", text: `${claudeEvent} hook additional context: ${values.join("\n")}` };
-}
 
 /**
  * Factory: build the `before_agent_start` handler closure registered on
@@ -229,7 +297,9 @@ function contextPart(
  *
  * D-CF5-13: the handler drains both context buffers into one custom message
  * with a text part per event, `SessionStart hook additional context: <values>`
- * first, then `UserPromptSubmit hook additional context: <values>`. Pi places the message after the prompt, persists
+ * first, then one part for each event of `PROMPT_CONTEXT_EVENTS` that
+ * buffered a context, labeled with that event (D-PG6-20). Pi places the
+ * message after the prompt, persists
  * it in the session, and sends it to the model as a user message, so the
  * SessionStart context stays in the history of every later turn, as Claude
  * Code's does. The prompt and the system prompt are not changed.
@@ -243,29 +313,90 @@ function contextPart(
  * started the run, which Pi tells by starting it with the rewake's own
  * custom message. The Stop hooks at the end of that run see
  * `stop_hook_active: true`; any other run start clears the mark.
+ *
+ * D-PG6-02: at the first run of a child session whose identity is known, the
+ * handler resolves the session that launched it, once, and keeps it in the
+ * runtime with the identity. A registration that went stale during that read
+ * changes nothing more.
  */
 function createBeforeAgentStartHandler(
   runtime: HooksRuntime,
+  capturedGeneration: number,
 ): (
   event: BeforeAgentStartEvent,
   ctx: ExtensionContext,
 ) => Promise<BeforeAgentStartEventResult | undefined> {
-  return (event) => {
-    runtime.recordRunStart(
-      event.messageType === "custom" && event.message.customType === REWAKE_CUSTOM_TYPE,
-    );
-    const content = [
-      contextPart("SessionStart", runtime.drainPendingSessionStartContext()),
-      contextPart("UserPromptSubmit", runtime.drainPendingPromptContext()),
-    ].filter((part) => part !== undefined);
-    if (content.length === 0) {
-      return Promise.resolve(undefined);
+  return async (event, ctx) => {
+    const sessionId = ctx.sessionManager.getSessionId();
+    runtime.captureChildIdentity(event, sessionId);
+    const identity = runtime.childIdentityFor(sessionId);
+    if (identity.kind === "unavailable") {
+      hookDebugLog(CHILD_IDENTITY_DIAGNOSTIC);
     }
 
-    return Promise.resolve({
-      message: { customType: HOOK_CONTEXT_MESSAGE_TYPE, content, display: false },
-    });
+    if (identity.kind === "known" && !runtime.childRootResolved(sessionId)) {
+      const root = await childRootSession(ctx);
+      if (runtime.currentGeneration() !== capturedGeneration) {
+        return undefined;
+      }
+
+      runtime.recordChildRoot(sessionId, root);
+      if (root === undefined) {
+        hookDebugLog(CHILD_ROOT_DIAGNOSTIC);
+      }
+    }
+
+    return startRun(runtime, event);
   };
+}
+
+// D-PG6-02: the launching session's id from pi-subagents' launch variable and
+// its file from the child's own session header. A failed read gives no root.
+async function childRootSession(ctx: ExtensionContext): Promise<ChildRootSession | undefined> {
+  try {
+    return await resolveChildRootSession({
+      sessionId: subagentParentSessionId(process.env),
+      sessionFile: ctx.sessionManager.getHeader()?.parentSession,
+    });
+  } catch (err) {
+    hookDebugLog(`before_agent_start root session read failed: ${errorMessage(err)}`);
+    return undefined;
+  }
+}
+
+// D-PG6-20: one part for each prompt event that buffered a context, in the
+// order of `PROMPT_CONTEXT_EVENTS`, each labeled with its own event.
+function promptContextParts(
+  entries: readonly PendingPromptContext[],
+): ({ readonly type: "text"; readonly text: string } | undefined)[] {
+  const byEvent = new Map<PromptContextEvent, string[]>();
+  for (const entry of entries) {
+    byEvent.set(entry.event, [...(byEvent.get(entry.event) ?? []), entry.context]);
+  }
+
+  return PROMPT_CONTEXT_EVENTS.map((claudeEvent) =>
+    hookContextPart(claudeEvent, byEvent.get(claudeEvent) ?? []),
+  );
+}
+
+// Records how the run started and drains both context buffers into one message.
+function startRun(
+  runtime: HooksRuntime,
+  event: BeforeAgentStartEvent,
+): BeforeAgentStartEventResult | undefined {
+  runtime.recordRunStart(
+    event.messageType === "custom" && event.message.customType === REWAKE_CUSTOM_TYPE,
+  );
+  const sessionStart = runtime.drainPendingSessionStartContext().map((entry) => entry.context);
+  const content = [
+    hookContextPart("SessionStart", sessionStart),
+    ...promptContextParts(runtime.drainPendingPromptContext()),
+  ].filter((part) => part !== undefined);
+  if (content.length === 0) {
+    return undefined;
+  }
+
+  return { message: { customType: HOOK_CONTEXT_MESSAGE_TYPE, content, display: false } };
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -381,6 +512,21 @@ function collectAllCachedPlugins(routingState: EventRouterRoutingState): CacheEn
 }
 
 /**
+ * The routed parse of a group's matcher: a command name for
+ * UserPromptExpansion (D-PG6-19), none for the two events with no upstream
+ * matcher, and a tool name for the rest.
+ */
+function routedMatcher(claudeEvent: BucketAEvent, rawMatcher: string): ParsedMatcher {
+  if (claudeEvent === "UserPromptExpansion") {
+    return parseNameMatcher(rawMatcher);
+  }
+
+  return parseMatcher(
+    claudeEvent === "UserPromptSubmit" || claudeEvent === "Stop" ? "" : rawMatcher,
+  );
+}
+
+/**
  * Push one matcher group's handlers into its event bucket, in declaration
  * order. Returns the next `declarationIndex` so the caller's running counter
  * stays continuous across every group and event of one plugin.
@@ -394,7 +540,7 @@ function pushGroupHandlers(
 ): number {
   const { claudeEvent, groupIndex } = position;
   const rawMatcher = group.matcher ?? "";
-  const matcher = parseMatcher(rawMatcher);
+  const matcher = routedMatcher(claudeEvent, rawMatcher);
   let declarationIndex = startIndex;
 
   for (let handlerIndex = 0; handlerIndex < group.hooks.length; handlerIndex++) {
@@ -417,6 +563,7 @@ function pushGroupHandlers(
       handlerDecl,
       declarationIndex,
       ifPredicate: cacheEntry.ifPredicates.get(key) ?? MATCH_ALL_IF,
+      options: cacheEntry.options,
     });
 
     declarationIndex += 1;
@@ -503,12 +650,14 @@ export interface HooksFileReader {
 }
 
 /**
- * The hooks read port plus the one persisted-state operation hydration
+ * The hooks read port plus the persisted-state operations hydration
  * additionally needs. The `extends` composes that port's single member into
  * this bundle; it does not claim a dependency bundle is a kind of file reader.
  */
 export interface HooksHydrationDeps extends HooksFileReader {
   readonly loadState: (extensionRoot: string) => Promise<ExtensionState>;
+  /** D-PG6-07: the names of a record's MCP servers, from the one reader of them (MREC-01/02). */
+  readonly readMcpServerNames: McpServerNamesReader;
 }
 
 /**
@@ -519,15 +668,49 @@ export interface HooksHydrationDeps extends HooksFileReader {
  * injection seam documented on `registerHooksBridgeWith`: the sole
  * production caller omits it and runs on the `dispatchHookExec` default.
  */
+/** D-PG6-18 / D-PG6-19: the prompt template or skill a typed line expands, in Claude form. */
+export interface TypedExpansion {
+  readonly commandName: string;
+  readonly commandArgs: string;
+  readonly commandSource?: string;
+}
+
+/** D-PG6-18: names what a typed line expands, or nothing for a line that expands nothing. */
+export type TypedExpansionResolver = (
+  text: string,
+  ctx: ExtensionContext,
+) => Promise<TypedExpansion | undefined>;
+
 export interface RegisterHooksBridgeOptions {
   readonly cwd: string;
   readonly executor?: HookExecutor;
+  /**
+   * D-PG6-18: the extension factory passes the resolver over Pi's commands
+   * and the skill alias table, so a typed line that names a template or a
+   * skill runs its UserPromptExpansion hooks. A registration without one
+   * runs the event for no line.
+   */
+  readonly resolveTypedExpansion?: TypedExpansionResolver;
+  /**
+   * When this Pi process started, in epoch milliseconds; a fork whose header
+   * is not older was made by this launch (D-PG6-15). Defaults to
+   * `performance.timeOrigin`.
+   */
+  readonly processStartedAt?: number;
 }
 
 /** Hooks hydration operations bound to one required state reader. */
 export interface HooksHydration {
   /** `projectTrusted` is Pi's answer for the project at `cwd` (`ctx.isProjectTrusted()`). */
   readonly hydrateProjectScopeForCwd: (cwd: string, projectTrusted: boolean) => Promise<void>;
+  /**
+   * D-PG6-07: re-reads both scopes' plugin MCP servers from their state, so a
+   * plugin that a load's autoapply installed or enabled after the hydrates
+   * names its servers in the same session. `projectTrusted` is Pi's answer for
+   * the project at `cwd`; an untrusted project names no server. It writes no
+   * state and reaches no network.
+   */
+  readonly refreshMcpServers: (cwd: string, projectTrusted: boolean) => Promise<void>;
   readonly registerHooksBridge: (
     pi: ExtensionAPI,
     opts: RegisterHooksBridgeOptions,
@@ -610,13 +793,14 @@ async function hydrateCacheFromDisk(
  * disabled records (ENBL-14), find plugins with declared hook resources, read +
  * parse each hooks.json, and populate the cache. Parse failures are logged
  * through hookDebugLog and skipped (the resolver flips installable: false on
- * the next reconcile).
+ * the next reconcile). The scope's plugin MCP servers come last, from every
+ * enabled record, with hooks or not (D-PG6-07).
  */
 async function hydrateScopeFromState(
   state: ExtensionState,
   loc: ScopedLocations,
   cwd: string,
-  reader: HooksFileReader,
+  reader: HooksHydrationDeps,
   routingState: EventRouterRoutingState,
   generationIsCurrent: GenerationGuard,
 ): Promise<void> {
@@ -627,6 +811,13 @@ async function hydrateScopeFromState(
       return;
     }
   }
+
+  const servers = await mcpServerEntries(state, loc, reader.readMcpServerNames);
+  if (!generationIsCurrent()) {
+    return;
+  }
+
+  routingState.setMcpServers(loc.scope, servers);
 }
 
 /** The hydration targets of every enabled plugin of `loc`'s scope with recorded hooks. */
@@ -655,6 +846,7 @@ function hydrateTargets(
           marketplace: mpName,
           pluginId,
           resolvedSource: pluginRecord.resolvedSource,
+          options: recordedOptionsOf(pluginRecord),
           hooksJsonPath: path.join(loc.hooksDir, slug, "hooks.json"),
           hooksDir: loc.hooksDir,
           cwd,
@@ -676,6 +868,7 @@ interface HydrateOnePluginTarget {
   readonly marketplace: string;
   readonly pluginId: string;
   readonly resolvedSource: string;
+  readonly options: ResolvedOptions;
   readonly hooksJsonPath: string;
   readonly hooksDir: string;
   readonly cwd: string;
@@ -687,7 +880,8 @@ async function tryHydrateOnePlugin(
   generationIsCurrent: GenerationGuard,
   target: HydrateOnePluginTarget,
 ): Promise<void> {
-  const { scope, marketplace, pluginId, resolvedSource, hooksJsonPath, hooksDir, cwd } = target;
+  const { scope, marketplace, pluginId, resolvedSource, options, hooksJsonPath, hooksDir, cwd } =
+    target;
   // Defense-in-depth (NFR-10): state.json is normally written only by this
   // extension, but the slug component (`pluginRecord.resources.hooks[i]`) is
   // state-supplied data. A corrupted state record (third-party tampering or
@@ -751,6 +945,7 @@ async function tryHydrateOnePlugin(
     resolvedSource: branded,
     config: result.value,
     ifPredicates: result.ifPredicates,
+    options,
   });
 }
 
@@ -809,6 +1004,8 @@ async function hydrateProjectScopeForCwdWith(
     }
   }
 
+  // D-PG6-07: an untrusted project and a state that fails to load name no server.
+  routingState.setMcpServers("project", []);
   routingState.recordProjectTrust(cwd, projectTrusted);
   if (!projectTrusted) {
     hookDebugLog(`hydrate-project: cwd=${cwd} skipped: Pi does not trust the project`);
@@ -832,6 +1029,66 @@ async function hydrateProjectScopeForCwdWith(
   }
 
   await hydrateScopeFromState(state, loc, cwd, reader, routingState, generationIsCurrent);
+}
+
+/** D-PG6-07: the plugin MCP servers of `loc`'s scope; a state that fails to load names none. */
+async function scopeMcpServers(
+  reader: HooksHydrationDeps,
+  loc: ScopedLocations,
+): Promise<McpServerEntry[]> {
+  let state: ExtensionState;
+  try {
+    state = await reader.loadState(loc.extensionRoot);
+  } catch (err) {
+    hookDebugLog(
+      `refresh-mcp-servers: loadState failed for scope=${loc.scope} extensionRoot=${loc.extensionRoot}: ${errorMessage(err)}`,
+    );
+    return [];
+  }
+
+  return mcpServerEntries(state, loc, reader.readMcpServerNames);
+}
+
+/**
+ * D-PG6-07: replaces both scopes' server tables with the servers their state
+ * names now. Nothing changes when the generation goes stale during the reads.
+ */
+async function refreshMcpServersWith(
+  reader: HooksHydrationDeps,
+  cwd: string,
+  projectTrusted: boolean,
+  routingState: EventRouterRoutingState,
+  generationIsCurrent: GenerationGuard,
+): Promise<void> {
+  const tables = await Promise.all(
+    SCOPES.map(async (scope) => ({
+      scope,
+      servers: await refreshedMcpServers(reader, scope, cwd, projectTrusted),
+    })),
+  );
+  if (!generationIsCurrent()) {
+    return;
+  }
+
+  for (const { scope, servers } of tables) {
+    routingState.setMcpServers(scope, servers);
+  }
+}
+
+/** The servers `scope` names now; a project Pi does not trust names none (D-LOC-01). */
+function refreshedMcpServers(
+  reader: HooksHydrationDeps,
+  scope: Scope,
+  cwd: string,
+  projectTrusted: boolean,
+): Promise<McpServerEntry[]> {
+  if (scope === "user") {
+    return scopeMcpServers(reader, locationsFor("user", homedir()));
+  }
+
+  return projectTrusted
+    ? scopeMcpServers(reader, locationsFor("project", cwd))
+    : Promise.resolve([]);
 }
 
 /**
@@ -859,6 +1116,59 @@ type CompositeHandler<E extends CompositeDispatchEvent> = (
   event: CompositeEventFor<E>,
   ctx: ExtensionContext,
 ) => Promise<CompositeReturnFor<E>>;
+
+/**
+ * D-PG6-18: the UserPromptExpansion handler of Pi's `input` event. It runs
+ * the event's hooks once for a line the user typed, not for `extension`
+ * input, when `resolve` names what the line expands and a hook is routed,
+ * and only in a main session. Registered right after the UserPromptSubmit
+ * handler, so a blocked prompt runs no expansion hook, and before the alias
+ * and command handlers, so the hooks see the line as typed. The composite
+ * handler checks the generation again after the resolver's await.
+ */
+function expansionInputHandler(
+  runtime: HooksRuntime,
+  handler: CompositeHandler<"UserPromptExpansion">,
+  resolve: TypedExpansionResolver | undefined,
+): (event: InputEvent, ctx: ExtensionContext) => Promise<InputEventResult | undefined> | undefined {
+  return (event, ctx) =>
+    !dispatchesInCurrentSession("UserPromptExpansion") ||
+    event.source === "extension" ||
+    resolve === undefined ||
+    runtime.getRoutingBucket("UserPromptExpansion").length === 0
+      ? undefined
+      : runTypedExpansion(event, ctx, handler, resolve);
+}
+
+// D-PG6-18 / NFR-2: a resolver that rejects runs no hook and lets the line go on.
+async function runTypedExpansion(
+  event: InputEvent,
+  ctx: ExtensionContext,
+  handler: CompositeHandler<"UserPromptExpansion">,
+  resolve: TypedExpansionResolver,
+): Promise<InputEventResult | undefined> {
+  let expansion: TypedExpansion | undefined;
+  try {
+    expansion = await resolve(event.text, ctx);
+  } catch (err) {
+    hookDebugLog(`input: typed expansion not resolved: ${errorMessage(err)}`);
+    return undefined;
+  }
+
+  if (expansion === undefined) {
+    return undefined;
+  }
+
+  return handler(
+    {
+      command_name: expansion.commandName,
+      command_args: expansion.commandArgs,
+      ...(expansion.commandSource === undefined ? {} : { command_source: expansion.commandSource }),
+      input: event,
+    },
+    ctx,
+  );
+}
 
 /**
  * D-60-06: prepares the `_shared` data directory of every scope that has
@@ -890,31 +1200,40 @@ async function prepareSessionStartDataDirs(
 /**
  * The `session_shutdown` callback: it maps Pi's reason once, with the live
  * session mode, and dispatches the Claude-side SessionEnd event (D-CF5-02).
- * Pi `reload` keeps the session, so it runs no SessionEnd and a cleanup hook
- * never tears down state of a session that continues (D-CF5-03). A context
- * whose mode is not a notification mode is skipped with a debug line before
- * the event is read.
+ * Pi `reload` keeps the session, so it runs no SessionEnd (D-CF5-03). In a
+ * pi-subagents child, every shutdown, reload included, drains this runtime's
+ * async children, also when the mode check skips dispatch with a debug line.
+ * A main session leaves its async hooks running, as Claude Code does; the
+ * next load's reap stops what an earlier load left (D-BG-207).
  */
 function sessionShutdownCallback(
   sessionEndHandler: CompositeHandler<"SessionEnd">,
-): (event: SessionShutdownEvent, ctx: ExtensionContext) => Promise<undefined> | undefined {
-  return (event, ctx) => {
-    let mode: ExtensionMode;
+  runtime: HooksRuntime,
+): (event: SessionShutdownEvent, ctx: ExtensionContext) => Promise<undefined> {
+  return async (event, ctx) => {
     try {
-      // Without a notification mode the user-facing channel is unavailable, so
-      // the hook could not report its outcome. The callback is skipped and
-      // debug-logged instead; the same skip applies at the other mode checks.
-      mode = requireNotificationMode(ctx.mode);
-    } catch (error: unknown) {
-      hookDebugLog(`hook callback skipped: ${errorMessage(error)}`);
-      return undefined;
-    }
+      let mode: ExtensionMode;
+      try {
+        // Without a notification mode the user-facing channel is unavailable, so
+        // the hook could not report its outcome. The callback is skipped and
+        // debug-logged instead; the same skip applies at the other mode checks.
+        mode = requireNotificationMode(ctx.mode);
+      } catch (error: unknown) {
+        hookDebugLog(`hook callback skipped: ${errorMessage(error)}`);
+        return undefined;
+      }
 
-    if (event.reason === "reload") {
-      return undefined;
-    }
+      if (event.reason === "reload" || !dispatchesInCurrentSession("SessionEnd")) {
+        return undefined;
+      }
 
-    return sessionEndHandler({ reason: claudeSessionEndReason(event.reason, mode) }, ctx);
+      await sessionEndHandler({ reason: claudeSessionEndReason(event.reason, mode) }, ctx);
+      return;
+    } finally {
+      if (isSubagentChild(process.env)) {
+        await shutdownInMemoryChildren(runtime);
+      }
+    }
   };
 }
 
@@ -949,10 +1268,11 @@ async function runCompactionSessionStart(
 /**
  * The `session_compact` callback (D-CF5-04, D-CF5-05): one compaction runs
  * SessionStart with `source: "compact"` to completion and then PostCompact,
- * as upstream. The compaction SessionStart never passes the SSDEDUP-01 guard
- * of `session_start`, so each compaction runs it again. A context whose mode
- * is not a notification mode is skipped with a debug line before the event
- * is read.
+ * as upstream in main sessions. Child sessions dispatch neither event. The
+ * compaction SessionStart never passes the SSDEDUP-01 guard of
+ * `session_start`, so each main-session compaction runs it again. A context
+ * whose mode is not a notification mode is skipped with a debug line before
+ * the event is read.
  */
 function sessionCompactCallback(
   handlers: {
@@ -967,6 +1287,10 @@ function sessionCompactCallback(
       requireNotificationMode(ctx.mode);
     } catch (error: unknown) {
       hookDebugLog(`hook callback skipped: ${errorMessage(error)}`);
+      return undefined;
+    }
+
+    if (!dispatchesInCurrentSession("SessionStart")) {
       return undefined;
     }
 
@@ -995,25 +1319,31 @@ function sessionCompactCallback(
  *   2. Reset pending-context and settle transitions for the new generation.
  *   3. SIGKILL prior-cycle in-memory async-rewake children (HOOK-06).
  *   4. Hydrate the parsed-config cache from disk, then rebuild routing tables.
- *   5. Reap persisted orphans per scope (D-62-05).
- *   6. Register exactly 12 pi.on call sites -- 7 Bucket-A dispatch surfaces
+ *   5. Reap persisted orphans per scope (D-62-05), then remove the scope's
+ *      saved hook output older than 30 days (D-PG5-15).
+ *   6. Register exactly 14 pi.on call sites -- 7 Bucket-A dispatch surfaces
  *      (DISP-01) plus `before_agent_start` (the drain point for the
  *      SessionStart `additionalContext` capture buffer) plus `turn_end` (sends
- *      the context of a queued follow-up, D-CF5-13) plus the two
- *      settle-time surfaces `agent_end` (caches the run's last-assistant
- *      message) and `agent_settled` (gates on stopReason to dispatch the
- *      Stop / StopFailure buckets; STOP-01) plus a SECOND `input`
- *      subscription (the STOP-07 loop-protection reset, distinct from the
- *      UserPromptSubmit dispatch handler on the same event). The eight
+ *      the context of a queued follow-up, D-CF5-13) plus the three
+ *      turn-boundary surfaces `agent_end` (caches the run's last-assistant
+ *      message), `agent_before_settle` (runs the Stop bucket on a `stop`
+ *      ending and continues the run on a block; D-PG5-01), and
+ *      `agent_settled` (runs the StopFailure bucket on an `error` or
+ *      `length` ending; STOP-01, D-PG5-03) plus a SECOND `input`
+ *      subscription right after the UserPromptSubmit one (the
+ *      UserPromptExpansion dispatch for a line `opts.resolveTypedExpansion`
+ *      names, D-PG6-18) plus a THIRD `input` subscription (the STOP-07
+ *      loop-protection reset, distinct from both dispatch handlers). The eight
  *      per-Pi-event Claude buckets fan out from 7 Pi event surfaces because
  *      `tool_result` splits on `event.isError` between the PostToolUse and
  *      PostToolUseFailure buckets (D-59-01); the Stop / StopFailure buckets
- *      are driven off `agent_settled` rather than a per-Pi-event surface. The
- *      Pi event-name set has 11 names (`input` appears twice), so 12 calls.
+ *      are driven off the turn-boundary surfaces rather than a per-Pi-event
+ *      surface. The Pi event-name set has 12 names (`input` appears three
+ *      times), so 14 calls.
  *
  * `opts.executor` is the hook-execution injection point, forwarded verbatim
  * to every `compositeHandlerFor` / `toolResultCompositeHandler` /
- * `settleHandlerFor` closure registered in step 6. The sole production caller
+ * `beforeSettleHandlerFor` / `settleHandlerFor` closure registered in step 6. The sole production caller
  * -- the extension factory in `index.ts` -- does NOT pass it, so production
  * always runs on the `dispatchHookExec` default; it exists so a test can
  * register the real bridge against a spy and assert on routing without
@@ -1064,6 +1394,7 @@ async function registerHooksBridgeWith(
   // with both pending buffers empty, which only the SessionStart and
   // UserPromptSubmit adapters can subsequently populate (D-CF5-13).
   runtime.preparePendingContextForRegistration();
+  runtime.resetChildIdentity();
 
   // Same epoch hygiene for the settle dispatcher's cached last-assistant
   // message: clear it so a `/reload` cannot leak the prior session's message
@@ -1075,7 +1406,7 @@ async function registerHooksBridgeWith(
   // new runtime for every load, so in production this walk finds nothing:
   // the user-scope reap below and the project hydrate's reap stop an earlier
   // load's children, on /reload and after a crash alike (D-BG-207).
-  shutdownInMemoryChildren(runtime);
+  await shutdownInMemoryChildren(runtime);
 
   const hydrated = await hydrateCacheFromDisk(opts, reader, routingState, generationIsCurrent);
   for (const { loc } of hydrated) {
@@ -1088,6 +1419,9 @@ async function registerHooksBridgeWith(
     // against an in-flight kill probe.
     // eslint-disable-next-line no-await-in-loop -- at most two scopes, one PID-table reap each
     await reapOrphans(runtime, loc);
+    // D-PG5-15: the saved hook output of each reaped scope ages out here.
+    // eslint-disable-next-line no-await-in-loop -- at most two scopes, one sweep each
+    await sweepHookOutput(loc, Date.now(), FILE_SYSTEM_SWEEP_OPS);
   }
 
   // SessionStart dispatch with lazy project-scope hydrate. Pi fires
@@ -1125,6 +1459,7 @@ async function registerHooksBridgeWith(
       // Pi's raw reason, and the compaction SessionStart never passes here
       // (D-CF5-05).
       let lastSessionStart: string | undefined = undefined;
+      const processStartedAt = opts.processStartedAt ?? performance.timeOrigin;
       return async (event, ctx) => {
         try {
           requireNotificationMode(ctx.mode);
@@ -1166,7 +1501,17 @@ async function registerHooksBridgeWith(
           }
 
           requireNotificationMode(ctx.mode);
-          await sessionStartHandler({ source: claudeSessionStartSource(event.reason) }, ctx);
+          if (dispatchesInCurrentSession("SessionStart")) {
+            const launch =
+              event.reason === "startup"
+                ? readSessionLaunchFacts(ctx.sessionManager, processStartedAt)
+                : NO_LAUNCH_FACTS;
+            await sessionStartHandler(
+              { source: claudeSessionStartSource(event.reason, launch) },
+              ctx,
+            );
+          }
+
           if (!generationIsCurrent()) {
             return;
           }
@@ -1181,14 +1526,17 @@ async function registerHooksBridgeWith(
     bind((generation) =>
       sessionShutdownCallback(
         compositeHandlerFor(runtime, "SessionEnd", generation, pi, opts.executor),
+        runtime,
       ),
     ),
   );
   pi.on(
     "session_before_compact",
-    bindWithMode((generation) =>
-      compositeHandlerFor(runtime, "PreCompact", generation, pi, opts.executor),
-    ),
+    bindWithMode((generation) => {
+      const handler = compositeHandlerFor(runtime, "PreCompact", generation, pi, opts.executor);
+      return (event, ctx) =>
+        dispatchesInCurrentSession("PreCompact") ? handler(event, ctx) : undefined;
+    }),
   );
   pi.on(
     "session_compact",
@@ -1205,8 +1553,26 @@ async function registerHooksBridgeWith(
   );
   pi.on(
     "input",
+    bindWithMode((generation) => {
+      const handler = compositeHandlerFor(
+        runtime,
+        "UserPromptSubmit",
+        generation,
+        pi,
+        opts.executor,
+      );
+      return (event, ctx) =>
+        dispatchesInCurrentSession("UserPromptSubmit") ? handler(event, ctx) : undefined;
+    }),
+  );
+  pi.on(
+    "input",
     bindWithMode((generation) =>
-      compositeHandlerFor(runtime, "UserPromptSubmit", generation, pi, opts.executor),
+      expansionInputHandler(
+        runtime,
+        compositeHandlerFor(runtime, "UserPromptExpansion", generation, pi, opts.executor),
+        opts.resolveTypedExpansion,
+      ),
     ),
   );
   // D-P5-07: both tool handlers of this generation share one view, so they
@@ -1230,7 +1596,7 @@ async function registerHooksBridgeWith(
   // buffers are empty.
   pi.on(
     "before_agent_start",
-    bindWithMode(() => createBeforeAgentStartHandler(runtime)),
+    bindWithMode((generation) => createBeforeAgentStartHandler(runtime, generation)),
   );
   // The context of a queued follow-up goes out at the turn end after which
   // the agent reads that follow-up (D-CF5-13).
@@ -1241,22 +1607,42 @@ async function registerHooksBridgeWith(
       return Promise.resolve(undefined);
     }),
   );
-  // Settle-time turn-boundary dispatch: agent_end caches the run's
-  // last-assistant message; agent_settled reads it and gates on stopReason
-  // to run the Stop / StopFailure buckets (STOP-01).
+  // Turn-boundary dispatch: agent_end caches the run's last-assistant
+  // message; agent_before_settle runs the Stop bucket on a `stop` ending and
+  // agent_settled the StopFailure bucket on an `error` or `length` ending
+  // (STOP-01, D-PG5-01, D-PG5-03). A pi-subagents child runs no Stop hook
+  // (D-PG3-04), and its boundary handler leaves the cache for agent_settled.
   pi.on(
     "agent_end",
     bindWithMode((generation) => agentEndCacheHandler(runtime, generation)),
   );
   pi.on(
+    "agent_before_settle",
+    bind((generation) => {
+      const handler = beforeSettleHandlerFor(runtime, generation, pi, opts.executor);
+      return (event, ctx) =>
+        dispatchesInCurrentSession("Stop") ? handler(event, ctx) : Promise.resolve(undefined);
+    }),
+  );
+  pi.on(
     "agent_settled",
-    bind((generation) => settleHandlerFor(runtime, generation, pi, opts.executor)),
+    bind((generation) => {
+      const handler = settleHandlerFor(runtime, generation, pi, opts.executor);
+      return (event, ctx) => {
+        if (!dispatchesInCurrentSession("Stop") && !dispatchesInCurrentSession("StopFailure")) {
+          runtime.takeLastAssistant();
+          return Promise.resolve();
+        }
+
+        return handler(event, ctx);
+      };
+    }),
   );
   // STOP-07 loop-protection reset: a dedicated second `input` subscription
   // (distinct from the UserPromptSubmit dispatch handler above) clears the
   // Stop re-entry flag and resets the consecutive-block counter + one-shot cap
-  // latch on a genuine user input. Bridge-injected `sendMessage` re-entries do
-  // NOT pass through `input`, so the flag never self-clears. The woken mark of
+  // latch on a genuine user input. A Stop continuation does NOT pass through
+  // `input`, so the flag never self-clears. The woken mark of
   // an async rewake ends at the next run start instead (D-BG-210).
   pi.on(
     "input",
@@ -1268,16 +1654,20 @@ async function registerHooksBridgeWith(
  * D-BG-207: reaps the project scope's PID table for the session's real `cwd`
  * after the project hydrate, so the async hook processes an earlier load of
  * this project left stop on /reload and at the next start after a crash. The
- * factory's reap reads only the home directory's tables. A project Pi does
- * not trust runs no hooks (D-LOC-01), so its table is left alone. The reap
- * keeps the rows of children this runtime owns and never throws.
+ * factory's reap reads only the home directory's tables. Then it removes the
+ * scope's saved hook output older than 30 days (D-PG5-15). A project Pi does
+ * not trust runs no hooks (D-LOC-01), so its table and its saved output are
+ * left alone. The reap keeps the rows of children this runtime owns, and
+ * neither step throws.
  */
 async function reapProjectOrphans(runtime: HooksRuntime, cwd: string): Promise<void> {
   if (!runtime.isProjectTrusted(cwd)) {
     return;
   }
 
-  await reapOrphans(runtime, locationsFor("project", cwd));
+  const loc = locationsFor("project", cwd);
+  await reapOrphans(runtime, loc);
+  await sweepHookOutput(loc, Date.now(), FILE_SYSTEM_SWEEP_OPS);
 }
 
 /** Binds every hooks hydration path to one runtime and one required state reader. */
@@ -1301,6 +1691,11 @@ export function createHooksHydration(
       if (!generationIsCurrent()) {
         return;
       }
+    },
+    async refreshMcpServers(cwd: string, projectTrusted: boolean): Promise<void> {
+      const capturedGeneration = runtime.currentGeneration();
+      const generationIsCurrent = (): boolean => runtime.currentGeneration() === capturedGeneration;
+      await refreshMcpServersWith(reader, cwd, projectTrusted, routingState, generationIsCurrent);
     },
     async registerHooksBridge(pi: ExtensionAPI, opts: RegisterHooksBridgeOptions): Promise<void> {
       await registerHooksBridgeWith(runtime, reader, pi, opts);

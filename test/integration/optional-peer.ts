@@ -6,13 +6,13 @@
 //
 // PIFL-03: an optional peer is never a `dependencies` or `devDependencies`
 // entry and never a lockfile package. `scripts/install-test-peers.mjs` puts
-// each declared floor in a gitignored cache, and `findCachedPeer` returns it.
-// A missing package, another package, or a version other than the floor
+// each suite version in a gitignored cache, and `findCachedPeer` returns it.
+// A missing package, another package, or a version other than that version
 // throws with the repair command.
 //
-// PIFL-02: the declared range and floor come from package.json
-// `peerDependencies`, so the tests prove exactly the versions the extension
-// declares and no separate constant can drift from them.
+// PIFL-02, D-PG1-02: package.json declares the range; the suite-version file
+// names any tested version above its floor. Each tested version must satisfy
+// its declared range.
 //
 // A peer's internal modules are often outside its `exports` map, so a bare
 // specifier cannot reach them. `importPeerModule` imports a file under the
@@ -24,7 +24,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-import { minVersion } from "semver";
+import { minVersion, satisfies } from "semver";
 
 // scripts/install-test-peers.mjs fills this directory; the two paths change together.
 const PEER_CACHE_NODE_MODULES = fileURLToPath(
@@ -82,36 +82,46 @@ async function readDeclaredPeerRange(packageName: string): Promise<string> {
   return range;
 }
 
-/** Returns the lowest version the declared `peerDependencies[packageName]` range admits. */
-async function readPeerFloor(packageName: string): Promise<string> {
+/** Returns the version the suites run, after checking the declared peer range. */
+async function readSuiteVersion(packageName: string): Promise<string> {
   const range = await readDeclaredPeerRange(packageName);
   const floor = minVersion(range);
   if (floor === null) {
     throw new Error(`package.json declares no usable ${packageName} peer range: ${range}`);
   }
 
-  return floor.version;
+  const suiteVersions = JSON.parse(
+    await readFile(new URL("./optional-peer-suite-versions.json", import.meta.url), "utf8"),
+  ) as Readonly<Record<string, string>>;
+  const version = suiteVersions[packageName] ?? floor.version;
+  if (!satisfies(version, range)) {
+    throw new Error(
+      `${packageName} suite version ${version} is outside declared peer range ${range}`,
+    );
+  }
+
+  return version;
 }
 
 /**
  * Returns `packageName` from the optional peer cache. Throws, naming the
  * repair command, when the cache holds no such package or holds a version
- * other than the declared floor.
+ * other than the version the suites run.
  */
 export async function findCachedPeer(packageName: string): Promise<OptionalPeer> {
-  const floor = await readPeerFloor(packageName);
+  const version = await readSuiteVersion(packageName);
   const peer = await readOptionalPeer(
     path.join(PEER_CACHE_NODE_MODULES, packageName),
     packageName,
   ).catch((error: unknown) => {
     throw new Error(
-      `${PEER_CACHE_NODE_MODULES} holds no ${packageName} ${floor}. ${PEER_CACHE_REMEDY}`,
+      `${PEER_CACHE_NODE_MODULES} holds no ${packageName} ${version}. ${PEER_CACHE_REMEDY}`,
       { cause: error },
     );
   });
-  if (peer.version !== floor) {
+  if (peer.version !== version) {
     throw new Error(
-      `${PEER_CACHE_NODE_MODULES} holds ${packageName} ${peer.version}, not the declared floor ${floor}. ${PEER_CACHE_REMEDY}`,
+      `${PEER_CACHE_NODE_MODULES} holds ${packageName} ${peer.version}, not suite version ${version}. ${PEER_CACHE_REMEDY}`,
     );
   }
 

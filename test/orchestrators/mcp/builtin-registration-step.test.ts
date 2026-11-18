@@ -179,6 +179,41 @@ function stubConfig(fixture: Session, scope: ScopeName, pluginRoot: string): Mcp
       CLAUDE_PLUGIN_DATA: dataDir(fixture, scope),
       TOKEN: "t$$1",
     },
+    timeout: 1800,
+    exposure: "deferred",
+  };
+}
+
+// D-PG10-20: the full option shape; the server names `tool` in args and env.
+function optionRecord(fixture: Session, toolDefault: string): PluginInstallRecord {
+  return {
+    ...installRecord(fixture.pluginRoot, [
+      {
+        name: "keyed",
+        config: {
+          command: "node",
+          args: ["${user_config.tool}"],
+          env: { TOOL: "${user_config.tool}" },
+        },
+      },
+    ]),
+    userConfig: {
+      tool: { type: "string", title: "Tool", description: "The tool.", default: toolDefault },
+    },
+  };
+}
+
+/** The config the server of `optionRecord` registers with when `tool` is `value`. */
+function keyedConfig(fixture: Session, value: string): McpServerConfig {
+  return {
+    command: "node",
+    args: [value],
+    env: {
+      CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
+      CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
+      TOOL: value,
+    },
+    timeout: 1800,
     exposure: "deferred",
   };
 }
@@ -329,6 +364,7 @@ describe("builtinRegistrationStep", () => {
             CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
             CLAUDE_PLUGIN_DATA: dataDir(fixture, "project"),
           },
+          timeout: 1800,
           exposure: "deferred",
         },
       ],
@@ -340,6 +376,7 @@ describe("builtinRegistrationStep", () => {
             CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
             CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
           },
+          timeout: 1800,
           exposure: "deferred",
         },
       ],
@@ -402,6 +439,7 @@ describe("builtinRegistrationStep", () => {
           CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
           CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
         },
+        timeout: 1800,
         exposure: "deferred",
       });
     }).thenReturn(undefined);
@@ -446,6 +484,7 @@ describe("builtinRegistrationStep", () => {
           CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
           CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
         },
+        timeout: 1800,
         exposure: "deferred",
       });
     }).thenReturn(undefined);
@@ -494,6 +533,7 @@ describe("builtinRegistrationStep", () => {
           CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
           CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
         },
+        timeout: 1800,
         exposure: "deferred",
       });
     }).thenReturn(undefined);
@@ -921,6 +961,7 @@ describe("builtinRegistrationStep", () => {
           CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
           CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
         },
+        timeout: 1800,
         exposure: "deferred",
       });
     }).thenReturn(undefined);
@@ -951,6 +992,7 @@ describe("builtinRegistrationStep", () => {
           CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
           CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
         },
+        timeout: 1800,
         exposure: "deferred",
       });
     }).thenReturn(undefined);
@@ -962,6 +1004,156 @@ describe("builtinRegistrationStep", () => {
     assert.deepStrictEqual(logged, [
       "[mcp] MCP server plugin_demo_home not registered: Pi would not run it as Claude Code does",
     ]);
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("D-PG10-21: a server that names a plugin option with no value is skipped and logged, and the plugin's other server registers", async (t) => {
+    // arrange
+    const fixture = await session(t);
+    const logged = captureDebugLog(t);
+    await writeState(fixture, "user", {
+      demo: {
+        ...installRecord(fixture.pluginRoot, [
+          { name: "keyed", config: { command: "node", env: { TOKEN: "${user_config.token}" } } },
+          { name: "plain", config: { command: "node" } },
+        ]),
+        userConfig: {
+          token: { type: "string", title: "Token", description: "The token.", required: true },
+        },
+      },
+    });
+    const ctx = sessionContext(fixture, false);
+    const pi = emptyRegistry();
+    when(() => {
+      pi.registerMcpServer("plugin_demo_plain", {
+        command: "node",
+        env: {
+          CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
+          CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
+        },
+        timeout: 1800,
+        exposure: "deferred",
+      });
+    }).thenReturn(undefined);
+
+    // act
+    await builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") });
+
+    // assert
+    assert.deepStrictEqual(logged, [
+      "[mcp] MCP server plugin_demo_keyed not registered: it names plugin options (unset): token",
+    ]);
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("D-PG10-25: a record whose userConfig does not parse skips each server that names an option, and the plugin's other server registers", async (t) => {
+    // arrange
+    const fixture = await session(t);
+    const logged = captureDebugLog(t);
+    await writeState(fixture, "user", {
+      demo: {
+        ...installRecord(fixture.pluginRoot, [
+          { name: "keyed", config: { command: "node", env: { TOKEN: "${user_config.token}" } } },
+          { name: "plain", config: { command: "node" } },
+        ]),
+        userConfig: "token=secret",
+      },
+    });
+    const ctx = sessionContext(fixture, false);
+    const pi = emptyRegistry();
+    when(() => {
+      pi.registerMcpServer("plugin_demo_plain", {
+        command: "node",
+        env: {
+          CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
+          CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
+        },
+        timeout: 1800,
+        exposure: "deferred",
+      });
+    }).thenReturn(undefined);
+
+    // act
+    await builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") });
+
+    // assert
+    assert.deepStrictEqual(logged, [
+      "[state] recorded userConfig ignored: userConfig is not an object",
+      "[mcp] MCP server plugin_demo_keyed not registered: it names plugin options (unset): token",
+    ]);
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("D-PG10-21: a record with no userConfig registers a server that names an option, with the reference as written", async (t) => {
+    // arrange
+    const fixture = await session(t);
+    await writeState(fixture, "user", {
+      demo: installRecord(fixture.pluginRoot, [
+        { name: "keyed", config: { command: "node", env: { TOKEN: "${user_config.token}" } } },
+      ]),
+    });
+    const ctx = sessionContext(fixture, false);
+    const pi = emptyRegistry();
+    when(() => {
+      pi.registerMcpServer("plugin_demo_keyed", {
+        command: "node",
+        env: {
+          CLAUDE_PLUGIN_ROOT: fixture.pluginRoot,
+          CLAUDE_PLUGIN_DATA: dataDir(fixture, "user"),
+          TOKEN: "$${user_config.token}",
+        },
+        timeout: 1800,
+        exposure: "deferred",
+      });
+    }).thenReturn(undefined);
+
+    // act & assert
+    await assert.doesNotReject(builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") }));
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("D-PG10-12: a record's option default reaches its registered server in args and env", async (t) => {
+    // arrange
+    const fixture = await session(t);
+    await writeState(fixture, "user", {
+      demo: optionRecord(fixture, "reverse"),
+    });
+    const ctx = sessionContext(fixture, false);
+    const pi = emptyRegistry();
+    when(() => {
+      pi.registerMcpServer("plugin_demo_keyed", keyedConfig(fixture, "reverse"));
+    }).thenReturn(undefined);
+
+    // act & assert
+    await assert.doesNotReject(builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") }));
+    verify(pi);
+    verify(ctx);
+  });
+
+  test("D-PG10-12: each session reads the record's options, so a changed default registers at the next session", async (t) => {
+    // arrange
+    const fixture = await session(t);
+    await writeState(fixture, "user", { demo: optionRecord(fixture, "reverse") });
+    const firstCtx = sessionContext(fixture, false);
+    const firstPi = emptyRegistry();
+    when(() => {
+      firstPi.registerMcpServer("plugin_demo_keyed", keyedConfig(fixture, "reverse"));
+    }).thenReturn(undefined);
+    await builtinRegistrationStep({ pi: firstPi, ctx: firstCtx, snapshot: runOf("builtin") });
+    await writeState(fixture, "user", { demo: optionRecord(fixture, "upper") });
+    const ctx = sessionContext(fixture, false);
+    const pi = emptyRegistry();
+    when(() => {
+      pi.registerMcpServer("plugin_demo_keyed", keyedConfig(fixture, "upper"));
+    }).thenReturn(undefined);
+
+    // act & assert
+    await assert.doesNotReject(builtinRegistrationStep({ pi, ctx, snapshot: runOf("builtin") }));
+    verify(firstPi);
     verify(pi);
     verify(ctx);
   });

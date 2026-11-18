@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { ChildProcess, spawn } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { PassThrough } from "node:stream";
@@ -13,11 +13,13 @@ import { dispatchHookExec } from "../../../extensions/pi-claude-marketplace/brid
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
 import type { StopFailureEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts";
 import type { StopEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/stop.ts";
+import type { UserPromptExpansionEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-expansion.ts";
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { DispatchableEvent } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import type {
@@ -25,6 +27,7 @@ import type {
   ExtensionContext,
   InputEvent,
   SessionBeforeCompactEvent,
+  BeforeAgentStartEvent,
   SessionCompactEvent,
   SessionShutdownEvent,
   SessionStartEvent,
@@ -51,6 +54,7 @@ test("executes a blocking hook through the portable process boundary", async (t)
     "PORTABLE_HOOK_PROBE",
     "CLAUDE_CODE_REMOTE",
     "CLAUDE_ENV_FILE",
+    "PI_SUBAGENT_CHILD",
   ] as const;
   const previousEnvironment = ownedEnvironmentKeys.map((key) => ({
     key,
@@ -70,6 +74,14 @@ test("executes a blocking hook through the portable process boundary", async (t)
   process.env.PORTABLE_HOOK_PROBE = "case-owned";
   delete process.env.CLAUDE_CODE_REMOTE;
   delete process.env.CLAUDE_ENV_FILE;
+  process.env.PI_SUBAGENT_CHILD = "1";
+  runtime.captureChildIdentity(
+    {
+      type: "before_agent_start",
+      systemPromptOptions: { customPrompt: '<active_agent name="a&amp;b&quot;c"/>\n\n' },
+    } as BeforeAgentStartEvent,
+    "portable-session",
+  );
 
   const consoleErrorSpy = t.mock.method(console, "error", () => undefined);
   const childOnceSpy = t.mock.method(ChildProcess.prototype, "once");
@@ -168,6 +180,7 @@ test("executes a blocking hook through the portable process boundary", async (t)
     },
     declarationIndex: 0,
     ifPredicate: MATCH_ALL_IF,
+    options: resolveOptions(undefined),
   } satisfies RoutingEntry;
   const event = {
     type: "tool_call",
@@ -222,6 +235,9 @@ test("executes a blocking hook through the portable process boundary", async (t)
     hook_event_name: "PreToolUse",
     tool_name: "Bash",
     tool_input: { command: "printf portable" },
+    tool_use_id: "portable-call",
+    agent_type: 'a&b"c',
+    agent_id: "portable-session",
   });
   const expectedEnvironment = Object.fromEntries(
     Object.entries(process.env).filter(
@@ -529,11 +545,21 @@ function makeEntry(
     handlerDecl,
     declarationIndex: 4,
     ifPredicate: MATCH_ALL_IF,
+    options: resolveOptions(undefined),
   };
 }
 
-function makeContext(cwd: string, sessionId = "dispatch-session"): ExtensionContext {
+function makeContext(
+  cwd: string,
+  sessionId = "dispatch-session",
+  model?: NonNullable<ExtensionContext["model"]>,
+  sessionName?: string,
+): ExtensionContext {
   const sessionManager = SessionManager.inMemory(cwd, { id: sessionId });
+  if (sessionName !== undefined) {
+    sessionManager.appendSessionInfo(sessionName);
+  }
+
   return {
     get ui(): ExtensionContext["ui"] {
       throw new Error("dispatchHookExec must not read ui");
@@ -545,7 +571,7 @@ function makeContext(cwd: string, sessionId = "dispatch-session"): ExtensionCont
     get modelRegistry(): ExtensionContext["modelRegistry"] {
       throw new Error("dispatchHookExec must not read modelRegistry");
     },
-    model: undefined,
+    model,
     scopedModels: [],
     isIdle(): never {
       throw new Error("dispatchHookExec must not call isIdle");
@@ -649,8 +675,8 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
   },
   {
     claudeEvent: "PreToolUse",
-    diagnosedOmissions: ["toolName", "input"],
-    benignOmission: "toolCallId",
+    diagnosedOmissions: ["toolName", "input", "toolCallId"],
+    benignOmission: "type",
     createEvent: () =>
       ({
         type: "tool_call",
@@ -661,12 +687,13 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
     eventFields: {
       tool_name: "Bash",
       tool_input: { command: "printf pre" },
+      tool_use_id: "pre-tool-call",
     },
   },
   {
     claudeEvent: "PostToolUse",
-    diagnosedOmissions: ["toolName", "input"],
-    benignOmission: "toolCallId",
+    diagnosedOmissions: ["toolName", "input", "toolCallId"],
+    benignOmission: "type",
     createEvent: () =>
       ({
         type: "tool_result",
@@ -680,13 +707,14 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
     eventFields: {
       tool_name: "Bash",
       tool_input: { command: "printf post" },
-      tool_response: [{ type: "text", text: "post\n" }],
+      tool_use_id: "post-tool-call",
+      tool_response: { interrupted: false, structuredContent: [{ type: "text", text: "post\n" }] },
     },
   },
   {
     claudeEvent: "PostToolUseFailure",
-    diagnosedOmissions: ["toolName", "input"],
-    benignOmission: "toolCallId",
+    diagnosedOmissions: ["toolName", "input", "toolCallId"],
+    benignOmission: "type",
     createEvent: () =>
       ({
         type: "tool_result",
@@ -700,6 +728,7 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
     eventFields: {
       tool_name: "Bash",
       tool_input: { command: "false" },
+      tool_use_id: "failed-tool-call",
       error: "exit 1",
       is_interrupt: false,
     },
@@ -735,7 +764,8 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
         willRetry: false,
         signal: new AbortController().signal,
       }) satisfies SessionBeforeCompactEvent,
-    eventFields: { trigger: "auto" },
+    // An automatic compaction sends no instructions, also when Pi carries a text (D-PG6-08).
+    eventFields: { trigger: "auto", custom_instructions: null },
   },
   {
     claudeEvent: "PostCompact",
@@ -801,6 +831,25 @@ const TRANSLATOR_CASES: readonly TranslatorCase[] = [
       last_assistant_message: "failed response",
     },
   },
+  {
+    claudeEvent: "UserPromptExpansion",
+    diagnosedOmissions: ["command_name", "command_args"],
+    benignOmission: "command_source",
+    createEvent: () =>
+      ({
+        command_name: "demo:deploy",
+        command_args: "staging",
+        command_source: "plugin",
+        input: { type: "input", text: "/demo:deploy staging", source: "interactive" },
+      }) satisfies UserPromptExpansionEvent,
+    eventFields: {
+      expansion_type: "slash_command",
+      command_name: "demo:deploy",
+      command_args: "staging",
+      command_source: "plugin",
+      prompt: "/demo:deploy staging",
+    },
+  },
 ];
 
 for (const translatorCase of TRANSLATOR_CASES) {
@@ -841,6 +890,352 @@ for (const translatorCase of TRANSLATOR_CASES) {
       assert.deepStrictEqual(processChild.killSignals, []);
     },
   );
+}
+
+// Only SessionStart sends the model, and only it and UserPromptSubmit send the
+// session title (D-PG6-09).
+const SESSION_FACT_FIELDS: Partial<Record<DispatchableEvent, Readonly<Record<string, string>>>> = {
+  SessionStart: { model: "dispatch-model", session_title: "Release prep" },
+  UserPromptSubmit: { session_title: "Release prep" },
+};
+
+const DISPATCH_MODEL = {
+  provider: "dispatch-provider",
+  id: "dispatch-model",
+  name: "Dispatch model",
+  api: "openai-completions",
+  baseUrl: "http://localhost:0",
+  reasoning: true,
+  input: ["text", "image"],
+  contextWindow: 32_000,
+  maxTokens: 4_000,
+  cost: { input: 1, output: 2, cacheRead: 3, cacheWrite: 4 },
+} satisfies NonNullable<ExtensionContext["model"]>;
+
+for (const translatorCase of TRANSLATOR_CASES) {
+  test(
+    "sends the " + translatorCase.claudeEvent + " stdin the model and the session name it takes",
+    async (t) => {
+      // arrange
+      const runtime = createHooksRuntime();
+      const caseRoot = await makeCaseRoot(t, "dispatch-session-facts-");
+      const processChild = makeInjectedChild(t);
+      const processBoundary = observeSpawn(t, processChild);
+      const entry = makeEntry(caseRoot, { claudeEvent: translatorCase.claudeEvent });
+      const context = makeContext(caseRoot, "dispatch-session", DISPATCH_MODEL, "Release prep");
+      const expectedPayload = {
+        session_id: "dispatch-session",
+        transcript_path: "",
+        cwd: caseRoot,
+        hook_event_name: translatorCase.claudeEvent,
+        ...translatorCase.eventFields,
+        ...SESSION_FACT_FIELDS[translatorCase.claudeEvent],
+      };
+
+      // act
+      const pendingOutcome = dispatchHookExec(
+        entry,
+        translatorCase.createEvent(),
+        context,
+        undefined,
+        runtime,
+        { spawnImpl: processBoundary.spawnImpl },
+      );
+      await processBoundary.spawned;
+      await processChild.close(0);
+      await pendingOutcome;
+      const stdin = Buffer.concat(processChild.stdinChunks).toString("utf8");
+
+      // assert
+      assert.strictEqual(stdin, JSON.stringify(expectedPayload));
+    },
+  );
+}
+
+test("omits stale child identity from synchronous stdin", { concurrency: false }, async (t) => {
+  // arrange
+  const previousMarker = process.env.PI_SUBAGENT_CHILD;
+  process.env.PI_SUBAGENT_CHILD = "1";
+  t.after(() => {
+    if (previousMarker === undefined) {
+      delete process.env.PI_SUBAGENT_CHILD;
+    } else {
+      process.env.PI_SUBAGENT_CHILD = previousMarker;
+    }
+  });
+  const runtime = createHooksRuntime();
+  runtime.captureChildIdentity(
+    {
+      type: "before_agent_start",
+      systemPromptOptions: { customPrompt: '<active_agent name="other-runner"/>\n\n' },
+    } as BeforeAgentStartEvent,
+    "other-session",
+  );
+  const root = await makeCaseRoot(t, "dispatch-identity-stale-");
+  const child = makeInjectedChild(t);
+  const boundary = observeSpawn(t, child);
+
+  // act
+  const pendingOutcome = dispatchHookExec(
+    makeEntry(root),
+    {
+      type: "tool_call",
+      toolCallId: "stale-call",
+      toolName: "bash",
+      input: { command: "printf stale" },
+    } satisfies ToolCallEvent,
+    makeContext(root, "current-session"),
+    undefined,
+    runtime,
+    { spawnImpl: boundary.spawnImpl },
+  );
+  await boundary.spawned;
+  await child.close(0);
+  const outcome = await pendingOutcome;
+  const payload: unknown = JSON.parse(Buffer.concat(child.stdinChunks).toString("utf8"));
+
+  // assert
+  assert.deepStrictEqual(outcome, { kind: "noop" });
+  assert.deepStrictEqual(payload, {
+    session_id: "current-session",
+    transcript_path: "",
+    cwd: root,
+    hook_event_name: "PreToolUse",
+    tool_name: "Bash",
+    tool_input: { command: "printf stale" },
+    tool_use_id: "stale-call",
+  });
+  assert.strictEqual(Object.hasOwn(payload, "agent_type"), false);
+  assert.strictEqual(Object.hasOwn(payload, "agent_id"), false);
+});
+
+const LAUNCHING_SESSION = {
+  sessionId: "launching-session",
+  transcriptPath: "/sessions/launching-session.jsonl",
+};
+
+function markSubagentChild(t: import("node:test").TestContext): void {
+  const previousMarker = process.env.PI_SUBAGENT_CHILD;
+  process.env.PI_SUBAGENT_CHILD = "1";
+  t.after(() => {
+    if (previousMarker === undefined) {
+      delete process.env.PI_SUBAGENT_CHILD;
+    } else {
+      process.env.PI_SUBAGENT_CHILD = previousMarker;
+    }
+  });
+}
+
+// D-PG6-01: a known child with a root names the launching session in its tool
+// payload and its session variables, and itself in `agent_id`.
+for (const translatorCase of TRANSLATOR_CASES.filter(({ claudeEvent }) =>
+  ["PreToolUse", "PostToolUse", "PostToolUseFailure"].includes(claudeEvent),
+)) {
+  test(
+    `names the launching session in a child's synchronous ${translatorCase.claudeEvent} stdin and env (D-PG6-01)`,
+    { concurrency: false },
+    async (t) => {
+      // arrange
+      markSubagentChild(t);
+      const runtime = createHooksRuntime();
+      runtime.captureChildIdentity(
+        {
+          type: "before_agent_start",
+          systemPromptOptions: { customPrompt: '<active_agent name="rooted-runner"/>\n\n' },
+        } as BeforeAgentStartEvent,
+        "rooted-session",
+      );
+      runtime.recordChildRoot("rooted-session", LAUNCHING_SESSION);
+      const root = await makeCaseRoot(t, "dispatch-identity-root-");
+      const child = makeInjectedChild(t);
+      const boundary = observeSpawn(t, child);
+
+      // act
+      const pendingOutcome = dispatchHookExec(
+        makeEntry(root, { claudeEvent: translatorCase.claudeEvent }),
+        translatorCase.createEvent(),
+        makeContext(root, "rooted-session"),
+        undefined,
+        runtime,
+        { spawnImpl: boundary.spawnImpl },
+      );
+      const call = await boundary.spawned;
+      await child.close(0);
+      const outcome = await pendingOutcome;
+      const payload: unknown = JSON.parse(Buffer.concat(child.stdinChunks).toString("utf8"));
+
+      // assert
+      assert.deepStrictEqual(outcome, { kind: "noop" });
+      assert.deepStrictEqual(payload, {
+        session_id: "launching-session",
+        transcript_path: "/sessions/launching-session.jsonl",
+        cwd: root,
+        hook_event_name: translatorCase.claudeEvent,
+        ...translatorCase.eventFields,
+        agent_type: "rooted-runner",
+        agent_id: "rooted-session",
+      });
+      assert.deepStrictEqual(
+        {
+          CLAUDE_CODE_SESSION_ID: call.options.env?.CLAUDE_CODE_SESSION_ID,
+          CLAUDE_SESSION_ID: call.options.env?.CLAUDE_SESSION_ID,
+        },
+        { CLAUDE_CODE_SESSION_ID: "launching-session", CLAUDE_SESSION_ID: "launching-session" },
+      );
+    },
+  );
+}
+
+// D-PG6-02: a child with no agent tag sends no `agent_id`, so it keeps its
+// own session fields even when its session has a recorded root.
+test(
+  "keeps the own session of a child whose identity is unavailable (D-PG6-02)",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    markSubagentChild(t);
+    const runtime = createHooksRuntime();
+    runtime.captureChildIdentity(
+      {
+        type: "before_agent_start",
+        systemPromptOptions: { customPrompt: "Answer the task." },
+      } as BeforeAgentStartEvent,
+      "untagged-session",
+    );
+    runtime.recordChildRoot("untagged-session", LAUNCHING_SESSION);
+    const root = await makeCaseRoot(t, "dispatch-identity-untagged-");
+    const child = makeInjectedChild(t);
+    const boundary = observeSpawn(t, child);
+
+    // act
+    const pendingOutcome = dispatchHookExec(
+      makeEntry(root),
+      {
+        type: "tool_call",
+        toolCallId: "untagged-call",
+        toolName: "bash",
+        input: { command: "printf untagged" },
+      } satisfies ToolCallEvent,
+      makeContext(root, "untagged-session"),
+      undefined,
+      runtime,
+      { spawnImpl: boundary.spawnImpl },
+    );
+    const call = await boundary.spawned;
+    await child.close(0);
+    const outcome = await pendingOutcome;
+    const payload: unknown = JSON.parse(Buffer.concat(child.stdinChunks).toString("utf8"));
+
+    // assert
+    assert.deepStrictEqual(outcome, { kind: "noop" });
+    assert.deepStrictEqual(payload, {
+      session_id: "untagged-session",
+      transcript_path: "",
+      cwd: root,
+      hook_event_name: "PreToolUse",
+      tool_name: "Bash",
+      tool_input: { command: "printf untagged" },
+      tool_use_id: "untagged-call",
+    });
+    assert.deepStrictEqual(
+      {
+        CLAUDE_CODE_SESSION_ID: call.options.env?.CLAUDE_CODE_SESSION_ID,
+        CLAUDE_SESSION_ID: call.options.env?.CLAUDE_SESSION_ID,
+      },
+      { CLAUDE_CODE_SESSION_ID: "untagged-session", CLAUDE_SESSION_ID: "untagged-session" },
+    );
+  },
+);
+
+// D-PG3-07: the synchronous lane of each tool event a child dispatches. A real
+// hook process records its stdin; the runtime captures another session's
+// identity once the process runs, and the recorded payload keeps the identity
+// of its own dispatch.
+for (const translatorCase of TRANSLATOR_CASES.filter(({ claudeEvent }) =>
+  ["PreToolUse", "PostToolUse", "PostToolUseFailure"].includes(claudeEvent),
+)) {
+  for (const { role, marker, identity } of [
+    {
+      role: "child",
+      marker: "1",
+      identity: { agent_type: "sync-runner", agent_id: "sync-session" },
+    },
+    { role: "main", marker: "0", identity: {} },
+  ] as const) {
+    test(
+      `records ${role} synchronous ${translatorCase.claudeEvent} stdin through a real process`,
+      { concurrency: false, timeout: 15_000 },
+      async (t) => {
+        // arrange
+        const previousMarker = process.env.PI_SUBAGENT_CHILD;
+        process.env.PI_SUBAGENT_CHILD = marker;
+        t.after(() => {
+          if (previousMarker === undefined) {
+            delete process.env.PI_SUBAGENT_CHILD;
+          } else {
+            process.env.PI_SUBAGENT_CHILD = previousMarker;
+          }
+        });
+        const runtime = createHooksRuntime();
+        const identityEvent = (agent: string): BeforeAgentStartEvent =>
+          ({
+            type: "before_agent_start",
+            systemPromptOptions: { customPrompt: `<active_agent name="${agent}"/>\n\n` },
+          }) as BeforeAgentStartEvent;
+        runtime.captureChildIdentity(identityEvent("sync-runner"), "sync-session");
+        const root = await makeCaseRoot(t, "dispatch-identity-real-");
+        const recordingPath = path.join(root, "stdin.json");
+        const spawned: ChildProcess[] = [];
+        const spawnImpl = t.mock.fn(
+          (command: string, args: readonly string[], options: SpawnOptions): ChildProcess => {
+            const child = spawn(command, [...args], options);
+            spawned.push(child);
+            runtime.captureChildIdentity(identityEvent("later-runner"), "later-session");
+            return child;
+          },
+        );
+        const entry = makeEntry(root, {
+          claudeEvent: translatorCase.claudeEvent,
+          command: process.execPath,
+          args: [
+            "-e",
+            'require("node:fs").writeFileSync(process.argv[1], require("node:fs").readFileSync(0));',
+            recordingPath,
+          ],
+        });
+
+        // act
+        const outcome = await dispatchHookExec(
+          entry,
+          translatorCase.createEvent(),
+          makeContext(root, "sync-session"),
+          undefined,
+          runtime,
+          // dispatchHookExec uses only spawn's three-argument overload with piped streams.
+          { spawnImpl: spawnImpl as unknown as typeof spawn },
+        );
+        const recorded: unknown = JSON.parse(await readFile(recordingPath, "utf8"));
+
+        // assert
+        assert.deepStrictEqual(outcome, { kind: "noop" });
+        assert.strictEqual(spawned.length, 1);
+        assert.deepStrictEqual(recorded, {
+          session_id: "sync-session",
+          transcript_path: "",
+          cwd: root,
+          hook_event_name: translatorCase.claudeEvent,
+          ...translatorCase.eventFields,
+          ...identity,
+        });
+        assert.strictEqual(Object.hasOwn(recorded as object, "agent_type"), role === "child");
+        assert.strictEqual(Object.hasOwn(recorded as object, "agent_id"), role === "child");
+        assert.deepStrictEqual(runtime.childIdentityFor("later-session"), {
+          kind: role === "child" ? "known" : "main",
+          ...(role === "child" ? { agentType: "later-runner", childId: "later-session" } : {}),
+        });
+      },
+    );
+  }
 }
 
 /**
@@ -944,7 +1339,7 @@ for (const translatorCase of TRANSLATOR_CASES) {
   );
 }
 
-test("contains a null unknown payload with diagnostics and no child", async (t) => {
+test("contains a null unknown payload as a runner failure with diagnostics and no child", async (t) => {
   // arrange
   const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-null-payload-");
@@ -965,9 +1360,14 @@ test("contains a null unknown payload with diagnostics and no child", async (t) 
     },
   );
   const lines = debugLines(errorSpy);
+  const caughtHead = "[hooks] exec: caught (dispatch-plugin/UserPromptSubmit): ";
+  const caughtError = lines.find((line) => line.startsWith(caughtHead))?.slice(caughtHead.length);
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "run", error: caughtError },
+  });
   assert.deepStrictEqual(processBoundary.calls, []);
   assert.deepStrictEqual(
     {
@@ -1025,7 +1425,7 @@ test("diagnoses a non-object unknown payload while containing its partial child 
   );
 });
 
-test("contains a wrong-shape payload whose required property throws", async (t) => {
+test("contains a wrong-shape payload whose required property throws as a runner failure", async (t) => {
   // arrange
   const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-wrong-shape-");
@@ -1034,6 +1434,7 @@ test("contains a wrong-shape payload whose required property throws", async (t) 
   const processBoundary = observeSpawn(t, processChild);
   const entry = makeEntry(caseRoot, { claudeEvent: "PreToolUse" });
   const event = {
+    toolCallId: "wrong-shape-call",
     get toolName(): never {
       throw new Error("wrong-shape toolName getter");
     },
@@ -1054,7 +1455,10 @@ test("contains a wrong-shape payload whose required property throws", async (t) 
   const lines = debugLines(errorSpy);
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "run", error: "wrong-shape toolName getter" },
+  });
   assert.deepStrictEqual(processBoundary.calls, []);
   assert.strictEqual(
     lines.some(
@@ -1428,7 +1832,7 @@ test("flushes an incomplete decoder tail before parsing the entry's plain stdout
   assert.deepStrictEqual(processChild.killSignals, []);
 });
 
-test("cancels timers and returns noop when the child emits a spawn error", async (t) => {
+test("cancels timers and settles with the spawn failure when the child emits a spawn error", async (t) => {
   // arrange
   const runtime = createHooksRuntime();
   const caseRoot = await makeCaseRoot(t, "dispatch-spawn-error-");
@@ -1454,7 +1858,10 @@ test("cancels timers and returns noop when the child emits a spawn error", async
   const lines = debugLines(errorSpy);
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "spawn", error: "spawn ENOENT" },
+  });
   assert.deepStrictEqual(processChild.killSignals, []);
   assert.strictEqual(processChild.child.listenerCount("error"), 0);
   assert.strictEqual(
@@ -1624,7 +2031,7 @@ test("spawns an exec-form hook with Claude's path variables filled in", async (t
   const processBoundary = observeSpawn(t, processChild);
   const entry = makeEntry(caseRoot, {
     command: "${CLAUDE_PLUGIN_ROOT}/bin/hook",
-    args: ["--data=${CLAUDE_PLUGIN_DATA}", "${CLAUDE_PROJECT_DIR}", "${user_config.token}"],
+    args: ["--data=${CLAUDE_PLUGIN_DATA}", "${CLAUDE_PROJECT_DIR}"],
   });
 
   // act
@@ -1649,10 +2056,46 @@ test("spawns an exec-form hook with Claude's path variables filled in", async (t
       args: [
         `--data=${path.join(caseRoot, ".pi", "pi-claude-marketplace", "data", "dispatch-marketplace", "dispatch-plugin")}`,
         caseRoot,
-        "${user_config.token}",
       ],
       shell: false,
     },
+  );
+});
+
+test("D-PG10-10: spawns an exec-form hook with its plugin options filled in", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const caseRoot = await makeCaseRoot(t, "dispatch-exec-options-");
+  const processChild = makeInjectedChild(t);
+  const processBoundary = observeSpawn(t, processChild);
+  const entry = {
+    ...makeEntry(caseRoot, {
+      command: "/usr/bin/${user_config.mode}",
+      args: ["--mode=${user_config.mode}"],
+    }),
+    options: resolveOptions({
+      mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+    }),
+  } satisfies RoutingEntry;
+
+  // act
+  const pendingOutcome = dispatchHookExec(
+    entry,
+    { toolName: "bash", input: {} },
+    makeContext(caseRoot),
+    undefined,
+    runtime,
+    { spawnImpl: processBoundary.spawnImpl },
+  );
+  const call = await processBoundary.spawned;
+  await processChild.close(0);
+  const hookOutcome = await pendingOutcome;
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+  assert.deepStrictEqual(
+    { command: call.command, args: call.args, shell: call.options.shell },
+    { command: "/usr/bin/fast", args: ["--mode=fast"], shell: false },
   );
 });
 
@@ -1692,8 +2135,122 @@ test("blocks a hook that cannot start when onFailure is block", async (t) => {
   });
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: ON_FAILURE_HEAD });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "block",
+    reason: ON_FAILURE_HEAD,
+    suppressOriginalPrompt: true,
+  });
 });
+
+const UNSET_TOKEN_MESSAGE =
+  `Plugin option "token" isn't set. Open /plugin manage to configure it, or check that ` +
+  `the plugin's userConfig schema declares "token".`;
+
+test("D-PG10-08: fails an exec-form hook that names an unset option without spawning it", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const caseRoot = await makeCaseRoot(t, "dispatch-exec-unset-option-");
+  const processChild = makeInjectedChild(t);
+  const processBoundary = observeSpawn(t, processChild);
+  const entry = makeEntry(caseRoot, { command: "guard", args: ["${user_config.token}"] });
+
+  // act
+  const hookOutcome = await dispatchHookExec(
+    entry,
+    { toolName: "bash", input: {} },
+    makeContext(caseRoot),
+    undefined,
+    runtime,
+    { spawnImpl: processBoundary.spawnImpl },
+  );
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "run", error: UNSET_TOKEN_MESSAGE },
+  });
+  assert.deepStrictEqual(processBoundary.calls, []);
+});
+
+test("D-PG10-08: blocks an exec-form hook that names an unset option when onFailure is block", async (t) => {
+  // arrange
+  const runtime = createHooksRuntime();
+  const caseRoot = await makeCaseRoot(t, "dispatch-exec-unset-option-block-");
+  const processChild = makeInjectedChild(t);
+  const processBoundary = observeSpawn(t, processChild);
+  const entry = makeEntry(caseRoot, {
+    command: "guard",
+    args: ["${user_config.token}"],
+    onFailure: "block",
+  });
+
+  // act
+  const hookOutcome = await dispatchHookExec(
+    entry,
+    { toolName: "bash", input: {} },
+    makeContext(caseRoot),
+    undefined,
+    runtime,
+    { spawnImpl: processBoundary.spawnImpl },
+  );
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "block",
+    reason: `${ON_FAILURE_HEAD}\n${UNSET_TOKEN_MESSAGE}`,
+    suppressOriginalPrompt: true,
+  });
+  assert.deepStrictEqual(processBoundary.calls, []);
+});
+
+const SHELL_REFUSAL_MESSAGE =
+  "Hook from plugin dispatch-plugin@dispatch-marketplace references ${user_config.*} in a " +
+  "shell-form command. The substituted value would be re-parsed by the shell. Use exec form " +
+  'instead \u2014 {"command": "<executable>", "args": ["${user_config.KEY}", ...]} \u2014 or ' +
+  "read $CLAUDE_PLUGIN_OPTION_<KEY> from the hook's environment. Command: guard ${user_config.mode}";
+
+for (const { onFailure, outcome } of [
+  {
+    onFailure: undefined,
+    outcome: { kind: "noop", failure: { kind: "run", error: SHELL_REFUSAL_MESSAGE } },
+  },
+  {
+    onFailure: "block",
+    outcome: {
+      kind: "block",
+      reason:
+        '[guard ${user_config.mode}]: failed; blocking because onFailure is "block"\n' +
+        SHELL_REFUSAL_MESSAGE,
+      suppressOriginalPrompt: true,
+    },
+  },
+] satisfies readonly { onFailure: string | undefined; outcome: HookExecResult }[]) {
+  test(`D-PG10-10: refuses a shell-form hook that names an option without spawning it (onFailure ${String(onFailure)})`, async (t) => {
+    // arrange
+    const runtime = createHooksRuntime();
+    const caseRoot = await makeCaseRoot(t, "dispatch-exec-shell-option-");
+    const processChild = makeInjectedChild(t);
+    const processBoundary = observeSpawn(t, processChild);
+    const entry = makeEntry(caseRoot, {
+      command: "guard ${user_config.mode}",
+      ...(onFailure === undefined ? {} : { onFailure }),
+    });
+
+    // act
+    const hookOutcome = await dispatchHookExec(
+      entry,
+      { toolName: "bash", input: {} },
+      makeContext(caseRoot),
+      undefined,
+      runtime,
+      { spawnImpl: processBoundary.spawnImpl },
+    );
+
+    // assert
+    assert.deepStrictEqual(hookOutcome, outcome);
+    assert.deepStrictEqual(processBoundary.calls, []);
+  });
+}
 
 test("blocks a hook that exits 1 when onFailure is block", async (t) => {
   // act
@@ -1707,7 +2264,11 @@ test("blocks a hook that exits 1 when onFailure is block", async (t) => {
   );
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: `${ON_FAILURE_HEAD}\nboom` });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "block",
+    reason: `${ON_FAILURE_HEAD}\nboom`,
+    suppressOriginalPrompt: true,
+  });
 });
 
 test("blocks a hook whose stdout starts and ends a JSON object that does not parse", async (t) => {
@@ -1722,7 +2283,11 @@ test("blocks a hook whose stdout starts and ends a JSON object that does not par
   );
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: ON_FAILURE_HEAD });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "block",
+    reason: ON_FAILURE_HEAD,
+    suppressOriginalPrompt: true,
+  });
 });
 
 test("lets a hook pass whose stdout opens a JSON object and does not close it", async (t) => {
@@ -1776,7 +2341,11 @@ test("blocks a hook that exits 1 whose JSON allows the call when onFailure is bl
   );
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: ON_FAILURE_HEAD });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "block",
+    reason: ON_FAILURE_HEAD,
+    suppressOriginalPrompt: true,
+  });
 });
 
 test("blocks a hook its timeout killed with the timed out message", async (t) => {
@@ -1800,6 +2369,7 @@ test("blocks a hook its timeout killed with the timed out message", async (t) =>
   assert.deepStrictEqual(hookOutcome, {
     kind: "block",
     reason: '[guard]: timed out; blocking because onFailure is "block"',
+    suppressOriginalPrompt: true,
   });
 });
 
@@ -1936,6 +2506,7 @@ describe("PostCompact runs (D-BG-503)", () => {
       outcome: {
         kind: "block",
         reason: `${ON_FAILURE_HEAD}\nboom`,
+        suppressOriginalPrompt: true,
         postCompactRun: { succeeded: false, output: `${ON_FAILURE_RUN}\nboom` },
       },
     },
@@ -1946,7 +2517,11 @@ describe("PostCompact runs (D-BG-503)", () => {
         child.emitError(new Error("refusing /home/alice/.pi/agent/data/acme"));
         return Promise.resolve();
       },
-      outcome: { kind: "noop", postCompactRun: { succeeded: false, output: "refusing acme" } },
+      outcome: {
+        kind: "noop",
+        failure: { kind: "spawn", error: "refusing acme" },
+        postCompactRun: { succeeded: false, output: "refusing acme" },
+      },
     },
     {
       name: "the onFailure block of a hook that cannot start",
@@ -1959,6 +2534,7 @@ describe("PostCompact runs (D-BG-503)", () => {
       outcome: {
         kind: "block",
         reason: `${ON_FAILURE_HEAD}\nno shell`,
+        suppressOriginalPrompt: true,
         postCompactRun: { succeeded: false, output: `${ON_FAILURE_RUN}\nspawn guard ENOENT` },
       },
     },
@@ -1982,6 +2558,7 @@ describe("PostCompact runs (D-BG-503)", () => {
       outcome: {
         kind: "block",
         reason: '[guard]: timed out; blocking because onFailure is "block"\nlate',
+        suppressOriginalPrompt: true,
         postCompactRun: {
           succeeded: false,
           output: 'timed out; blocking because onFailure is "block"',
@@ -2027,6 +2604,7 @@ describe("PostCompact runs (D-BG-503)", () => {
     assert.deepStrictEqual(hookOutcome, {
       kind: "block",
       reason: `${ON_FAILURE_HEAD}\nrefusing acme`,
+      suppressOriginalPrompt: true,
       postCompactRun: { succeeded: false, output: `${ON_FAILURE_RUN}\nrefusing acme` },
     });
   });
@@ -2064,6 +2642,7 @@ test("blocks a hook whose spawn throws when onFailure is block", async (t) => {
   assert.deepStrictEqual(hookOutcome, {
     kind: "block",
     reason: `${ON_FAILURE_HEAD}\nThe argument 'file' must be a string without null bytes`,
+    suppressOriginalPrompt: true,
   });
 });
 
@@ -2086,10 +2665,11 @@ test("redacts absolute paths from the cause of a hook that cannot start", async 
   assert.deepStrictEqual(hookOutcome, {
     kind: "block",
     reason: `${ON_FAILURE_HEAD}\nrefusing acme`,
+    suppressOriginalPrompt: true,
   });
 });
 
-test("keeps a hook whose spawn throws a noop without onFailure", async (t) => {
+test("settles a hook whose spawn throws without onFailure with the runner failure (D-PG5-10)", async (t) => {
   // arrange
   const caseRoot = await makeCaseRoot(t, "dispatch-start-throw-");
 
@@ -2100,14 +2680,34 @@ test("keeps a hook whose spawn throws a noop without onFailure", async (t) => {
     makeContext(caseRoot),
     undefined,
     createHooksRuntime(),
-    { spawnImpl: throwingSpawn(t) },
+    { spawnImpl: throwingSpawn(t, "refusing /home/alice/.pi/agent/data/acme") },
   );
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "run", error: "refusing acme" },
+  });
 });
 
-test("keeps a failing hook without onFailure a noop", async (t) => {
+test("settles a hook whose child cannot be spawned with the redacted spawn failure (D-PG5-10)", async (t) => {
+  // arrange
+  const spawnError = new Error("spawn /home/alice/plugins/demo/hooks/guard.sh ENOENT");
+
+  // act
+  const hookOutcome = await dispatchDriven(t, { command: "guard" }, (child) => {
+    child.emitError(spawnError);
+    return Promise.resolve();
+  });
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "spawn", error: "spawn guard.sh ENOENT" },
+  });
+});
+
+test("settles a hook that exits 1 without onFailure with its failure (D-PG5-10)", async (t) => {
   // act
   const hookOutcome = await dispatchDriven(t, { command: "guard" }, async (child) => {
     child.stderr?.write("boom\n");
@@ -2115,7 +2715,81 @@ test("keeps a failing hook without onFailure a noop", async (t) => {
   });
 
   // assert
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "exit", stderr: "boom\n" },
+  });
+});
+
+test("settles a hook that prints a JSON object before it exits 1 with no failure (D-PG5-10)", async (t) => {
+  // act
+  const hookOutcome = await dispatchDriven(t, { command: "guard" }, async (child) => {
+    child.stdout?.write('{"systemMessage":"hi"}');
+    child.stderr?.write("boom\n");
+    await child.close(1);
+  });
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "noop", systemMessage: "hi" });
+});
+
+test("settles a hook that a signal other than its timeout ended with its failure (D-PG5-10)", async (t) => {
+  // act
+  const hookOutcome = await dispatchDriven(t, { command: "guard" }, async (child) => {
+    child.stderr?.write("killed\n");
+    await child.close(null, "SIGKILL");
+  });
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "exit", stderr: "killed\n" },
+  });
+});
+
+test("settles a hook that its own timeout ended with no failure (D-PG5-10)", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+
+  // act
+  const hookOutcome = await dispatchDriven(t, { command: "guard", timeout: 1 }, async (child) => {
+    t.mock.timers.tick(1_000);
+    child.stderr?.write("late\n");
+    await child.close(null, "SIGTERM");
+  });
+
+  // assert
   assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+});
+
+test("keeps the JSON system message of a hook that its timeout ended and that exits 1", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+
+  // act
+  const hookOutcome = await dispatchDriven(t, { command: "guard", timeout: 1 }, async (child) => {
+    t.mock.timers.tick(1_000);
+    child.stdout?.write('{"systemMessage":"late"}');
+    await child.close(1);
+  });
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "noop", systemMessage: "late" });
+});
+
+test("keeps the JSON block of a hook that its timeout ended and that exits 1", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+
+  // act
+  const hookOutcome = await dispatchDriven(t, { command: "guard", timeout: 1 }, async (child) => {
+    t.mock.timers.tick(1_000);
+    child.stdout?.write('{"decision":"block","reason":"late"}');
+    await child.close(1);
+  });
+
+  // assert
+  assert.deepStrictEqual(hookOutcome, { kind: "block", reason: "late" });
 });
 
 test("keeps the exit-2 block of a hook with onFailure block", async (t) => {
@@ -2152,6 +2826,7 @@ test("blocks a hook that exits 1 with its whole stderr past 64 KB when onFailure
   assert.deepStrictEqual(hookOutcome, {
     kind: "block",
     reason: `${ON_FAILURE_HEAD}\nboom\n${"e".repeat(64 * 1024)}`,
+    suppressOriginalPrompt: true,
   });
 });
 
@@ -2378,7 +3053,10 @@ test("contains a synchronous stdin end failure and cancels on child error", asyn
   const lines = debugLines(errorSpy);
 
   // assert
-  assert.deepStrictEqual(hookOutcome, { kind: "noop" });
+  assert.deepStrictEqual(hookOutcome, {
+    kind: "noop",
+    failure: { kind: "run", error: "synchronous stdin end failure" },
+  });
   assert.deepStrictEqual(processChild.stdinOrder, ["error-listener"]);
   assert.deepStrictEqual(processChild.killSignals, []);
   assert.strictEqual(
@@ -2449,6 +3127,7 @@ test("lets a hook that prints more than 1 MB run to its timeout", async (t) => {
   assert.deepStrictEqual(hookOutcome, {
     kind: "block",
     reason: '[guard]: timed out; blocking because onFailure is "block"',
+    suppressOriginalPrompt: true,
   });
 });
 
@@ -2470,5 +3149,278 @@ test("blocks on the exit code of a hook whose two streams pass 1 MB and 64 KB", 
     kind: "block",
     reason: `denied\n${"e".repeat(64 * 1024)}more`,
     fromStderr: true,
+  });
+});
+
+describe("the 10,000-character context cap (D-PG5-14, D-PG5-15)", () => {
+  const PROMPT_EVENT = { type: "input", text: "hello", source: "interactive" } satisfies InputEvent;
+  const BIG = "x".repeat(12_000);
+  const SAVED_WRAPPER =
+    "<persisted-output>\n" +
+    "Output too large (11.7KB). Full output saved to: /saved/hook.txt\n\n" +
+    `Preview (first 2KB):\n${"x".repeat(2_000)}\n...\n</persisted-output>`;
+
+  function contextStdout(context: string, extra = ""): string {
+    return `{${extra}"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"${context}"}}`;
+  }
+
+  // A writer double that records each save and settles as `outcome` gives.
+  function createSaver(outcome: () => Promise<string> = () => Promise.resolve("/saved/hook.txt")) {
+    const saves: { dataRoot: string; id: string; source: string; text: string }[] = [];
+    let announceSave: () => void = () => undefined;
+    const saving = new Promise<void>((resolve) => {
+      announceSave = resolve;
+    });
+    const saveHookOutput = (
+      loc: { readonly dataRoot: string },
+      id: string,
+      source: string,
+      text: string,
+    ): Promise<string> => {
+      saves.push({ dataRoot: loc.dataRoot, id, source, text });
+      announceSave();
+      return outcome();
+    };
+
+    return { saves, saving, saveHookOutput };
+  }
+
+  async function dispatchPrompt(
+    t: import("node:test").TestContext,
+    stdout: string,
+    saver: ReturnType<typeof createSaver>,
+  ): Promise<{ readonly outcome: HookExecResult; readonly dataRoot: string }> {
+    const caseRoot = await makeCaseRoot(t, "dispatch-context-cap-");
+    const processChild = makeInjectedChild(t);
+    const processBoundary = observeSpawn(t, processChild);
+    const pendingOutcome = dispatchHookExec(
+      makeEntry(caseRoot, { claudeEvent: "UserPromptSubmit" }),
+      PROMPT_EVENT,
+      makeContext(caseRoot),
+      undefined,
+      createHooksRuntime(),
+      {
+        spawnImpl: processBoundary.spawnImpl,
+        dispatchId: () => "id-1",
+        saveHookOutput: saver.saveHookOutput,
+      },
+    );
+    await processBoundary.spawned;
+    processChild.stdout?.write(stdout);
+    await processChild.close(0);
+    return {
+      outcome: await pendingOutcome,
+      dataRoot: path.join(caseRoot, ".pi", "pi-claude-marketplace", "data"),
+    };
+  }
+
+  test("settles a 12,000-character additionalContext as the saved wrapper", async (t) => {
+    // arrange
+    const saver = createSaver();
+
+    // act
+    const { outcome, dataRoot } = await dispatchPrompt(t, contextStdout(BIG), saver);
+
+    // assert
+    assert.deepStrictEqual(
+      { outcome, saves: saver.saves },
+      {
+        outcome: { kind: "mutate", additionalContext: SAVED_WRAPPER },
+        saves: [{ dataRoot, id: "id-1", source: "additionalContext", text: BIG }],
+      },
+    );
+  });
+
+  test("saves 12,000 characters of plain prompt stdout with the source stdout", async (t) => {
+    // arrange
+    const saver = createSaver();
+
+    // act
+    const { outcome, dataRoot } = await dispatchPrompt(t, `${BIG}\n`, saver);
+
+    // assert
+    assert.deepStrictEqual(
+      { outcome, saves: saver.saves },
+      {
+        outcome: { kind: "mutate", additionalContext: SAVED_WRAPPER },
+        saves: [{ dataRoot, id: "id-1", source: "stdout", text: BIG }],
+      },
+    );
+  });
+
+  for (const { name, stdout, outcome } of [
+    {
+      name: "a context of 10,000 characters",
+      stdout: contextStdout("x".repeat(10_000)),
+      outcome: { kind: "mutate", additionalContext: "x".repeat(10_000) },
+    },
+    {
+      name: "a context of 6,000 characters",
+      stdout: contextStdout("x".repeat(6_000)),
+      outcome: { kind: "mutate", additionalContext: "x".repeat(6_000) },
+    },
+    {
+      name: "a result with no context",
+      stdout: '{"suppressOutput":true}',
+      outcome: { kind: "noop", suppressOutput: true },
+    },
+  ] satisfies { name: string; stdout: string; outcome: HookExecResult }[]) {
+    test(`settles ${name} unchanged and saves nothing`, async (t) => {
+      // arrange
+      const saver = createSaver();
+
+      // act
+      const settled = await dispatchPrompt(t, stdout, saver);
+
+      // assert
+      assert.deepStrictEqual(
+        { outcome: settled.outcome, saves: saver.saves },
+        { outcome, saves: [] },
+      );
+    });
+  }
+
+  test("settles the failure text and keeps the decision when the save rejects", async (t) => {
+    // arrange
+    const saver = createSaver(() => Promise.reject(new Error("disk full")));
+    const marker =
+      "\n\n[Hook additionalContext truncated at 10000 chars \u2014 persist-to-disk failed: disk full]";
+
+    // act
+    const { outcome } = await dispatchPrompt(
+      t,
+      contextStdout(BIG, '"decision":"block","reason":"no",'),
+      saver,
+    );
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      kind: "block",
+      reason: "no",
+      additionalContext: "x".repeat(10_000 - marker.length) + marker,
+    });
+  });
+
+  test("writes the saved file under the scope's data root with the production writer", async (t) => {
+    // arrange
+    const caseRoot = await makeCaseRoot(t, "dispatch-context-file-");
+    const processChild = makeInjectedChild(t);
+    const processBoundary = observeSpawn(t, processChild);
+    const folder = path.join(
+      caseRoot,
+      ".pi",
+      "pi-claude-marketplace",
+      "data",
+      "_shared",
+      "hook-output",
+    );
+
+    // act
+    const pendingOutcome = dispatchHookExec(
+      makeEntry(caseRoot, { claudeEvent: "UserPromptSubmit" }),
+      PROMPT_EVENT,
+      makeContext(caseRoot),
+      undefined,
+      createHooksRuntime(),
+      { spawnImpl: processBoundary.spawnImpl },
+    );
+    await processBoundary.spawned;
+    processChild.stdout?.write(contextStdout(BIG));
+    await processChild.close(0);
+    const outcome = await pendingOutcome;
+    const names = await readdir(folder);
+    const savedPath = path.join(folder, names[0] ?? "");
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        names: names.map((name) => /^hook-[0-9a-f-]{36}-additionalContext\.txt$/u.test(name)),
+        outcome,
+        saved: await readFile(savedPath, "utf8"),
+      },
+      {
+        names: [true],
+        outcome: {
+          kind: "mutate",
+          additionalContext: SAVED_WRAPPER.replace("/saved/hook.txt", savedPath),
+        },
+        saved: BIG,
+      },
+    );
+  });
+
+  test("cancels the timer at close, before the save ends, and ignores an error during the save", async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    let releaseSave: (filePath: string) => void = () => undefined;
+    const held = new Promise<string>((resolve) => {
+      releaseSave = resolve;
+    });
+    const saver = createSaver(() => held);
+    const caseRoot = await makeCaseRoot(t, "dispatch-context-order-");
+    const processChild = makeInjectedChild(t);
+    const processBoundary = observeSpawn(t, processChild);
+    let settlements = 0;
+
+    // act
+    const pendingOutcome = dispatchHookExec(
+      makeEntry(caseRoot, { claudeEvent: "UserPromptSubmit", timeout: 2 }),
+      PROMPT_EVENT,
+      makeContext(caseRoot),
+      undefined,
+      createHooksRuntime(),
+      { spawnImpl: processBoundary.spawnImpl, saveHookOutput: saver.saveHookOutput },
+    );
+    void pendingOutcome.then(() => {
+      settlements += 1;
+    });
+    await processBoundary.spawned;
+    processChild.stdout?.write(contextStdout(BIG));
+    await processChild.close(0);
+    await saver.saving;
+    t.mock.timers.tick(7_000);
+    processChild.emitError(new Error("late during the save"));
+    const settledDuringSave = settlements;
+    releaseSave("/saved/hook.txt");
+    const outcome = await pendingOutcome;
+
+    // assert
+    assert.deepStrictEqual(
+      { settledDuringSave, killSignals: processChild.killSignals, outcome, settlements },
+      {
+        settledDuringSave: 0,
+        killSignals: [],
+        outcome: { kind: "mutate", additionalContext: SAVED_WRAPPER },
+        settlements: 1,
+      },
+    );
+  });
+
+  test("settles a spawn error once when the process closes after it", async (t) => {
+    // arrange
+    const caseRoot = await makeCaseRoot(t, "dispatch-error-then-close-");
+    const processChild = makeInjectedChild(t);
+    const processBoundary = observeSpawn(t, processChild);
+
+    // act
+    const pendingOutcome = dispatchHookExec(
+      makeEntry(caseRoot, { claudeEvent: "UserPromptSubmit" }),
+      PROMPT_EVENT,
+      makeContext(caseRoot),
+      undefined,
+      createHooksRuntime(),
+      { spawnImpl: processBoundary.spawnImpl },
+    );
+    await processBoundary.spawned;
+    processChild.emitError(new Error("spawn ENOENT"));
+    processChild.stdout?.write(contextStdout(BIG));
+    await processChild.close(0);
+    const outcome = await pendingOutcome;
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      kind: "noop",
+      failure: { kind: "spawn", error: "spawn ENOENT" },
+    });
   });
 });

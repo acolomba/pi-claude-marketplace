@@ -38,6 +38,9 @@
  *   `"stop_hook_active":true`, so a Stop hook blocks once and lets the
  *   re-entered turn end.
  * - `stderr` and `output`: text it prints, as written, to stderr and stdout.
+ * - `when old string` or `when last message`, with `matched output`: it
+ *   prints `matched output` instead of `output` when the stdin's
+ *   `tool_input.old_string`, or its `last_assistant_message`, is the cell.
  * - `output bytes`: a number of `x` bytes it prints to stdout after `output`,
  *   such as more than 1 MB of output.
  * - `trailing output`: text it prints, as written, to stdout after
@@ -68,10 +71,11 @@
  * A script hook that sets `async`, `async rewake`, or `waits` is a lifecycle
  * hook (D-BG-12). Before it reads its stdin, its script writes its pid to
  * `<harness dir>/hook-<name>-<pid>.pid`, which the release of the profile Pi
- * reads to stop the script and then checks as a stand-in's. Right after
- * recording, it runs the recorder in its lifecycle mode with `start`. When it
- * exits, it runs the recorder with `end` and its exit code, then removes the
- * pid file. Every other hook writes neither.
+ * reads to stop the script and then checks as a stand-in's. The release also
+ * reads the bridge's PID table to stop a child before its script writes that
+ * file. Right after recording, the script runs the recorder in its lifecycle
+ * mode with `start`. When it exits, it runs the recorder with `end` and its
+ * exit code, then removes the pid file. Every other hook writes neither.
  *
  * A lifecycle script runs only while the hook gate of the Pi that started it
  * is open. The gate is the file `<harness dir>/hook-gate-<id>`, and the Pi's
@@ -114,6 +118,9 @@ export interface RecordingHook {
   readonly form?: RecordingHookForm;
   readonly arguments?: readonly string[];
   readonly output?: string;
+  readonly whenOldString?: string;
+  readonly whenLastMessage?: string;
+  readonly matchedOutput?: string;
   readonly outputBytes?: number;
   readonly trailingOutput?: string;
   readonly stderr?: string;
@@ -145,6 +152,9 @@ const SCRIPT_FORMS: ReadonlySet<RecordingHookForm | undefined> = new Set<Recordi
 // The fields only a script can act on, by the column that sets each.
 const BEHAVIOR_FIELDS = {
   output: "output",
+  "when old string": "whenOldString",
+  "when last message": "whenLastMessage",
+  "matched output": "matchedOutput",
   "output bytes": "outputBytes",
   "trailing output": "trailingOutput",
   stderr: "stderr",
@@ -235,6 +245,9 @@ const COLUMN_PARSERS: Readonly<Record<string, (cell: string) => Partial<Recordin
   form: (cell) => ({ form: oneOf(cell, FORMS, "a hook form") }),
   arguments: (cell) => ({ arguments: parseArguments(cell) }),
   output: (cell) => ({ output: cell }),
+  "when old string": (cell) => ({ whenOldString: cell }),
+  "when last message": (cell) => ({ whenLastMessage: cell }),
+  "matched output": (cell) => ({ matchedOutput: cell }),
   "output bytes": (cell) => ({ outputBytes: parseByteCount(cell) }),
   "trailing output": (cell) => ({ trailingOutput: cell }),
   stderr: (cell) => ({ stderr: cell }),
@@ -434,6 +447,19 @@ function releaseLines(name: string): string[] {
   ];
 }
 
+// The variables that make the recorder choose between `matched output` and
+// `output`, one for each condition the row sets.
+function conditions(hook: RecordingHook): string[] {
+  return [
+    ...(hook.whenOldString === undefined
+      ? []
+      : [`HOOK_WHEN_OLD_STRING=${shellQuoted(hook.whenOldString)}`]),
+    ...(hook.whenLastMessage === undefined
+      ? []
+      : [`HOOK_WHEN_LAST_MESSAGE=${shellQuoted(hook.whenLastMessage)}`]),
+  ];
+}
+
 // The lines a script runs after it records.
 function afterRecording(hook: RecordingHook): string[] {
   return [
@@ -441,7 +467,9 @@ function afterRecording(hook: RecordingHook): string[] {
       ? [`case "$stdin" in *'"stop_hook_active":true'*) exit 0 ;; esac`]
       : []),
     ...(hook.stderr === undefined ? [] : [`printf '%s' ${shellQuoted(hook.stderr)} >&2`]),
-    ...(hook.output === undefined ? [] : [`printf '%s' ${shellQuoted(hook.output)}`]),
+    ...(hook.output === undefined || conditions(hook).length > 0
+      ? []
+      : [`printf '%s' ${shellQuoted(hook.output)}`]),
     ...(hook.outputBytes === undefined
       ? []
       : [String.raw`head -c ${hook.outputBytes} /dev/zero | tr '\0' x`]),
@@ -459,7 +487,12 @@ function afterRecording(hook: RecordingHook): string[] {
 function scriptText(hook: RecordingHook): string {
   const meeting = hook.meets === undefined ? [] : meetingLines(hook.name, hook.meets);
   const marker = hook.meets === undefined ? "" : ' "$meeting"';
-  const recorder = `"${process.execPath}" "${HOOK_RECORDER_PATH}" ${hook.name}${marker} "$@"`;
+  const set = conditions(hook);
+  const conditional =
+    set.length === 0
+      ? ""
+      : `${set.join(" ")} HOOK_MATCHED_OUTPUT=${shellQuoted(hook.matchedOutput ?? "")} HOOK_DEFAULT_OUTPUT=${shellQuoted(hook.output ?? "")} `;
+  const recorder = `${conditional}"${process.execPath}" "${HOOK_RECORDER_PATH}" ${hook.name}${marker} "$@"`;
   const lifecycle = isLifecycleHook(hook);
   return `${[
     "#!/bin/sh",
@@ -579,6 +612,96 @@ export interface HookGate {
   readonly environment: { readonly [HOOK_GATE_VARIABLE]: string };
 }
 
+interface RegisteredHookProcess {
+  readonly pid: number;
+  readonly dispatchId: string;
+}
+
+async function registeredHookProcesses(scopeRoot: string): Promise<RegisteredHookProcess[]> {
+  const table = path.join(
+    scopeRoot,
+    "pi-claude-marketplace",
+    "data",
+    "_shared",
+    "async-rewake-pids.json",
+  );
+  let raw: string;
+  try {
+    raw = await readFile(table, "utf8");
+  } catch (error: unknown) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return [];
+    }
+
+    throw error;
+  }
+
+  const tableValue: unknown = JSON.parse(raw);
+  if (
+    typeof tableValue !== "object" ||
+    tableValue === null ||
+    !("version" in tableValue) ||
+    tableValue.version !== 1 ||
+    !("entries" in tableValue) ||
+    !Array.isArray(tableValue.entries)
+  ) {
+    throw new Error(`invalid hook PID table: ${table}`);
+  }
+
+  const entries: unknown[] = tableValue.entries;
+  return entries.map((entry) => {
+    if (
+      typeof entry !== "object" ||
+      entry === null ||
+      !("pid" in entry) ||
+      typeof entry.pid !== "number" ||
+      !Number.isSafeInteger(entry.pid) ||
+      entry.pid < 2 ||
+      !("dispatchId" in entry) ||
+      typeof entry.dispatchId !== "string"
+    ) {
+      throw new Error(`invalid hook PID table entry: ${table}`);
+    }
+
+    return { pid: entry.pid, dispatchId: entry.dispatchId };
+  });
+}
+
+async function isRegisteredHookProcess(entry: RegisteredHookProcess): Promise<boolean> {
+  if (process.platform !== "linux") {
+    return true;
+  }
+
+  try {
+    const environ = await readFile(`/proc/${entry.pid}/environ`, "utf8");
+    return environ
+      .split("\0")
+      .includes(`PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=${entry.dispatchId}`);
+  } catch (error: unknown) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+async function stopRegisteredHookProcess(entry: RegisteredHookProcess): Promise<void> {
+  if (!(await isRegisteredHookProcess(entry))) {
+    return;
+  }
+
+  try {
+    process.kill(-entry.pid, "SIGKILL");
+  } catch {
+    try {
+      process.kill(entry.pid, "SIGKILL");
+    } catch {
+      // The child already exited.
+    }
+  }
+}
+
 /**
  * Opens a new hook gate in `harness`. Only a Pi whose release passes the gate
  * to `stopHookScripts()` after the Pi stops may get its environment. The gate
@@ -592,17 +715,39 @@ export async function openHookGate(harness: string): Promise<HookGate> {
 }
 
 /**
- * Closes `gate`, then SIGKILLs each lifecycle hook script that a pid file in
- * `harness` names and that still runs. Call it once the Pi of the gate has
- * stopped. Pi starts each hook as the leader of a process group of its own,
- * so stopping a Pi and its group leaves the hook running. A scenario's
- * release stops what the scenario left, so that a waiting script cannot take
- * the release marker of a later scenario. A script of that Pi that had not
- * written its pid file when the release read them finds the gate closed and
- * exits, so none outlives the release. Closing a closed gate does nothing.
+ * Closes `gate`, so that a lifecycle hook script of a Pi with that gate that
+ * starts or has not yet written its pid file exits at once. Closing a closed
+ * gate does nothing (D-BG-12).
  */
-export async function stopHookScripts(harness: string, gate: HookGate): Promise<void> {
+export async function closeHookGate(harness: string, gate: HookGate): Promise<void> {
   await rm(gateFile(harness, gate.id), { force: true });
+}
+
+/**
+ * Closes `gate`, stops the hook groups that the bridge's PID table in each of
+ * `scopeRoots` registers, then SIGKILLs each lifecycle hook script that a pid
+ * file in `harness` names and that still runs. Call it once the Pi of the
+ * gate has stopped. Pi starts each hook as the leader of a process group of
+ * its own, so stopping a Pi and its group leaves the hook running. A
+ * scenario's release stops what the scenario left, so that a waiting script
+ * cannot take the release marker of a later scenario. The registry's table
+ * covers a child that started before its script wrote its pid file, and a
+ * script of that Pi that had not written its pid file when the release read
+ * them finds the gate closed and exits, so none outlives the release. Closing
+ * a closed gate does nothing.
+ */
+export async function stopHookScripts(
+  harness: string,
+  gate: HookGate,
+  scopeRoots: readonly string[],
+): Promise<void> {
+  await closeHookGate(harness, gate);
+  for (const scopeRoot of scopeRoots) {
+    for (const entry of await registeredHookProcesses(scopeRoot)) {
+      await stopRegisteredHookProcess(entry);
+    }
+  }
+
   for (const pid of await readHookScriptPids(harness)) {
     try {
       process.kill(pid, "SIGKILL");

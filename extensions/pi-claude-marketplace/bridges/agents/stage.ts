@@ -87,6 +87,7 @@ export async function prepareStagePluginAgents(
     knownSkills,
     mapModel,
     cwd,
+    options,
   } = input;
 
   // SUB-02: ${CLAUDE_PROJECT_DIR} resolves to the install cwd only for project
@@ -104,7 +105,8 @@ export async function prepareStagePluginAgents(
   const discoverWarnings: readonly string[] = discoverResult.warnings;
 
   // D-CF4-04: read the source of every skill an agent preloads, once, with
-  // the same project folder and reference names the agent bodies get.
+  // the same project folder, options, and reference names the agent bodies
+  // get.
   const skillPreloads = await readSkillPreloads({
     discovered,
     knownSkills: knownSkills ?? [],
@@ -113,6 +115,7 @@ export async function prepareStagePluginAgents(
     pluginRoot,
     pluginDataDir,
     projectDir,
+    options,
     referenceNames: input.referenceNames ?? {
       skills: knownSkills ?? [],
       commands: [],
@@ -138,6 +141,7 @@ export async function prepareStagePluginAgents(
         sourceHash: d.sourceHash,
         mapModel: mapModel ?? false,
         projectDir,
+        options,
         skillPreloads,
       },
       input.mcpGrantForms,

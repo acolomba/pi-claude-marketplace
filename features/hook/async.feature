@@ -6,6 +6,57 @@ Feature: Hook async
   after a crash. Waiting scripts stand in for slow hooks, the scripted model for
   a real one, and a local marketplace for a published one.
 
+  Scenario: Background edit hooks receive every translated pair
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name       | event       | matcher | form   | async | async rewake |
+      | pre-plain  | PreToolUse  | Edit    | script | true  |              |
+      | post-plain | PostToolUse | Edit    | script | true  |              |
+      | post-wake  | PostToolUse | Edit    | script |       | true         |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the project holds the file "document.txt" with the text "first\nmiddle\nsecond\n" for a tool hook
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                                                                                                        |
+      |       | edit | {"path":"document.txt","edits":[{"oldText":"first","newText":"one"},{"oldText":"second","newText":"two"}]} |
+      | Done. |      |                                                                                                                  |
+    When the user prompts "edit both blocks" and 6 background hook runs finish
+    Then the hooks record these runs in any order:
+      | event       | session | tool name | tool use id    | duration ms    | tool input                                                                            | tool response                                                                         | cwd           | transcript path | arguments  | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse  | first   | Edit      | {tool use 1}#1 |                | {"file_path":"{project dir}/document.txt","old_string":"first","new_string":"one"}   |                                                                                       | {project dir} |                 | pre-plain  | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PreToolUse  | first   | Edit      | {tool use 1}#2 |                | {"file_path":"{project dir}/document.txt","old_string":"second","new_string":"two"} |                                                                                       | {project dir} |                 | pre-plain  | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse | first   | Edit      | {tool use 1}#1 | {milliseconds} | {"file_path":"{project dir}/document.txt","old_string":"first","new_string":"one"}   | {"filePath":"{project dir}/document.txt","oldString":"first","newString":"one","replaceAll":false,"structuredPatch":[{"oldStart":1,"oldLines":3,"newStart":1,"newLines":3,"lines":["-first","+one"," middle","-second","+two"]}]} | {project dir} |                 | post-plain | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse | first   | Edit      | {tool use 1}#2 | {milliseconds} | {"file_path":"{project dir}/document.txt","old_string":"second","new_string":"two"} | {"filePath":"{project dir}/document.txt","oldString":"second","newString":"two","replaceAll":false,"structuredPatch":[{"oldStart":1,"oldLines":3,"newStart":1,"newLines":3,"lines":["-first","+one"," middle","-second","+two"]}]} | {project dir} |                 | post-plain | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse | first   | Edit      | {tool use 1}#1 | {milliseconds} | {"file_path":"{project dir}/document.txt","old_string":"first","new_string":"one"}   | {"filePath":"{project dir}/document.txt","oldString":"first","newString":"one","replaceAll":false,"structuredPatch":[{"oldStart":1,"oldLines":3,"newStart":1,"newLines":3,"lines":["-first","+one"," middle","-second","+two"]}]} | {project dir} |                 | post-wake  | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PostToolUse | first   | Edit      | {tool use 1}#2 | {milliseconds} | {"file_path":"{project dir}/document.txt","old_string":"second","new_string":"two"} | {"filePath":"{project dir}/document.txt","oldString":"second","newString":"two","replaceAll":false,"structuredPatch":[{"oldStart":1,"oldLines":3,"newStart":1,"newLines":3,"lines":["-first","+one"," middle","-second","+two"]}]} | {project dir} |                 | post-wake  | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the hook processes record these lifecycle events in any order:
+      | hook       | phase | exit code |
+      | pre-plain  | start |           |
+      | pre-plain  | start |           |
+      | pre-plain  | end   | 0         |
+      | pre-plain  | end   | 0         |
+      | post-plain | start |           |
+      | post-plain | start |           |
+      | post-plain | end   | 0         |
+      | post-plain | end   | 0         |
+      | post-wake  | start |           |
+      | post-wake  | start |           |
+      | post-wake  | end   | 0         |
+      | post-wake  | end   | 0         |
+    Then the project file "document.txt" has the text "one\nmiddle\ntwo\n" after a tool hook
+    Then the hooks show the user no rewake summaries
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                     |
+      | 1    | user        | edit both blocks                                                                                                         |
+      | 2    | user        | edit both blocks                                                                                                         |
+      | 2    | assistant   | tool call edit {"path":"document.txt","edits":[{"oldText":"first","newText":"one"},{"oldText":"second","newText":"two"}]} |
+      | 2    | tool result | edit returned: Successfully replaced 2 block(s) in document.txt.                                                       |
+
   Scenario: An async rewake hook goes on running after the prompt that started it
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source
@@ -207,6 +258,33 @@ Feature: Hook async
       | 2    | user      | remember the tests     |
       | 2    | user      | the tests live in test |
 
+  Scenario: A plain async hook runs past its declared timeout
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name | event            | matcher | form   | async | timeout | sleep | exit code |
+      | slow | UserPromptSubmit | *       | script | true  | 1       | 3     | 3         |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply |
+      | Done. |
+    When the user prompts "say done" and 1 background hook runs finish
+    Then the hooks record these runs:
+      | event            | session | prompt   | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | UserPromptSubmit | first   | say done | {project dir} |                 | slow      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the hook processes record these lifecycle events:
+      | hook | phase | exit code |
+      | slow | start |           |
+      | slow | end   | 3         |
+    Then the model receives these calls:
+      | call | role | text     |
+      | 1    | user | say done |
+
   Scenario: An async rewake Stop hook that exits 2 wakes the model once
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source
@@ -243,6 +321,50 @@ Feature: Hook async
       | keep | end   | 2         |
       | keep | start |           |
       | keep | end   | 0         |
+
+  Scenario: An async rewake Stop hook that wakes the model while another Stop hook runs wakes it once
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name | event | matcher | form   | async rewake | waits | exit code | stderr     | on reentry |
+      | keep | Stop  |         | script | true         |       | 2         | keep going | allow      |
+      | slow | Stop  |         | script |              | true  |           |            |            |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply |
+      | Done. |
+      | Woke. |
+    When the user prompts "say done" and the hook "keep" wakes the model while the stop hook "slow" runs
+    Then the hooks record these runs in any order:
+      | event | session | last assistant message | stop hook active | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | Stop  | first   | Done.                  | false            | {project dir} |                 | keep      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | Stop  | first   | Done.                  | false            | {project dir} |                 | slow      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | Stop  | first   | Woke.                  | true             | {project dir} |                 | keep      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | Stop  | first   | Woke.                  | true             | {project dir} |                 | slow      | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then the model receives these calls:
+      | call | role      | text                                                     |
+      | 1    | user      | say done                                                 |
+      | 2    | user      | say done                                                 |
+      | 2    | assistant | Done.                                                    |
+      | 2    | user      | Stop hook blocking error from command "Stop": keep going |
+    Then the hooks show the user these rewake summaries:
+      | text               |
+      | Stop hook feedback |
+    Then the hook processes record these lifecycle events in any order:
+      | hook | phase | exit code |
+      | keep | start |           |
+      | keep | end   | 2         |
+      | keep | start |           |
+      | keep | end   | 0         |
+      | slow | start |           |
+      | slow | end   | 0         |
+      | slow | start |           |
+      | slow | end   | 0         |
 
   Scenario: A hook process that a dead Pi left stops when Pi starts again
     Given pi runs with the scripted model
@@ -298,6 +420,25 @@ Feature: Hook async
       | name   | event            | matcher | form   | async rewake | waits | exit code | stderr     |
       | wake   | SessionStart     | startup | script | true         | true  |           |            |
       | marker | UserPromptSubmit |         | script |              |       | 2         | not needed |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started pi in the terminal and the hook "wake" goes on in the background
+    When the user reloads pi in the terminal and then prompts "after the reload" with the hooks recording
+    Then the hooks record these runs:
+      | event            | session | prompt           | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                   | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | UserPromptSubmit | first   | after the reload | {project dir} |                 | marker    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {agent dir}/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+    Then no hook process is running
+
+  Scenario: Reloading Pi stops a plain async hook that is running
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event            | matcher | form   | async | waits | exit code | stderr     |
+      | wake   | SessionStart     | startup | script | true  | true  |           |            |
+      | marker | UserPromptSubmit |         | script |       |       | 2         | not needed |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given the user has started pi in the terminal and the hook "wake" goes on in the background
@@ -412,8 +553,8 @@ Feature: Hook async
       | Done. |      |                                |
     When the user prompts "run the echo" and the hook "check" goes on in the background
     Then the hooks record these runs:
-      | event      | session | tool name | tool input                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | PreToolUse | first   | Bash      | {"command":"echo from-model"} | {project dir} |                 | check     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | event      | session | tool name | tool use id  | tool input                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {tool use 1} | {"command":"echo from-model"} | {project dir} |                 | check     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the hook processes record these lifecycle events:
       | hook  | phase | exit code |
       | check | start |           |

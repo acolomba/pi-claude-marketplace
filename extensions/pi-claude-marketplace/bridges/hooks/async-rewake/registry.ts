@@ -8,7 +8,9 @@
 // wakes the model with Claude Code 2.1.319's rewake text through pi.sendMessage with
 // `display: false` matching Claude Code's <system-reminder> semantic: an idle
 // Pi starts a turn with it, and a running turn reads it at its next turn
-// boundary (D-BG-201, D-BG-202).
+// boundary (D-BG-201, D-BG-202). An asyncRewake child is stopped at its
+// timeout; a plain async child has no timer and runs until it ends, a reload,
+// or the next start (D-PG5-17).
 //
 // This is one of exactly FIVE sanctioned `node:child_process` import
 // sites in the extension tree (closed-set whitelist at
@@ -44,15 +46,26 @@
 // failure / completion path routes through `hookDebugLog` (OBS-01).
 
 import { spawn, type ChildProcess } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { open, opendir, readFile, rm } from "node:fs/promises";
+import path from "node:path";
 
+import { isSubagentChild } from "../../../platform/subagent-child.ts";
+import { atomicWriteJson } from "../../../shared/atomic-json.ts";
 import { hookDebugLog } from "../../../shared/debug-log.ts";
 import { errorMessage } from "../../../shared/errors.ts";
 import { notifyAsyncRewakeSummary } from "../../../shared/notification-dispatch.ts";
 import { openNotificationRun, requireNotificationMode } from "../../../shared/notification-run.ts";
-import { installTimerLadder } from "../exec-timer.ts";
+import { assertPathInside } from "../../../shared/path-safety.ts";
+import { capHookContext } from "../context-cap.ts";
+import {
+  INERT_TIMER_LADDER,
+  installTimerLadder,
+  type ChildLike,
+  type TimerLadder,
+} from "../exec-timer.ts";
 import { hookPathVars, prepareHookEnv } from "../hook-env.ts";
+import { saveHookOutput } from "../hook-output-files.ts";
 import { translatePostCompact } from "../payloads/post-compact.ts";
 import { translatePostToolUseFailure } from "../payloads/post-tool-use-failure.ts";
 import { translatePostToolUse } from "../payloads/post-tool-use.ts";
@@ -62,12 +75,18 @@ import { translateSessionEnd } from "../payloads/session-end.ts";
 import { translateSessionStart } from "../payloads/session-start.ts";
 import { translateStopFailure } from "../payloads/stop-failure.ts";
 import { translateStop } from "../payloads/stop.ts";
+import { translateUserPromptExpansion } from "../payloads/user-prompt-expansion.ts";
 import { translateUserPromptSubmit } from "../payloads/user-prompt-submit.ts";
 import { asGroupLeader, type SignalGroup } from "../process-group.ts";
 import { planSpawn, serializeWithTruncation } from "../spawn-helpers.ts";
-import { collectStreamText } from "../stream-text.ts";
+import { ceilingBound, collectStreamText, type StreamTextBound } from "../stream-text.ts";
 import { resolveTimeoutSeconds } from "../timeout.ts";
-import { buildTranslationContext, type TranslationContext } from "../translation-context.ts";
+import {
+  buildTranslationContext,
+  childHookIdentityOf,
+  type HookDispatchContext,
+  type TranslationContext,
+} from "../translation-context.ts";
 
 import { asyncAnswerTexts } from "./async-answer.ts";
 import {
@@ -83,7 +102,7 @@ import type { DispatchableEvent } from "../../../domain/components/hook-events.t
 import type { ScopedLocations } from "../../../persistence/locations.ts";
 import type { ExtensionAPI, ExtensionContext } from "../../../platform/pi-api.ts";
 import type { RoutingEntry } from "../routing-state.ts";
-import type { HooksRuntime, HooksRuntimeChildEntry } from "../runtime.ts";
+import type { ChildJournalOwner, HooksRuntime, HooksRuntimeChildEntry } from "../runtime.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
 // Constants
@@ -95,6 +114,24 @@ import type { HooksRuntime, HooksRuntimeChildEntry } from "../runtime.ts";
  * to SIGKILL a stranger process that may have inherited a recycled pid.
  */
 const MARKER_ENV = "PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH" as const;
+const MAX_CHILD_JOURNAL_BYTES = 1024 * 1024;
+const MAX_CHILD_JOURNAL_ROWS = 4096;
+const MAX_CHILD_JOURNALS_SCANNED = 1024;
+const MAX_OWNER_TEXT = 256;
+
+/**
+ * The UTF-16 code units a plain `async` hook keeps of its stdout. Nothing stops the
+ * hook (D-PG5-17), so its output is bounded instead; the bound is far past
+ * the 10,000-character cap that its answer then passes (D-PG5-14).
+ */
+const PLAIN_ASYNC_STREAM_LIMIT = 8 * 1024 * 1024;
+
+/**
+ * The UTF-16 code units of the end of its stdout that a plain `async` hook
+ * keeps past `PLAIN_ASYNC_STREAM_LIMIT`, so an answer on its last line, after
+ * many progress lines, still reaches the model (D-BG-205).
+ */
+const PLAIN_ASYNC_STREAM_TAIL = 64 * 1024;
 
 /**
  * HOOK-06: custom-message type for the exit-2 injection. The hooks bridge also
@@ -125,6 +162,7 @@ const TRANSLATORS: Record<DispatchableEvent, (event: never, ctx: TranslationCont
   // event, the settle events included (D-BG-206).
   Stop: translateStop,
   StopFailure: translateStopFailure,
+  UserPromptExpansion: translateUserPromptExpansion,
 };
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -142,13 +180,17 @@ export type AsyncRewakeEntry = HooksRuntimeChildEntry;
 
 /**
  * What the exit handler of one child needs from its dispatch: the event's
- * context and API, and the hook's Claude label for the default rewake prefix.
+ * context and API, the runtime that records a sent wake (D-PG5-06), the
+ * hook's Claude label for the default rewake prefix, and the writer that
+ * saves an answer's text over the model's limit (D-PG5-15).
  */
 interface RewakeExit {
   readonly ctx: ExtensionContext;
   readonly pi: ExtensionAPI;
+  readonly runtime: HooksRuntime;
   readonly label: string;
   readonly lane: BackgroundLane;
+  readonly saveHookOutput: typeof saveHookOutput;
 }
 
 /**
@@ -160,6 +202,77 @@ type BackgroundLane = "rewake" | "plain";
 
 function laneOf(entry: RoutingEntry): BackgroundLane {
   return entry.handlerDecl.asyncRewake === true ? "rewake" : "plain";
+}
+
+// The bound of one output stream of a background hook. An `asyncRewake` hook
+// keeps each stream whole (EXEC-02) up to the collector's NFR-2 ceiling,
+// because its declared `timeout` can let it print for days. A plain async
+// hook has no timer, so it keeps less: the first `PLAIN_ASYNC_STREAM_LIMIT`
+// UTF-16 code units of its stdout and the last `PLAIN_ASYNC_STREAM_TAIL`, and
+// none of its stderr, which nothing reads. The collector still reads the
+// stderr pipe to its end, so the hook never blocks on a full pipe.
+function streamBoundFor(
+  entry: RoutingEntry,
+  lane: BackgroundLane,
+  stream: "stdout" | "stderr",
+): StreamTextBound {
+  const label = `${entry.pluginId}/${entry.claudeEvent}`;
+  if (lane !== "plain") {
+    return ceilingBound(stream, label);
+  }
+
+  if (stream === "stderr") {
+    return {
+      limit: 0,
+      onLimit: () => {
+        hookDebugLog(
+          `async-hook: stderr not kept; a plain async hook's stderr is unread (${label})`,
+        );
+      },
+    };
+  }
+
+  return {
+    limit: PLAIN_ASYNC_STREAM_LIMIT,
+    tail: PLAIN_ASYNC_STREAM_TAIL,
+    onLimit: () => {
+      hookDebugLog(
+        `async-hook: stdout past ${PLAIN_ASYNC_STREAM_LIMIT} UTF-16 code units dropped; ` +
+          `the last ${PLAIN_ASYNC_STREAM_TAIL} kept (${label})`,
+      );
+    },
+  };
+}
+
+/**
+ * Chooses the timer of a background child before it spawns, and returns what
+ * installs it on the child. An `asyncRewake` hook keeps its declared
+ * `timeout`, or 600 s, and the SIGTERM and SIGKILL ladder. A plain `async`
+ * hook runs until it ends, as in Claude Code, so it gets no timer, and a
+ * `timeout` it declares is ignored with one debug line (D-PG5-17).
+ */
+function ladderFor(entry: RoutingEntry, lane: BackgroundLane): (child: ChildLike) => TimerLadder {
+  const label = `${entry.pluginId}/${entry.claudeEvent}`;
+  if (lane === "plain") {
+    if (entry.handlerDecl.timeout !== undefined) {
+      hookDebugLog(
+        `async-hook: timeout ${JSON.stringify(entry.handlerDecl.timeout)} ignored (${label}); ` +
+          `a plain async hook runs until it ends`,
+      );
+    }
+
+    return () => INERT_TIMER_LADDER;
+  }
+
+  const timeoutSeconds = resolveTimeoutSeconds({
+    raw: entry.handlerDecl.timeout,
+    event: entry.claudeEvent,
+    pluginId: entry.pluginId,
+    // This lane returns as soon as the child is registered, so upstream's
+    // turn-blocking reductions do not apply -- see ../timeout.ts.
+    lane: "background",
+  });
+  return (child) => installTimerLadder(child, timeoutSeconds, label);
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -209,6 +322,11 @@ export interface SpawnDeps {
   readonly signalGroup?: SignalGroup;
   readonly dispatchId?: () => string;
   readonly pidTableWriter?: typeof writePidTable;
+  /**
+   * Saves a hook's context string over the model's limit and resolves to its
+   * path (D-PG5-15). Defaults to `saveHookOutput` of ../hook-output-files.ts.
+   */
+  readonly saveHookOutput?: typeof saveHookOutput;
 }
 
 /**
@@ -243,25 +361,24 @@ export async function spawnAndRegister(
   try {
     const dispatchId = makeDispatchId();
     const capturedGeneration = runtime.currentGeneration();
-    const transCtx = buildTranslationContext(ctx);
+    const identity = runtime.childIdentityFor(ctx.sessionManager.getSessionId());
+    const transCtx = buildTranslationContext(ctx, childHookIdentityOf(identity));
+    const persistenceOwner = isSubagentChild(process.env)
+      ? runtime.persistenceOwner(loc, transCtx.ownSessionId, dispatchId)
+      : undefined;
     const stdinPayload = TRANSLATORS[entry.claudeEvent](event as never, transCtx);
     const exit: RewakeExit = {
       ctx,
       pi,
+      runtime,
       label: rewakeLabel(entry.claudeEvent, stdinPayload),
       lane: laneOf(entry),
+      saveHookOutput: deps.saveHookOutput ?? saveHookOutput,
     };
     const stdinJson = serializeWithTruncation(stdinPayload);
     const env = await prepareAsyncEnv(entry, transCtx, loc, dispatchId);
     const planValue = planSpawn(entry, hookPathVars(entry, transCtx, loc));
-    const timeoutSeconds = resolveTimeoutSeconds({
-      raw: entry.handlerDecl.timeout,
-      event: entry.claudeEvent,
-      pluginId: entry.pluginId,
-      // This lane returns as soon as the child is registered, so upstream's
-      // turn-blocking reductions do not apply -- see ../timeout.ts.
-      lane: "background",
-    });
+    const startLadder = ladderFor(entry, exit.lane);
 
     let child: ChildProcess;
     try {
@@ -270,9 +387,10 @@ export async function spawnAndRegister(
         env,
         stdio: ["pipe", "pipe", "pipe"],
         shell: planValue.shell,
-        // The hook leads its own process group, which the ladder, `/reload`,
-        // and the orphan reap signal (../process-group.ts). A detached Windows
-        // process would open a console window of its own.
+        // The hook leads its own process group, which the ladder of an
+        // asyncRewake hook, `/reload`, and the orphan reap signal
+        // (../process-group.ts). A detached Windows process would open a
+        // console window of its own.
         detached: process.platform !== "win32",
       });
     } catch (err) {
@@ -284,28 +402,7 @@ export async function spawnAndRegister(
 
     const pid = child.pid;
     if (pid === undefined) {
-      const onSpawnError = (err: Error): void => {
-        hookDebugLog(
-          `async-rewake: spawn failed (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
-        );
-      };
-
-      child.once("error", onSpawnError);
-      child.once("close", () => {
-        child.removeListener("error", onSpawnError);
-      });
-      hookDebugLog(`async-rewake: child has no pid (${entry.pluginId}/${entry.claudeEvent})`);
-      try {
-        const killed = child.kill("SIGKILL");
-        if (!killed) {
-          hookDebugLog(
-            `async-rewake: kill(SIGKILL) returned false for pid-less child (${entry.pluginId}/${entry.claudeEvent})`,
-          );
-        }
-      } catch {
-        // best-effort
-      }
-
+      stopPidlessChild(child, entry);
       return;
     }
 
@@ -314,26 +411,32 @@ export async function spawnAndRegister(
     // `defaultMaxListeners = 10` applies per-instance, not across the
     // bridge, so no `setMaxListeners` adjustment is needed even for
     // large fan-ins.
-    // EXEC-02: the whole of each stream is kept, as Claude Code keeps every
-    // byte a hook prints. The collectors attach their `end` listeners before
-    // the finalize listeners below, so the decoder tail is in the text first.
-    const stderr = collectStreamText(child.stderr, (err) => {
-      hookDebugLog(
-        `async-rewake: stderr error (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
-      );
-    });
-    const stdout = collectStreamText(child.stdout, (err) => {
-      hookDebugLog(
-        `async-rewake: stdout error (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
-      );
-    });
+    // EXEC-02: an asyncRewake hook keeps the whole of each stream up to the
+    // NFR-2 ceiling, as Claude Code keeps every byte a hook prints; a plain
+    // async hook keeps only the start and the end of its stdout (`streamBoundFor`).
+    // The collectors attach their `end` listeners before the finalize
+    // listeners below, so the decoder tail is in the text first.
+    const stderr = collectStreamText(
+      child.stderr,
+      (err) => {
+        hookDebugLog(
+          `async-rewake: stderr error (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
+        );
+      },
+      streamBoundFor(entry, exit.lane, "stderr"),
+    );
+    const stdout = collectStreamText(
+      child.stdout,
+      (err) => {
+        hookDebugLog(
+          `async-rewake: stdout error (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
+        );
+      },
+      streamBoundFor(entry, exit.lane, "stdout"),
+    );
 
     const hookProcess = asGroupLeader(child, deps);
-    const ladder = installTimerLadder(
-      hookProcess,
-      timeoutSeconds,
-      `${entry.pluginId}/${entry.claudeEvent}`,
-    );
+    const ladder = startLadder(hookProcess);
 
     const rewakeMessageField = entry.handlerDecl.rewakeMessage;
     const rewakeSummaryField = entry.handlerDecl.rewakeSummary;
@@ -353,6 +456,7 @@ export async function spawnAndRegister(
       stderr,
       capturedGeneration,
       loc,
+      ...(persistenceOwner === undefined ? {} : { persistenceOwner }),
     };
 
     runtime.registerChild(asyncEntry);
@@ -371,7 +475,7 @@ export async function spawnAndRegister(
       }
 
       finalized = true;
-      finalizeChild(runtime, dispatchId, outcome, exit, pidTableWriter);
+      finalizeChild(runtime, dispatchId, persistenceOwner, outcome, exit, pidTableWriter);
     };
 
     const finalizeAfterOwnedStreams = (): void => {
@@ -418,11 +522,78 @@ export async function spawnAndRegister(
     // a recoverable record. Fire-and-forget at the body's tail -- the
     // sync spawn + register has already completed; awaiting here only
     // bounds the resolve latency on the I/O.
-    await persistPidTableForLoc(runtime, loc, pidTableWriter);
+    await persistSpawnedChild(runtime, entry, loc, dispatchId, persistenceOwner, pidTableWriter);
   } catch (err) {
     hookDebugLog(
       `async-rewake: spawnAndRegister threw (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(err)}`,
     );
+  }
+}
+
+/**
+ * Records a spawned hook in its table. A child session stops a hook its
+ * journal could not record, so no background process of a child runs
+ * unrecorded. A main session keeps the hook running, as before child journals
+ * existed, and its next table write records the hook again.
+ */
+async function persistSpawnedChild(
+  runtime: HooksRuntime,
+  entry: RoutingEntry,
+  loc: ScopedLocations,
+  dispatchId: string,
+  persistenceOwner: ChildJournalOwner | undefined,
+  pidTableWriter: typeof writePidTable,
+): Promise<void> {
+  try {
+    await persistPidTableForLoc(runtime, loc, persistenceOwner, pidTableWriter);
+  } catch (error: unknown) {
+    if (persistenceOwner === undefined) {
+      hookDebugLog(
+        `async-rewake: pid table persistence failed (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(error)}`,
+      );
+      return;
+    }
+
+    stopUnrecordedChild(runtime, dispatchId);
+    hookDebugLog(`async-rewake: child journal persistence failed: ${errorMessage(error)}`);
+  }
+}
+
+function stopPidlessChild(child: ChildProcess, entry: RoutingEntry): void {
+  const onSpawnError = (error: Error): void => {
+    hookDebugLog(
+      `async-rewake: spawn failed (${entry.pluginId}/${entry.claudeEvent}): ${errorMessage(error)}`,
+    );
+  };
+
+  child.once("error", onSpawnError);
+  child.once("close", () => {
+    child.removeListener("error", onSpawnError);
+  });
+  hookDebugLog(`async-rewake: child has no pid (${entry.pluginId}/${entry.claudeEvent})`);
+  try {
+    const killed = child.kill("SIGKILL");
+    if (!killed) {
+      hookDebugLog(
+        `async-rewake: kill(SIGKILL) returned false for pid-less child (${entry.pluginId}/${entry.claudeEvent})`,
+      );
+    }
+  } catch {
+    // Best effort: the child may already have exited.
+  }
+}
+
+function stopUnrecordedChild(runtime: HooksRuntime, dispatchId: string): void {
+  const unrecorded = runtime.takeChild(dispatchId);
+  if (unrecorded === undefined) {
+    return;
+  }
+
+  unrecorded.ladder.cancel();
+  try {
+    unrecorded.child.kill("SIGKILL");
+  } catch {
+    // The hook may already have exited.
   }
 }
 
@@ -452,13 +623,14 @@ const EXIT_HANDLERS: Record<
     wakeOnExitTwo(entry, exit);
   },
   plain: (entry, exit) => {
-    sendAsyncAnswer(entry, exit);
+    void sendAsyncAnswer(entry, exit);
   },
 };
 
 function finalizeChild(
   runtime: HooksRuntime,
   dispatchId: string,
+  persistenceOwner: ChildJournalOwner | undefined,
   outcome: { readonly code: number | null; readonly signal: NodeJS.Signals | null } | undefined,
   exit: RewakeExit,
   pidTableWriter: typeof writePidTable,
@@ -467,14 +639,22 @@ function finalizeChild(
   if (entry === undefined) {
     // Defensive guard for cleanup paths that removed the entry before a
     // terminal child event reached this closure.
+    if (persistenceOwner !== undefined) {
+      void removeCapturedChildRow(runtime, persistenceOwner, dispatchId).catch(() => {
+        hookDebugLog("async-rewake: retired child journal cleanup failed");
+      });
+    }
+
     return;
   }
 
-  void persistPidTableForLoc(runtime, entry.loc, pidTableWriter).catch((err: unknown) => {
-    hookDebugLog(
-      `async-rewake: terminal pid-table persistence failed dispatchId=${dispatchId}: ${errorMessage(err)}`,
-    );
-  });
+  void persistPidTableForLoc(runtime, entry.loc, entry.persistenceOwner, pidTableWriter).catch(
+    (err: unknown) => {
+      hookDebugLog(
+        `async-rewake: terminal pid-table persistence failed dispatchId=${dispatchId}: ${errorMessage(err)}`,
+      );
+    },
+  );
 
   if (outcome === undefined) {
     return;
@@ -502,15 +682,54 @@ function finalizeChild(
   EXIT_HANDLERS[exit.lane](entry, exit, outcome);
 }
 
+async function removeCapturedChildRow(
+  runtime: HooksRuntime,
+  owner: ChildJournalOwner,
+  dispatchId: string,
+): Promise<void> {
+  const filePath = childJournalPath(owner);
+  await runtime.runPidTableOperation(filePath, async () => {
+    const journal = await readChildJournal(filePath, owner.loc);
+    if (journal === undefined) {
+      return;
+    }
+
+    const remaining = journal.entries.filter((row) => row.dispatchId !== dispatchId);
+    if (remaining.length !== journal.entries.length) {
+      await writeChildJournal(owner, remaining);
+    }
+  });
+}
+
 /**
  * D-BG-205: a plain async hook that ended, whatever its code, gives the model
  * its answer's texts on the model's next call, never waking it; the user sees
- * nothing.
+ * nothing. Each text passes the 10,000-character cap alone, and the texts keep
+ * their order, `systemMessage` first (D-PG5-14, D-PG5-16). In production a
+ * reload during a save makes the old `pi` stale, so its `sendMessage` throws
+ * and the answer is dropped; the generation check after the save covers a
+ * runtime that is registered twice. A file the save wrote stays until the
+ * 30-day sweep. Never rejects.
  */
-function sendAsyncAnswer(entry: HooksRuntimeChildEntry, { pi }: RewakeExit): void {
-  const texts = asyncAnswerTexts(entry.stdout.text(), entry.claudeEvent);
-  if (texts.length === 0) {
+async function sendAsyncAnswer(
+  entry: HooksRuntimeChildEntry,
+  { pi, runtime, saveHookOutput: save }: RewakeExit,
+): Promise<void> {
+  const answer = asyncAnswerTexts(entry.stdout.text(), entry.claudeEvent);
+  if (answer.length === 0) {
     hookDebugLog(`async-hook: no answer on stdout (${entry.pluginId}/${entry.claudeEvent})`);
+  }
+
+  const texts = await Promise.all(
+    answer.map(({ source, text }) =>
+      capHookContext(text, source, (whole) => save(entry.loc, entry.dispatchId, source, whole)),
+    ),
+  );
+  if (entry.capturedGeneration !== runtime.currentGeneration()) {
+    hookDebugLog(
+      `async-hook: answer dropped after a reload (${entry.pluginId}/${entry.claudeEvent})`,
+    );
+    return;
   }
 
   for (const content of texts) {
@@ -535,13 +754,18 @@ function sendAsyncAnswer(entry: HooksRuntimeChildEntry, { pi }: RewakeExit): voi
  * wakes the model with Claude Code's rewake text. One `triggerTurn` send
  * starts a turn when Pi is idle and steers a running turn, as Claude Code's
  * `next`-priority notification does; the summary goes first, so its record
- * precedes the woken run's. Any other exit shows and sends nothing.
+ * precedes the woken run's. Any other exit shows and sends nothing. A wake
+ * sent while the Stop hooks run at the boundary continues that run, so the
+ * runtime records the sent wake for `stop_hook_active` (D-BG-210, D-PG5-06).
  *
  * IL-2 EXEMPTION (T-62-09): `rewakeSummary` is the single sanctioned runtime
  * notify call originating from `bridges/hooks/async-rewake/`, routed through
  * the canonical `shared/notification-dispatch.ts` seam.
  */
-function wakeOnExitTwo(entry: HooksRuntimeChildEntry, { ctx, pi, label }: RewakeExit): void {
+function wakeOnExitTwo(
+  entry: HooksRuntimeChildEntry,
+  { ctx, pi, runtime, label }: RewakeExit,
+): void {
   try {
     const run = openNotificationRun(pi, { kind: "hook" });
     notifyAsyncRewakeSummary(ctx, run, rewakeSummaryText(entry.rewakeSummary));
@@ -563,6 +787,7 @@ function wakeOnExitTwo(entry: HooksRuntimeChildEntry, { ctx, pi, label }: Rewake
       },
       { triggerTurn: true, deliverAs: "steer" },
     );
+    runtime.recordRewakeSent();
   } catch (err) {
     hookDebugLog(`async-rewake: sendMessage threw (${entry.pluginId}): ${errorMessage(err)}`);
   }
@@ -577,10 +802,32 @@ function wakeOnExitTwo(entry: HooksRuntimeChildEntry, { ctx, pi, label }: Rewake
  * cancels each timer ladder, and SIGKILLs the process group of each tracked
  * child best-effort. Idempotent: repeated calls on an empty registry are
  * no-ops. The persisted PID table is NOT touched here -- the orphan
- * reap path is responsible for draining that surface.
+ * reap path is responsible for draining that surface. Each child journal of
+ * this runtime drops the rows of the hooks the walk stopped, and is removed
+ * once it holds none: a child runner may exit before the stopped hooks'
+ * `close` events would remove their rows.
  */
-export function shutdownInMemoryChildren(runtime: HooksRuntime): void {
-  runtime.shutdownChildren();
+export async function shutdownInMemoryChildren(runtime: HooksRuntime): Promise<void> {
+  const stoppedIds = new Set(runtime.shutdownChildren().map((entry) => entry.dispatchId));
+  const owners = runtime.persistenceOwners();
+  try {
+    await Promise.all(
+      owners.map(async (owner) => {
+        const filePath = childJournalPath(owner);
+        await runtime.runPidTableOperation(filePath, async () => {
+          const journal = await readChildJournal(filePath, owner.loc);
+          if (journal !== undefined) {
+            await writeChildJournal(
+              owner,
+              journal.entries.filter((row) => !stoppedIds.has(row.dispatchId)),
+            );
+          }
+        });
+      }),
+    );
+  } finally {
+    runtime.forgetPersistenceOwners();
+  }
 }
 
 /**
@@ -605,6 +852,10 @@ export async function reapOrphans(
   loc: ScopedLocations,
   probes: OrphanProbes = DEFAULT_ORPHAN_PROBES,
 ): Promise<void> {
+  if (isSubagentChild(process.env)) {
+    return;
+  }
+
   await runtime.runPidTableOperation(pidTablePath(loc), async () => {
     const owned = runtime.pidTableEntries(loc);
     const ownedIds = new Set(owned.map((entry) => entry.dispatchId));
@@ -623,6 +874,7 @@ export async function reapOrphans(
         )
       : unlinkPidTable(loc));
   });
+  await reapChildJournals(runtime, loc, probes);
 }
 
 /** D-62-05: SIGKILLs one table row's process group when it is alive and ours. */
@@ -691,7 +943,7 @@ function killOrphanGroup(pid: number, probes: OrphanProbes): void {
  */
 async function prepareAsyncEnv(
   entry: RoutingEntry,
-  transCtx: TranslationContext,
+  transCtx: HookDispatchContext,
   loc: ScopedLocations,
   dispatchId: string,
 ): Promise<NodeJS.ProcessEnv> {
@@ -714,12 +966,265 @@ async function prepareAsyncEnv(
 async function persistPidTableForLoc(
   runtime: HooksRuntime,
   loc: ScopedLocations,
+  owner?: ChildJournalOwner,
   pidTableWriter: typeof writePidTable = writePidTable,
 ): Promise<void> {
-  await runtime.runPidTableOperation(pidTablePath(loc), async () => {
-    const snapshot: PidTableEntry[] = runtime.pidTableEntries(loc).map((entry) => ({ ...entry }));
-    await pidTableWriter(loc, snapshot);
+  const journalPath = owner === undefined ? pidTablePath(loc) : childJournalPath(owner);
+  await runtime.runPidTableOperation(journalPath, async () => {
+    const snapshot: PidTableEntry[] = runtime
+      .pidTableEntries(loc, owner)
+      .map((entry) => ({ ...entry }));
+    if (owner === undefined) {
+      await pidTableWriter(loc, snapshot);
+    } else {
+      await writeChildJournal(owner, snapshot);
+    }
   });
+}
+
+interface ChildJournal {
+  readonly version: 1;
+  readonly ownerPid: number;
+  readonly sessionId: string;
+  readonly ownerToken: string;
+  readonly entries: readonly PidTableEntry[];
+}
+
+function validJournalText(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= MAX_OWNER_TEXT;
+}
+
+function childJournalPath(owner: ChildJournalOwner): string {
+  const key = createHash("sha256")
+    .update(JSON.stringify([owner.ownerPid, owner.sessionId, owner.ownerToken]))
+    .digest("hex");
+  return path.join(owner.loc.dataRoot, "_shared", "async-rewake-children", `${key}.json`);
+}
+
+function validPidRow(value: unknown): value is PidTableEntry {
+  if (value === null || typeof value !== "object") {
+    return false;
+  }
+
+  const row = value as Record<string, unknown>;
+  return (
+    Number.isSafeInteger(row.pid) &&
+    typeof row.pid === "number" &&
+    row.pid > 0 &&
+    validJournalText(row.dispatchId) &&
+    (row.scope === "user" || row.scope === "project") &&
+    validJournalText(row.marketplace) &&
+    validJournalText(row.plugin) &&
+    typeof row.spawnedAt === "string" &&
+    /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(row.spawnedAt)
+  );
+}
+
+async function writeChildJournal(
+  owner: ChildJournalOwner,
+  entries: readonly PidTableEntry[],
+): Promise<void> {
+  if (
+    !validJournalText(owner.sessionId) ||
+    !validJournalText(owner.ownerToken) ||
+    entries.length > MAX_CHILD_JOURNAL_ROWS ||
+    entries.some((entry) => !validPidRow(entry))
+  ) {
+    throw new Error("child journal capacity or shape exceeded");
+  }
+
+  const filePath = childJournalPath(owner);
+  await assertPathInside(owner.loc.dataRoot, filePath, "child journal write");
+  if (entries.length === 0) {
+    await rm(filePath, { force: true });
+    return;
+  }
+
+  const envelope: ChildJournal = {
+    version: 1,
+    ownerPid: owner.ownerPid,
+    sessionId: owner.sessionId,
+    ownerToken: owner.ownerToken,
+    entries,
+  };
+  if (Buffer.byteLength(JSON.stringify(envelope, null, 2) + "\n") > MAX_CHILD_JOURNAL_BYTES) {
+    throw new Error("child journal capacity exceeded");
+  }
+
+  await atomicWriteJson(filePath, envelope);
+}
+
+async function readChildJournal(
+  filePath: string,
+  loc: ScopedLocations,
+): Promise<
+  { readonly owner: ChildJournalOwner; readonly entries: readonly PidTableEntry[] } | undefined
+> {
+  try {
+    await assertPathInside(loc.dataRoot, filePath, "child journal read");
+    const handle = await open(filePath, "r");
+    let raw: string;
+    try {
+      const info = await handle.stat();
+      if (!info.isFile()) {
+        hookDebugLog("async-rewake: child journal is not regular");
+        return undefined;
+      }
+
+      const bytes = Buffer.allocUnsafe(MAX_CHILD_JOURNAL_BYTES + 1);
+      const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
+      if (bytesRead > MAX_CHILD_JOURNAL_BYTES) {
+        hookDebugLog("async-rewake: child journal oversized");
+        return undefined;
+      }
+
+      raw = bytes.toString("utf8", 0, bytesRead);
+    } finally {
+      await handle.close();
+    }
+
+    const parsed: unknown = JSON.parse(raw);
+    if (parsed === null || typeof parsed !== "object") {
+      hookDebugLog("async-rewake: child journal malformed");
+      return undefined;
+    }
+
+    const envelope = parsed as Record<string, unknown>;
+    if (
+      envelope.version !== 1 ||
+      !Number.isSafeInteger(envelope.ownerPid) ||
+      typeof envelope.ownerPid !== "number" ||
+      envelope.ownerPid <= 0 ||
+      !validJournalText(envelope.sessionId) ||
+      !validJournalText(envelope.ownerToken) ||
+      !Array.isArray(envelope.entries) ||
+      envelope.entries.length > MAX_CHILD_JOURNAL_ROWS ||
+      !envelope.entries.every(validPidRow)
+    ) {
+      hookDebugLog("async-rewake: child journal malformed");
+      return undefined;
+    }
+
+    const owner: ChildJournalOwner = {
+      ownerPid: envelope.ownerPid,
+      sessionId: envelope.sessionId,
+      ownerToken: envelope.ownerToken,
+      loc,
+    };
+    if (childJournalPath(owner) !== filePath) {
+      hookDebugLog("async-rewake: child journal filename mismatch");
+      return undefined;
+    }
+
+    return { owner, entries: envelope.entries };
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      hookDebugLog("async-rewake: child journal unreadable");
+    }
+
+    return undefined;
+  }
+}
+
+function ownerIsDead(ownerPid: number, probes: OrphanProbes): boolean {
+  try {
+    probes.killProbe(ownerPid, 0);
+    return false;
+  } catch (error: unknown) {
+    return (error as NodeJS.ErrnoException).code === "ESRCH";
+  }
+}
+
+async function reapChildJournal(
+  runtime: HooksRuntime,
+  loc: ScopedLocations,
+  filePath: string,
+  probes: OrphanProbes,
+): Promise<void> {
+  await runtime.runPidTableOperation(filePath, async () => {
+    const journal = await readChildJournal(filePath, loc);
+    if (journal === undefined || !ownerIsDead(journal.owner.ownerPid, probes)) {
+      return;
+    }
+
+    const unresolved: PidTableEntry[] = [];
+    for (const row of journal.entries) {
+      // eslint-disable-next-line no-await-in-loop -- bounded recovery checks each process in order
+      if (!(await recoverChildRow(journal.owner, row, probes))) {
+        unresolved.push(row);
+      }
+    }
+
+    if (
+      unresolved.length !== journal.entries.length &&
+      ownerIsDead(journal.owner.ownerPid, probes)
+    ) {
+      await writeChildJournal(journal.owner, unresolved);
+    }
+  });
+}
+
+async function recoverChildRow(
+  owner: ChildJournalOwner,
+  row: PidTableEntry,
+  probes: OrphanProbes,
+): Promise<boolean> {
+  if (!ownerIsDead(owner.ownerPid, probes)) {
+    return false;
+  }
+
+  try {
+    probes.killProbe(row.pid, 0);
+  } catch (error: unknown) {
+    return (error as NodeJS.ErrnoException).code === "ESRCH" && ownerIsDead(owner.ownerPid, probes);
+  }
+
+  if (process.platform !== "linux") {
+    return false;
+  }
+
+  const marker = await readProcEnvironMarker(row.pid, probes);
+  if (marker !== row.dispatchId || !ownerIsDead(owner.ownerPid, probes)) {
+    return false;
+  }
+
+  try {
+    killOrphanGroup(row.pid, probes);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function reapChildJournals(
+  runtime: HooksRuntime,
+  loc: ScopedLocations,
+  probes: OrphanProbes,
+): Promise<void> {
+  const dirPath = path.join(loc.dataRoot, "_shared", "async-rewake-children");
+  try {
+    await assertPathInside(loc.dataRoot, dirPath, "child journal scan");
+    const dir = await opendir(dirPath);
+    let scanned = 0;
+    for await (const entry of dir) {
+      if (!entry.isFile() || !/^[a-f0-9]{64}\.json$/.test(entry.name)) {
+        continue;
+      }
+
+      if (scanned === MAX_CHILD_JOURNALS_SCANNED) {
+        hookDebugLog("async-rewake: child journal scan limit reached; work remains");
+        break;
+      }
+
+      scanned += 1;
+
+      await reapChildJournal(runtime, loc, path.join(dirPath, entry.name), probes);
+    }
+  } catch (error: unknown) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      hookDebugLog("async-rewake: child journal scan unavailable");
+    }
+  }
 }
 
 /**

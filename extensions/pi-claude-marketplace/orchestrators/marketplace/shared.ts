@@ -114,8 +114,7 @@ export class AgentsUnstageFailureError extends Error {
  * names identify EXECUTABLE files left on disk, and the error crosses the
  * ledger boundary into a renderer that reads it long after the bridge
  * returned; a frozen copy is the only way the field is provably the same list
- * at read time as at throw time. This follows `WorkflowNameCollisionError`
- * rather than the no-copy sibling.
+ * at read time as at throw time.
  */
 export class WorkflowsUnstageFailureError extends Error {
   readonly failedWorkflows: readonly UnstageWorkflowFailure[];
@@ -479,13 +478,43 @@ export function mcpConfigNoticesMember(notices: readonly McpConfigNotice[]): {
 }
 
 /**
- * AVAR-04 / ANAME-07: appends an unstage's MCP config notices to a command's
- * notices, in place. It first drops the `variables-missing`,
- * `credentials-blanked` and `tool-rules-unenforced` notices of the servers the
- * unstage removed, because they describe entries that the scope's
- * mcp-adapter.json no longer holds. `droppedServers` holds
- * declared names, as `UnstageOutcome.dropped.mcpServers` does. File notices
- * stay, because the files were still rewritten.
+ * Whether `notice` describes what the unstage of `plugin` in `scope` removed;
+ * `removed` holds the keys of the dropped entries.
+ */
+function describesUnstaged(
+  notice: McpConfigNotice,
+  scope: Scope,
+  plugin: string,
+  removed: ReadonlySet<string>,
+): boolean {
+  if (notice.scope !== scope) {
+    return false;
+  }
+
+  if (notice.kind === "option-blocked") {
+    return notice.plugin === plugin;
+  }
+
+  return (
+    (notice.kind === "variables-missing" ||
+      notice.kind === "credentials-blanked" ||
+      notice.kind === "tool-rules-unenforced" ||
+      notice.kind === "ca-file-removed") &&
+    removed.has(notice.server)
+  );
+}
+
+/**
+ * AVAR-04 / ANAME-07 / D-PG9-14: appends an unstage's MCP config notices to a
+ * command's notices, in place. It first drops the `variables-missing`,
+ * `credentials-blanked`, `tool-rules-unenforced` and `ca-file-removed` notices
+ * of the servers the unstage removed, because they describe entries that the
+ * scope's mcp-adapter.json no longer holds. `droppedServers` holds declared
+ * names, as `UnstageOutcome.dropped.mcpServers` does. D-PG10-21: it drops
+ * every `option-blocked` notice of the unstaged plugin and scope, whatever
+ * its server, because a blocked server is in no recorded list and so is never
+ * among the dropped servers. File notices stay, because the files were still
+ * rewritten.
  */
 export function foldUnstageNotices(
   notices: McpConfigNotice[],
@@ -500,14 +529,7 @@ export function foldUnstageNotices(
     unstaged.droppedServers.map((name) => generatedMcpServerKey(unstaged.plugin, name)),
   );
   const standing = notices.filter(
-    (notice) =>
-      !(
-        (notice.kind === "variables-missing" ||
-          notice.kind === "credentials-blanked" ||
-          notice.kind === "tool-rules-unenforced") &&
-        notice.scope === unstaged.scope &&
-        removed.has(notice.server)
-      ),
+    (notice) => !describesUnstaged(notice, unstaged.scope, unstaged.plugin, removed),
   );
   notices.splice(0, notices.length, ...standing, ...unstaged.notices);
 }

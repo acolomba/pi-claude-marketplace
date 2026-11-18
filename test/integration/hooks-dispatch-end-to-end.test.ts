@@ -21,7 +21,7 @@
 // `registerHooksBridge` (no child process spawned).
 
 import assert from "node:assert/strict";
-import { mkdir, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 
@@ -31,6 +31,7 @@ import {
   readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { type RoutingEntry } from "../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import { recordedMcpServerNames } from "../../extensions/pi-claude-marketplace/orchestrators/mcp/recorded-servers.ts";
 import {
   loadState,
   saveState,
@@ -60,7 +61,11 @@ function makeMockPi(): { pi: ExtensionAPI; registrations: CapturedRegistration[]
   return { pi, registrations };
 }
 
-function buildStateWithHooksPlugin(scope: "user" | "project", pluginId: string): ExtensionState {
+function buildStateWithHooksPlugin(
+  scope: "user" | "project",
+  pluginId: string,
+  userConfig?: unknown,
+): ExtensionState {
   return {
     schemaVersion: 2,
     marketplaces: {
@@ -93,6 +98,7 @@ function buildStateWithHooksPlugin(scope: "user" | "project", pluginId: string):
             provenance: "explicit",
             installedAt: "2026-06-17T00:00:00Z",
             updatedAt: "2026-06-17T00:00:00Z",
+            ...(userConfig === undefined ? {} : { userConfig }),
           },
         },
       },
@@ -138,10 +144,11 @@ async function seedHooksPlugin(
   extensionRoot: string,
   scope: "user" | "project",
   pluginId: string,
+  userConfig?: unknown,
 ): Promise<void> {
   const hooksDir = path.join(extensionRoot, "hooks", pluginId);
   await mkdir(hooksDir, { recursive: true });
-  await saveState(extensionRoot, buildStateWithHooksPlugin(scope, pluginId));
+  await saveState(extensionRoot, buildStateWithHooksPlugin(scope, pluginId, userConfig));
   await writeFile(path.join(hooksDir, "hooks.json"), HOOKS_JSON_BYTES, "utf8");
 }
 
@@ -179,7 +186,11 @@ const SESSION_START_EVENT: SessionStartEvent = { type: "session_start", reason: 
 test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and dispatches SessionStart end-to-end", async () => {
   // arrange
   const runtime = createHooksRuntime();
-  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
+  const hooksHydration = createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: recordedMcpServerNames,
+  });
   const { calls, executor } = recordingExecutor();
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
@@ -225,10 +236,79 @@ test("HOOK-E2E-01: registerHooksBridge boots a user-scope hooks-only plugin and 
   });
 });
 
+/**
+ * Boots the bridge over a user-scope plugin whose record holds `userConfig`,
+ * fires SessionStart, and returns the options of each routed entry and the
+ * executor calls.
+ */
+async function bootWithRecordedOptions(userConfig: unknown): Promise<{
+  readonly options: { readonly declared: boolean; readonly values: [string, string][] }[];
+  readonly calls: readonly ExecutorCall[];
+}> {
+  const runtime = createHooksRuntime();
+  const hooksHydration = createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: recordedMcpServerNames,
+  });
+  const { calls, executor } = recordingExecutor();
+  return withHermeticPiHome(async ({ agentDir, projectCwd }) => {
+    await seedHooksPlugin(
+      path.join(agentDir, "pi-claude-marketplace"),
+      "user",
+      "optioned",
+      userConfig,
+    );
+    const { pi, registrations } = makeMockPi();
+    const placeholderCtx = {
+      cwd: projectCwd,
+      mode: "print",
+      isProjectTrusted: () => true,
+      sessionManager: E2E_SESSION,
+    } as unknown as ExtensionContext;
+
+    await hooksHydration.registerHooksBridge(pi, { cwd: projectCwd, executor });
+    const options = (runtime.routingTableEntries().get("SessionStart") ?? []).map((entry) => ({
+      declared: entry.options.declared,
+      values: [...entry.options.values],
+    }));
+    await findSessionStartHandler(registrations)(SESSION_START_EVENT, placeholderCtx);
+    return { options, calls };
+  });
+}
+
+test("D-PG10-23 a booted hook entry holds the options its record holds", async () => {
+  // act
+  const booted = await bootWithRecordedOptions({
+    mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+  });
+
+  // assert
+  assert.deepStrictEqual(booted, {
+    options: [{ declared: true, values: [["mode", "fast"]] }],
+    calls: [{ pluginId: "optioned", claudeEvent: "SessionStart", scope: "user" }],
+  });
+});
+
+test("D-PG10-25 a record whose userConfig is a string boots with declared options and no values, and dispatches", async () => {
+  // act
+  const booted = await bootWithRecordedOptions("mode=fast");
+
+  // assert
+  assert.deepStrictEqual(booted, {
+    options: [{ declared: true, values: [] }],
+    calls: [{ pluginId: "optioned", claudeEvent: "SessionStart", scope: "user" }],
+  });
+});
+
 test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_start lazy project hydrate", async () => {
   // arrange
   const runtime = createHooksRuntime();
-  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
+  const hooksHydration = createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: recordedMcpServerNames,
+  });
   const { calls, executor } = recordingExecutor();
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
@@ -275,7 +355,11 @@ test("HOOK-E2E-02: project-scope SessionStart plugin dispatches via the session_
 test("HOOK-E2E-03: WR-05 -- session_start lazy hydrate writes nothing under a pristine project cwd", async () => {
   // arrange
   const runtime = createHooksRuntime();
-  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
+  const hooksHydration = createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: recordedMcpServerNames,
+  });
   const { executor } = recordingExecutor();
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
@@ -319,7 +403,11 @@ test("HOOK-E2E-03: WR-05 -- session_start lazy hydrate writes nothing under a pr
 test("HOOK-E2E-04: a throwing lazy project hydrate never blocks SessionStart dispatch", async () => {
   // arrange
   const runtime = createHooksRuntime();
-  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
+  const hooksHydration = createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: recordedMcpServerNames,
+  });
   const { calls, executor } = recordingExecutor();
 
   await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
@@ -358,3 +446,118 @@ test("HOOK-E2E-04: a throwing lazy project hydrate never blocks SessionStart dis
     );
   });
 });
+
+test(
+  "a registered child records complete successful and failed tool result payloads",
+  { concurrency: false },
+  async () => {
+    await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
+      const extensionRoot = path.join(agentDir, "pi-claude-marketplace");
+      const pluginId = "result-recording";
+      const sourceRoot = path.join(extensionRoot, "sources", "test-mp", "plugins", pluginId);
+      const recordPath = path.join(sourceRoot, "received.jsonl");
+      await mkdir(sourceRoot, { recursive: true });
+      await writeFile(
+        path.join(sourceRoot, "record.mjs"),
+        'import fs from "node:fs";\nconst input = fs.readFileSync(0, "utf8");\nfs.appendFileSync(new URL("./received.jsonl", import.meta.url), JSON.stringify(JSON.parse(input)) + "\\n");\n',
+      );
+      const state = buildStateWithHooksPlugin("user", pluginId);
+      state.marketplaces["claude-plugins-official"]!.plugins[pluginId]!.resolvedSource = sourceRoot;
+      await saveState(extensionRoot, state);
+      const hooksDir = path.join(extensionRoot, "hooks", pluginId);
+      await mkdir(hooksDir, { recursive: true });
+      const recorder = {
+        hooks: [{ type: "command", command: 'node "${CLAUDE_PLUGIN_ROOT}/record.mjs"' }],
+      };
+      await writeFile(
+        path.join(hooksDir, "hooks.json"),
+        JSON.stringify({ PostToolUse: [recorder], PostToolUseFailure: [recorder] }),
+      );
+      const runtime = createHooksRuntime();
+      const hydration = createHooksHydration(runtime, {
+        loadState,
+        readHooksJson,
+        readMcpServerNames: recordedMcpServerNames,
+      });
+      const { pi, registrations } = makeMockPi();
+      const ctx = {
+        cwd: projectCwd,
+        mode: "print",
+        ui: { notify: () => {} },
+        sessionManager: {
+          getSessionId: () => "child-session",
+          getSessionFile: () => "/sessions/child-session.jsonl",
+          getSessionName: () => undefined,
+        },
+      } as unknown as ExtensionContext;
+      const previousMarker = process.env.PI_SUBAGENT_CHILD;
+      process.env.PI_SUBAGENT_CHILD = "1";
+      try {
+        await hydration.registerHooksBridge(pi, { cwd: projectCwd });
+        const before = registrations.find((entry) => entry.event === "before_agent_start");
+        const result = registrations.find((entry) => entry.event === "tool_result");
+        assert.ok(before);
+        assert.ok(result);
+        await before.handler(
+          {
+            type: "before_agent_start",
+            systemPromptOptions: { customPrompt: '<active_agent name="reviewer"/>\n\n' },
+          },
+          ctx,
+        );
+        for (const isError of [false, true]) {
+          await result.handler(
+            {
+              type: "tool_result",
+              toolCallId: isError ? "failed-call" : "successful-call",
+              toolName: "catalog",
+              input: { query: "entry" },
+              content: [{ type: "text", text: isError ? "lookup failed" : "found" }],
+              isError,
+              details: undefined,
+            },
+            ctx,
+          );
+        }
+      } finally {
+        if (previousMarker === undefined) {
+          delete process.env.PI_SUBAGENT_CHILD;
+        } else {
+          process.env.PI_SUBAGENT_CHILD = previousMarker;
+        }
+      }
+
+      const payloads = (await readFile(recordPath, "utf8"))
+        .trimEnd()
+        .split("\n")
+        .map((line) => JSON.parse(line) as unknown);
+      assert.deepStrictEqual(payloads, [
+        {
+          session_id: "child-session",
+          transcript_path: "/sessions/child-session.jsonl",
+          cwd: projectCwd,
+          hook_event_name: "PostToolUse",
+          tool_name: "catalog",
+          tool_input: { query: "entry" },
+          tool_use_id: "successful-call",
+          tool_response: [{ type: "text", text: "found" }],
+          agent_type: "reviewer",
+          agent_id: "child-session",
+        },
+        {
+          session_id: "child-session",
+          transcript_path: "/sessions/child-session.jsonl",
+          cwd: projectCwd,
+          hook_event_name: "PostToolUseFailure",
+          tool_name: "catalog",
+          tool_input: { query: "entry" },
+          tool_use_id: "failed-call",
+          error: "lookup failed",
+          is_interrupt: false,
+          agent_type: "reviewer",
+          agent_id: "child-session",
+        },
+      ]);
+    });
+  },
+);

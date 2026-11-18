@@ -22,11 +22,12 @@ import path from "node:path";
 
 import { rewriteMarkdownReferences } from "../../domain/skill-tokens.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
-import { substituteClaudeVars } from "../../shared/vars.ts";
+import { substituteClaudeContent } from "../../shared/vars.ts";
 
 import { preloadedSkillNames } from "./convert.ts";
 
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
+import type { ClaudeContentOptions } from "../../shared/vars.ts";
 import type { AgentSkillSource, DiscoveredAgent, SkillPreload } from "./types.ts";
 
 /** The arguments of `readSkillPreloads`. */
@@ -40,6 +41,8 @@ export interface ReadSkillPreloadsInput {
   /** SUB-02: present only for a project-scope install. */
   readonly projectDir?: string | undefined;
   readonly referenceNames: InstalledReferenceNames;
+  /** D-PG10-13: the options a preloaded skill is filled with, as the skill's own staging. */
+  readonly options: ClaudeContentOptions | undefined;
 }
 
 /**
@@ -87,12 +90,16 @@ function skillPreload(
   }
 
   const rewritten = rewriteMarkdownReferences(body.trim(), input.pluginName, input.referenceNames);
-  const substituted = substituteClaudeVars(rewritten, {
-    pluginRoot: input.pluginRoot,
-    pluginData: input.pluginDataDir,
-    skillDir: row.targetPath,
-    projectDir: input.projectDir,
-  });
+  const substituted = substituteClaudeContent(
+    rewritten,
+    {
+      pluginRoot: input.pluginRoot,
+      pluginData: input.pluginDataDir,
+      skillDir: row.targetPath,
+      projectDir: input.projectDir,
+    },
+    input.options,
+  );
   return {
     kind: "inline",
     text: `Base directory for this skill: ${row.targetPath}\n\n${substituted}`,

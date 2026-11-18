@@ -12,14 +12,16 @@
 //
 // W-04: typed fields + open index signature use `unknown` to avoid TS2411
 // (typed-string fields incompatible with `string | undefined` index).
-// The line-based parser in frontmatter.ts only emits string values for the
-// known fields; consumers narrow as needed.
+// D-PG7-05: the YAML reader in frontmatter.ts gives every value as a string
+// (a scalar as its text, a sequence joined with commas), so consumers of the
+// known fields never narrow.
 
 import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { AgentsIndexRow } from "../../persistence/agents-index-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
+import type { ClaudeContentOptions } from "../../shared/vars.ts";
 
 export interface RawAgentFrontmatter {
   readonly name?: string;
@@ -91,11 +93,13 @@ export interface StageAgentsInput {
   readonly knownSkills?: readonly string[];
   /**
    * AG-7 opt-in: when true, `convertAgent` runs the model-mapping table
-   * (sonnet/opus/haiku/inherit/unknown) and emits `model:` accordingly.
-   * When false (the default), the generated frontmatter omits `model:`
-   * entirely and Pi picks its own default model. Threaded only on the
-   * install/update direct paths -- the marketplace autoupdate cascade
-   * always leaves this unset, so cascade-driven re-installs omit `model:`.
+   * (sonnet/opus/haiku/unknown) and emits `model:` accordingly. When false
+   * (the default), the generated frontmatter omits `model:` and Pi picks
+   * its own default model, except that a source `inherit` is always
+   * written as `model: ""` (D-PG7-11, D-PG7-17, PG-AGENT-07a). Threaded only on
+   * the install/update direct paths -- the marketplace autoupdate cascade
+   * always leaves this unset, so cascade-driven re-installs write no other
+   * `model:`.
    */
   readonly mapModel?: boolean;
   /**
@@ -129,6 +133,13 @@ export interface StageAgentsInput {
    * substitution only.
    */
   readonly cwd: string;
+  /**
+   * D-PG10-13: the plugin's options, written into agent bodies and preloaded
+   * skills where they name `${user_config.KEY}`. Required, like `cwd`; a
+   * caller passes `undefined` for a plugin that declares no `userConfig`
+   * (D-PG10-21).
+   */
+  readonly options: ClaudeContentOptions | undefined;
 }
 
 /**

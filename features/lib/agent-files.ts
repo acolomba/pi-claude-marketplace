@@ -6,7 +6,8 @@
  * nested, hidden, or frontmatter-less files (AGT-01, D-CF4-01).
  */
 
-import { readFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { writePublishedPluginFile, writePublishedPluginFiles } from "./published-marketplace.ts";
@@ -110,16 +111,45 @@ export async function publishAgentFiles(
   return rows.map((row) => path.join(published.root, "plugins", plugin, "agents", row.file));
 }
 
+// The agent file `fileName` in the agents folder of `scope`: the user scope's
+// agent directory, or the project's `.pi` folder.
+function stagedAgentPath(
+  tokens: { readonly agentDir: string; readonly projectDir: string },
+  scope: string,
+  fileName: string,
+): string {
+  const root = scope === "user" ? tokens.agentDir : path.join(tokens.projectDir, ".pi");
+  return path.join(root, "agents", fileName);
+}
+
 /**
  * Returns the text of the agent file `fileName` that the agents bridge staged
- * for pi-subagents in the agents folder of `scope`: the user scope's agent
- * directory, or the project's `.pi` folder.
+ * for pi-subagents in the agents folder of `scope`.
  */
 export async function readStagedAgentFile(
   tokens: { readonly agentDir: string; readonly projectDir: string },
   scope: string,
   fileName: string,
 ): Promise<string> {
-  const root = scope === "user" ? tokens.agentDir : path.join(tokens.projectDir, ".pi");
-  return readFile(path.join(root, "agents", fileName), "utf8");
+  return readFile(stagedAgentPath(tokens, scope, fileName), "utf8");
+}
+
+/**
+ * Replaces the agent file `fileName` in the agents folder of `scope` with
+ * `text`, through a temporary file and a rename, as the agents bridge writes.
+ */
+export async function replaceStagedAgentFile(
+  tokens: { readonly agentDir: string; readonly projectDir: string },
+  scope: string,
+  fileName: string,
+  text: string,
+): Promise<void> {
+  const file = stagedAgentPath(tokens, scope, fileName);
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporary, text, { flag: "wx" });
+    await rename(temporary, file);
+  } finally {
+    await rm(temporary, { force: true });
+  }
 }

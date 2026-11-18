@@ -732,7 +732,7 @@ test("warns about a refused script and renders the verdict reason unparaphrased"
   assert.deepStrictEqual(discovery, expectedDiscovery);
 });
 
-test("keeps both scripts when two files generate the same workflow name", async (t) => {
+test("keeps the last script in file order when two files generate the same workflow name", async (t) => {
   // arrange
   const pluginRoot = await createPluginRoot(t, "workflow-discover-collision-");
   const workflowsDir = path.join(pluginRoot, "workflows");
@@ -752,16 +752,72 @@ test("keeps both scripts when two files generate the same workflow name", async 
 
   // assert
   assert.deepStrictEqual(
-    discovery.discovered.map((record) => ({
-      scriptFile: record.scriptFile,
-      generatedName: "generatedName" in record.verdict ? record.verdict.generatedName : undefined,
-    })),
+    discovery.discovered.map((record) => record.scriptFile),
+    [secondScript],
+  );
+  assert.deepStrictEqual(discovery.warnings, []);
+});
+
+test("keeps the full name of a prefixed script whose elided name another script declares (D-PG8-18)", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-elision-clash-");
+  const workflowsDir = path.join(pluginRoot, "workflows");
+  await mkdir(workflowsDir);
+  await writeFile(
+    path.join(workflowsDir, "a.js"),
+    'export const meta = { name: "scan", description: "s" };\n',
+  );
+  await writeFile(
+    path.join(workflowsDir, "b.js"),
+    'export const meta = { name: "acme-scan", description: "s" };\n',
+  );
+  const resolved = resolvedPlugin(pluginRoot, ["workflows"]);
+
+  // act
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    discovery.discovered.map((record) => [
+      record.verdict.fileName,
+      record.verdict.outcome === "named" ? record.verdict.generatedName : undefined,
+    ]),
     [
-      { scriptFile: firstScript, generatedName: "acme:same" },
-      { scriptFile: secondScript, generatedName: "acme:same" },
+      ["a.js", "acme:scan"],
+      ["b.js", "acme:acme-scan"],
     ],
   );
   assert.deepStrictEqual(discovery.warnings, []);
+});
+
+test("keeps the script of the later declared path when two paths generate the same workflow name", async (t) => {
+  // arrange
+  const pluginRoot = await createPluginRoot(t, "workflow-discover-declared-order-");
+  const laterDir = path.join(pluginRoot, "alpha");
+  const earlierDir = path.join(pluginRoot, "zeta");
+  const laterScript = path.join(laterDir, "scan.js");
+  await mkdir(laterDir);
+  await mkdir(earlierDir);
+  await writeFile(path.join(earlierDir, "scan.js"), 'export const meta = { name: "scan" };\n');
+  await writeFile(laterScript, 'export const meta = { name: "scan" };\n');
+  const resolved = resolvedPlugin(pluginRoot, ["zeta", "alpha"]);
+
+  // act
+  const discovery = await discoverPluginWorkflows({
+    pluginName: "acme",
+    resolved,
+    tense: "install",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    discovery.discovered.map((record) => record.scriptFile),
+    [laterScript],
+  );
 });
 
 test("discovers a script once when two declared spellings resolve to one directory", async (t) => {
@@ -800,7 +856,7 @@ test("folds case when deduping declared paths on a case-insensitive platform", a
   // Two real directories differing only in case, each holding a script of the
   // same name: on a case-insensitive filesystem these are one directory, and
   // the folded key is what collapses them. Without the fold both scripts are
-  // discovered and collide on one generated name. Where the host filesystem
+  // discovered and the second replaces the first. Where the host filesystem
   // is itself case-insensitive (macOS by default) the two spellings already
   // name one directory, so the second mkdir must tolerate it.
   const lowerDir = path.join(pluginRoot, "workflows");
@@ -832,7 +888,8 @@ test("folds case when deduping declared paths on a case-insensitive platform", a
 // Redefines `process.platform` like the case above, under the same sequencing
 // guarantee. The two spellings name two directories on a case-sensitive host
 // and one directory on a case-insensitive one; without a fold both are walked
-// either way, so the outcome is the same on every host.
+// either way and the second script replaces the first, so the outcome is the
+// same on every host.
 test("keeps case-distinct declared paths apart on a case-sensitive platform", async (t) => {
   // arrange
   const pluginRoot = await createPluginRoot(t, "workflow-discover-case-kept-");
@@ -856,7 +913,7 @@ test("keeps case-distinct declared paths apart on a case-sensitive platform", as
   // assert
   assert.deepStrictEqual(
     discovery.discovered.map((record) => record.scriptFile),
-    [path.join(lowerDir, "greet.js"), path.join(upperDir, "greet.js")],
+    [path.join(upperDir, "greet.js")],
   );
   assert.deepStrictEqual(discovery.warnings, []);
 });

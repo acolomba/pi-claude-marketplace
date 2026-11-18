@@ -19,6 +19,7 @@ void ([
   "SessionEnd",
   "Stop",
   "StopFailure",
+  "UserPromptExpansion",
 ] as const satisfies readonly ClaudeHookEvent[]);
 void ([
   "PreToolUse",

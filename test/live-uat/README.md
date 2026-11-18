@@ -4,13 +4,12 @@ The harnesses in this directory verify runtime behavior that the offline suites 
 
 | Canary                              | Proves                                                                                                                                                                           | Needs live `pi`                                              |
 | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| `stop-canary.mjs`                   | the `agent_settled` Stop dispatcher fire-point (STOP-01, STOP-03, STOP-07)                                                                                                       | yes, for every assertion                                     |
 | `manifest-absence-canary.mjs`       | installed plugins survive their manifest entry disappearing; disabled partials read as disabled                                                                                  | only for the optional host smoke                             |
 | `workflow-agent-failure-canary.mjs` | the host engine's `agent()` failure observable -- a recoverable failure resolves to `null`, a non-recoverable one rejects (WEVID-01)                                             | no -- it drives the engine, not a Pi session                 |
 | `workflow-storage-canary.mjs`       | the envelopes the bridge writes are the envelopes the host engine lists, loads and parses, in both scopes (WSTOR-01)                                                             | no -- it drives the extension and the engine's storage layer |
-| `mcp-adapter-canary.mjs`            | pi-mcp-adapter 7.0.0 loads this extension's entries, a legacy entry migrates with the reloads counted, tool search finds the plugin tools, and info shows their status (ADOC-02) | yes, with the keyless stub, which the canary starts itself   |
+| `mcp-adapter-canary.mjs`            | pi-mcp-adapter 7.0.1 loads this extension's entries, a legacy entry migrates with the reloads counted, tool search finds the plugin tools, and info shows their status (ADOC-02) | yes, with the keyless stub, which the canary starts itself   |
 
-All five follow the same honesty contract: an unmet precondition or an unobserved assertion exits **non-zero** with a human-readable reason, so the verifier records `human_needed` rather than a silent pass.
+All four follow the same honesty contract: an unmet precondition or an unobserved assertion exits **non-zero** with a human-readable reason, so the verifier records `human_needed` rather than a silent pass.
 
 ## Manifest-absence canary -- `manifest-absence-canary.mjs`
 
@@ -282,139 +281,19 @@ EXIT=1
 
 The third control, a `PI_CODING_AGENT_DIR` outside the sandbox, ran at 3.13.0 and routed to `LIVE ENGINE REQUIRED`. It was not repeated at 3.13.1. The sandbox was empty after the 3.13.1 runs.
 
-## Stop contract canary -- `stop-canary.mjs`
+## Stop contract checks
 
-Live-Pi verification for the `agent_settled` Stop dispatcher (STOP-01, STOP-03, STOP-07). The mocked settle tests under `test/bridges/hooks/` prove the dispatcher logic offline; this canary proves the settle **fire-point** on a real Pi runtime, which no fake `pi` can establish.
+The scripted Stop canary is gone. It asserted one `agent_settled` for each block, and a blocked `Stop` now continues the same run (D-PG5-01). Three scenarios of `features/hook/prompt-and-stop.feature` replace its scripted half on a real Pi, on each run of `npm run check`:
 
-It has two halves:
+- "A run that a stop hook blocks twice settles once after one run start"
+- "Eight consecutive Stop blocks continue before the ninth is overridden"
+- "Reload starts a fresh Stop continuation count"
 
-- A **scripted canary** that drives a real Pi session and autonomously asserts what a headless drive can observe: `agent_settled` dispatch and block re-entry.
-- A **human verification checklist** (below) for the runtime timing / interrupt questions a headless drive cannot sustain -- the verifier routes these `human_needed` rather than passing them silently.
-
-### Prerequisites
-
-| Requirement                                | Notes                                                                                                                                                                                                                                   |
-| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The repository's Pi, >= 1.0.0              | `npm ci` installs it from the `@earendil-works/pi-coding-agent` devDependency. 1.0.0 is the package peer floor. `agent_settled` first appeared in 0.80.5. The earlier canary run used 0.80.10.                                          |
-| A disposable `PI_CODING_AGENT_DIR` sandbox | Use `$(pwd)/tmp/pi-uat/agent`. The harness refuses to run against any dir outside `tmp/pi-uat` (T-88-08) so the always-block canary never churns a real Pi state dir.                                                                   |
-| A working default provider in the sandbox  | The sandbox's `settings.json` selects the provider/model; a real turn must reach it. `--offline` disables only Pi's _startup_ network ops (marketplace autoupdate), not the model call. The keyless stub route below needs no real key. |
-
-**Keyless stub route.** `test/live-uat/openai-stub-server.mjs` is a local OpenAI-compatible stub. Without `STUB_SCRIPT`, it answers every chat completion with the text `ready`, so no real provider key is involved. This canary relies on that default. If you set `STUB_SCRIPT` to a JSON file, the stub replays scripted tool calls instead. It picks the script by a marker in the last user message. `mcp-adapter-canary.mjs` uses this mode. The stub listens on `127.0.0.1` only, on `STUB_PORT` (default 18787). `STUB_PORT=0` binds a free port, and the startup line names that port. If you set `STUB_HTTP_LOG`, it appends one line per request to that file: the time, the URL, the `stream` flag and the requested tool names. It never logs headers. Two sandbox files point Pi at it.
-
-`tmp/pi-uat/agent/models.json`:
-
-```json
-{"providers":{"stubllm":{"baseUrl":"http://127.0.0.1:18787/v1","api":"openai-completions","apiKey":"stub","models":[{"id":"stub"}]}}}
-```
-
-`tmp/pi-uat/agent/settings.json`:
-
-```json
-{"defaultProvider":"stubllm","defaultModel":"stub"}
-```
-
-### The scripted canary
-
-#### Run
-
-```bash
-mkdir -p tmp/pi-uat/agent   # then write the two sandbox files above
-STUB_HTTP_LOG=/var/tmp/stub-http.log node test/live-uat/openai-stub-server.mjs &
-PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/agent node test/live-uat/stop-canary.mjs
-kill %1
-rm -rf tmp/pi-uat/agent
-```
-
-The harness:
-
-1. Verifies the live-pi + sandbox preconditions (refuses non-sandbox dirs).
-2. Builds a disposable path-source marketplace carrying a Stop-only "ralph-loop" plugin whose Stop hook **always** returns `{"decision":"block","reason":"keep going"}` and appends one line to a marker file per invocation.
-3. Installs it into the sandbox (user scope) through the extension's own `/claude:plugin` machinery.
-4. Drives a real `pi -p --mode json --no-tools --offline` turn and reads the marker file, the JSON lifecycle event stream and the exit status of the `pi` process.
-5. **Always uninstalls the canary and removes the marketplace afterward** (the sandbox is left clean even on failure).
-
-#### What it asserts (exit 0 conditions for the scriptable half)
-
-- **STOP-01** -- `agent_settled` fires and dispatches the Stop bucket end-to-end (`agent_settled` event present AND the Stop hook fired at least once).
-- **STOP-03** -- block re-entry starts a new turn: two `turn_start` events for a single user prompt (the documented extra-turn-boundary divergence).
-- **STOP-07 bound** -- the run ends normally at exactly 8 blocks, with one `agent_settled` per block. A normal end means that `pi` exits with code 0, without a signal, before the 120-second harness timeout. The harness reads the exit status of the child process. It does not infer the status from the timeout.
-
-Exit 0 also needs the cap-trip warning, which a headless run cannot show. So a healthy headless run exits 1 (see below).
-
-#### What it routes to `human_needed` (exit non-zero)
-
-- **STOP-07 cap-trip warning (the expected headless result, exit 1)** -- since Pi 0.87 a one-shot `pi -p` drives the settle→block→re-enter loop itself: a run requested from an `agent_settled` handler is deferred until the settle handlers finish and is then awaited. The loop reaches the 8-consecutive-block cap headless, and the harness checks the bound above. The cap-trip warning goes through `ctx.ui.notify`, which does nothing in print/json mode, so the harness cannot see it. It prints the proven half, then exits 1 with a `SCRIPTABLE HALF PROVEN, cap-trip warning -> human_needed` message. Confirm the cap-trip warning interactively per **item 4** below.
-
-- **The cap check.** The harness compares the block count and the way the run ended against the cap, in this order:
-
-  | Observed                                                             | Result                                     | Exit |
-  | -------------------------------------------------------------------- | ------------------------------------------ | ---- |
-  | More than 8 blocks, whether or not the run ended                     | `STOP-07 REGRESSION -- failed:`            | 2    |
-  | Exactly 8 blocks, and the run did not end normally                   | `STOP-07 REGRESSION -- failed:`            | 2    |
-  | Fewer than 8 blocks, and the run did not end normally (inconclusive) | `LIVE RUNTIME REQUIRED`                    | 1    |
-  | Fewer than 8 blocks after a normal end                               | `STOP-07 REGRESSION -- failed:`            | 2    |
-  | Exactly 8 blocks after a normal end                                  | goes on to the `agent_settled` check below | --   |
-
-  "Did not end normally" means that the drive was still running at the timeout, or that `pi` exited with another code or a signal. The message states which one it saw. It does not name a cause: at exactly 8 blocks, the count cannot show whether the cap failed to end the run or re-entry went on past the cap.
-
-- **`agent_settled` count.** A run that passes the cap check must show one `agent_settled` per block. Any other count is a `STOP-07 REGRESSION`, exit 2.
-
-- If a precondition is not met, the harness exits 1 with a `LIVE RUNTIME REQUIRED` message. The preconditions are: the Pi package is installed (run `npm ci`), its version is 1.0.0 or later, and `PI_CODING_AGENT_DIR` is inside `tmp/pi-uat`.
-
-Exit 2 is kept apart from exit 1 on purpose. A script that reads only the exit code can then tell a broken bound from the expected headless result.
-
-The harness **never fakes a live result**: it exits non-zero rather than reporting a warning it could not observe, so the verifier records `human_needed`.
-
-#### Observed result (2026-07-31, pi 0.80.10)
-
-Openai-codex provider, sandbox `tmp/pi-uat/agent`. Summary of the observed run (not a verbatim transcript -- see `stop-canary.mjs` for the exact output formats):
-
-```text
-blocks=1, agent_settled=1, turn_start=2, cap=8, capWarning=false
-PASS STOP-01: agent_settled dispatched the Stop bucket end-to-end
-PASS STOP-03: block re-entry started a second turn for one prompt
--> CAP LOOP routed to human_needed (headless pi does not sustain the loop)
-exit 1
-```
-
-STOP-01 and STOP-03 are proven on real Pi. STOP-07's cap loop is item 4 in the human checklist.
-
-#### Observed result (2026-10-02, pi 1.0.0)
-
-Provider: the keyless stub `test/live-uat/openai-stub-server.mjs` on `127.0.0.1:18787`, selected by the two sandbox files from the Prerequisites section. No real provider key was used. Sandbox `tmp/pi-uat/agent`, `TMPDIR=/var/tmp/mcp4-uat`. The stub logged 8 chat-completion requests, one per turn. The canary's full output from this run, verbatim, with the exit status appended by the shell:
-
-```text
-[stop-canary] PASS: live pi 1.0.0 (/home/acolomba/src/pi-claude-marketplace-mcp-4/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js) >= 1.0.0, sandbox /home/acolomba/src/pi-claude-marketplace-mcp-4/tmp/pi-uat/agent
-[stop-canary] PASS: canary installed (ralph-loop@stop-canary-mkt, hooks: ralph-loop)
-[stop-canary] observed: Stop-hook blocks=8, agent_settled=8, turn_start=8, cap=8, capWarning=false.
-[stop-canary] drive: pi exited with code 0.
-[stop-canary] PASS: STOP-01: agent_settled fired and dispatched the Stop bucket end-to-end (stopReason "stop").
-[stop-canary] PASS: STOP-03: block re-entry proven -- the always-block Stop hook re-entered the agent loop (8 turns for one prompt; the expected extra-turn-boundary divergence).
-
-[stop-canary] SCRIPTABLE HALF PROVEN, cap-trip warning -> human_needed:
-  agent_settled dispatched the Stop bucket and block re-entry started a new turn (proven above).
-  Headless `pi` observed 8 block(s) against the 8-block override cap.
-  Since Pi 0.87 a headless run drives the settle->block->re-enter loop itself, because runs
-  requested from agent_settled handlers are deferred and then awaited.
-  The cap-trip warning goes through ctx.ui.notify, which does nothing in print/json mode, so
-  this harness cannot see it.
-
-Confirm the cap-trip warning interactively per test/live-uat/README.md (Human verification, item 4).
-STOP_EXIT=1
-```
-
-The run exited 1 through the `cap-trip warning -> human_needed` routing. The loop stopped at exactly 8 blocks with one `agent_settled` and one `turn_start` per block, and `pi` exited with code 0, so the cap bounds the loop (T-88-02). `capWarning=false` because print/json mode replaces `ctx.ui.notify` with a no-op. The STOP-07 warning stays item 4 in the human checklist.
-
-The two negative controls ran on the same tree. Each exited 1 with `LIVE RUNTIME REQUIRED`:
-
-- `PI_CODING_AGENT_DIR` unset: `PI_CODING_AGENT_DIR is unset.`
-- `PI_CODING_AGENT_DIR=$(pwd)/tmp/pi-uat/../../.pi/agent`: refused, because it resolves to `.pi/agent`, which is outside `tmp/pi-uat`.
-
-A third control proved the regression exit. A temporary copy of the canary with the cap constant set to 7 saw the same 8 blocks, printed `STOP-07 REGRESSION -- failed:` and `the always-block canary spun to 8 blocks, past the 7 cap (pi exited with code 0).`, and exited 2. The copy was then deleted.
+The real-plugin record and the human verification checklist below stay.
 
 ### Real-plugin run -- `ralph-loop@claude-plugins-official`
 
-Observed 2026-07-31, pi 0.80.10, openai-codex provider, sandbox `tmp/pi-uat/agent`, project dir `tmp/work`. Unlike the scripted canary (which carries a synthetic always-block hook), this run exercised the **unmodified upstream plugin** -- `stop-hook.sh` and `setup-ralph-loop.sh` byte-for-byte from `claude-plugins-official` -- installed through `/claude:plugin bootstrap` + `install ralph-loop@claude-plugins-official` + `/reload`, with the command registering as `/ralph-loop:ralph-loop`.
+Observed 2026-07-31, pi 0.80.10, openai-codex provider, sandbox `tmp/pi-uat/agent`, project dir `tmp/work`. This record predates D-PG5-01, when each block started a new turn. Unlike a synthetic always-block hook, this run exercised the **unmodified upstream plugin** -- `stop-hook.sh` and `setup-ralph-loop.sh` byte-for-byte from `claude-plugins-official` -- installed through `/claude:plugin bootstrap` + `install ralph-loop@claude-plugins-official` + `/reload`, with the command registering as `/ralph-loop:ralph-loop`.
 
 Task given (interactive session):
 
@@ -424,7 +303,7 @@ Task given (interactive session):
 
 Observed sequence (summary from the session JSONL, not a verbatim transcript): the setup script activated the loop (iteration 1, max 5); turns 1 and 2 each appended a line and settled into a Stop block, each re-entering via a `claude-hook-stop-block` injected turn; turn 3 appended the third line and ended with `<promise>COUNTER COMPLETE</promise>` as its final text; on that settle the hook matched the promise, removed `.claude/ralph-loop.local.md`, and allowed the stop. Final state: `ralph-canary.txt` with exactly 3 lines, empty `.claude/`, 2 block re-entries total, no cap warning.
 
-What this proves beyond the scripted canary:
+What this run proved:
 
 - The upstream block-to-continue contract holds against the real script, including its state-file iteration bookkeeping (the `session_id` guard falls through because `CLAUDE_CODE_SESSION_ID` is unset under Pi, preserving legacy behavior).
 - `transcript_path` (Pi's live session JSONL) is **parseable by the upstream extractor**: the per-line `.message.content[]` shape with `"role":"assistant"` satisfies the script's `grep` + `jq` pipeline, so completion-promise detection terminates the loop exactly as on Claude Code -- the loop ended by promise, not by its `--max-iterations` fallback.
@@ -432,7 +311,7 @@ What this proves beyond the scripted canary:
 
 ### Human verification checklist
 
-A headless `pi -p` drive on Pi 1.0.0 reaches the 8-block cap (8 blocks, pi exit 0; see the Stop contract canary above), but it cannot show the cap-trip warning or the interrupt and queued-message timing below. These items require a **human at an interactive `pi` session**. Each item below is an explicit `human_needed` verification: record the observed result against the expected result; a mismatch is a STOP-01 / STOP-07 regression.
+A headless drive cannot show the cap-trip warning or the interrupt and queued-message timing below. These items require a **human at an interactive `pi` session**. Each item below is an explicit `human_needed` verification: record the observed result against the expected result; a mismatch is a STOP-01 / STOP-07 regression. The scenarios above prove items 3 and 4 on each run of the check.
 
 **Interactive setup** (shared by all items):
 
@@ -454,7 +333,7 @@ For items that need an installed Stop hook, install a Stop-only plugin whose hoo
 # stop-observe.sh -- log stdin (carries stop_hook_active) then decide.
 cat >> /tmp/stop-uat/stdin.log
 echo >> /tmp/stop-uat/stdin.log
-# For the always-block canary, uncomment the next line:
+# For the always-block hook, uncomment the next line:
 # printf '%s' '{"decision":"block","reason":"keep going"}'
 ```
 
@@ -467,31 +346,31 @@ echo >> /tmp/stop-uat/stdin.log
 #### Item 2 -- settle timing with queued user messages (STOP-01)
 
 - **Repro:** Start a turn, then while it is still running submit a **second** user message so it queues. Let both drain. Count `agent_settled` events and Stop hook firings in the session JSONL / `[hooks]` log.
-- **Expected:** upstream Claude fires `Stop` once per response; Pi's `agent_settled` fires **once, after the queue fully drains** (no automatic retry / compaction / queued continuation remains), so exactly **one** settle-time Stop dispatch for the whole drained sequence.
-- **Failure signature:** `agent_settled` (and the Stop dispatch) fires mid-queue before the drain, or fires more than once for a single logical completion. Document any per-response vs per-settle divergence from the upstream cadence.
+- **Expected:** upstream Claude fires `Stop` once per response. Pi reads a queued message before its `agent_before_settle` event, so the Stop hooks run once, after the queue fully drains, and Pi raises exactly **one** `agent_settled` for the whole drained sequence.
+- **Failure signature:** the Stop hooks run mid-queue before the drain, or `agent_settled` fires more than once for a single logical completion. Document any per-response vs per-settle divergence from the upstream cadence.
 
-#### Item 3 -- re-entry does NOT self-clear `stop_hook_active` (STOP-07)
+#### Item 3 -- a continuation does NOT self-clear `stop_hook_active` (STOP-07)
 
-- **Repro:** Install the always-block canary (the `stop-observe.sh` above with the `block` line uncommented, logging stdin). Send one prompt and let the block re-enter at least twice. Inspect `stop-observe.sh`'s `stdin.log`: read the `stop_hook_active` field of each consecutive Stop payload. Then submit a **genuine** new user prompt.
-- **Expected:** the bridge's re-entry uses `sendMessage(customType: "claude-hook-stop-block", display: false, …)`, which does **not** pass through the `input` event -- so `stop_hook_active` stays `true` across every consecutive re-entry (the 2nd+ Stop payloads show `"stop_hook_active": true`). Only the genuine user prompt fires `input`, which clears the flag (the next Stop payload after it shows `"stop_hook_active": false`).
-- **Failure signature:** the 2nd consecutive Stop payload shows `"stop_hook_active": false` (the injected re-entry self-cleared the flag via a stray `input`), or a genuine user prompt fails to clear it.
+- **Repro:** Install the always-block hook (the `stop-observe.sh` above with the `block` line uncommented, logging stdin). Send one prompt and let the block continue the run at least twice. Inspect `stop-observe.sh`'s `stdin.log`: read the `stop_hook_active` field of each consecutive Stop payload. Then submit a **genuine** new user prompt.
+- **Expected:** the bridge's continuation is a hidden message (`customType: "claude-hook-stop-block"`, `display: false`) that it returns at Pi's `agent_before_settle` event. It does **not** pass through the `input` event, so `stop_hook_active` stays `true` across every consecutive continuation (the 2nd+ Stop payloads show `"stop_hook_active": true`). Only a typed prompt fires `input`, which clears the flag (the next Stop payload after it shows `"stop_hook_active": false`).
+- **Failure signature:** the 2nd consecutive Stop payload shows `"stop_hook_active": false` (the continuation self-cleared the flag via a stray `input`), or a genuine user prompt fails to clear it.
 
-#### Item 4 -- the 8-consecutive-block override cap (STOP-07)
+#### Item 4 -- the override cap of eight continuations (STOP-07)
 
-- **Repro:** Install the always-block canary. In an **interactive** session (a real TTY -- a headless `pi -p` run reaches the cap, but only an interactive session shows the cap-trip warning), send one prompt and let the always-block hook drive the re-entry loop with no further input.
-- **Expected:** the loop runs settle → block → re-enter for 8 consecutive blocks; the **8th** block is suppressed (no re-entry), the turn ends, and the warning surfaces **exactly once**: `Stop hook override cap reached.` followed by the detail naming the plugin (`… blocked 8 times in a row; the turn ended despite its active block.`). The marker/`stdin.log` shows exactly 8 block invocations, then the run goes idle (no livelock).
-- **Failure signature:** the marker shows more than 8 blocks (the cap did not bound the livelock -- a T-88-02 regression), the warning is missing or fires more than once, or the run never terminates.
+- **Repro:** Install the always-block hook. In an **interactive** session (a real TTY -- only an interactive session shows the cap-trip warning), send one prompt and let the always-block hook drive the continuation loop with no further input.
+- **Expected:** the hook blocks and the run continues 8 times in a row; the **9th** block is overridden (no continuation), the run ends, and the warning surfaces **exactly once**: `Stop hook override cap reached.` followed by the detail naming the plugin (`… blocked 8 times in a row; the turn ended despite its active block.`). The marker/`stdin.log` shows exactly 9 hook runs, then the run goes idle (no livelock).
+- **Failure signature:** the marker shows more than 9 hook runs (the cap did not bound the livelock -- a T-88-02 regression), the warning is missing or fires more than once, or the run never terminates.
 
 ## MCP adapter canary -- `mcp-adapter-canary.mjs`
 
-Proves that a real pi-mcp-adapter loads the MCP server entries that this extension writes to `mcp-adapter.json` (ADOC-02). The offline suites check the entries that the extension writes. Only a live adapter can show that the adapter reads those entries, starts the servers, and gives their tools to the model. The canary drives a real Pi over its RPC mode (JSON commands on stdin, JSON events on stdout). Pi loads this extension, pi-mcp-adapter 7.0.0, and a small helper extension that the canary writes into its sandbox. The model is the keyless stub, which replays scripted tool calls.
+Proves that a real pi-mcp-adapter loads the MCP server entries that this extension writes to `mcp-adapter.json` (ADOC-02). The offline suites check the entries that the extension writes. Only a live adapter can show that the adapter reads those entries, starts the servers, and gives their tools to the model. The canary drives a real Pi over its RPC mode (JSON commands on stdin, JSON events on stdout). Pi loads this extension, pi-mcp-adapter 7.0.1, and a small helper extension that the canary writes into its sandbox. The model is the keyless stub, which replays scripted tool calls.
 
 ### Prerequisites
 
 | Requirement                               | Notes                                                                                                                                                                                                                                                                                                                                                               |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | The repository's Pi, 1.0.0 or later       | `npm ci` installs it from the `@earendil-works/pi-coding-agent` devDependency. The canary finds it through `test/pi-runtime.ts`.                                                                                                                                                                                                                                    |
-| A scratch install of pi-mcp-adapter 7.0.0 | Run `npm install --prefix /var/tmp/mcp-adapter-700 pi-mcp-adapter@7.0.0 --ignore-scripts --omit=peer --no-audit --no-fund`, then set `PI_MCP_ADAPTER_ROOT=/var/tmp/mcp-adapter-700/node_modules/pi-mcp-adapter`. Keep the prefix outside this repository. The adapter must never enter `package.json` or `package-lock.json`. The canary refuses any other version. |
+| A scratch install of pi-mcp-adapter 7.0.1 | Run `npm install --prefix /var/tmp/mcp-adapter-701 pi-mcp-adapter@7.0.1 --ignore-scripts --omit=peer --no-audit --no-fund`, then set `PI_MCP_ADAPTER_ROOT=/var/tmp/mcp-adapter-701/node_modules/pi-mcp-adapter`. Keep the prefix outside this repository. The adapter must never enter `package.json` or `package-lock.json`. The canary refuses any other version. |
 | `TMPDIR` outside the repository           | Use a directory on a real filesystem, such as `/var/tmp/mcp-adapter-canary`. The canary makes its sandbox there and removes it on every exit, also after Ctrl-C or `SIGTERM`. It refuses a temp directory inside the repository, because Pi asks for project trust there.                                                                                           |
 | No provider key                           | The canary starts the stub on `127.0.0.1` itself. Each Pi child gets an environment that the canary builds from scratch, so no inherited variable reaches Pi.                                                                                                                                                                                                       |
 
@@ -499,9 +378,9 @@ Proves that a real pi-mcp-adapter loads the MCP server entries that this extensi
 
 ```bash
 mkdir -p /var/tmp/mcp-adapter-canary
-npm install --prefix /var/tmp/mcp-adapter-700 pi-mcp-adapter@7.0.0 \
+npm install --prefix /var/tmp/mcp-adapter-701 pi-mcp-adapter@7.0.1 \
   --ignore-scripts --omit=peer --no-audit --no-fund
-PI_MCP_ADAPTER_ROOT=/var/tmp/mcp-adapter-700/node_modules/pi-mcp-adapter \
+PI_MCP_ADAPTER_ROOT=/var/tmp/mcp-adapter-701/node_modules/pi-mcp-adapter \
 TMPDIR=/var/tmp/mcp-adapter-canary \
   node test/live-uat/mcp-adapter-canary.mjs
 echo "EXIT=$?"
@@ -516,7 +395,7 @@ The canary runs five Pi sessions in one sandbox:
 
 ### What it asserts (exit 0 conditions)
 
-- **M0** -- the preconditions: the repository's Pi is 1.0.0 or later, `PI_MCP_ADAPTER_ROOT` holds pi-mcp-adapter 7.0.0, and `TMPDIR` is outside the repository.
+- **M0** -- the preconditions: the repository's Pi is 1.0.0 or later, `PI_MCP_ADAPTER_ROOT` holds pi-mcp-adapter 7.0.1, and `TMPDIR` is outside the repository.
 - **M1** (AMIG-03) -- the migration notice lists `echo -> plugin_echo_echo_ (echo) [user]`.
 - **M2** (AMIG-03, ASTAT-02) -- before any reload, the adapter still lists the old name `echo`, and info shows `(not loaded)`.
 - **M3** (AMIG-01, ANAME-01, ANAME-04) -- `mcp.json` keeps no entry with this extension's marker, and `mcp-adapter.json` holds `plugin_echo_echo_` with `toolPrefix: "mcp"` and `directTools: "search"`.
@@ -554,7 +433,7 @@ Exit 130 or 143 means that `SIGINT` (Ctrl-C) or `SIGTERM` stopped the run, which
 `--invert` flips the expected route A result text and nothing else:
 
 ```bash
-PI_MCP_ADAPTER_ROOT=/var/tmp/mcp-adapter-700/node_modules/pi-mcp-adapter \
+PI_MCP_ADAPTER_ROOT=/var/tmp/mcp-adapter-701/node_modules/pi-mcp-adapter \
 TMPDIR=/var/tmp/mcp-adapter-canary \
   node test/live-uat/mcp-adapter-canary.mjs --invert
 echo "EXIT=$?"

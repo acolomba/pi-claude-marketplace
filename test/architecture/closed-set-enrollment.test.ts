@@ -62,16 +62,17 @@ const UNENROLLED_DEPENDENCIES: AssertNever<UnenrolledDependency>[] = [];
 // `requires pi-mcp-adapter` marker.
 const ADAPTER_MCP: McpDependency = { kind: "mcp", runEvery: "adapter" };
 
-test("SCN-F025: BUCKET_A_EVENTS is the closed 10-entry admitted-event set", () => {
+test("SCN-F025: BUCKET_A_EVENTS is the closed 11-entry admitted-event set", () => {
   // TOOL-02: the admission set opened at 8 events, the closed set
   // `checkMatcherSupportability` reads to decide whether a plugin-declared hook
   // event is admitted at all.
-  // ADMIT-01: +2 for the turn-boundary `Stop` / `StopFailure` lifecycle tail,
-  // dispatched off `agent_settled` rather than a per-Pi-event composite
-  // (8 -> 10).
+  // ADMIT-01: +2 for the turn-boundary `Stop` / `StopFailure` lifecycle tail
+  // (8 -> 10). `Stop` runs on `agent_before_settle` and `StopFailure` on
+  // `agent_settled` (D-PG5-01), rather than through a per-Pi-event composite.
+  // D-PG6-21: +1 for `UserPromptExpansion` (10 -> 11).
 
   // arrange
-  const expectedEventCount = 10;
+  const expectedEventCount = 11;
 
   // act
   const admittedEvents = BUCKET_A_EVENTS;

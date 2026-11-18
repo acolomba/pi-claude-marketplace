@@ -34,10 +34,9 @@ export interface McpImplementationProfile {
   readonly serverName: (plugin: string, server: string) => string;
   /**
    * The text every tool name of the server starts with, or `undefined` when
-   * the implementation cannot promise one: Pi's built-in MCP cuts a long tool
-   * name inside a long server namespace (D-MB-13). Without a prefix, a caller
-   * matches the full names from `toolName` instead. `AdapterMcpProfile`
-   * states that the adapter always returns one.
+   * the implementation cuts a long tool name inside the server namespace
+   * (D-MB-13, D-PG1-07). Without a prefix, a caller matches the full names
+   * from `toolName` instead.
    */
   readonly toolNamePrefix: (plugin: string, server: string) => string | undefined;
   /** The full name the model sees for one tool of the server. */
@@ -46,31 +45,43 @@ export interface McpImplementationProfile {
   readonly grantSelector: (plugin: string, server: string) => string;
 }
 
-/**
- * ANAME-01: pi-mcp-adapter's profile. Its tool prefix is Claude Code's
- * tool-name form, so every server of every plugin has one.
- */
-export interface AdapterMcpProfile extends McpImplementationProfile {
-  readonly id: "adapter";
-  readonly toolNamePrefix: (plugin: string, server: string) => string;
-}
+// Pi 1.5.0 and pi-mcp-adapter 7.0.1 limit a tool name to 64 characters
+// and keep 55 before the underscore and hash.
+const MAX_TOOL_NAME_LENGTH = 64;
+const TOOL_NAME_HASH_LENGTH = 8;
+const KEPT_TOOL_NAME_LENGTH = MAX_TOOL_NAME_LENGTH - TOOL_NAME_HASH_LENGTH - 1;
 
 /**
  * The adapter's tool prefix is Claude Code's own tool-name form,
  * `mcp__plugin_<plugin>_<server>__` (ANAME-01), which is what D-MB-08 says a
  * hook matcher sees.
  */
-function adapterToolNamePrefix(plugin: string, server: string): string {
-  return `mcp__${generatedMcpServerKey(plugin, server)}_`;
+function adapterJoinedToolNamePrefix(plugin: string, server: string): string {
+  return joinedAdapterToolName(generatedMcpServerKey(plugin, server), "");
+}
+
+function adapterToolNamePrefix(plugin: string, server: string): string | undefined {
+  const prefix = adapterJoinedToolNamePrefix(plugin, server);
+  return prefix.length <= KEPT_TOOL_NAME_LENGTH ? prefix : undefined;
+}
+
+/** D-PG1-07: follows pi-mcp-adapter 7.0.1 `formatToolName` after its join. */
+export function fittedAdapterToolName(name: string): string {
+  if (name.length <= MAX_TOOL_NAME_LENGTH) {
+    return name;
+  }
+
+  const hash = createHash("sha256").update(name).digest("hex").slice(0, TOOL_NAME_HASH_LENGTH);
+  return `${name.slice(0, KEPT_TOOL_NAME_LENGTH)}_${hash}`;
 }
 
 /**
- * pi-mcp-adapter 7.0.0 `formatToolName` with `toolPrefix: "mcp"`: it turns
+ * pi-mcp-adapter 7.0.1 `joinToolName` with `toolPrefix: "mcp"`: it turns
  * each `.` in the tool name into `_`, and it does not add the prefix again to
  * a tool name that already starts with it.
  */
-function adapterToolName(plugin: string, server: string, tool: string): string {
-  const prefix = adapterToolNamePrefix(plugin, server);
+export function joinedAdapterToolName(serverKey: string, tool: string): string {
+  const prefix = `mcp__${serverKey}_`;
   const sanitized = tool.replaceAll(".", "_");
   if (sanitized.startsWith(prefix) && sanitized.length > prefix.length) {
     return sanitized;
@@ -79,7 +90,11 @@ function adapterToolName(plugin: string, server: string, tool: string): string {
   return `${prefix}${sanitized}`;
 }
 
-const ADAPTER_PROFILE: AdapterMcpProfile = Object.freeze({
+function adapterToolName(plugin: string, server: string, tool: string): string {
+  return fittedAdapterToolName(joinedAdapterToolName(generatedMcpServerKey(plugin, server), tool));
+}
+
+const ADAPTER_PROFILE: McpImplementationProfile = Object.freeze({
   id: "adapter",
   classify: classifyMcpServer,
   serverName: generatedMcpServerKey,
@@ -87,13 +102,6 @@ const ADAPTER_PROFILE: AdapterMcpProfile = Object.freeze({
   toolName: adapterToolName,
   grantSelector: (plugin: string, server: string) => `mcp:${generatedMcpServerKey(plugin, server)}`,
 });
-
-// Pi 1.5.0 limits a provider tool name to 64 characters
-// (`dist/extensions/mcp/tools.js` `MAX_TOOL_NAME_LENGTH`).
-const MAX_TOOL_NAME_LENGTH = 64;
-const TOOL_NAME_HASH_LENGTH = 8;
-// A cut tool name keeps this many characters, then `_` and the hash.
-const KEPT_TOOL_NAME_LENGTH = MAX_TOOL_NAME_LENGTH - TOOL_NAME_HASH_LENGTH - 1;
 
 /**
  * D-MB-13: Pi's built-in namespace for a registered server name, `mcp__`
@@ -146,8 +154,6 @@ const PROFILES = {
 } as const satisfies Record<McpImplementationId, McpImplementationProfile>;
 
 /** The frozen profile of one MCP implementation; every call returns the same object. */
-export function profileFor(id: "adapter"): AdapterMcpProfile;
-export function profileFor(id: McpImplementationId): McpImplementationProfile;
 export function profileFor(id: McpImplementationId): McpImplementationProfile {
   return PROFILES[id];
 }

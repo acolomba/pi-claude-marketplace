@@ -3,7 +3,13 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import { PACKAGE_JSON_REL, PACKAGE_LOCK_REL } from "./gate-targets.ts";
+import { satisfies } from "semver";
+
+import {
+  OPTIONAL_PEER_SUITE_VERSIONS_REL,
+  PACKAGE_JSON_REL,
+  PACKAGE_LOCK_REL,
+} from "./gate-targets.ts";
 import { REPO_ROOT } from "./source-scan.ts";
 
 interface PackageJson {
@@ -91,7 +97,7 @@ test("devDependencies pins pi-coding-agent and pi-tui at ^1.5.0 and pi-ai at exa
   });
 });
 
-test("package.json declares the optional pi-subagents peer at >=0.84.0 and the lock root mirrors it (PIFL-02, VER-02)", async () => {
+test("package.json declares the optional pi-subagents peer at >=0.87.0 and the lock root mirrors it (PIFL-02, VER-02, D-PG1-01)", async () => {
   // arrange
   const [pkg, lock] = await Promise.all([readPackageJson(), readPackageLock()]);
 
@@ -101,12 +107,12 @@ test("package.json declares the optional pi-subagents peer at >=0.84.0 and the l
   const meta = pkg.peerDependenciesMeta?.[SUBAGENTS_PEER];
 
   // assert
-  assert.equal(pkgRange, ">=0.84.0");
+  assert.equal(pkgRange, ">=0.87.0");
   assert.equal(lockRange, pkgRange);
   assert.deepStrictEqual(meta, { optional: true });
 });
 
-test("package.json declares pi-mcp-adapter as an optional peer at >=7.0.0 <8 (PIFL-03, VER-02)", async () => {
+test("package.json declares pi-mcp-adapter as an optional peer at >=7.0.1 <8 (PIFL-03, VER-02)", async () => {
   // arrange
   const pkg = await readPackageJson();
 
@@ -115,7 +121,7 @@ test("package.json declares pi-mcp-adapter as an optional peer at >=7.0.0 <8 (PI
   const meta = pkg.peerDependenciesMeta?.[MCP_ADAPTER_PEER];
 
   // assert
-  assert.equal(range, ">=7.0.0 <8");
+  assert.equal(range, ">=7.0.1 <8");
   assert.deepStrictEqual(meta, { optional: true });
 });
 
@@ -128,7 +134,7 @@ test("package-lock.json root peerDependencies mirrors package.json for pi-mcp-ad
   const lockRange = lock.packages?.[""]?.peerDependencies?.[MCP_ADAPTER_PEER];
 
   // assert
-  assert.equal(pkgRange, ">=7.0.0 <8");
+  assert.equal(pkgRange, ">=7.0.1 <8");
   assert.equal(lockRange, pkgRange);
 });
 
@@ -145,6 +151,22 @@ test("package.json declares the optional pi-dynamic-workflows peer at >=3.15.0 <
   assert.equal(pkgRange, ">=3.15.0 <4");
   assert.equal(lockRange, pkgRange);
   assert.deepStrictEqual(meta, { optional: true });
+});
+
+test("the suites run pi-subagents 0.88.1, a version the declared range admits, and no other companion names a suite version (D-PG1-02)", async () => {
+  // arrange
+  const pkg = await readPackageJson();
+  const suiteVersions = JSON.parse(
+    await readFile(path.join(REPO_ROOT, OPTIONAL_PEER_SUITE_VERSIONS_REL), "utf8"),
+  ) as Record<string, string>;
+
+  // act
+  const range = pkg.peerDependencies?.[SUBAGENTS_PEER];
+
+  // assert
+  assert.deepStrictEqual(suiteVersions, { "pi-subagents": "0.88.1" });
+  assert.ok(range);
+  assert.ok(satisfies(suiteVersions[SUBAGENTS_PEER], range));
 });
 
 for (const companion of COMPANION_PEERS) {

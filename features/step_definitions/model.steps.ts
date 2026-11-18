@@ -9,7 +9,7 @@
  */
 
 import assert from "node:assert/strict";
-import { access } from "node:fs/promises";
+import { access, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
@@ -63,6 +63,29 @@ Given(
   },
 );
 
+// D-PG6-24: Pi holds a model that cannot reason at the thinking level `off`,
+// so a scenario that sets a level starts with a model that reasons.
+Given(
+  "pi runs with a scripted model that reasons",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    await this.usePiWithProfile({ companions: [], reasoningModel: true });
+  },
+);
+
+// Pi lowers a level the model cannot take to one it can, so the step reads
+// the level back and fails on one Pi changed.
+Given(
+  "the user has set the thinking level {string}",
+  async function (this: ScenarioWorld, level: string) {
+    const set = await this.pi.request({ type: "set_thinking_level", level });
+    assert.strictEqual(set.response.success, true, JSON.stringify(set.response));
+    const { response } = await this.pi.request({ type: "get_state" });
+    assert.strictEqual(response.success, true, JSON.stringify(response));
+    assert.strictEqual((response.data as { readonly thinkingLevel?: string }).thinkingLevel, level);
+  },
+);
+
 // Pi loads every extension twice in a project that needs a trust decision,
 // once to ask the extensions and once with the decision, so this start gets
 // two trusted starts' budget.
@@ -77,6 +100,21 @@ Given(
     await this.usePiWithProfile({ companions: [], trust: "untrusted" });
     await assert.rejects(access(path.join(this.tokens.agentDir, "trust.json")), {
       code: "ENOENT",
+    });
+  },
+);
+
+// D-PG10-17: the profile Pi starts with `false` saved for the project in Pi's
+// trust store, which is what Pi's "Do not trust" option saves. A saved `false`
+// wins even in a folder that holds none of Pi's trust-requiring resources.
+Given(
+  'pi runs with the scripted model in a project the user marked "do not trust"',
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    await this.usePiWithProfile({ companions: [], trust: "refused" });
+    const { agentDir, projectDir } = this.tokens;
+    assert.deepStrictEqual(JSON.parse(await readFile(path.join(agentDir, "trust.json"), "utf8")), {
+      [await realpath(projectDir)]: false,
     });
   },
 );

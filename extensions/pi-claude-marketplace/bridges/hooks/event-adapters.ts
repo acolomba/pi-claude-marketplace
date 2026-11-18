@@ -9,7 +9,8 @@
 //   - adaptToolCallResult        -> Pi `tool_call` (PreToolUse).
 //     `block` -> `{ block: true, reason }`, the reason reading
 //     `PreToolUse:<Tool> hook error: <message>`; `stop` -> a block with
-//     `terminate: true`, which ends the turn; a mutation that asks blocks with
+//     `terminate: true`, which ends the turn, and a stop notice to the user
+//     (D-PG5-13); a mutation that asks blocks with
 //     its reason when Pi has no terminal (`print`, `json`, `rpc`) and asks
 //     through `ctx.ui.confirm` in `tui`; an allowed mutation's `updatedInput`
 //     replaces the tool's whole input; `noop` returns `undefined`.
@@ -18,20 +19,21 @@
 //     PostToolUseFailure). `block` keeps the tool's output and adds the
 //     hook's feedback, `<Event>:<Tool> hook blocking error from command:
 //     "<command>": <message>`, without marking the result an error;
-//     `mutate.updatedToolOutput` returns its `content` and/or `isError` as
-//     Pi's `tool_result` value, since Pi keeps only returned changes, on a
+//     `mutate.updatedToolOutput` returns rendered `content`, sanitized
+//     `details` and optional `structuredContent` as Pi's result value, on a
 //     PostToolUse result only: a PostToolUseFailure hook cannot replace the
 //     failed result (D-BG-405);
 //     `stop` debug-logs + returns `undefined` (Pi's
 //     `tool_result` cannot end the turn without aborting it); `noop` returns
 //     `undefined`. CR-01: the mutation surface is whitelisted to
-//     `{ content, isError }` -- a hook-supplied patch cannot rewrite
+//     `{ content, details, structuredContent }` -- a hook-supplied value cannot rewrite
 //     `event.type`, `event.toolName`, or any other field.
 //
-//   - adaptInputResult           -> Pi `input` (UserPromptSubmit).
+//   - adaptInputResult           -> Pi `input` (the `PROMPT_CONTEXT_EVENTS`).
 //     `block` -> `{ action: "handled" }`; `stop` -> `{ action: "handled" }`,
-//     so the prompt stops; `mutate.additionalContext` is buffered in the
-//     runtime's prompt-context buffer and the prompt continues unchanged
+//     so the prompt stops, and a stop notice to the user (D-PG5-13);
+//     `mutate.additionalContext` is buffered in the
+//     runtime's prompt-context buffer with its event, and the prompt continues unchanged
 //     (`undefined`); the `before_agent_start` handler sends the context as a
 //     message after the prompt (D-CF5-13); `noop` returns `undefined`.
 //
@@ -56,13 +58,28 @@
 //
 // Mutation surface: tool_call replaces `event.input` (Record<string,
 // unknown>) key by key, tool_result returns the replacement `content` (the
-// Pi-side (TextContent | ImageContent)[] array) and `isError`. The fold in `dispatch.ts` runs every
+// Pi-side (TextContent | ImageContent)[] array) and safe structured content. The fold in `dispatch.ts` runs every
 // hook on one snapshot, so a mutation applies once, after every hook ran.
 
+import { homedir } from "node:os";
+import { isDeepStrictEqual } from "node:util";
+
+import { mapPiToClaudeToolName } from "../../domain/components/hook-tool-names.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { notifyHookNotice } from "../../shared/notification-dispatch.ts";
+import { openNotificationRun } from "../../shared/notification-run.ts";
 
-import { hookBlockingErrorText, hookErrorText, hookEventLabel } from "./hook-labels.ts";
+import {
+  hookBlockingErrorText,
+  hookErrorText,
+  hookEventLabel,
+  hookStoppedText,
+  promptStoppedText,
+} from "./hook-labels.ts";
+import { decodeHookToolInput } from "./tool-input.ts";
+import { renderFileToolOutput } from "./tool-output-files.ts";
+import { renderSearchShellToolOutput } from "./tool-output-search-shell.ts";
 
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type {
@@ -78,7 +95,12 @@ import type {
 } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { HookExecResult } from "./exec-result.ts";
-import type { PendingPromptContext, RoutingEntry } from "./routing-state.ts";
+import type {
+  PendingPromptContext,
+  PendingSessionStartContext,
+  PromptContextEvent,
+  RoutingEntry,
+} from "./routing-state.ts";
 import type { HooksRuntime } from "./runtime.ts";
 
 /**
@@ -104,8 +126,8 @@ const UNATTRIBUTED = { scope: "user", marketplace: "", pluginId: "" } as const s
 };
 
 // A context to buffer, with the provenance of the entry the fold attributes
-// it to. Both pending buffers take this shape.
-function bufferedContext(text: string, context: HookAdapterContext): PendingPromptContext {
+// it to. A prompt's context adds its event (`bufferedPromptContext`).
+function bufferedContext(text: string, context: HookAdapterContext): PendingSessionStartContext {
   const provenance = context.attributedTo ?? UNATTRIBUTED;
   return {
     context: text,
@@ -113,6 +135,14 @@ function bufferedContext(text: string, context: HookAdapterContext): PendingProm
     marketplace: provenance.marketplace,
     pluginId: provenance.pluginId,
   };
+}
+
+function bufferedPromptContext(
+  text: string,
+  claudeEvent: PromptContextEvent,
+  context: HookAdapterContext,
+): PendingPromptContext {
+  return { ...bufferedContext(text, context), event: claudeEvent };
 }
 
 // The declared command of the entry a folded result is attributed to.
@@ -129,61 +159,137 @@ function attributedCommand(context: HookAdapterContext): string {
  * rewrite omits is gone. The input object keeps its identity, since Pi runs
  * the tool with it.
  *
- * CR-01: a non-object rewrite (null, array, primitive) changes nothing, so a
- * hook returning `updatedInput: null` cannot pollute via array index keys.
- * Keys are copied one at a time via `Object.entries` rather than
- * `Object.assign`, skipping an own `"__proto__"` key: `JSON.parse` creates
- * `__proto__` as an ordinary own data property (not the prototype link), so
- * a hook-supplied rewrite carrying that key would otherwise let
- * `Object.assign` reassign `event.input`'s prototype.
+ * The caller validates the complete rewrite first. Define each own key as a
+ * data property so even a prototype-looking key cannot change the target's
+ * prototype.
  */
-function replaceToolCallInput(event: ToolCallEvent, updatedInput: unknown): void {
-  if (updatedInput === null || typeof updatedInput !== "object" || Array.isArray(updatedInput)) {
-    return;
-  }
-
+export function replaceToolCallInput(
+  event: ToolCallEvent,
+  updatedInput: Record<string, unknown>,
+): void {
   const target = event.input as Record<string, unknown>;
   for (const key of Object.keys(target)) {
     Reflect.deleteProperty(target, key);
   }
 
-  for (const [key, value] of Object.entries(updatedInput as Record<string, unknown>)) {
-    if (key === "__proto__") {
-      continue;
-    }
-
-    target[key] = value;
+  for (const [key, value] of Object.entries(updatedInput)) {
+    Object.defineProperty(target, key, {
+      value,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
   }
 }
 
-/**
- * CR-01: whitelist the documented mutation surface for `tool_result` -- only
- * `content` (the Pi-side `(TextContent | ImageContent)[]` array) and `isError`
- * (boolean) may be written. Everything else in the hook-supplied patch is
- * silently dropped, so a malicious or buggy hook cannot rewrite the event's
- * discriminator (`type`), its `toolName`, or any other routing-load-bearing
- * field. Non-object patches are rejected early.
- *
- * The patch is the handler's return value: Pi 1.4's `emitToolResult` keeps
- * only the changes a handler returns, so a change made to the event in place
- * would never reach the model. `undefined` when neither field is valid.
- */
-function toolResultPatch(updatedToolOutput: unknown): ToolResultEventResult | undefined {
-  if (updatedToolOutput === null || typeof updatedToolOutput !== "object") {
+function contentBlocks(value: unknown): value is ToolResultEvent["content"] {
+  return (
+    Array.isArray(value) &&
+    value.every((candidate: unknown) => {
+      if (typeof candidate !== "object" || candidate === null) {
+        return false;
+      }
+
+      const block = candidate as Record<string, unknown>;
+      return (
+        (block.type === "text" && typeof block.text === "string") ||
+        (block.type === "image" &&
+          typeof block.data === "string" &&
+          typeof block.mimeType === "string")
+      );
+    })
+  );
+}
+
+function customOutput(value: unknown): ToolResultEventResult | undefined {
+  if (Array.isArray(value) && contentBlocks(value)) {
+    return { content: value };
+  }
+
+  if (value !== null && typeof value === "object" && "content" in value) {
+    if (!contentBlocks(value.content)) {
+      return undefined;
+    }
+
+    return {
+      content: value.content,
+      ...("structuredContent" in value && value.structuredContent !== undefined
+        ? {
+            structuredContent: value.structuredContent as Exclude<
+              ToolResultEvent["structuredContent"],
+              undefined
+            >,
+          }
+        : {}),
+    };
+  }
+
+  const text = typeof value === "string" ? value : JSON.stringify(value);
+  return {
+    content: [{ type: "text", text }],
+    ...(value !== null && typeof value === "object"
+      ? {
+          structuredContent: value as Exclude<ToolResultEvent["structuredContent"], undefined>,
+        }
+      : {}),
+  };
+}
+
+function routingDetails(event: ToolResultEvent): unknown {
+  const details = event.details;
+  if (
+    event.toolName.startsWith("mcp__") &&
+    details !== null &&
+    typeof details === "object" &&
+    "server" in details &&
+    typeof details.server === "string" &&
+    "tool" in details &&
+    typeof details.tool === "string"
+  ) {
+    return { server: details.server, tool: details.tool };
+  }
+
+  return null;
+}
+
+/** Render hook output as data and replace all stale Pi output carriers. */
+function toolResultPatch(
+  updatedToolOutput: unknown,
+  event: ToolResultEvent,
+  cwd: string,
+): ToolResultEventResult | undefined {
+  if (updatedToolOutput === undefined || typeof event.toolName !== "string") {
     return undefined;
   }
 
-  const patch = updatedToolOutput as Partial<Pick<ToolResultEvent, "content" | "isError">>;
-  const toolResult: ToolResultEventResult = {};
-  if (Array.isArray(patch.content)) {
-    toolResult.content = patch.content;
+  const toolName = event.toolName;
+  if (["read", "edit", "write"].includes(toolName)) {
+    return renderFileToolOutput(event, updatedToolOutput, cwd);
   }
 
-  if (typeof patch.isError === "boolean") {
-    toolResult.isError = patch.isError;
+  if (["find", "grep", "bash", "powershell"].includes(toolName)) {
+    return renderSearchShellToolOutput(event, updatedToolOutput, cwd);
   }
 
-  return Object.keys(toolResult).length === 0 ? undefined : toolResult;
+  const decoded = customOutput(updatedToolOutput);
+  if (decoded?.content === undefined) {
+    return undefined;
+  }
+
+  if (
+    isDeepStrictEqual(decoded.content, event.content) &&
+    isDeepStrictEqual(decoded.structuredContent, event.structuredContent)
+  ) {
+    return undefined;
+  }
+
+  return {
+    content: decoded.content,
+    details: routingDetails(event),
+    ...(decoded.structuredContent === undefined
+      ? {}
+      : { structuredContent: decoded.structuredContent }),
+  };
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -230,10 +336,52 @@ async function adaptToolCallMutation(
   }
 
   if (result.updatedInput !== undefined) {
-    replaceToolCallInput(event, result.updatedInput);
+    const decoded = decodeHookToolInput(
+      event.toolName,
+      event.input,
+      result.updatedInput,
+      context.ctx.cwd,
+      homedir(),
+    );
+    if (decoded.kind === "accepted") {
+      if (decoded.input !== event.input) {
+        replaceToolCallInput(event, decoded.input);
+      }
+    } else {
+      notifyIgnoredToolInputRewrite(event, context, decoded.category);
+    }
   }
 
   return undefined;
+}
+
+// Shows one hook notice from an adapter. With no Pi API there is no run to
+// open, so it shows nothing; a notice that fails to show is debug-logged
+// after `failed` and never fails the event.
+function showAdapterNotice(context: HookAdapterContext, notice: string, failed: string): void {
+  if (context.pi === undefined) {
+    return;
+  }
+
+  try {
+    const run = openNotificationRun(context.pi, { kind: "hook" });
+    notifyHookNotice(context.ctx, run, notice);
+  } catch (error: unknown) {
+    hookDebugLog(`${failed}: ${errorMessage(error)}`);
+  }
+}
+
+/** Reports a discarded rewrite without exposing its input values. */
+export function notifyIgnoredToolInputRewrite(
+  event: ToolCallEvent,
+  context: HookAdapterContext,
+  category: "shape" | "field" | "value",
+): void {
+  showAdapterNotice(
+    context,
+    `PreToolUse:${mapPiToClaudeToolName(event.toolName)} ignored input rewrite (${category})`,
+    "adaptToolCall: ignored rewrite notice failed",
+  );
 }
 
 /**
@@ -243,7 +391,9 @@ async function adaptToolCallMutation(
  * A block reaches the model as Claude Code sends it (D-CF5-11):
  * `PreToolUse:<Tool> hook error: <reason>`, with an exit-2 stderr reason
  * after the attributed hook's bracketed command. A `continue: false` blocks
- * the call and sets `terminate`, so Pi ends the turn after the batch.
+ * the call and sets `terminate`, so Pi ends the turn after the batch, and
+ * shows the user `PreToolUse:<Tool> hook stopped continuation: <stopReason>`
+ * (D-PG5-13).
  */
 export async function adaptToolCallResult(
   result: HookExecResult,
@@ -266,6 +416,11 @@ export async function adaptToolCallResult(
       return adaptToolCallMutation(result, event, context);
 
     case "stop":
+      showAdapterNotice(
+        context,
+        hookStoppedText(hookEventLabel("PreToolUse", event.toolName), result.stopReason),
+        "adaptToolCall: stop notice failed",
+      );
       return { block: true, reason: result.stopReason ?? DEFAULT_STOP_REASON, terminate: true };
 
     case "noop":
@@ -332,13 +487,24 @@ export function adaptToolResultResult(
   context: HookAdapterContext,
 ): ToolResultEventResult | undefined {
   switch (result.kind) {
-    case "block":
+    case "block": {
       // D-CF5-11: the tool already ran, so its output stays and the hook's
       // feedback follows it; the result is not marked an error.
-      return { content: withFeedback(event, result, context) };
+      const feedbackResult: ToolResultEventResult = {
+        content: withFeedback(event, result, context),
+        isError: event.isError,
+      };
+      if (event.structuredContent !== undefined) {
+        feedbackResult.structuredContent = event.structuredContent;
+      }
+
+      return feedbackResult;
+    }
 
     case "mutate":
-      return event.isError ? failedResultPatch(result) : toolResultPatch(result.updatedToolOutput);
+      return event.isError
+        ? failedResultPatch(result)
+        : toolResultPatch(result.updatedToolOutput, event, context.ctx.cwd);
 
     case "stop":
       hookDebugLog(
@@ -384,11 +550,30 @@ export function adaptPreCompactResult(
 }
 
 // ──────────────────────────────────────────────────────────────────────────
-// adaptInputResult -- UserPromptSubmit
+// adaptInputResult -- the prompt events
 // ──────────────────────────────────────────────────────────────────────────
 
 /** The custom type of the message that carries prompt and session hook context to the model. */
 export const HOOK_CONTEXT_MESSAGE_TYPE = "claude-hook-additional-context";
+
+/**
+ * HOOK-05 / D-PG6-20: one `<Event> hook additional context: <values>` text
+ * part, the values joined by `\n` in buffer order, as Claude Code 2.1.316
+ * words it, labeled with the event of the hooks that gave the values. A
+ * value that is empty or only whitespace adds nothing, so no value with text
+ * gives no part.
+ */
+export function hookContextPart(
+  claudeEvent: "SessionStart" | PromptContextEvent,
+  values: readonly string[],
+): { readonly type: "text"; readonly text: string } | undefined {
+  const texts = values.filter((text) => text.trim().length > 0);
+  if (texts.length === 0) {
+    return undefined;
+  }
+
+  return { type: "text", text: `${claudeEvent} hook additional context: ${texts.join("\n")}` };
+}
 
 /**
  * D-CF5-13: send the context of a prompt that Pi queued into the running
@@ -404,8 +589,13 @@ export const HOOK_CONTEXT_MESSAGE_TYPE = "claude-hook-additional-context";
  * default, so the context would get a model call of its own. A blank
  * context, or no Pi API, sends nothing; a send that throws is debug-logged.
  */
-function sendQueuedPromptContext(pi: ExtensionAPI | undefined, text: string): void {
-  if (pi === undefined || text.trim() === "") {
+function sendQueuedPromptContext(
+  pi: ExtensionAPI | undefined,
+  claudeEvent: PromptContextEvent,
+  text: string,
+): void {
+  const part = hookContextPart(claudeEvent, [text]);
+  if (pi === undefined || part === undefined) {
     return;
   }
 
@@ -413,7 +603,7 @@ function sendQueuedPromptContext(pi: ExtensionAPI | undefined, text: string): vo
     pi.sendMessage(
       {
         customType: HOOK_CONTEXT_MESSAGE_TYPE,
-        content: [{ type: "text", text: `UserPromptSubmit hook additional context: ${text}` }],
+        content: [part],
         display: false,
       },
       { triggerTurn: false },
@@ -476,26 +666,31 @@ export function sendDueFollowUpContext(
 
   const entry = runtime.takeFollowUpContext(next);
   if (entry !== undefined) {
-    sendQueuedPromptContext(pi, entry.context);
+    sendQueuedPromptContext(pi, entry.event, entry.context);
   }
 }
 
 // D-CF5-13: where a prompt's context waits. A prompt that starts its own run
 // buffers it for `before_agent_start`; a steer sends it at once; a follow-up
 // queues it for the turn end before Pi reads the follow-up.
-function queuePromptContext(text: string, event: InputEvent, context: HookAdapterContext): void {
+function queuePromptContext(
+  text: string,
+  claudeEvent: PromptContextEvent,
+  event: InputEvent,
+  context: HookAdapterContext,
+): void {
   switch (event.streamingBehavior) {
     case undefined:
-      context.runtime.appendPendingPromptContext(bufferedContext(text, context));
+      context.runtime.appendPendingPromptContext(bufferedPromptContext(text, claudeEvent, context));
       return;
 
     case "steer":
-      sendQueuedPromptContext(context.pi, text);
+      sendQueuedPromptContext(context.pi, claudeEvent, text);
       return;
 
     case "followUp":
       context.runtime.queueFollowUpContext({
-        ...bufferedContext(text, context),
+        ...bufferedPromptContext(text, claudeEvent, context),
         prompt: event.text,
       });
       return;
@@ -508,7 +703,8 @@ function queuePromptContext(text: string, event: InputEvent, context: HookAdapte
  *
  * D-CF5-13 / HOOK-05: a hook's `additionalContext` never replaces the
  * prompt. The adapter buffers it with the provenance of the attributed entry
- * and lets the prompt continue; the `before_agent_start` handler of the same
+ * and `claudeEvent`, the hook's event, which labels it (D-PG6-20), and lets
+ * the prompt continue; the `before_agent_start` handler of the same
  * turn sends it as a message after the prompt. A prompt that Pi queues into
  * the running agent starts no turn of its own, so its context goes out as a
  * message on the model call that reads it (`queuePromptContext`). A block or
@@ -518,6 +714,7 @@ export function adaptInputResult(
   result: HookExecResult,
   event: InputEvent,
   context: HookAdapterContext,
+  claudeEvent: PromptContextEvent,
 ): InputEventResult | undefined {
   switch (result.kind) {
     case "block":
@@ -528,11 +725,17 @@ export function adaptInputResult(
         return undefined;
       }
 
-      queuePromptContext(result.additionalContext, event, context);
+      queuePromptContext(result.additionalContext, claudeEvent, event, context);
       return undefined;
 
     case "stop":
-      // D-CF5-11: a UserPromptSubmit `continue: false` stops the prompt.
+      // D-CF5-11 / D-PG5-13: a prompt hook's `continue: false` stops the
+      // prompt and shows the user why.
+      showAdapterNotice(
+        context,
+        promptStoppedText(result.stopReason),
+        "adaptInput: stop notice failed",
+      );
       return { action: "handled" };
 
     case "noop":

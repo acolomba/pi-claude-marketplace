@@ -6,8 +6,15 @@ import {
   serializeWithTruncation,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/spawn-helpers.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
+import {
+  ShellFormOptionReferenceError,
+  UnreadablePluginOptionsError,
+  UnsetPluginOptionError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
+import type { UserConfigSchema } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import type { ClaudePluginVars } from "../../../extensions/pi-claude-marketplace/shared/vars.ts";
 
 const PATH_VARS = {
@@ -28,7 +35,23 @@ function execEntry(command: string, args: readonly unknown[]): RoutingEntry {
     handlerDecl: { type: "command", command, args: [...args] },
     declarationIndex: 0,
     ifPredicate: { kind: "match-all" },
+    options: resolveOptions(undefined),
   };
+}
+
+const OPTION_SCHEMA = {
+  mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+  level: { type: "number", title: "Level", description: "The level.", default: 3 },
+  echo: {
+    type: "string",
+    title: "Echo",
+    description: "A value that names another option.",
+    default: "${user_config.mode}",
+  },
+} satisfies UserConfigSchema;
+
+function optionEntry(command: string, args: readonly unknown[]): RoutingEntry {
+  return { ...execEntry(command, args), options: resolveOptions(OPTION_SCHEMA) };
 }
 
 describe("planSpawn", () => {
@@ -38,7 +61,6 @@ describe("planSpawn", () => {
       "${CLAUDE_PLUGIN_ROOT}/bin",
       "--data=${CLAUDE_PLUGIN_DATA}",
       "${CLAUDE_PROJECT_DIR}",
-      "${user_config.token}",
       "${HOME}",
       "${CLAUDE_SKILL_DIR}",
       7,
@@ -50,17 +72,132 @@ describe("planSpawn", () => {
     // assert
     assert.deepStrictEqual(spawnPlan, {
       command: "/usr/bin/hook",
-      args: [
-        "/p/bin",
-        "--data=/d",
-        "/w",
-        "${user_config.token}",
-        "${HOME}",
-        "${CLAUDE_SKILL_DIR}",
-        "7",
-      ],
+      args: ["/p/bin", "--data=/d", "/w", "${HOME}", "${CLAUDE_SKILL_DIR}", "7"],
       shell: false,
     });
+  });
+
+  test("D-PG10-10: fills plugin options into an exec-form command and its string arguments after the path variables", () => {
+    // arrange
+    const entry = optionEntry("${CLAUDE_PLUGIN_ROOT}/bin/${user_config.mode}", [
+      "${user_config.mode}",
+      "--level=${user_config.level}",
+      "${CLAUDE_PLUGIN_DATA}/${user_config.mode}",
+      7,
+    ]);
+
+    // act
+    const spawnPlan = planSpawn(entry, PATH_VARS);
+
+    // assert
+    assert.deepStrictEqual(spawnPlan, {
+      command: "/p/bin/fast",
+      args: ["fast", "--level=3", "/d/fast", "7"],
+      shell: false,
+    });
+  });
+
+  test("D-PG10-10: fills two option references side by side and never rescans a spliced value", () => {
+    // arrange
+    const entry = optionEntry("/usr/bin/hook", [
+      "${user_config.mode}${user_config.level}",
+      "${user_config.echo}",
+    ]);
+
+    // act
+    const spawnPlan = planSpawn(entry, PATH_VARS);
+
+    // assert
+    assert.deepStrictEqual(spawnPlan, {
+      command: "/usr/bin/hook",
+      args: ["fast3", "${user_config.mode}"],
+      shell: false,
+    });
+  });
+
+  test("D-PG10-10: fills an option reference that a path value holds, as the option pass runs after the path variables", () => {
+    // arrange
+    const entry = optionEntry("/usr/bin/hook", ["${CLAUDE_PROJECT_DIR}"]);
+
+    // act
+    const spawnPlan = planSpawn(entry, { ...PATH_VARS, projectDir: "/w/${user_config.mode}" });
+
+    // assert
+    assert.deepStrictEqual(spawnPlan, {
+      command: "/usr/bin/hook",
+      args: ["/w/fast"],
+      shell: false,
+    });
+  });
+
+  const unsetCases: readonly {
+    readonly name: string;
+    readonly entry: RoutingEntry;
+    readonly key: string;
+  }[] = [
+    {
+      name: "D-PG10-21: an argument of a plugin that declares no options",
+      entry: execEntry("/usr/bin/hook", ["${user_config.token}"]),
+      key: "token",
+    },
+    {
+      name: "D-PG10-08: the command, for a key the plugin does not declare",
+      entry: optionEntry("/usr/bin/${user_config.missing}", []),
+      key: "missing",
+    },
+    {
+      name: "D-PG10-08: a key that is not an identifier",
+      entry: optionEntry("/usr/bin/hook", ["${user_config.a-b}"]),
+      key: "a-b",
+    },
+  ];
+  for (const { name, entry, key } of unsetCases) {
+    test(`${name} fails the run with the unset-option error`, () => {
+      // act & assert
+      assert.throws(
+        () => planSpawn(entry, PATH_VARS),
+        (error: unknown) => {
+          assert.ok(error instanceof UnsetPluginOptionError);
+          assert.strictEqual(error.key, key);
+          return true;
+        },
+      );
+    });
+  }
+
+  test("D-PG10-25: an option argument of a record whose options do not parse fails the run as unreadable", () => {
+    // arrange
+    const entry: RoutingEntry = {
+      ...execEntry("/usr/bin/hook", ["${user_config.token}"]),
+      options: { ...resolveOptions({}), unreadable: true },
+    };
+
+    // act & assert
+    assert.throws(
+      () => planSpawn(entry, PATH_VARS),
+      (error: unknown) => {
+        assert.ok(error instanceof UnreadablePluginOptionsError);
+        assert.deepStrictEqual(
+          { plugin: error.plugin, key: error.key },
+          { plugin: "exec-substitution@catalog", key: "token" },
+        );
+        return true;
+      },
+    );
+  });
+
+  test("D-PG10-25: an exec-form hook of a record whose options do not parse runs when it names no option", () => {
+    // arrange
+    const entry: RoutingEntry = {
+      ...execEntry("/usr/bin/hook", ["${CLAUDE_PLUGIN_ROOT}/x"]),
+      options: { ...resolveOptions({}), unreadable: true },
+    };
+
+    // act
+    const spawnPlan = planSpawn(entry, PATH_VARS);
+
+    // assert
+    assert.deepStrictEqual(spawnPlan, { command: "/usr/bin/hook", args: ["/p/x"], shell: false });
   });
 
   test("fills the path variables into an exec-form command with no arguments", () => {
@@ -115,6 +252,52 @@ describe("planSpawn", () => {
     });
   });
 
+  for (const { name, options, command } of [
+    { name: "an option with a value", options: OPTION_SCHEMA, command: "run ${user_config.mode}" },
+    { name: "an undeclared key", options: OPTION_SCHEMA, command: "run '${user_config.nope}'" },
+    { name: "a plugin with no options", options: undefined, command: "run ${user_config.mode}" },
+  ]) {
+    test(`D-PG10-10: refuses a shell-form command that names ${name}`, () => {
+      // arrange
+      const entry = {
+        ...execEntry(command, []),
+        handlerDecl: { type: "command", command },
+        options: resolveOptions(options),
+      } satisfies RoutingEntry;
+
+      // act & assert
+      assert.throws(
+        () => planSpawn(entry, PATH_VARS),
+        (error: unknown) => {
+          assert.ok(error instanceof ShellFormOptionReferenceError);
+          assert.deepStrictEqual(
+            { plugin: error.plugin, command: error.command },
+            { plugin: "exec-substitution@catalog", command },
+          );
+          return true;
+        },
+      );
+    });
+  }
+
+  test("D-PG10-10: runs a shell-form command that reads the option variable from its environment", () => {
+    // arrange
+    const entry = {
+      ...optionEntry("echo $CLAUDE_PLUGIN_OPTION_MODE", []),
+      handlerDecl: { type: "command", command: "echo $CLAUDE_PLUGIN_OPTION_MODE" },
+    } satisfies RoutingEntry;
+
+    // act
+    const spawnPlan = planSpawn(entry, PATH_VARS);
+
+    // assert
+    assert.deepStrictEqual(spawnPlan, {
+      command: "echo $CLAUDE_PLUGIN_OPTION_MODE",
+      args: [],
+      shell: true,
+    });
+  });
+
   test("uses exec form and stringifies mixed primitive arguments when args are present", () => {
     // arrange
     const entry = {
@@ -133,6 +316,7 @@ describe("planSpawn", () => {
       },
       declarationIndex: 4,
       ifPredicate: { kind: "match-all" },
+      options: resolveOptions(undefined),
     } satisfies RoutingEntry;
 
     // act
@@ -163,6 +347,7 @@ describe("planSpawn", () => {
       },
       declarationIndex: 0,
       ifPredicate: { kind: "match-all" },
+      options: resolveOptions(undefined),
     } satisfies RoutingEntry;
 
     // act
@@ -192,6 +377,7 @@ describe("planSpawn", () => {
       },
       declarationIndex: 2,
       ifPredicate: { kind: "match-all" },
+      options: resolveOptions(undefined),
     } satisfies RoutingEntry;
 
     // act
@@ -222,6 +408,7 @@ describe("planSpawn", () => {
       },
       declarationIndex: 7,
       ifPredicate: { kind: "match-all" },
+      options: resolveOptions(undefined),
     } satisfies RoutingEntry;
 
     // act
@@ -250,6 +437,7 @@ describe("planSpawn", () => {
       },
       declarationIndex: 1,
       ifPredicate: { kind: "match-all" },
+      options: resolveOptions(undefined),
     } satisfies RoutingEntry;
 
     // act
@@ -280,6 +468,7 @@ describe("planSpawn", () => {
       },
       declarationIndex: 9,
       ifPredicate: { kind: "match-all" },
+      options: resolveOptions(undefined),
     } satisfies RoutingEntry;
 
     // act

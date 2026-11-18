@@ -30,6 +30,7 @@ import {
   pluginMirrorKey,
 } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { WORKFLOW_SCRIPT_MAX_BYTES } from "../../../extensions/pi-claude-marketplace/domain/workflow-script.ts";
 import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
@@ -201,7 +202,13 @@ for (const orchestrated of [false, true]) {
                 CLAUDE_PLUGIN_DATA: path.join(locations.extensionRoot, "data", "mp", "zzz"),
                 CLAUDE_PLUGIN_ROOT: path.join(marketplaceRoot, "plugins", "zzz"),
               },
-              _piClaudeMarketplace: { marketplace: "mp", plugin: "zzz" },
+              requestTimeoutMs: 1800000,
+              lifecycle: "lazy-keep-alive",
+              _piClaudeMarketplace: {
+                marketplace: "mp",
+                plugin: "zzz",
+                defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
+              },
             },
           },
         });
@@ -1306,7 +1313,7 @@ test("AGENT-01: fresh install preserves prefixed and unprefixed agent identities
         });
         assert.strictEqual(
           await readFile(targetPath, "utf8"),
-          `---\nname: hello:${agent.sourceName}\ndescription: ${agent.description}\naliases: ${agent.generatedName}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
+          `---\nname: hello:${agent.sourceName}\ndescription: ${agent.description}\naliases: ${agent.generatedName}\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: ${agent.sourceName}\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${agent.body}`,
         );
       }
 
@@ -3037,6 +3044,46 @@ test("T-102-01: the same hooks fixture installed ENABLED does get its routing en
   });
 });
 
+test("D-PG10-10 an install gives its plugin's routing entries the options of the resolution it installed", async () => {
+  await withHermeticHome(async ({ hooksRuntime, installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-hook-options-"));
+    hooksRuntime.recordProjectTrust(cwd, true);
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.extensionRoot, { recursive: true });
+      const { pluginRoot } = await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hooky",
+        hooksJson: {
+          PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hello" }] }],
+        },
+      });
+      const userConfig = {
+        mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+      } as const;
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "hooky", version: "0.0.1", userConfig }),
+      );
+      const { ctx, run } = makeCtx();
+
+      // act
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hooky" });
+
+      // assert
+      assert.deepStrictEqual(
+        hooksRuntime.getRoutingBucket("PreToolUse").map((entry) => entry.options),
+        [resolveOptions(userConfig)],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ───────────────────────────────────────────────────────────────────────────
 // D-102-02 / NFR-3 -- the one failure window this composition creates: the
 // ledger succeeded, and the disable cascade then threw.
@@ -3387,9 +3434,15 @@ test("AFILE-01: install writes the plugin's marked entries into project mcp-adap
       },
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 1800000,
+      "lifecycle": "lazy-keep-alive",
       "_piClaudeMarketplace": {
         "plugin": "hello",
-        "marketplace": "mp"
+        "marketplace": "mp",
+        "defaultFields": {
+          "requestTimeoutMs": 1800000,
+          "lifecycle": "lazy-keep-alive"
+        }
       }
     }
   }
@@ -3456,9 +3509,15 @@ test("ANAME-01: install writes Claude Code server keys that the global toolPrefi
       },
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 1800000,
+      "lifecycle": "lazy-keep-alive",
       "_piClaudeMarketplace": {
         "plugin": "my.plugin",
-        "marketplace": "mp"
+        "marketplace": "mp",
+        "defaultFields": {
+          "requestTimeoutMs": 1800000,
+          "lifecycle": "lazy-keep-alive"
+        }
       }
     },
     "plugin_my_plugin_live_": {
@@ -3469,9 +3528,15 @@ test("ANAME-01: install writes Claude Code server keys that the global toolPrefi
       },
       "directTools": true,
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 1800000,
+      "lifecycle": "lazy-keep-alive",
       "_piClaudeMarketplace": {
         "plugin": "my.plugin",
-        "marketplace": "mp"
+        "marketplace": "mp",
+        "defaultFields": {
+          "requestTimeoutMs": 1800000,
+          "lifecycle": "lazy-keep-alive"
+        }
       }
     }
   }
@@ -3579,9 +3644,15 @@ test("ANAME-07 / D-08-04: install writes Claude servers through the closed adapt
       },
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 1800000,
+      "lifecycle": "lazy-keep-alive",
       "_piClaudeMarketplace": {
         "plugin": "hello",
-        "marketplace": "mp"
+        "marketplace": "mp",
+        "defaultFields": {
+          "requestTimeoutMs": 1800000,
+          "lifecycle": "lazy-keep-alive"
+        }
       }
     }
   }
@@ -3696,9 +3767,15 @@ test("ANAME-07: --partial installs every server except the blocked one", async (
       },
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 1800000,
+      "lifecycle": "lazy-keep-alive",
       "_piClaudeMarketplace": {
         "plugin": "hello",
-        "marketplace": "mp"
+        "marketplace": "mp",
+        "defaultFields": {
+          "requestTimeoutMs": 1800000,
+          "lifecycle": "lazy-keep-alive"
+        }
       }
     }
   }
@@ -3890,9 +3967,13 @@ for (const { title, descriptions, description } of [
       "description": "${description}",
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 300000,
       "_piClaudeMarketplace": {
         "plugin": "hello",
-        "marketplace": "mp"
+        "marketplace": "mp",
+        "defaultFields": {
+          "requestTimeoutMs": 300000
+        }
       }
     },
     "plugin_hello_docs_": {
@@ -3900,9 +3981,13 @@ for (const { title, descriptions, description } of [
       "description": "${description}",
       "directTools": "search",
       "toolPrefix": "mcp",
+      "requestTimeoutMs": 300000,
       "_piClaudeMarketplace": {
         "plugin": "hello",
-        "marketplace": "mp"
+        "marketplace": "mp",
+        "defaultFields": {
+          "requestTimeoutMs": 300000
+        }
       }
     }
   }
@@ -8426,14 +8511,14 @@ test("PHOOK-04 / D-71-02: install --partial drops only the unsupportable matcher
         marketplaceName: "mp",
         pluginName: "hook-plugin",
         skills: [{ sourceName: "helper-skill" }],
-        // One supported event with a clean Edit group and an unsupportable
-        // regex group: the partition keeps the Edit group and drops only the
-        // `.*` regex group (intra-event matcher-group partition, D-71-02).
+        // One supported event with a clean Edit group and an invalid regex
+        // group: the partition keeps the Edit group and drops only the
+        // `[` group (intra-event matcher-group partition, D-71-02).
         hooksJson: {
           hooks: {
             PreToolUse: [
               { matcher: "Edit", hooks: [{ type: "command", command: "echo edit" }] },
-              { matcher: ".*", hooks: [{ type: "command", command: "echo regex" }] },
+              { matcher: "[", hooks: [{ type: "command", command: "echo invalid" }] },
             ],
           },
         },
@@ -8458,7 +8543,7 @@ test("PHOOK-04 / D-71-02: install --partial drops only the unsupportable matcher
         PreToolUse: { matcher?: string }[];
       };
       // The event survives with ONLY the supportable Edit group; the dropped
-      // `.*` regex group is absent (strict subset within the kept event).
+      // invalid `[` group is absent (strict subset within the kept event).
       assert.equal(staged.PreToolUse.length, 1);
       assert.equal(staged.PreToolUse[0]?.matcher, "Edit");
     } finally {
@@ -18288,10 +18373,10 @@ test("WLIF-01: a workflows prepare failure leaves the undo with nothing to remov
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-workflows-prepare-fail-"));
     try {
-      // arrange -- two scripts declaring the SAME `meta.name` make
-      // `prepareStageWorkflows` raise before it returns a handle, so
-      // `workflowsPrep` is still undefined when the runner unwinds and the
-      // undo takes its early return.
+      // arrange -- a regular file where the workflows staging directory
+      // belongs makes `prepareStageWorkflows` raise before it returns a
+      // handle, so `workflowsPrep` is still undefined when the runner unwinds
+      // and the undo takes its early return.
       const locations = locationsFor("project", cwd);
       await seedPathMarketplaceWithPlugin({
         cwd,
@@ -18303,12 +18388,10 @@ test("WLIF-01: a workflows prepare failure leaves the undo with nothing to remov
             sourceName: "first",
             body: 'export const meta = { name: "greet", description: "a" };\n',
           },
-          {
-            sourceName: "second",
-            body: 'export const meta = { name: "greet", description: "b" };\n',
-          },
         ],
       });
+      await mkdir(path.dirname(locations.workflowsStagingDir), { recursive: true });
+      await writeFile(locations.workflowsStagingDir, "not a directory\n");
       const { ctx, run } = makeCtx();
 
       // act
@@ -18323,7 +18406,7 @@ test("WLIF-01: a workflows prepare failure leaves the undo with nothing to remov
 
       // assert
       assert.strictEqual(outcome.status, "failed");
-      assert.strictEqual(outcome.error.name, "WorkflowNameCollisionError");
+      assert.strictEqual((outcome.error as NodeJS.ErrnoException).code, "ENOTDIR");
       assert.deepStrictEqual(await entriesOf(locations.workflowsSavedDir), []);
       const state = await loadState(locations.extensionRoot);
       assert.strictEqual(state.marketplaces.mp?.plugins.hello, undefined);

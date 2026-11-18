@@ -21,6 +21,11 @@
 //
 // D-LOC-01: a project command runs, and the model's tool lists it, only when
 // Pi trusts the project (`ctx.isProjectTrusted()`).
+//
+// PG-SKILL-01 / D-PG11-07: a typed command gets the files its body mentions,
+// read after its `!` commands ran, so a refused invocation reads none. The
+// mentions come from the body with its variables filled and no argument
+// substituted (D-PG11-02). The `run_plugin_command` result attaches nothing.
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
@@ -46,9 +51,12 @@ import {
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
 
+import { appendMentionedFiles, NODE_MENTION_FILE_READER } from "./mention-attachments.ts";
+
 import type { ShellRun } from "../domain/context-injection.ts";
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 import type { PromptShellHost, PromptShellRunner } from "../platform/prompt-shell.ts";
+import type { MentionFileReader } from "./mention-attachments.ts";
 
 /** One typed invocation of a slash command, such as `/demo:greet Ada`. */
 export interface CommandInvocationRequest {
@@ -81,6 +89,8 @@ export interface CommandInvocationDependencies {
   /** The machine facts that choose a shell and give the commands their environment. */
   readonly host: PromptShellHost;
   readonly runShell: PromptShellRunner;
+  /** D-PG11-08: the reads of the files a typed command's body mentions. */
+  readonly mentions: MentionFileReader;
 }
 
 /** The dependencies of a running Pi: its agent directory, the filesystem, and this machine's shells. */
@@ -91,6 +101,7 @@ function nodeDependencies(): CommandInvocationDependencies {
     runShell: createPromptShellRunner({ host, spawn: NODE_PROMPT_SHELL_SPAWN }),
     readFile: async (file) => readFile(file, "utf8"),
     getAgentDir,
+    mentions: NODE_MENTION_FILE_READER,
   };
 }
 
@@ -146,24 +157,23 @@ function locateStagedCommand(
 
 /**
  * D-CF3-06 / D-CF3-10: the `${CLAUDE_*}` values a typed argument or the body
- * may name. Install already filled the body's path variables (CM-3, SUB-02);
- * these values reach a typed argument that names one, as upstream. The
- * plugin root and data come from the record install stored in the staged
- * frontmatter. A command has no skill directory, so `${CLAUDE_SKILL_DIR}`
- * stays literal.
+ * may name. Install filled the body's path variables, and the project
+ * directory at project scope only (CM-3, SUB-02); at user scope this step
+ * fills it (D-PG10-16). These values reach a typed argument that names one,
+ * as upstream. The plugin root and data come from the record install stored
+ * in the staged frontmatter. A command has no skill directory, so
+ * `${CLAUDE_SKILL_DIR}` stays literal.
  */
 function commandVariables(
   request: CommandInvocationRequest,
-  command: StagedCommand,
   frontmatter: Readonly<Record<string, unknown>>,
 ): Readonly<Record<string, string>> {
   const variables: Record<string, string> = {
     CLAUDE_SESSION_ID: request.sessionId,
     CLAUDE_EFFORT: claudeEffort(request.thinkingLevel),
+    // D-PG10-16: a user command's staged body keeps the literal, so this step fills it.
+    CLAUDE_PROJECT_DIR: request.cwd,
   };
-  if (command.scope === "project") {
-    variables.CLAUDE_PROJECT_DIR = request.cwd;
-  }
 
   const record = readCommandRecord(frontmatter);
   if (record !== undefined) {
@@ -200,24 +210,40 @@ function contextShell(
 /**
  * D-CF1-01 / D-CF1-02: fills the body with the typed arguments and the
  * invocation variables, then replaces each `!` command with its output.
- * Throws the cores' errors.
+ * PG-SKILL-01: then appends the files that the body with only its variables
+ * filled mentions (D-PG11-02). Throws the cores' errors.
  */
 async function renderCommand(
   request: CommandInvocationRequest,
-  command: StagedCommand,
   file: CommandFile,
   dependencies: CommandInvocationDependencies,
 ): Promise<CommandInvocationOutcome> {
+  const variables = commandVariables(request, file.frontmatter);
+  const authored = substituteArguments({
+    body: file.body,
+    args: undefined,
+    argumentNames: [],
+    variables,
+  });
   const filled = substituteArguments({
     body: file.body,
     args: request.args,
     argumentNames: parseArgumentNames(file.frontmatter.arguments),
-    variables: commandVariables(request, command, file.frontmatter),
+    variables,
   });
   const run = contextShell(request, file.frontmatter, dependencies);
-  return run === undefined
-    ? refusal(bashMissingMessage(request.typed))
-    : { kind: "send", text: await expandContextInjections(filled, run) };
+  if (run === undefined) {
+    return refusal(bashMissingMessage(request.typed));
+  }
+
+  const rendered = await expandContextInjections(filled, run);
+  return {
+    kind: "send",
+    text: await appendMentionedFiles(
+      { authored, rendered, cwd: request.cwd },
+      dependencies.mentions,
+    ),
+  };
 }
 
 /** T-01-24: the cores' own failures refuse with their message; any other propagates. */
@@ -231,8 +257,7 @@ function refusalFor(error: unknown): CommandInvocationOutcome {
 
 /** A staged command read for one invocation, or the outcome that ends it early. */
 type PreparedCommand =
-  | { readonly kind: "ready"; readonly command: StagedCommand; readonly file: CommandFile }
-  | CommandInvocationOutcome;
+  { readonly kind: "ready"; readonly file: CommandFile } | CommandInvocationOutcome;
 
 /** Finds the staged command, refuses it in an untrusted project, and reads its file. */
 async function prepareCommand(
@@ -258,7 +283,7 @@ async function prepareCommand(
   // the body it cached, with its `!` commands not run.
   return dependencies
     .readFile(command.file)
-    .then((text): PreparedCommand => ({ kind: "ready", command, file: parseFrontmatter(text) }))
+    .then((text): PreparedCommand => ({ kind: "ready", file: parseFrontmatter(text) }))
     .catch((error: unknown) =>
       refusal(
         `Cannot read the command ${request.typed}: ${errorMessage(error)}. Run /reload to load the installed commands again.`,
@@ -278,7 +303,7 @@ export async function invokeStagedCommand(
 ): Promise<CommandInvocationOutcome> {
   const prepared = await prepareCommand(request, dependencies);
   return prepared.kind === "ready"
-    ? renderCommand(request, prepared.command, prepared.file, dependencies).catch(refusalFor)
+    ? renderCommand(request, prepared.file, dependencies).catch(refusalFor)
     : prepared;
 }
 
@@ -300,7 +325,7 @@ export async function expandStagedCommand(
     return prepared;
   }
 
-  const { command, file } = prepared;
+  const { file } = prepared;
   if (file.frontmatter["disable-model-invocation"] === true) {
     return refusal(
       `Command ${request.name} cannot be used with ${toolName} due to disable-model-invocation. Ask the user to run ${request.typed} themselves; it cannot be invoked via ${toolName}. Do not replicate this command's workflow by other means; it is reserved for explicit user invocation.`,
@@ -314,7 +339,7 @@ export async function expandStagedCommand(
         body: file.body,
         args: request.args,
         argumentNames: parseArgumentNames(file.frontmatter.arguments),
-        variables: commandVariables(request, command, file.frontmatter),
+        variables: commandVariables(request, file.frontmatter),
       }),
     };
   } catch (error) {

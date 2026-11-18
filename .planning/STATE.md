@@ -1,41 +1,285 @@
 ---
 gsd_state_version: "1.0"
-milestone: behavioral-gaps
+milestone: parity-gaps
 status: Awaiting next milestone
-stopped_at: Milestone behavioral-gaps completed and archived (override_closeout)
-last_updated: "2026-11-10T19:57:18.434Z"
-last_activity: 2026-11-09
-last_activity_desc: Quick batch 261109-cpi fixed the reviewed dubious choices
-state_head: ecc72b9de832ab19c2cc72212b0e2684c136dc52
-progress:
-  total_phases: 16
-  completed_phases: 16
-  total_plans: 36
-  completed_plans: 36
-  percent: 100
-milestone_name: Behavioral Coverage Gaps
+stopped_at: Milestone parity-gaps completed and archived (override_closeout)
+last_updated: "2026-11-17T18:22:58.068Z"
+last_activity: 2026-11-17
+last_activity_desc: "parity-gaps shipped as PR #324"
+state_head: 6857cedb21be3c94d0d03672658036dc2df4aebb
+milestone_name: Claude Code Parity Gaps and Defects
 current_phase: null
 current_phase_name: null
+progress:
+  total_phases: 11
+  completed_phases: 11
+  total_plans: 102
+  completed_plans: 102
+  percent: 100
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-11-08 when the behavioral-gaps milestone closed)
+See: `.planning/PROJECT.md` (updated 2026-11-17 when the parity-gaps milestone closed)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Planning the next milestone; behavioral-gaps awaits the user's review of its dubious choices and a PR
+**Current focus:** Planning the next milestone; parity-gaps waits for a PR from `features/gaps`
 
 ## Current Position
 
-Phase: Milestone behavioral-gaps complete
+Phase: Milestone parity-gaps complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-11-09 -- Quick batch 261109-cpi fixed the six reviewed dubious choices
+Last activity: 2026-11-17 -- parity-gaps shipped as PR #324
 
+### parity-gaps closeout: `override_closeout`
+
+Completed 2026-11-17 on `features/gaps` (not yet pushed, no PR or npm
+release; version stays 0.23.0). 11/11 phases, 102 plans, 42/42 requirements.
+The audit reads `tech_debt` with no blockers (integration 9/9, flows 6/6), and
+`npm run check` passed at `421863f6` (adapter 2100/2100, builtin 204/204, 376
+direct-coverage records). The archive is `.planning/milestones/parity-gaps-*`,
+with phase records under `milestones/parity-gaps-phases/` and the session
+handoff at `milestones/parity-gaps-HANDOFF.json`.
+
+- Override: Phase 5 is `human_needed` on A9 alone (the start-failure notice
+  of `features/hook/failures.feature:157` has not run on Node 24); it closes
+  with the PR's CI `behavioral` job. Known verification overrides: 1 newly
+  acknowledged, 0 carried forward.
+- Runtime UAT skipped by the user's choice: the cucumber suite (real Pi, real
+  companion extensions, scripted model) stands in for it.
+- Still open: AGTLONGNAME-01, PG1-TIMING-01, and SEED-261107-kax (dormant,
+  upstream open-gsd/gsd-core#4649).
+
+### parity-gaps Phase 11 (Skills, Commands, and Records)
+
+Phase 11 complete 2026-11-16 (8/8 plans).
+
+- Phase gate: `npm run check` exit 0 at 9874efc2 (`/tmp/pg11-phasegate2.log`, hermetic `PI_CODING_AGENT_DIR`): adapter 2094 scenarios / 25908 steps, builtin 204 / 2762, direct.lcov 374 records. An earlier run at b574dd55 (`/tmp/pg11-phasegate.log`, exit 0, 2092 + 204) preceded the last fix round.
+- Validation: Nyquist-compliant, 0 gaps (cd2da90e).
+- Security: 27/27 threats closed (25 mitigate, 2 accepted: AR-11-01 closing tag in file content, AR-11-02 author mention reach), threats_open 0, ASVS 1 (cd2da90e).
+- Review: iteration 1 WR-01 (frontmatter `name` drops the path alias, 3c9f6415) and WR-02 (escaped backticks and block starts end a code span, 4ba4a058); iteration 2 WR-03 (thematic break and setext underline, 8b1c0eb1), IN-06 (paragraph-end rules, bfca1330), IN-07 (positive alias rows, 259f969a); iteration 3 WR-04 and WR-05, regressions of bfca1330, fixed in 32402034 and 2222bacd with IN-10 docs (79408239). The loop cap of three review iterations was reached, so no review read the last round; its owner rows were red then green and the gate passed after it. README alias wording fixed after verification (29661a49).
+- Verification: passed, 7/7 (6 verified, 1 by override: the documented CommonMark residual of the D-PG11-03 mask, pending maintainer review) (ceb1e3a1). PG-SKILL-01, PG-CMD-09, PG-SKILL-11, PG-DOC-01, PG-DOC-02 complete (marked by hand: the ROADMAP requirements line did not parse).
+
+Decisions (Phase 11):
+
+- A bridged command also answers to Claude Code's name `/<plugin>:<path>:<file>` when it differs from the Pi name, stored as `claudeName` in the staged command record; a command staged before this phase gets it at its next restage (D-PG11-01, amends D-141-01).
+- The alias reader drops the stored path name when the command's frontmatter declares `name` (`declaresFrontmatterName`, as Claude Code 2.1.323's `dBt`: any present value whose string form is non-empty and at most 256 characters), so a renamed command answers only to its frontmatter names, as upstream (D-PG11-01, WR-01).
+- Only author-written `@path` mentions are attached: the scan input is the body with variables filled and no arguments, built before `!` commands run (D-PG11-02).
+- A mention inside fenced code or an inline code span is attached, as upstream: the maintainer reversed D-PG11-03 on 2026-11-16, and the code mask is removed (residuals IN-09 and IN-11 list half no longer apply).
+- Mentions use upstream syntax (quoted, unquoted, CJK marks, `#L` ranges, `@agent-` excluded); each file is appended as Pi's `<file name="...">` block, inside the skill block for a skill (D-PG11-04, D-PG11-05).
+- A mention qualifies only for a regular file of at most 262,144 bytes with no NUL byte; a directory is not attached (D-PG11-06).
+- Attachment runs on typed invocations only; `run_plugin_command` and the model's skill read attach nothing (D-PG11-07), through an injected `MentionFileReader` (D-PG11-08).
+- Each alias suggestion carries its target's description and, for a skill, its `argument-hint`, in pi-tui 1.5.0's row format (D-PG11-09).
+- Hooks and MCP servers keep a plugin's `bin` on `PATH`, where Claude Code gives it to the Bash and PowerShell tools only; recorded as a divergence in `docs/env-vars.md` (D-PG11-10).
+
+Open for the maintainer (Phase 11):
+
+- Decided 2026-11-16: D-PG11-01 and D-PG11-02 confirmed, D-PG11-03 reversed, D-PG11-06 confirmed as deferred (BACKLOG MENTIONDIR-01; it has no PROJECT.md Key Decisions row).
+- The verification override (CommonMark residual) and the 14 judgment-tier prohibitions.
+- WR-01 rule: a whitespace, list, or mapping frontmatter `name` also drops the path alias, though it adds no alias of its own (copied from upstream `dBt`).
+- Open Info: IN-01 (empty file attaches an empty block; Pi skips it), IN-02 (reversed or zero `#L` range), IN-03 (`</skill>` in content splits Pi's display), IN-04 (repeats deduplicated by text, not path), IN-05 (map key with `/` stored as `plugin:a:b`), IN-08 (`commandUpstreamNames` path name vs frontmatter `name`, upstream unverified), IN-09 (tab after `>`), IN-11 list half (fence indented four columns in a list item). BACKLOG CMDNESTNAME-01 stays unverified.
+
+### parity-gaps merge of features/gaps-mcp (Phases 9 and 10)
+
+Phase 9 (Adapter Entries and MCP Features, 6/6 plans) and Phase 10 (Plugin
+Options, Variables, and Trust, 21/21 plans) are complete.
+
+- Phase 10 complete 2026-11-15: 6/6 truths, PG-SEC-02 by override, PG-SEC-02 Pending; gate exit 0 at 16ef48af (adapter 1983, builtin 199).
+- Phase 10 security: 52/52 closed, threats_open 0.
+- Phase 07 security re-audited at 24de427b: 21/21 closed, threats_open 0; UF-07-02 open for maintainer decision. (3a59a8fd)
+- Phase 09 security re-audited at 25caef67: 23/23 closed, threats_open 0; T-09-09 stays an accepted residual under D-PG9-07 (locked 2026-11-16); UF-09-01 (low, quadratic CLAUDE_VARIABLE scan) logged, no fix. (976c4786)
+
+Decisions (Phase 10):
+
+- A required option with no default gives the reason `options not set` on install, list, and info; info names the unset keys in one note (D-PG10-06).
+- The install record holds the declared userConfig schema in an optional field with no schemaVersion bump, written through userConfigFieldsOf at install and at each restage (D-PG10-23).
+- A hook's environment holds CLAUDE_PLUGIN_OPTION_<KEY> for each option with a default, read from the record's userConfig through recordedOptionsOf at load (D-PG10-10, D-PG10-23).
+- Skill content gets each ${user_config.KEY} at staging through substituteClaudeContent: the sensitive-option text for a sensitive key, the default for a key with one, the reference as written otherwise, and no option pass for a plugin that declares no userConfig (D-PG10-08, D-PG10-09, D-PG10-13, D-PG10-21).
+- Each option of an enabled plugin's MCP value map gets PI_CLAUDE_MARKETPLACE_OPTION_<16 hex>, valued with the split-token escape and owned through the scope-tagged ledger PI_CLAUDE_MARKETPLACE_OPTIONS; the factory sets the user scope, a load sets the project scope only when trusted and removes it otherwise, and every command applies again with the last load's answer (D-PG10-11, D-PG10-23).
+- A scope whose state cannot be read keeps its option variables; an empty option ledger is deleted.
+- An exec-form hook's command and string arguments get each ${user_config.KEY} filled from the routing entry's option values after the path variables; a key with no value fails the run with UnsetPluginOptionError, for every plugin (D-PG10-08, D-PG10-10, D-PG10-21).
+- A shell-form hook command that names any ${user_config.KEY}, set or not, is refused with ShellFormOptionReferenceError before the spawn on both lanes (D-PG10-10).
+- An MCP server whose command, args, env, url, or headers name ${user_config.KEY} for a key the MCP value map lacks is left out of mcp-adapter.json and the record, and the command reports it with an option-blocked notice (reason unset) that names the keys; a plugin with no userConfig blocks nothing (D-PG10-08, D-PG10-21).
+- The option-blocked notice names the server by its declared name, because the file holds no entry for it.
+- An update, a reinstall, and the load-time MCP move stage a plugin's servers with the options of the resolution they stage from, so a server that names an option with no value is left out and reported at every staging (D-PG10-08, D-PG10-21).
+- foldUnstageNotices drops an option-blocked notice by plugin and scope, whatever its server, because a blocked server is in no recorded list and so is never among the dropped servers (D-PG10-21).
+- Under Pi's built-in MCP, a plugin server whose fields name ${user_config.KEY} for an option with no value is not registered; the registration step debug-logs it and adds no notice, because the command that staged the plugin already reported it (D-PG10-08, D-PG10-21).
+- McpSubstitutionContext carries the plugin's options as a required member, undefined for a plugin that declares no userConfig (D-PG10-21).
+- A stdio server whose command, or an args element, starts with ${user_config.KEY} for an option whose MCP value pi-mcp-adapter 7.0.1 would expand to a home path is left out and reported with the option-blocked reason home-path; the same option later in a field, or in env, url, or headers, blocks nothing; a server that also names an option with no value is reported as unset (D-PG10-11, D-PG10-21).
+- A command that stages a plugin's hooks caches them with the options of the resolution it staged from, so a hook gets CLAUDE_PLUGIN_OPTION_<KEY> in that session with no /reload (D-PG10-10, D-PG10-15).
+- Under pi-mcp-adapter, ${user_config.KEY} in command, args, env, url, and headers is written as ${PI_CLAUDE_MARKETPLACE_OPTION_<16 hex>}, with no :- fallback, so mcp-adapter.json holds no option value; the stage overlays each option variable, with the escaped text the process holds, on the environment it decides the caFile origin and the OAuth header rule with (D-PG10-11, D-PG10-23).
+- The option pass runs after the path variables and before the environment scan; the option becomes its own segment and is never sent through the deny-list or the missing-variable report, and its value is not scanned again (D-PG10-11).
+- Command content, agent bodies, and the skills an agent preloads get each ${user_config.KEY} at staging through substituteClaudeContent, by the skills rule: the sensitive-option text for a sensitive key, the default for a key with one, the reference as written otherwise, and no option pass for a plugin that declares no userConfig (D-PG10-08, D-PG10-09, D-PG10-13, D-PG10-21).
+- Under Pi's built-in MCP, ${user_config.KEY} in command, args, env, url, and headers is filled with the option's MCP value when the registration step builds the config at each session; the value is held in Pi's in-memory registry only, and env and headers values get Pi's escape ($ doubled, a leading ! behind a $) (D-PG10-12, D-PG10-21).
+- The project trust gap of D-LOC-01 is confirmed for Pi 1.5.0 and 1.5.2, and the maintainer review of 2026-11-16 confirmed option A (PG-SEC-02 complete; the Pi request stays a draft): option B (an extension-kept consent record) recorded as the safer posture, the gap stays open until Pi lets an extension register a trust path (D-PG10-01).
+- An unreadable stored userConfig reads as declared with no values, so the built-in MCP skips servers that name an option; no notice (D-PG10-25).
+- The load-time MCP move writes the staged options to the record whatever its verdict (D-PG10-23).
+
+Open for the maintainer:
+
+- Phase 7: UF-07-02 anchor-on-repeated-key deny loss (design choice); AR-07-04; the quoted-deny change 5d985107; the D-PG7-02 retry residual.
+- Phase 10: the D-PG10 decisions were answered by the maintainer review of 2026-11-16 (D-PG10-01 option A, D-PG10-06 partial kept, D-PG10-19 defaults kept, D-PG10-25 fail closed, the rest confirmed). Still open: D-PG10-04 "Open /plugin manage" (IN-04); AR-10-01 and AR-10-02; the WR-01 residual; the `features/lib/mcp-configuration.ts` fixture edit; IN-01..IN-08 open (IN-07: unguarded mode check in `index.ts`).
+- Parity question (BACKLOG HOOKOPTFAIL-01): an option failure before a hook starts shows `Failed to run:`; Claude Code 2.1.323 may show `Failed with non-blocking status code: <message>` (10-RESEARCH E3; unconfirmed; `dispatch-exec.ts`, `hook-labels.ts`).
+- Review note: `${user_config.KEY}foo` with a `~` value blocks conservatively (home-path rule). Known gap: `${FOO:-${user_config.x}}` stays partly literal (BACKLOG MCPOPTFALLBACK-01).
+- CHANGELOG note: the first restage of a plugin whose entry held a literal `${user_config.KEY}` changes the entry's bytes, so pi-mcp-adapter asks for project approval again once.
+
+### parity-gaps merge of features/gaps-agents (Phases 7 and 8)
+
+Phase 7 (Agent Frontmatter and Grants, 6/6 plans) and Phase 8 (Workflow
+Agents and Run Paths, 7/7 plans; 08-06 skipped under option A) are complete.
+Both verifications passed with overrides pending maintainer review: Phase 7
+criteria 3 and 4 (D-PG7-17 writes `model: ""`), Phase 8 criterion 5 (option A
+of D-PG8-11; ROADMAP criterion 5 and PG-WF-05 amended to it). The maintainer
+review of 2026-11-16 confirmed D-PG7-02/04/07/10/17/18/19 and D-PG8-04..15
+(D-PG8-07 changed to keep the last script). T-08-13 is closed: the maintainer
+accepted the risk on 2026-11-16, with no engine request.
+
+
+### parity-gaps Phase 3 execution
+
+Waves 1-3 are merged and verified: 5/8 plans complete. Child journals isolate
+parent/sibling process ownership. Child PreToolUse, PostToolUse and
+PostToolUseFailure carry a session-checked identity.
+Installed-plugin scenarios under both MCP profiles prove a child runs only tool
+hooks, ignores a blocking Stop hook, and leaves parent and sibling hooks
+running; a real-process test proves survival and dead-owner recovery.
+
+Wave 3 resumed from the user pause in its preserved worktree and merged as
+`9a242dc3`. The full `npm run check` passed there, Node v26.13.1: 1880 adapter
+scenarios, 173 builtin scenarios and all 361 direct coverage pairs.
+Log: `/tmp/pg3-wave3-check.log`; 03-VALIDATION.md records the evidence.
+Wave 4 next: 03-06 complete lanes and real detached/concurrent companion
+acceptance. No manual verification is requested.
+
+### parity-gaps Phase 2 execution
+
+All nine waves and ten plans are merged and verified.
+`npm run check` exited 0 at `fae378d2b58ea520a6557a61d198c77e71a7d03e`, Node v26.13.0: 1867 adapter scenarios / 22776 steps and 161 built-in scenarios / 2193 steps. Merged LCOV: coverage/direct.lcov (361 records). Log: `/tmp/pg2-wave9-check.log`.
+All phase gates are complete. Goal verification passed 55/55 must-haves;
+PG-HOOK-01, PG-HOOK-03 and PG-HOOK-13 are complete. The final full gate at
+`d8930842` on Node v26.13.1 passed 1869 adapter scenarios, 162 builtin
+scenarios and all 361 direct coverage pairs. See `02-VALIDATION.md`.
+The Stop checks observed eight continuations before ninth override, ten
+tool-separated blocks with no cap notice, and a fresh eight after reload.
+
+Wave 9 documents the supported contracts, all twelve accepted decisions,
+and task/threat/probe evidence. Its 107-scenario focused run and full gate
+passed. Parent review restored an accidentally removed UserPromptSubmit
+context explanation in `fae378d2`; the combined gate above includes it.
+Nyquist validation corrected the stale scenario filter and verified all five
+current scenarios (75 steps). All 29 tasks have automated coverage; the latest
+combined-tree gate also passes with pi-subagents 0.88.1. Independent code
+review found four runtime defects and one documentation issue; all were fixed
+and independently rechecked. The refreshed security audit closes 27/27 threats.
+No manual verification remains.
+
+Wave 8 selects MCP output aliases after identity recovery, preserves native
+MCP/custom result schemas, and replaces all stale result carriers. Both MCP
+profiles prove redaction, images, empty modern precedence and immutable failures
+with complete hook, model and downstream records. All five direct pairs and the
+full module suite passed. The module run caught an omitted-name fallback and a
+stale modern-false assertion; both were corrected before handoff. The executor
+stayed within its 15 declared files. The parent verified exact task ancestry,
+a clean handoff and Fallow review. Phase scope resolves 38 task/correction
+commits with no files outside the declared union. Schema drift is clear;
+codebase drift remains advisory.
+
+Wave 7 projects available search/shell result facts and renders validated
+replacements. Real model and downstream checks cover search text, shell images,
+intentional empties and notice-like source content. The parent proved that Pi
+returns the same display for no Glob matches and a real filename equal to its
+empty notice. Commit `9d0631ad` omits the uncertain filenames/count. The owner
+and real-file regressions failed before the correction and passed afterwards;
+all six focused scenarios (91 steps) and direct owner coverage passed. Five
+small example tables became concrete scenarios under the cucumber rules.
+The first full gate caught four stale Bash response assertions and two empty
+result helper spacing failures. Commit `ca9148d4` corrects these fixtures;
+all 56 tool-use scenarios (840 steps) and the subsequent full gate passed.
+Two additional empty-output examples became concrete scenarios too.
+Scope additions for the existing observer step and stale Bash dispatch fixtures
+were necessary. Schema drift is clear; codebase drift remains advisory.
+All eight task-commit sections now use the canonical list format. GSD resolves
+35 exact task/correction commits from them with no files outside their union.
+Its separate plan lookup still requires forbidden GSD IDs in commit subjects;
+recorded task SHA ancestry is checked directly under the project policy.
+
+Wave 6 projects available Read, Edit and Write facts and renders validated
+replacements. Real downstream-handler and model checks cover complete text/image
+redaction, including stale details and structured output. The Pi API result type
+and existing async/skill scenarios were necessary scope adjustments.
+Post-merge checks caught stale dispatch/background assertions and a real partial
+result-envelope regression: removing toolName made the file projector throw and
+left a spawn-waiting test hanging. Commit `78a9502c` adds the fallback guard and
+its failing-before/passing-after owner case; `963f3459` aligns the background Read
+expectation. The entire unit suite and corrected full gate pass. The first failed
+gate's hung coverage runner was terminated after diagnosis, not counted as a pass.
+A later gate reproduced the async rewake failure. GSD debug proved a fixture
+cleanup race: a registered child could survive before writing its script PID
+file and contaminate the next scenario. Commit `a01d79d6` stops owned registered
+groups before the script-PID scan. Its deterministic regression failed without
+the fix; three historical async orders and the full gate passed. The old exit-code
+mismatch remains unproven under ASYNCLIFECYCLE-01. Schema drift is clear;
+codebase drift remains advisory.
+
+Wave 5 gives every executed edit pair the same actual native result or error,
+then folds hook output once. Five real scenarios (82 steps), the full failure
+feature (12 scenarios), and the full async feature (19 scenarios) passed.
+A final-review regression proved a generation change could still launch a later
+pair hook; `db6c7af1` prevents that launch. The async and runs step modules were
+necessary additions for complete event-driven background evidence. The existing
+async lifecycle issue did not reproduce in this wave and remains open.
+
+Wave 4 adds atomic per-pair preflight: every pair is checked before the one
+native edit; a later stop or denial blocks the batch, unsupported input restores
+the entire original call with notice, and conflicting accepted targets block.
+Eight real hook scenarios (131 steps) passed. The input codec's exported path
+helper and existing tool-use step module were necessary scope adjustments.
+The first combined gate exposed a stale matcher Edit expectation, corrected in
+`f382b6bf`, and an intermittent async exit-code mismatch. Subsequent async runs
+also exposed cleanup and rewake failures; cleanup failed on the pre-wave
+`309a4555` snapshot too. ASYNCLIFECYCLE-01 and WINDOWS #114 remain open;
+the passing full gate does not resolve their root cause or waive a check.
+
+The initial sandboxed gate failed on local-process permissions (`mkfifo`
+EPERM); all 129 tests in the three affected architecture files passed with
+normal elevated test permissions. The first unrestricted gate found one
+stale skill-read `path` expectation. Commit `a7f869eb` changes it to
+`file_path`; its scenario and the subsequent full gate passed.
+
+The GSD summary verifier has a false-positive parser: it searches from the
+first Verification heading to EOF and treats any `fail` substring as a failed
+self-check, including prose about failure hooks. Exact PASSED headings,
+created files, clean branches, committed summaries and all task SHA ancestry
+were checked directly before the scoped worktree merges. No check was waived.
+
+### pi-subagents 0.88.1 adoption — 2026-11-13
+
+Published pi-subagents 0.88.1 passed all six launch checks and all three real-child controls. PG-MCP-02 is complete; AGTAMBIENT-01 and its seed trigger are retired. `npm run check` passed (exit 0) at `2db3b81a9cc97098bee6bc744d451aeab4fe9fad`, Node v26.13.0; log: `/tmp/subagents0881-root-check.log`. AGTLONGNAME-01 and PG1-TIMING-01 remain open. See the [adoption summary](quick/261113-8yn-adopt-pi-subagents-0-88-1-ambient-mcp-fi/261113-8yn-SUMMARY.md).
+
+### parity-gaps Phase 1 closeout — historical 2026-11-12
+
+All 11 plans are complete. Verification passes with 19 verified truths and one
+explicit user-approved deferral, accepted 2026-11-12. The installed companion
+remains pi-subagents 0.88.0; its real-child direct-MCP limitation is not fixed here.
+[SEED-261112-81c](seeds/SEED-261112-81c-adopt-pi-subagents-ambient-mcp-fix.md)
+and BACKLOG AGTAMBIENT-01 carry adoption when a published release includes
+upstream PR #3259. PG-MCP-02 stays partial until the positive controls pass on
+the adopted release; the two characterization tests alert us when behavior changes.
+AGTLONGNAME-01 is a separate explicit-grant defect. PG1-TIMING-01 carries
+validation timing bookkeeping; `nyquist_compliant` remains false.
+
+The final full gate passed at `92bace26` on Node v26.13.0: 1,812 adapter scenarios,
+155 built-in scenarios and 354 direct-coverage pairs. Only planning Markdown
+changed for this closeout, with no new untracked executable inputs. Canonical
+completion advanced to Phase 2. Its state was corrected from the CLI's misleading
+"ready for verification" to "ready for discussion and planning"; no Phase 2 plan
+has been executed. The requirement parser rejected the mixed-case PG-AGENT-07b
+ID, so traceability was reconciled directly: three complete, PG-MCP-02 partial.
 
 ### mcp-4 closeout
 
@@ -132,6 +376,8 @@ Items acknowledged and deferred at milestone close, most recent first.
 
 | Category       | Item                                                                                                                                                                                          | Status          | Deferred At          | Milestone |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------- | --------- |
+| verification_gaps | 05/05-VERIFICATION.md: `human_needed`, A9 (start-failure notice not run on Node 24; closes with the PR's CI `behavioral` job) | acknowledged | 2026-11-17 | parity-gaps |
+| seeds | SEED-261107-kax: review the structure of skills, injected skills, and GSD capabilities | dormant -- pending upstream open-gsd/gsd-core#4649 | 2026-11-17 | parity-gaps |
 | verification_override | Phase 01 (foundation): verification `stale`; the flake fix `d04a5106` changed `features/lib/pi-process.ts` and `layout.md` after it; combined tree `npm run check` exit 0 | acknowledged | 2026-11-08 | behavioral-gaps |
 | verification_override | Phase 04 (PostToolUseFailure hooks): verification `stale`; later hooks phases changed `bridges/hooks/dispatch.ts`, its tests, and `docs/hooks-compatibility.md`; combined tree `npm run check` exit 0 | acknowledged | 2026-11-08 | behavioral-gaps |
 | verification_override | Phase 06 (SessionEnd hooks): verification `stale`; later hooks phases changed `bridges/hooks/timeout.ts` and `docs/hooks-compatibility.md`; combined tree `npm run check` exit 0 | acknowledged | 2026-11-08 | behavioral-gaps |
@@ -218,6 +464,13 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261109-jm6 | Move the init scripts to scripts/init and state each one's purpose | 2026-11-09 | 4e964d6 | — | [261109-jm6-move-the-init-scripts-to-scripts-init-an](./quick/261109-jm6-move-the-init-scripts-to-scripts-init-an/) |
 | 34 | Run one cucumber worker per available CPU, at most 8 (CI timeouts on PR #310) | 2026-11-09 | 6be7cb0c | — | — |
 | 35 | Wait for the background save of a migrated state.json in the state-migration step (CI run 42842685676 flake) | 2026-11-10 | ecc72b9d | — | — |
+| 261112-jzs | Add installed-companion MCP gap tests and upstream PR 3259 | 2026-11-12 | 92bace26 | — | [261112-jzs-add-installed-companion-characterization](./quick/261112-jzs-add-installed-companion-characterization/) |
+| 261113-8yn | Adopt pi-subagents 0.88.1, verify ambient MCP regression tests, and retire the upgrade trigger | 2026-11-13 | 2db3b81a | complete | [261113-8yn-adopt-pi-subagents-0-88-1-ambient-mcp-fi](./quick/261113-8yn-adopt-pi-subagents-0-88-1-ambient-mcp-fi/) |
+| 261116-gwm | Restore the `Original prompt:` part of the UserPromptExpansion block notice (maintainer review of D-PG6-18..22) | 2026-11-16 | 4d6825ba | complete | [261116-gwm-restore-the-original-prompt-part-of-the-](./quick/261116-gwm-restore-the-original-prompt-part-of-the-/) |
+| 261116-hk1 | Keep the last of two workflow scripts with one name, as Claude Code does (maintainer review of D-PG8-07) | 2026-11-16 | b35b86d1 | complete | [261116-hk1-keep-the-last-workflow-script-that-parse](./quick/261116-hk1-keep-the-last-workflow-script-that-parse/) |
+| 261116-im3 | Fail closed on unreadable recorded plugin options (maintainer review of D-PG10-25) | 2026-11-16 | 6d9a3cdd | complete | [261116-im3-fail-closed-on-unreadable-recorded-plugi](./quick/261116-im3-fail-closed-on-unreadable-recorded-plugi/) |
+| 261116-kw7 | Keep both workflow names that the plugin prefix elision would merge (maintainer decision D-PG8-18) | 2026-11-16 | 3488bf29 | complete | [261116-kw7-keep-both-workflow-names-the-prefix-elis](./quick/261116-kw7-keep-both-workflow-names-the-prefix-elis/) |
+| 261116-p4s | End the UserPromptSubmit block notice with the original prompt (maintainer decision, HOOKORIGPROMPT-01) | 2026-11-16 | 8c64be00 | complete | [261116-p4s-end-the-prompt-block-notice-with-the-orig](./quick/261116-p4s-end-the-prompt-block-notice-with-the-orig/) |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
@@ -300,10 +553,7 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Review the High entries of `.planning/DUBIOUS-CHOICES.md` and the pending D-BG decision rows in PROJECT.md
-- Run the CI timing check of the three behavioral legs against the 15-minute job timeouts (D-CF1-16)
-- Offer the version bump, then open the PR for `features/behavioral-gaps`
-- Remove the 15 phase worktrees `~/src/pi-claude-marketplace-behavioral-gaps-phase-N` and their branches
+- Offer the version bump, then open the PR for `features/gaps`; its CI `behavioral` job on Node 24 closes Phase 5 A9
 - Start the next milestone with /gsd-new-milestone
 
 
@@ -886,6 +1136,11 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ### Recent Decisions
 
+- [parity-gaps Phase 2] D-PG2-01..12 are implemented and verified: per-pair
+  Edit checks, available-field result translation, whole-original fallback,
+  whole regex matchers and eight Stop continuations. HOOKRESULT-01 and
+  Phase 5 Stop timing/environment work remain scoped follow-ups.
+
 Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the user's review; D-CF1-01..17).
 
 - [mcp-builtin Phase 6] DUAL-04 reads `{requires mcp}` with one read-only
@@ -981,6 +1236,14 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-08T05:46:41.533Z
-Stopped at: Phases 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 complete and merged; the other stream phases run in child sessions
+Last session: 2026-11-17T12:15:00.000Z
+Stopped at: Milestone parity-gaps completed and archived (override_closeout); next is the PR for `features/gaps`
 Resume file: None
+
+### Phase 2 completion-helper notes
+
+The completion helper mistook command strings and short module aliases for
+missing paths. The independent verifier checked all 22 artifacts and 20 links
+against real paths. Its requirement-list parser also rejected PG-prefixed IDs;
+`requirements.mark-complete PG-HOOK-01 PG-HOOK-03 PG-HOOK-13` updated all three
+checkboxes and traceability rows successfully. No verification gate was waived.

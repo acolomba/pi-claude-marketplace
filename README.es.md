@@ -24,7 +24,7 @@ Esta extensión instala complementos desde los mercados de complementos de Claud
 
 - Comandos.
 - Habilidades.
-- Agentes. Requiere [pi-subagents](https://pi.dev/packages/pi-subagents). Los permisos MCP de un agente siguen la implementación MCP en uso. Los agentes en subcarpetas reciben los nombres de sus carpetas, como en Claude Code, por ejemplo `demo:review:security`.
+- Agentes. Requiere [pi-subagents](https://pi.dev/packages/pi-subagents). Los permisos MCP de un agente siguen la implementación MCP en uso. El permiso `Workflow` de un agente se descarta, porque Claude Code no da la herramienta Workflow a ningún subagente. Los agentes en subcarpetas reciben los nombres de sus carpetas, como en Claude Code, por ejemplo `demo:review:security`.
 - Hooks (ganchos). Soporte parcial. Para más información, consulta [Compatibilidad de hooks](docs/hooks-compatibility.md).
 - Servidores MCP. Usa el MCP integrado de Pi o, para más funciones de MCP, [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter). Para más información, consulta [Compatibilidad de MCP](docs/mcp-compatibility.md).
 - Workflows (flujos de trabajo). Requiere [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows). Para más información, consulta [Compatibilidad de workflows](docs/workflows-compatibility.md).
@@ -36,8 +36,9 @@ El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como
 ## Requisitos previos
 
 - [Pi Coding Agent](https://pi.dev) 1.5.0 o posterior
-- [pi-subagents](https://pi.dev/packages/pi-subagents) 0.84.0 o posterior (opcional pero recomendado, `pi install npm:pi-subagents`)
-- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.0 o una versión 7.x posterior (opcional, `pi install npm:pi-mcp-adapter`). Admite más funciones de MCP que el MCP integrado de Pi.
+- [pi-subagents](https://pi.dev/packages/pi-subagents) 0.87.0 o posterior (opcional pero recomendado, `pi install npm:pi-subagents`)
+  - Las herramientas MCP directas del entorno en agentes en segundo plano sin restricciones o solo con exclusiones requieren pi-subagents 0.88.1 o posterior.
+- [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.1 o una versión 7.x posterior (opcional, `pi install npm:pi-mcp-adapter`). Admite más funciones de MCP que el MCP integrado de Pi.
 - [@quintinshaw/pi-dynamic-workflows](https://pi.dev/packages/@quintinshaw/pi-dynamic-workflows) 3.15.0 o posterior (opcional pero recomendado, `pi install npm:@quintinshaw/pi-dynamic-workflows`)
 
 ## Uso
@@ -110,7 +111,7 @@ Los comandos usan dos puntos (`:`) en POSIX y un punto (`.`) en Windows:
 | `foo`                  | `foo-bar`          | `/foo:bar`           | `/foo.bar`             |
 | `foo`                  | `foo`              | `/foo:foo`           | `/foo.foo`             |
 
-Un comando también tiene alias en las sesiones interactivas y por RPC. Si el frontmatter del comando define `name`, el comando también responde a `/<plugin>:<name>`, y a `/<name>` cuando el nombre no tiene dos puntos. Por ejemplo, `bar` con el frontmatter `name: baz` en el complemento `foo` también responde a `/foo:baz` y a `/baz`. Si dos comandos definen el mismo `name`, el primer comando recibe el alias. Una habilidad conserva un alias que ya tiene. Los alias de comandos usan dos puntos en todas las plataformas.
+Un comando también tiene alias en las sesiones interactivas y por RPC. Claude Code nombra un comando con el nombre del complemento, dos puntos y la ruta del archivo del comando en `commands/` sin `.md`, con cada `/` cambiada por dos puntos. Cuando ese nombre es distinto del nombre en Pi y el frontmatter del comando no define `name`, el comando también responde a él. Por ejemplo, `foo-bar` en el complemento `foo` aparece como `/foo:bar` y también responde a `/foo:foo-bar`. Si el frontmatter del comando define `name`, el comando también responde a `/<plugin>:<name>`, y a `/<name>` cuando el nombre no tiene dos puntos. Por ejemplo, `bar` con el frontmatter `name: baz` en el complemento `foo` también responde a `/foo:baz` y a `/baz`, porque Claude Code lo nombra `/foo:baz`. Si dos comandos definen el mismo `name`, el primer comando recibe el alias. No se añade un alias que es el nombre en Pi de otro comando. Una habilidad conserva un alias que ya tiene. Los alias de comandos usan dos puntos en todas las plataformas.
 
 Las habilidades usan la forma `/skill:` de Pi y también tienen alias en las sesiones interactivas y por RPC:
 
@@ -121,7 +122,7 @@ Las habilidades usan la forma `/skill:` de Pi y también tienen alias en las ses
 | `foo`                  | `foo`                                    | `/skill:foo`     | `/foo:foo`                     |
 | `foo`                  | `bar`, con `name: baz` en el frontmatter | `/skill:foo-bar` | `/foo:bar`, `/foo:baz`, `/baz` |
 
-Los alias son los nombres que Claude Code da a una habilidad. El nombre de la habilidad es el nombre de su carpeta. Si el frontmatter de la habilidad define `name`, la habilidad también responde a `/<plugin>:<name>`, y a `/<name>` cuando el nombre no tiene dos puntos.
+Los alias son los nombres que Claude Code da a una habilidad. El nombre de la habilidad es el nombre de su carpeta. Si el frontmatter de la habilidad define `name`, la habilidad también responde a `/<plugin>:<name>`, y a `/<name>` cuando el nombre no tiene dos puntos. Para más información, consulta [Compatibilidad de habilidades y comandos](docs/skills-commands-compatibility.md).
 
 Los servidores MCP de los complementos reciben los nombres que les da Claude Code. El modelo ve cada herramienta como `mcp__plugin_<plugin>_<server>__<tool>`. pi-mcp-adapter guarda cada servidor bajo una clave que termina en `_`. El MCP integrado de Pi registra cada servidor como `plugin_<plugin>_<server>`, sin `_` al final. Con el MCP integrado de Pi, el modelo ve cada `-` del nombre de una herramienta como `_`, y Pi recorta el nombre de una herramienta que tiene más de 64 caracteres. Para más información, consulta [Longitud de los nombres](docs/mcp-compatibility.md#name-length). `/claude:plugin info` muestra cada servidor como `plugin:<plugin>:<server>`. Los hooks de los complementos ven la parte del servidor en el nombre de una herramienta tal como la escribe Claude Code. Para más información, consulta [Mapeo de nombres de herramientas](docs/hooks-compatibility.md#tool-name-mapping).
 
@@ -375,7 +376,7 @@ Actualiza un complemento instalado, todos los complementos instalados de un merc
 ```
 
 > [!NOTE]
-> Las definiciones de agente en los complementos pueden nombrar un modelo preferido para el agente, por ejemplo, "sonnet" u "opus". Esta extensión descarta estos modelos de forma predeterminada. Para mapearlos a modelos de Pi en la medida de lo posible, usa la opción `--map-model` con `install` y `update`. Mapea `sonnet`, `opus`, `haiku`, `fable`, `best` y `opusplan`, con o sin `[1m]`, a los modelos actuales de Claude, por ejemplo `anthropic/claude-sonnet-5-5`. Conserva los ID de modelo completos que empiezan por `claude-`.
+> Las definiciones de agente en los complementos pueden nombrar un modelo preferido para el agente, por ejemplo, "sonnet" u "opus". Esta extensión descarta estos modelos de forma predeterminada. Para mapearlos a modelos de Pi en la medida de lo posible, usa la opción `--map-model` con `install` y `update`. Mapea `sonnet`, `opus`, `haiku`, `fable`, `best` y `opusplan`, con o sin `[1m]`, a los modelos actuales de Claude, por ejemplo `claude-sonnet-5-5`. Conserva los ID de modelo completos que empiezan por `claude-`. Un agente con `model: inherit` siempre recibe `model: ""`, con o sin `--map-model`. Así se ejecuta con el modelo de la sesión, también en un paso de un flujo de trabajo. Una entrada `Agent` o `Task` en `tools` permite que un agente inicie cualquier subagente, aunque la entrada nombre tipos de agente, como en `Agent(helper)`. Para más información, consulta [Personalizar los agentes generados](docs/mcp-compatibility.md#customizing-generated-agents).
 
 Reinstala un complemento instalado, todos los complementos instalados de un mercado, o todos los complementos instalados.
 

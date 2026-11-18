@@ -6,6 +6,7 @@ import {
   type HookExitFacts,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/on-failure.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
@@ -40,6 +41,7 @@ function guardEntry(
     handlerDecl: { type: "command", command: COMMAND, ...handler },
     declarationIndex: 0,
     ifPredicate: { kind: "match-all" },
+    options: resolveOptions(undefined),
   };
 }
 
@@ -84,7 +86,11 @@ describe("onFailureBlock with onFailure block", () => {
       const block = onFailureBlock(entry, facts, NOOP);
 
       // assert
-      assert.deepStrictEqual(block, { kind: "block", reason: FAILED_REASON });
+      assert.deepStrictEqual(block, {
+        kind: "block",
+        reason: FAILED_REASON,
+        suppressOriginalPrompt: true,
+      });
     });
   }
 
@@ -96,6 +102,7 @@ describe("onFailureBlock with onFailure block", () => {
     assert.deepStrictEqual(block, {
       kind: "block",
       reason: `[${COMMAND}]: timed out; blocking because onFailure is "block"\nboom`,
+      suppressOriginalPrompt: true,
     });
   });
 
@@ -107,6 +114,7 @@ describe("onFailureBlock with onFailure block", () => {
     assert.deepStrictEqual(block, {
       kind: "block",
       reason: `[${COMMAND}]: timed out; blocking because onFailure is "block"\nboom`,
+      suppressOriginalPrompt: true,
     });
   });
 
@@ -118,6 +126,7 @@ describe("onFailureBlock with onFailure block", () => {
     assert.deepStrictEqual(block, {
       kind: "block",
       reason: `[${COMMAND}]: failed; blocking because onFailure is "block"`,
+      suppressOriginalPrompt: true,
     });
   });
 
@@ -132,6 +141,7 @@ describe("onFailureBlock with onFailure block", () => {
     assert.deepStrictEqual(block, {
       kind: "block",
       reason: '[]: failed; blocking because onFailure is "block"',
+      suppressOriginalPrompt: true,
     });
   });
 
@@ -183,6 +193,7 @@ describe("onFailureBlock with onFailure block", () => {
     assert.deepStrictEqual(block, {
       kind: "block",
       reason: `[${COMMAND}]: timed out; blocking because onFailure is "block"\nboom`,
+      suppressOriginalPrompt: true,
     });
   });
 
@@ -194,7 +205,11 @@ describe("onFailureBlock with onFailure block", () => {
     const block = onFailureBlock(entry, { ...CLEAN_EXIT, exitCode: 1 }, allow);
 
     // assert
-    assert.deepStrictEqual(block, { kind: "block", reason: FAILED_REASON });
+    assert.deepStrictEqual(block, {
+      kind: "block",
+      reason: FAILED_REASON,
+      suppressOriginalPrompt: true,
+    });
   });
 });
 
@@ -244,4 +259,59 @@ describe("onFailureBlock without onFailure block", () => {
       assert.deepStrictEqual(lines, [debugLine]);
     });
   }
+});
+
+describe("onFailureBlock for the exit 2 of a missing script (D-PG5-09)", () => {
+  const stderr = "python3: can't open file '/x/gone.py': [Errno 2] No such file or directory\n";
+  const facts = { ...CLEAN_EXIT, exitCode: 2, stderr } satisfies HookExitFacts;
+  const missing = { kind: "noop", failure: { kind: "missing-script", stderr } } as const;
+
+  test("blocks a prompt hook with onFailure block, ending with the trimmed stderr", () => {
+    // act
+    const block = onFailureBlock(guardEntry({ onFailure: "block" }), facts, missing);
+
+    // assert
+    assert.deepStrictEqual(block, {
+      kind: "block",
+      reason: `[${COMMAND}]: failed; blocking because onFailure is "block"\n${stderr.trim()}`,
+      suppressOriginalPrompt: true,
+    });
+  });
+
+  test("ignores onFailure block on a Stop hook with a debug line", (t) => {
+    // arrange
+    const lines = observeDebug(t);
+
+    // act
+    const block = onFailureBlock(guardEntry({ onFailure: "block" }, "Stop"), facts, missing);
+
+    // assert
+    assert.strictEqual(block, undefined);
+    assert.deepStrictEqual(lines, [
+      '[hooks] on-failure: onFailure "block" ignored on Stop (guard-plugin/Stop)',
+    ]);
+  });
+
+  test("changes nothing for a prompt hook with no onFailure", () => {
+    // act
+    const block = onFailureBlock(guardEntry({}), facts, missing);
+
+    // assert
+    assert.strictEqual(block, undefined);
+  });
+
+  test("leaves an exit-2 block to apply as the wire protocol read it", () => {
+    // arrange
+    const stderrBlock = {
+      kind: "block",
+      reason: "denied",
+      fromStderr: true,
+    } satisfies HookExecResult;
+
+    // act
+    const block = onFailureBlock(guardEntry({ onFailure: "block" }), facts, stderrBlock);
+
+    // assert
+    assert.strictEqual(block, undefined);
+  });
 });

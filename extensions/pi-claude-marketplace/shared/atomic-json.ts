@@ -12,10 +12,10 @@ import writeFileAtomic from "write-file-atomic";
  *   - fsyncs the tmp file AND the parent directory before returning (default)
  *   - cleans up tmp files on process crash via signal-exit hooks
  *
- * Used ONLY for JSON files that participate in `withStateGuard`
- * (state.json, mcp.json, agents-index.json). Staging-tree commits use the
- * hand-rolled `mkdir`+`writeFile`+`rename` pattern (different problem shape,
- * EXDEV risk lives there).
+ * Used for the extension's own JSON files, such as those that participate in
+ * `withStateGuard` (state.json, mcp.json, agents-index.json). Staging-tree
+ * commits use the hand-rolled `mkdir`+`writeFile`+`rename` pattern (different
+ * problem shape, EXDEV risk lives there).
  *
  * `chown` left at the library default (inherits from existing file). This is
  * the right per-user behavior; pass `chown: false` only if a future audit
@@ -31,4 +31,16 @@ export async function atomicWriteJson(filePath: string, value: unknown): Promise
   // intent self-evident at the call site.
   await writeFileAtomic(filePath, bytes);
   return bytes;
+}
+
+/**
+ * Atomic text write (NFR-1): creates the parent folder, then writes the UTF-8
+ * bytes of `text` as they are, with no line break added, through
+ * `write-file-atomic`, so a reader sees the old file or the new one whole. The
+ * hooks bridge saves a context string over the model's limit with it
+ * (D-PG5-15).
+ */
+export async function atomicWriteText(filePath: string, text: string): Promise<void> {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  await writeFileAtomic(filePath, text, { encoding: "utf8" });
 }

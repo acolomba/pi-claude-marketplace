@@ -3,9 +3,9 @@ import { describe, test } from "node:test";
 
 import {
   admitWorkflowScript,
-  assertNoWorkflowNameCollisions,
+  keepLastWorkflowPerName,
+  unelideClashingWorkflowNames,
   WORKFLOW_SCRIPT_SUFFIX,
-  type AdmittedWorkflow,
   type NamedWorkflow,
   type RefusedCause,
   type RefusedWorkflow,
@@ -14,7 +14,6 @@ import {
   type WorkflowGate,
   type WorkflowVerdict,
 } from "../../extensions/pi-claude-marketplace/domain/workflow-script.ts";
-import { WorkflowNameCollisionError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 /**
  * The two projections every verdict assertion compares. `reason` is deliberately
@@ -47,6 +46,11 @@ function admission(verdict: WorkflowVerdict): Admission {
     metaName: verdict.outcome === "named" ? verdict.metaName : undefined,
     generatedName: verdict.outcome === "named" ? verdict.generatedName : undefined,
   };
+}
+
+/** PG-SEC-01: the agent types a verdict carries, read only off the arm that can carry them. */
+function agentTypesOf(verdict: WorkflowVerdict): readonly string[] | undefined {
+  return verdict.outcome === "named" ? verdict.agentTypes : undefined;
 }
 
 interface DecoyRow {
@@ -1313,202 +1317,350 @@ export const meta = { name: "ship" };
     // assert
     assert.deepStrictEqual(refusal(verdict), expectedVerdict);
   });
+
+  for (const { form, call } of [
+    { form: "an identifier key", call: `agent("scan", { agentType: "acme:reader" });` },
+    { form: "a quoted key", call: `agent("scan", { "agentType": "acme:reader" });` },
+    { form: "a substitution-free template", call: 'agent("scan", { agentType: `acme:reader` });' },
+    {
+      form: "an escaped literal",
+      call: String.raw`agent("scan", { agentType: "acme:\x72eader" });`,
+    },
+  ] satisfies readonly { form: string; call: string }[]) {
+    test(`PG-SEC-01: carries the agent type written with ${form}, decoded`, () => {
+      // arrange
+      const source = `export const meta = { name: "scan", description: "d" };\n${call}\n`;
+
+      // act
+      const verdict = admitWorkflowScript("acme", "scan.js", source);
+
+      // assert
+      assert.deepStrictEqual(agentTypesOf(verdict), ["acme:reader"]);
+    });
+  }
+
+  for (const { form, call } of [
+    { form: "an identifier value", call: `agent("scan", { agentType: READER });` },
+    { form: "a call value", call: `agent("scan", { agentType: pick() });` },
+    { form: "a number value", call: `agent("scan", { agentType: 7 });` },
+    { form: "a substituted template", call: 'agent("scan", { agentType: `acme:${name}` });' },
+    { form: "a computed key", call: `agent("scan", { ["agentType"]: "acme:reader" });` },
+    { form: "a shorthand property", call: `agent("scan", { agentType });` },
+    { form: "a method", call: `agent("scan", { agentType() { return "acme:reader"; } });` },
+    { form: "a property of another name", call: `const x = { kind: "acme:reader" };` },
+  ] satisfies readonly { form: string; call: string }[]) {
+    test(`PG-SEC-01: leaves the agent types off a script whose only candidate is ${form}`, () => {
+      // arrange
+      const source = `export const meta = { name: "scan", description: "d" };\n${call}\n`;
+
+      // act
+      const verdict = admitWorkflowScript("acme", "scan.js", source);
+
+      // assert
+      assert.strictEqual(verdict.outcome, "named");
+      assert.strictEqual(Object.hasOwn(verdict, "agentTypes"), false);
+    });
+  }
+
+  test("PG-SEC-01: finds nested agent types once each, in first-seen order", () => {
+    // arrange
+    const source = [
+      `export const meta = { name: "scan", description: "d" };`,
+      `export default async function run(ctx) {`,
+      `  const jobs = [{ agentType: "acme:writer" }, { agentType: "acme:reader" }];`,
+      `  if (ctx.deep) {`,
+      `    await Promise.all(jobs.map(() => agent("x", { agentType: "acme:writer" })));`,
+      `  }`,
+      `  return ctx.fast ? agent("y", { opts: { agentType: "acme:fixer" } }) : null;`,
+      `}`,
+      ``,
+    ].join("\n");
+
+    // act
+    const verdict = admitWorkflowScript("acme", "scan.js", source);
+
+    // assert
+    assert.deepStrictEqual(agentTypesOf(verdict), ["acme:writer", "acme:reader", "acme:fixer"]);
+  });
+
+  test("PG-SEC-01: an agent type changes nothing else about the admitted verdict", () => {
+    // arrange
+    const plain = `export const meta = { name: "scan", description: "d" };\n`;
+    const withAgent = `${plain}agent("scan", { agentType: "acme:reader" });\n`;
+
+    // act
+    const plainVerdict = admitWorkflowScript("acme", "scan.js", plain);
+    const agentVerdict = admitWorkflowScript("acme", "scan.js", withAgent);
+
+    // assert
+    assert.deepStrictEqual(agentVerdict, { ...plainVerdict, agentTypes: ["acme:reader"] });
+  });
+
+  for (const { verdictKind, source, expectedVerdict } of [
+    {
+      verdictKind: "a skipped script",
+      source: `agent("scan", { agentType: "acme:reader" });\n`,
+      expectedVerdict: { outcome: "skipped", cause: "no-meta" },
+    },
+    {
+      verdictKind: "a refused script",
+      source: `export const meta = { name: "scan", description: "d" };\nagent("scan", { agentType: "acme:reader", at: Date.now() });\n`,
+      expectedVerdict: { outcome: "refused", cause: "determinism-code" },
+    },
+  ] satisfies readonly { verdictKind: string; source: string; expectedVerdict: NonAdmission }[]) {
+    test(`PG-SEC-01: gives ${verdictKind} no agent types`, () => {
+      // act
+      const verdict = admitWorkflowScript("acme", "scan.js", source);
+
+      // assert
+      assert.deepStrictEqual(nonAdmission(verdict), expectedVerdict);
+      assert.strictEqual(Object.hasOwn(verdict, "agentTypes"), false);
+    });
+  }
+
+  test("PG-SEC-01: still reads the agent types of a script nested just inside the walk budget", () => {
+    // arrange
+    const source = `export const meta = { name: "scan", description: "d" };\nagent("scan", { agentType: "acme:reader" });\nconst deep = x${".a".repeat(990)};\n`;
+
+    // act
+    const verdict = admitWorkflowScript("acme", "scan.js", source);
+
+    // assert
+    assert.deepStrictEqual(agentTypesOf(verdict), ["acme:reader"]);
+  });
+
+  test("PG-SEC-01: keeps the verdict and drops the agent types of a script nested past the walk budget", () => {
+    // arrange -- acorn parses a member chain in a loop, so this tree is deeper
+    // than the walk's budget yet parses cleanly. The breach costs the note only.
+    const source = `export const meta = { name: "scan", description: "d" };\nagent("scan", { agentType: "acme:reader" });\nconst deep = x${".a".repeat(1_100)};\n`;
+    const expectedVerdict = {
+      outcome: "named",
+      metaName: "scan",
+      generatedName: "acme:scan",
+    } satisfies Admission;
+
+    // act
+    const verdict = admitWorkflowScript("acme", "scan.js", source);
+
+    // assert
+    assert.deepStrictEqual(admission(verdict), expectedVerdict);
+    assert.strictEqual(Object.hasOwn(verdict, "agentTypes"), false);
+  });
 });
 
-describe("assertNoWorkflowNameCollisions", () => {
-  test("accepts an empty verdict set", () => {
-    // arrange
-    const verdicts: readonly WorkflowVerdict[] = [];
-
-    // act & assert
-    assert.doesNotThrow(() => {
-      assertNoWorkflowNameCollisions(verdicts);
-    });
+describe("keepLastWorkflowPerName", () => {
+  const named = (fileName: string, generatedName: string): { verdict: NamedWorkflow } => ({
+    verdict: { outcome: "named", fileName, metaName: generatedName, generatedName },
   });
 
-  test("accepts a single admitted verdict", () => {
+  test("returns an empty list for no records", () => {
     // arrange
-    const verdicts = [
-      {
-        outcome: "named",
-        fileName: "ship.workflow.js",
-        metaName: "ship",
-        generatedName: "acme:ship",
-      },
-    ] satisfies readonly NamedWorkflow[];
+    const records: readonly { verdict: WorkflowVerdict }[] = [];
 
-    // act & assert
-    assert.doesNotThrow(() => {
-      assertNoWorkflowNameCollisions(verdicts);
-    });
+    // act
+    const kept = keepLastWorkflowPerName(records);
+
+    // assert
+    assert.deepStrictEqual(kept, []);
   });
 
-  test("reports both claimants when two declared names resolve to one command name", () => {
+  test("keeps only the last of two scripts that share one generated name", () => {
     // arrange
-    const verdicts = [
-      {
-        outcome: "named",
-        fileName: "ship.workflow.js",
-        metaName: "ship",
-        generatedName: "acme:ship",
-      },
-      {
-        outcome: "named",
-        fileName: "deploy.workflow.js",
-        metaName: "acme-ship",
-        generatedName: "acme:ship",
-      },
-    ] satisfies readonly NamedWorkflow[];
+    const first = named("a.js", "acme:scan");
+    const last = named("b.js", "acme:scan");
 
-    // act & assert
-    assert.throws(
-      () => {
-        assertNoWorkflowNameCollisions(verdicts);
-      },
-      (error: unknown) => {
-        assert.ok(error instanceof WorkflowNameCollisionError);
-        assert.deepStrictEqual(error.collisions, [
-          {
-            generatedName: "acme:ship",
-            fileNames: ["ship.workflow.js", "deploy.workflow.js"],
-          },
-        ]);
-        return true;
-      },
+    // act
+    const kept = keepLastWorkflowPerName([first, last]);
+
+    // assert
+    assert.deepStrictEqual(kept, [last]);
+  });
+
+  test("keeps the last claimant of each name and the order of the records it keeps", () => {
+    // arrange
+    const records = [
+      named("a.js", "acme:ship"),
+      named("b.js", "acme:audit"),
+      named("c.js", "acme:ship"),
+      named("d.js", "acme:audit"),
+      named("e.js", "acme:ship"),
+      named("f.js", "acme:report"),
+    ];
+
+    // act
+    const kept = keepLastWorkflowPerName(records);
+
+    // assert
+    assert.deepStrictEqual(
+      kept.map((record) => record.verdict.fileName),
+      ["d.js", "e.js", "f.js"],
     );
   });
 
-  test("collides two named verdicts whose declared names generate one command", () => {
+  test("keeps every skipped and refused record, so a later script that does not parse leaves the earlier one", () => {
     // arrange
-    const named = {
-      outcome: "named",
-      fileName: "ship.workflow.js",
-      metaName: "ship",
-      generatedName: "acme:ship",
-    } satisfies NamedWorkflow;
-    const elided = {
-      outcome: "named",
-      fileName: "ship.js",
-      metaName: "acme-ship",
-      generatedName: "acme:ship",
-    } satisfies NamedWorkflow;
-    const verdicts = [named, elided] satisfies readonly AdmittedWorkflow[];
+    const earlier = named("a.js", "acme:scan");
+    const skipped = {
+      verdict: {
+        outcome: "skipped",
+        fileName: "helper.js",
+        reason: "helper.js declares no `meta`, so there is nothing to install",
+        cause: "no-meta",
+      } satisfies SkippedWorkflow,
+    };
+    const refused = {
+      verdict: {
+        outcome: "refused",
+        fileName: "b.js",
+        reason: "b.js is not parseable JavaScript, so no name can be read from it",
+        cause: "unparseable",
+      } satisfies RefusedWorkflow,
+    };
 
-    // act & assert
-    assert.throws(
-      () => {
-        assertNoWorkflowNameCollisions(verdicts);
-      },
-      (error: unknown) => {
-        assert.ok(error instanceof WorkflowNameCollisionError);
-        assert.deepStrictEqual(error.collisions, [
-          { generatedName: "acme:ship", fileNames: ["ship.workflow.js", "ship.js"] },
-        ]);
-        return true;
-      },
-    );
+    // act
+    const kept = keepLastWorkflowPerName([earlier, skipped, refused]);
+
+    // assert
+    assert.deepStrictEqual(kept, [earlier, skipped, refused]);
   });
 
-  test("accepts skipped and refused verdicts that share a file name, since neither claims one", () => {
+  test("compares names as exact strings, so two normalization forms are both kept", () => {
+    // arrange
+    const composed = named("composed.js", "acme:caf\u00E9");
+    const decomposed = named("decomposed.js", "acme:cafe\u0301");
+
+    // act
+    const kept = keepLastWorkflowPerName([composed, decomposed]);
+
+    // assert
+    assert.deepStrictEqual(kept, [composed, decomposed]);
+  });
+});
+
+describe("unelideClashingWorkflowNames", () => {
+  const named = (
+    fileName: string,
+    metaName: string,
+    generatedName: string,
+  ): { verdict: NamedWorkflow } => ({
+    verdict: { outcome: "named", fileName, metaName, generatedName },
+  });
+  const installedNames = (records: readonly { verdict: WorkflowVerdict }[]): string[] =>
+    records.map((record) =>
+      record.verdict.outcome === "named"
+        ? `${record.verdict.fileName} ${record.verdict.generatedName}`
+        : record.verdict.fileName,
+    );
+
+  test("returns the records unchanged when no two meta names share a name", () => {
+    // arrange
+    const records = [named("a.js", "acme-audit", "acme:audit"), named("b.js", "scan", "acme:scan")];
+
+    // act
+    const settled = unelideClashingWorkflowNames("acme", records);
+
+    // assert
+    assert.deepStrictEqual(settled, records);
+    assert.strictEqual(settled[0], records[0]);
+  });
+
+  test("gives the prefixed script its full name when another script declares its elided name", () => {
+    // arrange
+    const records = [named("a.js", "acme-scan", "acme:scan"), named("b.js", "scan", "acme:scan")];
+
+    // act
+    const settled = unelideClashingWorkflowNames("acme", records);
+
+    // assert
+    assert.deepStrictEqual(settled, [
+      named("a.js", "acme-scan", "acme:acme-scan"),
+      named("b.js", "scan", "acme:scan"),
+    ]);
+  });
+
+  test("names each script the same way whatever the file order", () => {
+    // arrange
+    const records = [named("a.js", "scan", "acme:scan"), named("b.js", "acme-scan", "acme:scan")];
+
+    // act
+    const settled = unelideClashingWorkflowNames("acme", records);
+
+    // assert
+    assert.deepStrictEqual(installedNames(settled), ["a.js acme:scan", "b.js acme:acme-scan"]);
+  });
+
+  test("repeats until a full name no longer clashes with the elided name of a third script", () => {
+    // arrange
+    const records = [
+      named("a.js", "acme-scan", "acme:scan"),
+      named("b.js", "scan", "acme:scan"),
+      named("c.js", "acme-acme-scan", "acme:acme-scan"),
+    ];
+
+    // act
+    const settled = unelideClashingWorkflowNames("acme", records);
+
+    // assert
+    assert.deepStrictEqual(installedNames(settled), [
+      "a.js acme:acme-scan",
+      "b.js acme:scan",
+      "c.js acme:acme-acme-scan",
+    ]);
+  });
+
+  test("leaves two scripts with one meta name on one name for the keep-last rule", () => {
+    // arrange
+    const records = [
+      named("a.js", "acme-scan", "acme:scan"),
+      named("b.js", "acme-scan", "acme:scan"),
+    ];
+
+    // act
+    const settled = unelideClashingWorkflowNames("acme", records);
+
+    // assert
+    assert.deepStrictEqual(settled, records);
+  });
+
+  test("keeps the elided name of a script whose full name passes the engine's cap", () => {
+    // arrange
+    const tail = "a".repeat(123);
+    const records = [
+      named("a.js", `acme-${tail}`, `acme:${tail}`),
+      named("b.js", tail, `acme:${tail}`),
+    ];
+
+    // act
+    const settled = unelideClashingWorkflowNames("acme", records);
+
+    // assert
+    assert.deepStrictEqual(settled, records);
+  });
+
+  test("passes skipped and refused records through", () => {
     // arrange
     const skipped = {
-      outcome: "skipped",
-      fileName: "helper.js",
-      reason: "helper.js declares no `meta`, so there is nothing to install",
-      cause: "no-meta",
-    } satisfies SkippedWorkflow;
+      verdict: {
+        outcome: "skipped",
+        fileName: "helper.js",
+        reason: "helper.js declares no `meta`, so there is nothing to install",
+        cause: "no-meta",
+      } satisfies SkippedWorkflow,
+    };
     const refused = {
-      outcome: "refused",
-      fileName: "helper.js",
-      reason: "helper.js is not parseable JavaScript, so no name can be read from it",
-      cause: "unparseable",
-    } satisfies RefusedWorkflow;
-    const verdicts = [skipped, refused] satisfies readonly WorkflowVerdict[];
+      verdict: {
+        outcome: "refused",
+        fileName: "b.js",
+        reason: "b.js is not parseable JavaScript, so no name can be read from it",
+        cause: "unparseable",
+      } satisfies RefusedWorkflow,
+    };
 
-    // act & assert
-    assert.doesNotThrow(() => {
-      assertNoWorkflowNameCollisions(verdicts);
-    });
-  });
+    // act
+    const settled = unelideClashingWorkflowNames("acme", [skipped, refused]);
 
-  test("groups two independent collisions by first-seen name with claimants in caller order", () => {
-    // arrange
-    const verdicts = [
-      {
-        outcome: "named",
-        fileName: "a.workflow.js",
-        metaName: "ship",
-        generatedName: "acme:ship",
-      },
-      {
-        outcome: "named",
-        fileName: "b.workflow.js",
-        metaName: "audit",
-        generatedName: "acme:audit",
-      },
-      {
-        outcome: "named",
-        fileName: "c.workflow.js",
-        metaName: "acme-ship",
-        generatedName: "acme:ship",
-      },
-      {
-        outcome: "named",
-        fileName: "d.workflow.js",
-        metaName: "acme-audit",
-        generatedName: "acme:audit",
-      },
-      {
-        outcome: "named",
-        fileName: "e.workflow.js",
-        metaName: "ship",
-        generatedName: "acme:ship",
-      },
-    ] satisfies readonly NamedWorkflow[];
-
-    // act & assert
-    assert.throws(
-      () => {
-        assertNoWorkflowNameCollisions(verdicts);
-      },
-      (error: unknown) => {
-        assert.ok(error instanceof WorkflowNameCollisionError);
-        assert.deepStrictEqual(error.collisions, [
-          {
-            generatedName: "acme:ship",
-            fileNames: ["a.workflow.js", "c.workflow.js", "e.workflow.js"],
-          },
-          { generatedName: "acme:audit", fileNames: ["b.workflow.js", "d.workflow.js"] },
-        ]);
-        return true;
-      },
-    );
-  });
-
-  test("compares names as exact strings, so two normalization forms do not collide here", () => {
-    // arrange
-    const composedName = "acme:caf\u00E9";
-    const decomposedName = "acme:cafe\u0301";
-    const verdicts = [
-      {
-        outcome: "named",
-        fileName: "composed.workflow.js",
-        metaName: "caf\u00E9",
-        generatedName: composedName,
-      },
-      {
-        outcome: "named",
-        fileName: "decomposed.workflow.js",
-        metaName: "cafe\u0301",
-        generatedName: decomposedName,
-      },
-    ] satisfies readonly NamedWorkflow[];
-
-    // act & assert -- the two literals differ as strings (NFC vs NFD), and
-    // that string difference is the whole reason the gate stays silent.
-    assert.doesNotThrow(() => {
-      assertNoWorkflowNameCollisions(verdicts);
-    });
+    // assert
+    assert.deepStrictEqual(settled, [skipped, refused]);
   });
 });
 

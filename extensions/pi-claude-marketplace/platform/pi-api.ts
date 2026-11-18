@@ -53,6 +53,8 @@ export { parseFrontmatter } from "@earendil-works/pi-coding-agent";
 export { DynamicBorder } from "@earendil-works/pi-coding-agent";
 
 export type {
+  AgentBeforeSettleEvent,
+  AgentBeforeSettleEventResult,
   AgentEndEvent,
   AgentSettledEvent,
   BeforeAgentStartEvent,
@@ -139,6 +141,7 @@ export interface PiTextContentBlock {
 export interface ToolResultEventResult {
   content?: ToolResultEvent["content"];
   details?: unknown;
+  structuredContent?: Exclude<ToolResultEvent["structuredContent"], undefined>;
   isError?: boolean;
 }
 

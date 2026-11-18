@@ -2,7 +2,8 @@
  * @fileoverview Steps about the MCP implementation a profile Pi runs: the
  * profile Pi that runs the profile's implementation, the built-in stand-in
  * that serves a stub server to Pi's built-in MCP, the wait for the first
- * listing of a stub's tools, turning Pi's built-in MCP off in the user's
+ * listing of a stub's tools, the allowance of a project's plugin servers,
+ * turning Pi's built-in MCP off in the user's
  * settings, the restarts that switch the implementation while the sandbox and
  * the installed plugins stay, and the MCP servers extensions registered with
  * Pi (DUAL-01).
@@ -20,6 +21,7 @@ import assert from "node:assert/strict";
 import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
 import { nameStandInServer } from "../lib/builtin-mcp-stand-in/servers.ts";
+import { allowProjectServersForUser } from "../lib/mcp-configuration.ts";
 import { mcpImplementationLaunch, waitForStubListing } from "../lib/mcp-implementation.ts";
 import { expandTokens } from "../lib/run-tokens.ts";
 import { PROFILE_PI_START_TIMEOUT_MS } from "../support/world.ts";
@@ -58,6 +60,18 @@ Given(
   async function (this: ScenarioWorld, server: string, pluginText: string) {
     const plugin = expandTokens(pluginText, this.tokens);
     await waitForStubListing(this.mcpProfile, this.pi, this.profileHarness(), plugin, server);
+  },
+);
+
+// pi-mcp-adapter runs a trusted project's servers only with the user's allow
+// setting (D-CF6-03); Pi's built-in MCP asks only for trust (BLT-03, D-MB-09).
+// The setting is read when a session starts, so this precedes the profile Pi.
+Given(
+  "the mcp implementation allows the project's plugin mcp servers",
+  async function (this: ScenarioWorld) {
+    if (this.mcpProfile === "adapter") {
+      await allowProjectServersForUser(this);
+    }
   },
 );
 

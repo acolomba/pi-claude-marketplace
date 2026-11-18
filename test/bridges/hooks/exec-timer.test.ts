@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 
 import {
+  INERT_TIMER_LADDER,
   installTimerLadder,
   type ChildLike,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-timer.ts";
@@ -553,4 +554,17 @@ test("sends no SIGKILL to the group of a child that exited before its SIGTERM de
 
   // assert
   assert.deepStrictEqual(child.killCalls, []);
+});
+
+test("an inert ladder never reports a fired timeout however often it is cancelled (D-PG5-17)", () => {
+  // arrange
+  const firedBefore = INERT_TIMER_LADDER.fired();
+
+  // act
+  INERT_TIMER_LADDER.cancel();
+  INERT_TIMER_LADDER.cancel();
+  const firedAfter = INERT_TIMER_LADDER.fired();
+
+  // assert
+  assert.deepStrictEqual([firedBefore, firedAfter], [false, false]);
 });

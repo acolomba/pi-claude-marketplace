@@ -17,7 +17,11 @@ import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/s
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { createRemovalOpsFake } from "../../platform/removal-ops-fake.ts";
 
-import type { StageSkillsCommitResult } from "../../../extensions/pi-claude-marketplace/bridges/skills/types.ts";
+import type {
+  PreparedSkillsStaging,
+  StageSkillsCommitResult,
+  StageSkillsInput,
+} from "../../../extensions/pi-claude-marketplace/bridges/skills/types.ts";
 import type { ResolvedPluginInstallable } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 
 // Builtin-module patching that remains in this file, and why. The removal port
@@ -97,6 +101,7 @@ async function stageSingleSkill(
   t: TestContext,
   directory: string,
   source: string,
+  options?: StageSkillsInput["options"],
 ): Promise<{ stagedBytes: string; pluginRoot: string; pluginDataDir: string }> {
   const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
     t,
@@ -110,6 +115,7 @@ async function stageSingleSkill(
     locations,
     cwd: scopeRoot,
     knownWorkflowNames: [],
+    options,
     pluginName: "acme",
     pluginRoot,
     pluginDataDir,
@@ -123,6 +129,63 @@ async function stageSingleSkill(
   return { stagedBytes, pluginRoot, pluginDataDir };
 }
 
+/** The paths of one case's plugin `acme`, whose skills sit in `skillsDirectory`. */
+interface SkillCasePaths {
+  readonly scopeRoot: string;
+  readonly skillsDirectory: string;
+  readonly pluginRoot: string;
+  readonly pluginDataDir: string;
+  readonly locations: ReturnType<typeof locationsFor>;
+}
+
+/** Writes `files` (path under the plugin's `skills` folder to text) into the plugin `acme`. */
+async function writeSkillFiles(
+  t: TestContext,
+  files: Readonly<Record<string, string>>,
+): Promise<SkillCasePaths> {
+  const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+    t,
+    "skills-stage-files-",
+  );
+  const skillsDirectory = path.join(pluginRoot, "skills");
+  for (const [file, text] of Object.entries(files)) {
+    await mkdir(path.dirname(path.join(skillsDirectory, file)), { recursive: true });
+    await writeFile(path.join(skillsDirectory, file), text);
+  }
+
+  return { scopeRoot, skillsDirectory, pluginRoot, pluginDataDir, locations };
+}
+
+/** Stages the skills of the plugin `acme` that `writeSkillFiles` wrote. */
+async function stageWrittenSkills(
+  paths: SkillCasePaths,
+): Promise<Extract<PreparedSkillsStaging, { kind: "staged" }>> {
+  const prepared = await prepareStageSkills(createRemovalOps(), {
+    locations: paths.locations,
+    cwd: paths.scopeRoot,
+    knownWorkflowNames: [],
+    options: undefined,
+    pluginName: "acme",
+    pluginRoot: paths.pluginRoot,
+    pluginDataDir: paths.pluginDataDir,
+    resolved: installableSkillsPlugin(paths.pluginRoot, [paths.skillsDirectory]),
+  });
+  assert.strictEqual(prepared.kind, "staged");
+  return prepared;
+}
+
+/**
+ * Writes `files` into the plugin `acme`, stages its skills, and returns the
+ * staged handle with the case's paths.
+ */
+async function stageSkillFiles(
+  t: TestContext,
+  files: Readonly<Record<string, string>>,
+): Promise<SkillCasePaths & { prepared: Extract<PreparedSkillsStaging, { kind: "staged" }> }> {
+  const paths = await writeSkillFiles(t, files);
+  return { ...paths, prepared: await stageWrittenSkills(paths) };
+}
+
 /**
  * Stages every skill directory of `sources` (directory name to `SKILL.md`
  * text) of the plugin `acme` and returns the warnings of the staged result
@@ -132,27 +195,12 @@ async function stagedSkillWarnings(
   t: TestContext,
   sources: Readonly<Record<string, string>>,
 ): Promise<{ warnings: StageSkillsCommitResult["warnings"]; skillsDirectory: string }> {
-  const { locations, pluginDataDir, pluginRoot, scopeRoot } = await allocateCasePaths(
+  const { prepared, skillsDirectory } = await stageSkillFiles(
     t,
-    "skills-stage-warnings-",
+    Object.fromEntries(
+      Object.entries(sources).map(([directory, source]) => [`${directory}/SKILL.md`, source]),
+    ),
   );
-  const skillsDirectory = path.join(pluginRoot, "skills");
-  for (const [directory, source] of Object.entries(sources)) {
-    await mkdir(path.join(skillsDirectory, directory), { recursive: true });
-    await writeFile(path.join(skillsDirectory, directory, "SKILL.md"), source);
-  }
-
-  const resolved = installableSkillsPlugin(pluginRoot, [skillsDirectory]);
-  const prepared = await prepareStageSkills(createRemovalOps(), {
-    locations,
-    cwd: scopeRoot,
-    knownWorkflowNames: [],
-    pluginName: "acme",
-    pluginRoot,
-    pluginDataDir,
-    resolved,
-  });
-  assert.strictEqual(prepared.kind, "staged");
   return { warnings: prepared.result.warnings, skillsDirectory };
 }
 
@@ -171,6 +219,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -231,6 +280,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -299,6 +349,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -354,6 +405,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -373,6 +425,191 @@ describe("prepareStageSkills", () => {
           "Run /skill:acme-tool before acme:ghost.\n\n```text\n/skill:acme-tool stays verbatim\n```\n",
       ),
     );
+  });
+
+  test("PG-SKILL-04: points a SKILL.md link to a sibling skill at the staged folder of the sibling", async (t) => {
+    // arrange
+    const files = {
+      "alpha/SKILL.md": "---\nname: alpha\ndescription: Alpha\n---\nSee ../beta/ref.md.\n",
+      "beta/SKILL.md": "---\nname: beta\ndescription: Beta\n---\n",
+      "beta/ref.md": "Beta reference.\n",
+    };
+
+    // act
+    const { prepared, pluginRoot, pluginDataDir } = await stageSkillFiles(t, files);
+    const alphaBytes = await readFile(path.join(prepared.stagingRoot, "acme-alpha", "SKILL.md"));
+
+    // assert
+    assert.deepStrictEqual(
+      alphaBytes,
+      Buffer.from(
+        "---\nname: acme-alpha\ndescription: Alpha\n" +
+          recordLine(["acme:alpha", "alpha"], pluginRoot, pluginDataDir) +
+          "---\nSee ../acme-beta/ref.md.\n",
+      ),
+    );
+  });
+
+  test("PG-SKILL-04: rewrites a skill directory variable path before substitution, so it ends in the sibling's target folder", async (t) => {
+    // arrange
+    const files = {
+      "alpha/SKILL.md":
+        "---\nname: alpha\ndescription: Alpha\n---\nLoad ${CLAUDE_SKILL_DIR}/../beta/x.md.\n",
+      "beta/SKILL.md": "---\nname: beta\ndescription: Beta\n---\n",
+    };
+
+    // act
+    const { prepared, pluginRoot, pluginDataDir, locations } = await stageSkillFiles(t, files);
+    const alphaBytes = await readFile(path.join(prepared.stagingRoot, "acme-alpha", "SKILL.md"));
+
+    // assert
+    assert.deepStrictEqual(
+      alphaBytes,
+      Buffer.from(
+        "---\nname: acme-alpha\ndescription: Alpha\n" +
+          recordLine(["acme:alpha", "alpha"], pluginRoot, pluginDataDir) +
+          "---\nLoad " +
+          path.join(locations.skillsTargetDir, "acme-alpha") +
+          "/../acme-beta/x.md.\n",
+      ),
+    );
+  });
+
+  test("PG-SKILL-04: leaves a SKILL.md link to a skill that discovery dropped as written", async (t) => {
+    // arrange
+    const files = {
+      "acme-tool/SKILL.md": "---\nname: acme-tool\ndescription: Winning skill\n---\n",
+      "alpha/SKILL.md": "---\nname: alpha\ndescription: Alpha\n---\nSee ../tool/x.md.\n",
+      "tool/SKILL.md": "---\nname: tool\ndescription: Losing skill\n---\n",
+    };
+
+    // act
+    const { prepared, pluginRoot, pluginDataDir } = await stageSkillFiles(t, files);
+    const alphaBytes = await readFile(path.join(prepared.stagingRoot, "acme-alpha", "SKILL.md"));
+
+    // assert
+    assert.deepStrictEqual(prepared.result.stagedNames, ["acme-tool", "acme-alpha"]);
+    assert.deepStrictEqual(
+      alphaBytes,
+      Buffer.from(
+        "---\nname: acme-alpha\ndescription: Alpha\n" +
+          recordLine(["acme:alpha", "alpha"], pluginRoot, pluginDataDir) +
+          "---\nSee ../tool/x.md.\n",
+      ),
+    );
+  });
+
+  test("PG-SKILL-04: rewrites a sibling path in supporting Markdown from the folder of the file", async (t) => {
+    // arrange
+    const files = {
+      "alpha/SKILL.md": "---\nname: alpha\ndescription: Alpha\n---\n",
+      "alpha/references/deep.md": "Deep link ../../beta/ref.md here.\n",
+      "beta/SKILL.md": "---\nname: beta\ndescription: Beta\n---\n",
+    };
+
+    // act
+    const { prepared } = await stageSkillFiles(t, files);
+    const deepBytes = await readFile(
+      path.join(prepared.stagingRoot, "acme-alpha", "references", "deep.md"),
+    );
+
+    // assert
+    assert.deepStrictEqual(deepBytes, Buffer.from("Deep link ../../acme-beta/ref.md here.\n"));
+  });
+
+  test("PG-SKILL-04: climbs three folders from supporting Markdown two folders deep", async (t) => {
+    // arrange
+    const files = {
+      "alpha/SKILL.md": "---\nname: alpha\ndescription: Alpha\n---\n",
+      "alpha/references/deep/notes.md": "See `../../../beta/`.\n",
+      "beta/SKILL.md": "---\nname: beta\ndescription: Beta\n---\n",
+    };
+
+    // act
+    const { prepared } = await stageSkillFiles(t, files);
+    const notesBytes = await readFile(
+      path.join(prepared.stagingRoot, "acme-alpha", "references", "deep", "notes.md"),
+    );
+
+    // assert
+    assert.deepStrictEqual(notesBytes, Buffer.from("See `../../../acme-beta/`.\n"));
+  });
+
+  test("PG-SKILL-04: leaves a link from supporting Markdown to its own SKILL.md as written", async (t) => {
+    // arrange
+    const files = {
+      "alpha/SKILL.md": "---\nname: alpha\ndescription: Alpha\n---\n",
+      "alpha/references/deep.md": "Back to ../SKILL.md and ../../alpha/x.md.\n",
+      "beta/SKILL.md": "---\nname: beta\ndescription: Beta\n---\n",
+    };
+
+    // act
+    const { prepared } = await stageSkillFiles(t, files);
+    const deepBytes = await readFile(
+      path.join(prepared.stagingRoot, "acme-alpha", "references", "deep.md"),
+    );
+
+    // assert
+    assert.deepStrictEqual(deepBytes, Buffer.from("Back to ../SKILL.md and ../../alpha/x.md.\n"));
+  });
+
+  test("PG-SKILL-04: leaves a sibling path in a non-Markdown file and behind a symbolic link as written", async (t) => {
+    // arrange
+    const paths = await writeSkillFiles(t, {
+      "alpha/SKILL.md": "---\nname: alpha\ndescription: Alpha\n---\n",
+      "alpha/run.txt": "cat ../beta/ref.md\n",
+      "beta/SKILL.md": "---\nname: beta\ndescription: Beta\n---\n",
+    });
+    const outsideFile = path.join(paths.pluginRoot, "outside.md");
+    await writeFile(outsideFile, "See ../beta/ref.md\n");
+    await symlink(outsideFile, path.join(paths.skillsDirectory, "alpha", "linked.md"));
+
+    // act
+    const prepared = await stageWrittenSkills(paths);
+    const runBytes = await readFile(path.join(prepared.stagingRoot, "acme-alpha", "run.txt"));
+
+    // assert
+    assert.deepStrictEqual(runBytes, Buffer.from("cat ../beta/ref.md\n"));
+    assert.strictEqual(await readFile(outsideFile, "utf8"), "See ../beta/ref.md\n");
+  });
+
+  test("PG-SKILL-04: writes each SKILL.md once and a supporting file only when its text changed", async (t) => {
+    // arrange
+    const paths = await writeSkillFiles(t, {
+      "alpha/SKILL.md": "---\nname: alpha\ndescription: Alpha\n---\n",
+      "alpha/references/deep.md": "Deep link ../../beta/ref.md here.\n",
+      "alpha/references/plain.md": "No link here.\n",
+      "beta/SKILL.md": "---\nname: beta\ndescription: Beta\n---\n",
+    });
+    const originalWriteFile = filesystemPromises.writeFile.bind(filesystemPromises);
+    const writtenFiles: Parameters<typeof originalWriteFile>[0][] = [];
+    const writes = t.mock.method(
+      filesystemPromises,
+      "writeFile",
+      async (
+        file: Parameters<typeof originalWriteFile>[0],
+        data: Parameters<typeof originalWriteFile>[1],
+        options?: Parameters<typeof originalWriteFile>[2],
+      ) => {
+        writtenFiles.push(file);
+        await originalWriteFile(file, data, options);
+      },
+    );
+    t.after(() => {
+      writes.mock.restore();
+      syncBuiltinESMExports();
+    });
+    syncBuiltinESMExports();
+
+    // act
+    const prepared = await stageWrittenSkills(paths);
+
+    // assert
+    assert.deepStrictEqual(writtenFiles, [
+      path.join(prepared.stagingRoot, "acme-alpha", "SKILL.md"),
+      path.join(prepared.stagingRoot, "acme-alpha", "references", "deep.md"),
+      path.join(prepared.stagingRoot, "acme-beta", "SKILL.md"),
+    ]);
   });
 
   test("leaves a non-Markdown supporting file byte for byte, though it holds a skill reference", async (t) => {
@@ -401,6 +638,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -436,6 +674,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: ["acme:audit"],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -479,6 +718,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -532,6 +772,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -604,6 +845,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -657,6 +899,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -719,6 +962,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -762,6 +1006,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -832,6 +1077,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -997,6 +1243,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1057,6 +1304,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1135,6 +1383,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1216,6 +1465,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot: windowsRoot,
       pluginDataDir,
@@ -1230,6 +1480,60 @@ describe("prepareStageSkills", () => {
     // assert
     assert.strictEqual(stagedBytes, expectedBytes);
     assert.deepStrictEqual(prepared.result.degraded, []);
+  });
+
+  test("writes each option into the staged description and body (D-PG10-08, D-PG10-09, D-PG10-13)", async (t) => {
+    // arrange
+    const source =
+      "---\nname: opts\ndescription: Mode ${user_config.mode}.\n---\n" +
+      "Mode ${user_config.mode} token ${user_config.token} note ${user_config.note}.\n";
+    const options = {
+      values: new Map([
+        ["mode", "fast"],
+        ["token", "abc123"],
+      ]),
+      sensitive: new Set(["token"]),
+    };
+
+    // act
+    const { stagedBytes, pluginRoot, pluginDataDir } = await stageSingleSkill(
+      t,
+      "opts",
+      source,
+      options,
+    );
+
+    // assert
+    assert.strictEqual(
+      stagedBytes,
+      '---\nname: acme-opts\ndescription: "Mode fast."\n' +
+        recordLine(["acme:opts", "opts"], pluginRoot, pluginDataDir) +
+        "---\nMode fast token [sensitive option 'token' not available in skill content] " +
+        "note ${user_config.note}.\n",
+    );
+  });
+
+  test("keeps every option reference as written for a plugin with no options (D-PG10-21)", async (t) => {
+    // arrange
+    const source =
+      "---\nname: opts\ndescription: Mode ${user_config.mode}.\n---\n" +
+      "Mode ${user_config.mode} token ${user_config.token}.\n";
+
+    // act
+    const { stagedBytes, pluginRoot, pluginDataDir } = await stageSingleSkill(
+      t,
+      "opts",
+      source,
+      undefined,
+    );
+
+    // assert
+    assert.strictEqual(
+      stagedBytes,
+      "---\nname: acme-opts\ndescription: Mode ${user_config.mode}.\n" +
+        recordLine(["acme:opts", "opts"], pluginRoot, pluginDataDir) +
+        "---\nMode ${user_config.mode} token ${user_config.token}.\n",
+    );
   });
 
   test("keeps the project token literal for a user-scope install", async (t) => {
@@ -1265,6 +1569,7 @@ describe("prepareStageSkills", () => {
       locations,
       cwd: path.join(scopeRoot, "ignored-project"),
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1310,6 +1615,7 @@ describe("prepareStageSkills", () => {
         locations,
         cwd: scopeRoot,
         knownWorkflowNames: [],
+        options: undefined,
         pluginName: "acme",
         pluginRoot: "/plugin",
         pluginDataDir: "[unterminated",
@@ -1363,6 +1669,7 @@ describe("prepareStageSkills", () => {
         locations,
         cwd: scopeRoot,
         knownWorkflowNames: [],
+        options: undefined,
         pluginName: "acme",
         pluginRoot,
         pluginDataDir,
@@ -1408,6 +1715,7 @@ describe("prepareStageSkills", () => {
         locations,
         cwd: scopeRoot,
         knownWorkflowNames: [],
+        options: undefined,
         pluginName: "acme",
         pluginRoot,
         pluginDataDir,
@@ -1455,6 +1763,7 @@ describe("commitPreparedSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1505,6 +1814,7 @@ describe("commitPreparedSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1543,6 +1853,7 @@ describe("commitPreparedSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1602,6 +1913,7 @@ describe("commitPreparedSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1666,6 +1978,7 @@ describe("commitPreparedSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1729,6 +2042,7 @@ describe("commitPreparedSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1781,6 +2095,7 @@ describe("commitPreparedSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1832,6 +2147,7 @@ describe("abortPreparedSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,
@@ -1864,6 +2180,7 @@ describe("abortPreparedSkills", () => {
       locations,
       cwd: scopeRoot,
       knownWorkflowNames: [],
+      options: undefined,
       pluginName: "acme",
       pluginRoot,
       pluginDataDir,

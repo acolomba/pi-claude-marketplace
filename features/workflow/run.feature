@@ -1,7 +1,7 @@
 Feature: Workflow run
 
-  A bridged workflow command runs the plugin's script in the workflow engine, which
-  hands it the engine's argument object; Pi asks no approval first, unlike Claude Code
+  A workflow command, the model by installed name with an argument object, or a sibling script
+  runs a plugin's script in the workflow engine; Pi asks no approval first, unlike Claude Code
   in its manual permission mode (a Pi gap). A scripted model and a local marketplace stand in.
 
   Background:
@@ -62,3 +62,49 @@ Feature: Workflow run
     Then the workflow engine shows these notices:
       | notice             |
       | started /demo:nope |
+
+  Scenario: The model starts a workflow by name with an argument object, and the script receives the object
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/echo.js" with this text:
+      """
+      export const meta = {name:"echo",description:"Echoes two fields."};
+
+      return "who=" + args.who + " n=" + args.items.length;
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply        | tool     | arguments                                                   |
+      |              | workflow | {"name":"demo:echo","args":{"who":"Ada","items":["a","b"]}} |
+      | Run started. |          |                                                             |
+    When the user prompts "Start the echo." and the model starts a workflow run
+    Then the model receives these calls:
+      | call | role        | text                                                                           |
+      | 1    | user        | Start the echo.                                                                |
+      | 2    | user        | Start the echo.                                                                |
+      | 2    | assistant   | tool call workflow {"name":"demo:echo","args":{"who":"Ada","items":["a","b"]}} |
+      | 2    | tool result | workflow returned: started the workflow echo                                   |
+    Then the workflow run ends with the status "completed" and the result "who=Ada n=2"
+
+  Scenario: A workflow that calls a sibling by its installed name returns the sibling's result
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/inner.js" with this text:
+      """
+      export const meta = {name:"inner",description:"Answers the outer workflow."};
+
+      return "inner got " + args.word;
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "workflows/outer.js" with this text:
+      """
+      export const meta = {name:"outer",description:"Calls the inner workflow."};
+
+      const answer = await workflow("demo:inner", {word:"hi"});
+      return "outer: " + answer;
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    When the user runs the workflow command "/demo:outer"
+    Then the workflow run ends with the status "completed" and the result "outer: inner got hi"
+    Then the workflow engine shows these notices:
+      | notice              |
+      | started /demo:outer |

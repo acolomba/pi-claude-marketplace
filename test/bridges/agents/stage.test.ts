@@ -31,8 +31,6 @@ import { AgentOwnershipConflictError } from "../../../extensions/pi-claude-marke
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
-import { ADAPTER_ASYNC, BUILTIN_ASYNC } from "./agent-grant-seeds.ts";
-
 import type {
   AgentsIndex,
   AgentsIndexEntry,
@@ -41,13 +39,21 @@ import type {
 const BOT_QUERY_SOURCE =
   "---\nname: bot\ndescription: Bot\ntools: Read, mcp__plugin_acme_db__query\n---\n\nBody.\n";
 
+const CURRENT_ADAPTER_ASYNC =
+  "tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before pi-mcp-adapter has cached the server's tools still fails";
+const CURRENT_BUILTIN_ASYNC =
+  "tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before Pi's built-in MCP has listed the server's tools still fails";
+
 const BOT_QUERY_SOURCE_HASH = createHash("sha256").update(BOT_QUERY_SOURCE).digest("hex");
 
-/** The frontmatter block of `BOT_QUERY_SOURCE` in one MCP implementation's grant form. */
+/**
+ * The frontmatter block of `BOT_QUERY_SOURCE` in one MCP implementation's grant
+ * form. The warning item is double-quoted, because it holds `: `.
+ */
 function botQueryFrontmatter(sourcePath: string, form: "adapter" | "builtin"): string {
   const selector = form === "builtin" ? "mcp:plugin_acme_db/query" : "mcp:plugin_acme_db_/query";
-  const asyncWarning = form === "builtin" ? BUILTIN_ASYNC : ADAPTER_ASYNC;
-  return `---\nname: acme:bot\ndescription: Bot\naliases: pi-claude-marketplace-acme-bot\ntools: read,${selector}\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: true\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: bot\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings:\n    - ${asyncWarning}\n---\n`;
+  const asyncWarning = form === "builtin" ? CURRENT_BUILTIN_ASYNC : CURRENT_ADAPTER_ASYNC;
+  return `---\nname: acme:bot\ndescription: Bot\naliases: pi-claude-marketplace-acme-bot\ntools: read,${selector}\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: true\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: bot\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings:\n    - "${asyncWarning}"\n---\n`;
 }
 
 /** An agents-index row of another plugin that records both grant forms (MGRT-01). */
@@ -125,6 +131,7 @@ describe("prepareStagePluginAgents", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -154,7 +161,7 @@ describe("prepareStagePluginAgents", () => {
     });
     assert.strictEqual(
       await readFile(targetPath, "utf8"),
-      `---\nname: acme:reviewer\ndescription: Reviewer\naliases: pi-claude-marketplace-acme-reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: reviewer\n  sourcePath: ${winnerPath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nFirst body.\n`,
+      `---\nname: acme:reviewer\ndescription: Reviewer\naliases: pi-claude-marketplace-acme-reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: reviewer\n  sourcePath: ${winnerPath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nFirst body.\n`,
     );
     assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
       schemaVersion: 1,
@@ -190,6 +197,7 @@ describe("prepareStagePluginAgents", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -203,7 +211,7 @@ describe("prepareStagePluginAgents", () => {
       {
         kind: "hygiene",
         message:
-          "[bot] tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before pi-mcp-adapter has cached the server's tools still fails",
+          "[bot] tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before pi-mcp-adapter has cached the server's tools still fails",
       },
       { kind: "hygiene", message: "[bot] dropped tools: mcp__plugin_acme_web__get" },
     ]);
@@ -229,17 +237,17 @@ describe("prepareStagePluginAgents", () => {
       sourceHash: BOT_QUERY_SOURCE_HASH,
       droppedFields: [],
       droppedTools: [],
-      warnings: [BUILTIN_ASYNC],
+      warnings: [CURRENT_BUILTIN_ASYNC],
       mcpImplementation: "builtin",
       mcpForms: {
         builtin: {
           frontmatter: builtinFrontmatter,
-          warnings: [BUILTIN_ASYNC],
+          warnings: [CURRENT_BUILTIN_ASYNC],
           droppedTools: [],
         },
         adapter: {
           frontmatter: botQueryFrontmatter(sourcePath, "adapter"),
-          warnings: [ADAPTER_ASYNC],
+          warnings: [CURRENT_ADAPTER_ASYNC],
           droppedTools: [],
         },
       },
@@ -249,6 +257,7 @@ describe("prepareStagePluginAgents", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -261,7 +270,7 @@ describe("prepareStagePluginAgents", () => {
     // assert
     assert.strictEqual(leak, undefined);
     assert.deepStrictEqual(prepared.result.warnings, [
-      { kind: "hygiene", message: `[bot] ${BUILTIN_ASYNC}` },
+      { kind: "hygiene", message: `[bot] ${CURRENT_BUILTIN_ASYNC}` },
     ]);
     assert.strictEqual(await readFile(targetPath, "utf8"), `${builtinFrontmatter}\nBody.\n`);
     assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
@@ -290,6 +299,7 @@ describe("prepareStagePluginAgents", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -306,7 +316,7 @@ describe("prepareStagePluginAgents", () => {
 
     // assert
     assert.deepStrictEqual(prepared.result.warnings, [
-      { kind: "hygiene", message: `[bot] ${BUILTIN_ASYNC}` },
+      { kind: "hygiene", message: `[bot] ${CURRENT_BUILTIN_ASYNC}` },
       { kind: "hygiene", message: "[bot] dropped tools: mcp__plugin_acme_web__get" },
     ]);
   });
@@ -322,6 +332,7 @@ describe("prepareStagePluginAgents", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -350,6 +361,7 @@ describe("prepareStagePluginAgents", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -380,6 +392,7 @@ describe("prepareStagePluginAgents", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -427,6 +440,7 @@ describe("prepareStagePluginAgents", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -500,7 +514,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -517,13 +530,12 @@ Helper body.
 name: acme:bot
 description: A bot agent
 aliases: pi-claude-marketplace-acme-bot
-model: anthropic/claude-sonnet-5-5
+model: claude-sonnet-5-5
 tools: read,bash,edit
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -544,6 +556,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -606,6 +619,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations: userLocations,
       cwd: userLocations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -629,7 +643,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -669,6 +682,7 @@ Read \${CLAUDE_PROJECT_DIR} and ${pluginRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: "/work/app",
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -694,7 +708,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -715,6 +728,51 @@ Work in /work/app; see /skill:acme-rules.
     assert.strictEqual(await abortPreparedAgents(createRemovalOps(), prepared), undefined);
   });
 
+  test("D-PG10-13: writes the options of its input into the body and a preloaded skill", async (t) => {
+    // arrange
+    const tree = await createStageTree(t, "agents-stage-options-");
+    await writeFile(
+      path.join(tree.agentsSourceDir, "bot.md"),
+      "---\nname: bot\ndescription: Bot\nskills: rules\n---\n\nBot ${user_config.mode}.\n",
+    );
+    const skillSource = path.join(tree.pluginRoot, "skills", "rules");
+    await mkdir(skillSource, { recursive: true });
+    await writeFile(
+      path.join(skillSource, "SKILL.md"),
+      "---\ndescription: The rules.\n---\nToken ${user_config.token}.\n",
+    );
+    const skillTarget = path.join(tree.locations.skillsTargetDir, "acme-rules");
+
+    // act
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations: tree.locations,
+      cwd: tree.locations.scopeRoot,
+      options: { values: new Map([["mode", "fast"]]), sensitive: new Set(["token"]) },
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot: tree.pluginRoot,
+      pluginDataDir: tree.pluginDataDir,
+      agentsDirs: [tree.agentsSourceDir],
+      knownSkills: ["acme-rules"],
+      skillSources: [
+        { generatedName: "acme-rules", sourcePath: skillSource, targetPath: skillTarget },
+      ],
+    });
+    assert.strictEqual(prepared.kind, "staged");
+    const staged = await readFile(
+      path.join(prepared.stagingDir, "pi-claude-marketplace-acme-bot.md"),
+      "utf8",
+    );
+    await abortPreparedAgents(createRemovalOps(), prepared);
+
+    // assert
+    assert.strictEqual(
+      staged.split("---\n").at(-1),
+      `\nBot fast.\n\nBase directory for this skill: ${skillTarget}\n\n` +
+        "Token [sensitive option 'token' not available in skill content].\n",
+    );
+  });
+
   test("D-CF4-04: stages without reading a skill source when no agent declares skills", async (t) => {
     // arrange
     const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
@@ -732,6 +790,7 @@ Work in /work/app; see /skill:acme-rules.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -760,7 +819,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -773,6 +831,98 @@ provenance:
 
 Bot body.
 `,
+    );
+    assert.strictEqual(await abortPreparedAgents(createRemovalOps(), prepared), undefined);
+  });
+
+  test("D-PG3-01: stages a background: false agent with no launch mode and a background: true agent in the background", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-stage-launch-mode-",
+    );
+    const ordinaryPath = path.join(agentsSourceDir, "ordinary.md");
+    const backgroundPath = path.join(agentsSourceDir, "worker.md");
+    await writeFile(
+      ordinaryPath,
+      "---\nname: ordinary\ndescription: Ordinary\ntools: Read\nbackground: false\n---\n\nOrdinary body.\n",
+    );
+    await writeFile(
+      backgroundPath,
+      "---\nname: worker\ndescription: Worker\ntools: Read\nbackground: true\n---\n\nWorker body.\n",
+    );
+
+    // act
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      options: undefined,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+      knownSkills: [],
+    });
+
+    // assert
+    assert.strictEqual(prepared.kind, "staged");
+    assert.deepStrictEqual(
+      {
+        ordinary: await readFile(
+          path.join(prepared.stagingDir, "pi-claude-marketplace-acme-ordinary.md"),
+          "utf8",
+        ),
+        worker: await readFile(
+          path.join(prepared.stagingDir, "pi-claude-marketplace-acme-worker.md"),
+          "utf8",
+        ),
+      },
+      {
+        ordinary: `---
+name: acme:ordinary
+description: Ordinary
+aliases: pi-claude-marketplace-acme-ordinary
+tools: read
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+advertise: true
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: ordinary
+  sourcePath: ${ordinaryPath}
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Ordinary body.
+`,
+        worker: `---
+name: acme:worker
+description: Worker
+aliases: pi-claude-marketplace-acme-worker
+tools: read
+systemPromptMode: replace
+inheritProjectContext: true
+inheritSkills: false
+advertise: true
+async: true
+provenance:
+  generatedBy: pi-claude-marketplace
+  sourcePlugin: acme
+  sourceAgent: worker
+  sourcePath: ${backgroundPath}
+  droppedFields: []
+  droppedTools: []
+  warnings: []
+---
+
+Worker body.
+`,
+      },
     );
     assert.strictEqual(await abortPreparedAgents(createRemovalOps(), prepared), undefined);
   });
@@ -834,6 +984,7 @@ Duplicate body.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -896,6 +1047,7 @@ Mixed body.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -974,6 +1126,7 @@ Review files.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -1049,6 +1202,7 @@ Review files.
         prepareStagePluginAgents(createRemovalOps(), {
           locations,
           cwd: locations.scopeRoot,
+          options: undefined,
           marketplaceName: "catalog",
           pluginName: "acme",
           pluginRoot,
@@ -1098,6 +1252,7 @@ Review files.
     const error = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -1148,7 +1303,7 @@ describe("commitPreparedAgents", () => {
         generatedName: `pi-claude-marketplace-acme-${name}`,
         targetPath: path.join(locations.agentsDir, `pi-claude-marketplace-acme-${name}.md`),
         expectedFileBytes: (extraSourcePath: string) =>
-          `---\nname: acme:${name}\ndescription: ${description}\naliases: pi-claude-marketplace-acme-${name}\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: ${name}\n  sourcePath: ${extraSourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${body}\n`,
+          `---\nname: acme:${name}\ndescription: ${description}\naliases: pi-claude-marketplace-acme-${name}\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: ${name}\n  sourcePath: ${extraSourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\n${body}\n`,
       }));
       for (const extra of extras) {
         await writeFile(extra.sourcePath, extra.bytes);
@@ -1185,6 +1340,7 @@ describe("commitPreparedAgents", () => {
       const prepared = await prepareStagePluginAgents(createRemovalOps(), {
         locations,
         cwd: locations.scopeRoot,
+        options: undefined,
         marketplaceName: "catalog",
         pluginName: "acme",
         pluginRoot,
@@ -1243,6 +1399,7 @@ describe("commitPreparedAgents", () => {
       const retried = await prepareStagePluginAgents(createRemovalOps(), {
         locations,
         cwd: locations.scopeRoot,
+        options: undefined,
         marketplaceName: "catalog",
         pluginName: "acme",
         pluginRoot,
@@ -1279,7 +1436,7 @@ describe("commitPreparedAgents", () => {
       assert.deepStrictEqual((await readdir(locations.agentsDir)).sort(), expectedFileNames.sort());
       assert.strictEqual(
         await readFile(newTarget, "utf8"),
-        `---\nname: acme:acme-reviewer\ndescription: Prefixed reviewer\naliases: pi-claude-marketplace-acme-acme-reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: acme-reviewer\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nPrefixed body.\n`,
+        `---\nname: acme:acme-reviewer\ndescription: Prefixed reviewer\naliases: pi-claude-marketplace-acme-acme-reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: acme-reviewer\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nPrefixed body.\n`,
       );
       for (const extra of extras) {
         assert.strictEqual(
@@ -1400,6 +1557,7 @@ describe("commitPreparedAgents", () => {
       const prepared = await prepareStagePluginAgents(createRemovalOps(), {
         locations,
         cwd: locations.scopeRoot,
+        options: undefined,
         marketplaceName: "catalog",
         pluginName: "acme",
         pluginRoot,
@@ -1470,7 +1628,6 @@ systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1487,13 +1644,12 @@ Helper body.
 name: acme:bot
 description: A bot agent
 aliases: pi-claude-marketplace-acme-bot
-model: anthropic/claude-sonnet-5-5
+model: claude-sonnet-5-5
 tools: read,bash,edit
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
 advertise: true
-async: false
 provenance:
   generatedBy: pi-claude-marketplace
   sourcePlugin: acme
@@ -1543,6 +1699,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -1635,6 +1792,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -1704,17 +1862,17 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
           sourceHash: BOT_QUERY_SOURCE_HASH,
           droppedFields: [],
           droppedTools: [],
-          warnings: [ADAPTER_ASYNC],
+          warnings: [CURRENT_ADAPTER_ASYNC],
           mcpImplementation: "adapter",
           mcpForms: {
             adapter: {
               frontmatter: botQueryFrontmatter(sourcePath, "adapter"),
-              warnings: [ADAPTER_ASYNC],
+              warnings: [CURRENT_ADAPTER_ASYNC],
               droppedTools: [],
             },
             builtin: {
               frontmatter: botQueryFrontmatter(sourcePath, "builtin"),
-              warnings: [BUILTIN_ASYNC],
+              warnings: [CURRENT_BUILTIN_ASYNC],
               droppedTools: [],
             },
           },
@@ -1724,6 +1882,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -1772,6 +1931,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -1825,6 +1985,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const stageInput = {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -1866,17 +2027,17 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
           sourceHash: BOT_QUERY_SOURCE_HASH,
           droppedFields: [],
           droppedTools: [],
-          warnings: [ADAPTER_ASYNC],
+          warnings: [CURRENT_ADAPTER_ASYNC],
           mcpImplementation: "adapter",
           mcpForms: {
             adapter: {
               frontmatter: botQueryFrontmatter(sourcePath, "adapter"),
-              warnings: [ADAPTER_ASYNC],
+              warnings: [CURRENT_ADAPTER_ASYNC],
               droppedTools: [],
             },
             builtin: {
               frontmatter: botQueryFrontmatter(sourcePath, "builtin"),
-              warnings: [BUILTIN_ASYNC],
+              warnings: [CURRENT_BUILTIN_ASYNC],
               droppedTools: [],
             },
           },
@@ -1923,6 +2084,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -1997,6 +2159,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -2049,6 +2212,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -2097,6 +2261,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -2200,6 +2365,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -2219,7 +2385,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     assert.strictEqual(await readFile(handNamedTarget, "utf8"), handNamedBytes);
     assert.strictEqual(
       await readFile(currentTarget, "utf8"),
-      `---\nname: acme:current\ndescription: Current agent\naliases: pi-claude-marketplace-acme-current\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nasync: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: current\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nCurrent.\n`,
+      `---\nname: acme:current\ndescription: Current agent\naliases: pi-claude-marketplace-acme-current\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nadvertise: true\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: current\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nCurrent.\n`,
     );
     assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
       schemaVersion: 1,
@@ -2281,6 +2447,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -2345,6 +2512,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -2413,6 +2581,7 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -2455,6 +2624,7 @@ describe("assertAgentCommitTargets", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -2489,6 +2659,7 @@ describe("assertAgentCommitTargets", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -2527,6 +2698,7 @@ describe("abortPreparedAgents", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,
@@ -2556,6 +2728,7 @@ describe("abortPreparedAgents", () => {
     const prepared = await prepareStagePluginAgents(createRemovalOps(), {
       locations,
       cwd: locations.scopeRoot,
+      options: undefined,
       marketplaceName: "catalog",
       pluginName: "acme",
       pluginRoot,

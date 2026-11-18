@@ -7,12 +7,16 @@ import {
   adaptPreCompactResult,
   adaptToolCallResult,
   adaptToolResultResult,
+  hookContextPart,
   sendDueFollowUpContext,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts";
 import { MATCH_ALL_IF } from "../../../extensions/pi-claude-marketplace/bridges/hooks/if-field/index.ts";
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
+import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 
 import type {
   FollowUpTurnEnd,
@@ -44,6 +48,7 @@ function guardEntry(): RoutingEntry {
     handlerDecl: { type: "command", command: GUARD_COMMAND },
     declarationIndex: 0,
     ifPredicate: MATCH_ALL_IF,
+    options: resolveOptions(undefined),
   };
 }
 
@@ -53,6 +58,7 @@ function guardEntry(): RoutingEntry {
 function headlessContext(mode: "rpc" | "json" | "print"): ExtensionContext {
   return {
     mode,
+    cwd: "/work",
     get ui(): ExtensionContext["ui"] {
       throw new Error("no dialog opens without a terminal");
     },
@@ -100,6 +106,195 @@ function createMessagePi(sent: SentMessage[], failure?: Error): ExtensionAPI {
 }
 
 describe("adaptToolCallResult", () => {
+  for (const mode of ["tui", "print", "json", "rpc"] as const) {
+    test(`sends one private ignored-rewrite notice through ${mode}`, async () => {
+      // arrange
+      const capture = createJsonCapture();
+      const notifications: Array<[string, string | undefined]> = [];
+      const input = { path: "original.txt", offset: 1 };
+      const event = {
+        type: "tool_call",
+        toolCallId: "call-read",
+        toolName: "read",
+        input,
+      } satisfies ToolCallEvent;
+      const ctx = {
+        mode,
+        cwd: "/workspace",
+        ui: {
+          notify(message: string, severity?: string): void {
+            notifications.push([message, severity]);
+          },
+        },
+      } as ExtensionContext;
+      const context: HookAdapterContext = {
+        ...adapterContext(guardEntry()),
+        ctx,
+        pi: { appendEntry: capture.entrySink.appendEntry } as ExtensionAPI,
+      };
+
+      // act
+      const adaptation = await adaptToolCallResult(
+        { kind: "mutate", updatedInput: { file_path: "replacement.txt", pages: "secret-value" } },
+        event,
+        context,
+      );
+
+      // assert
+      assert.strictEqual(adaptation, undefined);
+      assert.strictEqual(event.input, input);
+      assert.deepStrictEqual(input, { path: "original.txt", offset: 1 });
+      if (mode === "tui" || mode === "print") {
+        assert.deepStrictEqual(notifications, [
+          ["PreToolUse:Read ignored input rewrite (field)", "info"],
+        ]);
+        assert.deepStrictEqual(capture.entries, []);
+      } else {
+        assert.deepStrictEqual(notifications, []);
+        assert.deepStrictEqual(capture.entries, [
+          {
+            customType: "claude-plugin",
+            payload: {
+              schemaVersion: 1,
+              origin: { kind: "hook" },
+              kind: "hook-notice",
+              severity: "info",
+              needsReload: false,
+              text: "PreToolUse:Read ignored input rewrite (field)",
+            },
+          },
+        ]);
+      }
+
+      capture.assertValid();
+    });
+  }
+
+  test("keeps an ignored rewrite from failing the tool call when its notice transport throws", async () => {
+    // arrange
+    const input = { path: "original.txt" };
+    const event = {
+      type: "tool_call",
+      toolCallId: "call-read",
+      toolName: "read",
+      input,
+    } satisfies ToolCallEvent;
+    const context: HookAdapterContext = {
+      ...adapterContext(guardEntry()),
+      ctx: { mode: "json", cwd: "/workspace" } as ExtensionContext,
+      pi: {
+        appendEntry(): never {
+          throw new Error("notice transport failed");
+        },
+      } as unknown as ExtensionAPI,
+    };
+
+    // act
+    const adaptation = await adaptToolCallResult(
+      { kind: "mutate", updatedInput: { file_path: "replacement.txt", pages: "secret-value" } },
+      event,
+      context,
+    );
+
+    // assert
+    assert.strictEqual(adaptation, undefined);
+    assert.strictEqual(event.input, input);
+    assert.deepStrictEqual(input, { path: "original.txt" });
+  });
+
+  test("shows one sanitized notice when a Read rewrite asks for an unavailable field", async () => {
+    // arrange
+    const capture = createJsonCapture();
+    const input = { path: "original.txt", offset: 1 };
+    const event = {
+      type: "tool_call",
+      toolCallId: "call-read",
+      toolName: "read",
+      input,
+    } satisfies ToolCallEvent;
+    const context: HookAdapterContext = {
+      ...adapterContext(guardEntry()),
+      ctx: { mode: "json", cwd: "/workspace" } as ExtensionContext,
+      pi: { appendEntry: capture.entrySink.appendEntry } as ExtensionAPI,
+    };
+
+    // act
+    const adaptation = await adaptToolCallResult(
+      { kind: "mutate", updatedInput: { file_path: "replacement.txt", pages: "secret" } },
+      event,
+      context,
+    );
+
+    // assert
+    assert.strictEqual(adaptation, undefined);
+    assert.strictEqual(event.input, input);
+    assert.deepStrictEqual(input, { path: "original.txt", offset: 1 });
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "hook" },
+          kind: "hook-notice",
+          severity: "info",
+          needsReload: false,
+          text: "PreToolUse:Read ignored input rewrite (field)",
+        },
+      },
+    ]);
+    capture.assertValid();
+  });
+
+  for (const { toolName, original, candidate } of [
+    {
+      toolName: "read",
+      original: { path: "original.txt" },
+      candidate: { file_path: "file:///tmp/%ZZ" },
+    },
+    {
+      toolName: "write",
+      original: { path: "original.txt", content: "original" },
+      candidate: { file_path: "file://remotehost/tmp/secret", content: "replacement" },
+    },
+  ]) {
+    test(`keeps the original ${toolName} call and hides a malformed file URL`, async () => {
+      const capture = createJsonCapture();
+      const input = structuredClone(original);
+      const event = {
+        type: "tool_call",
+        toolCallId: `call-${toolName}`,
+        toolName,
+        input,
+      } satisfies ToolCallEvent;
+      const context: HookAdapterContext = {
+        ...adapterContext(guardEntry()),
+        ctx: { mode: "json", cwd: "/workspace" } as ExtensionContext,
+        pi: { appendEntry: capture.entrySink.appendEntry } as ExtensionAPI,
+      };
+
+      assert.strictEqual(
+        await adaptToolCallResult({ kind: "mutate", updatedInput: candidate }, event, context),
+        undefined,
+      );
+      assert.strictEqual(event.input, input);
+      assert.deepStrictEqual(input, original);
+      assert.deepStrictEqual(capture.entries, [
+        {
+          customType: "claude-plugin",
+          payload: {
+            schemaVersion: 1,
+            origin: { kind: "hook" },
+            kind: "hook-notice",
+            severity: "info",
+            needsReload: false,
+            text: `PreToolUse:${toolName === "read" ? "Read" : "Write"} ignored input rewrite (value)`,
+          },
+        },
+      ]);
+      capture.assertValid();
+    });
+  }
+
   function bashCall(input: Record<string, unknown>): ToolCallEvent {
     return { type: "tool_call", toolCallId: "call-bash", toolName: "bash", input };
   }
@@ -212,7 +407,7 @@ describe("adaptToolCallResult", () => {
     assert.deepStrictEqual(hookOutcome.updatedInput, { command: "echo rewritten" });
   });
 
-  test("drops a __proto__ key from the rewrite without polluting the input's prototype", async () => {
+  test("rejects a __proto__ rewrite without polluting the input's prototype", async () => {
     // arrange
     const input = { command: "inspect", keep: "original" };
     const event = bashCall(input);
@@ -229,7 +424,7 @@ describe("adaptToolCallResult", () => {
 
     // assert
     assert.strictEqual(adaptation, undefined);
-    assert.deepStrictEqual(event, bashCall({ command: "replacement" }));
+    assert.deepStrictEqual(event, bashCall({ command: "inspect", keep: "original" }));
     assert.strictEqual(event.input, input);
     assert.strictEqual(Object.getPrototypeOf(event.input), Object.prototype);
     assert.strictEqual(Object.hasOwn(event.input, "__proto__"), false);
@@ -383,6 +578,123 @@ describe("adaptToolCallResult", () => {
 });
 
 describe("adaptToolResultResult", () => {
+  for (const toolName of ["Bash", "Read"]) {
+    test(`replaces a custom ${toolName} result through the generic schema`, () => {
+      const event = {
+        type: "tool_result",
+        toolCallId: `custom-${toolName}`,
+        toolName,
+        input: { query: "hello" },
+        content: [{ type: "text" as const, text: "original" }],
+        structuredContent: { secret: "original" },
+        details: { secret: "original" },
+        isError: false,
+      } satisfies ToolResultEvent;
+
+      assert.deepStrictEqual(
+        adaptToolResultResult(
+          { kind: "mutate", updatedToolOutput: { content: [{ type: "text", text: "redacted" }] } },
+          event,
+          adapterContext(guardEntry()),
+        ),
+        { content: [{ type: "text", text: "redacted" }], details: null },
+      );
+      assert.deepStrictEqual(event.structuredContent, { secret: "original" });
+    });
+  }
+
+  test("a search replacement clears every stale output carrier", () => {
+    const event = {
+      type: "tool_result",
+      toolCallId: "find-redaction",
+      toolName: "find",
+      input: { pattern: "*" },
+      content: [{ type: "text" as const, text: "OLD_SECRET" }],
+      details: { fullOutputPath: "OLD_SECRET" },
+      structuredContent: "OLD_SECRET",
+      isError: false,
+    } satisfies ToolResultEvent;
+    assert.deepStrictEqual(
+      adaptToolResultResult(
+        { kind: "mutate", updatedToolOutput: { filenames: [] } },
+        event,
+        adapterContext(guardEntry()),
+      ),
+      { content: [{ type: "text", text: "" }], details: null },
+    );
+    assert.deepStrictEqual(event.content, [{ type: "text", text: "OLD_SECRET" }]);
+  });
+
+  test("a malformed shell replacement leaves the complete event untouched", () => {
+    const event = {
+      type: "tool_result",
+      toolCallId: "shell-invalid",
+      toolName: "bash",
+      input: { command: "printf secret" },
+      content: [{ type: "text" as const, text: "OLD_SECRET" }],
+      details: { fullOutputPath: "OLD_SECRET" },
+      structuredContent: "OLD_SECRET",
+      isError: false,
+    } satisfies ToolResultEvent;
+    const original = structuredClone(event);
+    assert.strictEqual(
+      adaptToolResultResult(
+        { kind: "mutate", updatedToolOutput: { structuredContent: "bad" } },
+        event,
+        adapterContext(guardEntry()),
+      ),
+      undefined,
+    );
+    assert.deepStrictEqual(event, original);
+  });
+
+  test("a result missing its tool name cannot select a built-in decoder", () => {
+    const event = {
+      type: "tool_result",
+      toolCallId: "missing-name",
+      toolName: undefined as unknown as string,
+      input: {},
+      content: [{ type: "text" as const, text: "original" }],
+      isError: false,
+      details: undefined,
+    } satisfies ToolResultEvent;
+    assert.strictEqual(
+      adaptToolResultResult(
+        { kind: "mutate", updatedToolOutput: { filenames: ["forged"] } },
+        event,
+        adapterContext(guardEntry()),
+      ),
+      undefined,
+    );
+  });
+
+  test("a file replacement clears stale Pi details", () => {
+    const event = {
+      type: "tool_result",
+      toolCallId: "read-redaction",
+      toolName: "read",
+      input: { path: "secret.txt" },
+      content: [{ type: "text" as const, text: "OLD_SECRET" }],
+      structuredContent: "OLD_SECRET",
+      details: { fullOutputPath: "OLD_SECRET" },
+      isError: false,
+    } satisfies ToolResultEvent;
+
+    assert.deepStrictEqual(
+      adaptToolResultResult(
+        {
+          kind: "mutate",
+          updatedToolOutput: { type: "text", file: { content: "safe" } },
+        },
+        event,
+        adapterContext(guardEntry()),
+      ),
+      {
+        content: [{ type: "text", text: "safe" }],
+        details: null,
+      },
+    );
+  });
   test("returns undefined for noop without changing the complete event", () => {
     // arrange
     const input = { command: "inspect" };
@@ -458,6 +770,7 @@ describe("adaptToolResultResult", () => {
           { type: "text", text: "from-model\n" },
           { type: "text", text: feedback },
         ],
+        isError,
       });
       assert.deepStrictEqual(event.content, [{ type: "text", text: "from-model\n" }]);
       assert.strictEqual(event.isError, isError);
@@ -511,7 +824,7 @@ describe("adaptToolResultResult", () => {
     // assert
     assert.deepStrictEqual(adaptation, {
       content: [{ type: "text", text: "replacement output" }],
-      isError: true,
+      details: null,
     });
     assert.deepStrictEqual(event, {
       type: "tool_result",
@@ -586,12 +899,22 @@ describe("adaptToolResultResult", () => {
     assert.strictEqual(event.content, content);
   });
 
-  for (const { name, updatedToolOutput } of [
-    { name: "null", updatedToolOutput: null },
-    { name: "primitive", updatedToolOutput: "hostile" },
-    { name: "array", updatedToolOutput: ["hostile"] },
+  for (const { name, updatedToolOutput, text, structuredContent } of [
+    { name: "null", updatedToolOutput: null, text: "null", structuredContent: undefined },
+    {
+      name: "primitive",
+      updatedToolOutput: "hostile",
+      text: "hostile",
+      structuredContent: undefined,
+    },
+    {
+      name: "array",
+      updatedToolOutput: ["hostile"],
+      text: '["hostile"]',
+      structuredContent: ["hostile"],
+    },
   ] as const) {
-    test(`drops a ${name} updated output`, () => {
+    test(`renders a ${name} updated output as data`, () => {
       // arrange
       const content = [{ type: "text" as const, text: "original output" }];
       const event = {
@@ -609,7 +932,11 @@ describe("adaptToolResultResult", () => {
       const adaptation = adaptToolResultResult(hookOutcome, event, adapterContext(guardEntry()));
 
       // assert
-      assert.strictEqual(adaptation, undefined);
+      assert.deepStrictEqual(adaptation, {
+        content: [{ type: "text", text }],
+        details: null,
+        ...(structuredContent === undefined ? {} : { structuredContent }),
+      });
       assert.deepStrictEqual(event, {
         type: "tool_result",
         toolCallId: `result-mutate-${name}`,
@@ -687,6 +1014,7 @@ describe("adaptToolResultResult", () => {
     // assert
     assert.deepStrictEqual(adaptation, {
       content: [{ type: "text", text: "replacement output" }],
+      details: null,
     });
     assert.deepStrictEqual(event, {
       type: "tool_result",
@@ -700,7 +1028,159 @@ describe("adaptToolResultResult", () => {
     assert.strictEqual(event.content, content);
   });
 
-  test("returns a boolean error patch without content when the patch has none", () => {
+  test("a generic image replacement drops stale output details", () => {
+    const event = {
+      type: "tool_result",
+      toolCallId: "image",
+      toolName: "owner-tool",
+      input: {},
+      content: [{ type: "text" as const, text: "old" }],
+      details: { secret: "old" },
+      isError: false,
+    } satisfies ToolResultEvent;
+    assert.deepStrictEqual(
+      adaptToolResultResult(
+        {
+          kind: "mutate",
+          updatedToolOutput: { content: [{ type: "image", data: "bmV3", mimeType: "image/png" }] },
+        },
+        event,
+        adapterContext(guardEntry()),
+      ),
+      {
+        content: [{ type: "image", data: "bmV3", mimeType: "image/png" }],
+        details: null,
+      },
+    );
+  });
+
+  test("an MCP envelope replaces every old output carrier and keeps only routing details", () => {
+    // arrange
+    const event = {
+      type: "tool_result",
+      toolCallId: "mcp-redaction",
+      toolName: "mcp__catalog__lookup",
+      input: { text: "ping" },
+      content: [{ type: "text" as const, text: "secret-content" }],
+      structuredContent: { secret: "old-structured" },
+      details: {
+        server: "catalog",
+        tool: "lookup",
+        output: "secret-details",
+        fullOutputPath: "/secret",
+      },
+      isError: false,
+    } satisfies ToolResultEvent;
+
+    // act
+    const patch = adaptToolResultResult(
+      {
+        kind: "mutate",
+        updatedToolOutput: {
+          content: [{ type: "image", data: "bmV3", mimeType: "image/png" }],
+          structuredContent: { public: true },
+          toolName: "forged",
+          isError: true,
+        },
+      },
+      event,
+      adapterContext(guardEntry()),
+    );
+
+    // assert
+    assert.deepStrictEqual(patch, {
+      content: [{ type: "image", data: "bmV3", mimeType: "image/png" }],
+      details: { server: "catalog", tool: "lookup" },
+      structuredContent: { public: true },
+    });
+    assert.deepStrictEqual(event.structuredContent, { secret: "old-structured" });
+  });
+
+  for (const { name, value, text } of [
+    { name: "false", value: false, text: "false" },
+    { name: "zero", value: 0, text: "0" },
+    { name: "empty string", value: "", text: "" },
+    { name: "empty array", value: [], text: undefined },
+  ] as const) {
+    test(`accepts ${name} as a supplied output`, () => {
+      // arrange
+      const event = {
+        type: "tool_result",
+        toolCallId: name,
+        toolName: "mcp__catalog__lookup",
+        input: {},
+        content: [{ type: "text" as const, text: "original" }],
+        details: undefined,
+        isError: false,
+      } satisfies ToolResultEvent;
+
+      // act
+      const patch = adaptToolResultResult(
+        { kind: "mutate", updatedToolOutput: value },
+        event,
+        adapterContext(guardEntry()),
+      );
+
+      // assert
+      assert.deepStrictEqual(patch, {
+        content: text === undefined ? [] : [{ type: "text", text }],
+        details: null,
+      });
+    });
+  }
+
+  test("feedback retains the original structured value and error status", () => {
+    const event = {
+      type: "tool_result",
+      toolCallId: "feedback",
+      toolName: "owner-tool",
+      input: {},
+      content: [{ type: "text" as const, text: "original" }],
+      structuredContent: { secret: "structured" },
+      details: { route: "safe" },
+      isError: true,
+    } satisfies ToolResultEvent;
+    const patch = adaptToolResultResult(
+      { kind: "block", reason: "check" },
+      event,
+      adapterContext(guardEntry()),
+    );
+    assert.deepStrictEqual(patch?.structuredContent, event.structuredContent);
+    assert.strictEqual(patch?.isError, true);
+    assert.deepStrictEqual(patch?.content?.[0], event.content[0]);
+  });
+
+  test("a byte-identical generic replacement leaves every carrier untouched", () => {
+    const event = {
+      type: "tool_result",
+      toolCallId: "same",
+      toolName: "owner-tool",
+      input: {},
+      content: [{ type: "text" as const, text: "original" }],
+      structuredContent: "original",
+      details: { secret: "original" },
+      isError: false,
+    } satisfies ToolResultEvent;
+    assert.strictEqual(
+      adaptToolResultResult(
+        {
+          kind: "mutate",
+          updatedToolOutput: {
+            content: [{ type: "text", text: "original" }],
+            structuredContent: "original",
+            isError: false,
+          },
+        },
+        event,
+        adapterContext(guardEntry()),
+      ),
+      undefined,
+    );
+    assert.deepStrictEqual(event.structuredContent, "original");
+    assert.deepStrictEqual(event.details, { secret: "original" });
+  });
+
+  test("does not let output data change the tool failure flag", () => {
     // arrange
     const content = [{ type: "text" as const, text: "original output" }];
     const event = {
@@ -721,7 +1201,11 @@ describe("adaptToolResultResult", () => {
     );
 
     // assert
-    assert.deepStrictEqual(adaptation, { isError: true });
+    assert.deepStrictEqual(adaptation, {
+      content: [{ type: "text", text: '{"isError":true}' }],
+      details: null,
+      structuredContent: { isError: true },
+    });
     assert.deepStrictEqual(event, {
       type: "tool_result",
       toolCallId: "result-error-only",
@@ -845,6 +1329,41 @@ describe("adaptToolResultResult", () => {
   }
 });
 
+describe("hookContextPart", () => {
+  test("labels the values with the event of their hooks, joined in order (D-PG6-20)", () => {
+    // act
+    const parts = [
+      hookContextPart("SessionStart", ["first", "second"]),
+      hookContextPart("UserPromptSubmit", ["prompt context"]),
+    ];
+
+    // assert
+    assert.deepStrictEqual(parts, [
+      { type: "text", text: "SessionStart hook additional context: first\nsecond" },
+      { type: "text", text: "UserPromptSubmit hook additional context: prompt context" },
+    ]);
+  });
+
+  test("leaves out a value that is empty or only whitespace (HOOK-05)", () => {
+    // act
+    const part = hookContextPart("UserPromptSubmit", ["", "kept", " \n\t"]);
+
+    // assert
+    assert.deepStrictEqual(part, {
+      type: "text",
+      text: "UserPromptSubmit hook additional context: kept",
+    });
+  });
+
+  test("gives no part when no value has text (HOOK-05)", () => {
+    // act
+    const parts = [hookContextPart("SessionStart", []), hookContextPart("UserPromptSubmit", [" "])];
+
+    // assert
+    assert.deepStrictEqual(parts, [undefined, undefined]);
+  });
+});
+
 describe("adaptInputResult", () => {
   test("returns undefined for noop without changing the complete input event", () => {
     // arrange
@@ -857,7 +1376,12 @@ describe("adaptInputResult", () => {
     } satisfies InputEvent;
 
     // act
-    const adaptation = adaptInputResult({ kind: "noop" }, event, adapterContext(guardEntry()));
+    const adaptation = adaptInputResult(
+      { kind: "noop" },
+      event,
+      adapterContext(guardEntry()),
+      "UserPromptSubmit",
+    );
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -884,6 +1408,7 @@ describe("adaptInputResult", () => {
       { kind: "block", reason: "policy denied" },
       event,
       adapterContext(guardEntry()),
+      "UserPromptSubmit",
     );
 
     // assert
@@ -915,6 +1440,7 @@ describe("adaptInputResult", () => {
       { kind: "mutate", additionalContext: "ctx-a\nctx-b" },
       event,
       context,
+      "UserPromptSubmit",
     );
 
     // assert
@@ -930,6 +1456,7 @@ describe("adaptInputResult", () => {
         scope: "user",
         marketplace: "owner-marketplace",
         pluginId: "owner-plugin",
+        event: "UserPromptSubmit",
       },
     ]);
     assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
@@ -951,6 +1478,7 @@ describe("adaptInputResult", () => {
       { kind: "mutate", additionalContext: "ctx-a\nctx-b" },
       event,
       { ...adapterContext(guardEntry()), runtime, pi: createMessagePi(sent) },
+      "UserPromptSubmit",
     );
 
     // assert
@@ -995,6 +1523,7 @@ describe("adaptInputResult", () => {
       { kind: "mutate", additionalContext: "ctx-a\nctx-b" },
       event,
       context,
+      "UserPromptSubmit",
     );
 
     // assert
@@ -1007,6 +1536,7 @@ describe("adaptInputResult", () => {
         scope: "user",
         marketplace: "owner-marketplace",
         pluginId: "owner-plugin",
+        event: "UserPromptSubmit",
         prompt: "queued prompt",
       },
     ]);
@@ -1022,6 +1552,7 @@ describe("adaptInputResult", () => {
       { kind: "mutate", additionalContext: " \n " },
       { type: "input", text: "queued prompt", source: "rpc", streamingBehavior: "steer" },
       { ...adapterContext(guardEntry()), runtime, pi: createMessagePi(sent) },
+      "UserPromptSubmit",
     );
 
     // assert
@@ -1039,6 +1570,7 @@ describe("adaptInputResult", () => {
       { kind: "mutate", additionalContext: "ctx" },
       { type: "input", text: "queued prompt", source: "rpc", streamingBehavior: "steer" },
       { ...adapterContext(guardEntry()), runtime },
+      "UserPromptSubmit",
     );
 
     // assert
@@ -1067,6 +1599,7 @@ describe("adaptInputResult", () => {
       { kind: "mutate", additionalContext: "ctx" },
       { type: "input", text: "queued prompt", source: "rpc", streamingBehavior: "steer" },
       { ...adapterContext(guardEntry()), runtime, pi: createMessagePi([], new Error("closed")) },
+      "UserPromptSubmit",
     );
 
     // assert
@@ -1088,10 +1621,15 @@ describe("adaptInputResult", () => {
     } satisfies InputEvent;
 
     // act
-    const adaptation = adaptInputResult({ kind: "mutate", additionalContext: "" }, event, {
-      ...adapterContext(guardEntry()),
-      runtime,
-    });
+    const adaptation = adaptInputResult(
+      { kind: "mutate", additionalContext: "" },
+      event,
+      {
+        ...adapterContext(guardEntry()),
+        runtime,
+      },
+      "UserPromptSubmit",
+    );
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -1118,10 +1656,15 @@ describe("adaptInputResult", () => {
       } satisfies InputEvent;
 
       // act
-      const adaptation = adaptInputResult(hookOutcome, event, {
-        ...adapterContext(guardEntry()),
-        runtime,
-      });
+      const adaptation = adaptInputResult(
+        hookOutcome,
+        event,
+        {
+          ...adapterContext(guardEntry()),
+          runtime,
+        },
+        "UserPromptSubmit",
+      );
 
       // assert
       assert.deepStrictEqual(adaptation, { action: "handled" });
@@ -1142,7 +1685,12 @@ describe("adaptInputResult", () => {
     } satisfies HookExecResult;
 
     // act
-    const adaptation = adaptInputResult(hookOutcome, event, adapterContext(guardEntry()));
+    const adaptation = adaptInputResult(
+      hookOutcome,
+      event,
+      adapterContext(guardEntry()),
+      "UserPromptSubmit",
+    );
 
     // assert
     assert.strictEqual(adaptation, undefined);
@@ -1167,7 +1715,12 @@ describe("adaptInputResult", () => {
       } satisfies InputEvent;
 
       // act
-      const adaptation = adaptInputResult(stopOutcome, event, adapterContext(guardEntry()));
+      const adaptation = adaptInputResult(
+        stopOutcome,
+        event,
+        adapterContext(guardEntry()),
+        "UserPromptSubmit",
+      );
 
       // assert
       assert.deepStrictEqual(adaptation, { action: "handled" });
@@ -1186,6 +1739,7 @@ describe("sendDueFollowUpContext", () => {
     scope: "project",
     marketplace: "fixtures",
     pluginId: "demo",
+    event: "UserPromptSubmit",
     prompt: "also say hi",
   } as const;
 
@@ -1646,4 +2200,185 @@ describe("adaptPreCompactResult", () => {
       );
     });
   }
+});
+
+describe("stop notices (D-PG5-13)", () => {
+  const PROMPT = { type: "input", text: "hello", source: "interactive" } satisfies InputEvent;
+  const BASH_CALL = {
+    type: "tool_call",
+    toolCallId: "call-bash",
+    toolName: "bash",
+    input: { command: "echo from-model" },
+  } satisfies ToolCallEvent;
+
+  // A JSON-mode adapter context whose notices land in `capture`.
+  function noticeContext(capture: ReturnType<typeof createJsonCapture>): HookAdapterContext {
+    return {
+      ...adapterContext(guardEntry()),
+      ctx: Object.defineProperties({ mode: "json", cwd: "/workspace" } as ExtensionContext, {
+        ui: { get: () => capture.ui },
+      }),
+      pi: { appendEntry: capture.entrySink.appendEntry } as ExtensionAPI,
+    };
+  }
+
+  // The `claude-plugin` entry of one hook notice.
+  function noticeEntry(text: string): unknown {
+    return {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin: { kind: "hook" },
+        kind: "hook-notice",
+        severity: "info",
+        needsReload: false,
+        text,
+      },
+    };
+  }
+
+  // A JSON-mode adapter context whose notice transport throws.
+  function failingNoticeContext(): HookAdapterContext {
+    return {
+      ...adapterContext(guardEntry()),
+      ctx: { mode: "json", cwd: "/workspace" } as ExtensionContext,
+      pi: {
+        getAllTools: () => [],
+        getCommands: () => [],
+        appendEntry(): never {
+          throw new Error("notice transport failed");
+        },
+      } as unknown as ExtensionAPI,
+    };
+  }
+
+  for (const { name, stopReason, notice } of [
+    { name: "its reason", stopReason: "not now", notice: "Operation stopped by hook: not now" },
+    { name: "no reason", stopReason: undefined, notice: "Operation stopped by hook" },
+    { name: "an empty reason", stopReason: "", notice: "Operation stopped by hook" },
+  ]) {
+    test(`shows a stopped prompt with ${name} and stops it`, () => {
+      // arrange
+      const capture = createJsonCapture();
+      const stopOutcome: HookExecResult =
+        stopReason === undefined ? { kind: "stop" } : { kind: "stop", stopReason };
+
+      // act
+      const adaptation = adaptInputResult(
+        stopOutcome,
+        { ...PROMPT },
+        noticeContext(capture),
+        "UserPromptSubmit",
+      );
+
+      // assert
+      assert.deepStrictEqual(adaptation, { action: "handled" });
+      assert.deepStrictEqual(capture.entries, [noticeEntry(notice)]);
+      capture.assertValid();
+    });
+  }
+
+  for (const { name, stopOutcome, notice, reason } of [
+    {
+      name: "its reason",
+      stopOutcome: { kind: "stop", stopReason: "halt" } as const,
+      notice: "PreToolUse:Bash hook stopped continuation: halt",
+      reason: "halt",
+    },
+    {
+      name: "no reason",
+      stopOutcome: { kind: "stop" } as const,
+      notice: "PreToolUse:Bash hook stopped continuation: Execution stopped by hook",
+      reason: "Operation stopped by hook",
+    },
+  ]) {
+    test(`shows a stopped tool call with ${name} and keeps the block the model receives`, async () => {
+      // arrange
+      const capture = createJsonCapture();
+
+      // act
+      const adaptation = await adaptToolCallResult(
+        stopOutcome,
+        { ...BASH_CALL },
+        noticeContext(capture),
+      );
+
+      // assert
+      assert.deepStrictEqual(adaptation, { block: true, reason, terminate: true });
+      assert.deepStrictEqual(capture.entries, [noticeEntry(notice)]);
+      capture.assertValid();
+    });
+  }
+
+  test("debug-logs a prompt stop notice that fails to show and still stops the prompt", (t) => {
+    // arrange
+    const lines = captureDebugLog(t);
+
+    // act
+    const adaptation = adaptInputResult(
+      { kind: "stop", stopReason: "not now" },
+      { ...PROMPT },
+      failingNoticeContext(),
+      "UserPromptSubmit",
+    );
+
+    // assert
+    assert.deepStrictEqual(adaptation, { action: "handled" });
+    assert.deepStrictEqual(lines, [
+      "[hooks] adaptInput: stop notice failed: notice transport failed",
+    ]);
+  });
+
+  test("debug-logs a tool stop notice that fails to show and still ends the turn", async (t) => {
+    // arrange
+    const lines = captureDebugLog(t);
+
+    // act
+    const adaptation = await adaptToolCallResult(
+      { kind: "stop", stopReason: "halt" },
+      { ...BASH_CALL },
+      failingNoticeContext(),
+    );
+
+    // assert
+    assert.deepStrictEqual(adaptation, { block: true, reason: "halt", terminate: true });
+    assert.deepStrictEqual(lines, [
+      "[hooks] adaptToolCall: stop notice failed: notice transport failed",
+    ]);
+  });
+
+  for (const isError of [false, true]) {
+    test(`shows no stop notice for a stopped ${isError ? "PostToolUseFailure" : "PostToolUse"} result`, () => {
+      // arrange
+      const capture = createJsonCapture();
+      const event = {
+        type: "tool_result",
+        toolCallId: "result-stop",
+        toolName: "bash",
+        input: { command: "inspect" },
+        content: [{ type: "text" as const, text: "original output" }],
+        isError,
+        details: undefined,
+      } satisfies ToolResultEvent;
+
+      // act
+      const adaptation = adaptToolResultResult(
+        { kind: "stop", stopReason: "halt" },
+        event,
+        noticeContext(capture),
+      );
+
+      // assert
+      assert.strictEqual(adaptation, undefined);
+      assert.deepStrictEqual(capture.entries, []);
+    });
+  }
+
+  test("shows no stop notice for a stopped PreCompact bucket, which has no notice context", () => {
+    // act
+    const adaptation = adaptPreCompactResult([{ kind: "stop", stopReason: "halt" }]);
+
+    // assert
+    assert.strictEqual(adaptation, undefined);
+  });
 });

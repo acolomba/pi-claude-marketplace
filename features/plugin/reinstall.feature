@@ -184,6 +184,44 @@ Feature: Plugin reinstall
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
 
+  Scenario: A reinstall records the options the plugin declares now (D-PG10-15)
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+      | opt  | 1.0.0   |
+    Given the published plugin "opt" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "opt",
+        "version": "1.0.0",
+        "userConfig": {
+          "mode": { "type": "string", "title": "Mode", "description": "The mode.", "default": "fast" }
+        }
+      }
+      """
+    Given the user has run "/claude:plugin install opt@fixtures --scope project"
+    Given the published plugin "opt" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "opt",
+        "version": "1.0.0",
+        "userConfig": {
+          "mode": { "type": "string", "title": "Mode", "description": "The mode.", "default": "slow" }
+        }
+      }
+      """
+    When the user runs "/claude:plugin reinstall opt@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name | status      | reasons | scope   | version |
+      | fixtures         | project           | opt@fixtures | opt  | reinstalled |         | project | 1.0.0   |
+    Then the installation record of the project scope holds these options of "opt@fixtures":
+      | option | type   | title | description | default |
+      | mode   | string | Mode  | The mode.   | slow    |
+
   Scenario: Reinstalling a plugin with agents without pi-subagents names the missing companion
     Given the published plugin "demo" of the marketplace "fixtures" has the agent "reviewer" described as "Reviews the files it is given." with this body:
       """

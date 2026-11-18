@@ -5,6 +5,10 @@ planted: 2026-11-07
 planted_during: between milestones (after mcp-builtin, PR #303)
 trigger_when: open-gsd/gsd-core#4649 (bounded project-skills discovery) is closed, or a milestone touches GSD tooling, skills, or agent configuration
 scope: medium
+audit_acknowledged:
+  milestone: parity-gaps
+  at: 2026-11-17
+  status: dormant
 ---
 
 # SEED-261107-kax: Review the structure of skills, injected skills (agent_skills), and GSD capabilities once open-gsd/gsd-core#4649 is closed

@@ -191,7 +191,7 @@ npm run test:coverage:direct:all   # direct.lcov only, the gated report
 - `test/e2e/` (6 files, `npm run test:e2e`) — exercise the extension against a real upstream ref, selected via `PI_CM_E2E_REF` (`pinned` or `main`); run with `--experimental-test-coverage` under `test:coverage:e2e`
 
 **Live UAT (not a `.test.ts` category):**
-- `test/live-uat/*.mjs` — standalone, human-invoked scripted drivers (e.g. `manifest-absence-canary.mjs`, `stop-canary.mjs`) that exercise the extension against a live Pi process end-to-end; run manually via `node test/live-uat/<file>.mjs`, never picked up by any `npm test*` script or import graph
+- `test/live-uat/*.mjs` — standalone, human-invoked scripted drivers (e.g. `manifest-absence-canary.mjs`, `workflow-storage-canary.mjs`) that exercise the extension against a live Pi process end-to-end; run manually via `node test/live-uat/<file>.mjs`, never picked up by any `npm test*` script or import graph
 
 ## Common Patterns
 

@@ -1,0 +1,72 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-11-16T05:30:00.000Z",
+  "phase": "6",
+  "phase_name": "Hook Inputs and Events",
+  "phase_dir": ".planning/phases/06-hook-inputs-and-events",
+  "plan": 13,
+  "task": 1,
+  "total_tasks": 13,
+  "status": "paused",
+  "completed_tasks": [
+    {
+      "id": 12,
+      "name": "06-12 typed UserPromptExpansion",
+      "status": "done",
+      "commit": "3312c94a"
+    }
+  ],
+  "remaining_tasks": [
+    {
+      "id": 13,
+      "name": "06-13 docs, CHANGELOG, consolidated D-PG6 records",
+      "status": "done",
+      "commit": "392e6ea2"
+    },
+    {
+      "id": 14,
+      "name": "Phase 6 close: validate, secure, review loop (max 3), phase gate, verifier, fingerprint, phase complete 6",
+      "status": "done",
+      "commit": "see git log after 392e6ea2"
+    },
+    {
+      "id": 17,
+      "name": "Milestone lifecycle: re-verify Phases 1-2 staleness, audit, complete, cleanup",
+      "status": "not_started"
+    }
+  ],
+  "blockers": [],
+  "async_jobs": [],
+  "human_actions_pending": [
+    {
+      "action": "Approve PR / merge to main / version bump",
+      "context": "outward-facing; never done autonomously",
+      "blocking": true
+    }
+  ],
+  "decisions": [
+    {
+      "decision": "Dispatch every gsd-executor from the features/gaps checkout",
+      "rationale": "isolation hook reads its sentinel from this checkout",
+      "phase": "6"
+    },
+    {
+      "decision": "Withhold openUi:false default (D-PG9-07)",
+      "rationale": "breaks pi-subagents 0.88.1 MCP grants",
+      "phase": "9"
+    },
+    {
+      "decision": "Workflow grant stays dropped (D-PG8-11 option A)",
+      "rationale": "Claude Code gives Workflow to no subagent",
+      "phase": "8"
+    },
+    {
+      "decision": "Maintainer decision review done 2026-11-16: every pending D-PG row locked, D-PG4-11/12 and D-PG9-07 included; T-08-13 accepted",
+      "rationale": "user answers recorded in PROJECT.md Key Decisions",
+      "phase": "milestone"
+    }
+  ],
+  "uncommitted_files": [],
+  "next_action": "Phases 1-11 are complete on features/gaps (Phase 11 closed 2026-11-16, gate exit 0 at 9874efc2). Next: the milestone lifecycle (re-verify Phases 1-2 staleness, audit, complete, cleanup).",
+  "context_notes": "Full detail in .planning/phases/06-hook-inputs-and-events/HANDOFF-parity-gaps-session.md. Worktree: features/gaps (this; Phases 1-11). features/gaps-agents and features/gaps-mcp are merged."
+}

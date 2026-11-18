@@ -201,6 +201,32 @@ Feature: Skill invocation
       | call | role | text                                                                                                                                                                                                                                                                                                                                                                                                                                            |
       | 1    | user | <skill name="demo-paths" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-paths/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-paths.\n\nSkill {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-paths root {home}/marketplaces/fixtures/plugins/demo data {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo project {project dir}.\n</skill> |
 
+  Scenario: A user-scope skill gets the project directory when the user invokes it (PG-CORE-05)
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the skill "where" with this skill file:
+      """
+      ---
+      name: where
+      description: Reports the project.
+      ---
+
+      project ${CLAUDE_PROJECT_DIR}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts "/skill:demo-where"
+    Then the model receives these calls:
+      | call | role | text                                                                                                                                                                                                                                      |
+      | 1    | user | <skill name="demo-where" location="{agent dir}/pi-claude-marketplace/resources/skills/demo-where/SKILL.md">\nReferences are relative to {agent dir}/pi-claude-marketplace/resources/skills/demo-where.\n\nproject {project dir}\n</skill> |
+
   Scenario: Invoking a skill through its plugin-qualified name over RPC sends the same skill block
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source
@@ -320,3 +346,53 @@ Feature: Skill invocation
     Then the model receives these calls:
       | call | role | text                                                                                                                                                                                                                                    |
       | 1    | user | <skill name="demo-pwsh" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-pwsh/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-pwsh.\n\nShell: ran\n</skill> |
+
+  Scenario: A skill attaches the file that its body mentions when the user types its alias (PG-SKILL-01)
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the skill "review" described as "Reviews the draft." with this body:
+      """
+      Follow @${CLAUDE_SKILL_DIR}/role.md
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "skills/review/role.md" with this text:
+      """
+      Review as a careful editor.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts "/demo:review"
+    Then the model receives these calls:
+      | call | role | text                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+      | 1    | user | <skill name="demo-review" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-review/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-review.\n\nFollow @{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-review/role.md\n\n<file name="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-review/role.md">\nReview as a careful editor.\n</file>\n</skill> |
+
+  Scenario: A file that a typed argument mentions is not attached to a skill (PG-SKILL-01)
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the skill "review" described as "Reviews the named file." with this body:
+      """
+      Review $ARGUMENTS
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file "templates/x.md" with this text:
+      """
+      Check the spelling.
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Noted. |
+    When the user prompts "/demo:review @{home}/marketplaces/fixtures/plugins/demo/templates/x.md"
+    Then the model receives these calls:
+      | call | role | text                                                                                                                                                                                                                                                                                                |
+      | 1    | user | <skill name="demo-review" location="{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-review/SKILL.md">\nReferences are relative to {project dir}/.pi/pi-claude-marketplace/resources/skills/demo-review.\n\nReview @{home}/marketplaces/fixtures/plugins/demo/templates/x.md\n</skill> |

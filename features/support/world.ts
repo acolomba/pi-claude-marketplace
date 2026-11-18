@@ -64,12 +64,14 @@ import { PiProcess } from "../lib/pi-process.ts";
 import { REGISTRY_PROBE_EXTENSION } from "../lib/pi-registry-probe/snapshot.ts";
 import { PiTuiSession } from "../lib/pi-tui.ts";
 import { rowArrays } from "../lib/result-rows.ts";
+import { latestSessionFile, sessionsFolder } from "../lib/saved-sessions.ts";
+import { reasoningModelPath } from "../lib/scripted-model/extension.ts";
 import { readModelCalls, readModelScript } from "../lib/scripted-model/script.ts";
 import { assertStandInsStopped, harnessDirectory } from "../lib/turn-records.ts";
 
 import { currentRun } from "./pi-process.ts";
 
-import type { RpcProfileEnvironment } from "../../test/e2e/_rpc.ts";
+import type { PiSessionLaunch, RpcProfileEnvironment } from "../../test/e2e/_rpc.ts";
 import type { CompanionName } from "../lib/companions.ts";
 import type { GitPluginRepository } from "../lib/git-plugin.ts";
 import type { HookGate } from "../lib/hook-files.ts";
@@ -133,16 +135,24 @@ export interface ScopeBytes {
 }
 
 /**
- * What a scenario's profile Pi loads and trusts (D-CF1-15). It always loads
- * the real extension, the scripted model, and the registry probe, then
- * `companions` in the fixed order pi-subagents, pi-mcp-adapter, pi-dynamic-workflows (HAR-01), then
+ * What a scenario's profile Pi loads and trusts (D-CF1-15). It loads
+ * `leadingExtensions` in order, then always the real extension, the scripted
+ * model, and the registry probe, then `companions` in the fixed order
+ * pi-subagents, pi-mcp-adapter, pi-dynamic-workflows (HAR-01), then
  * `extraExtensions` in order. It trusts the sandbox project unless `trust` is
- * `untrusted` (D-CF1-07).
+ * `untrusted`, which saves no decision (D-CF1-07), or `refused`, which saves
+ * `false` for the project as Pi's "Do not trust" option does (D-PG10-17).
  */
 export interface PiProfile {
   readonly companions: readonly CompanionName[];
   readonly extraExtensions?: readonly string[];
-  readonly trust?: "trusted" | "untrusted";
+  /**
+   * Extensions the profile Pi loads before the real extension, so Pi runs
+   * their handlers of an event before the extension's. Such an extension
+   * stands in for another Pi extension that a user loads first.
+   */
+  readonly leadingExtensions?: readonly string[];
+  readonly trust?: "trusted" | "untrusted" | "refused";
   /**
    * The profile Pi's spawn environment carries `PI_SUBAGENT_CHILD=1`, as
    * pi-subagents' runner sets it before any extension of a background child
@@ -157,8 +167,25 @@ export interface PiProfile {
    * `extraExtensions` (D-BG-01). `usePiWithProfile()` refuses it when
    * `extraExtensions` lacks the GitHub redirect, because such a Pi would reach
    * GitHub's real address with nothing to keep its requests on this machine.
+   * It also refuses it with `leadingExtensions`, which the terminal session
+   * cannot load ahead of the real extension.
    */
   readonly withoutGitHubBaseOverride?: true;
+  /**
+   * The profile Pi saves its session in the sandbox's sessions folder instead
+   * of starting with `--no-session`, so a restart can start a new session or
+   * continue, open, or fork a saved one (D-PG6-16). The scenario's release
+   * removes that folder.
+   */
+  readonly session?: "saved";
+  /**
+   * The scripted model registers its models as ones that reason, so Pi keeps
+   * the thinking level a scenario sets. Without it Pi holds the level at
+   * `off`, and no existing table gains an `effort` column (D-PG6-24). The
+   * profile writes the scripted model's file into the harness directory
+   * before Pi starts, and the scenario's release removes it.
+   */
+  readonly reasoningModel?: true;
 }
 
 /**
@@ -167,10 +194,21 @@ export interface PiProfile {
  * `with-adapter` adds it; `builtin-on` removes `-builtin:mcp` from the user's
  * Pi settings and keeps the companions; `no-mcp` removes pi-mcp-adapter and
  * starts Pi with `--no-mcp`; `after-crash` starts the same launch again after
- * `crashPi()` killed the profile Pi (ASYNC-04).
+ * `crashPi()` killed the profile Pi (ASYNC-04); `new-session` starts it again
+ * in a new saved session, `continue-session` with `--continue`, and
+ * `open-session` and `fork-session` with `--session` and `--fork` on the
+ * newest session file of the sandbox's sessions folder (D-PG6-16).
  */
 export type PiRestart =
-  "without-adapter" | "with-adapter" | "builtin-on" | "no-mcp" | "after-crash";
+  | "without-adapter"
+  | "with-adapter"
+  | "builtin-on"
+  | "no-mcp"
+  | "after-crash"
+  | "new-session"
+  | "continue-session"
+  | "open-session"
+  | "fork-session";
 
 /** What a one-shot Pi in the run's sandbox starts with (D-BG-09). */
 export interface OneShotPiLaunch {
@@ -179,9 +217,18 @@ export interface OneShotPiLaunch {
   readonly environment: RpcProfileEnvironment;
 }
 
-// What a profile Pi starts with: its profile and whether it starts with `--no-mcp`.
-interface ProfileLaunch extends PiProfile {
+// The restarts whose new session holds the entries of the stopped Pi's session.
+const SESSION_KEEPING_RESTARTS: ReadonlySet<PiRestart> = new Set([
+  "continue-session",
+  "open-session",
+  "fork-session",
+]);
+
+// What a profile Pi starts with: its profile, whether it starts with
+// `--no-mcp`, and its session flags.
+interface ProfileLaunch extends Omit<PiProfile, "session"> {
   readonly noMcp?: true;
+  readonly session?: PiSessionLaunch;
 }
 
 /**
@@ -666,13 +713,16 @@ export class ScenarioWorld extends World {
    * steps talk to until the scenario's release stops it with its process
    * group. A scenario that needs a model must not change the run's shared Pi,
    * which every other scenario reuses, so it gets a Pi of its own in the
-   * run's sandbox, with the run's git environment. The profile Pi loads the
-   * real extension, the scripted model, the registry probe (HAR-01), the
-   * companions the profile names, each from its `pi.extensions` entry in the
-   * optional peer cache, and then `profile.extraExtensions`. Its `TMPDIR` and its harness directory lie inside the sandbox home, which
-   * the next scenario's `Before()` empties (HAR-05). It trusts the sandbox
+   * run's sandbox, with the run's git environment. The profile Pi loads
+   * `profile.leadingExtensions`, the real extension, the scripted model, the
+   * registry probe (HAR-01), the companions the profile names, each from its
+   * `pi.extensions` entry in the optional peer cache, and then
+   * `profile.extraExtensions`. Its `TMPDIR` and its harness directory lie
+   * inside the sandbox home, which the next scenario's `Before()` empties
+   * (HAR-05). It trusts the sandbox
    * project through a `trust.json` entry, as Pi records a user's answer to
-   * its trust prompt, unless the profile is untrusted (D-CF1-07). It runs the
+   * its trust prompt, unless the profile is untrusted (D-CF1-07) or refused
+   * (D-PG10-17). It runs the
    * scripted model, with auto retry off, so a call past the script fails at
    * once. The start fails when the Pi does not run the MCP implementation its
    * launch implies (DUAL-02). One scenario starts at most one profile Pi; only
@@ -692,11 +742,25 @@ export class ScenarioWorld extends World {
     await mkdir(harness, { recursive: true });
     await this.prepareTemporaryDirectory();
     if (profile.trust !== "untrusted") {
-      await this.trustSandboxProject();
+      await this.saveSandboxTrust(profile.trust !== "refused");
+    }
+
+    if (profile.reasoningModel === true) {
+      const marker = reasoningModelPath(harness);
+      await writeFile(marker, "");
+      this.onRelease(() => rm(marker, { force: true }));
     }
 
     this.profileHarnessDirectory = harness;
-    await this.startProfilePi(profile);
+    const { session, ...launch } = profile;
+    if (session === undefined) {
+      await this.startProfilePi(launch);
+      return;
+    }
+
+    const folder = sessionsFolder(this.tokens);
+    this.onRelease(() => rm(folder, { recursive: true, force: true }));
+    await this.startProfilePi({ ...launch, session: { kind: session } });
   }
 
   /**
@@ -759,7 +823,9 @@ export class ScenarioWorld extends World {
    * skips the onboarding wait and the stand-in check: the dead Pi's hook
    * processes may outlive it until the new Pi's load stops them, and the
    * first profile Pi's release still checks its stand-ins when the scenario
-   * ends (ASYNC-04).
+   * ends (ASYNC-04). A session that a restart continues, opens, or forks
+   * still holds the payloads of the stopped Pi's session, so the report
+   * keeps only the payloads that follow them (D-PG6-16).
    */
   async restartPi(restart: PiRestart): Promise<SessionReport> {
     const launch = this.profileLaunch;
@@ -767,6 +833,9 @@ export class ScenarioWorld extends World {
       assert.fail("no profile Pi of this scenario is running");
     }
 
+    // The session file is read before the stop, while it is the newest.
+    const restarted = await restartedLaunch(launch, restart, sessionsFolder(this.tokens));
+    const earlier = SESSION_KEEPING_RESTARTS.has(restart) ? await savedPayloads(this.pi) : [];
     if (restart === "after-crash") {
       assert.strictEqual(this.profilePiCrashed, true, "no step crashed the profile Pi");
       this.profilePiCrashed = false;
@@ -774,8 +843,10 @@ export class ScenarioWorld extends World {
       await this.stopProfilePiForRestart(launch, restart);
     }
 
-    await this.startProfilePi(restartedLaunch(launch, restart));
-    return readSession(this.pi);
+    await this.startProfilePi(restarted);
+    const report = await readSession(this.pi);
+    assert.deepStrictEqual(report.payloads.slice(0, earlier.length), earlier);
+    return { ...report, payloads: report.payloads.slice(earlier.length) };
   }
 
   /** Whether a profile Pi started in this scenario, so a step that must precede it can refuse. */
@@ -983,13 +1054,14 @@ export class ScenarioWorld extends World {
     );
   }
 
-  // Writes the `trust.json` entry Pi saves when a user trusts the sandbox
-  // project, in Pi's format: sorted keys, two-space JSON, and a trailing
-  // newline. Pi keys the entry by the project's realpath (D-CF1-07).
-  private async trustSandboxProject(): Promise<void> {
+  // Writes the `trust.json` entry Pi saves when a user answers its trust
+  // prompt for the sandbox project, in Pi's format: sorted keys, two-space
+  // JSON, and a trailing newline. Pi keys the entry by the project's realpath
+  // (D-CF1-07, D-PG10-17).
+  private async saveSandboxTrust(trusted: boolean): Promise<void> {
     const { sandbox } = currentRun();
     const file = path.join(sandbox.agentDir, "trust.json");
-    const text = `${JSON.stringify({ [await realpath(sandbox.cwd)]: true }, null, 2)}\n`;
+    const text = `${JSON.stringify({ [await realpath(sandbox.cwd)]: trusted }, null, 2)}\n`;
     await writeFile(file, text, { flag: "wx" });
     assert.strictEqual(await readFile(file, "utf8"), text);
   }
@@ -1019,6 +1091,14 @@ export class ScenarioWorld extends World {
     if (!extensions.includes(GITHUB_REDIRECT_EXTENSION)) {
       throw new Error(
         "a profile Pi without the GitHub base override must load the GitHub redirect",
+      );
+    }
+
+    // The terminal session loads its extensions after the real one, so it
+    // could not load a leading extension where the profile Pi does.
+    if (profile.leadingExtensions !== undefined) {
+      throw new Error(
+        "a profile Pi without the GitHub base override cannot load leading extensions",
       );
     }
 
@@ -1068,7 +1148,7 @@ export class ScenarioWorld extends World {
     }
 
     await this.pi.stop();
-    await stopHookScripts(harness, hookGate);
+    await stopHookScripts(harness, hookGate, [this.scopeRoot("user"), this.scopeRoot("project")]);
     await assertStandInsStopped(harness);
     if (restart === "builtin-on") {
       await turnOnBuiltinMcp(agentDir);
@@ -1112,21 +1192,26 @@ export class ScenarioWorld extends World {
         ...companions.map((companion) => companion.entry),
         ...(launch.extraExtensions ?? []),
       ],
+      ...(launch.leadingExtensions === undefined
+        ? {}
+        : { leadingExtensions: launch.leadingExtensions }),
       environment: {
         TMPDIR: path.join(sandbox.home, "tmp"),
         ...(launch.subagentChild === true ? { PI_SUBAGENT_CHILD: "1" } : {}),
         ...hookGate.environment,
       },
       ...(launch.noMcp === true ? { noMcp: true } : {}),
+      ...(launch.session === undefined ? {} : { session: launch.session }),
     });
     // HAR-05: the profile Pi stops first, so a stand-in that exits when its
     // stdin closes has exited before its pid file is checked. Pi starts each
     // hook in a process group of its own, which stopping Pi leaves running,
-    // so the release stops the hook scripts apart, closing the Pi's hook gate
-    // first so that no script of the stopped Pi escapes (D-BG-12).
+    // so the release stops each registered group and script apart, closing
+    // the Pi's hook gate first so that no script of the stopped Pi escapes
+    // (D-BG-12).
     this.onRelease(async () => {
       await pi.stop();
-      await stopHookScripts(harness, hookGate);
+      await stopHookScripts(harness, hookGate, [this.scopeRoot("user"), this.scopeRoot("project")]);
       await assertStandInsStopped(harness);
     });
     this.scenarioPi = pi;
@@ -1145,9 +1230,27 @@ export class ScenarioWorld extends World {
   }
 }
 
+// The payloads of the session `pi` is in, when Pi saved its file. Pi writes a
+// session's file only once it holds a prompt and a reply, so an unsaved
+// session leaves nothing that a later start continues.
+async function savedPayloads(pi: PiProcess): Promise<readonly NotificationPayload[]> {
+  const { response } = await pi.request({ type: "get_state" });
+  assert.strictEqual(response.success, true, JSON.stringify(response));
+  const { sessionFile } = response.data as { readonly sessionFile?: string };
+  const saved =
+    sessionFile !== undefined &&
+    (await lstat(sessionFile).then(
+      () => true,
+      () => false,
+    ));
+  return saved ? (await readSession(pi)).payloads : [];
+}
+
 // The run's git environment for a profile Pi, without the GitHub base
 // override when the profile asks for that (D-BG-01).
-function profileGitEnvironment(profile: PiProfile): RpcGitEnvironment {
+function profileGitEnvironment(
+  profile: Pick<PiProfile, "withoutGitHubBaseOverride">,
+): RpcGitEnvironment {
   const { piEnvironment } = currentRun();
   if (profile.withoutGitHubBaseOverride !== true) {
     return piEnvironment;
@@ -1157,8 +1260,13 @@ function profileGitEnvironment(profile: PiProfile): RpcGitEnvironment {
   return environment;
 }
 
-// The launch of a profile Pi after `restart` changes `launch`.
-function restartedLaunch(launch: ProfileLaunch, restart: PiRestart): ProfileLaunch {
+// The launch of a profile Pi after `restart` changes `launch`. An open or a
+// fork reads the newest session file of `sessions`.
+async function restartedLaunch(
+  launch: ProfileLaunch,
+  restart: PiRestart,
+  sessions: string,
+): Promise<ProfileLaunch> {
   const withoutAdapter = launch.companions.filter((name) => name !== "pi-mcp-adapter");
   switch (restart) {
     case "without-adapter":
@@ -1170,6 +1278,14 @@ function restartedLaunch(launch: ProfileLaunch, restart: PiRestart): ProfileLaun
       return launch;
     case "no-mcp":
       return { ...launch, companions: withoutAdapter, noMcp: true };
+    case "new-session":
+      return { ...launch, session: { kind: "saved" } };
+    case "continue-session":
+      return { ...launch, session: { kind: "continue" } };
+    case "open-session":
+      return { ...launch, session: { kind: "open", file: await latestSessionFile(sessions) } };
+    case "fork-session":
+      return { ...launch, session: { kind: "fork", file: await latestSessionFile(sessions) } };
   }
 }
 

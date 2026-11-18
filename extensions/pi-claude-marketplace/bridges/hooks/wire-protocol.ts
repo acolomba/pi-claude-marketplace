@@ -7,16 +7,20 @@
 //
 // EXEC-03: every diagnostic path here routes through `hookDebugLog`. The
 // parser NEVER throws -- malformed JSON, unrecognized shapes, and
-// signal-kill exit codes all map to `{ kind: "noop" }` so the dispatch
-// fold cannot crash on bad child output.
+// signal-kill exit codes all map to a `noop` so the dispatch fold cannot
+// crash on bad child output.
 //
 // Wire-protocol branching (D-CF5-11, as Claude Code 2.1.316 reads a hook):
 //   - exit 2          -> block; the reason is the stdout JSON's block or
 //                        deny reason when it prints one, else the trimmed
-//                        stderr, marked `fromStderr`
+//                        stderr, marked `fromStderr`. On Stop and
+//                        UserPromptSubmit, an exit 2 with a blank stdout and a
+//                        stderr that names a missing file is a noop that
+//                        carries a `missing-script` failure (D-PG5-08)
 //   - exit non-zero   -> the stdout JSON object decides, as on exit 0, when
-//                        stdout is one; else noop (debug-log)
-//   - signal-kill     -> noop (debug-log; `exitCode === null`)
+//                        stdout is one; else a noop that carries the stderr
+//                        as an `exit` failure (debug-log; D-PG5-10)
+//   - signal-kill     -> the same failure noop (debug-log; `exitCode === null`)
 //   - exit 0 + empty  -> noop
 //   - exit 0 + plain text -> on SessionStart and UserPromptSubmit, a mutate
 //                        whose `additionalContext` is the trimmed stdout, as
@@ -33,7 +37,8 @@
 //
 // Whatever the decision, a JSON object's top-level `systemMessage` and its
 // `hookSpecificOutput.additionalContext` ride the arm it gives (D-CF5-13,
-// D-CF5-14), and `permissionDecision: "defer"` is ignored (Pi has no
+// D-CF5-14), a block carries `hookSpecificOutput.suppressOriginalPrompt:
+// true` (D-PG6-20), and `permissionDecision: "defer"` is ignored (Pi has no
 // deferred-permission flow; D-CF5-11).
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -41,11 +46,27 @@ import { hookDebugLog } from "../../shared/debug-log.ts";
 import type { BucketAEvent } from "../../domain/components/hook-events.ts";
 import type { HookExecResult } from "./exec-result.ts";
 
-// D-CF5-13: the events on which Claude Code adds plain stdout as context.
+// D-CF5-13 / D-PG6-20: the events on which Claude Code adds plain stdout as
+// context.
 const PLAIN_CONTEXT_EVENTS: ReadonlySet<BucketAEvent> = new Set([
   "SessionStart",
   "UserPromptSubmit",
+  "UserPromptExpansion",
 ]);
+
+// D-PG5-08: Claude Code 2.1.323 reads an exit 2 of a hook on these events as
+// a missing script, not a block, when stdout is blank and stderr matches
+// `MISSING_SCRIPT_STDERR`, the interpreter's report of a file it cannot open.
+const MISSING_SCRIPT_EVENTS: ReadonlySet<BucketAEvent> = new Set(["Stop", "UserPromptSubmit"]);
+const MISSING_SCRIPT_STDERR = /no such file|can't open/i;
+
+function isMissingScriptExit(claudeEvent: BucketAEvent, stdout: string, stderr: string): boolean {
+  return (
+    MISSING_SCRIPT_EVENTS.has(claudeEvent) &&
+    stdout.trim() === "" &&
+    MISSING_SCRIPT_STDERR.test(stderr)
+  );
+}
 
 /**
  * D-60-01 wire-protocol parse. Maps child exit code + stdout + stderr, and
@@ -60,11 +81,11 @@ export function parseHookStdout(
   claudeEvent: BucketAEvent,
 ): HookExecResult {
   if (exitCode === 2) {
-    return exitTwoBlock(stdout, stderr);
+    return exitTwoResult(stdout, stderr, claudeEvent);
   }
 
   if (exitCode !== 0) {
-    return nonZeroExitResult(exitCode, stdout);
+    return nonZeroExitResult(exitCode, stdout, stderr, claudeEvent);
   }
 
   const trimmed = stdout.trim();
@@ -87,7 +108,7 @@ export function parseHookStdout(
   }
 
   // A text that starts with `{`, ends with `}`, and parses is a JSON object.
-  return normalizeClaudeStdout(parsed as object);
+  return normalizeClaudeStdout(parsed as object, claudeEvent);
 }
 
 // D-CF5-13: plain stdout on exit 0 is context on SessionStart and
@@ -102,11 +123,14 @@ function plainStdoutResult(trimmed: string, claudeEvent: BucketAEvent): HookExec
 }
 
 // The stdout JSON object a hook printed, or `undefined` when stdout is empty,
-// not JSON, or JSON that is not an object. Quiet: the callers log the outcome.
+// not JSON, or JSON that is not an object, an array included. Quiet: the
+// callers log the outcome.
 function stdoutObject(stdout: string): object | undefined {
   try {
     const parsed: unknown = JSON.parse(stdout.trim());
-    return parsed !== null && typeof parsed === "object" ? parsed : undefined;
+    return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed
+      : undefined;
   } catch {
     // Not JSON: the caller falls back to stderr or to noop.
     return undefined;
@@ -117,9 +141,15 @@ function stdoutObject(stdout: string): object | undefined {
  * D-CF5-11: exit 2 blocks. The reason is the block or deny reason of the
  * stdout JSON when the hook printed one, else the trimmed stderr, which the
  * `fromStderr` marker labels so the adapter can show it after the hook's
- * command, as Claude Code does.
+ * command, as Claude Code does. The exit 2 of a missing script decides
+ * nothing and carries its stderr as written, for the notice (D-PG5-08).
  */
-function exitTwoBlock(stdout: string, stderr: string): HookExecResult {
+function exitTwoResult(stdout: string, stderr: string, claudeEvent: BucketAEvent): HookExecResult {
+  if (isMissingScriptExit(claudeEvent, stdout, stderr)) {
+    hookDebugLog(`wire-protocol: exit 2 of a missing script on ${claudeEvent}; defaulting to noop`);
+    return { kind: "noop", failure: { kind: "missing-script", stderr } };
+  }
+
   const parsed = stdoutObject(stdout);
   const outputs = hookOutputs(parsed);
   const decided = parsed === undefined ? undefined : decideClaudeStdout(parsed);
@@ -136,18 +166,24 @@ function exitTwoBlock(stdout: string, stderr: string): HookExecResult {
 /**
  * D-CF5-11 / E15: on an exit other than 0 and 2, Claude Code ignores the exit
  * code when stdout is a JSON object, and its fields alone decide. A signal
- * kill, and plain or broken stdout, are a non-blocking error: noop.
+ * kill, and plain or broken stdout, are a non-blocking error: a noop that
+ * carries the stderr as written, for the failure notice (D-PG5-10).
  */
-function nonZeroExitResult(exitCode: number | null, stdout: string): HookExecResult {
+function nonZeroExitResult(
+  exitCode: number | null,
+  stdout: string,
+  stderr: string,
+  claudeEvent: BucketAEvent,
+): HookExecResult {
   const exit = exitCode === null ? "signal-kill" : String(exitCode);
   const parsed = exitCode === null ? undefined : stdoutObject(stdout);
   if (parsed === undefined) {
     hookDebugLog(`wire-protocol: non-zero exit (${exit}); defaulting to noop`);
-    return { kind: "noop" };
+    return { kind: "noop", failure: { kind: "exit", stderr } };
   }
 
   hookDebugLog(`wire-protocol: non-zero exit (${exit}); applying its JSON output`);
-  return normalizeClaudeStdout(parsed);
+  return normalizeClaudeStdout(parsed, claudeEvent);
 }
 
 /**
@@ -155,8 +191,29 @@ function nonZeroExitResult(exitCode: number | null, stdout: string): HookExecRes
  * `docs/research/claude-hook-config-syntax.md § 4`: the decision, with the
  * hook's outputs on whichever arm the decision gives.
  */
-function normalizeClaudeStdout(parsed: object): HookExecResult {
-  return { ...decideClaudeStdout(parsed), ...hookOutputs(parsed) };
+function normalizeClaudeStdout(parsed: object, claudeEvent: BucketAEvent): HookExecResult {
+  const decided = decideClaudeStdout(parsed);
+  return decided.kind === "block" && suppressesOriginalPrompt(parsed, claudeEvent)
+    ? { ...decided, suppressOriginalPrompt: true, ...hookOutputs(parsed) }
+    : { ...decided, ...hookOutputs(parsed) };
+}
+
+// D-PG6-20: Claude Code 2.1.323 leaves the original prompt out of a JSON
+// block's notice when `hookSpecificOutput.suppressOriginalPrompt` is true and
+// its `hookEventName` names the event the hook ran for, one of the two prompt
+// events that read the field. An exit 2 reads no such field from stdout.
+function suppressesOriginalPrompt(parsed: object, claudeEvent: BucketAEvent): boolean {
+  const hso = (parsed as Record<string, unknown>).hookSpecificOutput;
+  if (hso === null || typeof hso !== "object") {
+    return false;
+  }
+
+  const { hookEventName, suppressOriginalPrompt } = hso as Record<string, unknown>;
+  return (
+    hookEventName === claudeEvent &&
+    (claudeEvent === "UserPromptSubmit" || claudeEvent === "UserPromptExpansion") &&
+    suppressOriginalPrompt === true
+  );
 }
 
 /**
@@ -271,6 +328,11 @@ function buildMutateFromHso(hso: Record<string, unknown>): HookExecResult | null
 
   if (hso.updatedToolOutput !== undefined) {
     mutate.updatedToolOutput = hso.updatedToolOutput;
+    hasMutate = true;
+  }
+
+  if (hso.updatedMCPToolOutput !== undefined) {
+    mutate.updatedMCPToolOutput = hso.updatedMCPToolOutput;
     hasMutate = true;
   }
 

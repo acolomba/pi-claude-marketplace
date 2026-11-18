@@ -102,7 +102,10 @@ import {
   prepareStageWorkflows,
   unstagePluginWorkflows,
 } from "../../bridges/workflows/index.ts";
-import { shadowedFolderDiscoveryWarnings } from "../../domain/component-paths.ts";
+import {
+  refusedListedSkillPathMessages,
+  shadowedFolderDiscoveryWarnings,
+} from "../../domain/component-paths.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
 import {
   MAX_DIRECTORY_PIN_FIELD_CHARS,
@@ -119,7 +122,8 @@ import {
   resolveStrict,
 } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource, type ParsedSource, type PathSource } from "../../domain/source.ts";
-import { mcpServerConfigsOf } from "../../persistence/state-io.ts";
+import { declaredOptions, resolveOptions } from "../../domain/user-config.ts";
+import { mcpServerConfigsOf, userConfigFieldsOf } from "../../persistence/state-io.ts";
 import { WorkflowsUnstageRefusedError } from "../../shared/errors-bridges.ts";
 import {
   ConcurrentInstallError,
@@ -136,7 +140,11 @@ import { type DegradeKind } from "../../shared/notify-reasons.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
-import { hygieneWarning, partitionStagingWarnings } from "../../shared/staging-warnings.ts";
+import {
+  discoveryWarning,
+  hygieneWarning,
+  partitionStagingWarnings,
+} from "../../shared/staging-warnings.ts";
 import {
   runPhases,
   type Phase,
@@ -1237,7 +1245,17 @@ async function runInstallLedgerBody(
     bridgeWarnings: [],
     // D-CF1-06: every conventional folder a declaration leaves unread, so
     // each verb that runs this ledger names it, and a failed install keeps it.
-    discoveryWarnings: [...shadowedFolderDiscoveryWarnings(installable.shadowedFolders)],
+    // PG-SEC-01 and PG-WF-02: the workflow agent notes, for an agent type
+    // that restricts its tools and for one the plugin does not install, join
+    // them here and nowhere else in this file, so an install prints each note
+    // once.
+    // D-PG4-01: so does each listed skills path of a root-source entry that
+    // does not load.
+    discoveryWarnings: [
+      ...shadowedFolderDiscoveryWarnings(installable.shadowedFolders),
+      ...refusedListedSkillPathMessages(installable.refusedListedSkillPaths).map(discoveryWarning),
+      ...generatedNames.workflowAgentNotes.map(discoveryWarning),
+    ],
     agentForeignFailures: [],
     mcpConfigNotices: [],
     frontmatterDegradations: [],
@@ -1261,6 +1279,8 @@ async function runInstallLedgerBody(
         knownWorkflowNames: generatedNames.workflows,
         // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
         cwd: installCtx.cwd,
+        // D-PG10-13: the options are written into skill content at staging.
+        options: declaredOptions(resolveOptions(installCtx.resolved.declaredUserConfig)),
       });
       installCtx.skillsPrep = prep;
       // Set before commit so undo can remove any dirs that were placed if
@@ -1311,6 +1331,8 @@ async function runInstallLedgerBody(
         workflowNames: generatedNames.workflows,
         // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
         cwd: installCtx.cwd,
+        // D-PG10-13: the options are written into command content at staging.
+        options: declaredOptions(resolveOptions(installCtx.resolved.declaredUserConfig)),
       });
       installCtx.commandsPrep = prep;
       // Set before commit for the same reason as stagedSkillNames above.
@@ -1368,6 +1390,8 @@ async function runInstallLedgerBody(
         },
         // SUB-02: project-scope ${CLAUDE_PROJECT_DIR} resolves to the install cwd.
         cwd: installCtx.cwd,
+        // D-PG10-13: the options are written into agent content at staging.
+        options: declaredOptions(resolveOptions(installCtx.resolved.declaredUserConfig)),
       });
       installCtx.agentsPrep = prep;
       // The agents bridge tags its D-07 duplicate-name skips discovery and
@@ -1467,6 +1491,8 @@ async function runInstallLedgerBody(
         sourcePath: `${installCtx.resolved.pluginRoot}#mcpServers`,
         description: installCtx.resolved.description,
         env: opts.env,
+        // D-PG10-21: a server that names an option with no value is left out.
+        options: declaredOptions(resolveOptions(installCtx.resolved.declaredUserConfig)),
       });
       installCtx.mcpReplacement = await replacePreparedMcp(prep);
       const result = prep.result;
@@ -1652,6 +1678,8 @@ async function runInstallLedgerBody(
         // substituted entries. Each config is a deep copy, so no later
         // in-memory change reaches the saved record.
         mcpServerConfigs: mcpServerConfigsOf(installCtx.resolved.declaredMcpServers),
+        // D-PG10-23: the declared options, absent when the plugin declares none.
+        ...userConfigFieldsOf(installCtx.resolved.declaredUserConfig),
         ...(installCtx.resolved.mcpBundle === true && { mcpBundle: true }),
         compatibility: {
           // INV-1 / D-66-01 / BFILL-01: record the REAL compatibility from the

@@ -21,6 +21,31 @@ Feature: Plugin install
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
 
+  Scenario: An install records the options a plugin declares (D-PG10-23)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "mode": { "type": "string", "title": "Mode", "description": "The mode.", "default": "fast" },
+          "retries": { "type": "number", "title": "Retries", "description": "The retries.", "default": 3 }
+        }
+      }
+      """
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the installation record of the project scope holds these options of "demo@fixtures":
+      | option  | type   | title   | description  | default |
+      | mode    | string | Mode    | The mode.    | fast    |
+      | retries | number | Retries | The retries. | 3       |
+
   Scenario: A plugin with only a yarn lockfile stays installed with the recorded note
     Given the published plugin "demo" of the marketplace "fixtures" ships a package.json and the lockfile "yarn.lock"
     When the user runs "/claude:plugin install demo@fixtures --scope project"

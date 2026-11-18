@@ -20,10 +20,15 @@
 // because a load changes no installation state (APL-D1) and Pi has no way to
 // unload what its companion extensions already read; only enabled plugins are
 // reported, as upstream skips the disabled ones.
+//
+// D-PG10-25: an enabled record whose stored `userConfig` does not parse gets
+// an `{unreadable}` warning on every load, until a reinstall or an update
+// writes the options again. Its option-dependent parts are refused meanwhile.
 
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { recordedMarketplaceNameRefusal } from "../../domain/name.ts";
+import { unreadableUserConfigOf } from "../../persistence/state-io.ts";
 
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { ParsedSource } from "../../domain/source.ts";
@@ -264,6 +269,42 @@ export async function reportDelistedPlugins(
           plugin,
           reason: "not in manifest",
           cause: new Error(`Plugin "${plugin}" not found in marketplace "${marketplace.name}"`),
+        });
+      }
+    }
+  }
+}
+
+/**
+ * D-PG10-25: pushes one `{unreadable}` warning for every enabled record in
+ * `state` (the read-pass snapshot) whose stored `userConfig` does not parse,
+ * unless this pass already reported, uninstalled, or disabled that plugin. The
+ * row reuses the walk's `plugin-declarer-unreadable` shape, with the parse
+ * failure and the remedy as its cause.
+ */
+export function reportUnreadableOptions(
+  scope: Scope,
+  state: ExtensionState | undefined,
+  outcomes: PerEntryOutcome[],
+): void {
+  for (const marketplace of Object.values(state?.marketplaces ?? {})) {
+    for (const [plugin, record] of Object.entries(marketplace.plugins)) {
+      const detail = record.enabled ? unreadableUserConfigOf(record) : undefined;
+      if (
+        detail !== undefined &&
+        !hasRowOfKinds(DELISTED_SUPPRESSING_KINDS, outcomes, scope, marketplace.name, plugin)
+      ) {
+        const id = `${plugin}@${marketplace.name}`;
+        outcomes.push({
+          kind: "plugin-declarer-unreadable",
+          scope,
+          marketplace: marketplace.name,
+          plugin,
+          reason: "unreadable",
+          cause: new Error(
+            `The plugin options in the install record of ${id} do not parse (${detail}). ` +
+              `Run /claude:plugin reinstall ${id} to restore them.`,
+          ),
         });
       }
     }

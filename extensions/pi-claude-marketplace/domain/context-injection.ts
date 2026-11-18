@@ -162,6 +162,19 @@ async function runInjection(injection: Injection, run: ShellRun): Promise<string
 }
 
 /**
+ * D-PG11-02: `text` with each `!` command pattern that would run replaced by
+ * one `!`, which stands for the output that replaces it in Claude Code. The
+ * stand-in is not whitespace, so text right after a pattern stays in the
+ * pattern's token, as it does after the output.
+ */
+export function withoutContextInjections(text: string): string {
+  return findInjections(text).reduce(
+    (stripped, injection) => stripped.replace(injection.raw, "!"),
+    text,
+  );
+}
+
+/**
  * D-CF1-02: runs every `!` command in `text` through `run`, all at once, and
  * replaces the first remaining occurrence of each pattern with its output,
  * fenced blocks first. Rejects with a `ContextInjectionError` when a command

@@ -18,8 +18,9 @@ import {
   publishAgentFiles,
   readAgentFileRows,
   readStagedAgentFile,
+  replaceStagedAgentFile,
 } from "../../lib/agent-files.ts";
-import { projectTokens } from "../../lib/run-tokens.ts";
+import { expandTokens, projectTokens } from "../../lib/run-tokens.ts";
 import { numberedModelCall } from "../../lib/scripted-model/script.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
@@ -176,6 +177,27 @@ Given(
 Given("pi-subagents hides its builtin agents", async function (this: ScenarioWorld) {
   await mergeUserSetting(this, ["subagents", "disableBuiltins"], true);
 });
+
+// D-PG7-17: the model pi-subagents gives an agent whose file names none.
+Given(
+  "pi-subagents runs subagents on the model {string} by default",
+  async function (this: ScenarioWorld, model: string) {
+    await mergeUserSetting(this, ["subagents", "defaultModel"], model);
+  },
+);
+
+// D-PG3-03: the text an earlier release generated for an installed agent,
+// such as the `async: false` line it once wrote for every ordinary agent. It
+// replaces the file the install wrote and keeps the agent's index row. The
+// doc string holds the text without the line feed that ends the file.
+Given(
+  "the agents folder of the {word} scope holds the file {string} as an earlier release wrote it, with this text:",
+  async function (this: ScenarioWorld, scope: string, fileName: string, text: string) {
+    const earlier = `${expandTokens(text, this.tokens)}\n`;
+    await replaceStagedAgentFile(this.tokens, scope, fileName, earlier);
+    assert.strictEqual(await readStagedAgentFile(this.tokens, scope, fileName), earlier);
+  },
+);
 
 // D-CF4-14: the agents pi-subagents advertises to the parent model, as Claude
 // Code lists plugin agents to its model, each with the name and description

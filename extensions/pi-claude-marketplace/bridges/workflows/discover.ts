@@ -43,6 +43,8 @@ import path from "node:path";
 import {
   admitWorkflowScript,
   forMessage,
+  keepLastWorkflowPerName,
+  unelideClashingWorkflowNames,
   WORKFLOW_SCRIPT_MAX_BYTES,
   WORKFLOW_SCRIPT_SUFFIX,
 } from "../../domain/workflow-script.ts";
@@ -270,9 +272,8 @@ function oversizeWarning(
  *
  * A manifest may declare `workflows` and `Workflows`; on macOS those name ONE
  * directory but produce two distinct strings. Comparing the raw strings there
- * would discover every script in it twice, and two records for one script
- * collide on their generated name -- failing the install of a well-formed
- * plugin, which is the exact outcome the path dedup exists to prevent.
+ * would discover every script in it twice and print each of its warnings
+ * twice, which is the exact outcome the path dedup exists to prevent.
  */
 function pathDedupKey(full: string): string {
   return process.platform === "darwin" || process.platform === "win32" ? full.toLowerCase() : full;
@@ -379,19 +380,21 @@ function verdictWarning(
  *    and refused verdicts earn a warning on the same terms: a helper module, a
  *    broken draft and a script the engine's raw-text gate rejects are each one
  *    file's defect, and the plugin still installs everything else.
- * 3. There is NO dedup by generated name anywhere. Two scripts sharing a
- *    generated name is a WNAM-05 collision, a defect of the SET, and
- *    `assertNoWorkflowNameCollisions` must see both records to report both
- *    file names. Dropping the second here would make that assert unreachable
- *    and silently install the first under a name the author gave to two
- *    scripts.
+ * 3. Two admitted scripts with one generated name keep the LAST one in
+ *    discovery order, silently, as Claude Code does (D-PG8-07): its loader
+ *    reads the declared paths in order and replaces an earlier script of the
+ *    same name. Within a directory Claude Code takes the file system's
+ *    `readdir` order, which no platform fixes, so the sorted order here
+ *    decides which one is last. Before that, two different `meta.name`s that
+ *    the `<plugin>-` elision gives one name each keep their full name
+ *    (D-PG8-18), so only scripts with one `meta.name` reach the keep-last rule.
  *
  * The one dedup that DOES run here is by absolute source path, and it is not a
  * name rule: the resolver dedups its component paths by the raw declared
  * string, so a manifest declaring `"./workflows"` alongside the conventional
  * `workflows` directory yields two entries naming ONE directory. Without this
- * guard every file in it would be discovered twice and collide with itself,
- * failing a well-formed plugin. Identical paths are silently collapsed rather
+ * guard every file in it would be discovered twice, with each warning printed
+ * twice. Identical paths are silently collapsed rather
  * than warned about, because nothing is wrong with such a manifest. See
  * `pathDedupKey` for why the comparison is case-folded on some platforms. The
  * same set covers a script declared by path AND found under a declared
@@ -439,7 +442,9 @@ export async function discoverPluginWorkflows(input: {
   }
 
   return {
-    discovered: Object.freeze(discovered),
+    discovered: Object.freeze(
+      keepLastWorkflowPerName(unelideClashingWorkflowNames(input.pluginName, discovered)),
+    ),
     warnings: Object.freeze(warnings),
   };
 }

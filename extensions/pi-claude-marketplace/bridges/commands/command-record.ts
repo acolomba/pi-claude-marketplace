@@ -6,6 +6,12 @@
 // session time to fill those two variables when a typed argument names one,
 // as Claude Code does. Pi sends no frontmatter to the model, so the record
 // never reaches it.
+//
+// D-PG11-01: the record also holds the name Claude Code gives the command
+// from its path (`claudeCommandName`), which the alias reader adds as an alias
+// unless a frontmatter `name` replaces it, as in Claude Code 2.1.323. A command
+// staged before D-PG11-01 has a record without it, and that record still
+// reads; the command gets the alias when its plugin is staged again.
 
 import Type from "typebox";
 import { Compile } from "typebox/compile";
@@ -17,42 +23,61 @@ const RECORD_KEY = "pi-claude-marketplace";
 export interface CommandRecord {
   readonly pluginRoot: string;
   readonly pluginData: string;
+  /** D-PG11-01: Claude Code's path name for the command; none if staged before D-PG11-01. */
+  readonly claudeName: string | undefined;
 }
 
 // A record with a member of its own is not one install wrote.
 const STORED_RECORD = Compile(
   Type.Object(
-    { pluginRoot: Type.String(), pluginData: Type.String() },
+    {
+      pluginRoot: Type.String(),
+      pluginData: Type.String(),
+      claudeName: Type.Optional(Type.String()),
+    },
     { additionalProperties: false },
   ),
 );
 
 /**
  * Returns a copy of `frontmatter` that ends with `record` under the record
- * key. An author value under that key is replaced, never merged, so a plugin
- * cannot plant values the handler would trust.
+ * key, its members in the order `pluginRoot`, `pluginData`, `claudeName`. An
+ * author value under that key is replaced, never merged, so a plugin cannot
+ * plant values the handler or the alias reader would trust.
  */
 export function withCommandRecord(
   frontmatter: Readonly<Record<string, unknown>>,
-  record: CommandRecord,
+  record: CommandRecord & { readonly claudeName: string },
 ): Readonly<Record<string, unknown>> {
   const entries = Object.entries(frontmatter).filter(([key]) => key !== RECORD_KEY);
   return Object.fromEntries([
     ...entries,
-    [RECORD_KEY, { pluginRoot: record.pluginRoot, pluginData: record.pluginData }],
+    [
+      RECORD_KEY,
+      {
+        pluginRoot: record.pluginRoot,
+        pluginData: record.pluginData,
+        claudeName: record.claudeName,
+      },
+    ],
   ]);
 }
 
 /**
  * Returns the record under the record key of a staged command's parsed
  * `frontmatter`, or `undefined` when the key is missing or holds anything
- * other than exactly the two string members install writes.
+ * other than the string members install writes: the two paths, and the
+ * Claude Code name that a file staged before D-PG11-01 lacks.
  */
 export function readCommandRecord(
   frontmatter: Readonly<Record<string, unknown>>,
 ): CommandRecord | undefined {
   const stored = frontmatter[RECORD_KEY];
   return STORED_RECORD.Check(stored)
-    ? { pluginRoot: stored.pluginRoot, pluginData: stored.pluginData }
+    ? {
+        pluginRoot: stored.pluginRoot,
+        pluginData: stored.pluginData,
+        claudeName: stored.claudeName,
+      }
     : undefined;
 }

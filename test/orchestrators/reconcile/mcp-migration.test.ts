@@ -81,7 +81,16 @@ interface PluginSeed {
   readonly bundle?: boolean;
   /** The version the catalog lists, `1.0.0` unless the catalog moved past the record. */
   readonly version?: string;
+  /** The options `plugin.json` declares. */
+  readonly userConfig?: Readonly<Record<string, unknown>>;
 }
+
+const MODE_OPTION = {
+  type: "string",
+  title: "Mode",
+  description: "The mode.",
+  default: "fast",
+} as const;
 
 /** Writes path marketplace `mp` at `<cwd>/mp-src` holding each plugin, and returns its paths. */
 async function seedMarketplace(
@@ -98,6 +107,7 @@ async function seedMarketplace(
         name: plugin,
         version: seed.version ?? "1.0.0",
         ...(seed.bundle === true && { mcpServers: ["./.mcp.json", "./tool.mcpb"] }),
+        ...(seed.userConfig !== undefined && { userConfig: seed.userConfig }),
       }),
     );
     if (seed.bundle === true) {
@@ -436,7 +446,13 @@ function freshAdapterText(
       },
       directTools: "search",
       toolPrefix: "mcp",
-      _piClaudeMarketplace: { plugin, marketplace: "mp" },
+      requestTimeoutMs: 1800000,
+      lifecycle: "lazy-keep-alive",
+      _piClaudeMarketplace: {
+        plugin,
+        marketplace: "mp",
+        defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
+      },
     };
   }
 
@@ -1706,6 +1722,161 @@ describe("migrateLegacyMcpEntries", () => {
         updatedAt: MOVED_AT,
       },
     });
+  });
+
+  test("D-PG10-23: a legacy record that a move converts records the options its plugin declares beside its servers", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "options-legacy");
+    const { cwd, locations } = scope;
+    const marketplace = await seedMarketplace(cwd, {
+      hello: { servers: { srv: { command: "srv" } }, userConfig: { mode: MODE_OPTION } },
+    });
+    await seedState(
+      locations,
+      stateWith(cwd, marketplace, {
+        hello: legacyPluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+      }),
+    );
+    await writeLegacy(locations, { srv: legacyEntry("hello") });
+    const input = migrationInput(cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, []));
+
+    // assert
+    assert.deepStrictEqual(input.rows, [HELLO_MOVED]);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins, {
+      hello: {
+        ...pluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+        mcpServerConfigs: [{ name: "srv", config: { command: "srv" } }],
+        userConfig: { mode: MODE_OPTION },
+        updatedAt: MOVED_AT,
+      },
+    });
+  });
+
+  test("D-PG10-23: a record that already holds the neutral verdict records the options its stage resolved", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "options-neutral");
+    const { cwd, locations } = scope;
+    const marketplace = await seedMarketplace(cwd, {
+      hello: { servers: { srv: { command: "srv" } }, userConfig: { mode: MODE_OPTION } },
+    });
+    await seedState(
+      locations,
+      stateWith(cwd, marketplace, {
+        hello: pluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+      }),
+    );
+    await writeLegacy(locations, { srv: legacyEntry("hello") });
+    const input = migrationInput(cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, []));
+
+    // assert
+    assert.deepStrictEqual(input.rows, [HELLO_MOVED]);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins, {
+      hello: {
+        ...pluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+        userConfig: { mode: MODE_OPTION },
+        updatedAt: MOVED_AT,
+      },
+    });
+  });
+
+  test("D-PG10-23: a legacy record whose catalog moved past its version records the options its stage resolved, and keeps its stored verdict", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "options-moved-legacy");
+    const { cwd, locations } = scope;
+    const marketplace = await seedMarketplace(cwd, {
+      hello: {
+        servers: { srv: { command: "srv" } },
+        version: "1.1.0",
+        userConfig: { mode: MODE_OPTION },
+      },
+    });
+    await seedState(
+      locations,
+      stateWith(cwd, marketplace, {
+        hello: legacyPluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+      }),
+    );
+    await writeLegacy(locations, { srv: legacyEntry("hello") });
+    const input = migrationInput(cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, []));
+
+    // assert
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins, {
+      hello: {
+        ...legacyPluginRecord(marketplace.marketplaceRoot, "hello", ["srv"]),
+        userConfig: { mode: MODE_OPTION },
+        updatedAt: MOVED_AT,
+      },
+    });
+  });
+
+  test("D-PG10-21: a move leaves out a server that names an option with no value, and reports it", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "options-blocked");
+    const { cwd, locations } = scope;
+    const keyed = { command: "srv", args: ["--region", "${user_config.region}"] };
+    const marketplace = await seedMarketplace(cwd, {
+      hello: {
+        servers: { srv: { command: "srv" }, keyed },
+        userConfig: { mode: MODE_OPTION },
+      },
+    });
+    await seedState(
+      locations,
+      stateWith(cwd, marketplace, {
+        hello: pluginRecord(marketplace.marketplaceRoot, "hello", ["srv", "keyed"]),
+      }),
+    );
+    await writeLegacy(locations, {
+      srv: legacyEntry("hello"),
+      keyed: legacyEntry("hello", keyed),
+    });
+    const input = migrationInput(cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, writeRecordingOperations(locations, []));
+
+    // assert
+    assert.deepStrictEqual(input.notices, [
+      {
+        kind: "option-blocked",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "hello",
+        server: "keyed",
+        names: ["region"],
+        reason: "unset",
+      },
+    ]);
+    assert.deepStrictEqual(await serverKeys(locations.mcpAdapterJsonPath), ["plugin_hello_srv_"]);
+  });
+
+  test("D-PG10-21: a disabled owner's stage gets no servers and no options", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "options-disabled");
+    await seedNotMovable(scope, { enabled: false });
+    const staged: unknown[] = [];
+    const input = migrationInput(scope.cwd);
+
+    // act
+    await migrateLegacyMcpEntries(input, {
+      ...writeRecordingOperations(scope.locations, []),
+      prepareStageMcpServers: async (stageInput) => {
+        staged.push({ servers: stageInput.servers, options: stageInput.options });
+        return prepareStageMcpServers(stageInput);
+      },
+    });
+
+    // assert
+    assert.deepStrictEqual(staged, [{ servers: {}, options: undefined }]);
   });
 
   test("D-P3-16: a legacy record whose source names an MCP bundle records the bundle with its servers", async (t) => {

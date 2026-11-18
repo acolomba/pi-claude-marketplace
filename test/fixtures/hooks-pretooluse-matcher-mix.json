@@ -7,7 +7,7 @@
         "hooks": [{ "type": "command", "command": "echo edit" }]
       },
       {
-        "matcher": ".*",
+        "matcher": "[",
         "hooks": [{ "type": "command", "command": "echo regex" }]
       }
     ]

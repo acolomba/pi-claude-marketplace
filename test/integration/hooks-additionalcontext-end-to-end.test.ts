@@ -29,6 +29,7 @@ import {
   createHooksRuntime,
   readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { recordedMcpServerNames } from "../../extensions/pi-claude-marketplace/orchestrators/mcp/recorded-servers.ts";
 import {
   loadState,
   saveState,
@@ -178,6 +179,7 @@ JSON
     sessionManager: {
       getSessionId: () => sessionId,
       getSessionFile: () => undefined,
+      getSessionName: () => undefined,
     },
   } as unknown as ExtensionContext;
 }
@@ -194,7 +196,11 @@ function findHandler(
 test("HOOK-E2E-03: SessionStart hook stdout additionalContext reaches the before_agent_start message end-to-end", async () => {
   // arrange
   const runtime = createHooksRuntime();
-  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
+  const hooksHydration = createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: recordedMcpServerNames,
+  });
   const sessionStartEvent: SessionStartEvent = { type: "session_start", reason: "startup" };
 
   await withHermeticPiHome(async (env) => {
@@ -266,7 +272,11 @@ test("HOOK-E2E-03: SessionStart hook stdout additionalContext reaches the before
 test("HOOK-E2E-04: registerHooksBridge clears the pending buffer on /reload (re-entry)", async () => {
   // arrange
   const runtime = createHooksRuntime();
-  const hooksHydration = createHooksHydration(runtime, { loadState, readHooksJson });
+  const hooksHydration = createHooksHydration(runtime, {
+    loadState,
+    readHooksJson,
+    readMcpServerNames: recordedMcpServerNames,
+  });
   const sessionStartEvent: SessionStartEvent = { type: "session_start", reason: "startup" };
 
   await withHermeticPiHome(async (env) => {

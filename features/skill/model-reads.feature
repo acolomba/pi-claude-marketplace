@@ -40,6 +40,31 @@ Feature: Skill model reads
       | 2    | assistant   | tool call read {"path":"{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-status/SKILL.md"}                                                                                                                                                                                                                                                                                       |
       | 2    | tool result | read returned: ---\nname: demo-status\ndescription: Reports the status.\narguments: [target]\npi-claude-marketplace: {"names":["demo:status","status"],"pluginRoot":"{home}/marketplaces/fixtures/plugins/demo","pluginData":"{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"}\n---\n\nSession {uuid} at effort low.\nArguments [], target [], first [$0].\nStatus: !`printf ran` |
 
+  Scenario: A user-scope skill file the model reads shows the project directory (PG-CORE-05)
+    Given the published plugin "demo" of the marketplace "fixtures" has the skill "where" with this skill file:
+      """
+      ---
+      name: where
+      description: Reports the project.
+      ---
+
+      project ${CLAUDE_PROJECT_DIR}
+      """
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  | tool | arguments                                                                         |
+      |        | read | {"path":"{agent dir}/pi-claude-marketplace/resources/skills/demo-where/SKILL.md"} |
+      | Noted. |      |                                                                                   |
+    When the user prompts "Where is the project?"
+    Then the model receives these calls:
+      | call | role        | text                                                                                                                                                                                                                                                                                        |
+      | 1    | user        | Where is the project?                                                                                                                                                                                                                                                                       |
+      | 2    | user        | Where is the project?                                                                                                                                                                                                                                                                       |
+      | 2    | assistant   | tool call read {"path":"{agent dir}/pi-claude-marketplace/resources/skills/demo-where/SKILL.md"}                                                                                                                                                                                            |
+      | 2    | tool result | read returned: ---\nname: demo-where\ndescription: Reports the project.\npi-claude-marketplace: {"names":["demo:where","where"],"pluginRoot":"{home}/marketplaces/fixtures/plugins/demo","pluginData":"{agent dir}/pi-claude-marketplace/data/fixtures/demo"}\n---\n\nproject {project dir} |
+
   Scenario: A part of a skill file the model reads keeps its frontmatter and fills its body lines
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
@@ -85,8 +110,8 @@ Feature: Skill model reads
       | Noted. |      |                                                                                          |
     When the user prompts "Check the status."
     Then the hooks record these runs:
-      | event       | session | tool name | tool input                                                                               | tool response                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
-      | PostToolUse | first   | Read      | {"path":"{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-status/SKILL.md"} | [{"type":"text","text":"---\\nname: demo-status\\ndescription: Reports the status.\\narguments: [target]\\npi-claude-marketplace: {\\"names\\":[\\"demo:status\\",\\"status\\"],\\"pluginRoot\\":\\"{home}/marketplaces/fixtures/plugins/demo\\",\\"pluginData\\":\\"{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo\\"}\\n---\\n\\nSession ${CLAUDE_SESSION_ID} at effort ${CLAUDE_EFFORT}.\\nArguments [$ARGUMENTS], target [$target], first [$0].\\nStatus: !`printf ran`"}] | {project dir} |                 | observe   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | event       | session | tool name | tool use id  | duration ms    | tool input                                                                                    | tool response                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PostToolUse | first   | Read      | {tool use 1} | {milliseconds} | {"file_path":"{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-status/SKILL.md"} | {"type":"text","file":{"filePath":"{project dir}/.pi/pi-claude-marketplace/resources/skills/demo-status/SKILL.md","content":"---\\nname: demo-status\\ndescription: Reports the status.\\narguments: [target]\\npi-claude-marketplace: {\\"names\\":[\\"demo:status\\",\\"status\\"],\\"pluginRoot\\":\\"{home}/marketplaces/fixtures/plugins/demo\\",\\"pluginData\\":\\"{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo\\"}\\n---\\n\\nSession ${CLAUDE_SESSION_ID} at effort ${CLAUDE_EFFORT}.\\nArguments [$ARGUMENTS], target [$target], first [$0].\\nStatus: !`printf ran`","startLine":1,"numLines":10,"totalLines":10}} | {project dir} |                 | observe   | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
     Then the model receives these calls:
       | call | role        | text                                                                                                                                                                                                                                                                                                                                                                                          |
       | 1    | user        | Check the status.                                                                                                                                                                                                                                                                                                                                                                             |
@@ -97,7 +122,7 @@ Feature: Skill model reads
   Scenario: A read hook's replacement of a skill file reaches the model as the hook wrote it, with no variable filled
     Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
       | name    | event       | matcher | form   | output                                                                                                                                                                                                                                                                                         |
-      | replace | PostToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"content":[{"type":"text","text":"Head 1 at effort ${CLAUDE_EFFORT}.\\nHead 2.\\nHead 3.\\nHead 4.\\nHead 5.\\nHead 6 at effort ${CLAUDE_EFFORT}.\\nTail 7 at effort ${CLAUDE_EFFORT}, arguments [$ARGUMENTS]."}]}}} |
+      | replace | PostToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"type":"text","file":{"content":"Head 1 at effort ${CLAUDE_EFFORT}.\\nHead 2.\\nHead 3.\\nHead 4.\\nHead 5.\\nHead 6 at effort ${CLAUDE_EFFORT}.\\nTail 7 at effort ${CLAUDE_EFFORT}, arguments [$ARGUMENTS]."}}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has started a new pi session

@@ -43,6 +43,7 @@
 // from any of these cases fails where it happens.
 
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import https from "node:https";
@@ -64,9 +65,11 @@ import {
 import { createJsonCapture } from "./edge/json-capture.ts";
 import { createNotificationBoundary, expectSoftDepProbes } from "./edge/notification-boundary.ts";
 import { retryTree } from "./orchestrators/plugin/scope-tree-inventory.ts";
+import { captureDebugLog } from "./platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "./platform/hermetic-environment.ts";
 
 import type {
+  AgentBeforeSettleEvent,
   AgentEndEvent,
   AgentSettledEvent,
   BeforeAgentStartEvent,
@@ -169,20 +172,26 @@ const EMPTY_DISCOVERY: ResourcesDiscoverResult = { skillPaths: [], promptPaths: 
  * Which `event.cwd` read each NFR-2 refusal case targets, and how many reads the
  * handler makes in all. The discover handler reads the event's working directory
  * once per stage, in this order: the deferred project-scope hydrate, the
- * reconcile, the plugin PATH recompute, and the project-scope half of the
- * resource aggregation. Naming the ordinals states which stage a case refuses;
- * asserting the total states that the stage list itself has not moved.
+ * reconcile, the hooks' MCP server refresh, the plugin PATH recompute, the
+ * plugin option variables, and the project-scope half of the resource
+ * aggregation. Naming the ordinals states which stage a case refuses; asserting
+ * the total states that the stage list itself has not moved.
  *
- * Each of the three named ordinals has its own case, and each case asserts an
+ * Each of the four named ordinals has its own case, and each case asserts an
  * observable only its own stage produces -- otherwise the ordinal is decoration
  * and the case's title is a claim about a stage it is not pinned to. The aggregate
- * discovery case counts all four reads across two calls while a real filesystem
- * fault targets the fourth stage without a synthetic event refusal.
+ * discovery case counts all five reads across two calls while a real filesystem
+ * fault targets the fifth stage without a synthetic event refusal.
  */
 const CWD_READ_DEFERRED_HYDRATE = 1;
 const CWD_READ_RECONCILE = 2;
-const CWD_READ_PLUGIN_PATH_RECOMPUTE = 3;
-const CWD_READS_PER_DISCOVER = 4;
+const CWD_READ_MCP_SERVER_REFRESH = 3;
+const CWD_READ_PLUGIN_PATH_RECOMPUTE = 4;
+const CWD_READ_PLUGIN_OPTIONS = 5;
+const CWD_READS_PER_DISCOVER = 6;
+
+/** The start of every option variable name the extension owns (D-PG10-23). */
+const OWNED_OPTION_PREFIX = "PI_CLAUDE_MARKETPLACE_OPTION_";
 
 /**
  * Soft-dependency probes per `resources_discover` pass. The pass opens one
@@ -298,18 +307,27 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
   const { agentDir, cwd, home } = await createHermeticEnvironment(t, `index-${label}-`);
   const processRoot = await mkdtemp(path.join(tmpdir(), `index-${label}-process-`));
   const previousCwd = process.cwd();
+  // D-PG10-23: the factory and each load set option variables too.
+  const ownedOptionNames = (): string[] =>
+    Object.keys(process.env).filter((key) => key.startsWith(OWNED_OPTION_PREFIX));
   const tracked = [
     "PATH",
     "PI_CLAUDE_MARKETPLACE_PATH",
     "PI_CLAUDE_MARKETPLACE_EMPTY",
+    "PI_CLAUDE_MARKETPLACE_OPTIONS",
     "CLAUDE_PROJECT_DIR",
     ...SESSION_ENV_KEYS,
+    ...ownedOptionNames(),
   ];
   const saved = tracked.map((key) => {
     return { key, previous: process.env[key] };
   });
   t.after(async () => {
     process.chdir(previousCwd);
+    for (const key of ownedOptionNames()) {
+      Reflect.deleteProperty(process.env, key);
+    }
+
     for (const { key, previous } of saved) {
       restoreEnv(key, previous);
     }
@@ -429,6 +447,11 @@ async function loadExtension(
   })
     .thenReturn()
     .times(1);
+  when(() => {
+    pi.on("input", It.willCapture<EventListener<InputEvent>>("input expansion"));
+  })
+    .thenReturn()
+    .times(1);
   const toolCallListener = It.willCapture<ToolCallListener>("tool call");
   when(() => {
     pi.on("tool_call", toolCallListener);
@@ -455,6 +478,14 @@ async function loadExtension(
     .times(1);
   when(() => {
     pi.on("agent_end", It.willCapture<EventListener<AgentEndEvent>>("agent end"));
+  })
+    .thenReturn()
+    .times(1);
+  when(() => {
+    pi.on(
+      "agent_before_settle",
+      It.willCapture<EventListener<AgentBeforeSettleEvent>>("agent before settle"),
+    );
   })
     .thenReturn()
     .times(1);
@@ -896,7 +927,19 @@ async function seedPrompt(root: string, fileName: string): Promise<string> {
 }
 
 /** Record one enabled project-scope plugin whose binaries live under `root`. */
-async function seedEnabledPlugin(cwd: string, resolvedSource: string): Promise<void> {
+// D-PG10-03: a plugin's bin joins PATH only when it is a directory, so a case
+// that expects an entry gives the plugin a real one.
+async function seedPluginBinDirectory(resolvedSource: string): Promise<string> {
+  const binDir = path.join(resolvedSource, "bin");
+  await mkdir(binDir, { recursive: true });
+  return binDir;
+}
+
+async function seedEnabledPlugin(
+  cwd: string,
+  resolvedSource: string,
+  extra: Readonly<Record<string, unknown>> = {},
+): Promise<void> {
   const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
   const marketplaceRoot = path.join(cwd, "mp-src");
   await mkdir(extensionRoot, { recursive: true });
@@ -941,6 +984,7 @@ async function seedEnabledPlugin(cwd: string, resolvedSource: string): Promise<v
               provenance: "explicit",
               installedAt: "2026-08-03T00:00:00.000Z",
               updatedAt: "2026-08-03T00:00:00.000Z",
+              ...extra,
             },
           },
         },
@@ -948,6 +992,19 @@ async function seedEnabledPlugin(cwd: string, resolvedSource: string): Promise<v
     }),
     "utf8",
   );
+}
+
+/** A plugin record's declared option `mode`, whose default is `fast` (D-PG10-23). */
+const MODE_OPTION = {
+  userConfig: {
+    mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+  },
+};
+
+/** The owned variable name of one option, built from its four address parts (D-PG10-23). */
+function ownedOptionName(scope: string, marketplace: string, plugin: string, key: string): string {
+  const joined = [scope, marketplace, plugin, key].join("\0");
+  return OWNED_OPTION_PREFIX + createHash("sha256").update(joined).digest("hex").slice(0, 16);
 }
 
 /**
@@ -1326,7 +1383,7 @@ test("NFR-2 / D-MB-10: a live mode that fails before the built-in MCP resync ski
       return capture.ui;
     },
   };
-  const binDir = path.join(resolvedSource, "bin");
+  const binDir = await seedPluginBinDirectory(resolvedSource);
   process.env.PATH = "/usr/bin";
   Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
 
@@ -1378,7 +1435,7 @@ test("a refused load append leaves install state untouched and still runs the in
       return capture.ui;
     },
   };
-  const binDir = path.join(resolvedSource, "bin");
+  const binDir = await seedPluginBinDirectory(resolvedSource);
   process.env.PATH = "/usr/bin";
   Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
 
@@ -1503,7 +1560,7 @@ test("constructs one runtime, completion cache and reconcile operation per exten
 
   // act
   const hydrationConstruction = source.match(
-    /createHooksHydration\(hooksRuntime, \{ loadState, readHooksJson \}\)/g,
+    /createHooksHydration\(hooksRuntime, \{\s*loadState,\s*readHooksJson,\s*readMcpServerNames: recordedMcpServerNames,\s*\}\)/g,
   );
 
   // assert
@@ -1515,9 +1572,12 @@ test("constructs one runtime, completion cache and reconcile operation per exten
   assert.deepStrictEqual(updateConstructions, [
     "createUpdateOperations(hooksRouting, completionCache)",
   ]);
-  assert.deepStrictEqual(hydrationConstruction, [
-    "createHooksHydration(hooksRuntime, { loadState, readHooksJson })",
-  ]);
+  assert.deepStrictEqual(
+    hydrationConstruction?.map((construction) => construction.replaceAll(/\s+/g, " ")),
+    [
+      "createHooksHydration(hooksRuntime, { loadState, readHooksJson, readMcpServerNames: recordedMcpServerNames, })",
+    ],
+  );
   assert.deepStrictEqual(reconcileConstructions, ["createApplyReconcile({ loadState })"]);
   assert.deepStrictEqual(loadConstructions, ["createLoadReconcile({ loadState }, applyReconcile)"]);
 });
@@ -1871,7 +1931,7 @@ test("appends the recorded plugin's binaries to the process PATH and records the
   // arrange
   const scope = await createHermeticScope(t, "plugin-path");
   const resolvedSource = path.join(scope.cwd, "vendored-plugin");
-  const binDir = path.join(resolvedSource, "bin");
+  const binDir = await seedPluginBinDirectory(resolvedSource);
   await seedEnabledPlugin(scope.cwd, resolvedSource);
   const { discover, ctx, verifyBoundary } = await loadExtension(0, PROBES_PER_DISCOVER);
   process.env.PATH = "/usr/bin";
@@ -1887,6 +1947,41 @@ test("appends the recorded plugin's binaries to the process PATH and records the
   verifyBoundary();
 });
 
+test("D-PG10-02: leaves the project plugin's binaries off PATH when Pi does not trust the project, reading trust no more often", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "untrusted-plugin-path");
+  const resolvedSource = path.join(scope.cwd, "vendored-plugin");
+  await seedPluginBinDirectory(resolvedSource);
+  await seedEnabledPlugin(scope.cwd, resolvedSource);
+  // The case's own proxy answers the trust reads, so the mock promises none.
+  const loaded = await loadExtension(0, PROBES_PER_DISCOVER, undefined, undefined, undefined, 0);
+  let trustReads = 0;
+  const untrusted = new Proxy(loaded.ctx, {
+    get(target, property, receiver): unknown {
+      if (property === "isProjectTrusted") {
+        return () => {
+          trustReads += 1;
+          return false;
+        };
+      }
+
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  process.env.PATH = "/usr/bin";
+  Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
+
+  // act
+  await loaded.discover(discoverEvent(scope.cwd), untrusted);
+
+  // assert
+  assert.deepStrictEqual(
+    [process.env.PATH, process.env.PI_CLAUDE_MARKETPLACE_PATH, trustReads],
+    ["/usr/bin", undefined, TRUST_READS_PER_DISCOVER],
+  );
+  loaded.verifyBoundary();
+});
+
 test(
   "contains one aggregate discovery failure and recovers through the same callback",
   { concurrency: false },
@@ -1894,7 +1989,7 @@ test(
     // arrange
     const scope = await createHermeticScope(t, "discovery-recovery");
     const resolvedSource = path.join(scope.cwd, "vendored-plugin");
-    const binDir = path.join(resolvedSource, "bin");
+    const binDir = await seedPluginBinDirectory(resolvedSource);
     await seedEnabledPlugin(scope.cwd, resolvedSource);
     const promptPath = await seedPrompt(scope.cwd, "recovered.md");
     const skillPath = path.join(
@@ -2069,7 +2164,7 @@ test("still answers when the deferred project-scope hydrate fails (NFR-2)", asyn
   // arrange
   const scope = await createHermeticScope(t, "hydrate-refused");
   const resolvedSource = path.join(scope.cwd, "vendored-plugin");
-  const binDir = path.join(resolvedSource, "bin");
+  const binDir = await seedPluginBinDirectory(resolvedSource);
   await seedEnabledPlugin(scope.cwd, resolvedSource);
   // Seeded so the reconcile has something of its own to say. Without it this
   // case passes with the refusal retargeted at the reconcile read, because a
@@ -2108,7 +2203,7 @@ test("still answers when the reconcile fails (NFR-2)", async (t) => {
   // arrange
   const scope = await createHermeticScope(t, "reconcile-refused");
   const resolvedSource = path.join(scope.cwd, "vendored-plugin");
-  const binDir = path.join(resolvedSource, "bin");
+  const binDir = await seedPluginBinDirectory(resolvedSource);
   await seedEnabledPlugin(scope.cwd, resolvedSource);
   const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
     1,
@@ -2141,10 +2236,47 @@ test("still answers when the reconcile fails (NFR-2)", async (t) => {
   verifyBoundary();
 });
 
+test("still answers when the hooks' MCP server refresh fails (NFR-2)", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "mcp-refresh-refused");
+  const resolvedSource = path.join(scope.cwd, "vendored-plugin");
+  const binDir = await seedPluginBinDirectory(resolvedSource);
+  await seedEnabledPlugin(scope.cwd, resolvedSource);
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
+    0,
+    PROBES_PER_DISCOVER,
+  );
+  process.env.PATH = "/usr/bin";
+  Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
+  const refusal = eventRefusingCwdRead(discoverEvent(scope.cwd), CWD_READ_MCP_SERVER_REFRESH);
+  const expectedReads = { refused: true, reads: CWD_READS_PER_DISCOVER };
+  const logged = captureDebugLog(t);
+
+  // act
+  const discovered = await discover(refusal.event, ctx);
+
+  // assert
+  assert.deepStrictEqual(discovered, EMPTY_DISCOVERY);
+  assert.deepStrictEqual(notifications, []);
+  assert.deepStrictEqual({ refused: refusal.refused(), reads: refusal.readCount() }, expectedReads);
+  // Only this stage words this line, so the refusal landed on it.
+  assert.deepStrictEqual(
+    logged.filter((line) => line.includes("MCP server refresh")),
+    [
+      `[hydrate] MCP server refresh skipped: working directory read ${String(CWD_READ_MCP_SERVER_REFRESH)} refused`,
+    ],
+  );
+  // The recompute is downstream of the refresh, so it still ran.
+  assert.deepStrictEqual(process.env.PATH, `/usr/bin${path.delimiter}${binDir}`);
+  assert.deepStrictEqual(process.env.PI_CLAUDE_MARKETPLACE_PATH, binDir);
+  verifyBoundary();
+});
+
 test("still answers when the plugin PATH recompute fails (NFR-2)", async (t) => {
   // arrange
   const scope = await createHermeticScope(t, "recompute-refused");
   const resolvedSource = path.join(scope.cwd, "vendored-plugin");
+  await seedPluginBinDirectory(resolvedSource);
   await seedEnabledPlugin(scope.cwd, resolvedSource);
   const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
     0,
@@ -2425,6 +2557,217 @@ test("AVAR-03: the factory sets the reserved empty variable and CLAUDE_PROJECT_D
   assert.deepStrictEqual(
     [process.env.PI_CLAUDE_MARKETPLACE_EMPTY, process.env.CLAUDE_PROJECT_DIR],
     ["", expectedProjectDir],
+  );
+  verifyBoundary();
+});
+
+/** Record one enabled user-scope plugin `plug@mp` with the option `mode` (D-PG10-23). */
+async function seedUserOptionPlugin(agentDir: string): Promise<void> {
+  const extensionRoot = path.join(agentDir, "pi-claude-marketplace");
+  const marketplaceRoot = path.join(agentDir, "mp-src");
+  await mkdir(extensionRoot, { recursive: true });
+  await writeFile(
+    path.join(extensionRoot, "state.json"),
+    JSON.stringify({
+      schemaVersion: 3,
+      marketplaces: {
+        mp: {
+          name: "mp",
+          scope: "user",
+          source: { kind: "path", raw: marketplaceRoot },
+          addedFromCwd: agentDir,
+          manifestPath: path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+          marketplaceRoot,
+          plugins: {
+            plug: {
+              ...buildInstalledPluginRecord(
+                { version: "1.0.0", resolvedSource: path.join(marketplaceRoot, "plugins", "plug") },
+                { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+              ),
+              ...MODE_OPTION,
+            },
+          },
+        },
+      },
+    }),
+    "utf8",
+  );
+}
+
+test("D-PG10-23: the factory sets the user scope's option variables before it returns", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "options-factory");
+  await seedUserOptionPlugin(scope.agentDir);
+  const name = ownedOptionName("user", "mp", "plug", "mode");
+
+  // act
+  const { verifyBoundary } = await loadExtension(0, 0);
+
+  // assert
+  assert.deepStrictEqual(
+    [process.env[name], process.env.PI_CLAUDE_MARKETPLACE_OPTIONS],
+    ["fast", `user:${name}`],
+  );
+  verifyBoundary();
+});
+
+test("D-PG10-23: a load in a trusted project sets the project plugin's option variables", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "options-trusted");
+  await seedEnabledPlugin(scope.cwd, path.join(scope.cwd, "vendored-plugin"), MODE_OPTION);
+  const name = ownedOptionName("project", "mp", "plug", "mode");
+  const { discover, ctx, verifyBoundary } = await loadExtension(0, PROBES_PER_DISCOVER);
+
+  // act
+  await discover(discoverEvent(scope.cwd), ctx);
+
+  // assert
+  assert.deepStrictEqual(
+    [process.env[name], process.env.PI_CLAUDE_MARKETPLACE_OPTIONS],
+    ["fast", `project:${name}`],
+  );
+  verifyBoundary();
+});
+
+test("D-PG10-23: a load in an untrusted project removes the project's option variables, reading trust no more often", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "options-untrusted");
+  await seedEnabledPlugin(scope.cwd, path.join(scope.cwd, "vendored-plugin"), MODE_OPTION);
+  const name = ownedOptionName("project", "mp", "plug", "mode");
+  // The case's own proxy answers the trust reads, so the mock promises none.
+  const loaded = await loadExtension(0, PROBES_PER_DISCOVER, undefined, undefined, undefined, 0);
+  let trustReads = 0;
+  const untrusted = new Proxy(loaded.ctx, {
+    get(target, property, receiver): unknown {
+      if (property === "isProjectTrusted") {
+        return () => {
+          trustReads += 1;
+          return false;
+        };
+      }
+
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  process.env[name] = "fast";
+  process.env.PI_CLAUDE_MARKETPLACE_OPTIONS = `project:${name}`;
+
+  // act
+  await loaded.discover(discoverEvent(scope.cwd), untrusted);
+
+  // assert
+  assert.deepStrictEqual(
+    [process.env[name], process.env.PI_CLAUDE_MARKETPLACE_OPTIONS, trustReads],
+    [undefined, undefined, TRUST_READS_PER_DISCOVER],
+  );
+  loaded.verifyBoundary();
+});
+
+test("D-PG10-11: a command applies the option variables again in the same session, with no load in between", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "options-after-command");
+  const { command, ctx, verifyBoundary } = await loadExtension(1, 1, undefined, 3, undefined, 0);
+  await seedUserOptionPlugin(scope.agentDir);
+  const name = ownedOptionName("user", "mp", "plug", "mode");
+
+  // act
+  await command.handler("help", ctx);
+
+  // assert
+  assert.deepStrictEqual(
+    [process.env[name], process.env.PI_CLAUDE_MARKETPLACE_OPTIONS],
+    ["fast", `user:${name}`],
+  );
+  verifyBoundary();
+});
+
+test("D-PG10-11 / D-PG10-23: the apply after a command takes the last load's trust answer and reads trust no more often", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "options-after-untrusted-load");
+  const loaded = await loadExtension(
+    1,
+    PROBES_PER_DISCOVER + 1,
+    undefined,
+    MODE_READS_PER_DISCOVER + 3,
+    undefined,
+    0,
+  );
+  let trustReads = 0;
+  const untrusted = new Proxy(loaded.ctx, {
+    get(target, property, receiver): unknown {
+      if (property === "isProjectTrusted") {
+        return () => {
+          trustReads += 1;
+          return false;
+        };
+      }
+
+      return Reflect.get(target, property, receiver);
+    },
+  });
+  await loaded.discover(discoverEvent(scope.cwd), untrusted);
+  const name = ownedOptionName("project", "mp", "plug", "mode");
+  process.env[name] = "fast";
+  process.env.PI_CLAUDE_MARKETPLACE_OPTIONS = `project:${name}`;
+
+  // act
+  await loaded.command.handler("help", untrusted);
+
+  // assert
+  assert.deepStrictEqual(
+    [process.env[name], process.env.PI_CLAUDE_MARKETPLACE_OPTIONS, trustReads],
+    [undefined, undefined, TRUST_READS_PER_DISCOVER],
+  );
+  loaded.verifyBoundary();
+});
+
+test("D-PG10-11 / NFR-2: a command that throws still gets the apply, and the command's error is what the handler rejects with", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "options-after-throw");
+  const { command, ctx, verifyBoundary } = await loadExtension(0, 1, undefined, 3, undefined, 0);
+  const attempted: Notification[] = [];
+  const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
+  await seedUserOptionPlugin(scope.agentDir);
+  const name = ownedOptionName("user", "mp", "plug", "mode");
+
+  // act & assert
+  await assert.rejects(command.handler("help", refusing), {
+    message: "host notification refused",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    [process.env[name], process.env.PI_CLAUDE_MARKETPLACE_OPTIONS],
+    ["fast", `user:${name}`],
+  );
+  verifyBoundary();
+});
+
+test("still answers when the plugin option apply fails (NFR-2)", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "options-refused");
+  await seedEnabledPlugin(scope.cwd, path.join(scope.cwd, "vendored-plugin"), MODE_OPTION);
+  const name = ownedOptionName("project", "mp", "plug", "mode");
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
+    0,
+    PROBES_PER_DISCOVER,
+  );
+  process.env[name] = "stale";
+  process.env.PI_CLAUDE_MARKETPLACE_OPTIONS = `project:${name}`;
+  const refusal = eventRefusingCwdRead(discoverEvent(scope.cwd), CWD_READ_PLUGIN_OPTIONS);
+  const expectedReads = { refused: true, reads: CWD_READS_PER_DISCOVER };
+
+  // act
+  const discovered = await discover(refusal.event, ctx);
+
+  // assert
+  assert.deepStrictEqual(discovered, EMPTY_DISCOVERY);
+  assert.deepStrictEqual(notifications, []);
+  assert.deepStrictEqual({ refused: refusal.refused(), reads: refusal.readCount() }, expectedReads);
+  // The refusal landed ON the option stage, so that stage left the variables alone.
+  assert.deepStrictEqual(
+    [process.env[name], process.env.PI_CLAUDE_MARKETPLACE_OPTIONS],
+    ["stale", `project:${name}`],
   );
   verifyBoundary();
 });

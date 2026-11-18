@@ -5,10 +5,18 @@ import { describe, test, type TestContext } from "node:test";
 import {
   ADAPTER_EMPTY_ENV,
   applyMcpAdapterEnv,
+  applyOptionLedger,
   applyPathLedger,
   applySessionEnv,
   claudeSessionEnvFor,
+  OPTION_LEDGER_ENV,
   PATH_LEDGER_ENV,
+  planOptionLedger,
+} from "../../extensions/pi-claude-marketplace/shared/session-env.ts";
+
+import type {
+  OptionLedgerChange,
+  OptionScopeOutcomes,
 } from "../../extensions/pi-claude-marketplace/shared/session-env.ts";
 
 describe("claudeSessionEnvFor", () => {
@@ -444,5 +452,185 @@ describe("applyPathLedger", () => {
     // assert
     assert.deepStrictEqual(firstPathUpdate, expectedPathUpdate);
     assert.deepStrictEqual(secondPathUpdate, expectedPathUpdate);
+  });
+});
+
+describe("OPTION_LEDGER_ENV", () => {
+  test("D-PG10-23: uses the exact option ledger key", () => {
+    // arrange
+    const expectedLedgerKey = "PI_CLAUDE_MARKETPLACE_OPTIONS";
+
+    // act
+    const ledgerKey = OPTION_LEDGER_ENV;
+
+    // assert
+    assert.strictEqual(ledgerKey, expectedLedgerKey);
+  });
+});
+
+const OWNED = "OWNED_";
+const KEEP: OptionScopeOutcomes["user"] = { kind: "keep" };
+const REMOVE: OptionScopeOutcomes["user"] = { kind: "remove" };
+
+function fresh(...variables: (readonly [string, string])[]): OptionScopeOutcomes["user"] {
+  return { kind: "fresh", variables };
+}
+
+describe("planOptionLedger", () => {
+  test("D-PG10-23: a fresh scope replaces its prior names, in scope order then state order", () => {
+    // arrange
+    const priorLedger = "user:OWNED_OLD,project:OWNED_P1";
+    const outcomes: OptionScopeOutcomes = {
+      user: fresh(["OWNED_B", "b"], ["OWNED_A", "a"]),
+      project: fresh(["OWNED_P1", "p1"]),
+    };
+
+    // act
+    const change = planOptionLedger(priorLedger, OWNED, outcomes);
+
+    // assert
+    assert.deepStrictEqual(change, {
+      remove: ["OWNED_OLD"],
+      set: [
+        ["OWNED_B", "b"],
+        ["OWNED_A", "a"],
+        ["OWNED_P1", "p1"],
+      ],
+      ledger: "user:OWNED_B,user:OWNED_A,project:OWNED_P1",
+    } satisfies OptionLedgerChange);
+  });
+
+  test("D-PG10-23: a kept scope keeps its ledger entries and touches none of its variables", () => {
+    // arrange
+    const priorLedger = "project:OWNED_P1,user:OWNED_U1,project:OWNED_P2";
+    const outcomes: OptionScopeOutcomes = { user: fresh(["OWNED_U1", "u1"]), project: KEEP };
+
+    // act
+    const change = planOptionLedger(priorLedger, OWNED, outcomes);
+
+    // assert
+    assert.deepStrictEqual(change, {
+      remove: [],
+      set: [["OWNED_U1", "u1"]],
+      ledger: "user:OWNED_U1,project:OWNED_P1,project:OWNED_P2",
+    } satisfies OptionLedgerChange);
+  });
+
+  test("D-PG10-23: a removed scope deletes its names and leaves the ledger", () => {
+    // arrange
+    const priorLedger = "user:OWNED_U1,project:OWNED_P1";
+    const outcomes: OptionScopeOutcomes = { user: KEEP, project: REMOVE };
+
+    // act
+    const change = planOptionLedger(priorLedger, OWNED, outcomes);
+
+    // assert
+    assert.deepStrictEqual(change, {
+      remove: ["OWNED_P1"],
+      set: [],
+      ledger: "user:OWNED_U1",
+    } satisfies OptionLedgerChange);
+  });
+
+  test("D-PG10-23: never deletes a name that the same apply sets", () => {
+    // arrange
+    const priorLedger = "project:OWNED_SHARED";
+    const outcomes: OptionScopeOutcomes = { user: fresh(["OWNED_SHARED", "u"]), project: REMOVE };
+
+    // act
+    const change = planOptionLedger(priorLedger, OWNED, outcomes);
+
+    // assert
+    assert.deepStrictEqual(change, {
+      remove: [],
+      set: [["OWNED_SHARED", "u"]],
+      ledger: "user:OWNED_SHARED",
+    } satisfies OptionLedgerChange);
+  });
+
+  for (const { title, entry } of [
+    { title: "an unknown scope word", entry: "local:OWNED_X" },
+    { title: "a name without the owned prefix", entry: "project:PATH" },
+    {
+      title: "a name with a character outside letters, digits, and underscore",
+      entry: "project:OWNED_X-Y",
+    },
+    { title: "an entry with no scope", entry: "OWNED_X" },
+    { title: "an empty entry", entry: "" },
+  ]) {
+    test(`D-PG10-23: ignores ${title} on read`, () => {
+      // arrange
+      const priorLedger = `${entry},project:OWNED_P1`;
+      const outcomes: OptionScopeOutcomes = { user: REMOVE, project: REMOVE };
+
+      // act
+      const change = planOptionLedger(priorLedger, OWNED, outcomes);
+
+      // assert
+      assert.deepStrictEqual(change, {
+        remove: ["OWNED_P1"],
+        set: [],
+        ledger: "",
+      } satisfies OptionLedgerChange);
+    });
+  }
+
+  test("D-PG10-23: gives the same ledger text and variables at a repeated apply", () => {
+    // arrange
+    const outcomes: OptionScopeOutcomes = {
+      user: fresh(["OWNED_U1", "u1"]),
+      project: fresh(["OWNED_P1", "p1"]),
+    };
+    const expectedChange: OptionLedgerChange = {
+      remove: [],
+      set: [
+        ["OWNED_U1", "u1"],
+        ["OWNED_P1", "p1"],
+      ],
+      ledger: "user:OWNED_U1,project:OWNED_P1",
+    };
+
+    // act
+    const firstChange = planOptionLedger("", OWNED, outcomes);
+    const secondChange = planOptionLedger(firstChange.ledger, OWNED, outcomes);
+
+    // assert
+    assert.deepStrictEqual(firstChange, expectedChange);
+    assert.deepStrictEqual(secondChange, expectedChange);
+  });
+});
+
+describe("applyOptionLedger", () => {
+  test("D-PG10-23: deletes the removed names, sets the pairs, and writes the ledger", () => {
+    // arrange
+    const env: NodeJS.ProcessEnv = { OWNED_OLD: "old", UNRELATED: "kept" };
+
+    // act
+    applyOptionLedger(env, {
+      remove: ["OWNED_OLD"],
+      set: [["OWNED_NEW", "new"]],
+      ledger: "user:OWNED_NEW",
+    });
+
+    // assert
+    assert.deepStrictEqual(env, {
+      UNRELATED: "kept",
+      OWNED_NEW: "new",
+      PI_CLAUDE_MARKETPLACE_OPTIONS: "user:OWNED_NEW",
+    });
+  });
+
+  test("D-PG10-23: deletes the ledger variable rather than leave it empty", () => {
+    // arrange
+    const env: NodeJS.ProcessEnv = {
+      OWNED_OLD: "old",
+      PI_CLAUDE_MARKETPLACE_OPTIONS: "user:OWNED_OLD",
+    };
+
+    // act
+    applyOptionLedger(env, { remove: ["OWNED_OLD"], set: [], ledger: "" });
+
+    // assert
+    assert.deepStrictEqual(env, {});
   });
 });

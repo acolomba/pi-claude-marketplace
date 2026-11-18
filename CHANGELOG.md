@@ -2,6 +2,60 @@
 
 ## [Unreleased]
 
+- Plugin agents, MCP servers, skills, commands, workflows, and hooks now behave more like Claude Code. Agents and MCP servers need pi-subagents 0.87.0 or later and pi-mcp-adapter 7.0.1 or later in 7.x. (#324)
+
+  - These versions fix plugin MCP grants and shorten long tool names for Pi's 64-character limit.
+  - `--map-model` now writes a bare model ID, so an agent prefers the session's provider. An installed agent keeps its old ID until the next `update --map-model`.
+  - A plugin MCP server without a `timeout` now allows a silent call for 30 minutes with stdio or 5 minutes with a remote server. Your `requestTimeoutMs` in `mcp-adapter.json` still wins.
+  - An installed plugin gets the default at its next update or reinstall under pi-mcp-adapter, or at the next session start under Pi's built-in MCP.
+  - Under pi-mcp-adapter, hooks now match plugin MCP tool names over 64 characters, and agents can exclude them with `disallowedTools`. Update or reinstall the plugin to refresh its agents.
+  - pi-mcp-adapter asks for project server approval again when the new timeout changes an approved server's stored definition.
+  - A marketplace entry whose source is the marketplace root and that lists `skills` now installs only those skills, as in Claude Code. If you installed a plugin from `anthropics/skills` or a marketplace like it, run `/claude:plugin reinstall` once to remove the extra skills.
+  - Install, update, and `info` now warn about each listed skills path of such an entry that escapes the plugin, does not exist, or names a file.
+  - A skill's relative link to a sibling skill of the same plugin now points at the sibling's installed folder.
+  - A workflow name that a plugin writes without a leading slash, as in `Workflow({ name: "plugin:scan" })`, now stays without one, so the model can start the workflow.
+  - An installed plugin gets the new links and workflow names when it updates to a new version, or at `/claude:plugin reinstall`.
+  - Install, update, and `info` now note when a workflow runs a plugin agent whose tool restriction the workflow engine keeps only under `builtin:codemode`.
+  - A blocking `Stop` hook now continues the same run, and Pi reports the run as finished once.
+  - A `Stop` or prompt hook whose script is missing no longer blocks, and its notice tells you to reinstall the plugin.
+  - A hook that fails without blocking now shows the first line of its stderr.
+  - A hook that returns `continue: false` now shows its `stopReason`.
+  - Hook context over 10,000 characters now goes to a file in `pi-claude-marketplace/data/_shared/hook-output/`, and the model gets its path and a preview. Files older than 30 days are removed.
+  - For a project plugin, that folder is inside the project, under `.pi/`. If you keep the project in version control, add the folder to the ignore list.
+  - A plain `async` hook now has no timeout.
+  - Tool hooks now get the call's `tool_use_id` and `duration_ms`, and the hooks of a plugin's MCP tool get `mcp_server`.
+  - Tool, `Stop`, and `StopFailure` hooks now get the session's thinking level as `effort`.
+  - `SessionStart` hooks now get `model` and `session_title`, `UserPromptSubmit` hooks get `session_title`, and `PreCompact` hooks get the text of `/compact`.
+  - `UserPromptExpansion` hooks now run when you type a plugin command or a skill, and they can block it. The block notice ends with `Original prompt: <command>`, as in Claude Code, unless the hook sets `suppressOriginalPrompt`. Run `/claude:plugin update` or `/claude:plugin reinstall` on a plugin installed earlier to get these hooks.
+  - A prompt that a `UserPromptSubmit` hook blocks now ends its notice with `Original prompt: <prompt>`, as in Claude Code, unless the hook sets `suppressOriginalPrompt` or the block comes from `onFailure: "block"`.
+  - A `SessionStart` hook now gets `resume` when Pi starts with `--continue` or `--session`, and `fork` when Pi starts with `--fork`.
+  - In a background subagent, a tool hook's `session_id` now names the session that started the subagent.
+  - Plugin agent frontmatter is now read as YAML, as Claude Code reads it: quoted values lose their quote marks, comments are ignored, a multi-line description keeps its lines, and an agent whose frontmatter cannot be parsed installs with no fields and a note.
+  - An agent whose plugin quotes its name, such as `name: "x"`, is now named without the quote marks.
+  - A plugin agent whose `tools` grant `Agent` or `Task` can now start subagents, and so can an agent with no `tools` list unless it disallows `Agent` or `Task`.
+  - A plugin agent's `model: inherit` now runs on the session's model instead of `subagents.defaultModel`.
+  - A plugin agent with both `tools` and `disallowedTools` is now restricted by both lists, and the two warnings about pi-subagents limits are gone.
+  - Run `/claude:plugin reinstall` once on an installed plugin to get these agent changes.
+  - Install, update, and `info` now note a workflow agent type that the plugin does not install, because the workflow engine runs a default agent in its place where Claude Code stops that step.
+  - The workflow compatibility page now says what a workflow subagent can reach, and which engine settings give it MCP tools and the session's model.
+  - When two workflow scripts of one plugin declare the same name, the install now keeps the last one, as Claude Code does. Before, the whole install failed.
+  - Workflow names like `demo-scan` and `scan` in the plugin `demo` now both install, as `/demo:demo-scan` and `/demo:scan`, instead of merging into one.
+  - Under pi-mcp-adapter, a plugin's stdio MCP server now stays running for the session once it starts, and updates keep your `protocolVersion`, `tasks`, `exposeResources`, and `caFile`. Run `/claude:plugin reinstall` once to apply this to an installed plugin.
+  - pi-mcp-adapter then starts such a server again in the background when it exits, and asks for project server approval again after the reinstall.
+  - pi-mcp-adapter's global `settings.idleTimeout` no longer stops such a server. To let one stop when idle, set `idleTimeout` on its entry.
+  - An update keeps your `caFile` only while the server stays https at the same origin, and otherwise removes it with a warning. An uninstall or disable does not keep your `caFile`, and says so.
+  - A plugin's `userConfig` options now give their default to hooks as `CLAUDE_PLUGIN_OPTION_<KEY>`, to MCP servers, and to skill, command, and agent content. A plugin whose options all have a default now installs without `--partial`.
+  - If you installed a plugin with `--partial` because of its `userConfig`, run `/claude:plugin reinstall` once to give it its options.
+  - An MCP server that names a plugin option with no value is left out with a warning. A shell-form hook that names a plugin option does not run.
+  - pi-mcp-adapter asks for project server approval again for a server whose entry names a plugin option, after the plugin's next update or reinstall.
+  - If an install record holds plugin options that do not parse, each new session warns with `{unreadable}`, and `list` and `info` show it. Servers and hooks that name an option do not run until `/claude:plugin reinstall`.
+  - A user-scope skill or command now gets the project directory for `${CLAUDE_PROJECT_DIR}` when you invoke it or the model reads it.
+  - A plugin's `bin` folder now joins `PATH` only when it exists. A project plugin's `bin` folder joins only in a project that Pi trusts.
+  - A plugin command with no frontmatter `name` now also answers to its Claude Code name, so `foo-bar` in plugin `foo`, listed as `/foo:bar`, also answers to `/foo:foo-bar`. A command installed earlier answers to that name only after its plugin's next update to a new version, reinstall, or enable.
+  - Alias suggestions in Pi's menu now show the description and the argument hint of the command or skill they name.
+  - A plugin command or skill that you type now attaches the files that its body names with an `@` path. A path inside code is attached, as in Claude Code; a path in the typed arguments or in the output of a `!` command is not.
+  - A new page, [Skill and command compatibility](docs/skills-commands-compatibility.md), compares skills and commands with Claude Code. Each row of its status table names the scenario that proves it.
+
 - Internal: the async hook behavioral tests no longer fail at random. (#323)
 
 - More plugin hook events now behave as in Claude Code, and the model-facing tools return what the model asks for. (#310)

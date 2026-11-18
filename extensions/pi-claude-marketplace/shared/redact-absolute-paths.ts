@@ -69,7 +69,7 @@ export function redactAbsolutePaths(text: string): string {
   );
   const quoted = redactQuotedAbsolutePaths(diagnostic);
   const absolutePath =
-    /(?<![\w:/\\])(?:[A-Za-z]:[\\/]|\\\\(?:\?\\)?|\/)[\w./\\~-]+[\\/][\w./\\~-]+/g;
+    /(?<![\w:/\\])(?<!(?:^|[\s.:/\\'"(])\.)(?:[A-Za-z]:[\\/]|\\\\(?:\?\\)?|\/)[\w./\\~-]+[\\/][\w./\\~-]+/g;
   return quoted.replace(absolutePath, (match) => pathBasename(match));
 }
 

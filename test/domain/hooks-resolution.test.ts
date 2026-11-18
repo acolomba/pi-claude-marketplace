@@ -196,9 +196,9 @@ test("keeps supported handlers and reports dropped groups in source order", asyn
   const resolution = emptyResolution();
   const contents = JSON.stringify({
     PreToolUse: [
-      { matcher: ".*", hooks: [{ type: "command", command: "echo first" }] },
+      { matcher: "[", hooks: [{ type: "command", command: "echo first" }] },
       { matcher: "Bash", hooks: [{ type: "command", command: "echo kept" }] },
-      { matcher: ".+", hooks: [{ type: "command", command: "echo second" }] },
+      { matcher: "(", hooks: [{ type: "command", command: "echo second" }] },
     ],
   });
 
@@ -215,8 +215,8 @@ test("keeps supported handlers and reports dropped groups in source order", asyn
     unsupported: ["hooks"],
     notes: [],
     droppedHooks: [
-      { kind: "group", event: "PreToolUse", matcher: ".*", cond: "regex" },
-      { kind: "group", event: "PreToolUse", matcher: ".+", cond: "regex" },
+      { kind: "group", event: "PreToolUse", matcher: "[", cond: "regex" },
+      { kind: "group", event: "PreToolUse", matcher: "(", cond: "regex" },
     ],
     hooksConfigPath: path.join("hooks", "hooks.json"),
   });
@@ -258,7 +258,7 @@ test("flags orphan rewake fields only in the retained hook subset", async () => 
         ],
       },
       {
-        matcher: ".*",
+        matcher: "[",
         hooks: [{ type: "command", command: "echo dropped", rewakeMessage: "ignored" }],
       },
     ],
@@ -276,7 +276,7 @@ test("flags orphan rewake fields only in the retained hook subset", async () => 
     supported: ["hooks"],
     unsupported: ["hooks"],
     notes: [],
-    droppedHooks: [{ kind: "group", event: "PreToolUse", matcher: ".*", cond: "regex" }],
+    droppedHooks: [{ kind: "group", event: "PreToolUse", matcher: "[", cond: "regex" }],
     hooksConfigPath: path.join("hooks", "hooks.json"),
     orphanRewake: true,
   });

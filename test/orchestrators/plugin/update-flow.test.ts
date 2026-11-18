@@ -35,6 +35,7 @@ import {
   parsePluginSource,
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import {
   materializeOrRefreshPluginMirror,
   materializePluginClone,
@@ -52,6 +53,7 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import { AgentTargetOccupiedError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
   BridgeStagingError,
+  McpConfigFileError,
   McpServerCollisionError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
@@ -4808,6 +4810,69 @@ test("prepare-handles-fail / GLK-02 / D-PL7-12: MCP collision aborts partial han
   });
 });
 
+// AFILE-02: each mcp-adapter.json defect the stage refuses.
+for (const [defect, text] of [
+  ["invalid-jsonc", "{"],
+  [
+    "marker-not-valid",
+    JSON.stringify({
+      mcpServers: {
+        plugin_hello_srv_: {
+          command: "node",
+          _piClaudeMarketplace: { plugin: "hello", marketplace: "mp", defaultFields: [] },
+        },
+      },
+    }),
+  ],
+] as const) {
+  test(`AFILE-02: an update the stage refuses for a ${defect} MCP config fails as unreadable with its cause`, async () => {
+    await withHermeticHome(async () => {
+      // arrange
+      const cwd = await createCaseDir("update-mcp-config-refused-");
+      try {
+        const marketplaceRoot = path.join(cwd, "mp-src");
+        await seedPathMarketplace({
+          cwd,
+          marketplaceRoot,
+          marketplaceName: "mp",
+          manifestPlugins: { hello: { version: "1.0.1", hasSkill: true, hasMcp: true } },
+          installedVersions: { hello: "1.0.0" },
+        });
+        await writeFile(
+          path.join(marketplaceRoot, "plugins", "hello", ".mcp.json"),
+          JSON.stringify({ mcpServers: { srv: { command: "node" } } }),
+        );
+        const locations = locationsFor("project", cwd);
+        await mkdir(path.dirname(locations.mcpAdapterJsonPath), { recursive: true });
+        await writeFile(locations.mcpAdapterJsonPath, text);
+        const prevCwd = process.cwd();
+        process.chdir(cwd);
+
+        // act
+        let outcome: Awaited<ReturnType<typeof updateSinglePlugin>>;
+        try {
+          outcome = await updateSinglePlugin("hello", "mp", "project");
+        } finally {
+          process.chdir(prevCwd);
+        }
+
+        // assert
+        assert.ok(outcome.partition === "failed");
+        assert.deepStrictEqual(
+          {
+            reasons: outcome.reasons,
+            defect: outcome.cause instanceof McpConfigFileError ? outcome.cause.defect : undefined,
+            bytes: await readFile(locations.mcpAdapterJsonPath, "utf8"),
+          },
+          { reasons: ["unreadable"], defect, bytes: text },
+        );
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 // ─── bare form: enumerates both user and project scopes ───────────────────────
 
 test("bare-form both-scopes: changed plugins render marketplace groups in presentation order", async () => {
@@ -7985,6 +8050,7 @@ test("WR-03: one update owner refreshes direct and cascade routes without leakin
         hooksJsonPath: path.join(pluginRoot, "hooks", "hooks.json"),
         cwd,
         logPrefix: "update-test",
+        options: resolveOptions(undefined),
       });
       hooksRouting.rebuildRoutingTables();
       assert.equal(runtime.getRoutingBucket("PreToolUse")[0]?.handlerDecl["command"], "echo OLD");
@@ -8061,6 +8127,62 @@ test("WR-03: one update owner refreshes direct and cascade routes without leakin
         "echo CASCADE",
       );
       assert.deepStrictEqual(peerRuntime.getRoutingBucket("PreToolUse"), []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-PG10-15: an update gives the plugin's routing entries the options of the new version", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-hook-options-");
+    try {
+      // arrange
+      const runtime = createHooksRuntime();
+      const operations = createPluginUpdateOperations(
+        createHooksRouting(runtime, { readHooksJson }),
+        createCompletionCache(),
+      );
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: {
+          hello: {
+            version: "1.0.0",
+            hasSkill: true,
+            hooksJson: {
+              PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo hook" }] }],
+            },
+          },
+        },
+        installedVersions: { hello: "1.0.0" },
+        scope: "user",
+      });
+      const userConfig = {
+        mode: { type: "string", title: "Mode", description: "The mode.", default: "slow" },
+      } as const;
+      await rewriteManifest(seeded.manifestPath, "mp", { hello: { version: "2.0.0" } });
+      await writeFile(
+        path.join(seeded.marketplaceRoot, "plugins", "hello", ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "hello", version: "2.0.0", userConfig }),
+      );
+      const { ctx, run } = makeCtx();
+
+      // act
+      await operations.updatePlugins({
+        ctx,
+        run,
+        scope: "user",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        runtime.getRoutingBucket("PreToolUse").map((entry) => entry.options),
+        [resolveOptions(userConfig)],
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -13765,7 +13887,13 @@ test("AFILE-06: a disabled plugin MCP server stays disabled through update", asy
             directTools: "search",
             toolPrefix: "mcp",
             disabled: true,
-            _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+            requestTimeoutMs: 1800000,
+            lifecycle: "lazy-keep-alive",
+            _piClaudeMarketplace: {
+              plugin: "hello",
+              marketplace: "mp",
+              defaultFields: { requestTimeoutMs: 1800000, lifecycle: "lazy-keep-alive" },
+            },
           },
         },
       });
@@ -13955,7 +14083,12 @@ test("ANAME-07: a plugin-set timeout wins over a carried override and a dropped 
             directTools: "search",
             toolPrefix: "mcp",
             disabled: true,
-            _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+            requestTimeoutMs: 300000,
+            _piClaudeMarketplace: {
+              plugin: "hello",
+              marketplace: "mp",
+              defaultFields: { requestTimeoutMs: 300000 },
+            },
           },
         },
       });

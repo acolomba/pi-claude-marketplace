@@ -6,12 +6,14 @@ import { type RoutingEntry } from "../../../extensions/pi-claude-marketplace/bri
 import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import {
   agentEndCacheHandler,
+  beforeSettleHandlerFor,
   inputResetHandlerFor,
   resetSettleState,
   settleHandlerFor,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/settle.ts";
 import { parseMatcher } from "../../../extensions/pi-claude-marketplace/domain/components/hooks.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
+import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 
 import type { HookExecutor } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
@@ -19,6 +21,8 @@ import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/b
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type { StopReason } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type {
+  AgentBeforeSettleEvent,
+  AgentBeforeSettleEventResult,
   AgentEndEvent,
   AgentSettledEvent,
   AssistantMessage,
@@ -27,6 +31,15 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 const settledEvent = { type: "agent_settled" } as unknown as AgentSettledEvent;
+// An entry another extension proposed at the same boundary, which the Stop
+// continuation keeps ahead of its own (D-PG5-05).
+const proposedEntry = { type: "custom", customType: "other-extension", data: { kept: true } };
+const boundaryEvent = {
+  type: "agent_before_settle",
+  entries: [proposedEntry],
+  continue: false,
+  outcome: "completed",
+} as unknown as AgentBeforeSettleEvent;
 const emptyContext = { mode: "print" } as unknown as ExtensionContext;
 
 interface SendCall {
@@ -88,6 +101,7 @@ function stopEntry(pluginId: string, asyncRewake = false): RoutingEntry {
     },
     declarationIndex: 0,
     ifPredicate: MATCH_ALL_IF,
+    options: resolveOptions(undefined),
   };
 }
 
@@ -134,20 +148,57 @@ function failureEnd(
   } as unknown as AgentEndEvent;
 }
 
-/** The content of a Stop re-entry: one `Stop hook feedback:` part per text (D-CF5-25). */
+/** The content of a Stop continuation: one `Stop hook feedback:` part per text (D-CF5-25). */
 function feedbackContent(...texts: readonly string[]): unknown[] {
   return texts.map((text) => ({ type: "text", text: `Stop hook feedback:\n${text}` }));
 }
 
+/**
+ * The boundary result of a Stop continuation: the proposed entries, then one
+ * hidden feedback entry, with `continue: true` (D-PG5-01).
+ */
+function continuation(pluginId: string, ...texts: readonly string[]): unknown {
+  return {
+    entries: [
+      proposedEntry,
+      {
+        type: "custom_message",
+        customType: "claude-hook-stop-block",
+        content: feedbackContent(...texts),
+        display: false,
+        details: { pluginId },
+      },
+    ],
+    continue: true,
+  };
+}
+
+/** Runs the boundary handler after an `agent_end` that ended with `stop`. */
 async function runStop(
   runtime: HooksRuntime,
   pi: ExtensionAPI,
   ctx: ExtensionContext,
   executor: HookExecutor,
-): Promise<void> {
+): Promise<AgentBeforeSettleEventResult | undefined> {
   const generation = runtime.currentGeneration();
   agentEndCacheHandler(runtime, generation)(agentEnd("stop"));
-  await settleHandlerFor(runtime, generation, pi, executor)(settledEvent, ctx);
+  return beforeSettleHandlerFor(runtime, generation, pi, executor)(boundaryEvent, ctx);
+}
+
+/** Runs `count` Stop boundaries in a row and returns what each resolved to. */
+async function runStops(
+  count: number,
+  runtime: HooksRuntime,
+  pi: ExtensionAPI,
+  ctx: ExtensionContext,
+  executor: HookExecutor,
+): Promise<unknown[]> {
+  const results: unknown[] = [];
+  for (let index = 0; index < count; index += 1) {
+    results.push(await runStop(runtime, pi, ctx, executor));
+  }
+
+  return results;
 }
 
 for (const scenario of [
@@ -185,7 +236,7 @@ for (const scenario of [
     const ctx = {
       get mode(): string {
         modeReads += 1;
-        if (scenario.failure === "mode" && modeReads === 9) {
+        if (scenario.failure === "mode" && modeReads === 10) {
           throw new Error("stale emission context");
         }
 
@@ -208,16 +259,12 @@ for (const scenario of [
     runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
 
     // act
-    for (let index = 0; index < 9; index += 1) {
-      await runStop(runtime, pi, ctx, executor);
-    }
-
+    const results = await runStops(9, runtime, pi, ctx, executor);
     await settleHandlerFor(runtime, runtime.currentGeneration(), pi, executor)(settledEvent, ctx);
 
     // assert
-    assert.deepStrictEqual(
-      host.sent,
-      [
+    assert.deepStrictEqual(results, [
+      ...[
         "continue",
         "more context",
         "continue",
@@ -225,16 +272,11 @@ for (const scenario of [
         "continue",
         "more context",
         "continue",
-      ].map((text) => ({
-        message: {
-          customType: "claude-hook-stop-block",
-          content: feedbackContent(text),
-          display: false,
-          details: { pluginId: "alpha" },
-        },
-        options: { deliverAs: "followUp", triggerTurn: true },
-      })),
-    );
+        "more context",
+      ].map((text) => continuation("alpha", text)),
+      undefined,
+    ]);
+    assert.deepStrictEqual(host.sent, []);
     assert.strictEqual(runtime.isStopHookActive(), true);
     assert.deepStrictEqual(runtime.recordStopReentry(), { reenter: false, notifyCap: false });
     assert.deepStrictEqual(
@@ -293,11 +335,12 @@ for (const scenario of [
     );
 
     // act
-    await runStop(runtime, pi, ctx, executor);
+    const stopResult = await runStop(runtime, pi, ctx, executor);
     agentEndCacheHandler(runtime, runtime.currentGeneration())(failureEnd("error", "failure"));
     await settleHandlerFor(runtime, runtime.currentGeneration(), pi, executor)(settledEvent, ctx);
 
     // assert
+    assert.strictEqual(stopResult, undefined);
     assert.strictEqual(runtime.isStopHookActive(), false);
     assert.deepStrictEqual(host.sent, []);
     assert.deepStrictEqual(capture.entries, []);
@@ -354,7 +397,81 @@ for (const stopReason of [
   }
 }
 
-test("uses only the supplied runtime for Stop re-entry", async () => {
+for (const { failure, readMode } of [
+  { failure: "unknown mode", readMode: (): string => "unknown" },
+  {
+    failure: "throwing mode getter",
+    readMode: (): string => {
+      throw new Error("stale mode");
+    },
+  },
+]) {
+  test(`the boundary keeps a stop ending cached and runs no hook on ${failure}`, async (t) => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
+    const { pi, sent } = makePi();
+    const ending = agentEnd("stop");
+    const assistant = ending.messages[1];
+    assert.ok(assistant?.role === "assistant");
+    runtime.recordLastAssistant(assistant);
+    const context = new Proxy(emptyContext, {
+      get(target, property, receiver): unknown {
+        if (property === "mode") {
+          return readMode();
+        }
+
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const executor = t.mock.fn<HookExecutor>(() =>
+      Promise.resolve({ kind: "block", reason: "continue" }),
+    );
+    const handler = beforeSettleHandlerFor(runtime, runtime.currentGeneration(), pi, executor);
+
+    // act
+    const boundaryResult = await handler(boundaryEvent, context);
+
+    // assert
+    assert.strictEqual(boundaryResult, undefined);
+    assert.strictEqual(runtime.takeLastAssistant(), assistant);
+    assert.strictEqual(executor.mock.callCount(), 0);
+    assert.deepStrictEqual(sent, []);
+  });
+}
+
+for (const stopReason of ["length", "error"] as const) {
+  test(`the boundary leaves a ${stopReason} ending cached for StopFailure and runs no Stop hook (D-PG5-03)`, async (t) => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
+    const { pi, sent } = makePi();
+    const ending = failureEnd(stopReason);
+    const assistant = ending.messages[1];
+    assert.ok(assistant?.role === "assistant");
+    const executor = t.mock.fn<HookExecutor>(() =>
+      Promise.resolve({ kind: "block", reason: "continue" }),
+    );
+    const generation = runtime.currentGeneration();
+    agentEndCacheHandler(runtime, generation)(ending);
+
+    // act
+    const boundaryResult = await beforeSettleHandlerFor(
+      runtime,
+      generation,
+      pi,
+      executor,
+    )(boundaryEvent, emptyContext);
+
+    // assert
+    assert.strictEqual(boundaryResult, undefined);
+    assert.strictEqual(executor.mock.callCount(), 0);
+    assert.strictEqual(runtime.takeLastAssistant(), assistant);
+    assert.deepStrictEqual(sent, []);
+  });
+}
+
+test("uses only the supplied runtime for Stop continuation", async () => {
   // arrange
   const owningRuntime = createHooksRuntime();
   const peerRuntime = createHooksRuntime();
@@ -375,21 +492,12 @@ test("uses only the supplied runtime for Stop re-entry", async () => {
   const { pi, sent } = makePi();
 
   // act
-  const handler = settleHandlerFor(owningRuntime, generation, pi, executor);
-  await handler(settledEvent, emptyContext);
+  const handler = beforeSettleHandlerFor(owningRuntime, generation, pi, executor);
+  const boundaryResult = await handler(boundaryEvent, emptyContext);
 
   // assert
-  assert.deepStrictEqual(
-    sent.map((call) => call.message),
-    [
-      {
-        customType: "claude-hook-stop-block",
-        content: feedbackContent("continue"),
-        display: false,
-        details: { pluginId: "owner" },
-      },
-    ],
-  );
+  assert.deepStrictEqual(boundaryResult, continuation("owner", "continue"));
+  assert.deepStrictEqual(sent, []);
   assert.strictEqual(peerRuntime.takeLastAssistant(), peerMessage);
   assert.deepStrictEqual(events, [
     {
@@ -414,48 +522,70 @@ test("cache miss, one-shot hit, and stale epoch are visible at public boundaries
   const epoch = runtime.currentGeneration();
 
   // act
-  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
+  const boundary = (generation: number): Promise<AgentBeforeSettleEventResult | undefined> =>
+    beforeSettleHandlerFor(runtime, generation, pi, executor)(boundaryEvent, emptyContext);
+  const results: unknown[] = [];
+  results.push(await boundary(epoch));
   agentEndCacheHandler(runtime, epoch)(agentEnd("stop"));
-  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
-  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
+  results.push(await boundary(epoch));
+  results.push(await boundary(epoch));
   agentEndCacheHandler(runtime, epoch)(agentEnd("stop"));
-  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
+  results.push(await boundary(epoch));
   const staleEpoch = runtime.currentGeneration();
   runtime.advanceGeneration();
   agentEndCacheHandler(runtime, staleEpoch)(agentEnd("stop"));
-  await settleHandlerFor(runtime, staleEpoch, pi, executor)(settledEvent, emptyContext);
-  await settleHandlerFor(
-    runtime,
-    runtime.currentGeneration(),
-    pi,
-    executor,
-  )(settledEvent, emptyContext);
+  results.push(await boundary(staleEpoch));
+  results.push(await boundary(runtime.currentGeneration()));
 
   // assert
   assert.deepStrictEqual(events, [
     { last_assistant_message: "done", stop_hook_active: false },
     { last_assistant_message: "done", stop_hook_active: true },
   ]);
+  assert.deepStrictEqual(results, [
+    undefined,
+    continuation("alpha", "continue"),
+    undefined,
+    continuation("alpha", "continue"),
+    undefined,
+    undefined,
+  ]);
+  assert.deepStrictEqual(sent, []);
+});
+
+test("an agent end drops the mark of every tool call (D-PG6-06)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.recordToolCallPrepared("a", undefined, 100);
+  runtime.recordToolCallPrepared("b", undefined, 110);
+
+  // act
+  agentEndCacheHandler(runtime, runtime.currentGeneration())(agentEnd("stop"));
+
+  // assert
   assert.deepStrictEqual(
-    sent.map((call) => call.message),
-    [
-      {
-        customType: "claude-hook-stop-block",
-        content: feedbackContent("continue"),
-        display: false,
-        details: { pluginId: "alpha" },
-      },
-      {
-        customType: "claude-hook-stop-block",
-        content: feedbackContent("continue"),
-        display: false,
-        details: { pluginId: "alpha" },
-      },
-    ],
+    [runtime.takeToolDuration("a", 200), runtime.takeToolDuration("b", 200)],
+    [undefined, undefined],
   );
 });
 
-test("the last agent ending wins before settle", async () => {
+test("a stale agent end keeps the tool call marks (D-PG6-06)", () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  const stale = runtime.currentGeneration();
+  runtime.advanceGeneration();
+  runtime.recordToolCallPrepared("a", undefined, 100);
+
+  // act
+  agentEndCacheHandler(runtime, stale)(agentEnd("stop"));
+
+  // assert
+  assert.strictEqual(runtime.takeToolDuration("a", 200), 100);
+});
+
+test("the last agent ending wins before the boundary", async () => {
   // arrange
   const runtime = createHooksRuntime();
   runtime.advanceGeneration();
@@ -473,9 +603,15 @@ test("the last agent ending wins before settle", async () => {
   // act
   cache(agentEnd("aborted"));
   cache(agentEnd("stop"));
-  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
+  const boundaryResult = await beforeSettleHandlerFor(
+    runtime,
+    epoch,
+    pi,
+    executor,
+  )(boundaryEvent, emptyContext);
 
   // assert
+  assert.strictEqual(boundaryResult, undefined);
   assert.deepStrictEqual(events, [{ last_assistant_message: "done", stop_hook_active: false }]);
 });
 
@@ -502,11 +638,17 @@ test("an ending without an assistant has no public effect", async () => {
 
   // act
   agentEndCacheHandler(runtime, epoch)(ending);
-  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
+  const boundaryResult = await beforeSettleHandlerFor(
+    runtime,
+    epoch,
+    pi,
+    executor,
+  )(boundaryEvent, emptyContext);
 
   // assert
   assert.deepStrictEqual(fired, []);
-  assert.strictEqual(sent.length, 0);
+  assert.strictEqual(boundaryResult, undefined);
+  assert.deepStrictEqual(sent, []);
 });
 
 test("trailing non-assistant messages do not replace the assistant", async () => {
@@ -537,7 +679,7 @@ test("trailing non-assistant messages do not replace the assistant", async () =>
 
   // act
   agentEndCacheHandler(runtime, epoch)(ending);
-  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
+  await beforeSettleHandlerFor(runtime, epoch, pi, executor)(boundaryEvent, emptyContext);
 
   // assert
   assert.deepStrictEqual(events, [{ last_assistant_message: "answer", stop_hook_active: false }]);
@@ -574,7 +716,7 @@ test("assistant text joins in order and excludes non-text content", async () => 
 
   // act
   agentEndCacheHandler(runtime, epoch)(ending);
-  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
+  await beforeSettleHandlerFor(runtime, epoch, pi, executor)(boundaryEvent, emptyContext);
 
   // assert
   assert.deepStrictEqual(events, [
@@ -583,7 +725,7 @@ test("assistant text joins in order and excludes non-text content", async () => 
 });
 
 for (const stopReason of ["pending", "aborted", "toolUse", "deferred"] as const) {
-  test(`${stopReason} endings do not dispatch a settle bucket`, async () => {
+  test(`${stopReason} endings dispatch no Stop or StopFailure bucket`, async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -600,9 +742,16 @@ for (const stopReason of ["pending", "aborted", "toolUse", "deferred"] as const)
 
     // act
     agentEndCacheHandler(runtime, epoch)(agentEnd(stopReason));
+    const boundaryResult = await beforeSettleHandlerFor(
+      runtime,
+      epoch,
+      pi,
+      executor,
+    )(boundaryEvent, emptyContext);
     await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
 
     // assert
+    assert.strictEqual(boundaryResult, undefined);
     assert.deepStrictEqual(fired, []);
     assert.deepStrictEqual(sent, []);
   });
@@ -646,14 +795,160 @@ test("an empty Stop bucket has no public effect", async () => {
   const { pi, sent } = makePi();
 
   // act
-  await runStop(runtime, pi, emptyContext, executor);
+  const boundaryResult = await runStop(runtime, pi, emptyContext, executor);
 
   // assert
+  assert.strictEqual(boundaryResult, undefined);
   assert.deepStrictEqual(fired, []);
   assert.deepStrictEqual(sent, []);
 });
 
-test("a block re-enters with its reason as stop hook feedback (STOP-03 / D-CF5-25)", async () => {
+// Runs `runtime`'s handler for each step of a turn ending in order, and
+// returns which hooks fired and what each boundary resolved to.
+async function driveEnding(
+  steps: readonly ("boundary" | "settle")[],
+  ending: AgentEndEvent | undefined,
+): Promise<{ readonly fired: string[]; readonly boundaries: unknown[] }> {
+  const runtime = createHooksRuntime();
+  runtime.setRoutingBucket("Stop", [stopEntry("stop")]);
+  runtime.setRoutingBucket("StopFailure", [failureEntry("failure")]);
+  const fired: string[] = [];
+  const executor: HookExecutor = (entry): Promise<HookExecResult> => {
+    fired.push(entry.pluginId);
+    return Promise.resolve({ kind: "block", reason: "continue" });
+  };
+
+  const { pi } = makePi();
+  const epoch = runtime.currentGeneration();
+  if (ending !== undefined) {
+    agentEndCacheHandler(runtime, epoch)(ending);
+  }
+
+  const boundaries: unknown[] = [];
+  for (const step of steps) {
+    if (step === "boundary") {
+      boundaries.push(
+        await beforeSettleHandlerFor(runtime, epoch, pi, executor)(boundaryEvent, emptyContext),
+      );
+    } else {
+      await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
+    }
+  }
+
+  return { fired, boundaries };
+}
+
+test("settle runs no hook for a stop ending that the boundary took (D-PG5-03)", async () => {
+  // act
+  const { fired, boundaries } = await driveEnding(["boundary", "settle"], agentEnd("stop"));
+
+  // assert
+  assert.deepStrictEqual(fired, ["stop"]);
+  assert.deepStrictEqual(boundaries, [continuation("stop", "continue")]);
+});
+
+test("settle runs no hook for a stop ending whose boundary Pi skipped, and drops it (D-PG5-03)", async () => {
+  // act
+  const { fired, boundaries } = await driveEnding(["settle", "boundary"], agentEnd("stop"));
+
+  // assert
+  assert.deepStrictEqual(fired, []);
+  assert.deepStrictEqual(boundaries, [undefined]);
+});
+
+for (const stopReason of ["length", "error"] as const) {
+  test(`a ${stopReason} ending runs StopFailure once at settle after the boundary (D-PG5-03)`, async () => {
+    // act
+    const { fired, boundaries } = await driveEnding(
+      ["boundary", "settle", "settle"],
+      failureEnd(stopReason),
+    );
+
+    // assert
+    assert.deepStrictEqual(fired, ["failure"]);
+    assert.deepStrictEqual(boundaries, [undefined]);
+  });
+}
+
+test("a stale settle handler runs no StopFailure hook and leaves the cached ending", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.setRoutingBucket("StopFailure", [failureEntry("failure")]);
+  const fired: string[] = [];
+  const executor: HookExecutor = (entry): Promise<HookExecResult> => {
+    fired.push(entry.pluginId);
+    return Promise.resolve({ kind: "noop" });
+  };
+
+  const { pi } = makePi();
+  const staleEpoch = runtime.currentGeneration();
+  const ending = failureEnd("error");
+  agentEndCacheHandler(runtime, staleEpoch)(ending);
+  runtime.advanceGeneration();
+
+  // act
+  await settleHandlerFor(runtime, staleEpoch, pi, executor)(settledEvent, emptyContext);
+
+  // assert
+  assert.deepStrictEqual(fired, []);
+  assert.strictEqual(runtime.takeLastAssistant(), ending.messages[1]);
+});
+
+test("a second settle with no agent end runs nothing", async () => {
+  // act
+  const { fired, boundaries } = await driveEnding(["settle", "boundary", "settle"], undefined);
+
+  // assert
+  assert.deepStrictEqual(fired, []);
+  assert.deepStrictEqual(boundaries, [undefined]);
+});
+
+test("a wake sent while the Stop hooks run makes the next Stop run active (D-BG-210 / D-PG5-06)", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  const flags: boolean[] = [];
+  const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
+    flags.push((event as { stop_hook_active: boolean }).stop_hook_active);
+    runtime.recordRewakeSent();
+    return Promise.resolve({ kind: "noop" });
+  };
+
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
+  const { pi, sent } = makePi();
+
+  // act
+  const results = await runStops(2, runtime, pi, emptyContext, executor);
+
+  // assert
+  assert.deepStrictEqual(flags, [false, true]);
+  assert.deepStrictEqual(results, [undefined, undefined]);
+  assert.deepStrictEqual(sent, []);
+});
+
+test("a wake sent after the Stop hooks finished leaves the next Stop run inactive (D-PG5-06)", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  const flags: boolean[] = [];
+  const executor: HookExecutor = (_entry, event): Promise<HookExecResult> => {
+    flags.push((event as { stop_hook_active: boolean }).stop_hook_active);
+    return Promise.resolve({ kind: "noop" });
+  };
+
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
+  const { pi } = makePi();
+
+  // act
+  await runStop(runtime, pi, emptyContext, executor);
+  runtime.recordRewakeSent();
+  await runStop(runtime, pi, emptyContext, executor);
+
+  // assert
+  assert.deepStrictEqual(flags, [false, false]);
+});
+
+test("a block continues the run with its reason as stop hook feedback (STOP-03 / D-CF5-25)", async () => {
   // arrange
   const runtime = createHooksRuntime();
   runtime.advanceGeneration();
@@ -663,23 +958,14 @@ test("a block re-enters with its reason as stop hook feedback (STOP-03 / D-CF5-2
   const { pi, sent } = makePi();
 
   // act
-  await runStop(runtime, pi, emptyContext, executor);
+  const boundaryResult = await runStop(runtime, pi, emptyContext, executor);
 
   // assert
-  assert.deepStrictEqual(sent, [
-    {
-      message: {
-        customType: "claude-hook-stop-block",
-        content: feedbackContent("continue"),
-        display: false,
-        details: { pluginId: "alpha" },
-      },
-      options: { deliverAs: "followUp", triggerTurn: true },
-    },
-  ]);
+  assert.deepStrictEqual(boundaryResult, continuation("alpha", "continue"));
+  assert.deepStrictEqual(sent, []);
 });
 
-test("a reasonless block re-enters with an empty feedback reason", async () => {
+test("a reasonless block continues the run with an empty feedback reason", async () => {
   // arrange
   const runtime = createHooksRuntime();
   runtime.advanceGeneration();
@@ -688,16 +974,14 @@ test("a reasonless block re-enters with an empty feedback reason", async () => {
   const { pi, sent } = makePi();
 
   // act
-  await runStop(runtime, pi, emptyContext, executor);
+  const boundaryResult = await runStop(runtime, pi, emptyContext, executor);
 
   // assert
-  assert.deepStrictEqual(
-    sent.map((call) => call.message["content"]),
-    [feedbackContent("")],
-  );
+  assert.deepStrictEqual(boundaryResult, continuation("alpha", ""));
+  assert.deepStrictEqual(sent, []);
 });
 
-test("sends every reason and context back in one re-entry in routing order whatever order the hooks finish in (D-CF5-25)", async () => {
+test("sends every reason and context back in one continuation in routing order whatever order the hooks finish in (D-CF5-25)", async () => {
   // arrange
   const runtime = createHooksRuntime();
   runtime.advanceGeneration();
@@ -723,23 +1007,14 @@ test("sends every reason and context back in one re-entry in routing order whate
   pending.get("advisor")?.({ kind: "mutate", additionalContext: "c" });
   pending.get("quiet")?.({ kind: "mutate", additionalContext: "" });
   pending.get("first")?.({ kind: "block", reason: "r1" });
-  await settling;
+  const boundaryResult = await settling;
 
   // assert
-  assert.deepStrictEqual(sent, [
-    {
-      message: {
-        customType: "claude-hook-stop-block",
-        content: feedbackContent("r1", "c", "r2", "c2"),
-        display: false,
-        details: { pluginId: "first" },
-      },
-      options: { deliverAs: "followUp", triggerTurn: true },
-    },
-  ]);
+  assert.deepStrictEqual(boundaryResult, continuation("first", "r1", "c", "r2", "c2"));
+  assert.deepStrictEqual(sent, []);
 });
 
-test("counts a re-entry that carries several hooks' feedback once toward the cap (STOP-07)", async () => {
+test("counts a continuation that carries several hooks' feedback once toward the cap (STOP-07)", async () => {
   // arrange
   const runtime = createHooksRuntime();
   runtime.advanceGeneration();
@@ -754,12 +1029,14 @@ test("counts a re-entry that carries several hooks' feedback once toward the cap
   const { ctx, notified } = makeContext();
 
   // act
-  for (let index = 0; index < 8; index += 1) {
-    await runStop(runtime, pi, ctx, executor);
-  }
+  const results = await runStops(9, runtime, pi, ctx, executor);
 
   // assert
-  assert.strictEqual(sent.length, 7);
+  assert.deepStrictEqual(results, [
+    ...Array.from({ length: 8 }, () => continuation("alpha", "alpha", "c", "beta")),
+    undefined,
+  ]);
+  assert.deepStrictEqual(sent, []);
   assert.deepStrictEqual(notified, [
     {
       text: "Stop hook override cap reached.\n\n`alpha`'s Stop hook blocked 8 times in a row; the turn ended despite its active block.",
@@ -768,7 +1045,7 @@ test("counts a re-entry that carries several hooks' feedback once toward the cap
   ]);
 });
 
-test("a stop suppresses the re-entry of every other hook's reason and context (STOP-06)", async () => {
+test("a stop suppresses the continuation of every other hook's reason and context (STOP-06 / D-PG5-05)", async () => {
   // arrange
   const runtime = createHooksRuntime();
   runtime.advanceGeneration();
@@ -782,9 +1059,10 @@ test("a stop suppresses the re-entry of every other hook's reason and context (S
   const { pi, sent } = makePi();
 
   // act
-  await runStop(runtime, pi, emptyContext, executor);
+  const boundaryResult = await runStop(runtime, pi, emptyContext, executor);
 
   // assert
+  assert.strictEqual(boundaryResult, undefined);
   assert.deepStrictEqual(sent, []);
 });
 
@@ -808,23 +1086,27 @@ test("hooks that neither block nor add context send nothing and reset the cap (H
   const { ctx, notified } = makeContext();
 
   // act
-  for (let index = 0; index < 7; index += 1) {
-    await runStop(runtime, pi, ctx, executor);
-  }
-
+  const blocked = await runStops(7, runtime, pi, ctx, executor);
   quiet = true;
-  await runStop(runtime, pi, ctx, executor);
-  const afterQuiet = sent.length;
+  const quietResult = await runStop(runtime, pi, ctx, executor);
   quiet = false;
-  await runStop(runtime, pi, ctx, executor);
+  const afterQuiet = await runStops(2, runtime, pi, ctx, executor);
 
   // assert
-  assert.strictEqual(afterQuiet, 7);
-  assert.strictEqual(sent.length, 8);
+  assert.deepStrictEqual(
+    [...blocked, quietResult, ...afterQuiet],
+    [
+      ...Array.from({ length: 7 }, () => continuation("alpha", "continue", "continue")),
+      undefined,
+      continuation("alpha", "continue", "continue"),
+      continuation("alpha", "continue", "continue"),
+    ],
+  );
+  assert.deepStrictEqual(sent, []);
   assert.deepStrictEqual(notified, []);
 });
 
-test("additional context re-enters through the block lane", async () => {
+test("additional context continues the run through the block lane", async () => {
   // arrange
   const runtime = createHooksRuntime();
   runtime.advanceGeneration();
@@ -834,20 +1116,11 @@ test("additional context re-enters through the block lane", async () => {
   const { pi, sent } = makePi();
 
   // act
-  await runStop(runtime, pi, emptyContext, executor);
+  const boundaryResult = await runStop(runtime, pi, emptyContext, executor);
 
   // assert
-  assert.deepStrictEqual(sent, [
-    {
-      message: {
-        customType: "claude-hook-stop-block",
-        content: feedbackContent("more context"),
-        display: false,
-        details: { pluginId: "alpha" },
-      },
-      options: { deliverAs: "followUp", triggerTurn: true },
-    },
-  ]);
+  assert.deepStrictEqual(boundaryResult, continuation("alpha", "more context"));
+  assert.deepStrictEqual(sent, []);
 });
 
 test("a noop Stop outcome emits no message or notification", async () => {
@@ -860,9 +1133,10 @@ test("a noop Stop outcome emits no message or notification", async () => {
   const { ctx, notified } = makeContext();
 
   // act
-  await runStop(runtime, pi, ctx, executor);
+  const boundaryResult = await runStop(runtime, pi, ctx, executor);
 
   // assert
+  assert.strictEqual(boundaryResult, undefined);
   assert.deepStrictEqual(sent, []);
   assert.deepStrictEqual(notified, []);
 });
@@ -885,10 +1159,11 @@ test("a stop outcome suppresses a preceding block", async () => {
   const { pi, sent } = makePi();
 
   // act
-  await runStop(runtime, pi, emptyContext, executor);
+  const boundaryResult = await runStop(runtime, pi, emptyContext, executor);
 
   // assert
   assert.deepStrictEqual(fired, ["blocker", "stopper"]);
+  assert.strictEqual(boundaryResult, undefined);
   assert.deepStrictEqual(sent, []);
 });
 
@@ -908,10 +1183,11 @@ test("a stop outcome suppresses a following block", async () => {
   const { pi, sent } = makePi();
 
   // act
-  await runStop(runtime, pi, emptyContext, executor);
+  const boundaryResult = await runStop(runtime, pi, emptyContext, executor);
 
   // assert
   assert.deepStrictEqual(fired, ["stopper", "blocker"]);
+  assert.strictEqual(boundaryResult, undefined);
   assert.deepStrictEqual(sent, []);
 });
 
@@ -929,10 +1205,11 @@ test("an asynchronous Stop declaration runs through the background noop of the e
   const { pi, sent } = makePi();
 
   // act
-  await runStop(runtime, pi, emptyContext, executor);
+  const boundaryResult = await runStop(runtime, pi, emptyContext, executor);
 
   // assert
   assert.deepStrictEqual(fired, ["alpha"]);
+  assert.strictEqual(boundaryResult, undefined);
   assert.deepStrictEqual(sent, []);
 });
 
@@ -954,10 +1231,11 @@ test("a false if predicate skips a Stop declaration", async () => {
   const { pi, sent } = makePi();
 
   // act
-  await runStop(runtime, pi, emptyContext, executor);
+  const boundaryResult = await runStop(runtime, pi, emptyContext, executor);
 
   // assert
   assert.deepStrictEqual(fired, []);
+  assert.strictEqual(boundaryResult, undefined);
   assert.deepStrictEqual(sent, []);
 });
 
@@ -985,29 +1263,67 @@ test("a reload during awaited Stop work discards every stale effect", async () =
 
   // act
   agentEndCacheHandler(runtime, generation)(agentEnd("stop"));
-  const staleSettle = settleHandlerFor(runtime, generation, pi, staleExecutor)(settledEvent, ctx);
+  const staleBoundary = beforeSettleHandlerFor(
+    runtime,
+    generation,
+    pi,
+    staleExecutor,
+  )(boundaryEvent, ctx);
   runtime.advanceGeneration();
   resetSettleState(runtime);
   resolveStaleOutcome?.({ kind: "block", reason: "stale" });
-  await staleSettle;
+  const staleResult = await staleBoundary;
 
   // assert
-  assert.strictEqual(sent.length, 0);
+  assert.strictEqual(staleResult, undefined);
   assert.deepStrictEqual(notified, []);
   assert.strictEqual(runtime.isStopHookActive(), false);
 
   // act
-  await runStop(runtime, pi, ctx, liveExecutor);
+  const liveResult = await runStop(runtime, pi, ctx, liveExecutor);
 
   // assert
   assert.deepStrictEqual(liveEvents, [{ last_assistant_message: "done", stop_hook_active: false }]);
-  assert.deepStrictEqual(
-    sent.map((call) => call.message.content),
-    [feedbackContent("fresh")],
-  );
+  assert.deepStrictEqual(liveResult, continuation("alpha", "fresh"));
+  assert.deepStrictEqual(sent, []);
 });
 
-test("the eighth consecutive block is suppressed and warns only once", async () => {
+test("a pending old-generation Stop completion cannot consume a reloaded budget", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
+  let resolveOldHook: ((result: HookExecResult) => void) | undefined;
+  const executor: HookExecutor = () =>
+    new Promise((resolve) => {
+      resolveOldHook = resolve;
+    });
+  const { pi, sent } = makePi();
+  const { ctx, notified } = makeContext();
+  const oldGeneration = runtime.currentGeneration();
+  agentEndCacheHandler(runtime, oldGeneration)(agentEnd("stop"));
+  const pending = beforeSettleHandlerFor(runtime, oldGeneration, pi, executor)(boundaryEvent, ctx);
+
+  // act
+  runtime.advanceGeneration();
+  resetSettleState(runtime);
+  const freshEight = Array.from({ length: 8 }, () => runtime.recordStopReentry());
+  resolveOldHook?.({ kind: "block", reason: "stale" });
+  const staleResult = await pending;
+  const ninth = runtime.recordStopReentry();
+
+  // assert
+  assert.deepStrictEqual(
+    freshEight,
+    Array.from({ length: 8 }, () => ({ reenter: true, notifyCap: false })),
+  );
+  assert.deepStrictEqual(ninth, { reenter: false, notifyCap: true });
+  assert.strictEqual(staleResult, undefined);
+  assert.deepStrictEqual(sent, []);
+  assert.deepStrictEqual(notified, []);
+});
+
+test("the ninth consecutive block is suppressed and warns only once", async () => {
   // arrange
   const runtime = createHooksRuntime();
   runtime.advanceGeneration();
@@ -1022,13 +1338,15 @@ test("the eighth consecutive block is suppressed and warns only once", async () 
   const { ctx, notified } = makeContext();
 
   // act
-  for (let index = 0; index < 9; index += 1) {
-    await runStop(runtime, pi, ctx, executor);
-  }
+  const results = await runStops(9, runtime, pi, ctx, executor);
 
   // assert
   assert.deepStrictEqual(flags, [false, true, true, true, true, true, true, true, true]);
-  assert.strictEqual(sent.length, 7);
+  assert.deepStrictEqual(results, [
+    ...Array.from({ length: 8 }, () => continuation("alpha", "continue")),
+    undefined,
+  ]);
+  assert.deepStrictEqual(sent, []);
   assert.deepStrictEqual(notified, [
     {
       text: "Stop hook override cap reached.\n\n`alpha`'s Stop hook blocked 8 times in a row; the turn ended despite its active block.",
@@ -1037,7 +1355,7 @@ test("the eighth consecutive block is suppressed and warns only once", async () 
   ]);
 });
 
-test("block and additional-context re-entries share one cap", async () => {
+test("block and additional-context continuations share one cap", async () => {
   // arrange
   const runtime = createHooksRuntime();
   runtime.advanceGeneration();
@@ -1056,14 +1374,11 @@ test("block and additional-context re-entries share one cap", async () => {
   const { ctx, notified } = makeContext();
 
   // act
-  for (let index = 0; index < 8; index += 1) {
-    await runStop(runtime, pi, ctx, executor);
-  }
+  const results = await runStops(9, runtime, pi, ctx, executor);
 
   // assert
-  assert.deepStrictEqual(
-    sent.map((call) => call.message["content"]),
-    [
+  assert.deepStrictEqual(results, [
+    ...[
       "continue",
       "more context",
       "continue",
@@ -1071,8 +1386,11 @@ test("block and additional-context re-entries share one cap", async () => {
       "continue",
       "more context",
       "continue",
-    ].map((text) => feedbackContent(text)),
-  );
+      "more context",
+    ].map((text) => continuation("alpha", text)),
+    undefined,
+  ]);
+  assert.deepStrictEqual(sent, []);
   assert.strictEqual(notified.length, 1);
 });
 
@@ -1088,19 +1406,23 @@ test("a noop resets the cap and rearms its notification", async () => {
   const { ctx, notified } = makeContext();
 
   // act
-  for (let index = 0; index < 7; index += 1) {
-    await runStop(runtime, pi, ctx, executor);
-  }
-
+  const before = await runStops(7, runtime, pi, ctx, executor);
   mode = "noop";
-  await runStop(runtime, pi, ctx, executor);
+  const quietResult = await runStop(runtime, pi, ctx, executor);
   mode = "block";
-  for (let index = 0; index < 8; index += 1) {
-    await runStop(runtime, pi, ctx, executor);
-  }
+  const after = await runStops(9, runtime, pi, ctx, executor);
 
   // assert
-  assert.strictEqual(sent.length, 14);
+  assert.deepStrictEqual(
+    [...before, quietResult, ...after],
+    [
+      ...Array.from({ length: 7 }, () => continuation("alpha", "continue")),
+      undefined,
+      ...Array.from({ length: 8 }, () => continuation("alpha", "continue")),
+      undefined,
+    ],
+  );
+  assert.deepStrictEqual(sent, []);
   assert.strictEqual(notified.length, 1);
 });
 
@@ -1122,17 +1444,24 @@ test("a stop resets the cap but leaves the next payload active", async () => {
   const { ctx, notified } = makeContext();
 
   // act
-  await runStop(runtime, pi, ctx, executor);
+  const first = await runStop(runtime, pi, ctx, executor);
   mode = "stop";
-  await runStop(runtime, pi, ctx, executor);
+  const stopped = await runStop(runtime, pi, ctx, executor);
   mode = "block";
-  for (let index = 0; index < 8; index += 1) {
-    await runStop(runtime, pi, ctx, executor);
-  }
+  const after = await runStops(9, runtime, pi, ctx, executor);
 
   // assert
   assert.strictEqual(flags[2], true);
-  assert.strictEqual(sent.length, 8);
+  assert.deepStrictEqual(
+    [first, stopped, ...after],
+    [
+      continuation("alpha", "continue"),
+      undefined,
+      ...Array.from({ length: 8 }, () => continuation("alpha", "continue")),
+      undefined,
+    ],
+  );
+  assert.deepStrictEqual(sent, []);
   assert.strictEqual(notified.length, 1);
 });
 
@@ -1152,16 +1481,17 @@ test("a live input clears active state and resets the cap", async () => {
   const epoch = runtime.currentGeneration();
 
   // act
-  await runStop(runtime, pi, ctx, executor);
-  await runStop(runtime, pi, ctx, executor);
+  const before = await runStops(2, runtime, pi, ctx, executor);
   inputResetHandlerFor(runtime, epoch)();
-  for (let index = 0; index < 8; index += 1) {
-    await runStop(runtime, pi, ctx, executor);
-  }
+  const after = await runStops(9, runtime, pi, ctx, executor);
 
   // assert
   assert.deepStrictEqual(flags.slice(0, 3), [false, true, false]);
-  assert.strictEqual(sent.length, 9);
+  assert.deepStrictEqual(
+    [...before, ...after],
+    [...Array.from({ length: 10 }, () => continuation("alpha", "continue")), undefined],
+  );
+  assert.deepStrictEqual(sent, []);
   assert.strictEqual(notified.length, 1);
 });
 
@@ -1180,14 +1510,18 @@ test("a stale input handler cannot clear live active state", async () => {
   const staleHandler = inputResetHandlerFor(runtime, runtime.currentGeneration());
 
   // act
-  await runStop(runtime, pi, emptyContext, executor);
+  const first = await runStop(runtime, pi, emptyContext, executor);
   runtime.advanceGeneration();
   staleHandler();
-  await runStop(runtime, pi, emptyContext, executor);
+  const second = await runStop(runtime, pi, emptyContext, executor);
 
   // assert
   assert.deepStrictEqual(flags, [false, true]);
-  assert.strictEqual(sent.length, 2);
+  assert.deepStrictEqual(
+    [first, second],
+    [continuation("alpha", "continue"), continuation("alpha", "continue")],
+  );
+  assert.deepStrictEqual(sent, []);
 });
 
 test("resetting settle state clears cached and active session data", async () => {
@@ -1205,47 +1539,50 @@ test("resetting settle state clears cached and active session data", async () =>
   const epoch = runtime.currentGeneration();
 
   // act
-  await runStop(runtime, pi, emptyContext, executor);
+  const first = await runStop(runtime, pi, emptyContext, executor);
   agentEndCacheHandler(runtime, epoch)(agentEnd("stop"));
   resetSettleState(runtime);
-  await settleHandlerFor(runtime, epoch, pi, executor)(settledEvent, emptyContext);
-  await runStop(runtime, pi, emptyContext, executor);
+  const afterReset = await beforeSettleHandlerFor(
+    runtime,
+    epoch,
+    pi,
+    executor,
+  )(boundaryEvent, emptyContext);
+  const fresh = await runStop(runtime, pi, emptyContext, executor);
 
   // assert
   assert.deepStrictEqual(flags, [false, false]);
-  assert.strictEqual(sent.length, 2);
+  assert.deepStrictEqual(
+    [first, afterReset, fresh],
+    [continuation("alpha", "continue"), undefined, continuation("alpha", "continue")],
+  );
+  assert.deepStrictEqual(sent, []);
 });
 
-test("a send failure is contained and a later input starts a clean run", async () => {
+test("a Stop continuation sends no message through Pi (D-PG5-01)", async () => {
   // arrange
   const runtime = createHooksRuntime();
   runtime.advanceGeneration();
   const executor: HookExecutor = (): Promise<HookExecResult> =>
     Promise.resolve({ kind: "block", reason: "continue" });
   runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
-  const failingPi = makePi(new Error("host refused")).pi;
-  const healthy = makePi();
-  const epoch = runtime.currentGeneration();
+  const refusing = makePi(new Error("host refused"));
 
   // act
-  await assert.doesNotReject(runStop(runtime, failingPi, emptyContext, executor));
-  await settleHandlerFor(runtime, epoch, healthy.pi, executor)(settledEvent, emptyContext);
-  inputResetHandlerFor(runtime, epoch)();
-  await runStop(runtime, healthy.pi, emptyContext, executor);
+  const boundaryResult = await runStop(runtime, refusing.pi, emptyContext, executor);
 
   // assert
-  assert.deepStrictEqual(
-    healthy.sent.map((call) => call.message["content"]),
-    [feedbackContent("continue")],
-  );
+  assert.deepStrictEqual(boundaryResult, continuation("alpha", "continue"));
+  assert.deepStrictEqual(refusing.sent, []);
 });
 
-test("an executor rejection consumes its ending and permits a fresh ending", async () => {
+test("an executor rejection resolves to nothing, closes the stop boundary, and permits a fresh ending", async (t) => {
   // arrange
+  const debugLines = observeHookDebug(t);
   const runtime = createHooksRuntime();
   runtime.advanceGeneration();
-  const executorError = new Error("executor failed");
-  const rejecting: HookExecutor = (): Promise<HookExecResult> => Promise.reject(executorError);
+  const rejecting: HookExecutor = (): Promise<HookExecResult> =>
+    Promise.reject(new Error("executor failed"));
   const events: unknown[] = [];
   const healthy: HookExecutor = (_entry, event): Promise<HookExecResult> => {
     events.push(event);
@@ -1255,22 +1592,20 @@ test("an executor rejection consumes its ending and permits a fresh ending", asy
   runtime.setRoutingBucket("Stop", [stopEntry("alpha")]);
   const { pi, sent } = makePi();
   const epoch = runtime.currentGeneration();
+  const boundary = (executor: HookExecutor): Promise<AgentBeforeSettleEventResult | undefined> =>
+    beforeSettleHandlerFor(runtime, epoch, pi, executor)(boundaryEvent, emptyContext);
   agentEndCacheHandler(runtime, epoch)(agentEnd("stop"));
 
   // act
-  await assert.rejects(
-    settleHandlerFor(runtime, epoch, pi, rejecting)(settledEvent, emptyContext),
-    (rejectedWith: unknown) => {
-      assert.strictEqual(rejectedWith, executorError);
-
-      return true;
-    },
-  );
-  await settleHandlerFor(runtime, epoch, pi, healthy)(settledEvent, emptyContext);
+  const rejected = await boundary(rejecting);
+  runtime.recordRewakeSent();
+  const consumed = await boundary(healthy);
   agentEndCacheHandler(runtime, epoch)(agentEnd("stop"));
-  await settleHandlerFor(runtime, epoch, pi, healthy)(settledEvent, emptyContext);
+  const fresh = await boundary(healthy);
 
   // assert
+  assert.deepStrictEqual([rejected, consumed, fresh], [undefined, undefined, undefined]);
+  assert.deepStrictEqual(debugLines(), ["[hooks] settle: Stop boundary failed: executor failed"]);
   assert.deepStrictEqual(events, [{ last_assistant_message: "done", stop_hook_active: false }]);
   assert.deepStrictEqual(sent, []);
 });
@@ -1377,7 +1712,7 @@ test("a reload during awaited StopFailure work discards the stale continuation",
   assert.deepStrictEqual(events, [{ error: "unknown", last_assistant_message: "provider failed" }]);
 });
 
-test("a length ending reports max-output classification without re-entry", async () => {
+test("a length ending reports max-output classification without a continuation", async () => {
   // arrange
   const runtime = createHooksRuntime();
   runtime.advanceGeneration();
@@ -1482,7 +1817,7 @@ test("all failure outcomes run in order and are then discarded", async () => {
   agentEndCacheHandler(runtime, epoch)(failureEnd("error", "provider failed"));
   await settleHandlerFor(runtime, epoch, pi, failureExecutor)(settledEvent, emptyContext);
   runtime.setRoutingBucket("Stop", [stopEntry("fresh")]);
-  await runStop(runtime, pi, emptyContext, stopExecutor);
+  const boundaryResult = await runStop(runtime, pi, emptyContext, stopExecutor);
 
   // assert
   assert.deepStrictEqual(
@@ -1497,10 +1832,8 @@ test("all failure outcomes run in order and are then discarded", async () => {
     })),
   );
   assert.deepStrictEqual(stopEvents, [{ last_assistant_message: "done", stop_hook_active: false }]);
-  assert.deepStrictEqual(
-    sent.map((call) => call.message["content"]),
-    [feedbackContent("fresh")],
-  );
+  assert.deepStrictEqual(boundaryResult, continuation("fresh", "fresh"));
+  assert.deepStrictEqual(sent, []);
 });
 
 test("an empty failure bucket has no public effect", async () => {
@@ -1598,21 +1931,19 @@ test("shows each Stop hook's system message in routing order and never sends it 
   pending.get("last")?.({ kind: "noop", systemMessage: "two" });
   pending.get("quiet")?.({ kind: "block", reason: "keep going", systemMessage: "" });
   pending.get("first")?.({ kind: "noop", systemMessage: "one" });
-  await settling;
+  const boundaryResult = await settling;
 
   // assert
   assert.deepStrictEqual(host.capture.entries, [
     hookNoticeEntry("Stop says: one"),
     hookNoticeEntry("Stop says: two"),
   ]);
-  assert.deepStrictEqual(
-    host.sent.map((call) => call.message["content"]),
-    [feedbackContent("keep going")],
-  );
+  assert.deepStrictEqual(boundaryResult, continuation("quiet", "keep going"));
+  assert.deepStrictEqual(host.sent, []);
   host.capture.assertValid();
 });
 
-test("shows a Stop system message when a stop suppresses the re-entry (STOP-06 / D-CF5-14)", async () => {
+test("shows a Stop system message when a stop suppresses the continuation (STOP-06 / D-CF5-14)", async () => {
   // arrange
   const runtime = createHooksRuntime();
   runtime.advanceGeneration();
@@ -1622,14 +1953,15 @@ test("shows a Stop system message when a stop suppresses the re-entry (STOP-06 /
   const host = makeNoticeHost();
 
   // act
-  await runStop(runtime, host.pi, host.ctx, executor);
+  const boundaryResult = await runStop(runtime, host.pi, host.ctx, executor);
 
   // assert
   assert.deepStrictEqual(host.capture.entries, [hookNoticeEntry("Stop says: halted")]);
+  assert.strictEqual(boundaryResult, undefined);
   assert.deepStrictEqual(host.sent, []);
 });
 
-test("debug-logs a Stop notice that fails to show and still re-enters", async (t) => {
+test("debug-logs a Stop notice that fails to show and still continues the run", async (t) => {
   // arrange
   const debugLines = observeHookDebug(t);
   const runtime = createHooksRuntime();
@@ -1647,14 +1979,12 @@ test("debug-logs a Stop notice that fails to show and still re-enters", async (t
   } as unknown as ExtensionContext;
 
   // act
-  await runStop(runtime, pi, ctx, executor);
+  const boundaryResult = await runStop(runtime, pi, ctx, executor);
 
   // assert
   assert.deepStrictEqual(debugLines(), ["[hooks] settle: Stop notice failed: no ui"]);
-  assert.deepStrictEqual(
-    sent.map((call) => call.message["content"]),
-    [feedbackContent("continue")],
-  );
+  assert.deepStrictEqual(boundaryResult, continuation("alpha", "continue"));
+  assert.deepStrictEqual(sent, []);
 });
 
 test("drops a StopFailure system message with a debug line (D-CF5-14)", async (t) => {
@@ -1687,4 +2017,282 @@ test("drops a StopFailure system message with a debug line (D-CF5-14)", async (t
     '[hooks] settle: unrecognized StopFailure errorMessage: "provider failed"',
     "[hooks] settle: 2 systemMessage(s) dropped on StopFailure",
   ]);
+});
+
+const BOOM_FAILURE = { kind: "noop", failure: { kind: "exit", stderr: "boom" } } as const;
+const MISSING_SCRIPT_STDERR =
+  "python3: can't open file '/x/gone.py': [Errno 2] No such file or directory";
+// The em dash (U+2014) of the missing-script notice, escaped because the
+// fix-unicode-dashes hook rewrites a literal one.
+const MISSING_SCRIPT_NOTICE = `Stop hook error: Hook script appears to be missing \u2014 "echo gone" exited 2 with: ${MISSING_SCRIPT_STDERR}. Treating as non-blocking. Run /claude:plugin reinstall gone@catalog --scope user to reinstall it.`;
+
+// An executor that answers each Stop hook with its plugin's result.
+function resultsExecutor(results: Readonly<Record<string, HookExecResult>>): HookExecutor {
+  return (entry) => Promise.resolve(results[entry.pluginId] ?? { kind: "noop" });
+}
+
+for (const { name, results, notices, continued } of [
+  {
+    name: "shows a Stop hook's failed exit as a Stop hook error (D-PG5-10)",
+    results: { failer: BOOM_FAILURE },
+    notices: ["Stop hook error: Failed with non-blocking status code: boom"],
+    continued: undefined,
+  },
+  {
+    name: "shows a missing Stop script and asks for no continuation (D-PG5-08)",
+    results: {
+      gone: { kind: "noop", failure: { kind: "missing-script", stderr: MISSING_SCRIPT_STDERR } },
+    },
+    notices: [MISSING_SCRIPT_NOTICE],
+    continued: undefined,
+  },
+  {
+    name: "continues the run beside a missing Stop script that shows its notice (D-PG5-09)",
+    results: {
+      gone: { kind: "noop", failure: { kind: "missing-script", stderr: MISSING_SCRIPT_STDERR } },
+      guard: { kind: "block", reason: "keep going" },
+    },
+    notices: [MISSING_SCRIPT_NOTICE],
+    continued: continuation("guard", "keep going"),
+  },
+  {
+    name: "shows the system messages, then the failure notices, then the stop line",
+    results: {
+      halt: { kind: "stop", stopReason: "done for today" },
+      failer: BOOM_FAILURE,
+      speaker: { kind: "noop", systemMessage: "said" },
+    },
+    notices: [
+      "Stop says: said",
+      "Stop hook error: Failed with non-blocking status code: boom",
+      "Stop hook stopped continuation: done for today",
+    ],
+    continued: undefined,
+  },
+  {
+    name: "shows the stop reason of the first stopping hook in routing order (D-PG5-13)",
+    results: {
+      first: { kind: "stop", stopReason: "done for today" },
+      second: { kind: "stop", stopReason: "later" },
+    },
+    notices: ["Stop hook stopped continuation: done for today"],
+    continued: undefined,
+  },
+  {
+    name: "shows no stop line for a stop with no reason",
+    results: { halt: { kind: "stop" } },
+    notices: [],
+    continued: undefined,
+  },
+  {
+    name: "shows no stop line for a stop with an empty reason",
+    results: { halt: { kind: "stop", stopReason: "" } },
+    notices: [],
+    continued: undefined,
+  },
+] satisfies ReadonlyArray<{
+  readonly name: string;
+  readonly results: Readonly<Record<string, HookExecResult>>;
+  readonly notices: readonly string[];
+  readonly continued: unknown;
+}>) {
+  test(name, async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    runtime.setRoutingBucket(
+      "Stop",
+      Object.keys(results).map((pluginId) => stopEntry(pluginId)),
+    );
+    const host = makeNoticeHost();
+    const executor = resultsExecutor(results);
+
+    // act
+    const boundaryResult = await runStop(runtime, host.pi, host.ctx, executor);
+    await settleHandlerFor(
+      runtime,
+      runtime.currentGeneration(),
+      host.pi,
+      executor,
+    )(settledEvent, host.ctx);
+
+    // assert
+    assert.deepStrictEqual(
+      host.capture.entries,
+      notices.map((text) => hookNoticeEntry(text)),
+    );
+    assert.deepStrictEqual(boundaryResult, continued);
+    assert.deepStrictEqual(host.sent, []);
+    host.capture.assertValid();
+  });
+}
+
+test("shows the stop line once the run settles, though an earlier boundary handler asked to continue (D-PG5-13)", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket("Stop", [stopEntry("halt")]);
+  const host = makeNoticeHost();
+  const generation = runtime.currentGeneration();
+  const executor = resultsExecutor({ halt: { kind: "stop", stopReason: "done for today" } });
+  agentEndCacheHandler(runtime, generation)(agentEnd("stop"));
+  const continuedEvent = { ...boundaryEvent, continue: true } as AgentBeforeSettleEvent;
+
+  // act
+  const boundaryResult = await beforeSettleHandlerFor(
+    runtime,
+    generation,
+    host.pi,
+    executor,
+  )(continuedEvent, host.ctx);
+  const noticesAtBoundary = [...host.capture.entries];
+  const settle = settleHandlerFor(runtime, generation, host.pi, executor);
+  await settle(settledEvent, host.ctx);
+  await settle(settledEvent, host.ctx);
+
+  // assert
+  assert.deepStrictEqual(
+    { boundaryResult, noticesAtBoundary, notices: host.capture.entries },
+    {
+      boundaryResult: undefined,
+      noticesAtBoundary: [],
+      notices: [hookNoticeEntry("Stop hook stopped continuation: done for today")],
+    },
+  );
+});
+
+test("drops the stop line when the run goes on past the boundary (D-PG5-13)", async (t) => {
+  // arrange
+  const debugLines = observeHookDebug(t);
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket("Stop", [stopEntry("halt")]);
+  const host = makeNoticeHost();
+  const generation = runtime.currentGeneration();
+  const executor = resultsExecutor({ halt: { kind: "stop", stopReason: "done for today" } });
+  await runStop(runtime, host.pi, host.ctx, executor);
+
+  // act
+  agentEndCacheHandler(runtime, generation)(agentEnd("aborted"));
+  await settleHandlerFor(runtime, generation, host.pi, executor)(settledEvent, host.ctx);
+
+  // assert
+  assert.deepStrictEqual(
+    { notices: host.capture.entries, debug: debugLines() },
+    {
+      notices: [],
+      debug: [
+        "[hooks] settle: continue:false from halt suppresses Stop continuation; stopReason=done for today",
+        "[hooks] settle: the run went on after a Stop hook stopped it; stopReason not shown",
+      ],
+    },
+  );
+});
+
+test("shows a Stop hook that cannot start on the first Stop run and not on the second (D-PG5-12)", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket("Stop", [stopEntry("starter")]);
+  const host = makeNoticeHost();
+  const executor = resultsExecutor({
+    starter: { kind: "noop", failure: { kind: "spawn", error: "spawn starter.sh ENOENT" } },
+  });
+
+  // act
+  await runStops(2, runtime, host.pi, host.ctx, executor);
+
+  // assert
+  assert.deepStrictEqual(host.capture.entries, [
+    hookNoticeEntry(
+      "Stop hook error: Failed with non-blocking status code: Error occurred while executing hook command: spawn starter.sh ENOENT",
+    ),
+  ]);
+});
+
+test("shows a Stop hook that cannot start on the next Stop run when its notice failed to show (D-PG5-12)", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket("Stop", [stopEntry("starter")]);
+  const host = makeNoticeHost();
+  let appends = 0;
+  const pi = {
+    ...host.pi,
+    appendEntry: (...entry: Parameters<ExtensionAPI["appendEntry"]>): void => {
+      appends += 1;
+      if (appends === 1) {
+        throw new Error("append failed");
+      }
+
+      host.pi.appendEntry(...entry);
+    },
+  };
+  const executor = resultsExecutor({
+    starter: { kind: "noop", failure: { kind: "spawn", error: "spawn starter.sh ENOENT" } },
+  });
+
+  // act
+  await runStops(3, runtime, pi, host.ctx, executor);
+
+  // assert
+  assert.deepStrictEqual(host.capture.entries, [
+    hookNoticeEntry(
+      "Stop hook error: Failed with non-blocking status code: Error occurred while executing hook command: spawn starter.sh ENOENT",
+    ),
+  ]);
+});
+
+test("debug-logs a Stop failure notice and a stop line that fail to show", async (t) => {
+  // arrange
+  const debugLines = observeHookDebug(t);
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket("Stop", [stopEntry("failer"), stopEntry("halt")]);
+  const { pi, sent } = makePi();
+  const ctx = {
+    mode: "print",
+    get ui(): never {
+      throw new Error("no ui");
+    },
+  } as unknown as ExtensionContext;
+  const executor = resultsExecutor({
+    failer: BOOM_FAILURE,
+    halt: { kind: "stop", stopReason: "done" },
+  });
+
+  // act
+  const boundaryResult = await runStop(runtime, pi, ctx, executor);
+  await settleHandlerFor(runtime, runtime.currentGeneration(), pi, executor)(settledEvent, ctx);
+
+  // assert
+  assert.deepStrictEqual(debugLines(), [
+    "[hooks] settle: Stop notice failed: no ui",
+    "[hooks] settle: continue:false from halt suppresses Stop continuation; stopReason=done",
+    "[hooks] settle: Stop notice failed: no ui",
+  ]);
+  assert.strictEqual(boundaryResult, undefined);
+  assert.deepStrictEqual(sent, []);
+});
+
+test("shows no notice for a StopFailure hook that failed (D-PG5-10)", async () => {
+  // arrange
+  const runtime = createHooksRuntime();
+  runtime.advanceGeneration();
+  runtime.setRoutingBucket("StopFailure", [failureEntry("failer")]);
+  const host = makeNoticeHost();
+  const epoch = runtime.currentGeneration();
+
+  // act
+  agentEndCacheHandler(runtime, epoch)(failureEnd("error", "rate limit exceeded"));
+  await settleHandlerFor(
+    runtime,
+    epoch,
+    host.pi,
+    resultsExecutor({ failer: BOOM_FAILURE }),
+  )(settledEvent, host.ctx);
+
+  // assert
+  assert.deepStrictEqual(host.capture.entries, []);
+  assert.deepStrictEqual(host.sent, []);
 });

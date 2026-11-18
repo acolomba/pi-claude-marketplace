@@ -191,6 +191,30 @@ describe("narrowResolverNotes", () => {
     assert.deepStrictEqual(reasons, ["unsupported source"]);
   });
 
+  for (const key of ["mode", "lspServers", "source"]) {
+    test(`D-PG10-05: classifies a malformed userConfig note naming ${key} as invalid manifest`, () => {
+      // arrange
+      const notes = [`malformed userConfig: userConfig option "${key}" is not an object`];
+
+      // act
+      const reasons = narrowResolverNotes(notes);
+
+      // assert
+      assert.deepStrictEqual(reasons, ["invalid manifest"]);
+    });
+  }
+
+  test("D-PG10-06: classifies an unset userConfig note naming lspServers as unsupported source", () => {
+    // arrange
+    const notes = ["required userConfig options have no default: lspServers, source"];
+
+    // act
+    const reasons = narrowResolverNotes(notes);
+
+    // assert
+    assert.deepStrictEqual(reasons, ["unsupported source"]);
+  });
+
   test("classifies an inline malformed mcpServers note as unsupported source", () => {
     // arrange
     const notes = ["malformed mcpServers: shape mismatch"];
@@ -315,6 +339,29 @@ describe("narrowUnsupportedKinds", () => {
 
     // assert
     assert.deepStrictEqual(reasons, ["unsupported mcp"]);
+  });
+
+  test("D-PG10-06: classifies userConfig as options not set", () => {
+    // arrange
+    const kinds = ["userConfig"];
+    const expectedReasons = ["options not set"] satisfies readonly UnsupportedReason[];
+
+    // act
+    const reasons = narrowUnsupportedKinds(kinds);
+
+    // assert
+    assert.deepStrictEqual(reasons, expectedReasons);
+  });
+
+  test("D-PG10-06: classifies themes and userConfig in kind order", () => {
+    // arrange
+    const kinds = ["themes", "userConfig"];
+
+    // act
+    const reasons = narrowUnsupportedKinds(kinds);
+
+    // assert
+    assert.deepStrictEqual(reasons, ["unsupported component", "options not set"]);
   });
 
   test("classifies hooks as unsupported hooks", () => {

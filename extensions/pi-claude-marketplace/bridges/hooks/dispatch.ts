@@ -52,13 +52,18 @@
 // tables (DISP-03 zombie-defense belt-and-suspenders), and a run whose
 // generation changed while its hooks ran folds to noop.
 
+import { homedir } from "node:os";
+
 import { closedSetMatcherValues } from "../../domain/components/hook-events.ts";
+import { mapPiToClaudeToolName } from "../../domain/components/hook-tool-names.ts";
 import {
   claudeFormToolName,
+  looksLikeCutAdapterToolName,
   MCP_TOOL_PREFIX,
-  serverPrefixNames,
+  recoverAdapterToolName,
   toolLiteralNames,
 } from "../../domain/components/hooks/builtin-mcp-tool-names.ts";
+import { joinedAdapterToolName } from "../../domain/mcp-implementation.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { notifyHookNotice } from "../../shared/notification-dispatch.ts";
@@ -71,11 +76,14 @@ import {
   adaptObservationResultForEvent,
   adaptToolCallResult,
   adaptToolResultResult,
+  notifyIgnoredToolInputRewrite,
+  replaceToolCallInput,
 } from "./event-adapters.ts";
 import {
   compactionBlockedText,
   hookErrorText,
   hookEventLabel,
+  hookFailureText,
   hookMatchLabel,
   hookSaysText,
   postCompactLineText,
@@ -84,6 +92,9 @@ import {
 import { ifFires } from "./if-field/index.ts";
 import { createHookToolView } from "./mcp-tool-view.ts";
 import { compactTrigger } from "./payloads/compact-trigger.ts";
+import { withToolFacts } from "./payloads/tool-event-facts.ts";
+import { expansionPrompt } from "./payloads/user-prompt-expansion.ts";
+import { decideEditBatch, editPairToolUseId, editPairViews } from "./tool-batch.ts";
 
 import type { BucketAEvent, DispatchableEvent } from "../../domain/components/hook-events.ts";
 import type { McpToolIdentity } from "../../domain/components/hooks/builtin-mcp-tool-names.ts";
@@ -101,11 +112,13 @@ import type {
   ToolResultEventResult,
 } from "../../platform/pi-api.ts";
 import type { CompactionCancel, HookAdapterContext } from "./event-adapters.ts";
-import type { HookExecResult } from "./exec-result.ts";
+import type { HookExecResult, HookFailure } from "./exec-result.ts";
 import type { HookBlock } from "./hook-labels.ts";
 import type { HookToolView } from "./mcp-tool-view.ts";
 import type { ClaudeSessionEndEvent } from "./payloads/session-end.ts";
 import type { ClaudeSessionStartEvent } from "./payloads/session-start.ts";
+import type { HookToolFacts } from "./payloads/tool-event-facts.ts";
+import type { UserPromptExpansionEvent } from "./payloads/user-prompt-expansion.ts";
 import type { RoutingEntry } from "./routing-state.ts";
 import type { HooksRuntime } from "./runtime.ts";
 
@@ -140,27 +153,40 @@ export type HookExecutor = (
 // ──────────────────────────────────────────────────────────────────────────
 
 /**
- * Tool-event matcher-fires predicate. A tool-set matcher fires when one of
- * its `toolNames` -- the Pi tool literals a Claude matcher token maps to,
- * plus the MCP tool literals -- names the event's tool, or one of its MCP
- * server `toolPrefixes` names the tool's server (ANAME-02). For a tool of
- * Pi's built-in MCP an MCP literal or prefix names the server as it
- * registered, with `-` kept (D-P5-04); for every other tool the literal is
- * Pi's name and the prefix starts it (D-P5-05). The comparison is exact and
- * case-sensitive. The parser already filters regex/unmapped matchers at
- * parse time so those arms are unreachable at dispatch; defensive `false`
- * keeps the switch exhaustive.
+ * Exact members retain the native mapping and MCP recovery rules. Regexes
+ * test the recovered Claude-form name, including mapped native tool names.
  */
 function matcherFiresOnToolEvent(matcher: ParsedMatcher, tool: McpToolIdentity): boolean {
   switch (matcher.kind) {
     case "match-all":
       return true;
     case "tool-set":
-      return (
-        [...matcher.toolNames].some((literal) => toolLiteralNames(literal, tool)) ||
-        (matcher.toolPrefixes?.some((prefix) => serverPrefixNames(prefix, tool)) ?? false)
-      );
+      return [...matcher.toolNames].some((literal) => toolLiteralNames(literal, tool));
     case "regex":
+      return matcher.pattern.test(mapPiToClaudeToolName(claudeFormToolName(tool)));
+    case "name-set":
+    case "invalid-pattern":
+    case "unmapped":
+      return false;
+  }
+}
+
+/**
+ * D-PG6-19 / D-PG2-10: a UserPromptExpansion matcher selects the command
+ * name: an exact-list member equals it, a regular expression is tested
+ * against it unanchored and case-sensitive, and an empty matcher or `*`
+ * selects every command.
+ */
+function matcherFiresOnCommandName(matcher: ParsedMatcher, commandName: string): boolean {
+  switch (matcher.kind) {
+    case "match-all":
+      return true;
+    case "name-set":
+      return matcher.names.has(commandName);
+    case "regex":
+      return matcher.pattern.test(commandName);
+    case "tool-set":
+    case "invalid-pattern":
     case "unmapped":
       return false;
   }
@@ -337,7 +363,7 @@ function withContext(result: HookExecResult, context: string | undefined): HookE
 // The last value a mutation in routing order sets for `field`, or `undefined`.
 function lastSet(
   mutations: readonly MutateOutcome[],
-  field: "updatedInput" | "updatedToolOutput",
+  field: "updatedInput" | "updatedToolOutput" | "updatedMCPToolOutput",
 ): unknown {
   return mutations.reduce<unknown>(
     (last, { result }) => (result[field] === undefined ? last : result[field]),
@@ -386,6 +412,11 @@ function foldMutations(
     result.updatedToolOutput = updatedToolOutput;
   }
 
+  const updatedMCPToolOutput = lastSet(mutations, "updatedMCPToolOutput");
+  if (updatedMCPToolOutput !== undefined) {
+    result.updatedMCPToolOutput = updatedMCPToolOutput;
+  }
+
   const asking = mutations.find((mutation) => mutation.result.permissionDecision === "ask");
   return {
     result: withContext(result, context),
@@ -416,6 +447,43 @@ function foldOutcomes(outcomes: readonly BucketOutcome[]): FoldedBucket {
   return foldMutations(outcomes, context);
 }
 
+// Choose from the original result so an invalid or unchanged later candidate
+// cannot erase a replacement accepted from an earlier hook.
+function acceptedToolOutput(
+  outcomes: readonly BucketOutcome[],
+  event: ToolResultEvent,
+  tool: McpToolIdentity,
+  context: HookAdapterContext,
+): ToolResultEventResult | undefined {
+  const mcpTool = tool.builtinServer !== undefined || tool.piName.startsWith(MCP_TOOL_PREFIX);
+  let accepted: ToolResultEventResult | undefined;
+  for (const { result } of outcomes) {
+    if (result.kind !== "mutate") {
+      continue;
+    }
+
+    let candidate = result.updatedToolOutput;
+    if (candidate === undefined && mcpTool) {
+      candidate = result.updatedMCPToolOutput;
+    }
+
+    if (candidate === undefined) {
+      continue;
+    }
+
+    const patch = adaptToolResultResult(
+      { kind: "mutate", updatedToolOutput: candidate },
+      event,
+      context,
+    );
+    if (patch !== undefined) {
+      accepted = patch;
+    }
+  }
+
+  return accepted;
+}
+
 // Run the matching hooks of `bucket` for the view's event and fold their
 // outcomes.
 async function runAndFold(
@@ -442,6 +510,10 @@ async function runAndFold(
 /** The events whose hooks a composite handler runs and whose notices it shows. */
 type NoticeEvent = CompositeDispatchEvent | "PostToolUse" | "PostToolUseFailure";
 
+/** The events whose failure notices `failureNotices` builds: Stop's too. */
+export type FailureNoticeEvent =
+  CompositeDispatchEvent | "PostToolUse" | "PostToolUseFailure" | "Stop";
+
 // D-CF5-14: every hook's non-empty `systemMessage`, in routing order.
 function systemMessages(outcomes: readonly BucketOutcome[]): string[] {
   return outcomes.flatMap(({ result }) =>
@@ -457,6 +529,7 @@ function showsSystemMessages(claudeEvent: NoticeEvent): boolean {
     case "PostToolUse":
     case "PostToolUseFailure":
     case "UserPromptSubmit":
+    case "UserPromptExpansion":
     case "SessionStart":
       return true;
     case "SessionEnd":
@@ -487,7 +560,9 @@ function systemMessageNotices(
 
 /**
  * D-CF5-11 / D-CF5-18 / D-CF5-24: the notices a block shows the user. A
- * blocked prompt shows why once, with the first block in routing order. A
+ * blocked prompt or expansion shows why once, with the first block in routing
+ * order, and `originalPrompt` after it unless that hook suppressed it
+ * (D-PG6-20). A
  * SessionStart or SessionEnd block changes nothing, so each one shows as the
  * event's hook error, as Claude Code shows exit-2 stderr there. A PostCompact
  * block shows in its hook's line after a manual compaction (D-BG-501).
@@ -495,14 +570,26 @@ function systemMessageNotices(
  * every blocking hook, as Claude Code reports a blocked compaction. A tool
  * block goes to the model instead.
  */
-function blockNotices(claudeEvent: NoticeEvent, label: string, folded: FoldedBucket): string[] {
+function blockNotices(
+  claudeEvent: NoticeEvent,
+  label: string,
+  folded: FoldedBucket,
+  originalPrompt: string | undefined,
+): string[] {
   switch (claudeEvent) {
     case "UserPromptSubmit":
+    case "UserPromptExpansion":
       return folded.result.kind === "block"
         ? blocks(folded.outcomes)
             .slice(0, 1)
-            .map(({ reason, command, fromStderr }) =>
-              promptBlockedText(reason, command, fromStderr),
+            .map(({ reason, command, fromStderr, suppressOriginalPrompt }) =>
+              promptBlockedText(
+                claudeEvent,
+                reason,
+                command,
+                fromStderr,
+                suppressOriginalPrompt === true ? undefined : originalPrompt,
+              ),
             )
         : [];
     case "SessionStart":
@@ -586,20 +673,156 @@ function blocks(outcomes: readonly BucketOutcome[]): HookBlock[] {
             reason: result.reason,
             command: entry.handlerDecl.command ?? "",
             fromStderr: result.fromStderr === true,
+            ...(result.suppressOriginalPrompt === true ? { suppressOriginalPrompt: true } : {}),
           },
         ]
       : [],
   );
 }
 
+// D-PG5-10: Claude Code shows a hook's non-blocking failure on these events.
+// A SessionEnd failure stays a debug line (D-BG-603), and the line after
+// `/compact` already reports a PostCompact failure (D-BG-501).
+function showsFailures(claudeEvent: FailureNoticeEvent): boolean {
+  switch (claudeEvent) {
+    case "Stop":
+    case "PreToolUse":
+    case "PostToolUse":
+    case "PostToolUseFailure":
+    case "UserPromptSubmit":
+    case "UserPromptExpansion":
+    case "SessionStart":
+    case "PreCompact":
+      return true;
+    case "SessionEnd":
+    case "PostCompact":
+      return false;
+  }
+}
+
+// D-PG5-12: the key of a start failure's once-only notice, as Claude Code
+// 2.1.323 keys it: the event, a colon, and the declared command with the
+// plugin root filled in.
+function startFailureKey(claudeEvent: FailureNoticeEvent, entry: RoutingEntry): string {
+  const command = (entry.handlerDecl.command ?? "").replaceAll(
+    /\$\{CLAUDE_PLUGIN_ROOT\}|\$CLAUDE_PLUGIN_ROOT\b/g,
+    () => entry.resolvedSource,
+  );
+  return `${claudeEvent}:${command}`;
+}
+
 /**
- * HOOK-05: every notice a folded bucket shows the user, labeled `label`: the
- * system messages in routing order (D-CF5-09), then the block notices.
+ * A notice text, and for a hook that cannot start the key that shows it once
+ * in a bridge load (D-PG5-12).
  */
-function hookNotices(claudeEvent: NoticeEvent, label: string, folded: FoldedBucket): string[] {
+export interface HookNotice {
+  readonly text: string;
+  readonly startFailureKey?: string;
+}
+
+// D-PG5-12: a failed exit and a missing script show on every event, and a
+// hook that cannot start shows once for each event and resolved command in a
+// bridge load.
+function failureNotice(
+  claudeEvent: FailureNoticeEvent,
+  entry: RoutingEntry,
+  failure: HookFailure,
+  text: string,
+): HookNotice {
+  return failure.kind === "exit" || failure.kind === "missing-script"
+    ? { text }
+    : { text, startFailureKey: startFailureKey(claudeEvent, entry) };
+}
+
+/**
+ * D-PG5-10 / D-PG5-12: one `<label> hook error: ...` notice for each hook that
+ * failed without blocking, in routing order. The failures are read from each
+ * hook's own result, because the fold keeps none of them. A hook that runs
+ * once for each pair of an edit shows an equal notice once. The Stop
+ * dispatcher in `./settle.ts` builds its failure notices here too, and shows
+ * each through `showHookNotice`.
+ */
+export function failureNotices(
+  claudeEvent: FailureNoticeEvent,
+  label: string,
+  outcomes: readonly BucketOutcome[],
+): HookNotice[] {
+  if (!showsFailures(claudeEvent)) {
+    return [];
+  }
+
+  const built: { readonly entry: RoutingEntry; readonly notice: HookNotice }[] = [];
+  for (const { entry, result } of outcomes) {
+    if (result.kind !== "noop" || result.failure === undefined) {
+      continue;
+    }
+
+    const text = hookFailureText(label, result.failure, {
+      command: entry.handlerDecl.command ?? "",
+      plugin: entry.pluginId,
+      marketplace: entry.marketplace,
+      scope: entry.scope,
+    });
+    const repeated = built.some((prior) => prior.entry === entry && prior.notice.text === text);
+    if (!repeated) {
+      built.push({ entry, notice: failureNotice(claudeEvent, entry, result.failure, text) });
+    }
+  }
+
+  return built.map(({ notice }) => notice);
+}
+
+/**
+ * D-PG5-12: shows `notice` through `show` unless this bridge load already
+ * showed its start failure. The start failure is recorded only after `show`
+ * returns, so a notice that fails to show can show at the next failure.
+ */
+export function showHookNotice(
+  runtime: HooksRuntime,
+  notice: HookNotice,
+  show: (text: string) => void,
+): void {
+  const key = notice.startFailureKey;
+  if (key !== undefined && runtime.startFailureNoticeShown(key)) {
+    return;
+  }
+
+  show(notice.text);
+  if (key !== undefined) {
+    runtime.recordStartFailureNotice(key);
+  }
+}
+
+/**
+ * HOOK-05: the notices of a folded bucket's decisions, labeled `label`: the
+ * system messages in routing order (D-CF5-09), then the block notices, which
+ * end with `originalPrompt` when there is one (D-PG6-20).
+ */
+function decisionNotices(
+  claudeEvent: NoticeEvent,
+  label: string,
+  folded: FoldedBucket,
+  originalPrompt?: string,
+): string[] {
   return [
     ...systemMessageNotices(claudeEvent, label, folded.outcomes),
-    ...blockNotices(claudeEvent, label, folded),
+    ...blockNotices(claudeEvent, label, folded, originalPrompt),
+  ];
+}
+
+/**
+ * HOOK-05: every notice a folded bucket shows the user, labeled `label`: the
+ * decision notices, then the failure notices (D-PG5-12).
+ */
+function hookNotices(
+  claudeEvent: NoticeEvent,
+  label: string,
+  folded: FoldedBucket,
+  originalPrompt?: string,
+): (string | HookNotice)[] {
+  return [
+    ...decisionNotices(claudeEvent, label, folded, originalPrompt),
+    ...failureNotices(claudeEvent, label, folded.outcomes),
   ];
 }
 
@@ -608,12 +831,14 @@ function hookNotices(claudeEvent: NoticeEvent, label: string, folded: FoldedBuck
  * hook-origin notification run. A notice goes only to the notify chokepoint,
  * never to the model. With no Pi API there is no run to open, so the notices
  * are dropped with a debug line; a notice that fails to show is debug-logged
- * and never fails the event.
+ * and never fails the event. A start failure is recorded only once shown
+ * (D-PG5-12).
  */
 function showHookNotices(
+  runtime: HooksRuntime,
   ctx: ExtensionContext,
   pi: ExtensionAPI | undefined,
-  notices: readonly string[],
+  notices: readonly (string | HookNotice)[],
 ): void {
   if (notices.length === 0) {
     return;
@@ -627,7 +852,9 @@ function showHookNotices(
   try {
     const run = openNotificationRun(pi, { kind: "hook" });
     for (const notice of notices) {
-      notifyHookNotice(ctx, run, notice);
+      showHookNotice(runtime, typeof notice === "string" ? { text: notice } : notice, (text) => {
+        notifyHookNotice(ctx, run, text);
+      });
     }
   } catch (error: unknown) {
     hookDebugLog(`dispatch: hook notice failed: ${errorMessage(error)}`);
@@ -696,9 +923,19 @@ const MCP_PROXY_TOOL = "mcp";
  * MHK-02, D-P5-06: the shape counts only while the adapter is the active MCP
  * implementation (`HookToolView.proxyRuleApplies`). Pi's built-in MCP has no
  * proxy, and a tool name it cut inside the namespace has the same shape.
+ * D-PG1-08: an adapter cut is a direct tool even when its input names a `tool`;
+ * the adapter's proxy is `mcp`, and this extension registers direct tools.
+ * Namespace proxies serve proxy-only servers; a long namespace has `_mcpns_`
+ * and a 16-digit hash, so it cannot have the cut shape. A third-party proxy
+ * namespace could coincide with a 64-character cut shape by chance; its outer
+ * call would then run hooks alongside its nested call.
  */
 function isMcpProxyCall(event: { readonly toolName: string; readonly input: object }): boolean {
   const { toolName } = event;
+  if (looksLikeCutAdapterToolName(toolName)) {
+    return false;
+  }
+
   const proxy =
     toolName === MCP_PROXY_TOOL ||
     (toolName.startsWith(MCP_TOOL_PREFIX) &&
@@ -718,7 +955,7 @@ function isMcpProxyCall(event: { readonly toolName: string; readonly input: obje
 /**
  * The event domain served by `compositeHandlerFor`: every dispatchable
  * event except the two `tool_result`-routed events (handled by
- * `toolResultCompositeHandler`) and the two settle-routed events (handled
+ * `toolResultCompositeHandler`), the two settle-routed events (handled
  * in `settle.ts`). Declared once so the exclusion set cannot drift between
  * the factory constraint and its private helpers.
  */
@@ -752,6 +989,12 @@ function dropStalePromptContext(runtime: HooksRuntime, event: InputEvent): void 
   }
 }
 
+// D-PG6-06: the default clock of the two tool handlers, in milliseconds. It
+// is monotonic, so a change of the wall clock cannot change a duration.
+function monotonicNow(): number {
+  return performance.now();
+}
+
 /**
  * D-59-01 / D-60-03: six-uniform composite handler factory.
  *
@@ -774,6 +1017,8 @@ function dropStalePromptContext(runtime: HooksRuntime, event: InputEvent): void 
  * `tools` identifies a PreToolUse event's tool (D-P5-01) and says whether pi-mcp-adapter's proxy rule applies (D-P5-06); it defaults to
  * a view over `pi`, which reads nothing until a tool event's bucket has hooks.
  * The router passes one view to both tool handlers of a generation (D-P5-07).
+ *
+ * `now` is the clock of the PreToolUse mark (D-PG6-06); production passes none.
  */
 export function compositeHandlerFor<E extends CompositeDispatchEvent>(
   runtime: HooksRuntime,
@@ -782,10 +1027,18 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
   pi?: ExtensionAPI,
   executor: HookExecutor = dispatchHookExec,
   tools: HookToolView = createHookToolView(pi),
+  now: () => number = monotonicNow,
 ): (event: CompositeEventFor<E>, ctx: ExtensionContext) => Promise<CompositeReturnFor<E>> {
-  return async (event, ctx) => {
+  const handler = async (
+    event: CompositeEventFor<E>,
+    ctx: ExtensionContext,
+  ): Promise<CompositeReturnFor<E>> => {
     if (capturedGeneration !== runtime.currentGeneration()) {
       return undefined as CompositeReturnFor<E>;
+    }
+
+    if (claudeEvent === "PreToolUse") {
+      runtime.recordToolCall();
     }
 
     if (claudeEvent === "UserPromptSubmit") {
@@ -797,28 +1050,209 @@ export function compositeHandlerFor<E extends CompositeDispatchEvent>(
       return undefined as CompositeReturnFor<E>;
     }
 
-    const view = hookEventView(claudeEvent, event, tools);
+    const view = hookEventView(runtime, claudeEvent, event, tools);
     if (view === undefined) {
       return undefined as CompositeReturnFor<E>;
+    }
+
+    if (
+      claudeEvent === "PreToolUse" &&
+      (event as ToolCallEvent).toolName === "edit" &&
+      Array.isArray(((event as ToolCallEvent).input as Record<string, unknown> | null)?.edits)
+    ) {
+      return (await runEditPreflight(
+        runtime,
+        bucket,
+        view,
+        ctx,
+        pi,
+        executor,
+        capturedGeneration,
+      )) as CompositeReturnFor<E>;
     }
 
     const folded = await runAndFold(runtime, bucket, view, ctx, pi, executor, (entry) =>
       entryFires(claudeEvent, entry, view),
     );
     const label = noticeLabel(claudeEvent, view.event);
-    showHookNotices(ctx, pi, hookNotices(claudeEvent, label, folded));
+    showHookNotices(
+      runtime,
+      ctx,
+      pi,
+      hookNotices(claudeEvent, label, folded, originalPromptOf(claudeEvent, view.event)),
+    );
     if (claudeEvent === "PreToolUse") {
       sendToolContext(pi, label, folded.result);
     }
 
     if (claudeEvent === "PostCompact") {
       const trigger = compactTrigger((view.event as SessionCompactEvent).reason);
-      showHookNotices(ctx, pi, postCompactNotices(trigger, folded.outcomes));
+      showHookNotices(runtime, ctx, pi, postCompactNotices(trigger, folded.outcomes));
     }
 
     const context = { runtime, ctx, pi, attributedTo: folded.attributedTo };
     return (await adaptForEvent(claudeEvent, folded, view.event, context)) as CompositeReturnFor<E>;
   };
+
+  return claudeEvent === "PreToolUse"
+    ? markedOnExit(runtime, capturedGeneration, handler, now)
+    : handler;
+}
+
+/**
+ * D-PG6-06: the mark of a call is the time its PreToolUse handler ends, on
+ * every exit path, also with no PreToolUse hook and for a blocked call. A
+ * handler of a stale generation keeps no mark.
+ */
+function markedOnExit<V, R>(
+  runtime: HooksRuntime,
+  capturedGeneration: number,
+  handler: (event: V, ctx: ExtensionContext) => Promise<R>,
+  now: () => number,
+): (event: V, ctx: ExtensionContext) => Promise<R> {
+  return async (event, ctx) => {
+    try {
+      return await handler(event, ctx);
+    } finally {
+      if (capturedGeneration === runtime.currentGeneration()) {
+        const call = event as ToolCallEvent;
+        runtime.recordToolCallPrepared(call.toolCallId, call.parentToolCallId, now());
+      }
+    }
+  };
+}
+
+async function authorizeEditPairs(
+  pairRuns: readonly { readonly event: ToolCallEvent; readonly folded: FoldedBucket }[],
+  contextFor: (folded: FoldedBucket) => HookAdapterContext,
+  runtime: HooksRuntime,
+  capturedGeneration: number,
+  ctx: ExtensionContext,
+): Promise<ToolCallEventResult | undefined> {
+  const decisions = await Promise.all(
+    pairRuns.map(({ event, folded }) =>
+      folded.result.kind === "mutate"
+        ? adaptToolCallResult(
+            { ...folded.result, updatedInput: undefined },
+            event,
+            contextFor(folded),
+          )
+        : Promise.resolve(undefined),
+    ),
+  );
+  if (capturedGeneration !== runtime.currentGeneration() || ctx.signal?.aborted) {
+    return undefined;
+  }
+
+  return decisions.find((decision) => decision?.block);
+}
+
+// Each pair carries its own tool use id, while hook stdin sees one Claude Edit
+// input (D-PG6-05). Pi still receives just the original native tool call.
+async function runEditPreflight(
+  runtime: HooksRuntime,
+  bucket: readonly RoutingEntry[],
+  view: HookEventView,
+  ctx: ExtensionContext,
+  pi: ExtensionAPI | undefined,
+  executor: HookExecutor,
+  capturedGeneration: number,
+): Promise<ToolCallEventResult | undefined> {
+  const nativeEvent = view.event as ToolCallEvent;
+  const batch = editPairViews(nativeEvent.input, ctx.cwd, homedir());
+  if (batch === undefined) {
+    return undefined;
+  }
+
+  const hooks = matchingHooks(
+    bucket,
+    view.event,
+    ctx,
+    (entry) => entryFires("PreToolUse", entry, view),
+    view.tool,
+  );
+  const runs = await Promise.all(
+    batch.pairs.map(async (pair) => {
+      const pairEvent: ToolCallEvent = {
+        ...nativeEvent,
+        toolCallId: editPairToolUseId(nativeEvent.toolCallId, pair.index, batch.pairs.length),
+        input: pair.input,
+      };
+      const outcomes = await runHooks(runtime, hooks, (entry) =>
+        executor(entry, pairEvent, ctx, pi, runtime),
+      );
+      return outcomes === undefined
+        ? undefined
+        : { event: pairEvent, folded: foldOutcomes(outcomes) };
+    }),
+  );
+  const pairRuns = runs.filter((run): run is NonNullable<typeof run> => run !== undefined);
+  if (pairRuns.length !== batch.pairs.length) {
+    return undefined;
+  }
+
+  if (capturedGeneration !== runtime.currentGeneration() || ctx.signal?.aborted) {
+    return undefined;
+  }
+
+  const label = noticeLabel("PreToolUse", nativeEvent);
+  for (const { folded } of pairRuns) {
+    showHookNotices(runtime, ctx, pi, decisionNotices("PreToolUse", label, folded));
+    sendToolContext(pi, label, folded.result);
+  }
+
+  // D-PG5-12: an equal failure of one hook across the pairs shows once.
+  const outcomes = pairRuns.flatMap(({ folded }) => folded.outcomes);
+  showHookNotices(runtime, ctx, pi, failureNotices("PreToolUse", label, outcomes));
+
+  const contextFor = (folded: FoldedBucket): HookAdapterContext => ({
+    runtime,
+    ctx,
+    pi,
+    attributedTo: folded.attributedTo,
+  });
+  const decisive =
+    pairRuns.find(({ folded }) => folded.result.kind === "stop") ??
+    pairRuns.find(({ folded }) => folded.result.kind === "block");
+  if (decisive !== undefined) {
+    return adaptToolCallResult(decisive.folded.result, decisive.event, contextFor(decisive.folded));
+  }
+
+  const authorization = await authorizeEditPairs(
+    pairRuns,
+    contextFor,
+    runtime,
+    capturedGeneration,
+    ctx,
+  );
+  if (capturedGeneration !== runtime.currentGeneration() || ctx.signal?.aborted) {
+    return undefined;
+  }
+
+  if (authorization?.block) {
+    return authorization;
+  }
+
+  const decision = decideEditBatch(
+    batch,
+    pairRuns.map(({ folded: { outcomes } }) =>
+      outcomes.map(({ result }) => (result.kind === "mutate" ? result.updatedInput : undefined)),
+    ),
+    ctx.cwd,
+    homedir(),
+  );
+  switch (decision.kind) {
+    case "block":
+      return { block: true, reason: "PreToolUse:Edit hook error: conflicting edit targets" };
+    case "original":
+      notifyIgnoredToolInputRewrite(nativeEvent, contextFor(NOOP_FOLD), decision.category);
+      return undefined;
+    case "accepted":
+      replaceToolCallInput(nativeEvent, decision.input);
+      return undefined;
+    case "unchanged":
+      return undefined;
+  }
 }
 
 // D-BG-402: Claude Code fires no PostToolUseFailure hook on a running tool
@@ -874,7 +1308,9 @@ function routedToolResult(event: ToolResultEvent, tools: HookToolView): ToolResu
  *
  * `executor` is the same injected seam `compositeHandlerFor` takes, defaulted
  * and forwarded identically, and so is `tools`, which identifies the event's
- * tool (D-P5-01).
+ * tool (D-P5-01). `now` is the clock that reads the call's duration as the
+ * handler starts, and the hooks read it as `hookDurationMs` on the event
+ * (D-PG6-06).
  */
 export function toolResultCompositeHandler(
   runtime: HooksRuntime,
@@ -882,12 +1318,14 @@ export function toolResultCompositeHandler(
   pi?: ExtensionAPI,
   executor: HookExecutor = dispatchHookExec,
   tools: HookToolView = createHookToolView(pi),
+  now: () => number = monotonicNow,
 ): (event: ToolResultEvent, ctx: ExtensionContext) => Promise<ToolResultEventResult | undefined> {
   return async (piEvent, ctx) => {
     if (capturedGeneration !== runtime.currentGeneration()) {
       return undefined;
     }
 
+    const facts = takeToolFacts(runtime, piEvent, now);
     const event = routedToolResult(piEvent, tools);
     const claudeEvent = event.isError ? "PostToolUseFailure" : "PostToolUse";
     const bucket = runtime.getRoutingBucket(claudeEvent);
@@ -900,25 +1338,99 @@ export function toolResultCompositeHandler(
       return undefined;
     }
 
-    const view = toolEventView(event, tools);
-    if (view === undefined) {
+    const verifiedName = event.isError ? undefined : adapterResultToolName(event.details);
+    const seen = toolEventView(event, tools, () => toolEventMcpLiterals(runtime), verifiedName);
+    if (seen === undefined) {
       return undefined;
     }
 
-    const folded = await runAndFold(runtime, bucket, view, ctx, pi, executor, (entry) =>
-      matcherFiresOnToolEvent(entry.matcher, view.tool),
-    );
+    const view = {
+      event: withToolFacts(seen.event, { ...facts, ...mcpServerFacts(runtime, seen.tool) }),
+      tool: seen.tool,
+    };
+    const batch =
+      event.toolName === "edit" ? editPairViews(event.input, ctx.cwd, homedir()) : undefined;
+    const folded =
+      batch === undefined
+        ? await runAndFold(runtime, bucket, view, ctx, pi, executor, (entry) =>
+            matcherFiresOnToolEvent(entry.matcher, view.tool),
+          )
+        : await runEditResultPairs(runtime, bucket, view, batch.pairs, ctx, pi, executor);
     const label = hookEventLabel(claudeEvent, view.event.toolName);
-    showHookNotices(ctx, pi, hookNotices(claudeEvent, label, folded));
+    showHookNotices(runtime, ctx, pi, hookNotices(claudeEvent, label, folded));
     sendToolContext(pi, label, folded.result);
 
-    return adaptToolResultResult(folded.result, view.event, {
+    const adapterContext = {
       runtime,
       ctx,
       pi,
       attributedTo: folded.attributedTo,
-    });
+    };
+    if (folded.result.kind !== "mutate" || view.event.isError) {
+      return adaptToolResultResult(folded.result, view.event, adapterContext);
+    }
+
+    return acceptedToolOutput(folded.outcomes, view.event, view.tool, adapterContext);
   };
+}
+
+// D-PG6-06: the call's duration, taken on entry, so its mark is removed
+// whatever the handler does next.
+function takeToolFacts(
+  runtime: HooksRuntime,
+  event: ToolResultEvent,
+  now: () => number,
+): HookToolFacts {
+  const hookDurationMs = runtime.takeToolDuration(event.toolCallId, now());
+  return hookDurationMs === undefined ? {} : { hookDurationMs };
+}
+
+// D-PG6-07: the plugin MCP server of the event's tool, as a fact of the event
+// the hooks read; none when the runtime knows no server of the tool.
+function mcpServerFacts(runtime: HooksRuntime, tool: McpToolIdentity): HookToolFacts {
+  const hookMcpServer = runtime.mcpServerFor(tool);
+  return hookMcpServer === undefined ? {} : { hookMcpServer };
+}
+
+// Each hook receives a pair input and the same native result carriers. Pair
+// outcomes are folded in pair order, then routing order, after every run ends.
+async function runEditResultPairs(
+  runtime: HooksRuntime,
+  bucket: readonly RoutingEntry[],
+  view: { readonly event: ToolResultEvent; readonly tool: McpToolIdentity },
+  pairs: readonly { readonly input: ToolResultEvent["input"] }[],
+  ctx: ExtensionContext,
+  pi: ExtensionAPI | undefined,
+  executor: HookExecutor,
+): Promise<FoldedBucket> {
+  const event = view.event;
+  const hooks = matchingHooks(
+    bucket,
+    event,
+    ctx,
+    (entry) => matcherFiresOnToolEvent(entry.matcher, view.tool),
+    view.tool,
+  );
+  const capturedGeneration = runtime.currentGeneration();
+  const runs = await Promise.all(
+    pairs.map(({ input }, index) => {
+      if (capturedGeneration !== runtime.currentGeneration()) {
+        return Promise.resolve(undefined);
+      }
+
+      const pairEvent: ToolResultEvent = {
+        ...event,
+        toolCallId: editPairToolUseId(event.toolCallId, index, pairs.length),
+        input,
+      };
+      return runHooks(runtime, hooks, (entry) => executor(entry, pairEvent, ctx, pi, runtime));
+    }),
+  );
+  if (!runs.every((outcomes): outcomes is BucketOutcome[] => outcomes !== undefined)) {
+    return NOOP_FOLD;
+  }
+
+  return foldOutcomes(runs.flat());
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -945,7 +1457,15 @@ async function adaptForEvent(
       // D-CF5-11: an ask may wait on the user's answer in the terminal.
       return await adaptToolCallResult(result, event as ToolCallEvent, context);
     case "UserPromptSubmit":
-      return adaptInputResult(result, event as InputEvent, context);
+      return adaptInputResult(result, event as InputEvent, context, claudeEvent);
+    case "UserPromptExpansion":
+      // D-PG6-20: the expansion's context joins the buffer of its line's prompt.
+      return adaptInputResult(
+        result,
+        (event as UserPromptExpansionEvent).input,
+        context,
+        claudeEvent,
+      );
     case "PreCompact":
       return adaptPreCompactResult(folded.outcomes.map((outcome) => outcome.result));
     case "SessionStart":
@@ -965,8 +1485,9 @@ async function adaptForEvent(
  * composite handler receives, so the factory's closure signature narrows
  * appropriately. SessionStart and SessionEnd receive the Claude-side event
  * the router maps from Pi's reason once (D-CF5-01 / D-CF5-02), so the filter
- * and the translator read one value; the other events receive their Pi
- * event.
+ * and the translator read one value; UserPromptExpansion receives the
+ * synthetic event of its translator (D-PG6-19); the other events receive
+ * their Pi event.
  */
 export type CompositeEventFor<E extends BucketAEvent> = E extends "SessionStart"
   ? ClaudeSessionStartEvent
@@ -978,21 +1499,23 @@ export type CompositeEventFor<E extends BucketAEvent> = E extends "SessionStart"
         ? SessionCompactEvent
         : E extends "UserPromptSubmit"
           ? InputEvent
-          : E extends "PreToolUse"
-            ? ToolCallEvent
-            : never;
+          : E extends "UserPromptExpansion"
+            ? UserPromptExpansionEvent
+            : E extends "PreToolUse"
+              ? ToolCallEvent
+              : never;
 
 /**
  * D-60-03: per-event return type bridge mapping each composite-handler
  * `claudeEvent` to the Pi-side handler return shape its registered
  * closure must produce. PreToolUse -> ToolCallEventResult;
- * UserPromptSubmit -> InputEventResult; PreCompact -> a cancel of the
+ * UserPromptSubmit and UserPromptExpansion -> InputEventResult; PreCompact -> a cancel of the
  * compaction (D-CF5-18); the other observation events -> undefined (Pi
  * handler return slot is void for those).
  */
 export type CompositeReturnFor<E extends BucketAEvent> = E extends "PreToolUse"
   ? ToolCallEventResult | undefined
-  : E extends "UserPromptSubmit"
+  : E extends "UserPromptSubmit" | "UserPromptExpansion"
     ? InputEventResult | undefined
     : E extends "PreCompact"
       ? CompactionCancel | undefined
@@ -1004,7 +1527,9 @@ export type CompositeReturnFor<E extends BucketAEvent> = E extends "PreToolUse"
  * `reason` (D-CF5-01 / D-CF5-02), the PreToolUse tool name as the hooks see
  * it (D-P5-03), and the Claude compaction `trigger` the translators also send
  * (D-CF5-04). UserPromptSubmit has none, because the parser rejects a
- * non-empty matcher on it.
+ * non-empty matcher on it. UserPromptExpansion has none: its matcher selects
+ * on the command name (`matcherFiresOnCommandName`), and Claude Code 2.1.323
+ * names its hooks by the event alone.
  */
 function matchValue(claudeEvent: CompositeDispatchEvent, event: unknown): string | undefined {
   switch (claudeEvent) {
@@ -1019,6 +1544,7 @@ function matchValue(claudeEvent: CompositeDispatchEvent, event: unknown): string
     case "PostCompact":
       return compactTrigger((event as SessionCompactEvent).reason);
     case "UserPromptSubmit":
+    case "UserPromptExpansion":
       return undefined;
   }
 }
@@ -1033,9 +1559,42 @@ interface HookEventView {
   readonly tool: McpToolIdentity | undefined;
 }
 
+function toolEventMcpLiterals(runtime: HooksRuntime): string[] {
+  const events = ["PreToolUse", "PostToolUse", "PostToolUseFailure"] as const;
+  return events.flatMap((event) =>
+    runtime
+      .getRoutingBucket(event)
+      .flatMap((entry) => [
+        ...(entry.matcher.kind === "tool-set" ? entry.matcher.toolNames : []),
+        ...(entry.ifPredicate.kind === "mcp-literal" ? [entry.ifPredicate.toolName] : []),
+      ]),
+  );
+}
+
 /**
- * D-P5-03: a tool event with the name `claudeFormToolName` derives for its
- * tool, once per event. Pi's event itself when the names agree, else a shallow copy that
+ * D-PG1-08: successful pi-mcp-adapter results name the server key and tool;
+ * failed results name only the server. A successful PostToolUse event can
+ * recover the full name; PostToolUseFailure needs a hook literal to do so.
+ */
+function adapterResultToolName(details: unknown): string | undefined {
+  if (
+    typeof details !== "object" ||
+    details === null ||
+    !("server" in details) ||
+    !("tool" in details) ||
+    typeof details.server !== "string" ||
+    typeof details.tool !== "string"
+  ) {
+    return undefined;
+  }
+
+  return joinedAdapterToolName(details.server, details.tool);
+}
+
+/**
+ * D-P5-03 / D-PG1-08: a tool event recovers an adapter name once from
+ * verified result details or tool-event hook literals, then derives the name every hook sees.
+ * Pi's event itself when the names agree, else a shallow copy that
  * shares Pi's `input` and `content`, so an input rewrite still reaches Pi.
  * Only an `mcp__` name changes, and Pi types such an event as its open-ended
  * custom tool event, whose `toolName` is any string, so the copy keeps the
@@ -1049,30 +1608,38 @@ interface HookEventView {
 function toolEventView<T extends ToolCallEvent | ToolResultEvent>(
   event: T,
   tools: HookToolView,
+  candidates: () => readonly string[],
+  verifiedName?: string,
 ): { readonly event: T; readonly tool: McpToolIdentity } | undefined {
   if (isMcpProxyCall(event) && tools.proxyRuleApplies()) {
     return undefined;
   }
 
-  const tool = tools.identify(event.toolName);
-  const toolName = claudeFormToolName(tool);
+  const tool = recoverAdapterToolName(tools.identify(event.toolName), candidates, verifiedName);
+  const toolName = event.toolName.startsWith("mcp__") ? claudeFormToolName(tool) : event.toolName;
   return { event: toolName === event.toolName ? event : { ...event, toolName }, tool };
 }
 
 function hookEventView(
+  runtime: HooksRuntime,
   claudeEvent: CompositeDispatchEvent,
   event: unknown,
   tools: HookToolView,
 ): HookEventView | undefined {
-  return claudeEvent === "PreToolUse"
-    ? toolEventView(event as ToolCallEvent, tools)
-    : { event, tool: undefined };
+  if (claudeEvent !== "PreToolUse") {
+    return { event, tool: undefined };
+  }
+
+  const seen = toolEventView(event as ToolCallEvent, tools, () => toolEventMcpLiterals(runtime));
+  return seen === undefined
+    ? undefined
+    : { event: withToolFacts(seen.event, mcpServerFacts(runtime, seen.tool)), tool: seen.tool };
 }
 
 /**
  * Per-event filter dispatch: a PreToolUse matcher compares the event's tool,
- * every other matcher the closed-set match value. UserPromptSubmit fires
- * unconditionally.
+ * a UserPromptExpansion matcher the command name, every other matcher the
+ * closed-set match value. UserPromptSubmit fires unconditionally.
  */
 function entryFires(
   claudeEvent: CompositeDispatchEvent,
@@ -1083,8 +1650,25 @@ function entryFires(
     return matcherFiresOnToolEvent(entry.matcher, view.tool);
   }
 
+  if (claudeEvent === "UserPromptExpansion") {
+    return matcherFiresOnCommandName(
+      entry.matcher,
+      (view.event as UserPromptExpansionEvent).command_name,
+    );
+  }
+
   const value = matchValue(claudeEvent, view.event);
   return value === undefined || matcherFiresOnClosedSetValue(entry, value);
+}
+
+// D-PG6-20: the prompt a block notice ends with, as the hook's stdin `prompt`
+// holds it: the typed command of an expansion, the submitted text of a prompt.
+function originalPromptOf(claudeEvent: CompositeDispatchEvent, event: unknown): string | undefined {
+  if (claudeEvent === "UserPromptExpansion") {
+    return expansionPrompt(event as UserPromptExpansionEvent);
+  }
+
+  return claudeEvent === "UserPromptSubmit" ? (event as InputEvent).text : undefined;
 }
 
 /**

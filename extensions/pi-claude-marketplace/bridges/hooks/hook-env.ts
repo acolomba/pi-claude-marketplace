@@ -11,6 +11,7 @@
 
 import path from "node:path";
 
+import { hookOptionVariableName } from "../../domain/user-config.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { claudeSessionEnvFor } from "../../shared/session-env.ts";
 
@@ -21,7 +22,10 @@ import type { RoutingEntry } from "./routing-state.ts";
 /** The dispatch facts the env contract reads. */
 export interface HookEnvContext {
   readonly cwd: string;
+  /** The hook-facing session, which the session variables name (D-PG6-01). */
   readonly sessionId: string;
+  /** Pi's own session, which names the env file (D-60-06, D-PG6-03). */
+  readonly ownSessionId: string;
 }
 
 /**
@@ -63,10 +67,18 @@ export function hookPathVars(
  * That ordering is the race-window safety property.
  *
  * D-60-06: a `SessionStart` dispatch also gets `CLAUDE_ENV_FILE` under
- * `_shared/`, which is likewise containment-checked.
+ * `_shared/`, which is likewise containment-checked. Its name holds the own
+ * session id, so two children of one launching session get two files
+ * (D-PG6-03).
  *
  * HOOK-05: `CLAUDE_CODE_REMOTE` is intentionally NOT set. Pi runs locally, and
  * the documented absence is the upstream-parity contract.
+ *
+ * D-PG10-10: each option value of the entry is exported as
+ * `CLAUDE_PLUGIN_OPTION_<KEY>`, after the three path variables and before the
+ * lane's additions and the session env, so no option can replace a lane
+ * marker or a session var. Two keys that name one variable leave the later
+ * key's value. A declared default counts as a saved value here (D-PG10-19).
  *
  * `extra` carries per-lane additions -- the async-rewake lane stamps its
  * dispatch marker through it. It is spread BEFORE the session env, so a lane
@@ -88,6 +100,9 @@ export async function prepareHookEnv(
     CLAUDE_PROJECT_DIR: vars.projectDir,
     CLAUDE_PLUGIN_ROOT: vars.pluginRoot,
     CLAUDE_PLUGIN_DATA: vars.pluginData,
+    ...Object.fromEntries(
+      Array.from(entry.options.values, ([key, value]) => [hookOptionVariableName(key), value]),
+    ),
     ...extra,
     // D-91-02: the session env spreads LAST so the authoritative per-dispatch
     // snapshot wins over both the live `process.env` and any per-lane `extra`.
@@ -95,7 +110,7 @@ export async function prepareHookEnv(
   };
 
   if (entry.claudeEvent === "SessionStart") {
-    const envFile = path.join(loc.dataRoot, "_shared", `claude-env-${transCtx.sessionId}.env`);
+    const envFile = path.join(loc.dataRoot, "_shared", `claude-env-${transCtx.ownSessionId}.env`);
     await assertPathInside(loc.dataRoot, envFile, "CLAUDE_ENV_FILE");
     env.CLAUDE_ENV_FILE = envFile;
   }

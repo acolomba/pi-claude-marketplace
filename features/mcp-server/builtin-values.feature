@@ -55,7 +55,7 @@ Feature: MCP server builtin values
     When the user asks pi for the configs of the mcp servers registered with it
     Then pi holds these mcp server configs, apart from each stdio server's command and arguments:
       | name               | config                                                                                                                                                                                                                                                                                    |
-      | plugin_demo_remote | {"type":"http","url":"http://127.0.0.1:9/mcp","headers":{"X-Api-Key":"key"},"oauth":{"clientId":"client","callbackUrl":"http://localhost:8765/callback","authServerMetadataUrl":"https://127.0.0.1:9/.well-known/oauth-authorization-server","scope":"read write"},"exposure":"deferred"} |
+      | plugin_demo_remote | {"type":"http","url":"http://127.0.0.1:9/mcp","headers":{"X-Api-Key":"key"},"oauth":{"clientId":"client","callbackUrl":"http://localhost:8765/callback","authServerMetadataUrl":"https://127.0.0.1:9/.well-known/oauth-authorization-server","scope":"read write"},"timeout":300,"exposure":"deferred"} |
 
   Scenario: Pi-only fields a plugin sets never reach Pi (BLT-02, CC-1)
     Given the marketplace "fixtures" is published as a dir source
@@ -78,7 +78,7 @@ Feature: MCP server builtin values
     When the user asks pi for the configs of the mcp servers registered with it
     Then pi holds these mcp server configs, apart from each stdio server's command and arguments:
       | name             | config                                                                                                                                                                       |
-      | plugin_demo_stub | {"env":{"CLAUDE_PLUGIN_ROOT":"{home}/marketplaces/fixtures/plugins/demo","CLAUDE_PLUGIN_DATA":"{agent dir}/pi-claude-marketplace/data/fixtures/demo"},"exposure":"deferred"} |
+      | plugin_demo_stub | {"env":{"CLAUDE_PLUGIN_ROOT":"{home}/marketplaces/fixtures/plugins/demo","CLAUDE_PLUGIN_DATA":"{agent dir}/pi-claude-marketplace/data/fixtures/demo"},"timeout":1800,"exposure":"deferred"} |
 
   Scenario: A server's description is the plugin's description (BLT-02, ANAME-06)
     Given the marketplace "fixtures" is published as a dir source
@@ -97,7 +97,7 @@ Feature: MCP server builtin values
     When the user asks pi for the configs of the mcp servers registered with it
     Then pi holds these mcp server configs, apart from each stdio server's command and arguments:
       | name             | config                                                                                                                                                                                                                |
-      | plugin_demo_stub | {"env":{"CLAUDE_PLUGIN_ROOT":"{home}/marketplaces/fixtures/plugins/demo","CLAUDE_PLUGIN_DATA":"{agent dir}/pi-claude-marketplace/data/fixtures/demo"},"exposure":"deferred","description":"Demo tools for the team."} |
+      | plugin_demo_stub | {"env":{"CLAUDE_PLUGIN_ROOT":"{home}/marketplaces/fixtures/plugins/demo","CLAUDE_PLUGIN_DATA":"{agent dir}/pi-claude-marketplace/data/fixtures/demo"},"timeout":1800,"exposure":"deferred","description":"Demo tools for the team."} |
 
   Scenario: A server with alwaysLoad reaches Pi with direct exposure (D-MB-02)
     Given the marketplace "fixtures" is published as a dir source
@@ -115,4 +115,4 @@ Feature: MCP server builtin values
     When the user asks pi for the configs of the mcp servers registered with it
     Then pi holds these mcp server configs, apart from each stdio server's command and arguments:
       | name             | config                                                                                                                                                                     |
-      | plugin_demo_stub | {"env":{"CLAUDE_PLUGIN_ROOT":"{home}/marketplaces/fixtures/plugins/demo","CLAUDE_PLUGIN_DATA":"{agent dir}/pi-claude-marketplace/data/fixtures/demo"},"exposure":"direct"} |
+      | plugin_demo_stub | {"env":{"CLAUDE_PLUGIN_ROOT":"{home}/marketplaces/fixtures/plugins/demo","CLAUDE_PLUGIN_DATA":"{agent dir}/pi-claude-marketplace/data/fixtures/demo"},"timeout":1800,"exposure":"direct"} |

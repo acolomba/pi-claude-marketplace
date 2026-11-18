@@ -28,12 +28,18 @@
 import { homedir } from "node:os";
 import path from "node:path";
 
+import { discoverPluginAgents } from "../../bridges/agents/index.ts";
 import { discoverPluginWorkflows } from "../../bridges/workflows/index.ts";
 import {
   scanClaudeServerVariables,
   type ClaudeEnv,
   type ServerVariableScan,
 } from "../../domain/claude-mcp-variables.ts";
+import {
+  isMarketplaceRootSource,
+  refusedListedSkillPathMessages,
+  resolveContainedComponentPath,
+} from "../../domain/component-paths.ts";
 import { BUCKET_A_EVENTS } from "../../domain/components/hook-events.ts";
 import {
   hookSummaryEntriesFromPersisted,
@@ -64,11 +70,13 @@ import {
   type PathSource,
 } from "../../domain/source.ts";
 import { rowClaimsInstallDisabled } from "../../domain/unsupported-components.ts";
+import { resolveOptions, type UserConfigSchema } from "../../domain/user-config.ts";
 import { declaredVersionWithPin, shaVersion } from "../../domain/version.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import {
   isRecordedButDisabled,
   loadState,
+  unreadableUserConfigOf,
   type ExtensionState,
   type PluginInstallRecord,
 } from "../../persistence/state-io.ts";
@@ -123,6 +131,7 @@ import {
   resolveGitPluginRootWithSubdir,
   resolvePluginPin,
 } from "./clone-cache.ts";
+import { workflowAgentNotes } from "./discover-names.ts";
 import { makePresenceProbe } from "./git-source-probe.ts";
 import { withMcpServerStatus } from "./info-mcp-status.ts";
 import { PLUGIN_INFO_CONTEXT, type PluginInfoCascadeMsg } from "./info.messaging.ts";
@@ -133,6 +142,7 @@ import { resolveDeclaredPluginVersion } from "./shared.ts";
 import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts";
 import type {
   GitPluginRootResult,
+  RefusedListedSkillPath,
   ResolveContext,
   ResolvedPluginInstallable,
   ResolvedPluginUnavailable,
@@ -144,6 +154,7 @@ import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
+import type { WorkflowNoteScript } from "./discover-names.ts";
 import type { Dirent } from "node:fs";
 
 // INFO-05: BUCKET_A_EVENTS is a string[] tuple; rewrap as a Set for O(1)
@@ -324,13 +335,16 @@ async function derivePluginRootForInfo(
   return pluginRoot;
 }
 
+/** The component kinds `info` lists by name from their directories. */
+type NamedComponentKind = "skills" | "commands" | "agents";
+
 /**
  * Extracts the displayable name from a single directory entry per `kind`, or
  * `undefined` when the entry does not qualify.
  */
 function nameFromEntry(
   entry: { name: string; isDirectory(): boolean; isFile(): boolean },
-  kind: "skills" | "commands" | "agents",
+  kind: NamedComponentKind,
 ): string | undefined {
   if (kind === "skills") {
     return entry.isDirectory() ? entry.name : undefined;
@@ -338,6 +352,24 @@ function nameFromEntry(
 
   // commands + agents: `.md` files; strip the suffix for display.
   return entry.isFile() && entry.name.endsWith(".md") ? entry.name.slice(0, -3) : undefined;
+}
+
+/**
+ * D-PG4-01: the names one declared directory contributes. A skills directory
+ * whose entries hold a regular file `SKILL.md` is itself one skill, named by
+ * its folder, as the skills bridge's `isSelfSkillDir` reads it; a `SKILL.md`
+ * directory or link does not count.
+ */
+function componentNamesFromEntries(
+  abs: string,
+  entries: readonly { name: string; isDirectory(): boolean; isFile(): boolean }[],
+  kind: NamedComponentKind,
+): readonly string[] {
+  if (kind === "skills" && entries.some((entry) => entry.name === "SKILL.md" && entry.isFile())) {
+    return [path.basename(abs)];
+  }
+
+  return entries.flatMap((entry) => nameFromEntry(entry, kind) ?? []);
 }
 
 /**
@@ -352,11 +384,23 @@ async function readEntriesOrEmpty(
   reader: PluginInfoReader,
   abs: string,
 ): Promise<readonly { name: string; isDirectory(): boolean; isFile(): boolean }[]> {
+  return (await readEntriesOrMissing(reader, abs)) ?? [];
+}
+
+/**
+ * Read directory entries, or `undefined` when `abs` is missing or is not a
+ * directory (ENOENT / ENOTDIR). Every other failure propagates, as in
+ * `readEntriesOrEmpty`.
+ */
+async function readEntriesOrMissing(
+  reader: PluginInfoReader,
+  abs: string,
+): Promise<readonly { name: string; isDirectory(): boolean; isFile(): boolean }[] | undefined> {
   try {
     return await reader.listDirectory(abs);
   } catch (err) {
     if (isErrnoException(err) && (err.code === "ENOENT" || err.code === "ENOTDIR")) {
-      return [];
+      return undefined;
     }
 
     throw err;
@@ -368,9 +412,11 @@ async function readEntriesOrEmpty(
  * root) and accumulate the per-kind component NAMES.
  *
  * For each declared directory:
- *   - skills:   directory entries -> directory NAMES (each skill is a
- *               subdirectory; `isSkillDir` filtering is bridge-layer
- *               only -- info surfaces authoring intent).
+ *   - skills:   a directory that holds a regular `SKILL.md` is one skill
+ *               named by its folder, and its subfolders are not skills
+ *               (D-PG4-01); any other directory lists its subdirectory
+ *               NAMES (`isSkillDir` filtering is bridge-layer only -- info
+ *               surfaces authoring intent).
  *   - commands: file entries -> basename minus `.md` suffix.
  *   - agents:   file entries -> basename minus `.md` suffix.
  *
@@ -386,18 +432,15 @@ async function discoverComponentNames(
   reader: PluginInfoReader,
   pluginRoot: string,
   componentDirs: readonly string[],
-  kind: "skills" | "commands" | "agents",
+  kind: NamedComponentKind,
 ): Promise<readonly string[]> {
   const names = new Set<string>();
   for (const rel of componentDirs) {
     const abs = path.isAbsolute(rel) ? rel : path.join(pluginRoot, rel);
     // eslint-disable-next-line no-await-in-loop -- bounded by the declared component dirs, one readdir each
     const entries = await readEntriesOrEmpty(reader, abs);
-    for (const entry of entries) {
-      const name = nameFromEntry(entry, kind);
-      if (name !== undefined) {
-        names.add(name);
-      }
+    for (const name of componentNamesFromEntries(abs, entries, kind)) {
+      names.add(name);
     }
   }
 
@@ -1012,6 +1055,16 @@ function parseLenientHooksJson(raw: string): unknown {
  * is free text, already reduced and already ordered, and the caller spreads it
  * onto the row only when non-empty.
  *
+ * D-PG4-01: the listed skills paths of a root-source entry that do not load
+ * come first, with their absolute paths reduced as install reduces them.
+ *
+ * PG-SEC-01 / D-PG4-12 / D-PG4-13 and PG-WF-02 / D-PG8-04: the workflow agent
+ * notes follow the workflow advisories. They are added here, the one function every row
+ * builder calls, so each row carries them once. They are recomputed at every
+ * run and never stored.
+ *
+ * D-PG10-06: the line that names the unset required options comes last.
+ *
  * SURF-01: object-literal field placement is documentation
  * only -- the renderer iterates `COMPONENT_KINDS` to enforce the
  * `["agents", "commands", "hooks", "mcp", "skills", "workflows"]` ordering.
@@ -1036,6 +1089,10 @@ async function composeResolvedComponents(
     readonly declaredMcpServers: Record<string, unknown>;
     readonly droppedMcpServers?: readonly DroppedMcpServer[];
     readonly hooksConfigPath?: string;
+    /** D-PG4-01: carried by the materializable arms only. */
+    readonly refusedListedSkillPaths?: readonly RefusedListedSkillPath[];
+    /** D-PG10-06: carried by the materializable arms only. */
+    readonly declaredUserConfig?: UserConfigSchema;
   },
   pluginName: string,
 ): Promise<{
@@ -1100,6 +1157,12 @@ async function composeResolvedComponents(
   const workflows = await previewWorkflows(pluginRoot, resolved.componentPaths.workflows, {
     pluginName,
   });
+  const workflowNotes = await previewWorkflowAgentNotes(
+    pluginName,
+    pluginRoot,
+    resolved.componentPaths.agents,
+    workflows.discovered,
+  );
 
   return {
     components: {
@@ -1110,9 +1173,36 @@ async function composeResolvedComponents(
       ...(skills.length > 0 && { skills }),
       ...(workflows.names.length > 0 && { workflows: workflows.names }),
     },
-    notes: workflows.warnings,
+    notes: [
+      ...refusedListedSkillPathMessages(resolved.refusedListedSkillPaths).map((message) =>
+        redactAbsolutePaths(message),
+      ),
+      ...workflows.warnings,
+      ...workflowNotes,
+      ...unsetOptionNotes(resolved.declaredUserConfig),
+    ],
     mcpDependency: mcpDependencyOf(Object.values(resolved.declaredMcpServers)),
   };
+}
+
+/**
+ * D-PG10-06: one line naming each required option with no default, in
+ * declaration order, so a `--partial` install leaves them unset. It names keys
+ * only, never a default or a value; a key passed the schema's identifier
+ * pattern at resolution.
+ */
+function unsetOptionNotes(schema: UserConfigSchema | undefined): readonly string[] {
+  const { unsetRequired } = resolveOptions(schema);
+  if (unsetRequired.length === 0) {
+    return [];
+  }
+
+  const keys = unsetRequired.map((key) => `"${key}"`).join(", ");
+  return [
+    unsetRequired.length === 1
+      ? `required option ${keys} has no default, so it is not set`
+      : `required options ${keys} have no default, so they are not set`,
+  ];
 }
 
 /**
@@ -1167,7 +1257,12 @@ async function previewWorkflows(
   pluginRoot: string,
   declared: readonly string[],
   opts: { readonly pluginName: string },
-): Promise<{ readonly names: readonly string[]; readonly warnings: readonly string[] }> {
+): Promise<{
+  readonly names: readonly string[];
+  readonly warnings: readonly string[];
+  /** The discovered records, which the workflow agent notes read (PG-SEC-01, PG-WF-02). */
+  readonly discovered: readonly WorkflowNoteScript[];
+}> {
   const { discovered, warnings } = await discoverPluginWorkflows({
     pluginName: opts.pluginName,
     resolved: { pluginRoot, componentPaths: { workflows: declared } },
@@ -1183,7 +1278,50 @@ async function previewWorkflows(
         .map((verdict) => verdict.generatedName),
     ),
     warnings: warnings.map((warning) => redactAbsolutePaths(warning)),
+    discovered,
   };
+}
+
+/**
+ * PG-SEC-01 / D-PG4-12 and PG-WF-02 / D-PG8-04: the workflow agent notes of
+ * this row, for an agent type that restricts its tools and for one the plugin
+ * does not install, from the join that install and update use. Nothing is read when no admitted script names an
+ * agent type as a literal, so an unaffected row reads no agent file.
+ *
+ * NFR-10: each agents path must resolve inside the plugin root before any
+ * read, because the lenient listing of a refused plugin carries the entry's
+ * raw strings. A refused path is not read.
+ *
+ * D-PG4-11: a note may cost itself and never the row, so a throw from the
+ * agent read, such as an unsafe agent name, yields no notes.
+ */
+async function previewWorkflowAgentNotes(
+  pluginName: string,
+  pluginRoot: string,
+  agentPaths: readonly string[],
+  workflows: readonly WorkflowNoteScript[],
+): Promise<readonly string[]> {
+  const namesAgentTypes = workflows.some(
+    ({ verdict }) => verdict.outcome === "named" && verdict.agentTypes !== undefined,
+  );
+  if (!namesAgentTypes) {
+    return [];
+  }
+
+  try {
+    const contained = await Promise.all(
+      agentPaths.map(async (raw) => resolveContainedComponentPath(pluginRoot, raw, "agents path")),
+    );
+    const agentsDirs = contained.flatMap((result) => (result.ok ? [result.absolutePath] : []));
+    const { discovered } = await discoverPluginAgents({ pluginName, agentsDirs });
+
+    return workflowAgentNotes(pluginName, discovered, workflows).map((note) =>
+      redactAbsolutePaths(note),
+    );
+  } catch (err) {
+    hookDebugLog(`info: workflow agent notes skipped for "${pluginName}": ${errorMessage(err)}`);
+    return [];
+  }
 }
 
 /**
@@ -1354,7 +1492,7 @@ async function buildBlock(args: {
         marketplace,
         scope,
         marketplaceDetails,
-        applyDisabledRowShape(stateOnly.row, installed.record),
+        applyRecordRowShape(stateOnly.row, installed.record),
         stateOnly.mcpDependency,
         skipReasonFor(installed.record, true),
       );
@@ -1458,7 +1596,7 @@ async function buildBlock(args: {
       marketplace,
       scope,
       marketplaceDetails,
-      applyDisabledRowShape(composed.row, installed.record),
+      applyRecordRowShape(composed.row, installed.record),
       composed.mcpDependency,
       skipReasonFor(installed.record, false),
     );
@@ -1563,7 +1701,7 @@ function invalidManifestBlock(args: {
     marketplace,
     scope,
     marketplaceDetails,
-    installed === undefined ? row : applyDisabledRowShape(row, installed),
+    installed === undefined ? row : applyRecordRowShape(row, installed),
     false,
     installed === undefined ? undefined : skipReasonFor(installed, false),
   );
@@ -1665,6 +1803,23 @@ function applyDisabledRowShape(
     status: "disabled",
     reasons: (row.reasons ?? []).filter((reason) => DISABLED_ROW_REASONS.has(reason)),
   };
+}
+
+/**
+ * D-PG10-25: the row of an installation record. `unreadable` goes last in its
+ * reasons when the record's stored options do not parse, once, and the
+ * disabled shape keeps it, so every arm that sees a record shows the fault.
+ */
+function applyRecordRowShape(
+  row: PluginInfoRow,
+  record: MarketplaceRecord["plugins"][string],
+): PluginInfoRow {
+  if (unreadableUserConfigOf(record) === undefined) {
+    return applyDisabledRowShape(row, record);
+  }
+
+  const reasons = new Set<ContentReason>([...(row.reasons ?? []), "unreadable"]);
+  return applyDisabledRowShape({ ...row, reasons: [...reasons] }, record);
 }
 
 /**
@@ -2042,7 +2197,9 @@ async function buildNotInstallablePathRowFields(
   reader: PluginInfoReader,
   env: ClaudeEnv,
   pluginName: string,
-  resolved: Parameters<typeof composeResolvedComponents>[3],
+  resolveComponents: (
+    pluginRoot: string,
+  ) => Promise<Parameters<typeof composeResolvedComponents>[3]>,
   resolverReasons: readonly ContentReason[],
   marketplaceRoot: string,
   parsedSource: PathSource,
@@ -2051,8 +2208,8 @@ async function buildNotInstallablePathRowFields(
   readonly mcpDependency: McpDependency | false;
 }> {
   const pluginRoot = await derivePluginRootForInfo(marketplaceRoot, parsedSource);
-  // NFR-7 / INFO-05: only `composeResolvedComponents` failures
-  // (component-dir EACCES, hooks-file EACCES/EIO, malformed JSON the
+  // NFR-7 / INFO-05: only `resolveComponents` and `composeResolvedComponents`
+  // failures (component-dir EACCES, hooks-file EACCES/EIO, malformed JSON the
   // lenient reader propagates) fall into the `narrowProbeError(err)`
   // arm here. `derivePluginRootForInfo`'s own throws -- the
   // `PathContainmentError` from `assertPathInside` -- propagate
@@ -2063,7 +2220,7 @@ async function buildNotInstallablePathRowFields(
       reader,
       env,
       pluginRoot,
-      resolved,
+      await resolveComponents(pluginRoot),
       pluginName,
     );
     return {
@@ -2097,7 +2254,8 @@ interface LenientComponentPaths {
  * `componentPaths`. The info surface re-resolves independently from the
  * marketplace entry's declared component paths plus the conventional
  * `<pluginRoot>/<kind>` locations, under the strict resolver's rules:
- * `skills` always starts from `skills/` (D-CF1-06), and so does `commands`,
+ * `skills` starts from `skills/` (D-CF1-06), except for a root-source entry
+ * that lists skills (D-PG4-01, `rootSourceLenientSkillPaths`), and so does `commands`,
  * because a marketplace entry's `commands` adds to `commands/` (D-CF3-04;
  * the entry holds no `plugin.json` declaration, the one that replaces the
  * folder). `agents` and `workflows` start from their conventional folder only
@@ -2110,9 +2268,15 @@ interface LenientComponentPaths {
  */
 function deriveLenientComponentPaths(
   entry: MarketplaceManifest["plugins"][number],
+  rootSourceSkills: string[] | undefined,
 ): LenientComponentPaths {
   const out: LenientComponentPaths = { skills: [], commands: [], agents: [], workflows: [] };
   for (const kind of ["skills", "commands", "agents", "workflows"] as const) {
+    if (kind === "skills" && rootSourceSkills !== undefined) {
+      out.skills = rootSourceSkills;
+      continue;
+    }
+
     const declared = (entry as Record<string, unknown>)[kind];
     if (kind === "skills" || kind === "commands" || !declared) {
       out[kind].push(kind);
@@ -2126,6 +2290,69 @@ function deriveLenientComponentPaths(
   }
 
   return out;
+}
+
+/**
+ * D-PG4-01, as in Claude Code 2.1.323: the lenient `skills` paths of a
+ * root-source entry that lists at least one string, or `undefined` when the
+ * D-CF1-06 rule applies. The listed strings that are relative and stay inside
+ * the plugin root replace the `skills/` folder, in listed order and once each;
+ * the folder follows only when the root itself is listed. When no kept string
+ * names a directory, an absolute or escaping string leaves nothing listed, and
+ * otherwise the D-CF1-06 rule applies, as the strict rule falls back. The
+ * containment test is lexical, so an absolute or escaping string never reaches
+ * a directory read.
+ */
+async function rootSourceLenientSkillPaths(
+  reader: PluginInfoReader,
+  pluginRoot: string,
+  entry: MarketplaceManifest["plugins"][number],
+): Promise<string[] | undefined> {
+  const listed = asDeclaredList((entry as Record<string, unknown>).skills).filter(
+    (declared) => typeof declared === "string",
+  );
+  if (!isMarketplaceRootSource(entry.source) || listed.length === 0) {
+    return undefined;
+  }
+
+  const contained = listed.map((declared) => containedRelativePath(declared));
+  const kept = [...new Set(contained.flatMap((relative) => relative ?? []))];
+  const directories = await Promise.all(
+    kept.map(
+      async (relative) =>
+        (await readEntriesOrMissing(reader, path.join(pluginRoot, relative))) !== undefined,
+    ),
+  );
+  if (!directories.includes(true)) {
+    return contained.includes(undefined) ? [] : undefined;
+  }
+
+  if (kept.includes(".") && !kept.includes("skills")) {
+    kept.push("skills");
+  }
+
+  return kept;
+}
+
+/**
+ * The lexically normalized form of a relative path that stays inside the
+ * plugin root, `.` for the root itself, or `undefined` for an absolute or
+ * escaping path. The normalization works on the string alone, so the
+ * process's working directory never decides the answer, and no filesystem
+ * read is made.
+ */
+function containedRelativePath(declared: string): string | undefined {
+  if (path.isAbsolute(declared)) {
+    return undefined;
+  }
+
+  const normalized = path.normalize(declared);
+  const relative = normalized.endsWith(path.sep) ? normalized.slice(0, -1) : normalized;
+  if (relative === ".." || relative.startsWith(`..${path.sep}`)) {
+    return undefined;
+  }
+
+  return relative;
 }
 
 /**
@@ -2172,7 +2399,7 @@ function buildNonInstallableRowFields(
         reader,
         env,
         pluginName,
-        resolved,
+        () => Promise.resolve(resolved),
         narrowUnsupportedKinds(resolved.unsupported),
         marketplaceRoot,
         parsedSource,
@@ -2182,10 +2409,13 @@ function buildNonInstallableRowFields(
         reader,
         env,
         pluginName,
-        {
-          componentPaths: deriveLenientComponentPaths(entry),
+        async (pluginRoot) => ({
+          componentPaths: deriveLenientComponentPaths(
+            entry,
+            await rootSourceLenientSkillPaths(reader, pluginRoot, entry),
+          ),
           declaredMcpServers: {},
-        },
+        }),
         narrowResolverNotes(resolved.notes),
         marketplaceRoot,
         parsedSource,

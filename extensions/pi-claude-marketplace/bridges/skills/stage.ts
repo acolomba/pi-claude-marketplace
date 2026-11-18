@@ -7,7 +7,7 @@
 //     `<extensionRoot>/skills-staging/<uuid>/` -- staging and target both
 //     live under `<extensionRoot>/`, guaranteeing same-FS atomicity for the
 //     per-skill `rename`.
-//   - D-08: substitution helper is `shared/vars.ts::substituteClaudeVars`
+//   - D-08: substitution helper is `shared/vars.ts::substituteClaudeContent`
 //     (uniform across skills/commands/agents).
 //   - RN-6: two source skills that elide to the same generated name are a
 //     first-wins skip plus a warning, decided in `discover.ts` (D-141-04).
@@ -22,20 +22,25 @@ import path from "node:path";
 import { descriptionFallback } from "../../domain/description-fallback.ts";
 import { droppedInvocationFieldsWarning } from "../../domain/invocation-frontmatter.ts";
 import { assertSafeName } from "../../domain/name.ts";
+import { rewriteSiblingSkillPaths } from "../../domain/skill-sibling-paths.ts";
 import { rewriteMarkdownReferences } from "../../domain/skill-tokens.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { stripBom } from "../../shared/bom.ts";
 import { SkillFrontmatterNodeError } from "../../shared/errors-bridges.ts";
 import { appendLeakToError, errorMessage } from "../../shared/errors.ts";
+import {
+  colonRepairTrigger,
+  extractBodyAfterFrontmatter,
+  repairSingleLineScalars,
+} from "../../shared/frontmatter-repair.ts";
 import { cleanupStaging } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { discoveryWarning } from "../../shared/staging-warnings.ts";
-import { substituteClaudeVars } from "../../shared/vars.ts";
+import { substituteClaudeContent } from "../../shared/vars.ts";
 
 import { discoverPluginSkills } from "./discover.ts";
 import {
   foldWhenToUse,
-  repairSingleLineScalars,
   setDescriptionScalar,
   synthesizeUnparseableSkill,
   truncate1536,
@@ -51,7 +56,7 @@ import {
 
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { RemovalOps } from "../../shared/fs-utils.ts";
-import type { ClaudePluginVars } from "../../shared/vars.ts";
+import type { ClaudeContentOptions, ClaudePluginVars } from "../../shared/vars.ts";
 import type { SkillNameClaims } from "./skill-names.ts";
 import type {
   DiscoveredSkill,
@@ -60,25 +65,6 @@ import type {
   StagedSkillRecord,
   StageSkillsInput,
 } from "./types.ts";
-
-/**
- * SKILL-01: extract the markdown body from a skill source whose frontmatter
- * block failed to parse, reproducing `parseFrontmatter`'s OWN split so the
- * synthesized block preserves the body byte-for-byte identically to the
- * parseable path (PARSE-01 encoding parity). Newlines are normalized (CR/CRLF ->
- * LF, including lone CR) exactly as the parser does; the opening fence is the
- * parser's anchored `---` prefix (`startsWith`, NOT a per-line `trim`); and the
- * close is the parser's `\n---` prefix search. An exotic delimiter -- a `---x`
- * line or an indented `---` -- is therefore classified identically to Pi rather
- * than by a looser `line.trim() === "---"` match. Called ONLY on the gate-1
- * throw arm, where a closed `---` block is present by construction -- the body
- * is everything after the closing delimiter, trimmed.
- */
-function extractBodyAfterFrontmatter(content: string): string {
-  const normalized = content.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
-  const closeIndex = normalized.indexOf("\n---", 3);
-  return normalized.slice(closeIndex + 4).trim();
-}
 
 /** The frontmatter and body Pi's own `parseFrontmatter` yields for a skill source. */
 type ParsedSkillFrontmatter = ReturnType<typeof parseFrontmatter>;
@@ -93,7 +79,7 @@ type ParsedSkillFrontmatter = ReturnType<typeof parseFrontmatter>;
 function repairUnparseableFrontmatter(
   content: string,
 ): { repaired: string; parsed: ParsedSkillFrontmatter } | undefined {
-  const repaired = repairSingleLineScalars(content);
+  const repaired = repairSingleLineScalars(content, colonRepairTrigger);
   if (repaired === content) {
     return undefined;
   }
@@ -128,6 +114,7 @@ function augmentSkillDescription(
   frontmatter: Record<string, unknown>,
   body: string,
   vars: ClaudePluginVars,
+  options: ClaudeContentOptions | undefined,
 ): string {
   const rawDescription = frontmatter.description;
   const sourceDescription = typeof rawDescription === "string" ? rawDescription : "";
@@ -138,13 +125,13 @@ function augmentSkillDescription(
     sourceDescription === "" ? descriptionFallback(body, "Plugin skill") : sourceDescription;
   const folded = foldWhenToUse(base, whenToUse === "" ? undefined : whenToUse);
   // SK-4 / AG-8: substitute the Claude path vars BEFORE the value is escaped into
-  // the double-quoted scalar. The later whole-file `substituteClaudeVars` (below)
+  // the double-quoted scalar. The later whole-file `substituteClaudeContent` (below)
   // would otherwise splice a Windows path's backslashes into the ALREADY-escaped
   // scalar, forming an invalid `\U...`-class escape that fails the PARSE-02
   // backstop; substituting first lets `emitSafeDoubleQuotedScalar` escape those
   // backslashes. The cap is applied pre-substitution (the WTU-02 listing budget
   // measures the authored text).
-  const effective = substituteClaudeVars(truncate1536(folded), vars);
+  const effective = substituteClaudeContent(truncate1536(folded), vars, options);
 
   // NREG-01: a present, in-cap `description` with no `when_to_use` and no path
   // var to expand is unchanged -- do NOT re-emit it as a double-quoted scalar
@@ -156,6 +143,9 @@ function augmentSkillDescription(
   return setDescriptionScalar(content, effective);
 }
 
+/** Rewrites the text of one staged Markdown file in the staged folder `stagedFileDir`. */
+type SkillMarkdownRewrite = (content: string, stagedFileDir: string) => string;
+
 /**
  * Rewrites copied supporting Markdown without following plugin symlinks.
  * D-CF2-02: it leaves the skill's own `SKILL.md`, `skillFile`, alone. The
@@ -164,9 +154,8 @@ function augmentSkillDescription(
  */
 async function rewriteSupportingMarkdown(
   directory: string,
-  pluginName: string,
-  names: InstalledReferenceNames,
   skillFile: string,
+  rewrite: SkillMarkdownRewrite,
 ): Promise<void> {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     const file = path.join(directory, entry.name);
@@ -182,11 +171,11 @@ async function rewriteSupportingMarkdown(
 
     if (fileStat.isDirectory()) {
       // eslint-disable-next-line no-await-in-loop -- the caller's staging cleanup needs no write in flight
-      await rewriteSupportingMarkdown(file, pluginName, names, skillFile);
+      await rewriteSupportingMarkdown(file, skillFile, rewrite);
     } else if (fileStat.isFile() && entry.name.endsWith(".md")) {
       // eslint-disable-next-line no-await-in-loop -- the caller's staging cleanup needs no write in flight
       const content = await readFile(file, "utf8");
-      const rewritten = rewriteMarkdownReferences(content, pluginName, names);
+      const rewritten = rewrite(content, directory);
       if (rewritten !== content) {
         // eslint-disable-next-line no-await-in-loop -- the caller's staging cleanup needs no write in flight
         await writeFile(file, rewritten, "utf8");
@@ -252,6 +241,29 @@ function parseSkillSource(content: string, generatedName: string): ParsedSkillSo
   }
 }
 
+/**
+ * SKTK-01 references, then D-PG4-05 sibling paths, for a Markdown file of
+ * `skill` staged under `stagedDir`. The copy keeps the source tree, so a
+ * staged file's source folder is the same relative path under the skill's
+ * source folder.
+ */
+function skillMarkdownRewrite(
+  context: SkillStagingContext,
+  skill: DiscoveredSkill,
+  stagedDir: string,
+): SkillMarkdownRewrite {
+  const skillSourceDir = path.resolve(skill.skillDir);
+  return (content, stagedFileDir) =>
+    rewriteSiblingSkillPaths(
+      rewriteMarkdownReferences(content, context.pluginName, context.referenceNames),
+      {
+        fileSourceDir: path.join(skillSourceDir, path.relative(stagedDir, stagedFileDir)),
+        skillSourceDir,
+        siblingSkills: context.siblingSkills,
+      },
+    );
+}
+
 /** What every skill of one `prepareStageSkills` call is staged with. */
 interface SkillStagingContext {
   readonly pluginName: string;
@@ -259,9 +271,15 @@ interface SkillStagingContext {
   readonly pluginDataDir: string;
   /** SUB-02: the install cwd at project scope, `undefined` at user scope. */
   readonly projectDir: string | undefined;
+  readonly options: StageSkillsInput["options"];
   readonly locations: StageSkillsInput["locations"];
   readonly stagingRoot: string;
   readonly referenceNames: InstalledReferenceNames;
+  /**
+   * D-PG4-07: the resolved source folder of each skill that stages, to its
+   * generated name. Built from discovery, so a skipped sibling is absent.
+   */
+  readonly siblingSkills: ReadonlyMap<string, string>;
   readonly claims: SkillNameClaims;
 }
 
@@ -276,9 +294,9 @@ interface StagedSkill {
 
 /**
  * Copies one discovered skill into the staging root and writes its staged
- * `SKILL.md`: SK-3 name, description augment, SKTK-01 references, SK-4
- * variables, and last the D-CF2-02 / D-CF2-06 record of its names and
- * install-time values.
+ * `SKILL.md`: SK-3 name, description augment, SKTK-01 references,
+ * PG-SKILL-04 sibling paths, SK-4 variables, and last the D-CF2-02 / D-CF2-06
+ * record of its names and install-time values.
  */
 async function stageSkill(
   context: SkillStagingContext,
@@ -345,7 +363,13 @@ async function stageSkill(
   if (parsed !== undefined) {
     droppedFields = droppedInvocationFieldsWarning(skill.sourceName, parsed.frontmatter);
     content = rewriteFrontmatterName(content, skill.generatedName);
-    content = augmentSkillDescription(content, parsed.frontmatter, parsed.body, skillVars);
+    content = augmentSkillDescription(
+      content,
+      parsed.frontmatter,
+      parsed.body,
+      skillVars,
+      context.options,
+    );
     frontmatterAliases = frontmatterNameAliases(pluginName, parsed.frontmatter.name);
   }
 
@@ -357,9 +381,12 @@ async function stageSkill(
   // SKTK-01: retarget same-plugin `<plugin>:<skill>`, `<plugin>:<command>`
   // and `<plugin>:<workflow>` references (both arms -- a degraded skill's
   // body is prose too). Runs before SK-4 substitution so the PARSE-02
-  // backstop validates the final bytes.
-  content = rewriteMarkdownReferences(content, pluginName, context.referenceNames);
-  content = substituteClaudeVars(content, skillVars);
+  // backstop validates the final bytes. D-PG4-05: the sibling paths are
+  // rewritten before it too, so a `${CLAUDE_SKILL_DIR}/../<sibling>/` path
+  // still reads as a token.
+  const rewriteMarkdown = skillMarkdownRewrite(context, skill, stagedDir);
+  content = rewriteMarkdown(content, stagedDir);
+  content = substituteClaudeContent(content, skillVars, context.options);
   // D-CF2-02 / D-CF2-06 / T-02-02: the record goes in last, after every
   // rewrite, so no reference rewrite reads its names. Its `pluginRoot` and
   // `pluginData` are the values the SK-4 substitution used.
@@ -369,7 +396,7 @@ async function stageSkill(
     pluginData: context.pluginDataDir,
   });
   await writeFile(skillMdPath, content, "utf8");
-  await rewriteSupportingMarkdown(stagedDir, pluginName, context.referenceNames, skillMdPath);
+  await rewriteSupportingMarkdown(stagedDir, skillMdPath, rewriteMarkdown);
 
   // PARSE-02 / D-86-04: re-parse the STAGED bytes as a Pi-acceptability
   // backstop. A THROW here means our OWN rewrite/substitution produced
@@ -471,6 +498,7 @@ export async function prepareStageSkills(
     pluginRoot,
     pluginDataDir,
     projectDir: locations.scope === "project" ? cwd : undefined,
+    options: input.options,
     locations,
     stagingRoot,
     // SKTK-01: the same-plugin reference targets this install materializes.
@@ -478,6 +506,9 @@ export async function prepareStageSkills(
       input.referenceNames,
       discovered.map((skill) => skill.generatedName),
       input.knownWorkflowNames,
+    ),
+    siblingSkills: new Map(
+      discovered.map((skill) => [path.resolve(skill.skillDir), skill.generatedName]),
     ),
     // D-CF2-02: every skill's identity is claimed before any
     // frontmatter alias, and the loop below claims aliases in discovery order.

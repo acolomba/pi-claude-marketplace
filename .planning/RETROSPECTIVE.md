@@ -2,6 +2,47 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: parity-gaps -- Claude Code Parity Gaps and Defects
+
+**Completed:** 2026-11-17 on `features/gaps` (not yet pushed, no PR or npm release; version stays 0.23.0)
+**Phases:** 11 | **Plans:** 102 | **Tasks:** 105 | **Requirements:** 42/42 | **Audit:** `tech_debt`, no blockers (integration 9/9, flows 6/6); Phase 5 closed with a verification override (A9, Node 24, closes with the PR's CI); runtime UAT skipped by the user's choice
+
+### What Was Built
+
+- Companion floors (pi-subagents 0.87.0, pi-mcp-adapter 7.0.1), bare mapped model IDs, Claude Code's MCP idle windows, and long adapter tool names that hooks and agents can name.
+- Claude-shaped hook tool input and results, Claude Code's matchers, a `Stop` continuation in the same run with the eight-block limit, failure and `stopReason` notices, saved long context, the missing stdin fields, `UserPromptExpansion`, and `resume` and `fork` at `SessionStart`.
+- Background subagents in the companion's launch mode with no main-session hooks; YAML agent frontmatter, `Agent` and `Task` grants, `model: inherit`, and both tool lists.
+- Root-source skill lists, sibling skill links, workflows started by name, and workflow agent notes; kept-alive stdio servers and kept user fields under the adapter; `userConfig` defaults, `${CLAUDE_PROJECT_DIR}` for user-scope content, the trusted-project `bin` rule, `@file` mentions, Claude Code command names, and a skills and commands compatibility page.
+
+### What Worked
+
+- **The PRD as the requirement source,** with its section 5 decisions answered in the discuss step of the phase that needed them, so no plan was written against an open question.
+- **Two child branches for disjoint code areas** (agents and workflows, MCP and options) merged back without conflicts in product code.
+- **A maintainer decision review before the audit:** every pending D-PG row was settled in one pass, and three autonomous choices (D-PG8-07, D-PG10-25, D-PG11-03) were reversed toward upstream before the close.
+
+### What Was Inefficient
+
+- **Verifications went stale on docs edits:** wording fixes in shared docs that every phase report covers forced all 11 phases to re-verify, some twice.
+- **The Phase 11 review loop reached its three-iteration cap,** with the last fix round read by no review.
+- **GSD's requirement parsers did not read `PG-` IDs** in ROADMAP lines and several SUMMARY frontmatters, so requirements were marked and reconciled by hand.
+
+### Patterns Established
+
+- **A divergence needs a decision ID or a Pi capability gap,** and the scenario or compatibility page names it; "accepted by the autonomous run" rows wait for the maintainer.
+- **Override entries cite the locked decision row they rest on** and claim no maintainer sign-off.
+
+### Key Lessons
+
+1. Keep phase reports from covering shared docs that later phases edit, or plan one combined-tree re-verification at the close.
+2. Settle autonomous parity choices with the maintainer before the audit; reversals after it repeat the gate.
+3. A behavioral suite that drives a real Pi with real companions can stand in for a manual runtime UAT, but a runtime or Node version it never ran on stays open (A9).
+
+### Cost Observations
+
+- Model mix: Opus parent and child sessions; planner and researcher agents configured for Fable; exact percentages were not recorded.
+- Sessions: one parent on `features/gaps` and two child branches (`features/gaps-agents`, `features/gaps-mcp`).
+- Timeline: 2026-11-11 -> 2026-11-17 (779 commits).
+
 ## Milestone: behavioral-gaps -- Behavioral Coverage Gaps
 
 **Completed:** 2026-11-08 on `features/behavioral-gaps` (not yet pushed, no PR or npm release yet)
@@ -1231,6 +1272,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | plugin-lifecycle | 11 | Parallel backlog closure followed by shared test/cleanup sweeps; one exact-tree gate reused by concurrent verifiers; dry-run archive validation |
 | component-features | 8 | A harness phase, then parallel component sessions with file ownership; a user-reviewed dubious-choices log; upstream gaps split into bugs (patches) and design differences (accepted); a reopen and a retroactive phase for the locality redesign |
 | mcp-builtin | 6 | A frozen foundation phase, then four parallel child sessions with parent lines; two cucumber profiles for two MCP implementations; read-time verdicts from neutral records; every phase re-verified on the combined tree at the close |
+| parity-gaps | 11 | A PRD as the requirement source with its open decisions answered per phase; two child branches for disjoint code areas; a maintainer decision review before the audit; the cucumber suite in place of the manual runtime UAT |
 
 ### Cumulative Quality
 
@@ -1251,6 +1293,7 @@ Result: 8/8 INFO requirements satisfied, 1459/1459 tests GREEN, full catalog UAT
 | plugin-lifecycle | 1,151 scenarios / 11,854 steps | 16 hooks and 309 direct-coverage records; all 64 requirements and 11 phase verifications current on the closeout tree |
 | component-features | 1,539 scenarios / 16,565 steps | Every bridged component kind checked against a real Pi with a scripted model; 327 direct-coverage records; 62/62 requirements and all 8 phase verifications current on the closeout tree |
 | mcp-builtin | 1,603 adapter + 133 builtin scenarios | Every MCP scenario under both implementations; 31/31 requirements; all 6 phase verifications current on the closeout tree (Phase 2 `human_needed`) |
+| parity-gaps | 2,100 adapter + 204 builtin scenarios | 376 direct-coverage records; 42/42 requirements; all 11 phase verifications current on the closeout tree (Phase 5 `human_needed` on A9) |
 
 ### Top Lessons (Verified Across Milestones)
 

@@ -521,6 +521,36 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
       },
     },
 
+    // D-PG10-25: an enabled plugin whose install record holds options that do
+    // not parse. Its option-dependent parts are refused until a reinstall.
+    "reconcile-plugin-options-unreadable": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "deploy-kit",
+                reasons: ["unreadable"],
+                cause: new Error(
+                  "The plugin options in the install record of deploy-kit@mp do not parse (userConfig is not an object). Run /claude:plugin reinstall deploy-kit@mp to restore them.",
+                ),
+                severity: "warning",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // LOAD-01: the same check, on the arm where the dependency is recorded and
     // enabled at a version outside the declared range. The second token, and a
     // remedy that names the canonical folded range.

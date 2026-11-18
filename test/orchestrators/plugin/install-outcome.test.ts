@@ -47,7 +47,11 @@ import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { createRemovalOpsFake } from "../../platform/removal-ops-fake.ts";
-import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
+import {
+  runWithAllLoaded,
+  runWithNothingLoaded,
+  runWithSoftDeps,
+} from "../../shared/notification-run-seeds.ts";
 
 import type { ActiveMcpImplementation } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
@@ -59,7 +63,10 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import type { PackageInstallOps } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type {
+  ExtensionState,
+  PluginInstallRecord,
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Phase } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
@@ -2222,6 +2229,246 @@ test("MREC-01: the recorded configs are copies that a later change to the resolv
   ]);
 });
 
+const DECLARED_OPTIONS = {
+  mode: { type: "string", title: "Mode", description: "The mode.", default: "fast" },
+  retries: { type: "number", title: "Retries", description: "The retries.", default: 3 },
+};
+
+async function installDeclaring(
+  t: TestContext,
+  pluginJson: Record<string, unknown>,
+): Promise<{
+  readonly record: PluginInstallRecord | undefined;
+  readonly resolved: InstallLedgerSummary["resolved"];
+}> {
+  const environment = await createHermeticEnvironment(t, "install-outcome-user-config-");
+  const seeded = await seedPlugin(environment.cwd, { pluginJson });
+  const ledgerOutcome = await runInstallLedger(
+    seeded.state,
+    locationsFor("project", environment.cwd),
+    {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      consentView: "none",
+      removalOps: createRemovalOps(),
+      env: {},
+    },
+  );
+  assert.ok(ledgerOutcome.kind === "installed");
+  return {
+    record: seeded.state.marketplaces.marketplace?.plugins.empty,
+    resolved: ledgerOutcome.summary.resolved,
+  };
+}
+
+test("D-PG10-23: records the declared options as a copy that a later change to the resolution does not reach", async (t) => {
+  // arrange
+  const { record, resolved } = await installDeclaring(t, { userConfig: DECLARED_OPTIONS });
+  const declared = resolved.declaredUserConfig as Record<string, { default?: unknown }>;
+
+  // act
+  declared.mode = { default: "changed" };
+
+  // assert
+  assert.deepStrictEqual(record?.userConfig, DECLARED_OPTIONS);
+});
+
+test("D-PG10-23: records a declared empty userConfig as an empty object", async (t) => {
+  // act
+  const { record } = await installDeclaring(t, { userConfig: {} });
+
+  // assert
+  assert.deepStrictEqual(record?.userConfig, {});
+});
+
+test("D-PG10-14: records no userConfig field for a plugin that declares no options", async (t) => {
+  // act
+  const { record } = await installDeclaring(t, {});
+
+  // assert
+  assert.strictEqual(Object.hasOwn(record ?? {}, "userConfig"), false);
+});
+
+/** The staged text after the last frontmatter fence. */
+function bodyOf(staged: string): string | undefined {
+  return staged.split("---\n").at(-1);
+}
+
+/**
+ * Installs a plugin whose skill `opts`, command `cmd`, and agent `bot` name
+ * options and returns their staged bodies.
+ */
+async function stagedOptionBodies(
+  t: TestContext,
+  pluginJson: Record<string, unknown>,
+): Promise<{
+  readonly skill: string | undefined;
+  readonly command: string | undefined;
+  readonly agent: string | undefined;
+}> {
+  const environment = await createHermeticEnvironment(t, "install-outcome-skill-options-");
+  const seeded = await seedPlugin(environment.cwd, { pluginJson });
+  const skillDir = path.join(seeded.pluginRoot, "skills", "opts");
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(
+    path.join(skillDir, "SKILL.md"),
+    "---\nname: opts\n---\nMode ${user_config.mode} retries ${user_config.retries}.\n",
+  );
+  await mkdir(path.join(seeded.pluginRoot, "commands"), { recursive: true });
+  await writeFile(
+    path.join(seeded.pluginRoot, "commands", "cmd.md"),
+    "Mode ${user_config.mode} retries ${user_config.retries}.\n",
+  );
+  await mkdir(path.join(seeded.pluginRoot, "agents"), { recursive: true });
+  await writeFile(
+    path.join(seeded.pluginRoot, "agents", "bot.md"),
+    "---\nname: bot\ndescription: Bot\n---\nMode ${user_config.mode} retries ${user_config.retries}.\n",
+  );
+  const locations = locationsFor("project", environment.cwd);
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    consentView: "none",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+  assert.ok(ledgerOutcome.kind === "installed");
+  return {
+    skill: bodyOf(
+      await readFile(path.join(locations.skillsTargetDir, "empty-opts", "SKILL.md"), "utf8"),
+    ),
+    command: bodyOf(await readFile(path.join(locations.promptsTargetDir, "empty:cmd.md"), "utf8")),
+    agent: bodyOf(
+      await readFile(path.join(locations.agentsDir, "pi-claude-marketplace-empty-bot.md"), "utf8"),
+    ),
+  };
+}
+
+test("D-PG10-13: the skills phase writes the declared options into skill content", async (t) => {
+  // act
+  const { skill } = await stagedOptionBodies(t, { userConfig: DECLARED_OPTIONS });
+
+  // assert
+  assert.strictEqual(skill, "Mode fast retries 3.\n");
+});
+
+test("D-PG10-21: the skills phase keeps the option references of a plugin with no userConfig", async (t) => {
+  // act
+  const { skill } = await stagedOptionBodies(t, {});
+
+  // assert
+  assert.strictEqual(skill, "Mode ${user_config.mode} retries ${user_config.retries}.\n");
+});
+
+test("D-PG10-13: the commands phase writes the declared options into command content", async (t) => {
+  // act
+  const { command } = await stagedOptionBodies(t, { userConfig: DECLARED_OPTIONS });
+
+  // assert
+  assert.strictEqual(command, "Mode fast retries 3.\n");
+});
+
+test("D-PG10-21: the commands phase keeps the option references of a plugin with no userConfig", async (t) => {
+  // act
+  const { command } = await stagedOptionBodies(t, {});
+
+  // assert
+  assert.strictEqual(command, "Mode ${user_config.mode} retries ${user_config.retries}.\n");
+});
+
+test("D-PG10-13: the agents phase writes the declared options into agent content", async (t) => {
+  // act
+  const { agent } = await stagedOptionBodies(t, { userConfig: DECLARED_OPTIONS });
+
+  // assert
+  assert.strictEqual(agent, "\nMode fast retries 3.\n");
+});
+
+test("D-PG10-21: the agents phase keeps the option references of a plugin with no userConfig", async (t) => {
+  // act
+  const { agent } = await stagedOptionBodies(t, {});
+
+  // assert
+  assert.strictEqual(agent, "\nMode ${user_config.mode} retries ${user_config.retries}.\n");
+});
+
+/** Installs a plugin with a server that names `token` and a plain server, and returns the mcp summary. */
+async function stagedOptionServers(
+  t: TestContext,
+  pluginJson: Record<string, unknown>,
+): Promise<{ readonly names: readonly string[]; readonly notices: readonly unknown[] }> {
+  const environment = await createHermeticEnvironment(t, "install-outcome-mcp-options-");
+  const seeded = await seedPlugin(environment.cwd, {
+    pluginJson,
+    mcpServers: {
+      keyed: { command: "node", args: ["${user_config.token}"] },
+      plain: { command: "node" },
+    },
+  });
+  const ledgerOutcome = await runInstallLedger(
+    seeded.state,
+    locationsFor("project", environment.cwd),
+    {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      consentView: "none",
+      removalOps: createRemovalOps(),
+      partial: true,
+      env: {},
+    },
+  );
+  assert.ok(ledgerOutcome.kind === "installed");
+  return {
+    names: ledgerOutcome.summary.stagedMcpServerNames,
+    notices: ledgerOutcome.summary.mcpConfigNotices,
+  };
+}
+
+test("D-PG10-21: the mcp phase leaves out a server that names a required option with no default", async (t) => {
+  // act
+  const staged = await stagedOptionServers(t, {
+    userConfig: {
+      token: { type: "string", title: "Token", description: "The token.", required: true },
+    },
+  });
+
+  // assert
+  assert.deepStrictEqual(staged, {
+    names: ["plain"],
+    notices: [
+      {
+        kind: "option-blocked",
+        scope: "project",
+        file: "mcp-adapter.json",
+        plugin: "empty",
+        server: "keyed",
+        names: ["token"],
+        reason: "unset",
+      },
+    ],
+  });
+});
+
+test("D-PG10-21: the mcp phase stages every server of a plugin with no userConfig", async (t) => {
+  // act
+  const staged = await stagedOptionServers(t, {});
+
+  // assert
+  assert.deepStrictEqual(staged, { names: ["keyed", "plain"], notices: [] });
+});
+
 test("MREC-01: a bundle reference records the bundle flag beside no recorded server", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-mcp-bundle-");
@@ -2503,7 +2750,7 @@ test("ANAME-02: a server left out by a partial install is not granted to the plu
     {
       kind: "hygiene",
       message:
-        "[bot] tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before pi-mcp-adapter has cached the server's tools still fails",
+        "[bot] tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before pi-mcp-adapter has cached the server's tools still fails",
     },
     { kind: "hygiene", message: "[bot] dropped tools: mcp__plugin_empty_live__stream" },
   ]);
@@ -2560,7 +2807,7 @@ test("MGRT-01: an install under Pi's built-in MCP stages the built-in grant and 
     {
       kind: "hygiene",
       message:
-        "[bot] tools include MCP tools, which pi-subagents serves only to background children -- the agent runs in the background (`async: true`), where Claude Code runs it in the foreground; a launch before Pi's built-in MCP has listed the server's tools still fails",
+        "[bot] tools include MCP tools, which require a pi-subagents background child -- the agent runs in the background (`async: true`); a launch before Pi's built-in MCP has listed the server's tools still fails",
     },
   ]);
   assert.deepStrictEqual(installed.rows, [
@@ -2673,6 +2920,149 @@ test("D-CF1-06: a commands folder the manifest's declared path leaves unread joi
       stagedCommandNames: [],
     },
   );
+});
+
+test("D-PG4-01: an escaping listed skills path of a root-source entry joins the discovery warnings and the plugin installs", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-refused-listed-");
+  const seeded = await seedPlugin(environment.cwd);
+  const marketplaceRoot = path.join(environment.cwd, "marketplace");
+  await writeFile(
+    path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: "marketplace",
+      plugins: [{ name: "empty", source: "./", skills: ["./skills/a", "../outside"] }],
+    }),
+  );
+  await mkdir(path.join(marketplaceRoot, "skills", "a"), { recursive: true });
+  await writeFile(
+    path.join(marketplaceRoot, "skills", "a", "SKILL.md"),
+    "---\nname: a\ndescription: Skill a.\n---\n\nSkill a body.\n",
+  );
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    consentView: "none",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(
+    {
+      discoveryWarnings: ledgerOutcome.summary.discoveryWarnings,
+      stagedSkillNames: ledgerOutcome.summary.stagedSkillNames,
+    },
+    {
+      discoveryWarnings: [
+        { kind: "discovery", message: "skills path escapes plugin directory: ../outside" },
+      ],
+      stagedSkillNames: ["empty-a"],
+    },
+  );
+});
+
+/**
+ * PG-SEC-01: seeds a plugin whose `commands` declaration leaves the commands
+ * folder unread, an agent `reader` with the given frontmatter fields, and a
+ * workflow script that runs the agent type `empty:reader`.
+ */
+async function seedWorkflowAgentPlugin(cwd: string, agentFields: string) {
+  const seeded = await seedPlugin(cwd, { pluginJson: { commands: "./custom" } });
+  await mkdir(path.join(seeded.pluginRoot, "custom"), { recursive: true });
+  await mkdir(path.join(seeded.pluginRoot, "commands"), { recursive: true });
+  await writeFile(path.join(seeded.pluginRoot, "commands", "old.md"), "Do the old thing.\n");
+  await mkdir(path.join(seeded.pluginRoot, "agents"), { recursive: true });
+  await writeFile(
+    path.join(seeded.pluginRoot, "agents", "reader.md"),
+    `---\nname: reader\ndescription: Reads.\n${agentFields}---\n\nRead.\n`,
+  );
+  await mkdir(path.join(seeded.pluginRoot, "workflows"), { recursive: true });
+  await writeFile(
+    path.join(seeded.pluginRoot, "workflows", "scan.js"),
+    `export const meta = { name: "scan", description: "d" };\nawait agent("run", { agentType: "empty:reader" });\n`,
+  );
+  return seeded;
+}
+
+const SHADOWED_COMMANDS_WARNING = {
+  kind: "discovery",
+  message: 'Default commands/ folder is ignored because the manifest sets "commands"',
+} as const;
+
+const SCAN_RESTRICTION_NOTE = {
+  kind: "discovery",
+  message: `workflow script "scan.js" in "workflows" runs agent type "empty:reader", which restricts its tools; unless the workflow engine's providerMiddlewareExtensions setting lists builtin:codemode, the engine does not keep that restriction, so the agent may use bash, edit, and write`,
+} as const;
+
+for (const { companions, run } of [
+  { companions: "every companion loaded", run: runWithAllLoaded },
+  { companions: "no companion loaded", run: runWithNothingLoaded },
+] satisfies readonly { companions: string; run: () => NotificationRun }[]) {
+  test(`PG-SEC-01: a workflow that runs a tool-restricted agent adds one note after the folder warnings, with ${companions}`, async (t) => {
+    // arrange
+    const environment = await createHermeticEnvironment(t, "install-outcome-restriction-note-");
+    const seeded = await seedWorkflowAgentPlugin(environment.cwd, "tools: Read\n");
+    const locations = locationsFor("project", environment.cwd);
+
+    // act
+    const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+      ctx: notificationContext(),
+      run: run(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      consentView: "none",
+      removalOps: createRemovalOps(),
+      env: {},
+    });
+
+    // assert
+    assert.ok(ledgerOutcome.kind === "installed");
+    assert.deepStrictEqual(
+      {
+        discoveryWarnings: ledgerOutcome.summary.discoveryWarnings,
+        stagedWorkflowNames: ledgerOutcome.summary.stagedWorkflowNames,
+      },
+      {
+        discoveryWarnings: [SHADOWED_COMMANDS_WARNING, SCAN_RESTRICTION_NOTE],
+        stagedWorkflowNames: ["empty:scan"],
+      },
+    );
+  });
+}
+
+test("PG-SEC-01: a workflow that runs an unrestricted agent keeps the folder warnings alone", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-no-restriction-");
+  const seeded = await seedWorkflowAgentPlugin(environment.cwd, "");
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    consentView: "none",
+    removalOps: createRemovalOps(),
+    env: {},
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.deepStrictEqual(ledgerOutcome.summary.discoveryWarnings, [SHADOWED_COMMANDS_WARNING]);
 });
 
 test("stages the workflow and skips a command of the same name with a discovery warning", async (t) => {

@@ -4,6 +4,8 @@ import { describe, test } from "node:test";
 import { classifyBuiltinMcpServer } from "../../extensions/pi-claude-marketplace/domain/mcp-builtin-features.ts";
 import {
   effectiveMcpCompatibility,
+  fittedAdapterToolName,
+  joinedAdapterToolName,
   profileFor,
 } from "../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 import { classifyMcpServer } from "../../extensions/pi-claude-marketplace/domain/mcp-server-features.ts";
@@ -17,7 +19,53 @@ import type {
   StoredMcpCompatibility,
 } from "../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
 
-void (profileFor("adapter").toolNamePrefix satisfies (plugin: string, server: string) => string);
+describe("fittedAdapterToolName", () => {
+  test("keeps a 64-character adapter name whole (D-PG1-07)", () => {
+    // arrange
+    const name = `mcp__plugin_demo_stub__${"x".repeat(41)}`;
+
+    // act
+    const fittedName = fittedAdapterToolName(name);
+
+    // assert
+    assert.strictEqual(fittedName, name);
+  });
+
+  test("cuts a 65-character adapter name to 55 characters and a hash (D-PG1-07)", () => {
+    // arrange
+    const name = `mcp__plugin_demo_stub__${"x".repeat(42)}`;
+
+    // act
+    const fittedName = fittedAdapterToolName(name);
+
+    // assert
+    assert.strictEqual(fittedName, `mcp__plugin_demo_stub__${"x".repeat(32)}_d4fc4a25`);
+  });
+});
+
+describe("joinedAdapterToolName", () => {
+  for (const { tool, name } of [
+    { tool: "get.the.thing", name: "mcp__plugin_demo_stub__get_the_thing" },
+    { tool: "mcp__plugin_demo_stub__echo", name: "mcp__plugin_demo_stub__echo" },
+    { tool: "echo", name: "mcp__plugin_demo_stub__echo" },
+    {
+      tool: "mcp__plugin_demo_stub__",
+      name: "mcp__plugin_demo_stub__mcp__plugin_demo_stub__",
+    },
+  ]) {
+    test(`joins ${tool} under the adapter server key (D-PG1-07)`, () => {
+      // arrange
+      const serverKey = "plugin_demo_stub_";
+
+      // act
+      const joinedName = joinedAdapterToolName(serverKey, tool);
+
+      // assert
+      assert.strictEqual(joinedName, name);
+    });
+  }
+});
+
 // @ts-expect-error the built-in profile can promise no prefix for a long namespace
 void (profileFor("builtin").toolNamePrefix satisfies (plugin: string, server: string) => string);
 
@@ -53,8 +101,23 @@ interface AdapterToolNameRow {
   readonly toolName: string;
 }
 
-// pi-mcp-adapter 7.0.0 `formatToolName` with `toolPrefix: "mcp"`, for server "stub" of plugin "demo".
+// pi-mcp-adapter 7.0.1 `formatToolName` with `toolPrefix: "mcp"`, for server "stub" of plugin "demo".
 const ADAPTER_TOOL_NAME_ROWS: readonly AdapterToolNameRow[] = [
+  {
+    title: "D-PG1-07: keeps an adapter tool name of exactly 64 characters whole",
+    tool: "x".repeat(41),
+    toolName: `mcp__plugin_demo_stub__${"x".repeat(41)}`,
+  },
+  {
+    title: "D-PG1-07: cuts a 65-character adapter tool name to 55 characters and a hash",
+    tool: "x".repeat(42),
+    toolName: `mcp__plugin_demo_stub__${"x".repeat(32)}_d4fc4a25`,
+  },
+  {
+    title: "D-PG1-07: hashes a long adapter tool name after replacing dots",
+    tool: "get.the.thing.with.dots.and.a.very.long.tool.name.indeed",
+    toolName: "mcp__plugin_demo_stub__get_the_thing_with_dots_and_a_ve_210dc4f4",
+  },
   {
     title: "ANAME-01: the adapter profile turns each dot in a tool name into an underscore",
     tool: "files.read.all",
@@ -130,7 +193,9 @@ const BUILTIN_TOOL_NAME_ROWS: readonly BuiltinToolNameRow[] = [
 interface LongNameRow {
   readonly title: string;
   readonly id: McpImplementationId;
+  readonly plugin?: string;
   readonly server: string;
+  readonly tool?: string;
   readonly toolNamePrefix: string | undefined;
   readonly toolName: string;
 }
@@ -163,11 +228,34 @@ const LONG_NAME_ROWS: readonly LongNameRow[] = [
     toolName: "mcp__plugin_atlassian_confluence_tools_confluence_cloud_0e6bb645",
   },
   {
-    title: "ANAME-01: the adapter profile keeps the prefix of a long server name",
+    title: "D-PG1-07: the adapter profile promises a 55-character namespace",
+    id: "adapter",
+    server: "confluence-api",
+    toolNamePrefix: "mcp__plugin_atlassian-confluence-tools_confluence-api__",
+    toolName: "mcp__plugin_atlassian-confluence-tools_confluence-api___7c3d5b4c",
+  },
+  {
+    title: "D-PG1-07: the adapter profile promises no prefix past 55 characters",
+    id: "adapter",
+    server: "confluence-apis",
+    toolNamePrefix: undefined,
+    toolName: "mcp__plugin_atlassian-confluence-tools_confluence-apis__c55c12f9",
+  },
+  {
+    title: "D-PG1-07: the adapter profile cuts inside a long server namespace",
     id: "adapter",
     server: "confluence-cloud",
-    toolNamePrefix: "mcp__plugin_atlassian-confluence-tools_confluence-cloud__",
-    toolName: "mcp__plugin_atlassian-confluence-tools_confluence-cloud__search_pages",
+    toolNamePrefix: undefined,
+    toolName: "mcp__plugin_atlassian-confluence-tools_confluence-cloud_77c42b12",
+  },
+  {
+    title: "D-PG1-07: cuts an 84-character adapter tool name inside the tool segment",
+    id: "adapter",
+    plugin: "chrome-devtools-mcp",
+    server: "chrome-devtools",
+    tool: "take_screenshot_of_the_current_page",
+    toolNamePrefix: "mcp__plugin_chrome-devtools-mcp_chrome-devtools__",
+    toolName: "mcp__plugin_chrome-devtools-mcp_chrome-devtools__take_s_d9a1c2f1",
   },
 ];
 
@@ -228,15 +316,22 @@ describe("profileFor", () => {
     });
   }
 
-  for (const { title, id, server, ...expectedNames } of LONG_NAME_ROWS) {
+  for (const {
+    title,
+    id,
+    plugin = "atlassian-confluence-tools",
+    server,
+    tool = "search_pages",
+    ...expectedNames
+  } of LONG_NAME_ROWS) {
     test(title, () => {
       // arrange
       const profile = profileFor(id);
 
       // act
       const names = {
-        toolNamePrefix: profile.toolNamePrefix("atlassian-confluence-tools", server),
-        toolName: profile.toolName("atlassian-confluence-tools", server, "search_pages"),
+        toolNamePrefix: profile.toolNamePrefix(plugin, server),
+        toolName: profile.toolName(plugin, server, tool),
       };
 
       // assert

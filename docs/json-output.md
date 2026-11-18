@@ -534,7 +534,7 @@ A load pass could not refresh one scope's plugin PATH.
 
 #### mcp-config-notices
 
-One section of facts about the MCP config files that a command or the load pass rewrote or left unchanged. Severity is always `warning`, and `needsReload` is always `false`. One operation emits one entry for each section that has a notice, in this order: `comments-dropped`, `left-unchanged`, `override-kept`, `variables-missing`, `credentials-blanked`, `tool-rules-unenforced`, `leftover-removed`.
+One section of facts about the MCP config files that a command or the load pass rewrote or left unchanged. Severity is always `warning`, and `needsReload` is always `false`. One operation emits one entry for each section that has a notice, in this order: `comments-dropped`, `left-unchanged`, `override-kept`, `variables-missing`, `credentials-blanked`, `tool-rules-unenforced`, `leftover-removed`, `ca-file-removed`, `option-blocked`.
 
 <!-- fields: kind:mcp-config-notices -->
 
@@ -785,19 +785,20 @@ The plain branch has `event` and an optional `matcher`. The lenient branch adds 
 
 ### MCP config notice
 
-`kind` selects the branch. Branch-specific fields are absent from the other branches. Notices name fields and variables, never their values.
+`kind` selects the branch. Branch-specific fields are absent from the other branches. Notices name fields, variables, and option keys, never their values.
 
 <!-- fields: mcp-config-notice -->
 
-| Field path | Type     | Presence    | Meaning                                                                                                |
-| ---------- | -------- | ----------- | ------------------------------------------------------------------------------------------------------ |
-| `kind`     | string   | required    | McpConfigNoticeKind.                                                                                   |
-| `scope`    | Scope    | required    | Scope of the config file.                                                                              |
-| `file`     | string   | required    | `mcp-adapter.json`, or `mcp.json` for `comments-dropped` and `left-unchanged`.                         |
-| `plugin`   | string   | conditional | Required for every kind except `comments-dropped` and `left-unchanged`. Plugin that provides `server`. |
-| `server`   | string   | conditional | Required where `plugin` is. Server key in `file`.                                                      |
-| `fields`   | string[] | conditional | Required for `override-kept` and `tool-rules-unenforced`. Field names, in their file order.            |
-| `names`    | string[] | conditional | Required for `variables-missing` and `credentials-blanked`. Variable names, in first-seen order.       |
+| Field path | Type     | Presence    | Meaning                                                                                                                                                                                 |
+| ---------- | -------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`     | string   | required    | McpConfigNoticeKind.                                                                                                                                                                    |
+| `scope`    | Scope    | required    | Scope of the config file.                                                                                                                                                               |
+| `file`     | string   | required    | `mcp-adapter.json`, or `mcp.json` for `comments-dropped` and `left-unchanged`.                                                                                                          |
+| `plugin`   | string   | conditional | Required for every kind except `comments-dropped` and `left-unchanged`. Plugin that provides `server`.                                                                                  |
+| `server`   | string   | conditional | Required where `plugin` is. Server key in `file`, or for `option-blocked` the server's declared name, since `file` holds no entry for it.                                               |
+| `fields`   | string[] | conditional | Required for `override-kept` and `tool-rules-unenforced`. Field names, in their file order.                                                                                             |
+| `names`    | string[] | conditional | Required for `variables-missing` and `credentials-blanked`: variable names. Required for `option-blocked`: option keys. Each in first-seen order.                                       |
+| `reason`   | string   | conditional | Required for `ca-file-removed`: McpCaFileRemovedReason, why the entry no longer holds the `caFile`. Required for `option-blocked`: McpOptionBlockedReason, why the server was left out. |
 
 <!-- /fields -->
 
@@ -946,7 +947,7 @@ These are native wire values, including spaces and hyphens. They are not the lab
 
 `RowHint`: `partial-install`, `partial-update`, `catalog-partial-update`, `stale-gate-update`, `enable`.
 
-`Reason`: `up-to-date`, `not found`, `already installed`, `already added`, `not installed`, `not in manifest`, `invalid manifest`, `no longer installable`, `unsupported source`, `unsupported component`, `unsupported hooks`, `lsp`, `requires pi-subagents`, `requires pi-mcp-adapter`, `rollback partial`, `unreadable`, `unparseable`, `unreadable manifest`, `source mismatch`, `plugins remain`, `concurrently uninstalled`, `concurrently updated`, `stale clone`, `duplicate name`, `lock held`, `already autoupdate`, `already no autoupdate`, `already enabled`, `already disabled`, `permission denied`, `source missing`, `network unreachable`, `marketplace not added`, `marketplace not added to user scope`, `marketplace not added to project scope`, `orphan rewake`, `authentication required`, `dangling reference`, `malformed mcp`, `malformed skill`, `malformed command`, `installs disabled`, `marketplace in user scope`, `marketplace in project scope`, `data kept`, `no matching version`, `version conflict`, `constraint too complex`, `invalid version constraint`, `dependency marketplace not added`, `dependency cycle`, `dependency failed`, `dependency promoted`, `dependency pruned`, `dependency unsatisfied`, `dependency version unsatisfied`, `dependents unsatisfied`, `dependency current copy`, `dependency enabled`, `dependents remain`, `dependency installed`, `dependents constrain`, `cross-marketplace`, `stale workflow command`, `requires pi-dynamic-workflows`, `components now supported`, `unsupported mcp`, `marketplace in local layer only`, `marketplace in base layer only`, `plugin in local layer only`, `plugin in base layer only`, `already installed in base layer`, `already installed in local layer`, `still installed in base layer`, `still installed in local layer`, `disabled in local layer`, `enabled in local layer`, `network error`, `requires mcp`, `requires builtin mcp`.
+`Reason`: `up-to-date`, `not found`, `already installed`, `already added`, `not installed`, `not in manifest`, `invalid manifest`, `no longer installable`, `unsupported source`, `unsupported component`, `unsupported hooks`, `lsp`, `requires pi-subagents`, `requires pi-mcp-adapter`, `rollback partial`, `unreadable`, `unparseable`, `unreadable manifest`, `source mismatch`, `plugins remain`, `concurrently uninstalled`, `concurrently updated`, `stale clone`, `duplicate name`, `lock held`, `already autoupdate`, `already no autoupdate`, `already enabled`, `already disabled`, `permission denied`, `source missing`, `network unreachable`, `marketplace not added`, `marketplace not added to user scope`, `marketplace not added to project scope`, `orphan rewake`, `authentication required`, `dangling reference`, `malformed mcp`, `malformed skill`, `malformed command`, `installs disabled`, `marketplace in user scope`, `marketplace in project scope`, `data kept`, `no matching version`, `version conflict`, `constraint too complex`, `invalid version constraint`, `dependency marketplace not added`, `dependency cycle`, `dependency failed`, `dependency promoted`, `dependency pruned`, `dependency unsatisfied`, `dependency version unsatisfied`, `dependents unsatisfied`, `dependency current copy`, `dependency enabled`, `dependents remain`, `dependency installed`, `dependents constrain`, `cross-marketplace`, `stale workflow command`, `requires pi-dynamic-workflows`, `components now supported`, `unsupported mcp`, `marketplace in local layer only`, `marketplace in base layer only`, `plugin in local layer only`, `plugin in base layer only`, `already installed in base layer`, `already installed in local layer`, `still installed in base layer`, `still installed in local layer`, `disabled in local layer`, `enabled in local layer`, `network error`, `requires mcp`, `requires builtin mcp`, `options not set`.
 
 `McpServerStatus`: `connected`, `cached, connects on first use`, `needs authentication`, `pending approval`, `disabled`, `not connected`, `failed`, `status unknown`, `not loaded`, `overridden by project scope`, `overridden by mcp.json`, `project not trusted`.
 
@@ -954,7 +955,11 @@ The `McpServerStatus` tokens depend on the MCP implementation that Pi runs. pi-m
 
 `Companion`: `pi-dynamic-workflows`, `pi-mcp-adapter`, `pi-subagents`, `mcp`, `builtin mcp`.
 
-`McpConfigNoticeKind`: `comments-dropped`, `left-unchanged`, `override-kept`, `variables-missing`, `credentials-blanked`, `tool-rules-unenforced`, `leftover-removed`.
+`McpConfigNoticeKind`: `comments-dropped`, `left-unchanged`, `override-kept`, `variables-missing`, `credentials-blanked`, `tool-rules-unenforced`, `leftover-removed`, `ca-file-removed`, `option-blocked`.
+
+`McpCaFileRemovedReason`: `not-https`, `origin-changed`, `url-unresolved`, `entry-removed`.
+
+`McpOptionBlockedReason`: `unset`, `home-path`.
 
 `McpMigrationRowKind`: `moved`, `removed`, `stopped`, `unowned`, `not-listed`, `source-unreadable`, `source-outdated`, `marketplace-unreadable`, `collision`, `file-unreadable`, `unfinished`.
 

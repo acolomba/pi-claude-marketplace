@@ -101,6 +101,22 @@ test("defaults another blocking event timeout to 600 seconds", () => {
   assert.strictEqual(timeoutSeconds, 600);
 });
 
+test("defaults a blocking UserPromptExpansion timeout to 600 seconds (D-PG6-18)", () => {
+  // arrange
+  const options = {
+    raw: undefined,
+    event: "UserPromptExpansion",
+    pluginId: "expansion-plugin",
+    lane: "blocking",
+  } as const;
+
+  // act
+  const timeoutSeconds = resolveTimeoutSeconds(options);
+
+  // assert
+  assert.strictEqual(timeoutSeconds, 600);
+});
+
 test("defaults a background event timeout to 600 seconds", () => {
   // arrange
   const options = {

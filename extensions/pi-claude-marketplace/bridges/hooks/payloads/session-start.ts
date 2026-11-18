@@ -7,10 +7,15 @@
 // once, with `claudeSessionStartSource`, and dispatches the Claude-side event
 // it builds. Dispatch compares each matcher with that `source` and this
 // translator writes it to stdin, so a hook receives the value its matcher
-// was compared with. Pi `new` is `clear`, as upstream `/clear`; `startup`,
-// `resume`, and `fork` keep their name. Pi `reload` runs no SessionStart
-// (D-CF5-03), so it is not an input here. The compaction handler sends
-// `compact` itself (D-CF5-04).
+// was compared with. Pi `new` is `clear`, as upstream `/clear`; the
+// in-session `resume` and `fork` keep their name. Pi reports `startup` for
+// every launch, so the launch facts of the session Pi opened decide it: a
+// fork made by this launch is `fork`, a session that holds messages is
+// `resume`, and any other is `startup` (D-PG6-14, D-PG6-15). Pi `reload` runs
+// no SessionStart (D-CF5-03), so it is not an input here. The compaction
+// handler sends `compact` itself (D-CF5-04). The active model's id and the
+// session's name follow `source`, each left out when Pi has none, as Claude
+// Code marks both optional (D-PG6-09).
 
 import type { SessionStartSource } from "../../../domain/components/hook-events.ts";
 import type { SessionStartEvent } from "../../../platform/pi-api.ts";
@@ -28,15 +33,38 @@ export interface SessionStartStdin {
   readonly cwd: string;
   readonly hook_event_name: "SessionStart";
   readonly source: SessionStartSource;
+  readonly model?: string;
+  readonly session_title?: string;
 }
 
-/** Maps a Pi session start reason other than `reload` to Claude's `source` (D-CF5-01). */
+/** What the session that Pi opened at `startup` shows about its launch (D-PG6-14, D-PG6-15). */
+export interface SessionLaunchFacts {
+  /** The session holds a `message` entry, so the launch continued a saved session. */
+  readonly holdsMessages: boolean;
+  /** The header names a parent session and is not older than this Pi process. */
+  readonly forkedByThisLaunch: boolean;
+}
+
+// A fork holds the messages it copied, so the fork test comes first.
+function launchSource(launch: SessionLaunchFacts): SessionStartSource {
+  if (launch.forkedByThisLaunch) {
+    return "fork";
+  }
+
+  return launch.holdsMessages ? "resume" : "startup";
+}
+
+/**
+ * Maps a Pi session start reason other than `reload` to Claude's `source`
+ * (D-CF5-01). Only `startup` reads `launch` (D-PG6-14, D-PG6-15).
+ */
 export function claudeSessionStartSource(
   reason: Exclude<SessionStartEvent["reason"], "reload">,
+  launch: SessionLaunchFacts,
 ): SessionStartSource {
   switch (reason) {
     case "startup":
-      return "startup";
+      return launchSource(launch);
     case "new":
       return "clear";
     case "resume":
@@ -57,5 +85,7 @@ export function translateSessionStart(
     cwd: ctx.cwd,
     hook_event_name: "SessionStart",
     source: event.source,
+    ...(ctx.model === undefined ? {} : { model: ctx.model }),
+    ...(ctx.sessionTitle === undefined ? {} : { session_title: ctx.sessionTitle }),
   };
 }

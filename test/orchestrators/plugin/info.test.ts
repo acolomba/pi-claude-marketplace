@@ -99,6 +99,7 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { TestContext } from "node:test";
 
 type FaultableFsPromiseMethod = "readFile" | "readdir" | "stat";
 
@@ -438,6 +439,8 @@ interface SeedPathMarketplaceOpts {
       };
       /** Persisted hook entries; omission exercises the legacy file fallback. */
       hookEntries?: readonly { event: string; matcher?: string }[];
+      /** D-PG10-25: the stored `userConfig`, as a hand edit may leave it. */
+      userConfig?: unknown;
     }
   >;
   readonly autoupdate?: boolean;
@@ -471,14 +474,17 @@ async function seedPathMarketplace(opts: SeedPathMarketplaceOpts): Promise<strin
   const plugins: Record<string, unknown> = {};
   for (const [name, info] of Object.entries(opts.installed ?? {})) {
     const override = info.resources;
-    plugins[name] = buildInstalledPluginRecord(info, {
-      agents: [...(override?.agents ?? [])],
-      hooks: [...(override?.hooks ?? [])],
-      mcpServers: [...(override?.mcpServers ?? [])],
-      prompts: [...(override?.prompts ?? [])],
-      skills: [...(override?.skills ?? [`${name}-skill`])],
-      workflows: [...(override?.workflows ?? [])],
-    });
+    plugins[name] = {
+      ...buildInstalledPluginRecord(info, {
+        agents: [...(override?.agents ?? [])],
+        hooks: [...(override?.hooks ?? [])],
+        mcpServers: [...(override?.mcpServers ?? [])],
+        prompts: [...(override?.prompts ?? [])],
+        skills: [...(override?.skills ?? [`${name}-skill`])],
+        workflows: [...(override?.workflows ?? [])],
+      }),
+      ...(info.userConfig !== undefined && { userConfig: info.userConfig }),
+    };
   }
 
   const record: Record<string, unknown> = {
@@ -2118,6 +2124,622 @@ test("PR-5: orchestrator pre-sorts per-kind component arrays alphabetically befo
   });
 });
 
+/**
+ * D-PG4-01: seeds a marketplace whose one entry, `root`, takes the marketplace
+ * root as its source and lists `skills`; `files` lie under that root.
+ */
+function seedRootSourceEntry(
+  home: string,
+  cwd: string,
+  skills: unknown,
+  files: readonly string[],
+): Promise<string> {
+  return seedPathMarketplace({
+    scope: "user",
+    scopeRoot: path.join(home, ".pi", "agent"),
+    cwd,
+    mpName: "mp",
+    manifest: { name: "mp", plugins: [{ name: "root", source: "./", version: "1.0.0", skills }] },
+    componentFiles: { ".": files },
+  });
+}
+
+/** The `info root@mp` message of an available `root` row with `skills`. */
+function rootSourceInfo(skills: string): readonly { message: string }[] {
+  return [
+    {
+      message: [
+        "● mp [user] <no autoupdate>",
+        "  ○ root v1.0.0 (available)",
+        `    skills: ${skills}`,
+      ].join("\n"),
+    },
+  ];
+}
+
+test("D-PG4-01: info lists a listed skill folder that holds SKILL.md as one skill, not its subfolders", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedRootSourceEntry(
+      home,
+      cwd,
+      ["./skills/a"],
+      ["skills/a/SKILL.md", "skills/a/references/deep.md", "skills/b/SKILL.md"],
+    );
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "root", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, rootSourceInfo("a"));
+  });
+});
+
+test("D-PG4-01: info notes each listed path of a root-source entry that does not load, with absolute paths reduced", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedRootSourceEntry(
+      home,
+      cwd,
+      ["./skills/a", "../outside", path.join(home, "outside", "skills"), "./skills/missing"],
+      ["skills/a/SKILL.md"],
+    );
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "root", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ○ root v1.0.0 (available)",
+          "    skills: a",
+          "    note: skills path escapes plugin directory: ../outside",
+          "    note: skills path escapes plugin directory: skills",
+          "    note: skills path not found: skills/missing",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+async function seedOptionsPlugin(
+  home: string,
+  cwd: string,
+  userConfig: Record<string, unknown> | undefined,
+  installed = false,
+): Promise<void> {
+  await seedPathMarketplace({
+    scope: "user",
+    scopeRoot: path.join(home, ".pi", "agent"),
+    cwd,
+    mpName: "mp",
+    manifest: {
+      name: "mp",
+      plugins: [
+        {
+          name: "p",
+          source: "./p",
+          version: "1.0.0",
+          ...(userConfig !== undefined && { userConfig }),
+        },
+      ],
+    },
+    ...(installed && { installed: { p: { version: "1.0.0" } } }),
+    componentFiles: { p: ["skills/a/SKILL.md"] },
+  });
+}
+
+function stringOption(title: string, extra: Record<string, unknown>): Record<string, unknown> {
+  return { type: "string", title, description: `The ${title.toLowerCase()}.`, ...extra };
+}
+
+test("D-PG10-06: info names each unset required option in declaration order", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedOptionsPlugin(home, cwd, {
+      token: stringOption("Token", { required: true }),
+      mode: stringOption("Mode", { default: "fast" }),
+      region: stringOption("Region", { required: true }),
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "p", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ⊖ p v1.0.0 (partially-available) {options not set}",
+          "    skills: a",
+          '    note: required options "token", "region" have no default, so they are not set',
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("D-PG10-06: info names the one unset required option of an installed plugin", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedOptionsPlugin(
+      home,
+      cwd,
+      {
+        token: stringOption("Token", { required: true, sensitive: true }),
+        mode: stringOption("Mode", { default: "fast" }),
+      },
+      true,
+    );
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "p", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◉ p v1.0.0 (partially-installed) {options not set}",
+          "    skills: a",
+          '    note: required option "token" has no default, so it is not set',
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+for (const { title, userConfig } of [
+  {
+    title: "options that all have a default",
+    userConfig: {
+      mode: stringOption("Mode", { default: "fast" }),
+      level: stringOption("Level", {}),
+    },
+  },
+  { title: "an empty userConfig", userConfig: {} },
+  { title: "no userConfig", userConfig: undefined },
+]) {
+  test(`D-PG10-06: info adds no option note for ${title}`, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      await seedOptionsPlugin(home, cwd, userConfig);
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "p", scope: "user", cwd });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "● mp [user] <no autoupdate>",
+            "  ○ p v1.0.0 (available)",
+            "    skills: a",
+          ].join("\n"),
+        },
+      ]);
+    });
+  });
+}
+
+test("D-PG4-01: info lists a skill reached as a listed folder and through its parent once, sorted without case", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "p", source: "./p", version: "1.0.0", skills: "./skills/Zeta" }],
+      },
+      componentFiles: { p: ["skills/Zeta/SKILL.md", "skills/alpha/SKILL.md"] },
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "p", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ○ p v1.0.0 (available)",
+          "    skills: alpha, Zeta",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("D-PG4-01: a SKILL.md directory does not make its folder one skill in info", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedRootSourceEntry(
+      home,
+      cwd,
+      ["./skills/a"],
+      ["skills/a/SKILL.md/inner.md", "skills/a/references/deep.md"],
+    );
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "root", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, rootSourceInfo("references, SKILL.md"));
+  });
+});
+
+test("D-PG4-01: a SKILL.md link does not make its folder one skill in info", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedRootSourceEntry(
+      home,
+      cwd,
+      ["./skills/a"],
+      ["target.md", "skills/a/references/deep.md"],
+    );
+    await symlink(path.join(mpRoot, "target.md"), path.join(mpRoot, "skills", "a", "SKILL.md"));
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "root", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, rootSourceInfo("references"));
+  });
+});
+
+/**
+ * D-PG4-01 / T-04-03: runs `info root@mp` through a reader that records each
+ * directory it lists, beside a skill folder outside the plugin root and one
+ * under the absolute path `outsideAbs` names, so a read of either shows.
+ */
+async function lenientRootSourceInfo(
+  home: string,
+  cwd: string,
+  mpRoot: string,
+): Promise<{ readonly calls: readonly string[]; readonly messages: readonly string[] }> {
+  await mkdir(path.join(path.dirname(mpRoot), "outside", "x"), { recursive: true });
+  await writeFile(path.join(path.dirname(mpRoot), "outside", "x", "SKILL.md"), "", "utf8");
+  await mkdir(path.join(home, "outside-abs", "y"), { recursive: true });
+  await writeFile(path.join(home, "outside-abs", "y", "SKILL.md"), "", "utf8");
+  const calls: string[] = [];
+  const reader: PluginInfoReader = {
+    ...NODE_READER,
+    listDirectory: (directoryPath) => {
+      calls.push(path.relative(mpRoot, directoryPath) || ".");
+      return NODE_READER.listDirectory(directoryPath);
+    },
+  };
+  const { ctx, run, notifications } = makeCtx();
+  await withDefaultMcpStatus(createGetPluginInfo(reader))({
+    ctx,
+    run,
+    marketplace: "mp",
+    plugin: "root",
+    scope: "user",
+    cwd,
+  });
+  return { calls, messages: notifications.map((n) => n.message) };
+}
+
+/** The `info root@mp` message of an unavailable `root` row, with its skills line. */
+function unavailableRootInfo(reason: string, skillsLine: readonly string[]): readonly string[] {
+  return [
+    [
+      "● mp [user] <no autoupdate>",
+      `  ⊘ root v1.0.0 (unavailable) {${reason}}`,
+      ...skillsLine,
+    ].join("\n"),
+  ];
+}
+
+const ROOT_SKILL_FILES = ["skills/a/SKILL.md", "skills/b/SKILL.md", "skills/c/SKILL.md"];
+
+/**
+ * A refused listed path no longer makes a root-source plugin unavailable
+ * (D-PG4-01), so the lenient listing cases make it unavailable with a
+ * malformed `hooks/hooks.json`.
+ */
+async function breakRootHooks(mpRoot: string): Promise<void> {
+  await mkdir(path.join(mpRoot, "hooks"), { recursive: true });
+  await writeFile(path.join(mpRoot, "hooks", "hooks.json"), "{ not valid json", "utf8");
+}
+
+test("D-PG4-01: the lenient listing of a root-source entry reads the listed paths inside the plugin only, in listed order and once each", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const outsideAbs = path.join(home, "outside-abs");
+    const mpRoot = await seedRootSourceEntry(
+      home,
+      cwd,
+      ["./skills/c", outsideAbs, "../outside", "skills/c/", "./skills/a"],
+      ROOT_SKILL_FILES,
+    );
+    await breakRootHooks(mpRoot);
+
+    // act
+    const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
+
+    // assert
+    assert.deepStrictEqual(calls, [
+      "skills/c",
+      "skills/a",
+      "agents",
+      "commands",
+      "skills/c",
+      "skills/a",
+    ]);
+    assert.deepStrictEqual(
+      messages,
+      unavailableRootInfo("unsupported hooks", ["    skills: a, c"]),
+    );
+  });
+});
+
+test("D-PG4-01: the lenient listing of a root-source entry adds the skills folder after a listed root", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedRootSourceEntry(
+      home,
+      cwd,
+      [".", "./skills/c", "../outside"],
+      ROOT_SKILL_FILES,
+    );
+    await breakRootHooks(mpRoot);
+
+    // act
+    const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
+
+    // assert
+    assert.deepStrictEqual(calls, [
+      ".",
+      "skills/c",
+      "agents",
+      "commands",
+      ".",
+      "skills/c",
+      "skills",
+    ]);
+    assert.deepStrictEqual(
+      messages,
+      unavailableRootInfo("unsupported hooks", [
+        "    skills: .claude-plugin, a, b, c, hooks, skills",
+      ]),
+    );
+  });
+});
+
+test("D-PG4-01: the lenient listing of a root-source entry reads a listed skills folder once beside a listed root", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedRootSourceEntry(
+      home,
+      cwd,
+      ["./skills/", ".", "../outside"],
+      ROOT_SKILL_FILES,
+    );
+    await breakRootHooks(mpRoot);
+
+    // act
+    const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
+
+    // assert
+    assert.deepStrictEqual(calls, ["skills", ".", "agents", "commands", "skills", "."]);
+    assert.deepStrictEqual(
+      messages,
+      unavailableRootInfo("unsupported hooks", [
+        "    skills: .claude-plugin, a, b, c, hooks, skills",
+      ]),
+    );
+  });
+});
+
+test("D-PG4-01: the lenient listing of a root-source entry lists no skill when every listed path is absolute or escapes", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedRootSourceEntry(
+      home,
+      cwd,
+      ["../outside", path.join(home, "outside-abs")],
+      ROOT_SKILL_FILES,
+    );
+    await breakRootHooks(mpRoot);
+
+    // act
+    const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
+
+    // assert
+    assert.deepStrictEqual(calls, ["agents", "commands"]);
+    assert.deepStrictEqual(messages, unavailableRootInfo("unsupported hooks", []));
+  });
+});
+
+test("D-PG4-01: the lenient listing refuses a listed path that climbs back through the working directory", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedRootSourceEntry(
+      home,
+      cwd,
+      ["./skills/a", `../${path.basename(process.cwd())}/skills/b`],
+      ROOT_SKILL_FILES,
+    );
+    await breakRootHooks(mpRoot);
+
+    // act
+    const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
+
+    // assert
+    assert.deepStrictEqual(calls, ["skills/a", "agents", "commands", "skills/a"]);
+    assert.deepStrictEqual(messages, unavailableRootInfo("unsupported hooks", ["    skills: a"]));
+  });
+});
+
+test("D-PG4-01: the lenient listing refuses an escaping listed path when the working directory is the filesystem root", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedRootSourceEntry(
+      home,
+      cwd,
+      ["./skills/a", "../skills/b", "skills/../../skills/c"],
+      ROOT_SKILL_FILES,
+    );
+    await breakRootHooks(mpRoot);
+    const previous = process.cwd();
+    process.chdir(path.parse(previous).root);
+
+    // act
+    let listing: Awaited<ReturnType<typeof lenientRootSourceInfo>>;
+    try {
+      listing = await lenientRootSourceInfo(home, cwd, mpRoot);
+    } finally {
+      process.chdir(previous);
+    }
+
+    // assert
+    assert.deepStrictEqual(listing.calls, ["skills/a", "agents", "commands", "skills/a"]);
+    assert.deepStrictEqual(
+      listing.messages,
+      unavailableRootInfo("unsupported hooks", ["    skills: a"]),
+    );
+  });
+});
+
+test("D-PG4-01: the lenient listing of a root-source entry whose listed folders are missing or files starts from the skills folder", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedRootSourceEntry(
+      home,
+      cwd,
+      ["./skills/missing", "./skills/file.md"],
+      [...ROOT_SKILL_FILES, "skills/file.md"],
+    );
+    await breakRootHooks(mpRoot);
+
+    // act
+    const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
+
+    // assert
+    assert.deepStrictEqual(calls, [
+      "skills/missing",
+      "skills/file.md",
+      "agents",
+      "commands",
+      "skills",
+      "skills/missing",
+      "skills/file.md",
+    ]);
+    assert.deepStrictEqual(
+      messages,
+      unavailableRootInfo("unsupported hooks", ["    skills: a, b, c"]),
+    );
+  });
+});
+
+test("D-PG4-01: the lenient listing of a root-source entry lists no skill when no listed folder exists and one listed path escapes", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedRootSourceEntry(
+      home,
+      cwd,
+      ["./skills/missing", "../outside"],
+      ROOT_SKILL_FILES,
+    );
+    await breakRootHooks(mpRoot);
+
+    // act
+    const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
+
+    // assert
+    assert.deepStrictEqual(calls, ["skills/missing", "agents", "commands"]);
+    assert.deepStrictEqual(messages, unavailableRootInfo("unsupported hooks", []));
+  });
+});
+
+test("D-PG4-01: the lenient listing of a root-source entry that lists no string starts from the skills folder", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedRootSourceEntry(home, cwd, [42], ROOT_SKILL_FILES);
+
+    // act
+    const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
+
+    // assert
+    assert.deepStrictEqual(calls, ["agents", "commands", "skills"]);
+    assert.deepStrictEqual(
+      messages,
+      unavailableRootInfo("unsupported source", ["    skills: a, b, c"]),
+    );
+  });
+});
+
+test("D-PG4-01: the lenient listing of a root-source entry that lists no skills starts from the skills folder", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedRootSourceEntry(home, cwd, undefined, [
+      ...ROOT_SKILL_FILES,
+      "hooks/hooks.json",
+    ]);
+    await writeFile(path.join(mpRoot, "hooks", "hooks.json"), "{ not valid json", "utf8");
+
+    // act
+    const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
+
+    // assert
+    assert.deepStrictEqual(calls, ["agents", "commands", "skills"]);
+    assert.deepStrictEqual(
+      messages,
+      unavailableRootInfo("unsupported hooks", ["    skills: a, b, c"]),
+    );
+  });
+});
+
+test("D-PG4-01: the lenient listing of an entry whose source is not the marketplace root starts from the skills folder", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange: the same plugin name, under a source below the marketplace root
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          { name: "root", source: "./sub", version: "1.0.0", skills: ["./skills/a", "../x"] },
+        ],
+      },
+      componentFiles: { sub: ROOT_SKILL_FILES },
+    });
+
+    // act
+    const { calls, messages } = await lenientRootSourceInfo(home, cwd, mpRoot);
+
+    // assert
+    assert.deepStrictEqual(calls, [
+      "sub/agents",
+      "sub/commands",
+      "sub/skills",
+      "sub/skills/a",
+      "x",
+    ]);
+    assert.deepStrictEqual(
+      messages,
+      unavailableRootInfo("unsupported source", ["    skills: a, b, c"]),
+    );
+  });
+});
+
 // ---------------------------------------------------------------------------
 // (k) dependencies field surfaced as `dependencies:` line.
 // ---------------------------------------------------------------------------
@@ -3404,6 +4026,71 @@ test("plugin info manifest absent: ENBL-16 / D-96-03: a DISABLED record whose re
 // `{not in manifest}` is derived from the manifest lookup rather than from
 // disabled-ness -- without it, a stamp hard-coded on the disabled arm would
 // pass every other test in this file.
+test("D-PG10-25: a manifest-absent record whose stored options do not parse renders `{not in manifest, unreadable}`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [] },
+      installed: { alpha: { version: "1.0.0", userConfig: "token=secret" } },
+    });
+
+    const { ctx, run, notifications } = makeCtx();
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● alpha v1.0.0 (installed) {not in manifest, unreadable}",
+          "    skills: alpha-skill",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("D-PG10-25: a declared disabled record whose stored options do not parse renders `(disabled) {unreadable}`", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "alpha", source: "./alpha", version: "1.0.0", skills: "skills" }],
+      },
+      installed: { alpha: { version: "1.0.0", disabled: true, userConfig: "token=secret" } },
+      installablePluginDirs: ["alpha"],
+      componentDirs: { alpha: ["skills/alpha-src-skill"] },
+    });
+
+    const { ctx, run, notifications } = makeCtx();
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "alpha", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◍ alpha v1.0.0 (disabled) {unreadable}",
+          "    skills: alpha-src-skill",
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
 test("plugin info manifest absent: ENBL-16 / ENBL-17: a DECLARED disabled record renders `(disabled)` with no reason brace", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
@@ -5155,7 +5842,7 @@ test("PHOOK-05 / D-71-05: strict reader lists the kept `PostToolUse(Bash)` group
   });
 });
 
-test("PHOOK-05 / D-71-05: strict reader enumerates an intra-event dropped matcher group as `PreToolUse(.*) (unsupported)`", async () => {
+test("strict reader enumerates a dropped invalid matcher group as unsupported", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -5172,8 +5859,8 @@ test("PHOOK-05 / D-71-05: strict reader enumerates an intra-event dropped matche
     });
 
     // Intra-event matcher-group partition (D-71-02): PreToolUse declares a
-    // supportable `Edit` group and an unsupportable regex `.*` group. The
-    // partition keeps the Edit group and drops the regex group, so the plugin
+    // supportable `Edit` group and an invalid regex `[` group. The
+    // partition keeps the Edit group and drops the invalid group, so the plugin
     // resolves `partially-available` with `hooksConfigPath` recorded. The strict
     // reader renders the kept group plain and the dropped group at
     // matcher-group granularity with the (unsupported) suffix.
@@ -5185,7 +5872,7 @@ test("PHOOK-05 / D-71-05: strict reader enumerates an intra-event dropped matche
         hooks: {
           PreToolUse: [
             { matcher: "Edit", hooks: [{ type: "command", command: "echo edit" }] },
-            { matcher: ".*", hooks: [{ type: "command", command: "echo regex" }] },
+            { matcher: "[", hooks: [{ type: "command", command: "echo invalid" }] },
           ],
         },
       }),
@@ -5199,11 +5886,8 @@ test("PHOOK-05 / D-71-05: strict reader enumerates an intra-event dropped matche
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
     assert.match(msg, /\(partially-available\) \{unsupported hooks\}/);
-    // Kept group plain, dropped regex group at matcher-group granularity.
-    assert.match(
-      msg,
-      /\n {4}hooks:\n {6}PreToolUse\(Edit\)\n {6}PreToolUse\(\.\*\) \(unsupported\)/,
-    );
+    // Kept group plain, dropped invalid group at matcher-group granularity.
+    assert.match(msg, /\n {4}hooks:\n {6}PreToolUse\(Edit\)\n {6}PreToolUse\(\[\) \(unsupported\)/);
   });
 });
 
@@ -8595,8 +9279,8 @@ test("strict hook inventory deduplicates two dropped matcher groups exactly", as
         hooks: {
           PreToolUse: [
             { matcher: "Edit", hooks: [{ type: "command", command: "echo edit" }] },
-            { matcher: ".*", hooks: [{ type: "command", command: "echo one" }] },
-            { matcher: ".*", hooks: [{ type: "command", command: "echo two" }] },
+            { matcher: "[", hooks: [{ type: "command", command: "echo one" }] },
+            { matcher: "[", hooks: [{ type: "command", command: "echo two" }] },
           ],
         },
       }),
@@ -8615,7 +9299,7 @@ test("strict hook inventory deduplicates two dropped matcher groups exactly", as
           "  ⊖ alpha v1.0.0 (partially-available) {unsupported hooks}",
           "    hooks:",
           "      PreToolUse(Edit)",
-          "      PreToolUse(.*) (unsupported)",
+          "      PreToolUse([) (unsupported)",
         ].join("\n"),
       },
     ]);
@@ -10367,6 +11051,268 @@ test("WR-09: the workflow names and the advisories come from one discovery pass"
     assert.ok(
       message.includes('    note: workflow script "roll.js" in "workflows" will be refused'),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PG-SEC-01 / D-PG4-12: the workflow agent restriction note on the info row.
+//
+// `info` shows the note that install and update print, from the same join,
+// after the workflow advisories. It reads agent files only for a script that
+// names an agent type as a literal, and only inside the plugin root.
+// ---------------------------------------------------------------------------
+
+const RESTRICTED_A1_AGENT =
+  "---\nname: a1\ndescription: Reads files.\ntools: Read\n---\n\nRead the files.\n";
+const WORKFLOW_RUNS_FOO_A1 =
+  'export const meta = { name: "scan", description: "scans" };\n' +
+  'return await agent("Scan the files.", { agentType: "foo:a1" });\n';
+const FOO_A1_RESTRICTION_NOTE =
+  '    note: workflow script "scan.js" in "workflows" runs agent type "foo:a1", which ' +
+  "restricts its tools; unless the workflow engine's providerMiddlewareExtensions setting lists " +
+  "builtin:codemode, the engine does not keep that restriction, so the agent may use bash, edit, " +
+  "and write";
+
+async function seedPluginFile(
+  mpRoot: string,
+  pluginDir: string,
+  rel: string,
+  text: string,
+): Promise<string> {
+  const abs = path.join(mpRoot, pluginDir, rel);
+  await mkdir(path.dirname(abs), { recursive: true });
+  await writeFile(abs, text, "utf8");
+  return abs;
+}
+
+/** Counts the `readFile` calls on `files` for the rest of the test. */
+function countReadsOf(t: TestContext, files: readonly string[]): { readonly count: () => number } {
+  let reads = 0;
+  const filesystemPromises = createRequire(import.meta.url)(
+    "node:fs/promises",
+  ) as typeof import("node:fs/promises");
+  const originalReadFile = filesystemPromises.readFile;
+  t.mock.method(
+    filesystemPromises,
+    "readFile",
+    async (...args: Parameters<typeof originalReadFile>) => {
+      if (typeof args[0] === "string" && files.includes(args[0])) {
+        reads += 1;
+      }
+
+      return originalReadFile(...args);
+    },
+  );
+  syncBuiltinESMExports();
+  t.after(() => {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  });
+  return { count: () => reads };
+}
+
+test("PG-SEC-01: an installed plugin whose workflow runs a tool-restricted agent renders the note after the workflow advisories", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedFooInstalled(home, cwd);
+    await seedPluginFile(mpRoot, "foo", "agents/a1.md", RESTRICTED_A1_AGENT);
+    await seedWorkflowScripts(mpRoot, "foo", {
+      "helper.js": WORKFLOW_NO_META,
+      "scan.js": WORKFLOW_RUNS_FOO_A1,
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert -- the folder is its name, never the absolute path (NFR-9).
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          EXPECTED_FOO_COMPONENT_LINES,
+          "    workflows: foo:scan",
+          FOO_WORKFLOWS_REQUIRES_LINE,
+          '    note: workflow script "helper.js" in "workflows" will not be installed: ' +
+            "helper.js declares no `meta`, so there is nothing to install",
+          FOO_A1_RESTRICTION_NOTE,
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("PG-SEC-01: a plugin whose scripts name no literal agent type reads no agent file for notes", async (t) => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- a bound agent type is not a literal, so the restricted agent
+    // gets no note (D-PG4-11) and its file is never opened.
+    const mpRoot = await seedFooInstalled(home, cwd);
+    const agentFile = await seedPluginFile(mpRoot, "foo", "agents/a1.md", RESTRICTED_A1_AGENT);
+    await seedWorkflowScripts(mpRoot, "foo", {
+      "scan.js":
+        'export const meta = { name: "scan", description: "scans" };\n' +
+        'const reader = "foo:a1";\n' +
+        'return await agent("Scan the files.", { agentType: reader });\n',
+      "zeta.js": WORKFLOW_NAMED_ZETA,
+    });
+    const agentReads = countReadsOf(t, [agentFile]);
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `${EXPECTED_FOO_COMPONENT_LINES}\n    workflows: foo:scan, foo:zeta\n${FOO_WORKFLOWS_REQUIRES_LINE}`,
+      },
+    ]);
+    assert.equal(agentReads.count(), 0);
+  });
+});
+
+test("D-PG4-11: an agent read that throws leaves the row resolved and without a restriction note", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- the agent's name `.` is unsafe, so the agents read throws.
+    const mpRoot = await seedFooInstalled(home, cwd);
+    await seedPluginFile(
+      mpRoot,
+      "foo",
+      "agents/a1.md",
+      "---\nname: .\ntools: Read\n---\n\nRead.\n",
+    );
+    await seedWorkflowScripts(mpRoot, "foo", { "scan.js": WORKFLOW_RUNS_FOO_A1 });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `${EXPECTED_FOO_COMPONENT_LINES}\n    workflows: foo:scan\n${FOO_WORKFLOWS_REQUIRES_LINE}`,
+      },
+    ]);
+  });
+});
+
+test("NFR-10 / PG-SEC-01: an agents path that is absolute or escapes the plugin root is not read for notes", async (t) => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- both declared agents paths hold a restricted agent that the
+    // script names. The refused plugin's lenient listing carries both raw
+    // strings, and containment drops them before any agent file is read.
+    const absoluteAgents = path.join(home, "absolute-agents");
+    const mpRoot = await seedFooInstalled(home, cwd, { agents: ["../outside", absoluteAgents] });
+    const restricted = "---\nname: spy\ndescription: Spies.\ntools: Read\n---\n\nSpy.\n";
+    const escapingFile = await seedPluginFile(mpRoot, "outside", "spy.md", restricted);
+    const absoluteFile = path.join(absoluteAgents, "spy.md");
+    await mkdir(absoluteAgents, { recursive: true });
+    await writeFile(absoluteFile, restricted, "utf8");
+    await seedWorkflowScripts(mpRoot, "foo", {
+      "scan.js":
+        'export const meta = { name: "scan", description: "scans" };\n' +
+        'return await agent("Spy.", { agentType: "foo:spy" });\n',
+    });
+    const outsideReads = countReadsOf(t, [escapingFile, absoluteFile]);
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert -- the `agents:` line is the existing directory listing; the
+    // restriction note is absent because no agent file outside the root was
+    // read, so the agent type reads as one the plugin does not install
+    // (PG-WF-02).
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● foo v1.2.3 (installed) {unsupported source}",
+          "    Foo plugin",
+          "    agents: spy",
+          "    commands: c1",
+          "    skills: s1",
+          "    workflows: foo:scan",
+          FOO_WORKFLOWS_REQUIRES_LINE,
+          '    note: workflow script "scan.js" in "workflows" runs agent type "foo:spy", which ' +
+            "this plugin does not install; the workflow engine runs a default agent in its " +
+            "place, where Claude Code fails the step",
+        ].join("\n"),
+      },
+    ]);
+    assert.equal(outsideReads.count(), 0);
+  });
+});
+
+test("PG-SEC-01: an available plugin's row carries the restriction note", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [fooInstalledEntry()] },
+      installablePluginDirs: ["foo"],
+    });
+    await seedPluginFile(mpRoot, "foo", "agents/a1.md", RESTRICTED_A1_AGENT);
+    await seedWorkflowScripts(mpRoot, "foo", { "scan.js": WORKFLOW_RUNS_FOO_A1 });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ○ foo v1.2.3 (available)",
+          "    Foo plugin",
+          "    agents: a1",
+          "    workflows: foo:scan",
+          FOO_WORKFLOWS_REQUIRES_LINE,
+          FOO_A1_RESTRICTION_NOTE,
+        ].join("\n"),
+      },
+    ]);
+  });
+});
+
+test("PG-SEC-01: a partially available plugin's row carries the restriction note", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange -- `lspServers` makes the plugin partially available.
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [fooInstalledEntry({ lspServers: { ls: { command: "ls-server" } } })],
+      },
+      installablePluginDirs: ["foo"],
+    });
+    await seedPluginFile(mpRoot, "foo", "agents/a1.md", RESTRICTED_A1_AGENT);
+    await seedWorkflowScripts(mpRoot, "foo", { "scan.js": WORKFLOW_RUNS_FOO_A1 });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "foo", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ⊖ foo v1.2.3 (partially-available) {lsp}",
+          "    Foo plugin",
+          "    agents: a1",
+          "    workflows: foo:scan",
+          FOO_WORKFLOWS_REQUIRES_LINE,
+          FOO_A1_RESTRICTION_NOTE,
+        ].join("\n"),
+      },
+    ]);
   });
 });
 

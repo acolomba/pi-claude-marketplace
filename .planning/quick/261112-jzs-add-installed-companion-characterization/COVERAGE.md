@@ -1,0 +1,1 @@
+No external API integration: this quick task adds local contract tests of an already-installed companion and documents the existing local acceptance runner. It adds no product integration, service capability, or external endpoint.

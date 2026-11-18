@@ -27,6 +27,8 @@
 // `env`) writes `""` for a plain name that is set; when it is unset, the field
 // gets the `:-` default, or the literal `${NAME}` text and a missing report.
 
+import path from "node:path";
+
 import {
   CREDENTIAL_BASE_URL_NAMES,
   matchesPlainNamePattern,
@@ -35,6 +37,9 @@ import {
   REMOTE_SINK_DENIED_NAMES,
   valueCarriesCredential,
 } from "./claude-credential-denylist.ts";
+import { replaceUserConfigReferences } from "./user-config.ts";
+
+import type { ResolvedOptions } from "./user-config.ts";
 
 /** The environment Claude's rule reads at install time. */
 export type ClaudeEnv = Readonly<Record<string, string | undefined>>;
@@ -208,6 +213,73 @@ function segmentFor(inner: string, state: ScanState): Segment {
 }
 
 /**
+ * D-PG10-11: the option pass of one field. `reference` writes each option as
+ * a reference to the process variable `names` gives for its key, for
+ * pi-mcp-adapter to expand when it connects. `text` writes each option's MCP
+ * value. A key the form lacks keeps its `${user_config.KEY}` text.
+ */
+export type McpOptionPass =
+  | { readonly form: "reference"; readonly names: ReadonlyMap<string, string> }
+  | { readonly form: "text"; readonly mcpValues: ReadonlyMap<string, string> };
+
+function optionSegment(key: string, pass: McpOptionPass): Segment | undefined {
+  if (pass.form === "reference") {
+    const name = pass.names.get(key);
+    return name === undefined ? undefined : { kind: "ref", name };
+  }
+
+  const text = pass.mcpValues.get(key);
+  return text === undefined ? undefined : { kind: "text", text };
+}
+
+// D-PG10-11: Claude Code 2.1.323 fills options after the path variables and
+// before its environment scan, and that scan reads the filled value. Here the
+// option becomes its own segment and only the text around it is scanned: under
+// pi-mcp-adapter the value is not in the entry, so it cannot be scanned, and
+// the text form follows so that both implementations behave alike. A segment
+// never goes through `segmentFor`, so an option is never reported missing or
+// tested against the deny-list.
+function optionPieces(text: string, pass: McpOptionPass | undefined): Array<string | Segment> {
+  if (pass === undefined) {
+    return [text];
+  }
+
+  const pieces: Array<string | Segment> = [];
+  let start = 0;
+  replaceUserConfigReferences(text, (key, matched) => {
+    const segment = optionSegment(key, pass);
+    if (segment !== undefined) {
+      const at = text.indexOf(matched, start);
+      pieces.push(text.slice(start, at), segment);
+      start = at + matched.length;
+    }
+
+    return matched;
+  });
+  pieces.push(text.slice(start));
+  return pieces;
+}
+
+function scannedSegments(text: string, state: ScanState): Segment[] {
+  const segments: Segment[] = [];
+  let textStart = 0;
+  for (const match of text.matchAll(CLAUDE_VARIABLE)) {
+    if (match.index > textStart) {
+      segments.push({ kind: "text", text: text.slice(textStart, match.index) });
+    }
+
+    segments.push(segmentFor(match[0].slice(2, -1), state));
+    textStart = match.index + match[0].length;
+  }
+
+  if (textStart < text.length) {
+    segments.push({ kind: "text", text: text.slice(textStart) });
+  }
+
+  return segments;
+}
+
+/**
  * Expands one field value by Claude's rule. A set variable, the empty string
  * included, stays a reference. A `:-` default stays with its reference, set or
  * not, for the adapter to use when the variable is unset at connect time
@@ -217,31 +289,22 @@ function segmentFor(inner: string, state: ScanState): Segment {
  * with no default stays a reference and is reported missing. At user scope
  * `${CLAUDE_PROJECT_DIR}` stays a reference and is never reported missing. A
  * deny-listed reference follows Claude's deny arm for `fieldClass` (AVAR-05)
- * and is listed in `withheld` whenever it is written as `""`.
+ * and is listed in `withheld` whenever it is written as `""`. `options` is the
+ * option pass that runs between the path variables and the scan, or
+ * `undefined` for none, so `${user_config.KEY}` stays text (D-PG10-11,
+ * D-PG10-21).
  */
 export function expandClaudeValue(
   raw: string,
   fieldClass: FieldClass,
   env: ClaudeEnv,
   builtins: ClaudeBuiltins,
+  options: McpOptionPass | undefined,
 ): ExpandedValue {
-  const expanded = replaceBuiltins(raw, builtins);
-  const segments: Segment[] = [];
   const state: ScanState = { fieldClass, env, builtins, missing: [], withheld: [] };
-  let textStart = 0;
-  for (const match of expanded.matchAll(CLAUDE_VARIABLE)) {
-    if (match.index > textStart) {
-      segments.push({ kind: "text", text: expanded.slice(textStart, match.index) });
-    }
-
-    segments.push(segmentFor(match[0].slice(2, -1), state));
-    textStart = match.index + match[0].length;
-  }
-
-  if (textStart < expanded.length) {
-    segments.push({ kind: "text", text: expanded.slice(textStart) });
-  }
-
+  const segments = optionPieces(replaceBuiltins(raw, builtins), options).flatMap((piece) =>
+    typeof piece === "string" ? scannedSegments(piece, state) : [piece],
+  );
   return { segments, missing: state.missing, withheld: state.withheld };
 }
 
@@ -256,10 +319,14 @@ export interface ServerVariableScan {
   readonly withheld: readonly string[];
 }
 
-/** The string values of one server's expanded fields and their deny-list. */
+/**
+ * The string values of one server's expanded fields and their deny-list, and
+ * the values pi-mcp-adapter expands a leading `~` in.
+ */
 interface ScannedFields {
   readonly fieldClass: FieldClass;
   readonly values: readonly string[];
+  readonly homeExpanded: readonly string[];
 }
 
 // A builtin never names a variable, so the scan gives each one the path `/`,
@@ -307,14 +374,12 @@ function scannedFields(server: unknown): ScannedFields | undefined {
 
   const { type } = server;
   if (type === undefined || type === "stdio") {
+    const command = stringsOf([server.command]);
     const args = Array.isArray(server.args) ? stringsOf(server.args) : [];
     return {
       fieldClass: "plain",
-      values: [
-        ...stringsOf([server.command]),
-        ...args,
-        ...recordStrings(server.env, LITERAL_ENV_KEYS),
-      ],
+      values: [...command, ...args, ...recordStrings(server.env, LITERAL_ENV_KEYS)],
+      homeExpanded: [...command, ...args],
     };
   }
 
@@ -322,6 +387,7 @@ function scannedFields(server: unknown): ScannedFields | undefined {
     return {
       fieldClass: "remote",
       values: [...stringsOf([server.url]), ...recordStrings(server.headers, NO_KEYS)],
+      homeExpanded: [],
     };
   }
 
@@ -343,7 +409,7 @@ export function scanClaudeServerVariables(server: unknown, env: ClaudeEnv): Serv
   const unset = new Set<string>();
   const withheld = new Set<string>();
   for (const raw of fields.values) {
-    const expanded = expandClaudeValue(raw, fields.fieldClass, env, SCAN_BUILTINS);
+    const expanded = expandClaudeValue(raw, fields.fieldClass, env, SCAN_BUILTINS, undefined);
     for (const name of expanded.missing) {
       unset.add(name);
     }
@@ -354,4 +420,99 @@ export function scanClaudeServerVariables(server: unknown, env: ClaudeEnv): Serv
   }
 
   return { unset: [...unset], withheld: [...withheld] };
+}
+
+/**
+ * D-PG10-21: why a plugin MCP server is left out. `unset`: a field names an
+ * option that has no value. `home-path` (D-PG10-11): `command` or an `args`
+ * element starts with an option whose value pi-mcp-adapter expands to a path
+ * under the user's home.
+ */
+export type McpOptionBlockReason = "unset" | "home-path";
+
+/** D-PG10-21: why a server is left out, and the option keys that cause it. */
+export interface McpOptionBlock {
+  readonly reason: McpOptionBlockReason;
+  readonly keys: readonly string[];
+}
+
+/**
+ * D-PG10-08 / D-PG10-21: whether a raw plugin MCP server config is left out
+ * for the options its fields name, and why. Claude Code 2.1.323 fills
+ * `${user_config.KEY}` in the five fields from its MCP value map, which holds
+ * each declared default and the empty string for an option that is not
+ * required, and throws for a key the map lacks: a required option with no
+ * default, or a key the manifest does not declare. It catches the throw per
+ * server, so that one server does not load. The keys come once each, in
+ * first-seen field order. `undefined` options, for a plugin that declares no
+ * `userConfig`, block nothing: Claude runs no option pass for it. A server
+ * with no unset option is left out as `home-path` when `command` or an `args`
+ * element starts with an option whose value pi-mcp-adapter expands to a home
+ * path (D-PG10-11), its keys in the same order.
+ */
+export function mcpOptionBlock(
+  server: unknown,
+  options: Pick<ResolvedOptions, "mcpValues"> | undefined,
+): McpOptionBlock | undefined {
+  const fields = scannedFields(server);
+  if (options === undefined || fields === undefined) {
+    return undefined;
+  }
+
+  const unset = unsetOptionKeys(fields.values, options.mcpValues);
+  if (unset.length > 0) {
+    return { reason: "unset", keys: unset };
+  }
+
+  const home = homePathOptionKeys(fields.homeExpanded, options.mcpValues);
+  return home.length === 0 ? undefined : { reason: "home-path", keys: home };
+}
+
+function unsetOptionKeys(
+  values: readonly string[],
+  mcpValues: ReadonlyMap<string, string>,
+): string[] {
+  const unset = new Set<string>();
+  for (const raw of values) {
+    replaceUserConfigReferences(raw, (key, matched) => {
+      if (!mcpValues.has(key)) {
+        unset.add(key);
+      }
+
+      return matched;
+    });
+  }
+
+  return [...unset];
+}
+
+const LEADING_OPTION_REFERENCE = /^\$\{user_config\.([^}]+)\}/;
+
+// D-PG10-11: pi-mcp-adapter 7.0.1 fills variables in `command` and in each
+// `args` element and then expands a leading `~` (`resolveConfigPath`,
+// `expandHomePath` in its `utils.ts`). Claude Code 2.1.323 passes an option's
+// value as written, so an option at the start of such a field whose value the
+// adapter would expand would run a program under the user's home that the
+// plugin does not name. The value alone is read, so `~` followed by any text
+// counts.
+function adapterExpandsHome(value: string): boolean {
+  return value === "~" || value.startsWith("~/") || value.startsWith(`~${path.sep}`);
+}
+
+function homePathOptionKeys(
+  values: readonly string[],
+  mcpValues: ReadonlyMap<string, string>,
+): string[] {
+  const homeKeys = new Set(
+    [...mcpValues].filter(([, value]) => adapterExpandsHome(value)).map(([key]) => key),
+  );
+  const keys = new Set<string>();
+  for (const raw of values) {
+    const key = LEADING_OPTION_REFERENCE.exec(raw)?.[1];
+    if (key !== undefined && homeKeys.has(key)) {
+      keys.add(key);
+    }
+  }
+
+  return [...keys];
 }
