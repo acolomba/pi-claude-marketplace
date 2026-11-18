@@ -242,7 +242,7 @@ Agrega un mercado desde la abreviatura de repositorio de GitHub `owner/repo`.
 ```
 
 > [!NOTE]
-> Si Git no está autenticado, un repositorio privado desencadenará una autenticación Device Flow.
+> Si Git no está autenticado, un repositorio privado inicia la autenticación Device Flow. Define `PI_CLAUDE_MARKETPLACE_DEVICE_FLOW=off` en tu entorno para desactivar Device Flow y usar solo las credenciales guardadas de Git.
 
 Agrega el mismo mercado desde una URL de GitHub.
 

@@ -26,6 +26,7 @@ const INHERITED_VARIABLES = {
   GIT_CONFIG_GLOBAL: "/shell/home/.gitconfig",
   GIT_ASKPASS: "/shell/bin/askpass",
   PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: "https://operator.example/git",
+  PI_CLAUDE_MARKETPLACE_DEVICE_FLOW: "off",
   PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS: "5",
   DISABLE_UPDATES: "1",
   DISABLE_AUTOUPDATER: "true",

@@ -161,9 +161,64 @@ describe("NO_STORED_CREDENTIAL_CAUSE", () => {
         "| git credential approve",
     );
   });
+
+  test("mentions gh auth login and gh auth setup-git for github.com", () => {
+    // arrange
+    const host = "github.com";
+
+    // act
+    const cause = NO_STORED_CREDENTIAL_CAUSE(host);
+
+    // assert
+    assert.strictEqual(
+      cause,
+      "no credential was obtained for github.com; run gh auth login && gh auth setup-git, or store one with: printf " +
+        "'protocol=https\\nhost=github.com\\nusername=<user>\\npassword=<token>\\n\\n' " +
+        "| git credential approve",
+    );
+  });
 });
 
 describe("buildAuthForHost", () => {
+  for (const host of ["github.com", "gitlab.com"]) {
+    test(`returns a stored-credential bundle for ${host} when PI_CLAUDE_MARKETPLACE_DEVICE_FLOW is off`, async (t) => {
+      // arrange
+      const previous = process.env.PI_CLAUDE_MARKETPLACE_DEVICE_FLOW;
+      t.after(() => {
+        if (previous === undefined) {
+          Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_DEVICE_FLOW");
+        } else {
+          process.env.PI_CLAUDE_MARKETPLACE_DEVICE_FLOW = previous;
+        }
+      });
+      process.env.PI_CLAUDE_MARKETPLACE_DEVICE_FLOW = "off";
+      const ui = mock<NotificationContext["ui"]>({ exactParams: true, name: "UI" });
+      const deviceFlowHttp = mock<DeviceFlowHttp>({ exactParams: true, name: "device HTTP" });
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+
+      // act
+      const auth = buildAuthForHost({
+        host,
+        ctx: { mode: "tui", ui },
+        run: runWithNothingLoaded(),
+        credentialOps: credentials.credentialOps,
+        deviceFlowHttp,
+      });
+      const credential = await buildAuthCallbacks(auth).onAuth(`https://${host}/owner/repo`);
+
+      // assert
+      assert.deepStrictEqual(auth, {
+        kind: "stored-credential",
+        credentialOps: credentials.credentialOps,
+        host,
+      });
+      assert.deepStrictEqual(credential, { cancel: true });
+      assert.deepStrictEqual(credentials.calls, { fill: [{ host }], approve: [], reject: [] });
+      verify(deviceFlowHttp);
+      verify(ui);
+    });
+  }
+
   for (const initialMode of ["print", "json", "rpc", "tui"]) {
     test(`refuses new device flow in live print mode after construction in ${initialMode}`, async () => {
       // arrange

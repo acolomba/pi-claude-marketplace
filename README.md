@@ -242,7 +242,7 @@ Add a marketplace from a GitHub repository `owner/repo` shorthand.
 ```
 
 > [!NOTE]
-> If Git is not already authenticated, a private repository will trigger Device Flow authentication.
+> If Git is not already authenticated, a private repository triggers Device Flow authentication. Set `PI_CLAUDE_MARKETPLACE_DEVICE_FLOW=off` in your environment to turn Device Flow off and use stored Git credentials only.
 
 Add the same marketplace from a GitHub URL.
 

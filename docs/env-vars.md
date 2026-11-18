@@ -249,6 +249,14 @@ These Claude Code settings have no Pi meaning, or the extension keeps its own be
 - `CLAUDE_CODE_AUTOUPDATER_DISABLED_BY_HOST`. A host that runs Claude Code sets it, and it also turns the background update off. Pi has no such host setting.
 - The hidden toggle. Claude Code hides the auto-update toggle of `/plugin` when the background update is off. Here, `marketplace autoupdate` and `marketplace noautoupdate` stay available, because the value also selects the plugins that a manual `marketplace update` updates.
 
+## Variables that control OAuth Device Flow
+
+When a command reaches a private repository on `github.com` or `gitlab.com` and `git credential fill` produces no credential, the extension starts interactive OAuth Device Flow. This setting lives in the process environment only, so a cloned project's `.pi/claude-plugins.json` cannot change it.
+
+| Variable                                      | Claude Code | Pi rule                                                                                                                                                                                            |
+| --------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PI_CLAUDE_MARKETPLACE_DEVICE_FLOW` (pi-only) | --          | `0`, `false`, `no`, or `off`, in any case and with surrounding spaces removed, turns Device Flow off on every host. Stored Git credentials still run. Any other value keeps Device Flow turned on. |
+
 ## Not delivered (out of scope)
 
 The following Claude Code variables are recognized but not delivered by the extension. They are listed here so a reader finds a recorded decision rather than silence; they are deliberately kept out of the overview matrix, which reflects delivered behavior.

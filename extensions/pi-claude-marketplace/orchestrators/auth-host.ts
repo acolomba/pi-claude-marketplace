@@ -43,6 +43,7 @@
 import { findProviderForHost } from "../domain/auth-registry.ts";
 import { initiateDeviceFlow } from "../domain/github-auth.ts";
 import { NODE_CREDENTIAL_SPAWN, createCredentialOps } from "../platform/git-credential.ts";
+import { isDeviceFlowDisabled } from "../shared/device-flow.ts";
 import { DeviceFlowUnavailableError } from "../shared/errors.ts";
 import { GITHUB_HOST, gitHubOverrideHost, gitHubWireUrl } from "../shared/github-base-url.ts";
 import { notifyDeviceFlowPrompt } from "../shared/notification-dispatch.ts";
@@ -121,8 +122,14 @@ export function hostFromCloneUrl(cloneUrl: string, kind: "github" | "url" | "git
  * not there. Which of the five occurred is diagnosable only through
  * `hookDebugLog`.
  */
-export const NO_STORED_CREDENTIAL_CAUSE: (host: string) => string = (host) =>
-  String.raw`no credential was obtained for ${host}; store one with: printf 'protocol=https\nhost=${host}\nusername=<user>\npassword=<token>\n\n' | git credential approve`;
+export const NO_STORED_CREDENTIAL_CAUSE: (host: string) => string = (host) => {
+  const approveCommand = String.raw`printf 'protocol=https\nhost=${host}\nusername=<user>\npassword=<token>\n\n' | git credential approve`;
+  if (host === GITHUB_HOST) {
+    return `no credential was obtained for ${host}; run gh auth login && gh auth setup-git, or store one with: ${approveCommand}`;
+  }
+
+  return `no credential was obtained for ${host}; store one with: ${approveCommand}`;
+};
 
 /**
  * Build the `stored-credential` bundle for `host`: the user's git credential
@@ -183,7 +190,7 @@ export function buildAuthForHost(args: {
   // AAP-02 / D-13: a run no command opened, such as an autoapply load, gets no
   // interactive Device Flow, as the autoupdate cascade gets none (D-3-04). A
   // credential miss then fails that row instead of holding the load.
-  if (provider === undefined || run.origin.kind !== "command") {
+  if (provider === undefined || run.origin.kind !== "command" || isDeviceFlowDisabled()) {
     return buildStoredCredentialAuth(host, credentialOps);
   }
 

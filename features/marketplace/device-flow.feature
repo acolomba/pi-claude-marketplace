@@ -252,3 +252,82 @@ Feature: Marketplace device flow
       | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
       | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
       | POST   | https://github.com/acme/tools.git/git-upload-pack                   | git host  |
+
+  Scenario: Adding a private GitHub marketplace with PI_CLAUDE_MARKETPLACE_DEVICE_FLOW set to off fails without Device Flow
+    Given the marketplace "tools" is published as a github source
+    Given the git host requires the user "x-access-token" with the password "stand-in-access-token" for the marketplace "tools"
+    Given github's sign-in answers its polls with these outcomes:
+      | outcome               |
+      | authorization_pending |
+      | authorized            |
+    Given pi runs with github's requests routed to the stand-ins and the environment variable "PI_CLAUDE_MARKETPLACE_DEVICE_FLOW" set to "off"
+    When the user runs "/claude:plugin marketplace add acme/tools --scope user"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name       | scope | status | reasons                 |
+      | acme/tools | user  | failed | authentication required |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+    Then github's sign-in receives no request
+    Then pi routes these github requests:
+      | method | url                                                                 | routed to |
+      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
+
+  Scenario: Updating a private GitHub marketplace with PI_CLAUDE_MARKETPLACE_DEVICE_FLOW set to off reports the gh login and credential remedy
+    Given the marketplace "tools" is published as a github source
+    Given github's sign-in answers its polls with these outcomes:
+      | outcome               |
+      | authorization_pending |
+      | authorized            |
+    Given pi runs with github's requests routed to the stand-ins and the environment variable "PI_CLAUDE_MARKETPLACE_DEVICE_FLOW" set to "off"
+    Given the user has run "/claude:plugin marketplace add acme/tools --scope user"
+    Given the git host requires the user "x-access-token" with the password "stand-in-access-token" for the marketplace "tools"
+    When the user runs "/claude:plugin marketplace update tools --scope user"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons                 | scope | leaks | rollback partial | cause chain                                                                                                                                                                                                                                                                        | cause truncated |
+      | tools            | user              | failed             | tools | tools | failed | authentication required | user  |       |                  | Failed to update marketplace "tools"., The operation was canceled., no credential was obtained for github.com; run gh auth login && gh auth setup-git, or store one with: printf 'protocol=https\\nhost=github.com\\nusername=<user>\\npassword=<token>\\n\\n' \| git credential approve | false           |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+    Then github's sign-in receives no request
+    Then pi routes these github requests:
+      | method | url                                                                 | routed to |
+      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
+
+  Scenario: Adding a private GitHub marketplace with PI_CLAUDE_MARKETPLACE_DEVICE_FLOW set to off uses a stored credential
+    Given the marketplace "tools" is published as a github source
+    Given the git host requires the user "x-access-token" with the password "stand-in-access-token" for the marketplace "tools"
+    Given github's sign-in answers its polls with these outcomes:
+      | outcome               |
+      | authorization_pending |
+    Given the user has stored a credential for github.com with the user "x-access-token" and the password "stand-in-access-token"
+    Given pi runs with github's requests routed to the stand-ins and the environment variable "PI_CLAUDE_MARKETPLACE_DEVICE_FLOW" set to "off"
+    When the user runs "/claude:plugin marketplace add acme/tools --scope user"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope | status |
+      | tools | user  | added  |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+    Then github's sign-in receives no request
+    Then pi routes these github requests:
+      | method | url                                                                 | routed to |
+      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
+      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
+      | POST   | https://github.com/acme/tools.git/git-upload-pack                   | git host  |

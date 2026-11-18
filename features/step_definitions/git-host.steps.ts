@@ -36,6 +36,11 @@ import {
   readPollScript,
 } from "../lib/github-device-flow/server.ts";
 import { armedStatus } from "../lib/https-git-host/server.ts";
+import {
+  PI_LAUNCH_ENVIRONMENT_EXTENSION,
+  readAppliedLaunchEnvironments,
+  writeLaunchEnvironment,
+} from "../lib/pi-launch-environment.ts";
 import { expandTokens } from "../lib/run-tokens.ts";
 import { harnessDirectory } from "../lib/turn-records.ts";
 import { PROFILE_PI_START_TIMEOUT_MS } from "../support/world.ts";
@@ -244,24 +249,43 @@ Given(
   },
 );
 
+async function startPiWithGitHubRedirect(
+  world: ScenarioWorld,
+  extraExtensions: readonly string[],
+): Promise<void> {
+  await world.usePiWithProfile({
+    companions: [],
+    extraExtensions: [...extraExtensions, GITHUB_REDIRECT_EXTENSION],
+    withoutGitHubBaseOverride: true,
+  });
+  const loads = (await readRedirectLog(world.profileHarness())).flatMap((line) =>
+    line.decision === "loaded" ? [line] : [],
+  );
+  assert.deepStrictEqual(
+    loads.map((line) => ({ configured: line.configured, ownProcess: line.pid === process.pid })),
+    [{ configured: true, ownProcess: false }],
+  );
+}
+
 // D-BG-01: the pi runs without the GitHub base override, so GHB-02 runs
 // Device Flow, and the redirect keeps every request on this machine.
 Given(
   "pi runs with github's requests routed to the stand-ins",
   { timeout: PROFILE_PI_START_TIMEOUT_MS },
   async function (this: ScenarioWorld): Promise<void> {
-    await this.usePiWithProfile({
-      companions: [],
-      extraExtensions: [GITHUB_REDIRECT_EXTENSION],
-      withoutGitHubBaseOverride: true,
-    });
-    const loads = (await readRedirectLog(this.profileHarness())).flatMap((line) =>
-      line.decision === "loaded" ? [line] : [],
-    );
-    assert.deepStrictEqual(
-      loads.map((line) => ({ configured: line.configured, ownProcess: line.pid === process.pid })),
-      [{ configured: true, ownProcess: false }],
-    );
+    await startPiWithGitHubRedirect(this, []);
+  },
+);
+
+Given(
+  "pi runs with github's requests routed to the stand-ins and the environment variable {string} set to {string}",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld, variable: string, value: string): Promise<void> {
+    const variables = { [variable]: value };
+    const file = await writeLaunchEnvironment(this.tokens.home, variables);
+    this.onRelease(() => rm(file, { force: true }));
+    await startPiWithGitHubRedirect(this, [PI_LAUNCH_ENVIRONMENT_EXTENSION]);
+    assert.deepStrictEqual(await readAppliedLaunchEnvironments(this.profileHarness()), [variables]);
   },
 );
 

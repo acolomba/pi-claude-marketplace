@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Set `PI_CLAUDE_MARKETPLACE_DEVICE_FLOW=off` to turn off OAuth Device Flow and use stored Git credentials only. Thanks to @rakesh-vs, who reported #325 and wrote the fix. (#327)
+
 - Internal: the async hook behavioral tests no longer fail at random. (#323)
 
 - More plugin hook events now behave as in Claude Code, and the model-facing tools return what the model asks for. (#310)
