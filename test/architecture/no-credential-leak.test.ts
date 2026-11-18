@@ -401,6 +401,22 @@ test("AUTH-09: platform/git-credential.ts never interpolates a password in an Er
   );
 
   assertNoCredentialInLiterals(GIT_CREDENTIAL_FILE, stripped, ERROR_LITERAL_CALL_SITE);
+  const ghOutputLeak = fullTemplateLiteralsAfter(
+    stripped,
+    /(?:new\s+Error|hookDebugLog)\s*\(\s*(`(?:[^`\\]|\\.)*`)/g,
+  ).filter((lit) => /\b(?:token|stdout)\b/i.test(lit));
+  assert.deepStrictEqual(
+    ghOutputLeak,
+    [],
+    `AUTH-09 violation: ${GIT_CREDENTIAL_FILE} interpolates token or stdout in an Error or hookDebugLog literal`,
+  );
+  const ghFnMatch = /async function readGitHubCliToken\([\s\S]*?\n}\n/.exec(stripped);
+  assert.ok(ghFnMatch, "readGitHubCliToken function body not found for AUTH-09 scan");
+  assert.doesNotMatch(
+    ghFnMatch[0],
+    /\b(?:new\s+Error|hookDebugLog)\b/,
+    "readGitHubCliToken constructs an Error or logs while holding gh stdout (AUTH-09 violation)",
+  );
 });
 
 test("AUTH-09: domain/github-auth.ts never interpolates a token in an Error message and passes only the prompt values to onDeviceCode", async () => {
@@ -548,9 +564,9 @@ test("AUTH-09: the git hookDebugLog calls never interpolate a credential field",
   // the calls, and `git.ts` is covered so a call added there is caught rather
   // than landing outside the gate.
   const hookDebugLogWithToken =
-    /hookDebugLog\s*\((?:[^)]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^)]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
+    /hookDebugLog\s*\((?:[^)]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken|password|token|stdout)|[^)]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken|password|token|stdout))/i;
   const hookDebugLogCall = /hookDebugLog\s*\(/g;
-  const SCANNED = [GIT_PLATFORM_FILE, GIT_AUTH_CALLBACKS_FILE];
+  const SCANNED = [GIT_CREDENTIAL_FILE, GIT_PLATFORM_FILE, GIT_AUTH_CALLBACKS_FILE];
 
   const sources = new Map<string, string>();
   let scannedCallSites = 0;

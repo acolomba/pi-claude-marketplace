@@ -4,9 +4,14 @@ import { describe, test } from "node:test";
 
 import {
   NODE_CREDENTIAL_SPAWN,
+  NODE_GITHUB_CLI_SPAWN,
   createCredentialOps,
   type CredentialOps,
+  type GitHubCliProcess,
+  type GitHubCliSpawn,
+  type GitHubCliSpawnOptions,
 } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
+import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
 
 import { registerCredentialOpsContract } from "./credential-ops-contract.ts";
 import { createCredentialProcessFake } from "./credential-process-fake.ts";
@@ -34,6 +39,103 @@ void ({
 
 function manualCredentialProcess() {
   return createCredentialProcessFake({ onInput: () => {} });
+}
+
+interface GitHubCliProcessControl {
+  readonly command: string;
+  readonly args: readonly string[];
+  readonly options: GitHubCliSpawnOptions;
+  close(code: number | null): void;
+  fail(error: Error): void;
+  terminations(): readonly "SIGTERM"[];
+  writeOutput(output: string): void;
+}
+
+function manualGitHubCliProcess(): {
+  readonly spawn: GitHubCliSpawn;
+  invocations(): readonly GitHubCliProcessControl[];
+  waitForProcess(index?: number): Promise<GitHubCliProcessControl>;
+} {
+  const processes: GitHubCliProcessControl[] = [];
+  const waiters = new Map<number, Array<(control: GitHubCliProcessControl) => void>>();
+  const spawnGh: GitHubCliSpawn = (command, args, options) => {
+    const stdoutListeners: Array<(chunk: Buffer) => void> = [];
+    const errorListeners: Array<(error: Error) => void> = [];
+    const closeListeners: Array<(code: number | null) => void> = [];
+    const signals: "SIGTERM"[] = [];
+
+    const control: GitHubCliProcessControl = {
+      command,
+      args: [...args],
+      options: {
+        env: { ...options.env },
+        shell: options.shell,
+        stdio: [...options.stdio],
+      },
+      close: (code) => {
+        for (const listener of closeListeners) {
+          listener(code);
+        }
+      },
+      fail: (error) => {
+        for (const listener of errorListeners) {
+          listener(error);
+        }
+      },
+      terminations: () => [...signals],
+      writeOutput: (output) => {
+        const chunk = Buffer.from(output);
+        for (const listener of stdoutListeners) {
+          listener(chunk);
+        }
+      },
+    };
+
+    const child: GitHubCliProcess = {
+      stdout: {
+        on: (_event, listener) => {
+          stdoutListeners.push(listener);
+        },
+      },
+      kill: (signal) => {
+        signals.push(signal);
+        return true;
+      },
+      on: (event, listener) => {
+        if (event === "error") {
+          errorListeners.push(listener as (error: Error) => void);
+        } else {
+          closeListeners.push(listener as (code: number | null) => void);
+        }
+      },
+    };
+
+    const index = processes.length;
+    processes.push(control);
+    for (const resolve of waiters.get(index) ?? []) {
+      resolve(control);
+    }
+
+    waiters.delete(index);
+    return child;
+  };
+
+  return {
+    spawn: spawnGh,
+    invocations: () => [...processes],
+    waitForProcess: (index = 0) => {
+      const existing = processes[index];
+      if (existing !== undefined) {
+        return Promise.resolve(existing);
+      }
+
+      return new Promise((resolve) => {
+        const list = waiters.get(index) ?? [];
+        list.push(resolve);
+        waiters.set(index, list);
+      });
+    },
+  };
 }
 
 function credentialAttributes(input: string): Record<string, string> {
@@ -103,6 +205,17 @@ describe("createCredentialOps", () => {
 
     // act
     const productionLauncher: unknown = NODE_CREDENTIAL_SPAWN;
+
+    // assert
+    assert.strictEqual(productionLauncher, nodeLauncher);
+  });
+
+  test("runs the real Node launcher for the production gh CLI subprocess", () => {
+    // arrange
+    const nodeLauncher: unknown = spawn;
+
+    // act
+    const productionLauncher: unknown = NODE_GITHUB_CLI_SPAWN;
 
     // assert
     assert.strictEqual(productionLauncher, nodeLauncher);
@@ -351,4 +464,217 @@ describe("createCredentialOps", () => {
       assert.deepStrictEqual(process.terminations(), []);
     });
   }
+
+  test("falls back to gh auth token on a github.com fill miss without approving it", async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const gitProcesses = manualCredentialProcess();
+    const ghProcesses = manualGitHubCliProcess();
+    const credentialOps = createCredentialOps({
+      spawn: gitProcesses.spawn,
+      timeoutMs: 50,
+      gitHubCliFallback: {
+        spawn: ghProcesses.spawn,
+        credentialFrom: (token) => ({ username: "x-access-token", password: token }),
+      },
+    });
+
+    // act
+    const pendingCredential = credentialOps.fill("github.com");
+    gitProcesses.process().close(1);
+    const ghProcess = await ghProcesses.waitForProcess();
+    ghProcess.writeOutput("  gho_fallback_token_1\r\n");
+    ghProcess.close(0);
+    const credential = await pendingCredential;
+    t.mock.timers.tick(50);
+
+    // assert
+    assert.deepStrictEqual(credential, {
+      username: "x-access-token",
+      password: "gho_fallback_token_1",
+    });
+    assert.strictEqual(ghProcess.command, "gh");
+    assert.deepStrictEqual(ghProcess.args, ["auth", "token", "--hostname", "github.com"]);
+    assert.strictEqual(ghProcess.options.env.GH_PROMPT_DISABLED, "1");
+    assert.strictEqual(ghProcess.options.shell, false);
+    assert.deepStrictEqual(ghProcess.options.stdio, ["ignore", "pipe", "ignore"]);
+    assert.deepStrictEqual(ghProcess.terminations(), []);
+    assert.strictEqual(gitProcesses.invocations().length, 1);
+  });
+
+  test("skips gh auth token when git credential fill already returned a credential", async () => {
+    // arrange
+    const gitProcesses = manualCredentialProcess();
+    const ghProcesses = manualGitHubCliProcess();
+    const credentialOps = createCredentialOps({
+      spawn: gitProcesses.spawn,
+      timeoutMs: DEFAULT_TIMEOUT_MS,
+      gitHubCliFallback: {
+        spawn: ghProcesses.spawn,
+        credentialFrom: (token) => ({ username: "x-access-token", password: token }),
+      },
+    });
+
+    // act
+    const pendingCredential = credentialOps.fill("github.com");
+    gitProcesses.process().writeOutput("username=stored-user\npassword=stored-token\n");
+    gitProcesses.process().close(0);
+    const credential = await pendingCredential;
+
+    // assert
+    assert.deepStrictEqual(credential, {
+      username: "stored-user",
+      password: "stored-token",
+    });
+    assert.deepStrictEqual(ghProcesses.invocations(), []);
+  });
+
+  test("skips gh auth token for hosts other than github.com without reading the GitHub base override", async (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "http://invalid-scheme.example");
+    const gitProcesses = manualCredentialProcess();
+    const ghProcesses = manualGitHubCliProcess();
+    const credentialOps = createCredentialOps({
+      spawn: gitProcesses.spawn,
+      timeoutMs: DEFAULT_TIMEOUT_MS,
+      gitHubCliFallback: {
+        spawn: ghProcesses.spawn,
+        credentialFrom: (token) => ({ username: "x-access-token", password: token }),
+      },
+    });
+
+    // act
+    const pendingCredential = credentialOps.fill("gitlab.com");
+    gitProcesses.process().close(1);
+    const credential = await pendingCredential;
+
+    // assert
+    assert.strictEqual(credential, null);
+    assert.deepStrictEqual(ghProcesses.invocations(), []);
+  });
+
+  test("skips gh auth token while PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL is set", async (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://github.com/mirror");
+    const gitProcesses = manualCredentialProcess();
+    const ghProcesses = manualGitHubCliProcess();
+    const credentialOps = createCredentialOps({
+      spawn: gitProcesses.spawn,
+      timeoutMs: DEFAULT_TIMEOUT_MS,
+      gitHubCliFallback: {
+        spawn: ghProcesses.spawn,
+        credentialFrom: (token) => ({ username: "x-access-token", password: token }),
+      },
+    });
+
+    // act
+    const pendingCredential = credentialOps.fill("github.com");
+    gitProcesses.process().close(1);
+    const credential = await pendingCredential;
+
+    // assert
+    assert.strictEqual(credential, null);
+    assert.deepStrictEqual(ghProcesses.invocations(), []);
+  });
+
+  for (const { behavior, exitCode, output } of [
+    { behavior: "returns null when gh exits non-zero", exitCode: 1, output: "" },
+    {
+      behavior: "returns null when gh closes without an exit code",
+      exitCode: null,
+      output: "gho_ignored\n",
+    },
+    { behavior: "returns null when gh prints whitespace only", exitCode: 0, output: "  \r\n  " },
+    {
+      behavior: "returns null when gh prints multiple lines",
+      exitCode: 0,
+      output: "gho_line_1\ngho_line_2\n",
+    },
+    {
+      behavior: "returns null when gh prints a NUL byte",
+      exitCode: 0,
+      output: "gho_bad\0token\n",
+    },
+  ]) {
+    test(behavior, async () => {
+      // arrange
+      const gitProcesses = manualCredentialProcess();
+      const ghProcesses = manualGitHubCliProcess();
+      const credentialOps = createCredentialOps({
+        spawn: gitProcesses.spawn,
+        timeoutMs: DEFAULT_TIMEOUT_MS,
+        gitHubCliFallback: {
+          spawn: ghProcesses.spawn,
+          credentialFrom: (token) => ({ username: "x-access-token", password: token }),
+        },
+      });
+
+      // act
+      const pendingCredential = credentialOps.fill("github.com");
+      gitProcesses.process().close(1);
+      const ghProcess = await ghProcesses.waitForProcess();
+      if (output !== "") {
+        ghProcess.writeOutput(output);
+      }
+
+      ghProcess.close(exitCode);
+      const credential = await pendingCredential;
+
+      // assert
+      assert.strictEqual(credential, null);
+    });
+  }
+
+  test("returns null and clears the timeout when the gh process fails to start", async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const gitProcesses = manualCredentialProcess();
+    const ghProcesses = manualGitHubCliProcess();
+    const credentialOps = createCredentialOps({
+      spawn: gitProcesses.spawn,
+      timeoutMs: 50,
+      gitHubCliFallback: {
+        spawn: ghProcesses.spawn,
+        credentialFrom: (token) => ({ username: "x-access-token", password: token }),
+      },
+    });
+
+    // act
+    const pendingCredential = credentialOps.fill("github.com");
+    gitProcesses.process().close(1);
+    const ghProcess = await ghProcesses.waitForProcess();
+    ghProcess.fail(new Error("spawn gh ENOENT"));
+    const credential = await pendingCredential;
+    t.mock.timers.tick(50);
+
+    // assert
+    assert.strictEqual(credential, null);
+    assert.deepStrictEqual(ghProcess.terminations(), []);
+  });
+
+  test("terminates a timed-out gh process and returns null", async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const gitProcesses = manualCredentialProcess();
+    const ghProcesses = manualGitHubCliProcess();
+    const credentialOps = createCredentialOps({
+      spawn: gitProcesses.spawn,
+      timeoutMs: 50,
+      gitHubCliFallback: {
+        spawn: ghProcesses.spawn,
+        credentialFrom: (token) => ({ username: "x-access-token", password: token }),
+      },
+    });
+
+    // act
+    const pendingCredential = credentialOps.fill("github.com");
+    gitProcesses.process().close(1);
+    const ghProcess = await ghProcesses.waitForProcess();
+    t.mock.timers.tick(50);
+    const credential = await pendingCredential;
+
+    // assert
+    assert.strictEqual(credential, null);
+    assert.deepStrictEqual(ghProcess.terminations(), ["SIGTERM"]);
+  });
 });

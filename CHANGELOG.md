@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Private `github.com` repositories now use your `gh` CLI login when Git has no stored credential, before starting Device Flow. The token stays in memory only. Thanks to @rakesh-vs. (#326)
+
 - Internal: the async hook behavioral tests no longer fail at random. (#323)
 
 - More plugin hook events now behave as in Claude Code, and the model-facing tools return what the model asks for. (#310)

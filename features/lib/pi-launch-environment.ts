@@ -14,7 +14,7 @@
  * empties.
  */
 
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,6 +39,11 @@ function parseVariables(text: string): Readonly<Record<string, string>> {
   }
 
   return parsed as Readonly<Record<string, string>>;
+}
+
+/** Returns true when `home` holds a launch environment file for the next profile Pi. */
+export function hasLaunchEnvironment(home: string): boolean {
+  return existsSync(path.join(home, VARIABLES_FILE));
 }
 
 /**

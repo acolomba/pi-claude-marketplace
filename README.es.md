@@ -242,7 +242,7 @@ Agrega un mercado desde la abreviatura de repositorio de GitHub `owner/repo`.
 ```
 
 > [!NOTE]
-> Si Git no está autenticado, un repositorio privado desencadenará una autenticación Device Flow.
+> Para un repositorio privado de `github.com`, si Git no tiene una credencial guardada, esta extensión intenta usar tu sesión de la CLI `gh` (`gh auth token --hostname github.com`) en memoria antes de iniciar la autenticación Device Flow.
 
 Agrega el mismo mercado desde una URL de GitHub.
 

@@ -52,6 +52,7 @@ import { spawn } from "node:child_process";
 
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
+import { GITHUB_HOST, gitHubOverrideHost } from "../shared/github-base-url.ts";
 
 import type { GitCredentials } from "./git.ts";
 
@@ -125,11 +126,72 @@ export type CredentialSpawn = (
  */
 export const NODE_CREDENTIAL_SPAWN = spawn as CredentialSpawn;
 
+export interface GitHubCliProcess {
+  readonly stdout: {
+    on(event: "data", listener: (chunk: Buffer) => void): void;
+  };
+  kill(signal: "SIGTERM"): boolean;
+  on(
+    event: "error" | "close",
+    listener: ((error: Error) => void) | ((code: number | null) => void),
+  ): void;
+}
+
+export interface GitHubCliSpawnOptions {
+  readonly env: NodeJS.ProcessEnv;
+  readonly shell: false;
+  readonly stdio: readonly ["ignore", "pipe", "ignore"];
+}
+
+export type GitHubCliSpawn = (
+  command: string,
+  args: readonly string[],
+  options: GitHubCliSpawnOptions,
+) => GitHubCliProcess;
+
+/** Production `gh` launcher: Node's `spawn` narrowed to `GitHubCliSpawn`. */
+export const NODE_GITHUB_CLI_SPAWN = spawn as GitHubCliSpawn;
+
+export interface GitHubCliFallbackOptions {
+  readonly spawn: GitHubCliSpawn;
+  readonly credentialFrom: (accessToken: string) => GitCredentials;
+}
+
 export interface CreateCredentialOpsOptions {
   /** The process launcher. `NODE_CREDENTIAL_SPAWN` in production. */
   readonly spawn: CredentialSpawn;
   /** Milliseconds before a pending `git credential` subprocess is SIGTERMed. */
   readonly timeoutMs: number;
+  /** In-memory `gh auth token` fallback for `github.com` on a helper miss. */
+  readonly gitHubCliFallback?: GitHubCliFallbackOptions;
+}
+
+function collectProcessStdout(
+  child: GitHubCliProcess,
+  timeoutMs: number,
+  timeoutMessage: string,
+): Promise<{ stdout: string; code: number }> {
+  return new Promise((resolve, reject) => {
+    let stdout = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf8");
+    });
+
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+      reject(new Error(timeoutMessage));
+    }, timeoutMs);
+    timer.unref();
+
+    child.on("error", (err: Error) => {
+      clearTimeout(timer);
+      reject(err);
+    });
+    child.on("close", (code: number | null) => {
+      clearTimeout(timer);
+      resolve({ stdout, code: code ?? -1 });
+    });
+  });
 }
 
 /**
@@ -146,44 +208,28 @@ function gitCredentialIO(
   spawnProcess: CredentialSpawn,
   timeoutMs: number,
 ): Promise<{ stdout: string; code: number }> {
-  return new Promise((resolve, reject) => {
-    const child = spawnProcess("git", ["credential", subcommand], {
-      env: {
-        ...process.env,
-        GIT_TERMINAL_PROMPT: "0",
-        GCM_INTERACTIVE: "never",
-      },
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-
-    let stdout = "";
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf8");
-    });
-
-    const timer = setTimeout(() => {
-      child.kill("SIGTERM");
-      reject(new Error(`git credential ${subcommand} timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-    timer.unref();
-
-    child.on("error", (err: Error) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-    child.on("close", (code: number | null) => {
-      clearTimeout(timer);
-      resolve({ stdout, code: code ?? -1 });
-    });
-
-    // Swallow EPIPE: the credential helper may exit before reading all
-    // input (e.g. non-zero exit on approve/reject with no helper). Without
-    // this listener the 'error' event on child.stdin becomes an unhandled
-    // exception.
-    child.stdin.on("error", () => {});
-    child.stdin.write(input);
-    child.stdin.end();
+  const child = spawnProcess("git", ["credential", subcommand], {
+    env: {
+      ...process.env,
+      GIT_TERMINAL_PROMPT: "0",
+      GCM_INTERACTIVE: "never",
+    },
+    stdio: ["pipe", "pipe", "pipe"],
   });
+  const outcome = collectProcessStdout(
+    child,
+    timeoutMs,
+    `git credential ${subcommand} timed out after ${timeoutMs}ms`,
+  );
+
+  // Swallow EPIPE: the credential helper may exit before reading all
+  // input (e.g. non-zero exit on approve/reject with no helper). Without
+  // this listener the 'error' event on child.stdin becomes an unhandled
+  // exception.
+  child.stdin.on("error", () => {});
+  child.stdin.write(input);
+  child.stdin.end();
+  return outcome;
 }
 
 /**
@@ -260,6 +306,56 @@ type RunGitCredential = (
   subcommand: "fill" | "approve" | "reject",
   input: string,
 ) => Promise<{ stdout: string; code: number }>;
+
+async function readGitHubCliToken(
+  host: string,
+  spawnProcess: GitHubCliSpawn,
+  timeoutMs: number,
+): Promise<string | null> {
+  const child = spawnProcess("gh", ["auth", "token", "--hostname", host], {
+    env: {
+      ...process.env,
+      GH_PROMPT_DISABLED: "1",
+    },
+    shell: false,
+    stdio: ["ignore", "pipe", "ignore"],
+  });
+
+  let result;
+  try {
+    result = await collectProcessStdout(child, timeoutMs, "gh auth token timed out");
+  } catch {
+    return null;
+  }
+
+  if (result.code !== 0) {
+    return null;
+  }
+
+  const token = result.stdout.trim();
+  if (token === "" || /[\r\n\0]/.test(token)) {
+    return null;
+  }
+
+  return token;
+}
+
+async function fillFromGitHubCli(
+  host: string,
+  fallback: GitHubCliFallbackOptions | undefined,
+  timeoutMs: number,
+): Promise<GitCredentials | null> {
+  if (fallback === undefined || host !== GITHUB_HOST || gitHubOverrideHost() !== undefined) {
+    return null;
+  }
+
+  const token = await readGitHubCliToken(host, fallback.spawn, timeoutMs);
+  if (token === null) {
+    return null;
+  }
+
+  return fallback.credentialFrom(token);
+}
 
 async function credentialFill(
   host: string,
@@ -348,7 +444,14 @@ export function createCredentialOps(options: CreateCredentialOpsOptions): Creden
     gitCredentialIO(subcommand, input, options.spawn, options.timeoutMs);
 
   return {
-    fill: (host) => credentialFill(host, runGitCredential),
+    fill: async (host) => {
+      const stored = await credentialFill(host, runGitCredential);
+      if (stored !== null) {
+        return stored;
+      }
+
+      return fillFromGitHubCli(host, options.gitHubCliFallback, options.timeoutMs);
+    },
     approve: (host, cred) => credentialApprove(host, cred, runGitCredential),
     reject: (host, cred) => credentialReject(host, cred, runGitCredential),
   };

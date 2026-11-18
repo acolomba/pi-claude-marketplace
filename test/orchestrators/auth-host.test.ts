@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import { mock, verify, when } from "strong-mock";
 
+import { GITHUB_PROVIDER } from "../../extensions/pi-claude-marketplace/domain/auth-registry.ts";
 import {
   DEFAULT_CREDENTIAL_OPS,
   NO_STORED_CREDENTIAL_CAUSE,
@@ -23,6 +24,7 @@ import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shar
 import { createDeviceFlowFake } from "../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../edge/json-capture.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
+import { createCredentialProcessFake } from "../platform/credential-process-fake.ts";
 import { captureDebugLog } from "../platform/debug-log-capture.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
@@ -35,7 +37,10 @@ import type {
 } from "../../extensions/pi-claude-marketplace/domain/github-auth.ts";
 import type { GitAuthBundle } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { AuthAttemptResult } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
-import type { CredentialSpawn } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
+import type {
+  CredentialSpawn,
+  GitHubCliSpawn,
+} from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
 import type {
   ExtensionContext,
   NotificationContext,
@@ -66,6 +71,78 @@ describe("DEFAULT_CREDENTIAL_OPS", () => {
     assert.deepStrictEqual(Object.keys(productionOps), Object.keys(composed));
     assert.deepStrictEqual(Object.keys(productionOps), ["fill", "approve", "reject"]);
     assert.deepStrictEqual(launches, []);
+  });
+
+  test("authenticates github.com from gh auth token before Device Flow without approving into keychain", async () => {
+    // arrange
+    const gitProcesses = createCredentialProcessFake({
+      onInput: (process) => {
+        if (process.subcommand === "fill") {
+          process.close(1);
+          return;
+        }
+
+        throw new Error(`unexpected git credential ${process.subcommand}`);
+      },
+    });
+    const ghCalls: Array<readonly [string, readonly string[]]> = [];
+    const ghSpawn: GitHubCliSpawn = (command, args) => {
+      ghCalls.push([command, args]);
+      const stdoutListeners: Array<(chunk: Buffer) => void> = [];
+      const closeListeners: Array<(code: number | null) => void> = [];
+      queueMicrotask(() => {
+        for (const listener of stdoutListeners) {
+          listener(Buffer.from("gho_session_token\n"));
+        }
+
+        for (const listener of closeListeners) {
+          listener(0);
+        }
+      });
+      return {
+        stdout: {
+          on: (_event, listener) => {
+            stdoutListeners.push(listener);
+          },
+        },
+        kill: () => true,
+        on: (event, listener) => {
+          if (event === "close") {
+            closeListeners.push(listener as (code: number | null) => void);
+          }
+        },
+      };
+    };
+
+    const credentialOps = createCredentialOps({
+      spawn: gitProcesses.spawn,
+      timeoutMs: 5_000,
+      gitHubCliFallback: {
+        spawn: ghSpawn,
+        credentialFrom: GITHUB_PROVIDER.credentialFrom,
+      },
+    });
+    const ui = mock<NotificationContext["ui"]>({ exactParams: true, name: "UI" });
+    const deviceFlowHttp = mock<DeviceFlowHttp>({ exactParams: true, name: "device HTTP" });
+    const auth = buildGitHubAuth({
+      credentialOps,
+      ctx: { mode: "tui", ui },
+      run: runWithNothingLoaded(),
+      deviceFlowHttp,
+    });
+
+    // act
+    const credential = await buildAuthCallbacks(auth).onAuth("https://github.com/acme/tools.git");
+
+    // assert
+    assert.deepStrictEqual(credential, {
+      username: "x-access-token",
+      password: "gho_session_token",
+    });
+    assert.deepStrictEqual(ghCalls, [["gh", ["auth", "token", "--hostname", "github.com"]]]);
+    assert.strictEqual(gitProcesses.invocations().length, 1);
+    verify(deviceFlowHttp);
+    verify(ui);
   });
 });
 

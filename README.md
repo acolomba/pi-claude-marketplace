@@ -242,7 +242,7 @@ Add a marketplace from a GitHub repository `owner/repo` shorthand.
 ```
 
 > [!NOTE]
-> If Git is not already authenticated, a private repository will trigger Device Flow authentication.
+> For a private `github.com` repository, if Git has no stored credential, this extension tries your `gh` CLI login (`gh auth token --hostname github.com`) in memory before starting Device Flow authentication.
 
 Add the same marketplace from a GitHub URL.
 

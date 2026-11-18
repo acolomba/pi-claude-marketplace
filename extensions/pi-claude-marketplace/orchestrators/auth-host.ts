@@ -40,9 +40,13 @@
  * enforced by test/architecture/no-credential-leak.test.ts (PROV-05).
  */
 
-import { findProviderForHost } from "../domain/auth-registry.ts";
+import { GITHUB_PROVIDER, findProviderForHost } from "../domain/auth-registry.ts";
 import { initiateDeviceFlow } from "../domain/github-auth.ts";
-import { NODE_CREDENTIAL_SPAWN, createCredentialOps } from "../platform/git-credential.ts";
+import {
+  NODE_CREDENTIAL_SPAWN,
+  NODE_GITHUB_CLI_SPAWN,
+  createCredentialOps,
+} from "../platform/git-credential.ts";
 import { DeviceFlowUnavailableError } from "../shared/errors.ts";
 import { GITHUB_HOST, gitHubOverrideHost, gitHubWireUrl } from "../shared/github-base-url.ts";
 import { notifyDeviceFlowPrompt } from "../shared/notification-dispatch.ts";
@@ -78,6 +82,10 @@ const CREDENTIAL_TIMEOUT_MS = 5_000;
 export const DEFAULT_CREDENTIAL_OPS: CredentialOps = createCredentialOps({
   spawn: NODE_CREDENTIAL_SPAWN,
   timeoutMs: CREDENTIAL_TIMEOUT_MS,
+  gitHubCliFallback: {
+    spawn: NODE_GITHUB_CLI_SPAWN,
+    credentialFrom: GITHUB_PROVIDER.credentialFrom,
+  },
 });
 
 /**

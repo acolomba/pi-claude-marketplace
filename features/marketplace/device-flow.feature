@@ -252,3 +252,117 @@ Feature: Marketplace device flow
       | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
       | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
       | POST   | https://github.com/acme/tools.git/git-upload-pack                   | git host  |
+
+  Scenario: Adding a private GitHub marketplace uses the signed-in gh CLI token without Device Flow
+    Given the marketplace "tools" is published as a github source
+    Given the git host requires the user "x-access-token" with the password "gh-stand-in-token" for the marketplace "tools"
+    Given github's sign-in answers its polls with these outcomes:
+      | outcome               |
+      | authorization_pending |
+    Given the user's git keeps credentials in its credential store
+    Given the user's gh cli is signed in to github.com with the token "gh-stand-in-token"
+    Given pi runs with github's requests routed to the stand-ins
+    When the user runs "/claude:plugin marketplace add acme/tools --scope user"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope | status |
+      | tools | user  | added  |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+    Then github's sign-in receives no request
+    Then pi routes these github requests:
+      | method | url                                                                 | routed to |
+      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
+      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
+      | POST   | https://github.com/acme/tools.git/git-upload-pack                   | git host  |
+    Then the user's gh cli receives these calls:
+      | arguments                        | prompt disabled |
+      | auth token --hostname github.com | 1               |
+    Then the user's git credential store holds no credentials
+
+  Scenario: Installing a plugin from a private GitHub source uses the signed-in gh CLI token without Device Flow
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the git host requires the user "x-access-token" with the password "gh-stand-in-token" for the plugin "ghp"
+    Given github's sign-in answers its polls with these outcomes:
+      | outcome               |
+      | authorization_pending |
+    Given the user's git keeps credentials in its credential store
+    Given the user's gh cli is signed in to github.com with the token "gh-stand-in-token"
+    Given pi runs with github's requests routed to the stand-ins
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin install ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   |
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 401    |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+    Then github's sign-in receives no request
+    Then pi routes these github requests:
+      | method | url                                                               | routed to |
+      | GET    | https://github.com/acme/ghp.git/info/refs?service=git-upload-pack | git host  |
+      | GET    | https://github.com/acme/ghp.git/info/refs?service=git-upload-pack | git host  |
+      | POST   | https://github.com/acme/ghp.git/git-upload-pack                   | git host  |
+    Then the user's gh cli receives these calls:
+      | arguments                        | prompt disabled |
+      | auth token --hostname github.com | 1               |
+    Then the user's git credential store holds no credentials
+
+  Scenario: Adding a private GitHub marketplace falls back to Device Flow when the gh CLI is signed out
+    Given the marketplace "tools" is published as a github source
+    Given the git host requires the user "x-access-token" with the password "stand-in-access-token" for the marketplace "tools"
+    Given github's sign-in answers its polls with these outcomes:
+      | outcome               |
+      | authorization_pending |
+      | authorized            |
+    Given the user's git keeps credentials in its credential store
+    Given the user's gh cli is signed out
+    Given pi runs with github's requests routed to the stand-ins
+    When the user runs "/claude:plugin marketplace add acme/tools --scope user"
+    Then the command reports these results:
+      | kind               | severity | needs reload | verification uri                | user code |
+      | device-flow-prompt | info     | false        | https://github.com/login/device | WDJB-MJHT |
+      | cascade            | info     | false        |                                 |           |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status |
+      | tools            | user              | added              |
+    Then the user's gh cli receives these calls:
+      | arguments                        | prompt disabled |
+      | auth token --hostname github.com | 1               |
+    Then the user's git credential store holds these credentials:
+      | protocol | host       | user           | password              |
+      | https    | github.com | x-access-token | stand-in-access-token |
+
+  Scenario: Adding a GitHub marketplace under the GitHub base address does not call the gh CLI
+    Given the marketplace "tools" is published as a github source
+    Given the git host requires the user "x-access-token" with the password "gh-stand-in-token" for the marketplace "tools"
+    Given the user's gh cli is signed in to github.com with the token "gh-stand-in-token"
+    Given pi runs with the user's gh cli
+    When the user runs "/claude:plugin marketplace add acme/tools --scope user"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id         | name       | status | reasons                 | scope | leaks | rollback partial | cause chain                                                            | cause truncated |
+      | acme/tools       | user              | failed             | acme/tools | acme/tools | failed | authentication required | user  |       |                  | The operation was canceled., fetched https://{git host}/acme/tools.git | false           |
+    Then the user's gh cli receives no call

@@ -39,7 +39,7 @@ export interface GitAuthProvider {
   /** Requested OAuth scope. */
   readonly scope: string;
   /** Pure mapping from an access token to the git credential shape. */
-  credentialFrom(accessToken: string): GitCredentials;
+  readonly credentialFrom: (accessToken: string) => GitCredentials;
 }
 
 /**
