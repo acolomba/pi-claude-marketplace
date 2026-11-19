@@ -16,9 +16,8 @@
 import assert from "node:assert/strict";
 import path from "node:path";
 
-import { promptDisposition } from "../../test/e2e/_rpc.ts";
-
 import { DIALOG_METHODS } from "./pi-process.ts";
+import { promptDisposition } from "./pi-rpc.ts";
 import { writePublishedPluginFile } from "./published-marketplace.ts";
 import { modelCallsOf } from "./scripted-model/script.ts";
 import { readLogLengths, readLogLinesSince } from "./turn-records.ts";

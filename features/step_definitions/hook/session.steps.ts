@@ -51,10 +51,10 @@ import path from "node:path";
 
 import { Given, When } from "@cucumber/cucumber";
 
-import { promptDisposition } from "../../../test/e2e/_rpc.ts";
 import { readHookScriptPids } from "../../lib/hook-files.ts";
 import { HOOK_RUNS_LOG, waitForHookLifecycle } from "../../lib/hook-recorder.ts";
 import { startSession } from "../../lib/pi-commands.ts";
+import { promptDisposition } from "../../lib/pi-rpc.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
 import { latestSessionFile, sessionsFolder } from "../../lib/saved-sessions.ts";
 import { modelCallsOf, readModelCalls } from "../../lib/scripted-model/script.ts";

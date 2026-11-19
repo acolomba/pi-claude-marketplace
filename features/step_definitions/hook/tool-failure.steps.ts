@@ -25,9 +25,9 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import { Given, When } from "@cucumber/cucumber";
 
-import { promptDisposition } from "../../../test/e2e/_rpc.ts";
 import { MCP_STUB_SERVER } from "../../lib/mcp-stub-server.ts";
 import { DIALOG_METHODS } from "../../lib/pi-process.ts";
+import { promptDisposition } from "../../lib/pi-rpc.ts";
 import { writePublishedPluginFiles } from "../../lib/published-marketplace.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
 import { modelCallsOf } from "../../lib/scripted-model/script.ts";

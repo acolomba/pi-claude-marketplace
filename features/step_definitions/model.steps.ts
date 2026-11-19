@@ -14,8 +14,8 @@ import path from "node:path";
 
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
-import { listedCommands } from "../../test/e2e/_rpc.ts";
 import { isInPeerCache } from "../lib/companions.ts";
+import { listedCommands } from "../lib/pi-rpc.ts";
 import { expandTokens, projectTokens } from "../lib/run-tokens.ts";
 import {
   callMessageRows,

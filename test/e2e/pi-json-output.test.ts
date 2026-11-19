@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { Compile } from "typebox/compile";
 
 import { NOTIFICATION_PAYLOAD_SCHEMA } from "../../extensions/pi-claude-marketplace/shared/notification-wire.ts";
-import { resolvePiRuntime, type PiRuntime } from "../pi-runtime.ts";
+import { resolvePiRuntime, type PiRuntime } from "../../features/lib/pi-runtime.ts";
 
 import { runJsonOutputRuntime } from "./json-output-runtime.ts";
 

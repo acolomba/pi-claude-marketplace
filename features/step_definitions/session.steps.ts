@@ -25,10 +25,10 @@ import assert from "node:assert/strict";
 
 import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
-import { promptDisposition } from "../../test/e2e/_rpc.ts";
 import { sendMessage, startSession } from "../lib/pi-commands.ts";
 import { DIALOG_METHODS } from "../lib/pi-process.ts";
 import { readRegistrySnapshot, REGISTRY_PROBE_COMMAND } from "../lib/pi-registry-probe/snapshot.ts";
+import { promptDisposition } from "../lib/pi-rpc.ts";
 import { resultsTable } from "../lib/result-rows.ts";
 import { expandTokens, projectTokens } from "../lib/run-tokens.ts";
 import { modelCallsOf } from "../lib/scripted-model/script.ts";

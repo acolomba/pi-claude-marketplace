@@ -17,8 +17,8 @@ import path from "node:path";
 
 import { type DataTable, Given } from "@cucumber/cucumber";
 
-import { listedCommands } from "../../test/e2e/_rpc.ts";
 import { isInPeerCache, parseCompanionName, resolveCompanion } from "../lib/companions.ts";
+import { listedCommands } from "../lib/pi-rpc.ts";
 import { PROFILE_PI_START_TIMEOUT_MS } from "../support/world.ts";
 
 import type { ScenarioWorld } from "../support/world.ts";

@@ -5,7 +5,7 @@
 // graph is its intended shape, not a defect.
 // fallow-ignore-file unused-file -- standalone operator-run UAT driver: an engineer invokes it from the command line and no module ever imports it, so being unreachable from the import graph is its intended shape, not a defect.
 //
-// This driver imports `../pi-runtime.ts` on purpose, because every Pi launch
+// This driver imports `../../features/lib/pi-runtime.ts` on purpose, because every Pi launch
 // in the repository resolves the CLI through that one module. It imports
 // nothing from a `test/live-uat/` sibling, so it stays runnable on its own as
 // `node test/live-uat/<file>.mjs`, and one bad edit cannot fail two canaries.
@@ -62,7 +62,7 @@ import { fileURLToPath } from "node:url";
 import claudeMarketplaceExtension from "../../extensions/pi-claude-marketplace/index.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { resolvePiRuntime } from "../pi-runtime.ts";
+import { resolvePiRuntime } from "../../features/lib/pi-runtime.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(HERE, "../..");

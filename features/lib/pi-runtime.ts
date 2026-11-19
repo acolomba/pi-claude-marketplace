@@ -1,6 +1,6 @@
 // The single module that finds the Pi CLI this repository runs. Every
 // caller that launches Pi -- the e2e runtime-smoke helper
-// (test/e2e/_helpers.ts), the live-UAT canaries
+// (test/e2e/pi-runtime-smoke.ts), the live-UAT canaries
 // (test/live-uat/manifest-absence-canary.mjs, test/live-uat/mcp-adapter-canary.mjs)
 // and scripts/pi.sh -- resolves through `resolvePiRuntime` and then runs
 // `process.execPath` (or `node`) with the returned `cliPath` as its first

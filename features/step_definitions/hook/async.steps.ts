@@ -23,13 +23,13 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import { Given, Then, When } from "@cucumber/cucumber";
 
-import { promptDisposition } from "../../../test/e2e/_rpc.ts";
 import {
   HOOK_LIFECYCLE_LOG,
   HOOK_RUNS_LOG,
   waitForHookLifecycle,
 } from "../../lib/hook-recorder.ts";
 import { claudePluginPayloads } from "../../lib/pi-commands.ts";
+import { promptDisposition } from "../../lib/pi-rpc.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
 import { modelCallsOf } from "../../lib/scripted-model/script.ts";
 import { isRunning, readLogLengths, readLogLinesSince } from "../../lib/turn-records.ts";
