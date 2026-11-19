@@ -23,11 +23,11 @@ import { listedCommands, promptDisposition } from "../../features/lib/pi-rpc.ts"
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { builtinMcpCommand, builtinMcpTool } from "../platform/pi-inventory-seed.ts";
 
-import { runRpcSession } from "./_rpc-session.ts";
+import { runRpcSession } from "./rpc-session.ts";
 
 import type { ListedCommand } from "../../features/lib/pi-rpc.ts";
 import type { HermeticEnvironment } from "../platform/hermetic-environment.ts";
-import type { RpcSessionResult } from "./_rpc-session.ts";
+import type { RpcSessionResult } from "./rpc-session.ts";
 import type { Static } from "typebox";
 
 /** The name and `sourceInfo.path` of one listed command. */

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { classifyNightlyFailure } from "./_helpers.ts";
+import { classifyNightlyFailure } from "./nightly-classification.ts";
 
 test("nightly classifier treats failing non-empty snapshot diff as upstream change", () => {
   assert.equal(
