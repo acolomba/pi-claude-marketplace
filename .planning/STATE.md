@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: parity-gaps
 status: Awaiting next milestone
 stopped_at: Milestone parity-gaps completed and archived (override_closeout)
-last_updated: "2026-11-19T03:44:58.828Z"
-last_activity: 2026-11-17
-last_activity_desc: "parity-gaps shipped as PR #324"
-state_head: 6e8eeb56b9c8504ddcab4ac0796df259d1d4897f
+last_updated: "2026-11-19T05:09:52.150Z"
+last_activity: 2026-11-19
+last_activity_desc: "Completed quick task 261119-59e: --map-model alias table to Claude Code 2.1.328, Pi floor 1.5.1"
+state_head: aaf280507fbb305d94acdef22d27040db229a2ae
 milestone_name: Claude Code Parity Gaps and Defects
 current_phase: null
 current_phase_name: null
@@ -34,7 +34,7 @@ component as a working Pi artifact.
 Phase: Milestone parity-gaps complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-11-17 -- parity-gaps shipped as PR #324
+Last activity: 2026-11-19 -- Completed quick task 261119-59e: --map-model alias table to Claude Code 2.1.328, Pi floor 1.5.1
 
 ### parity-gaps closeout: `override_closeout`
 
@@ -472,6 +472,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261116-kw7 | Keep both workflow names that the plugin prefix elision would merge (maintainer decision D-PG8-18) | 2026-11-16 | 3488bf29 | complete | [261116-kw7-keep-both-workflow-names-the-prefix-elis](./quick/261116-kw7-keep-both-workflow-names-the-prefix-elis/) |
 | 261116-p4s | End the UserPromptSubmit block notice with the original prompt (maintainer decision, HOOKORIGPROMPT-01) | 2026-11-16 | 8c64be00 | complete | [261116-p4s-end-the-prompt-block-notice-with-the-orig](./quick/261116-p4s-end-the-prompt-block-notice-with-the-orig/) |
 | 261119-fst | Drop accidental GSD agent model overrides from .planning/config.json (back to quality profile) | 2026-11-19 | 6e8eeb56 | complete | — |
+| 261119-59e | Bring the --map-model alias table to Claude Code 2.1.328 and raise the Pi floor to 1.5.1 (maintainer decision D-PG1-15, closes AGENT-06) | 2026-11-19 | e76a60e | complete | [261119-59e-bring-the-map-model-alias-table-to-claud](./quick/261119-59e-bring-the-map-model-alias-table-to-claud/) |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
