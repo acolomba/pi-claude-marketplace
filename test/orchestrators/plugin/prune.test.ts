@@ -21,8 +21,8 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { withLockedStateTransaction } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
-import { makeCtx } from "../../e2e/_helpers.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { makeCtx } from "../../platform/mock-pi.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { PruneRestoreOps } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/prune-rollback.ts";

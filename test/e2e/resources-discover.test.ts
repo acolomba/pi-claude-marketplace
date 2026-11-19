@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import claudeMarketplaceExtension from "../../extensions/pi-claude-marketplace/index.ts";
 
-import { installTargetWithMockPi, withE2EEnvironment } from "./_helpers.ts";
+import { installTargetWithMockPi, withE2EEnvironment } from "./upstream-marketplace.ts";
 
 test("resources_discover covers /reload by returning staged skill and prompt resources", async () => {
   await withE2EEnvironment(async (env) => {
