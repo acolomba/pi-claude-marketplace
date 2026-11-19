@@ -30,9 +30,9 @@ import { createInterface } from "node:readline";
 
 import { hasTrustRequiringProjectResources } from "@earendil-works/pi-coding-agent";
 
-import { killProcessGroup, startRpcPi } from "../../test/e2e/_rpc.ts";
+import { killProcessGroup, startRpcPi } from "./pi-rpc.ts";
 
-import type { RpcGitEnvironment, RpcProfile, RpcSandbox } from "../../test/e2e/_rpc.ts";
+import type { RpcGitEnvironment, RpcProfile, RpcSandbox } from "./pi-rpc.ts";
 
 export type { RpcGitEnvironment, RpcProfile, RpcSandbox };
 

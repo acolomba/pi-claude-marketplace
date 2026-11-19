@@ -44,7 +44,6 @@ import {
   World,
 } from "@cucumber/cucumber";
 
-import { listedCommands } from "../../test/e2e/_rpc.ts";
 import { inLoadOrder, resolveCompanion } from "../lib/companions.ts";
 import { GITHUB_REDIRECT_EXTENSION } from "../lib/github-device-flow/extension.ts";
 import { openHookGate, stopHookScripts } from "../lib/hook-files.ts";
@@ -62,6 +61,7 @@ import { npmConfigText, NpmRegistry } from "../lib/npm-registry.ts";
 import { readSession } from "../lib/pi-commands.ts";
 import { PiProcess } from "../lib/pi-process.ts";
 import { REGISTRY_PROBE_EXTENSION } from "../lib/pi-registry-probe/snapshot.ts";
+import { listedCommands } from "../lib/pi-rpc.ts";
 import { PiTuiSession } from "../lib/pi-tui.ts";
 import { rowArrays } from "../lib/result-rows.ts";
 import { latestSessionFile, sessionsFolder } from "../lib/saved-sessions.ts";
@@ -71,7 +71,6 @@ import { assertStandInsStopped, harnessDirectory } from "../lib/turn-records.ts"
 
 import { currentRun } from "./pi-process.ts";
 
-import type { PiSessionLaunch, RpcProfileEnvironment } from "../../test/e2e/_rpc.ts";
 import type { CompanionName } from "../lib/companions.ts";
 import type { GitPluginRepository } from "../lib/git-plugin.ts";
 import type { HookGate } from "../lib/hook-files.ts";
@@ -81,6 +80,7 @@ import type { NpmRegistryRequest } from "../lib/npm-registry.ts";
 import type { NotificationPayload, OfferedSkill, SessionReport } from "../lib/pi-commands.ts";
 import type { RpcGitEnvironment, RpcRecord, RpcRequest, RpcSandbox } from "../lib/pi-process.ts";
 import type { RegistrySnapshot } from "../lib/pi-registry-probe/snapshot.ts";
+import type { PiSessionLaunch, RpcProfileEnvironment } from "../lib/pi-rpc.ts";
 import type { PiTuiOptions } from "../lib/pi-tui.ts";
 import type { PluginCompletion } from "../lib/plugin-completions.ts";
 import type { PublicationSites, PublishedMarketplace } from "../lib/published-marketplace.ts";

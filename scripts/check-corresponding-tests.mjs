@@ -158,7 +158,6 @@ function checkCorrespondingTests(projectRoot = defaultProjectRoot) {
     }
   }
 
-  // fallow-ignore-next-line code-duplication -- reviewed: scripts/check-corresponding-tests.mjs comes from the TypeScript blueprint, so a helper shared with it would conflict on every blueprint sync; each gate script keeps its own CLI prologue
   for (const testPath of testPaths.filter(isCorrespondingTestCandidate)) {
     if (isStructuralSupplement(projectRoot, testPath)) {
       continue;
@@ -174,6 +173,7 @@ function checkCorrespondingTests(projectRoot = defaultProjectRoot) {
   return violations;
 }
 
+// fallow-ignore-next-line code-duplication -- reviewed: scripts/check-corresponding-tests.mjs comes from the TypeScript blueprint, so a helper shared with it would conflict on every blueprint sync; each gate script keeps its own CLI prologue
 function parseProjectRoot(args) {
   if (args.length === 0) {
     return defaultProjectRoot;
@@ -199,7 +199,6 @@ function main() {
   }
 
   for (const violation of violations) {
-    // fallow-ignore-next-line code-duplication -- reviewed: scripts/check-corresponding-tests.mjs comes from the TypeScript blueprint, so a helper shared with it would conflict on every blueprint sync; each gate script keeps its own CLI prologue
     process.stderr.write(`${violation.kind}: ${violation.path}\n`);
   }
 
@@ -207,6 +206,7 @@ function main() {
   process.exitCode = 1;
 }
 
+// fallow-ignore-next-line code-duplication -- reviewed: scripts/check-corresponding-tests.mjs comes from the TypeScript blueprint, so a helper shared with it would conflict on every blueprint sync; each gate script keeps its own CLI prologue
 const invokedPath = process.argv[1] === undefined ? undefined : path.resolve(process.argv[1]);
 
 if (invokedPath === fileURLToPath(import.meta.url)) {

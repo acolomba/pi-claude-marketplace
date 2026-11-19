@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import type { PiRuntime } from "../pi-runtime.ts";
+import type { PiRuntime } from "../../features/lib/pi-runtime.ts";
 
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const MAX_BYTES = 1024 * 1024;
