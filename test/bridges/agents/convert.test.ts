@@ -607,19 +607,19 @@ Review files.
     },
     {
       sourceModel: "fable",
-      expectedModelLine: "model: claude-fable-5-1",
+      expectedModelLine: "model: claude-fable-5-2",
       expectedOriginalModel: "fable",
       expectedWarnings: [],
     },
     {
       sourceModel: "fable[1m]",
-      expectedModelLine: "model: claude-fable-5-1",
+      expectedModelLine: "model: claude-fable-5-2",
       expectedOriginalModel: "fable[1m]",
       expectedWarnings: [],
     },
     {
       sourceModel: "best",
-      expectedModelLine: "model: claude-fable-5-1",
+      expectedModelLine: "model: claude-opus-5-5",
       expectedOriginalModel: "best",
       expectedWarnings: [],
     },

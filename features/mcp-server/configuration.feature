@@ -597,7 +597,7 @@ Feature: MCP server configuration
     When the user prompts "call the stub"
     Then the stub mcp server "root" of the plugin "{home}/marketplaces/fixtures/plugins/demo" receives these messages:
       | kind         | method                    | params                                                                                                    |
-      | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"roots":{}},"clientInfo":{"name":"pi","version":"1.5.0"}} |
+      | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"roots":{}},"clientInfo":{"name":"pi","version":"1.5.1"}} |
       | notification | notifications/initialized |                                                                                                           |
       | request      | tools/list                |                                                                                                           |
       | request      | tools/call                | {"name":"echo","arguments":{"text":"ping"},"_meta":{"progressToken":3}}                                   |

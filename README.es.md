@@ -35,7 +35,7 @@ El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como
 
 ## Requisitos previos
 
-- [Pi Coding Agent](https://pi.dev) 1.5.0 o posterior
+- [Pi Coding Agent](https://pi.dev) 1.5.1 o posterior
 - [pi-subagents](https://pi.dev/packages/pi-subagents) 0.87.0 o posterior (opcional pero recomendado, `pi install npm:pi-subagents`)
   - Las herramientas MCP directas del entorno en agentes en segundo plano sin restricciones o solo con exclusiones requieren pi-subagents 0.88.1 o posterior.
 - [pi-mcp-adapter](https://pi.dev/packages/pi-mcp-adapter) 7.0.1 o una versión 7.x posterior (opcional, `pi install npm:pi-mcp-adapter`). Admite más funciones de MCP que el MCP integrado de Pi.
@@ -376,7 +376,7 @@ Actualiza un complemento instalado, todos los complementos instalados de un merc
 ```
 
 > [!NOTE]
-> Las definiciones de agente en los complementos pueden nombrar un modelo preferido para el agente, por ejemplo, "sonnet" u "opus". Esta extensión descarta estos modelos de forma predeterminada. Para mapearlos a modelos de Pi en la medida de lo posible, usa la opción `--map-model` con `install` y `update`. Mapea `sonnet`, `opus`, `haiku`, `fable`, `best` y `opusplan`, con o sin `[1m]`, a los modelos actuales de Claude, por ejemplo `claude-sonnet-5-5`. Conserva los ID de modelo completos que empiezan por `claude-`. Un agente con `model: inherit` siempre recibe `model: ""`, con o sin `--map-model`. Así se ejecuta con el modelo de la sesión, también en un paso de un flujo de trabajo. Una entrada `Agent` o `Task` en `tools` permite que un agente inicie cualquier subagente, aunque la entrada nombre tipos de agente, como en `Agent(helper)`. Para más información, consulta [Personalizar los agentes generados](docs/mcp-compatibility.md#customizing-generated-agents).
+> Las definiciones de agente en los complementos pueden nombrar un modelo preferido para el agente, por ejemplo, "sonnet" u "opus". Esta extensión descarta estos modelos de forma predeterminada. Para mapearlos a modelos de Pi en la medida de lo posible, usa la opción `--map-model` con `install` y `update`. Mapea `sonnet`, `opus`, `haiku`, `fable`, `best` y `opusplan`, con o sin `[1m]`, a los modelos que Claude Code 2.1.328 elige en la API de Anthropic, por ejemplo `claude-sonnet-5-5`. Conserva los ID de modelo completos que empiezan por `claude-`. Un agente con `model: inherit` siempre recibe `model: ""`, con o sin `--map-model`. Así se ejecuta con el modelo de la sesión, también en un paso de un flujo de trabajo. Una entrada `Agent` o `Task` en `tools` permite que un agente inicie cualquier subagente, aunque la entrada nombre tipos de agente, como en `Agent(helper)`. Para más información, consulta [Personalizar los agentes generados](docs/mcp-compatibility.md#customizing-generated-agents).
 
 Reinstala un complemento instalado, todos los complementos instalados de un mercado, o todos los complementos instalados.
 

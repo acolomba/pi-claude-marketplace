@@ -54,20 +54,22 @@ const SUPPORTED_SOURCE_FIELDS = new Set([
 ]);
 
 /**
- * AG-7 / D-CF4-07 as amended: Claude Code's model aliases, keyed lower-case,
- * mapped to the first-party models of Claude Code's model catalog.
- * `opusplan` runs a subagent on sonnet, because its plan-mode upgrade to opus
- * applies only to a session that inherits it; `best` selects fable. D-PG1-04:
- * pi-subagents 0.87.0+ keeps a provider-qualified ID on that provider, while
- * a bare ID resolves in the session registry with its provider preferred.
+ * AG-7 / D-CF4-07 as amended by D-PG1-15: Claude Code 2.1.328's model aliases,
+ * keyed lower-case, mapped to the first-party models they select. `best`
+ * selects opus, as upstream's `best:"opus"` does. `claude-fable-5-2` needs
+ * Pi 1.5.1, the peer floor. `opusplan` runs a subagent on sonnet, because its
+ * plan-mode upgrade to opus applies only to a session that inherits it.
+ * D-PG1-04: pi-subagents 0.87.0+ keeps a provider-qualified ID on that
+ * provider, while a bare ID resolves in the session registry with its provider
+ * preferred.
  */
 const MODEL_MAP: ReadonlyMap<string, string> = new Map([
   ["sonnet", "claude-sonnet-5-5"],
   ["opusplan", "claude-sonnet-5-5"],
   ["opus", "claude-opus-5-5"],
   ["haiku", "claude-haiku-5-5"],
-  ["fable", "claude-fable-5-1"],
-  ["best", "claude-fable-5-1"],
+  ["fable", "claude-fable-5-2"],
+  ["best", "claude-opus-5-5"],
 ]);
 
 /** The suffix of Claude Code's one-million-token context aliases. */
