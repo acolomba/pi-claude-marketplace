@@ -40,12 +40,11 @@ import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 
-import { promptDisposition } from "../../test/e2e/_rpc.ts";
-
 import { closeHookGate, openHookGate, readHookScriptPids } from "./hook-files.ts";
 import { HOOK_LIFECYCLE_LOG, waitForHookLifecycle } from "./hook-recorder.ts";
 import { startSession } from "./pi-commands.ts";
 import { DIALOG_METHODS, PiProcess } from "./pi-process.ts";
+import { promptDisposition } from "./pi-rpc.ts";
 import { harnessDirectory, isRunning, readLogLengths, readLogLinesSince } from "./turn-records.ts";
 
 import type { HookGate } from "./hook-files.ts";

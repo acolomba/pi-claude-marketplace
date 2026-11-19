@@ -39,7 +39,6 @@ import path from "node:path";
 
 import { AfterAll, Before, BeforeAll, context } from "@cucumber/cucumber";
 
-import { listedCommands } from "../../test/e2e/_rpc.ts";
 import { resolveCompanion } from "../lib/companions.ts";
 import { HttpsGitHost } from "../lib/https-git-host/server.ts";
 import {
@@ -51,6 +50,7 @@ import {
 } from "../lib/mcp-implementation.ts";
 import { runCommand, startSession } from "../lib/pi-commands.ts";
 import { PiProcess } from "../lib/pi-process.ts";
+import { listedCommands } from "../lib/pi-rpc.ts";
 import { harnessDirectory } from "../lib/turn-records.ts";
 
 import type { McpImplementation, McpProfile } from "../lib/mcp-implementation.ts";

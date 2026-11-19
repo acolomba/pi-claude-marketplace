@@ -15,17 +15,11 @@ import { fileURLToPath } from "node:url";
 import { Type } from "typebox";
 import { Compile } from "typebox/compile";
 
-import {
-  killProcessGroup,
-  piArguments,
-  resolveRpcSandbox,
-  rpcChildEnvironment,
-} from "../../test/e2e/_rpc.ts";
-
 import { claudePluginPayloads } from "./pi-commands.ts";
+import { killProcessGroup, piArguments, resolveRpcSandbox, rpcChildEnvironment } from "./pi-rpc.ts";
 
-import type { RpcGitEnvironment, RpcProfileEnvironment, RpcSandbox } from "../../test/e2e/_rpc.ts";
 import type { NotificationPayload } from "./pi-commands.ts";
+import type { RpcGitEnvironment, RpcProfileEnvironment, RpcSandbox } from "./pi-rpc.ts";
 
 /** What the one-shot Pi starts with: the run's sandbox, git environment, and `TMPDIR`. */
 export interface JsonModeLaunch {

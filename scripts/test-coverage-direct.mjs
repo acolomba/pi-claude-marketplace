@@ -11,7 +11,7 @@ import ts from "typescript";
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const reporterPath = fileURLToPath(new URL("./test-reporter.mjs", import.meta.url));
 // Absolute, so a child that a case forks with another cwd still resolves it.
-const isolatedPiHomeUrl = new URL("../test/platform/isolated-pi-home.ts", import.meta.url).href;
+const isolatedPiHomeUrl = new URL("./isolated-pi-home.mjs", import.meta.url).href;
 const productionRoot = "extensions/pi-claude-marketplace";
 const testRoot = "test";
 

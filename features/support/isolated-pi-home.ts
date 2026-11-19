@@ -11,7 +11,7 @@
  * time, so the change never reaches another scenario.
  *
  * The worker's HOME stays in `PI_CM_TEST_HOME`, the variable that
- * `test/platform/isolated-pi-home.ts` sets for a test run, so this module
+ * `scripts/isolated-pi-home.mjs` sets for a test run, so this module
  * keeps no state of its own. `AfterAll()` removes the root it names.
  */
 

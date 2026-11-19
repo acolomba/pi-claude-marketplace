@@ -14,9 +14,13 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import { hermeticGitEnvironment } from "../../features/lib/hermetic-git.ts";
-import { rpcChildEnvironment } from "../e2e/_rpc.ts";
+import { rpcChildEnvironment } from "../../features/lib/pi-rpc.ts";
 
-import type { RpcGitEnvironment, RpcProfileEnvironment, RpcSandbox } from "../e2e/_rpc.ts";
+import type {
+  RpcGitEnvironment,
+  RpcProfileEnvironment,
+  RpcSandbox,
+} from "../../features/lib/pi-rpc.ts";
 import type { TestContext } from "node:test";
 
 const INHERITED_VARIABLES = {

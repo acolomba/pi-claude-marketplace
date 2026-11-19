@@ -70,8 +70,6 @@ import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 
-import { rpcChildEnvironment } from "../../test/e2e/_rpc.ts";
-
 import { resolveCompanion } from "./companions.ts";
 import { parseRecordingHooks, publishRecordingHooks } from "./hook-files.ts";
 import { HOOK_RUNS_LOG } from "./hook-recorder.ts";
@@ -80,6 +78,7 @@ import { publishStubMcpServer } from "./mcp-server-files.ts";
 import { writeMarketplace } from "./path-marketplace.ts";
 import { runCommandPayloads, startSession } from "./pi-commands.ts";
 import { PiProcess } from "./pi-process.ts";
+import { rpcChildEnvironment } from "./pi-rpc.ts";
 import { within } from "./subagent-hook-session.ts";
 import { harnessDirectory, isRunning } from "./turn-records.ts";
 

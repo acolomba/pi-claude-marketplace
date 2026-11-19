@@ -19,13 +19,15 @@ import { fileURLToPath } from "node:url";
 import { Compile } from "typebox/compile";
 
 import { NOTIFICATION_PAYLOAD_SCHEMA } from "../../extensions/pi-claude-marketplace/shared/notification-wire.ts";
+import { listedCommands, promptDisposition } from "../../features/lib/pi-rpc.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { builtinMcpCommand, builtinMcpTool } from "../platform/pi-inventory-seed.ts";
 
-import { listedCommands, promptDisposition, runRpcSession } from "./_rpc.ts";
+import { runRpcSession } from "./_rpc-session.ts";
 
+import type { ListedCommand } from "../../features/lib/pi-rpc.ts";
 import type { HermeticEnvironment } from "../platform/hermetic-environment.ts";
-import type { ListedCommand, RpcSessionResult } from "./_rpc.ts";
+import type { RpcSessionResult } from "./_rpc-session.ts";
 import type { Static } from "typebox";
 
 /** The name and `sourceInfo.path` of one listed command. */

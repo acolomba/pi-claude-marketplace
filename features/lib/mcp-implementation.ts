@@ -45,10 +45,10 @@ import { listedTools, readStubRequests, stubPidFiles } from "./mcp-stub-server.t
 import { readRegistrySnapshot, REGISTRY_PROBE_COMMAND } from "./pi-registry-probe/snapshot.ts";
 import { isRunning } from "./turn-records.ts";
 
-import type { ListedCommand } from "../../test/e2e/_rpc.ts";
 import type { CompanionName } from "./companions.ts";
 import type { PiProcess } from "./pi-process.ts";
 import type { RegistrySnapshot } from "./pi-registry-probe/snapshot.ts";
+import type { ListedCommand } from "./pi-rpc.ts";
 
 /** A cucumber profile, which names the MCP implementation its shared Pi runs (DUAL-01). */
 export type McpProfile = "adapter" | "builtin";

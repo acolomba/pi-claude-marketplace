@@ -3,7 +3,7 @@
  * Pi home, so no test reads or writes the developer's `~/.pi`.
  *
  * Every npm script that runs `node --test`, and the spawn of the direct
- * coverage script, must load `test/platform/isolated-pi-home.ts` with
+ * coverage script, must load `scripts/isolated-pi-home.mjs` with
  * `--import`. Every cucumber profile must load
  * `features/support/isolated-pi-home.ts`. This test runs under such a script
  * itself, so its last case checks that the import took effect.
@@ -19,7 +19,7 @@ import test from "node:test";
 import { PACKAGE_JSON_REL } from "./gate-targets.ts";
 import { REPO_ROOT } from "./source-scan.ts";
 
-const ISOLATED_PI_HOME_REL = "test/platform/isolated-pi-home.ts";
+const ISOLATED_PI_HOME_REL = "scripts/isolated-pi-home.mjs";
 const CUCUMBER_ISOLATED_PI_HOME_REL = "features/support/isolated-pi-home.ts";
 const COVERAGE_SCRIPT_REL = "scripts/test-coverage-direct.mjs";
 const CUCUMBER_CONFIG_REL = "cucumber.json";
@@ -85,7 +85,7 @@ test("the direct coverage spawn imports the isolation module", async () => {
 
   // act
   const definesUrl = script.includes(
-    `const isolatedPiHomeUrl = new URL("../${ISOLATED_PI_HOME_REL}", import.meta.url).href;`,
+    `const isolatedPiHomeUrl = new URL("./${path.basename(ISOLATED_PI_HOME_REL)}", import.meta.url).href;`,
   );
   const testSpawns = script.match(/"--test",/g) ?? [];
   const isolatedSpawns = script.match(/"--import",\s*isolatedPiHomeUrl,\s*"--test",/g) ?? [];

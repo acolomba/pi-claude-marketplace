@@ -20,7 +20,7 @@ pi-claude-marketplace/
 │   ├── persistence/                    # atomic state.json / config.json / agents-index.json I/O
 │   ├── platform/                       # Pi API + git wrappers
 │   └── shared/                         # leaf utilities: notify, errors, path-safety, atomic-json
-├── test/                              # 343 *.test.ts files, mirrors extensions/ layout, plus pi-runtime.ts support and index.test.ts
+├── test/                              # 343 *.test.ts files, mirrors extensions/ layout and index.test.ts
 │   ├── architecture/                   # 49 tests — source-scan gates, catalog-uat/
 │   ├── bridges/                        # 69 tests + _fixtures/ (fixture plugin trees, no .test.ts inside)
 │   ├── domain/                         # 35 tests
@@ -41,7 +41,7 @@ pi-claude-marketplace/
 │   ├── research/
 │   ├── plans/
 │   └── competitive-analysis/
-├── scripts/                            # pi.sh launcher, run-parallel.mjs, test-coverage-direct.mjs, check-corresponding-tests.mjs, check-workflow-install-scripts.mjs, init*.sh, codegraph hooks
+├── scripts/                            # pi.sh launcher, run-parallel.mjs, test-coverage-direct.mjs, isolated-pi-home.mjs (the test-run Pi home), check-corresponding-tests.mjs, check-workflow-install-scripts.mjs, init*.sh, codegraph hooks
 ├── .planning/                          # GSD planning artifacts (codebase docs, milestones, seeds)
 ├── .fallowrc.json                      # fallow zone/boundary/health config
 ├── rule-packs/architecture.json        # fallow rule pack: call and import bans for the extension

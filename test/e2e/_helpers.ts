@@ -9,7 +9,7 @@ import { createEventBus } from "@earendil-works/pi-coding-agent";
 import claudeMarketplaceExtension from "../../extensions/pi-claude-marketplace/index.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { resolvePiRuntime } from "../pi-runtime.ts";
+import { resolvePiRuntime } from "../../features/lib/pi-runtime.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import { PINNED_SHA } from "./_pinned-sha.ts";

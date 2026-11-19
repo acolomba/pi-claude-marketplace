@@ -18,8 +18,8 @@ import { readFile } from "node:fs/promises";
 
 import { Given, Then, When } from "@cucumber/cucumber";
 
-import { promptDisposition } from "../../../test/e2e/_rpc.ts";
 import { DIALOG_METHODS } from "../../lib/pi-process.ts";
+import { promptDisposition } from "../../lib/pi-rpc.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
 import { modelCallsOf } from "../../lib/scripted-model/script.ts";
 import { readLogLengths, readLogLinesSince } from "../../lib/turn-records.ts";

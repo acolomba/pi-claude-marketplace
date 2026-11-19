@@ -47,7 +47,6 @@ import { fileURLToPath } from "node:url";
 
 import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
-import { promptDisposition } from "../../../test/e2e/_rpc.ts";
 import { inLoadOrder, resolveCompanion } from "../../lib/companions.ts";
 import { HOOK_RUNS_LOG } from "../../lib/hook-recorder.ts";
 import { mcpImplementationLaunch } from "../../lib/mcp-implementation.ts";
@@ -57,6 +56,7 @@ import {
   writeLaunchEnvironment,
 } from "../../lib/pi-launch-environment.ts";
 import { DIALOG_METHODS } from "../../lib/pi-process.ts";
+import { promptDisposition } from "../../lib/pi-rpc.ts";
 import {
   FIXTURE_TIMEOUT_MS,
   parseConcurrentLaunches,
