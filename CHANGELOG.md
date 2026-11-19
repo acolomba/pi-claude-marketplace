@@ -56,6 +56,8 @@
   - A plugin command or skill that you type now attaches the files that its body names with an `@` path. A path inside code is attached, as in Claude Code; a path in the typed arguments or in the output of a `!` command is not.
   - A new page, [Skill and command compatibility](docs/skills-commands-compatibility.md), compares skills and commands with Claude Code. Each row of its status table names the scenario that proves it.
 
+- Internal: the fallow audit in CI passes again with fallow 3.44.0. (#329)
+
 - Internal: the async hook behavioral tests no longer fail at random. (#323)
 
 - More plugin hook events now behave as in Claude Code, and the model-facing tools return what the model asks for. (#310)
