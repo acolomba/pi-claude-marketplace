@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- `--map-model` now maps `fable` to `claude-fable-5-2` and `best` to `claude-opus-5-5`, as Claude Code 2.1.328 does. This extension now needs Pi 1.5.1 or later, and an installed agent keeps its old model until the next `update --map-model`.
+- `--map-model` now maps `fable` to `claude-fable-5-2` and `best` to `claude-opus-5-5`, as Claude Code 2.1.328 does. This extension now needs Pi 1.5.1 or later, and an installed agent keeps its old model until the next `update --map-model`. (#328)
 
 - Plugin agents, MCP servers, skills, commands, workflows, and hooks now behave more like Claude Code. Agents and MCP servers need pi-subagents 0.87.0 or later and pi-mcp-adapter 7.0.1 or later in 7.x. (#324)
 
