@@ -14,6 +14,7 @@ import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { makeCtx, makeMockPi } from "../platform/mock-pi.ts";
+import { allowlistedEnvironment } from "../platform/process-environment.ts";
 
 import { PINNED_SHA } from "./_pinned-sha.ts";
 import { E2E_MARKETPLACE_NAME, targetByPlugin } from "./_targets.ts";
@@ -33,18 +34,33 @@ export interface E2EEnvironment {
   marketplaceAdded: boolean;
 }
 
+// The proxy and CA variables that git's HTTPS transport reads, so the fetch
+// works behind a proxy. The fetch reads a public URL, so it needs no token.
+const HTTPS_TRANSPORT_VARIABLES: readonly string[] = [
+  "https_proxy",
+  "HTTPS_PROXY",
+  "all_proxy",
+  "ALL_PROXY",
+  "no_proxy",
+  "NO_PROXY",
+  "GIT_SSL_CAINFO",
+  "GIT_SSL_CAPATH",
+  "SSL_CERT_FILE",
+  "SSL_CERT_DIR",
+];
+
 async function prepareUpstreamCheckout(root: string): Promise<string> {
   const dir = path.join(root, "claude-plugins-official");
-  await execFileAsync("git", ["init", dir]);
-  await execFileAsync("git", ["-C", dir, "remote", "add", "origin", UPSTREAM_URL]);
+  // HOME is the hermetic home that withHermeticEnvironment set.
+  const env = allowlistedEnvironment(["PATH", "HOME"]);
+  await execFileAsync("git", ["init", dir], { env });
+  await execFileAsync("git", ["-C", dir, "remote", "add", "origin", UPSTREAM_URL], { env });
   const ref = process.env.PI_CM_E2E_REF === "main" ? "main" : PINNED_SHA;
   await execFileAsync("git", ["-C", dir, "fetch", "--depth", "1", "origin", ref], {
-    env: process.env.GITHUB_TOKEN
-      ? { ...process.env, GITHUB_TOKEN: process.env.GITHUB_TOKEN }
-      : process.env,
+    env: allowlistedEnvironment(["PATH", "HOME", ...HTTPS_TRANSPORT_VARIABLES]),
     timeout: 120_000,
   });
-  await execFileAsync("git", ["-C", dir, "checkout", "FETCH_HEAD"]);
+  await execFileAsync("git", ["-C", dir, "checkout", "FETCH_HEAD"], { env });
   await renameUpstreamMarketplace(dir);
   return dir;
 }
