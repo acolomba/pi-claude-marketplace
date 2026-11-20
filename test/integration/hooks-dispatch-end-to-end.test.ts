@@ -37,6 +37,7 @@ import {
   saveState,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { useAllowlistedProcessEnvironment } from "../platform/process-environment.ts";
 
 import type { HookExecutor } from "../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -450,7 +451,9 @@ test("HOOK-E2E-04: a throwing lazy project hydrate never blocks SessionStart dis
 test(
   "a registered child records complete successful and failed tool result payloads",
   { concurrency: false },
-  async () => {
+  async (t) => {
+    // PATH, because the hook runs node by name.
+    useAllowlistedProcessEnvironment(t, ["PATH", "HOME", "PI_CODING_AGENT_DIR"]);
     await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
       const extensionRoot = path.join(agentDir, "pi-claude-marketplace");
       const pluginId = "result-recording";
@@ -490,41 +493,32 @@ test(
           getSessionName: () => undefined,
         },
       } as unknown as ExtensionContext;
-      const previousMarker = process.env.PI_SUBAGENT_CHILD;
       process.env.PI_SUBAGENT_CHILD = "1";
-      try {
-        await hydration.registerHooksBridge(pi, { cwd: projectCwd });
-        const before = registrations.find((entry) => entry.event === "before_agent_start");
-        const result = registrations.find((entry) => entry.event === "tool_result");
-        assert.ok(before);
-        assert.ok(result);
-        await before.handler(
+      await hydration.registerHooksBridge(pi, { cwd: projectCwd });
+      const before = registrations.find((entry) => entry.event === "before_agent_start");
+      const result = registrations.find((entry) => entry.event === "tool_result");
+      assert.ok(before);
+      assert.ok(result);
+      await before.handler(
+        {
+          type: "before_agent_start",
+          systemPromptOptions: { customPrompt: '<active_agent name="reviewer"/>\n\n' },
+        },
+        ctx,
+      );
+      for (const isError of [false, true]) {
+        await result.handler(
           {
-            type: "before_agent_start",
-            systemPromptOptions: { customPrompt: '<active_agent name="reviewer"/>\n\n' },
+            type: "tool_result",
+            toolCallId: isError ? "failed-call" : "successful-call",
+            toolName: "catalog",
+            input: { query: "entry" },
+            content: [{ type: "text", text: isError ? "lookup failed" : "found" }],
+            isError,
+            details: undefined,
           },
           ctx,
         );
-        for (const isError of [false, true]) {
-          await result.handler(
-            {
-              type: "tool_result",
-              toolCallId: isError ? "failed-call" : "successful-call",
-              toolName: "catalog",
-              input: { query: "entry" },
-              content: [{ type: "text", text: isError ? "lookup failed" : "found" }],
-              isError,
-              details: undefined,
-            },
-            ctx,
-          );
-        }
-      } finally {
-        if (previousMarker === undefined) {
-          delete process.env.PI_SUBAGENT_CHILD;
-        } else {
-          process.env.PI_SUBAGENT_CHILD = previousMarker;
-        }
       }
 
       const payloads = (await readFile(recordPath, "utf8"))

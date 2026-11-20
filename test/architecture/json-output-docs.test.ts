@@ -7,6 +7,8 @@ import { test } from "node:test";
 
 import { Compile } from "typebox/compile";
 
+import { allowlistedEnvironment } from "../platform/process-environment.ts";
+
 import type { TestContext } from "node:test";
 import type { TSchema } from "typebox";
 
@@ -36,7 +38,10 @@ async function runExample(
     ? guideExample(guide, "prepare-command")
     : "";
   const script = `${preparation}\n${guideExample(guide, label)}`;
-  const jq = spawnSync("jq", ["--version"], { encoding: "utf8" });
+  const jq = spawnSync("jq", ["--version"], {
+    env: allowlistedEnvironment(["PATH"]),
+    encoding: "utf8",
+  });
   assert.strictEqual(jq.status, 0, `jq is required: ${jq.error?.message ?? jq.stderr}`);
   const directory = await mkdtemp(path.join(tmpdir(), "json-output-docs-"));
   t.after(async () => {
@@ -51,7 +56,7 @@ async function runExample(
   );
   const execution = spawnSync("bash", ["-c", script], {
     cwd: directory,
-    env: { PATH: process.env.PATH, input_file: inputFile, invocation_id: invocationId },
+    env: allowlistedEnvironment(["PATH"], { input_file: inputFile, invocation_id: invocationId }),
     encoding: "utf8",
     timeout: 5000,
     maxBuffer: 1024 * 1024,

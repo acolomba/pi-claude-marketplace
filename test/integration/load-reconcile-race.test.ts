@@ -39,6 +39,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { allowlistedEnvironment } from "../platform/process-environment.ts";
 
 interface ChildResult {
   readonly ok: boolean;
@@ -136,11 +137,18 @@ async function seedStateRaw(cwd: string, raw: unknown): Promise<void> {
   await writeFile(locations.stateJsonPath, JSON.stringify(raw, null, 2));
 }
 
-/** One reconcile child, forked but not yet released. */
+/**
+ * One reconcile child, forked but not yet released. A fork passes on the
+ * --import of scripts/isolated-pi-home.mjs, which keeps the HOME given here
+ * only while PI_CM_TEST_HOME is set.
+ */
 function forkReconcileChild(env: RaceEnv): ReturnType<typeof fork> {
   return fork(CHILD_PATH, [], {
     cwd: env.cwd,
-    env: { ...process.env, HOME: env.home, PI_CODING_AGENT_DIR: path.join(env.home, ".pi-agent") },
+    env: allowlistedEnvironment(["PI_CM_TEST_HOME"], {
+      HOME: env.home,
+      PI_CODING_AGENT_DIR: path.join(env.home, ".pi-agent"),
+    }),
     stdio: ["ignore", "ignore", "ignore", "ipc"],
   });
 }
@@ -516,15 +524,7 @@ test("D-13 gate (single-process): state with legacy autoupdate + ENOENT claude-p
 
     // Single process via fork (same child entry point; one child only) to
     // exercise the same code path the integration scenarios exercise.
-    const child = fork(CHILD_PATH, [], {
-      cwd: env.cwd,
-      env: {
-        ...process.env,
-        HOME: env.home,
-        PI_CODING_AGENT_DIR: path.join(env.home, ".pi-agent"),
-      },
-      stdio: ["ignore", "ignore", "ignore", "ipc"],
-    });
+    const child = forkReconcileChild(env);
 
     await new Promise<void>((resolve, reject) => {
       child.once("error", reject);

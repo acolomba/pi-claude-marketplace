@@ -7,6 +7,7 @@ import path from "node:path";
 import test from "node:test";
 
 import { openHookGate, stopHookScripts } from "../../features/lib/hook-files.ts";
+import { allowlistedEnvironment } from "../platform/process-environment.ts";
 
 test("stops a registered hook before its script writes a pid file", async (t) => {
   // arrange
@@ -26,7 +27,7 @@ test("stops a registered hook before its script writes a pid file", async (t) =>
   const dispatchId = "dispatch-1";
   const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
     detached: process.platform !== "win32",
-    env: { ...process.env, PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH: dispatchId },
+    env: allowlistedEnvironment([], { PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH: dispatchId }),
     stdio: "ignore",
   });
   t.after(async () => {

@@ -35,6 +35,7 @@ import {
   saveState,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { useAllowlistedProcessEnvironment } from "../platform/process-environment.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -193,8 +194,10 @@ function findHandler(
   return registration.handler;
 }
 
-test("HOOK-E2E-03: SessionStart hook stdout additionalContext reaches the before_agent_start message end-to-end", async () => {
+test("HOOK-E2E-03: SessionStart hook stdout additionalContext reaches the before_agent_start message end-to-end", async (t) => {
   // arrange
+  // PATH, because the hook runs bash and node by name.
+  useAllowlistedProcessEnvironment(t, ["PATH", "HOME", "PI_CODING_AGENT_DIR"]);
   const runtime = createHooksRuntime();
   const hooksHydration = createHooksHydration(runtime, {
     loadState,
@@ -269,8 +272,10 @@ test("HOOK-E2E-03: SessionStart hook stdout additionalContext reaches the before
   });
 });
 
-test("HOOK-E2E-04: registerHooksBridge clears the pending buffer on /reload (re-entry)", async () => {
+test("HOOK-E2E-04: registerHooksBridge clears the pending buffer on /reload (re-entry)", async (t) => {
   // arrange
+  // PATH, because the hook runs bash and node by name.
+  useAllowlistedProcessEnvironment(t, ["PATH", "HOME", "PI_CODING_AGENT_DIR"]);
   const runtime = createHooksRuntime();
   const hooksHydration = createHooksHydration(runtime, {
     loadState,

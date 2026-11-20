@@ -43,6 +43,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { allowlistedEnvironment } from "../../platform/process-environment.ts";
 
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
@@ -202,13 +203,13 @@ export function startFifoStateServer(opts: {
   readonly timeoutMs?: number;
 }): FifoStateServer {
   const server = spawn(process.execPath, ["--input-type=module", "--eval", SERVER_SOURCE], {
-    env: {
-      ...process.env,
+    // PATH, because the server runs mkfifo by name.
+    env: allowlistedEnvironment(["PATH"], {
       PI_CM_FIFO_PATH: opts.statePath,
       PI_CM_FIFO_PAYLOADS: JSON.stringify(opts.payloads),
       PI_CM_FIFO_TIMEOUT_MS: String(opts.timeoutMs ?? DEFAULT_TIMEOUT_MS),
       PI_CM_FIFO_SENTINEL: OVER_READ_SENTINEL,
-    },
+    }),
     stdio: ["ignore", "ignore", "pipe", "ipc"],
   });
 

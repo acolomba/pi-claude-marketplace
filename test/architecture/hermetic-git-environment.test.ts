@@ -13,6 +13,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { hostVariables } from "../../features/lib/child-environment.ts";
 import { hermeticGitEnvironment } from "../../features/lib/hermetic-git.ts";
 import { rpcChildEnvironment } from "../../features/lib/pi-rpc.ts";
 
@@ -75,7 +76,7 @@ describe("hermeticGitEnvironment", () => {
 
     // assert
     assert.deepStrictEqual(environment, {
-      PATH: process.env.PATH ?? "",
+      ...hostVariables(["PATH"]),
       HOME: "/scratch/home",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/dev/null",
@@ -106,7 +107,7 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      PATH: process.env.PATH ?? "",
+      ...hostVariables(["PATH"]),
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
@@ -133,7 +134,7 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      PATH: process.env.PATH ?? "",
+      ...hostVariables(["PATH"]),
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
@@ -159,7 +160,7 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      PATH: process.env.PATH ?? "",
+      ...hostVariables(["PATH"]),
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
@@ -185,7 +186,7 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      PATH: process.env.PATH ?? "",
+      ...hostVariables(["PATH"]),
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
@@ -216,7 +217,7 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      PATH: process.env.PATH ?? "",
+      ...hostVariables(["PATH"]),
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
@@ -248,7 +249,7 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      PATH: process.env.PATH ?? "",
+      ...hostVariables(["PATH"]),
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
@@ -270,7 +271,7 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      PATH: process.env.PATH ?? "",
+      ...hostVariables(["PATH"]),
     });
   });
 });

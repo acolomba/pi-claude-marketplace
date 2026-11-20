@@ -10,6 +10,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 
 import { resolvePiRuntime } from "../../features/lib/pi-runtime.ts";
+import { allowlistedEnvironment } from "../platform/process-environment.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -35,13 +36,12 @@ export async function runPiRuntimeSmoke(): Promise<{
       [runtime.cliPath, "--offline", "--no-extensions", "--extension", extension, "--help"],
       {
         cwd,
-        env: {
-          ...process.env,
+        env: allowlistedEnvironment(["PATH"], {
           HOME: home,
           PI_CODING_AGENT_DIR: agentDir,
           PI_CODING_AGENT_SESSION_DIR: sessionDir,
           PI_OFFLINE: "1",
-        },
+        }),
         timeout: 30_000,
       },
     );

@@ -15,6 +15,7 @@ import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/br
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { useAllowlistedProcessEnvironment } from "../../platform/process-environment.ts";
 
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
 import type { StopFailureEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts";
@@ -36,33 +37,8 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { SpawnOptions } from "node:child_process";
 
-/**
- * The host variables the portable case keeps. Its child echoes the whole
- * environment back as hook context, so a large host environment would push
- * that context over the D-PG5-15 cap and into a saved file.
- */
-const PORTABLE_CASE_ENVIRONMENT: ReadonlySet<string> = new Set([
-  "HOME",
-  "PATH",
-  "PI_CODING_AGENT_DIR",
-  "SystemRoot",
-  "TEMP",
-  "TMP",
-  "TMPDIR",
-]);
-
 test("executes a blocking hook through the portable process boundary", async (t) => {
   // arrange
-  const previousEnvironment = { ...process.env };
-  t.after(() => {
-    for (const key of Object.keys(process.env)) {
-      if (!Object.hasOwn(previousEnvironment, key)) {
-        Reflect.deleteProperty(process.env, key);
-      }
-    }
-
-    Object.assign(process.env, previousEnvironment);
-  });
   const runtime = createHooksRuntime();
   const { root: caseRoot, agentDir } = await createHermeticEnvironment(
     t,
@@ -73,16 +49,15 @@ test("executes a blocking hook through the portable process boundary", async (t)
   const stdoutCapturePath = path.join(caseRoot, "stdout.txt");
   const stderrCapturePath = path.join(caseRoot, "stderr.txt");
   await Promise.all([mkdir(cwd, { recursive: true }), mkdir(pluginRoot, { recursive: true })]);
-
-  for (const key of Object.keys(process.env)) {
-    if (!PORTABLE_CASE_ENVIRONMENT.has(key)) {
-      Reflect.deleteProperty(process.env, key);
-    }
-  }
-
-  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
-  process.env.PORTABLE_HOOK_PROBE = "case-owned";
-  process.env.PI_SUBAGENT_CHILD = "1";
+  // The hook child echoes its whole environment back as hook context, so a
+  // large host environment would push that context over the D-PG5-15 cap and
+  // into a saved file. HOME and PI_CODING_AGENT_DIR are the case's hermetic
+  // pair; the hook runs process.execPath, so it needs no PATH.
+  useAllowlistedProcessEnvironment(t, ["HOME", "PI_CODING_AGENT_DIR"], {
+    PI_CLAUDE_MARKETPLACE_DEBUG: "1",
+    PORTABLE_HOOK_PROBE: "case-owned",
+    PI_SUBAGENT_CHILD: "1",
+  });
   runtime.captureChildIdentity(
     {
       type: "before_agent_start",
@@ -1175,14 +1150,8 @@ for (const translatorCase of TRANSLATOR_CASES.filter(({ claudeEvent }) =>
       { concurrency: false, timeout: 15_000 },
       async (t) => {
         // arrange
-        const previousMarker = process.env.PI_SUBAGENT_CHILD;
-        process.env.PI_SUBAGENT_CHILD = marker;
-        t.after(() => {
-          if (previousMarker === undefined) {
-            delete process.env.PI_SUBAGENT_CHILD;
-          } else {
-            process.env.PI_SUBAGENT_CHILD = previousMarker;
-          }
+        useAllowlistedProcessEnvironment(t, ["HOME", "PI_CODING_AGENT_DIR"], {
+          PI_SUBAGENT_CHILD: marker,
         });
         const runtime = createHooksRuntime();
         const identityEvent = (agent: string): BeforeAgentStartEvent =>
