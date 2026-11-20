@@ -24,16 +24,16 @@ Each ITMIG requirement is met only when all of these hold:
 ### Migration to cucumber (ITMIG)
 
 - [ ] **ITMIG-01**: Scenarios cover the 12 LAYER-04 cases: install, uninstall, enable, disable, update, and reinstall each refuse, in both layer directions, when the other layer's config cannot be read, and change nothing.
-- [ ] **ITMIG-02**: Scenarios cover the plugin-layer consistency cases: the user-scope local gap, a legacy local layer from an earlier `--local` install kept byte for byte, `pending` before the first-run migration, and a malformed key such as `demo@` reported as a source mismatch.
+- [ ] **ITMIG-02**: Scenarios cover the plugin-layer consistency cases: the user-scope local gap, a legacy local layer from an earlier `--local` install kept byte for byte, `pending` before the first-run migration, a malformed key such as `demo@` reported as a source mismatch, a base layer that declares a plugin without its marketplace stopping the reload and changing no file, and a dangling reference row beside a declared plugin that still installs.
 - [ ] **ITMIG-03**: Scenarios cover plugin names that are `Object.prototype` members: a plugin named `constructor` installs, lists, shows, disables, enables, updates, and uninstalls, imports, and goes when its marketplace is removed; `__proto__` lists as unavailable; and a reload that declares `hello@constructor` records nothing.
 - [ ] **ITMIG-04**: Scenarios cover the unfiltered `list` fold: a project install from a user marketplace is listed under the user marketplace header with a `[project]` row, and an independently added project marketplace gets its own header and no duplicate row.
-- [ ] **ITMIG-05**: Scenarios cover the marketplace layer cases: D-09, a marketplace recorded in state but declared by no layer, for a named and an unnamed autoupdate flip; CFG-03 for a non-local flip when the local config cannot be read; a re-declaration and a same-repo url plugin install that make no git request; a named remove of a recorded but undeclared marketplace; and LAYER-02 refusing a remove when the other layer cannot be read.
-- [ ] **ITMIG-06**: Scenarios cover a project install that adds a user marketplace to the project: WR-07 (a plugin not in the manifest fails before the project clones), MA-12 (a leftover clone is replaced), MA-13 (a foreign tree is refused and kept), and D-MF-04 (dependencies are read from the fresh project clone, not the stale user clone).
+- [ ] **ITMIG-05**: Scenarios cover the marketplace layer cases: D-09, a marketplace recorded in state but declared by no layer, for a named and an unnamed autoupdate flip; CFG-03 for a non-local flip when the local config cannot be read; a re-declaration and a same-repo url plugin install that make no git request; a named remove of a recorded but undeclared marketplace; LAYER-02 refusing a remove when the other layer cannot be read; a base-layer remove of a url marketplace that removes its clone and data directory; a refused remove with an installed plugin that changes no state and no skill; and LAYER-03 keeping a url-source dependency, its clone, and its data while the scope still converges.
+- [ ] **ITMIG-06**: Scenarios cover a project install that adds a user marketplace to the project: WR-07 (a plugin not in the manifest fails before the project clones), MA-12 (a leftover clone is replaced), MA-13 (a foreign tree is refused and kept), D-MF-04 (dependencies are read from the fresh project clone, not the stale user clone), and a dependency's user git marketplace added to the project with a clone in each scope.
 - [ ] **ITMIG-07**: A step publishes a marketplace repository with a tag, and scenarios cover a path-source dependency installed from the tag its constraint selects while the marketplace HEAD has moved past it, plus the TAGS-02 fallback to the current checkout.
-- [ ] **ITMIG-08**: Scenarios cover the uncovered `prune` cases that a user can see: the remaining empty-scope variants, a malformed state file, held neighbours across marketplaces, an actual prune after a stale preview, a failed member that keeps its dependency until a retry, a preview with no project state, an unreadable declarer manifest, and the flags `-y`, `--keep-data`, and `--prune`.
-- [ ] **ITMIG-09**: Scenarios cover the MCP install refusals and warnings: a literal `~/` in stdio args refused as `{unsupported mcp}` and left out under `--partial`, the warning that tool permission rules are not enforced, AVAR-04 notices on update, reinstall, and enable, AVAR-05 (a deny-listed credential withheld with a notice), `${CLAUDE_PROJECT_DIR}`, `!` escaped to `!!`, and a secret value kept out of `mcp-adapter.json`.
-- [ ] **ITMIG-10**: Scenarios cover the legacy `mcp.json` move: the install-time sweep (AMIG-02) of marked entries, old-name stubs, and direct-tools copies, with the user's own servers kept; one notice for both scopes with project rows first; the AMIG-04 unowned-entry warnings; undeclared, unsupported, and malformed entries; and a plugin that lists as partially installed after the move.
-- [ ] **ITMIG-11**: Scenarios cover the pi-mcp-adapter override cases: a project install that keeps a user stub and writes it back on uninstall, a user plugin disabled in the project, an `/mcp-adapter enable` that survives, an update that drops a server and a later version that restores its choice, and `openUi` and trace kept on reinstall.
+- [ ] **ITMIG-08**: Scenarios cover the uncovered `prune` cases that a user can see: the remaining empty-scope variants, a malformed state file, held neighbours across marketplaces, an actual prune after a stale preview, a failed member that keeps its dependency until a retry, a preview with no project state, an unreadable declarer manifest, the flags `-y`, `--keep-data`, and `--prune`, a project-only prune, and a dependent-first chain whose preview matches the actual prune.
+- [ ] **ITMIG-09**: Scenarios cover the MCP install refusals and warnings: a literal `~/` in stdio args refused as `{unsupported mcp}` and left out under `--partial`, the warning that tool permission rules are not enforced, AVAR-04 notices on update, reinstall, and enable, AVAR-05 (a deny-listed credential withheld with a notice), `${CLAUDE_PROJECT_DIR}`, `!` escaped to `!!`, a secret value kept out of `mcp-adapter.json`, and D-PG10-11 entries holding a reference and no option value in all five fields.
+- [ ] **ITMIG-10**: Scenarios cover the legacy `mcp.json` move: the install-time sweep (AMIG-02) of marked entries, old-name stubs, and direct-tools copies, with the user's own servers kept; one notice for both scopes with project rows first; the AMIG-04 unowned-entry warnings; undeclared, unsupported, and malformed entries; a plugin that lists as partially installed after the move; a load with a cold clone cache; the stub notice; the user-scope stub removed from the project file; a user-scope install that leaves the project `mcp-adapter.json` alone; and the `list` row of a legacy record with no MCP trace.
+- [ ] **ITMIG-11**: Scenarios cover the pi-mcp-adapter override cases: a project install that keeps a user stub and writes it back on uninstall, a user plugin disabled in the project, an `/mcp-adapter enable` that survives, an update that drops a server and a later version that restores its choice, `openUi` and trace kept on reinstall, carried fields written back with the values the entry holds at uninstall, the ANAME-07 stub timeout, a foreign `serverChoices` key left alone, and an emptied stub removed.
 - [ ] **ITMIG-12**: Scenarios cover the hook cases: hook plugins in both scopes still run after an `apply` and after a load, a reload before the first prompt drops buffered SessionStart context, and a hook dispatch creates no `.pi` directory in a project that had none.
 - [ ] **ITMIG-13**: Scenarios cover the auth cases: a print-mode `marketplace add` that needs a sign-in refuses and leaves no staging behind, and a host that rejects the stored credential leads to the credential being evicted and a new Device Flow sign-in.
 
@@ -60,31 +60,31 @@ None.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ITDUP-01 | TBD | Pending |
-| ITDUP-02 | TBD | Pending |
-| ITMIG-01 | TBD | Pending |
-| ITMIG-02 | TBD | Pending |
-| ITMIG-03 | TBD | Pending |
-| ITMIG-04 | TBD | Pending |
-| ITMIG-05 | TBD | Pending |
-| ITMIG-06 | TBD | Pending |
-| ITMIG-07 | TBD | Pending |
-| ITMIG-08 | TBD | Pending |
-| ITMIG-09 | TBD | Pending |
-| ITMIG-10 | TBD | Pending |
-| ITMIG-11 | TBD | Pending |
-| ITMIG-12 | TBD | Pending |
-| ITMIG-13 | TBD | Pending |
-| ITSCOPE-01 | TBD | Pending |
-| ITSCOPE-02 | TBD | Pending |
-| ITSCOPE-03 | TBD | Pending |
-| ITSCOPE-04 | TBD | Pending |
+| ITDUP-01 | Phase 1 | Pending |
+| ITDUP-02 | Phase 1 | Pending |
+| ITMIG-01 | Phase 2 | Pending |
+| ITMIG-02 | Phase 2 | Pending |
+| ITMIG-03 | Phase 2 | Pending |
+| ITMIG-04 | Phase 2 | Pending |
+| ITMIG-05 | Phase 3 | Pending |
+| ITMIG-06 | Phase 3 | Pending |
+| ITMIG-07 | Phase 7 | Pending |
+| ITMIG-08 | Phase 4 | Pending |
+| ITMIG-09 | Phase 5 | Pending |
+| ITMIG-10 | Phase 5 | Pending |
+| ITMIG-11 | Phase 5 | Pending |
+| ITMIG-12 | Phase 6 | Pending |
+| ITMIG-13 | Phase 6 | Pending |
+| ITSCOPE-01 | Phase 8 | Pending |
+| ITSCOPE-02 | Phase 8 | Pending |
+| ITSCOPE-03 | Phase 8 | Pending |
+| ITSCOPE-04 | Phase 8 | Pending |
 
 **Coverage:**
 - Milestone requirements: 19 total
-- Mapped to phases: 0
-- Unmapped: 19
+- Mapped to phases: 19
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-11-20*
-*Last updated: 2026-11-20 after initial definition*
+*Last updated: 2026-11-20 after roadmap creation (8 phases)*

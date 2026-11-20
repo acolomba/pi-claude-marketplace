@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: integration-rescope
 milestone_name: Integration Test Rescope
 status: planning
-last_updated: "2026-11-20T18:33:32.050Z"
+last_updated: "2026-11-20T19:30:00.000Z"
 last_activity: 2026-11-20
 progress:
-  total_phases: 0
+  total_phases: 8
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,19 +17,21 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-11-17 when the parity-gaps milestone closed)
+See: `.planning/PROJECT.md` (updated 2026-11-20 when the integration-rescope milestone started)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Planning the next milestone; parity-gaps waits for a PR from `features/gaps`
+**Current focus:** integration-rescope Phase 1 (Duplicate Integration Files); Phases 1 to 6 can run in parallel
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 1 of 8 (Duplicate Integration Files)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-11-20 — Milestone integration-rescope started
+Status: Ready to plan
+Last activity: 2026-11-20 — Roadmap created (8 phases, 19/19 requirements mapped)
+
+Progress: [░░░░░░░░░░] 0%
 
 
 ### parity-gaps closeout: `override_closeout`
@@ -553,8 +555,8 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Offer the version bump, then open the PR for `features/gaps`; its CI `behavioral` job on Node 24 closes Phase 5 A9
-- Start the next milestone with /gsd-new-milestone
+- Plan integration-rescope Phase 1 with /gsd-discuss-phase 1 (or /gsd-plan-phase 1); Phases 2 to 6 can start beside it, Phase 7 after Phase 3, Phase 8 last
+- Before Phase 8's discuss step: decide the user-visible integration cases that no requirement names (ROADMAP.md, Milestone rules)
 
 
 ## Performance Metrics
@@ -1103,6 +1105,16 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ### Roadmap Evolution
 
+- integration-rescope roadmap created 2026-11-20 (phase numbers reset to 1),
+  from the overlap audit `research/INTEGRATION-OVERLAP.md`: Phase 1
+  (Duplicate Integration Files, ITDUP), then one migration phase per feature
+  area (2 plugin layers, names, and list fold; 3 marketplace layers and
+  cross-scope install; 4 prune; 5 MCP install, legacy move, and overrides; 6
+  hooks and auth; 7 path-source dependency tags), then Phase 8 (Integration
+  Suite Rescope, ITSCOPE-01..04, alone after the last merge). Phases 1 to 6
+  depend on no other phase; Phase 7 follows Phase 3 because both change the
+  marketplace publishing harness. ITMIG-04 (list fold) sits in Phase 2
+  because its scenarios land in `plugin/list.feature`.
 - behavioral-gaps roadmap created 2026-11-07 (phase numbers reset to 1), with
   the phase structure the user fixed for maximum concurrency: Phase 1
   (Foundation, serial in the parent session; builds every stand-in and shared
@@ -1180,6 +1192,16 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ### Blockers/Concerns
 
+- [integration-rescope] The audit's verdicts come from reading code; every
+  phase checks a verdict again with a deliberate break before it deletes an
+  integration case (REQUIREMENTS.md rule 2).
+- [integration-rescope] Open for Phase 8: the audit lists user-visible cases
+  that no ITMIG requirement names (ROADMAP.md, Milestone rules), and
+  ITSCOPE-01 offers only a unit test or deletion for them. A case kept under
+  rule 4 (a BACKLOG bug) also falls outside ITSCOPE-01's three classes.
+- [integration-rescope] ITMIG-13 needs a print-mode Pi driver, which the
+  harness lacks (D-BG-601), and ITMIG-07 needs a marketplace tag step; both
+  are shared harness additions.
 - [behavioral-gaps] Phase 1 must settle how Pi reaches the Device Flow
   stand-in: GHB-02 turns Device Flow off while
   `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` points GitHub sources at the
@@ -1236,8 +1258,8 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-17T12:15:00.000Z
-Stopped at: Milestone parity-gaps completed and archived (override_closeout); next is the PR for `features/gaps`
+Last session: 2026-11-20T19:30:00.000Z
+Stopped at: integration-rescope roadmap created (8 phases); next is Phase 1 discuss or plan
 Resume file: None
 
 ### Phase 2 completion-helper notes
