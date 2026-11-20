@@ -12,6 +12,7 @@ import {
   saveState,
   type ExtensionState,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { allowlistedEnvironment } from "../platform/process-environment.ts";
 
 interface ChildResult {
   readonly ok: boolean;
@@ -121,14 +122,20 @@ async function runRace(
   firstPlugin: string,
   secondPlugin: string,
 ): Promise<RaceOutcome> {
+  // A fork passes on the --import of scripts/isolated-pi-home.mjs, which keeps
+  // the HOME given here only while PI_CM_TEST_HOME is set.
+  const childEnvironment = allowlistedEnvironment(["PI_CM_TEST_HOME"], {
+    HOME: env.home,
+    PI_CODING_AGENT_DIR: path.join(env.home, ".pi-agent"),
+  });
   const first = fork(CHILD_PATH, [], {
     cwd: env.cwd,
-    env: { ...process.env, HOME: env.home },
+    env: childEnvironment,
     stdio: ["ignore", "ignore", "ignore", "ipc"],
   });
   const second = fork(CHILD_PATH, [], {
     cwd: env.cwd,
-    env: { ...process.env, HOME: env.home },
+    env: childEnvironment,
     stdio: ["ignore", "ignore", "ignore", "ipc"],
   });
 

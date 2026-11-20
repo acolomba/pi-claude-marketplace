@@ -1150,14 +1150,8 @@ for (const translatorCase of TRANSLATOR_CASES.filter(({ claudeEvent }) =>
       { concurrency: false, timeout: 15_000 },
       async (t) => {
         // arrange
-        const previousMarker = process.env.PI_SUBAGENT_CHILD;
-        process.env.PI_SUBAGENT_CHILD = marker;
-        t.after(() => {
-          if (previousMarker === undefined) {
-            delete process.env.PI_SUBAGENT_CHILD;
-          } else {
-            process.env.PI_SUBAGENT_CHILD = previousMarker;
-          }
+        useAllowlistedProcessEnvironment(t, ["HOME", "PI_CODING_AGENT_DIR"], {
+          PI_SUBAGENT_CHILD: marker,
         });
         const runtime = createHooksRuntime();
         const identityEvent = (agent: string): BeforeAgentStartEvent =>

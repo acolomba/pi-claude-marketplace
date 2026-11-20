@@ -48,6 +48,7 @@ import { createJsonCapture } from "../../edge/json-capture.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { adapterCommand } from "../../platform/pi-inventory-seed.ts";
+import { allowlistedEnvironment } from "../../platform/process-environment.ts";
 
 import type { SpawnDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import type { HookExecutor } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
@@ -485,10 +486,9 @@ test(
     });
     await unlinkPidTable(userLocations);
     const persistedOrphan = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], {
-      env: {
-        ...process.env,
+      env: allowlistedEnvironment([], {
         PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH: "router-persisted-orphan",
-      },
+      }),
       stdio: "ignore",
     });
     const persistedOrphanPid = persistedOrphan.pid;
