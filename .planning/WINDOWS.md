@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 16
+open_count: 17
 waived_count: 52
 fixed_count: 48
-total_count: 116
-last_updated: 2026-11-14T04:26:15.162Z
+total_count: 117
+last_updated: 2026-11-20T20:09:16.532Z
 ---
 
 # Broken Windows Ledger
@@ -131,6 +131,7 @@ last_updated: 2026-11-14T04:26:15.162Z
 | 114 | 02 | deviation | features/hook/async.feature |  | [parity-gaps] Async lifecycle scenarios intermittently report the wrong exit code, miss rewake, or leave a hook running. Cleanup failure also reproduced on pre-wave commit 309a45559e9f086d76198acae906b038a4c9e1bc, so it predates atomic edit preflight. Preserve assertions and investigate under ASYNCLIFECYCLE-01; no gate waived. | open |  | 2026-11-13T02:44:26.169Z |  |
 | 115 | 03 | deviation | docs/hooks-compatibility.md | 27 | [parity-gaps] 03-08-02 verify 'npx --no prettier --check' on the two compatibility pages cannot pass: prettier and mdformat disagree on two pre-existing lines of hooks-compatibility.md (27, 144; also failing at 1a8aa893); mdformat/markdownlint pass and mcp-compatibility.md passes prettier | open |  | 2026-11-13T23:19:58.582Z |  |
 | 116 | 4 | deviation | .fallowrc.json |  | [parity-gaps] ignoreExports exempts isMarketplaceRootSource (domain/component-paths.ts) from unused-export until orchestrators/plugin/info.ts imports it; remove the entry then | fixed |  | 2026-11-14T03:05:14.930Z | 2026-11-14T04:26:15.162Z |
+| 117 | 261120-i6p | unrun-verify | test/bridges/hooks/dispatch-exec.test.ts |  | [quick] the env -i runs of the portable dispatch case and of the integration hook and fork tests were not run: the session's permission classifier denied env -i | open |  | 2026-11-20T20:09:16.532Z |  |
 
 ````json
 [
@@ -1584,6 +1585,19 @@ last_updated: 2026-11-14T04:26:15.162Z
     "reason": "",
     "recorded_at": "2026-11-14T03:05:14.930Z",
     "resolved_at": "2026-11-14T04:26:15.162Z",
+    "milestone": null
+  },
+  {
+    "id": 117,
+    "kind": "unrun-verify",
+    "phase": "261120-i6p",
+    "file": "test/bridges/hooks/dispatch-exec.test.ts",
+    "line": null,
+    "description": "[quick] the env -i runs of the portable dispatch case and of the integration hook and fork tests were not run: the session's permission classifier denied env -i",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-20T20:09:16.532Z",
+    "resolved_at": null,
     "milestone": null
   }
 ]

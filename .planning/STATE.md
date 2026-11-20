@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: parity-gaps
 status: Awaiting next milestone
 stopped_at: Milestone parity-gaps completed and archived (override_closeout)
-last_updated: "2026-11-20T04:07:46.989Z"
+last_updated: "2026-11-20T20:11:52.130Z"
 last_activity: 2026-11-19
 last_activity_desc: Completed quick tasks 261119-59e (--map-model alias table, Pi floor 1.5.1), 261119-h5n (fallow 3.44.0 pin), and 261119-jmd (e2e helpers split)
-state_head: f2225cc575fd7b51941f8d4ad75650e1081122b1
+state_head: a9e53d221bf55b94304bbaa8407dd87d218f4dee
 milestone_name: Claude Code Parity Gaps and Defects
 current_phase: null
 current_phase_name: null
@@ -476,6 +476,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261119-h5n | Pin fallow 3.44.0 and move shared harness files out of test/ to fix the degraded fallow audit | 2026-11-19 | fa449db | — | [261119-h5n-fallow-3-44-pin-and-audit-degraded-fix](./quick/261119-h5n-fallow-3-44-pin-and-audit-degraded-fix/) |
 | 261119-jmd | Split test/e2e/_helpers.ts into modules named by function | 2026-11-19 | bcbea72 | — | [261119-jmd-split-test-e2e-helpers-ts-by-function](./quick/261119-jmd-split-test-e2e-helpers-ts-by-function/) |
 | 261120-env | Run the portable dispatch-exec hook test on a small allowlisted environment so a large host environment cannot push its context over the cap | 2026-11-20 | f2225cc | complete | — |
+| 261120-i6p | Centralize environment allowlisting in the spawning tests: one node:test helper, one cucumber picker, each test names only the variables it needs (Windows base list included) | 2026-11-20 | e321030 | complete | [261120-i6p-centralize-environment-allowlisting-in-t](./quick/261120-i6p-centralize-environment-allowlisting-in-t/) |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
