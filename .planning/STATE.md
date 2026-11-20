@@ -1,21 +1,16 @@
 ---
 gsd_state_version: "1.0"
-milestone: parity-gaps
-status: Awaiting next milestone
-stopped_at: Milestone parity-gaps completed and archived (override_closeout)
-last_updated: "2026-11-19T14:14:58.622Z"
-last_activity: 2026-11-19
-last_activity_desc: "Completed quick tasks 261119-59e (--map-model alias table, Pi floor 1.5.1), 261119-h5n (fallow 3.44.0 pin), and 261119-jmd (e2e helpers split)"
-state_head: bcbea726b51472af4c079c411cfa2447964c5340
-milestone_name: Claude Code Parity Gaps and Defects
-current_phase: null
-current_phase_name: null
+milestone: integration-rescope
+milestone_name: Integration Test Rescope
+status: planning
+last_updated: "2026-11-20T18:33:32.050Z"
+last_activity: 2026-11-20
 progress:
-  total_phases: 11
-  completed_phases: 11
-  total_plans: 102
-  completed_plans: 102
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -31,10 +26,11 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: Milestone parity-gaps complete
+Phase: Not started (defining requirements)
 Plan: —
-Status: Awaiting next milestone
-Last activity: 2026-11-19 -- Completed quick tasks 261119-59e (--map-model alias table to Claude Code 2.1.328, Pi floor 1.5.1), 261119-h5n (pin fallow 3.44.0, move shared harness files out of test/), and 261119-jmd (split test/e2e/_helpers.ts by function)
+Status: Defining requirements
+Last activity: 2026-11-20 — Milestone integration-rescope started
+
 
 ### parity-gaps closeout: `override_closeout`
 

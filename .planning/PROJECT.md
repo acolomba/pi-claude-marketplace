@@ -21,6 +21,43 @@ Use these terms in code, messages, docs, and planning (user decisions 2026-10-17
 - **Declaration:** an entry in a layer. **Installation:** the plugin's artifacts and record in a scope.
 - **Effective configuration:** a scope's two layers merged field by field, local winning on conflicts. The same intent may be declared in both layers.
 
+## Current Milestone: integration-rescope -- Integration Test Rescope
+
+Branch `claude/stoic-shannon-la9q7o`, started 2026-11-20.
+
+**Goal:** Every file in `test/integration/` either guards something that the
+cucumber suite and the unit tests cannot reach, or is deleted. Its
+user-visible cases live in cucumber scenarios that pass under both MCP
+profiles.
+
+**Why:** An overlap audit on 2026-11-20 compared the 45 integration test
+files with the 149 feature files
+([research/INTEGRATION-OVERLAP.md](research/INTEGRATION-OVERLAP.md)). It
+found 2 duplicated files, 29 partly covered, and 14 with no cucumber
+equivalent. Many uncovered cases are visible to users, so under the
+behavioral-test rule in `AGENTS.md` they belong in `features/`. Integration
+tests add nothing to the Sonar coverage gate, which reads only
+`coverage/direct.lcov`; their value is only the bugs they catch.
+
+**Target features:**
+
+- Remove the duplicates: delete `hooks-spawn-end-to-end.test.ts`, and delete
+  `pi-subagents-child-identity.test.ts` once a scenario covers its
+  empty-body child case.
+- Move the user-visible gaps into cucumber: the LAYER-04 refusals and the
+  other plugin-layer cases, plugin names that are `Object.prototype` members,
+  the unfiltered `list` fold, the marketplace layer cases (D-09 and
+  re-declaration), the MCP tool-rules warning, a literal `~/` in stdio args,
+  the legacy `mcp.json` sweep and migration notices, project-scope adapter
+  overrides, AVAR-04 and AVAR-05, cross-scope hooks after an apply, a reload
+  that clears buffered context, path-source dependencies at a marketplace
+  tag, and the uncovered prune, project-install, and auth cases. Then cut
+  the integration cases that the new scenarios duplicate.
+- Rescope the suite: what remains is peer conformance, multi-process races,
+  and internal record, released-build state, and fault-injection cases;
+  purely internal single-module cases move to unit tests, and the suite's
+  charter is written down.
+
 ## Previous Milestone: parity-gaps -- Claude Code Parity Gaps and Defects (branch: features/gaps, started 2026-11-11, completed 2026-11-17, not yet pushed, no PR or npm release yet)
 
 **Goal:** Close every P0 and P1 gap that
@@ -1142,7 +1179,8 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ### Active
 
-No milestone is active. The 42 parity-gaps requirements are validated and
+Milestone integration-rescope is active; its requirements are in
+[REQUIREMENTS.md](REQUIREMENTS.md). The 42 parity-gaps requirements are validated and
 archived in
 [milestones/parity-gaps-REQUIREMENTS.md](milestones/parity-gaps-REQUIREMENTS.md).
 The 34 behavioral-gaps requirements are validated and
@@ -2794,3 +2832,5 @@ _Last updated: 2026-11-16 after the maintainer review of the last two pending ro
 _Last updated: 2026-11-17 after the parity-gaps milestone closed (`override_closeout`, Phase 5 A9 waits for the PR's CI); every D-PG decision row is kept as locked._
 
 _Last updated: 2026-11-19 after the maintainer decision D-PG1-15: the `--map-model` alias table follows Claude Code 2.1.328 and the Pi floor is 1.5.1, which supersedes D-PG1-06 and amends D-CF4-07 and the NFR-11 floor; AGENT-06 is closed._
+
+_Last updated: 2026-11-20 after the integration-rescope milestone started._
