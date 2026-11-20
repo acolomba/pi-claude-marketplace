@@ -24,6 +24,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { hostVariables } from "./child-environment.ts";
 import { resolvePiRuntime } from "./pi-runtime.ts";
 
 import type { ChildProcess, ChildProcessByStdio } from "node:child_process";
@@ -195,10 +196,10 @@ export function rpcChildEnvironment(
   profileEnvironment?: RpcProfileEnvironment,
 ): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {
+    ...hostVariables(["PATH"]),
     HOME: sandbox.home,
     PI_CODING_AGENT_DIR: sandbox.agentDir,
     PI_OFFLINE: "1",
-    PATH: process.env.PATH ?? "",
   };
   if (git !== undefined) {
     environment.NODE_EXTRA_CA_CERTS = git.NODE_EXTRA_CA_CERTS;

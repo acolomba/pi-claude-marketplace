@@ -26,6 +26,8 @@ import { createServer } from "node:https";
 import path from "node:path";
 import { promisify } from "node:util";
 
+import { hostVariables } from "../child-environment.ts";
+
 import { cgiEnvironment, parseCgiResponse, runHttpBackend } from "./cgi.ts";
 
 import type { CgiResponse } from "./cgi.ts";
@@ -375,7 +377,7 @@ export class HttpsGitHost {
     await mkdir(path.join(root, "home"), { recursive: true });
     await execFileAsync("openssl", CERTIFICATE_ARGUMENTS, {
       cwd: root,
-      env: { PATH: process.env.PATH ?? "" },
+      env: hostVariables(["PATH"]),
     });
     const [key, cert] = await Promise.all([
       readFile(path.join(root, "key.pem")),

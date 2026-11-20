@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
+import { hostVariables } from "../../features/lib/child-environment.ts";
 import { cgiEnvironment, parseCgiResponse } from "../../features/lib/https-git-host/cgi.ts";
 
 import type { CgiRequest, CgiResponse } from "../../features/lib/https-git-host/cgi.ts";
@@ -149,7 +150,7 @@ describe("parseCgiResponse", () => {
 /** The keys every CGI environment of the host at `/run/repositories` holds. */
 function serverEnvironment(): NodeJS.ProcessEnv {
   return {
-    PATH: process.env.PATH ?? "",
+    ...hostVariables(["PATH"]),
     HOME: "/run/cgi-home",
     GIT_CONFIG_NOSYSTEM: "1",
     GIT_CONFIG_GLOBAL: "/dev/null",
