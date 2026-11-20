@@ -36,8 +36,33 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { SpawnOptions } from "node:child_process";
 
+/**
+ * The host variables the portable case keeps. Its child echoes the whole
+ * environment back as hook context, so a large host environment would push
+ * that context over the D-PG5-15 cap and into a saved file.
+ */
+const PORTABLE_CASE_ENVIRONMENT: ReadonlySet<string> = new Set([
+  "HOME",
+  "PATH",
+  "PI_CODING_AGENT_DIR",
+  "SystemRoot",
+  "TEMP",
+  "TMP",
+  "TMPDIR",
+]);
+
 test("executes a blocking hook through the portable process boundary", async (t) => {
   // arrange
+  const previousEnvironment = { ...process.env };
+  t.after(() => {
+    for (const key of Object.keys(process.env)) {
+      if (!Object.hasOwn(previousEnvironment, key)) {
+        Reflect.deleteProperty(process.env, key);
+      }
+    }
+
+    Object.assign(process.env, previousEnvironment);
+  });
   const runtime = createHooksRuntime();
   const { root: caseRoot, agentDir } = await createHermeticEnvironment(
     t,
@@ -49,31 +74,14 @@ test("executes a blocking hook through the portable process boundary", async (t)
   const stderrCapturePath = path.join(caseRoot, "stderr.txt");
   await Promise.all([mkdir(cwd, { recursive: true }), mkdir(pluginRoot, { recursive: true })]);
 
-  const ownedEnvironmentKeys = [
-    "PI_CLAUDE_MARKETPLACE_DEBUG",
-    "PORTABLE_HOOK_PROBE",
-    "CLAUDE_CODE_REMOTE",
-    "CLAUDE_ENV_FILE",
-    "PI_SUBAGENT_CHILD",
-  ] as const;
-  const previousEnvironment = ownedEnvironmentKeys.map((key) => ({
-    key,
-    existed: Object.hasOwn(process.env, key),
-    value: process.env[key],
-  }));
-  t.after(() => {
-    for (const previous of previousEnvironment) {
-      if (previous.existed && previous.value !== undefined) {
-        process.env[previous.key] = previous.value;
-      } else {
-        Reflect.deleteProperty(process.env, previous.key);
-      }
+  for (const key of Object.keys(process.env)) {
+    if (!PORTABLE_CASE_ENVIRONMENT.has(key)) {
+      Reflect.deleteProperty(process.env, key);
     }
-  });
+  }
+
   process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
   process.env.PORTABLE_HOOK_PROBE = "case-owned";
-  delete process.env.CLAUDE_CODE_REMOTE;
-  delete process.env.CLAUDE_ENV_FILE;
   process.env.PI_SUBAGENT_CHILD = "1";
   runtime.captureChildIdentity(
     {
