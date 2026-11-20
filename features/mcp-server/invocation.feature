@@ -56,7 +56,7 @@ Feature: MCP server invocation
     When the user prompts "call the stub"
     Then the stub mcp server "stub" of the plugin "demo" receives these messages:
       | kind         | method                    | params                                                                                                    |
-      | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"roots":{}},"clientInfo":{"name":"pi","version":"1.5.0"}} |
+      | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"roots":{}},"clientInfo":{"name":"pi","version":"1.5.1"}} |
       | notification | notifications/initialized |                                                                                                           |
       | request      | tools/list                |                                                                                                           |
       | request      | tools/call                | {"name":"echo","arguments":{"text":"ping"},"_meta":{"progressToken":3}}                                   |
@@ -215,6 +215,6 @@ Feature: MCP server invocation
       | 2    | tool result | tool_search returned: found no tools      |
     Then the stub mcp server "stub" of the plugin "demo" receives these messages:
       | kind         | method                    | params                                                                                                    |
-      | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"roots":{}},"clientInfo":{"name":"pi","version":"1.5.0"}} |
+      | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"roots":{}},"clientInfo":{"name":"pi","version":"1.5.1"}} |
       | notification | notifications/initialized |                                                                                                           |
       | request      | tools/list                |                                                                                                           |

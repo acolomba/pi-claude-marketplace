@@ -68,7 +68,7 @@ Feature: MCP server listing
       | 2    | mcp__plugin_demo_stub__echo, pi_claude_marketplace_list, pi_claude_marketplace_plugin_list |
     Then the stub mcp server "stub" of the plugin "demo" receives these messages:
       | kind         | method                    | params                                                                                                    |
-      | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"roots":{}},"clientInfo":{"name":"pi","version":"1.5.0"}} |
+      | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"roots":{}},"clientInfo":{"name":"pi","version":"1.5.1"}} |
       | notification | notifications/initialized |                                                                                                           |
       | request      | tools/list                |                                                                                                           |
 
@@ -336,6 +336,6 @@ Feature: MCP server listing
       | 2    | pi_claude_marketplace_list, pi_claude_marketplace_plugin_list |
     Then the stub mcp server "stub" of the plugin "demo" receives these messages:
       | kind         | method                    | params                                                                                                    |
-      | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"roots":{}},"clientInfo":{"name":"pi","version":"1.5.0"}} |
+      | request      | initialize                | {"protocolVersion":"2025-11-25","capabilities":{"roots":{}},"clientInfo":{"name":"pi","version":"1.5.1"}} |
       | notification | notifications/initialized |                                                                                                           |
       | request      | tools/list                |                                                                                                           |
