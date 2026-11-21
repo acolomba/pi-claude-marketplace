@@ -12,8 +12,8 @@
  * files a checkout holds outside `.git/`. A setup step also plants a
  * directory of the user's own at a checkout path (MA-13). A refused add must
  * leave that directory exactly as it was, so one read step lists every entry
- * it holds, directories and `.git/` included, and another proves the refusal
- * removed the clone it staged first.
+ * it holds, directories and `.git/` included, with the text of each file, and
+ * another proves the refusal removed the clone it staged first.
  */
 
 import assert from "node:assert/strict";
@@ -41,20 +41,25 @@ function extensionRootOf(world: ScenarioWorld, scope: string): string {
   return path.join(world.scopeRoot(scope), "pi-claude-marketplace");
 }
 
-// Every entry under the checkout of the marketplace `name`, as its path
-// segments under the checkout; the checkout itself must be a directory.
+// Every entry under the checkout of the marketplace `name`, as its absolute
+// path and its path segments under the checkout; the checkout itself must be
+// a directory.
 async function checkoutEntries(
   world: ScenarioWorld,
   name: string,
   scope: string,
-): Promise<{ segments: string[]; isDirectory: boolean }[]> {
+): Promise<{ absolutePath: string; segments: string[]; isDirectory: boolean }[]> {
   const checkout = path.join(extensionRootOf(world, scope), "sources", name);
   assert.equal((await stat(checkout)).isDirectory(), true);
   const entries = await readdir(checkout, { recursive: true, withFileTypes: true });
-  return entries.map((entry) => ({
-    segments: path.relative(checkout, path.join(entry.parentPath, entry.name)).split(path.sep),
-    isDirectory: entry.isDirectory(),
-  }));
+  return entries.map((entry) => {
+    const absolutePath = path.join(entry.parentPath, entry.name);
+    return {
+      absolutePath,
+      segments: path.relative(checkout, absolutePath).split(path.sep),
+      isDirectory: entry.isDirectory(),
+    };
+  });
 }
 
 // One table row per path, in path order.
@@ -154,15 +159,23 @@ Then(
   },
 );
 
-// A directory reads as its path and a trailing `/`, so a new empty directory,
-// such as a `.git/` an add began, changes the list.
+// A directory reads as its path and a trailing `/` with no content, so a new
+// empty directory, such as a `.git/` an add began, changes the list. A file
+// reads as its path and its text, so an overwritten or truncated file does too.
 Then(
   "the checkout of the marketplace {string} in the {word} scope holds exactly these entries:",
   async function (this: ScenarioWorld, name: string, scope: string, table: DataTable) {
-    const entries = (await checkoutEntries(this, name, scope)).map((entry) => {
-      const entryPath = entry.segments.join("/");
-      return entry.isDirectory ? `${entryPath}/` : entryPath;
-    });
-    assert.deepStrictEqual([["entry"], ...pathRows(entries)], table.raw());
+    const rows = await Promise.all(
+      (await checkoutEntries(this, name, scope)).map(async (entry): Promise<[string, string]> => {
+        const entryPath = entry.segments.join("/");
+        if (entry.isDirectory) {
+          return [`${entryPath}/`, ""];
+        }
+
+        return [entryPath, await readFile(entry.absolutePath, "utf8")];
+      }),
+    );
+    rows.sort(([left], [right]) => left.localeCompare(right));
+    assert.deepStrictEqual([["entry", "content"], ...rows], table.raw());
   },
 );
