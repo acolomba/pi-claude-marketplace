@@ -113,3 +113,34 @@ Feature: Plugin configuration
     Then the result lists these plugins:
       | marketplace name    | marketplace scope | id                                      | name                | status | reasons          | scope   | cause chain                                                                                                                                                                                                                                                                                     | cause truncated | leaks | rollback partial |
       | claude-plugins.json | project           | claude-plugins.json@claude-plugins.json | claude-plugins.json | failed | invalid manifest | project | The base config (claude-plugins.json) declares demo@fixtures, but only the local config (claude-plugins.local.json) declares its marketplace. Run /claude:plugin marketplace add <source> --scope project with the source the local config declares, or remove the plugin from the base config. | false           |       |                  |
+
+  Scenario: Applying a local layer that declares a plugin whose marketplace only the base layer declares fails as an invalid config and changes nothing (LAYER-06, CFG-03)
+    Given the marketplace "fixtures" offers these plugins:
+      | name  | version |
+      | demo  | 1.0.0   |
+      | other | 1.0.0   |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install other@fixtures --scope project"
+    Given a config in scope project and layer local, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   |         |
+    Given the config and installation record bytes of the project scope are remembered
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind           | reconcile-applied-cascade      |
+      | needs reload   | false                          |
+      | severity       | error                          |
+      | summary        | A plugin operation has failed. |
+      | tally failures | 1                              |
+      | tally label    | Reconcile                      |
+      | tally warnings | 0                              |
+    Then the result lists these plugins:
+      | marketplace name          | marketplace scope | id                                                  | name                      | status | reasons          | scope   | cause chain                                                                                                                                                                                                                                                                                             | cause truncated | leaks | rollback partial |
+      | claude-plugins.local.json | project           | claude-plugins.local.json@claude-plugins.local.json | claude-plugins.local.json | failed | invalid manifest | project | The local config (claude-plugins.local.json) declares demo@fixtures, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config. | false           |       |                  |
+    Then the config and installation record bytes of the project scope are unchanged
+    Then the "claude-plugins.local.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    Then the project scope stages these skills and prompts:
+      | kind  | name        |
+      | skill | other-skill |
