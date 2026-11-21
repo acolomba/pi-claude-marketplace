@@ -188,6 +188,62 @@ Feature: Plugin config migration
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
+  Scenario: Pending before the first-run migration reports the local config's missing marketplace and writes no project config (MIG-01, LAYER-06)
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has deleted the config files of the project scope
+    Given a config in scope project and layer local, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   |         |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind           | cascade                        |
+      | needs reload   | false                          |
+      | severity       | error                          |
+      | summary        | A plugin operation has failed. |
+      | tally failures | 1                              |
+      | tally label    | Reconcile pending              |
+      | tally warnings | 0                              |
+    Then the result lists these plugins:
+      | marketplace name          | marketplace scope | id                                                  | name                      | status | reasons          | scope   | cause chain                                                                                                                                                                                                                                                                                             | cause truncated | leaks | rollback partial |
+      | claude-plugins.local.json | project           | claude-plugins.local.json@claude-plugins.local.json | claude-plugins.local.json | failed | invalid manifest | project | The local config (claude-plugins.local.json) declares demo@fixtures, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config. | false           |       |                  |
+    Then the "claude-plugins.json" file of the project scope does not exist
+    Then the "claude-plugins.local.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+
+  Scenario: Applying before the first-run migration stops on the local config's missing marketplace and keeps the plugin installed (MIG-01, LAYER-06)
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has deleted the config files of the project scope
+    Given a config in scope project and layer local, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   |         |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind           | reconcile-applied-cascade      |
+      | needs reload   | false                          |
+      | severity       | error                          |
+      | summary        | A plugin operation has failed. |
+      | tally failures | 1                              |
+      | tally label    | Reconcile                      |
+      | tally warnings | 0                              |
+    Then the result lists these plugins:
+      | marketplace name          | marketplace scope | id                                                  | name                      | status | reasons          | scope   | cause chain                                                                                                                                                                                                                                                                                             | cause truncated | leaks | rollback partial |
+      | claude-plugins.local.json | project           | claude-plugins.local.json@claude-plugins.local.json | claude-plugins.local.json | failed | invalid manifest | project | The local config (claude-plugins.local.json) declares demo@fixtures, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config. | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+    Then the project scope stages these skills and prompts:
+      | kind  | name       |
+      | skill | demo-skill |
+
   Scenario: The first load after an upgrade from release 0.4.3 writes the project config with autoupdate off
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
