@@ -25,11 +25,22 @@ interface EnvironmentLedger {
 
 const ledgers = new WeakMap<TestContext, EnvironmentLedger>();
 
+// Windows names a variable in any case, so `Path` and `PATH` are one variable
+// there. A second record of it would put it back as unset when the case ends.
+function isRecorded(ledger: EnvironmentLedger, name: string): boolean {
+  if (process.platform !== "win32") {
+    return ledger.records.has(name);
+  }
+
+  const comparable = name.toUpperCase();
+  return [...ledger.records.keys()].some((recorded) => recorded.toUpperCase() === comparable);
+}
+
 function restore(ledger: EnvironmentLedger): void {
   if (ledger.wholeEnvironment) {
     // Code under test may add variables during the case.
     for (const name of Object.keys(process.env)) {
-      if (!ledger.records.has(name)) {
+      if (!isRecorded(ledger, name)) {
         Reflect.deleteProperty(process.env, name);
       }
     }
@@ -60,7 +71,7 @@ function ledgerFor(t: TestContext): EnvironmentLedger {
 }
 
 function record(ledger: EnvironmentLedger, name: string): void {
-  if (!ledger.records.has(name)) {
+  if (!isRecorded(ledger, name)) {
     ledger.records.set(name, ledger.wholeEnvironment ? undefined : process.env[name]);
   }
 }

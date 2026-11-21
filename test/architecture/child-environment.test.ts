@@ -226,7 +226,41 @@ describe("useAllowlistedProcessEnvironment", () => {
   });
 });
 
+// An environment that names a variable in any case, as Windows does: a key
+// keeps the spelling it was first set with.
+function windowsProcessEnvironment(initial: Record<string, string>): NodeJS.ProcessEnv {
+  const store: Record<string, string> = { ...initial };
+  const stored = (name: string | symbol): string | symbol =>
+    typeof name === "string"
+      ? (Object.keys(store).find((key) => key.toUpperCase() === name.toUpperCase()) ?? name)
+      : name;
+  return new Proxy(store, {
+    get: (target, name): unknown => Reflect.get(target, stored(name)),
+    set: (target, name, value) => Reflect.set(target, stored(name), String(value)),
+    has: (target, name) => Reflect.has(target, stored(name)),
+    deleteProperty: (target, name) => Reflect.deleteProperty(target, stored(name)),
+    getOwnPropertyDescriptor: (target, name) =>
+      Reflect.getOwnPropertyDescriptor(target, stored(name)),
+  });
+}
+
 describe("restoreEnvironmentAfter", () => {
+  test("on Windows, keeps a variable that a case records in two spellings", async (t) => {
+    // arrange
+    const environment = windowsProcessEnvironment({ Path: "C:\\Windows\\system32" });
+    t.mock.property(process, "env", environment);
+    t.mock.property(process, "platform", "win32");
+
+    // act
+    await t.test("case", (caseContext) => {
+      useAllowlistedProcessEnvironment(caseContext, ["PATH"]);
+      restoreEnvironmentAfter(caseContext, ["PATH"]);
+    });
+
+    // assert
+    assert.deepStrictEqual({ ...environment }, { Path: "C:\\Windows\\system32" });
+  });
+
   test("puts back a set variable and removes an unset one when the case ends", async (t) => {
     // arrange
     useAllowlistedProcessEnvironment(t, [], { PI_CM_CHILD_SET: "host-set" });
