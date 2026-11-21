@@ -31,13 +31,6 @@ import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 import type { ScopedLocations } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { NotificationBoundary } from "../edge/notification-boundary.ts";
 
-/** A plugin the marketplace `mp` offers. */
-interface FixturePlugin {
-  readonly name: string;
-}
-
-const PLUGINS: readonly FixturePlugin[] = [{ name: "alpha" }];
-
 interface LayerScope {
   readonly cwd: string;
   readonly locations: ScopedLocations;
@@ -45,29 +38,27 @@ interface LayerScope {
   readonly source: string;
 }
 
-/** Writes the path marketplace `mp`, every plugin at `version` with one skill. */
-async function publish(source: string, version: string): Promise<void> {
+/** Writes the path marketplace `mp`, which offers `alpha` 1.0.0 with one skill. */
+async function publish(source: string): Promise<void> {
+  const pluginRoot = path.join(source, "plugins", "alpha");
   await mkdir(path.join(source, ".claude-plugin"), { recursive: true });
   await writeFile(
     path.join(source, ".claude-plugin", "marketplace.json"),
     JSON.stringify({
       name: "mp",
-      plugins: PLUGINS.map(({ name }) => ({ name, source: `./plugins/${name}`, version })),
+      plugins: [{ name: "alpha", source: "./plugins/alpha", version: "1.0.0" }],
     }),
   );
-  for (const plugin of PLUGINS) {
-    const pluginRoot = path.join(source, "plugins", plugin.name);
-    await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
-    await mkdir(path.join(pluginRoot, "skills", `${plugin.name}-skill`), { recursive: true });
-    await writeFile(
-      path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-      JSON.stringify({ name: plugin.name, version }),
-    );
-    await writeFile(
-      path.join(pluginRoot, "skills", `${plugin.name}-skill`, "SKILL.md"),
-      `---\nname: ${plugin.name}-skill\ndescription: A skill of ${plugin.name}.\n---\n`,
-    );
-  }
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await mkdir(path.join(pluginRoot, "skills", "alpha-skill"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "alpha", version: "1.0.0" }),
+  );
+  await writeFile(
+    path.join(pluginRoot, "skills", "alpha-skill", "SKILL.md"),
+    "---\nname: alpha-skill\ndescription: A skill of alpha.\n---\n",
+  );
 }
 
 /** The production install operation of one command run, bound to one routing owner. */
@@ -107,7 +98,7 @@ function request(
 async function installedScope(t: TestContext, prefix: string): Promise<LayerScope> {
   const { cwd, root } = await createHermeticEnvironment(t, prefix);
   const source = path.join(root, "mp");
-  await publish(source, "1.0.0");
+  await publish(source);
   const scope = { cwd, locations: locationsFor("project", cwd), source };
   const boundary = createNotificationBoundary(2);
   await addMarketplace({
