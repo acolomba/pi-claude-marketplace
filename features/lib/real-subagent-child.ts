@@ -1055,19 +1055,27 @@ function tableRecords(
 }
 
 /**
- * Reads an agents table with the columns `name`, `background`, `tools`, and
- * `tool calls`: an empty `background` or `tools` cell leaves that line out of
- * the agent's frontmatter, and `tool calls` names the calls its child makes,
- * from `bash`, `failing read`, and `stub mcp tool`, separated by commas.
+ * Reads an agents table with the columns `name`, `background`, `tools`, an
+ * optional `body`, and `tool calls`, in that order. Any other header throws.
+ * An empty `background` or `tools` cell leaves that line out of the agent's
+ * frontmatter. A `body` cell is the agent's whole body, so an empty cell gives
+ * an agent with an empty body. A table without the `body` column gives every
+ * agent the body "Run the tools the task names.". `tool calls` names the calls
+ * the agent's child makes, from `bash`, `failing read`, and `stub mcp tool`,
+ * separated by commas.
  */
 export function parseRealChildAgents(rows: readonly (readonly string[])[]): RealChildAgent[] {
-  return tableRecords(rows, ["name", "background", "tools", "tool calls"]).map((row) => ({
+  const withBody = rows[0]?.includes("body") === true;
+  const columns = withBody
+    ? ["name", "background", "tools", "body", "tool calls"]
+    : ["name", "background", "tools", "tool calls"];
+  return tableRecords(rows, columns).map((row) => ({
     name: row.name ?? "",
     frontmatter: (["background", "tools"] as const).flatMap((key) => {
       const value = row[key] ?? "";
       return value === "" ? [] : [[key, value] as const];
     }),
-    body: "Run the tools the task names.",
+    body: withBody ? (row.body ?? "") : "Run the tools the task names.",
     calls: namedCalls(row["tool calls"] ?? ""),
   }));
 }

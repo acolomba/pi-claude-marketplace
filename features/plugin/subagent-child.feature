@@ -565,6 +565,29 @@ Feature: Plugin subagent child
       | Stop             |           | none           |
       | Stop             |           | none           |
 
+  @mcp
+  Scenario: A real child of an ordinary agent with an empty body runs in the background and hooks its tools with its own identity
+    When pi-subagents, with its async-by-default setting unset, launches from a main pi session a real child of each of these agents of a plugin with a stub mcp server, whose hooks record every event and whose stop hook would send a main session back:
+      | name  | background | tools      | body | tool calls         |
+      | plain |            | Bash, Read |      | bash, failing read |
+    Then pi-subagents ran the real children like this:
+      | agent      | mode       | state    | runner process | session |
+      | demo:plain | background | complete | recorded       | first   |
+    Then the real children's hooks record these runs in any order, and no main-session run names a child:
+      | session | event              | tool name | agent type | agent id | transcript path      | CLAUDE_CODE_SESSION_ID |
+      | main    | PreToolUse         | Bash      | demo:plain | first    | session file of main | main                   |
+      | main    | PostToolUse        | Bash      | demo:plain | first    | session file of main | main                   |
+      | main    | PreToolUse         | Read      | demo:plain | first    | session file of main | main                   |
+      | main    | PostToolUseFailure | Read      | demo:plain | first    | session file of main | main                   |
+    Then the main session's hooks record these runs for its control prompt:
+      | event            | tool name | child identity |
+      | SessionStart     |           | none           |
+      | UserPromptSubmit |           | none           |
+      | PreToolUse       | Bash      | none           |
+      | PostToolUse      | Bash      | none           |
+      | Stop             |           | none           |
+      | Stop             |           | none           |
+
   Scenario: Concurrent companion children keep separate hook identities
     When a pi-subagents runner process starts these child sessions of a plugin whose hooks record every event at once, prompts them all at once twice, and starts them again as new sessions:
       | agent      | mode    | body                         | tool calls |
