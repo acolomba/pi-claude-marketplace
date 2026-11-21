@@ -114,7 +114,7 @@ them at the merge.
   combined tree.
 
 - [x] **Phase 1: Duplicate Integration Files** - The two integration files that only repeat cucumber scenarios are gone, after their scenarios are proven to fail when the behavior breaks (completed 2026-11-21)
-- [ ] **Phase 2: Plugin Layers, Names, and List Fold** - Scenarios prove the LAYER-04 refusals, the plugin-layer reports, plugin names that are `Object.prototype` members, and the unfiltered `list` fold
+- [x] **Phase 2: Plugin Layers, Names, and List Fold** - Scenarios prove the LAYER-04 refusals, the plugin-layer reports, plugin names that are `Object.prototype` members, and the unfiltered `list` fold (completed 2026-11-21)
 - [ ] **Phase 3: Marketplace Layers and Cross-Scope Install** - Scenarios prove the marketplace layer rules and a project install that adds a user marketplace to the project
 - [ ] **Phase 4: Prune** - Scenarios prove the `prune` cases a user can see that the suite left out
 - [ ] **Phase 5: MCP Install, Legacy Move, and Overrides** - Scenarios prove the MCP install refusals and warnings, the legacy `mcp.json` move, and the pi-mcp-adapter override cases
@@ -223,7 +223,7 @@ Plans:
   2. Scenarios show the user-scope local gap, a legacy local layer from an earlier `--local` install kept byte for byte, `pending` before the first-run migration, and a malformed key such as `demo@` reported as a source mismatch. They pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `plugin-layer-consistency` (ITMIG-02).
   3. A plugin named `constructor` installs, lists, shows in `info`, disables, enables, updates, uninstalls, imports, and goes when its marketplace is removed; a plugin named `__proto__` lists as unavailable; and a reload that declares `hello@constructor` records nothing. The scenarios pass under both profiles, fail under a deliberate break, and `reserved-record-keys` keeps no case they replace (ITMIG-03).
   4. The unfiltered `list` shows a project install from a user marketplace as a `[project]` row under that user marketplace, and shows an independently added project marketplace on its own, with no duplicate row. The scenarios pass under both profiles, fail under a deliberate break, and `fold-adoption` no longer exists (ITMIG-04).
-**Plans**: 4/4 plans executed
+**Plans**: 4/4 plans complete
 
 Plans:
 - [x] 02-01-PLAN.md -- Wave 1: twelve LAYER-04 scenarios in the six verb files, breaks B1, B2, and B12, then trim `plugin-layer-verbs` to its two LAYER-06 cases (ITMIG-01)
@@ -318,7 +318,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
 | 1. Duplicate Integration Files | 2/2 | Complete    | 2026-11-21 |
-| 2. Plugin Layers, Names, and List Fold | 4/4 | In Progress | - |
+| 2. Plugin Layers, Names, and List Fold | 4/4 | Complete    | 2026-11-21 |
 | 3. Marketplace Layers and Cross-Scope Install | 0/TBD | Not started | - |
 | 4. Prune | 0/TBD | Not started | - |
 | 5. MCP Install, Legacy Move, and Overrides | 0/TBD | Not started | - |

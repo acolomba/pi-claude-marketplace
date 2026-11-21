@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: integration-rescope
 milestone_name: Integration Test Rescope
-current_phase: 02
-current_phase_name: Plugin Layers, Names, and List Fold
-status: executing
-stopped_at: Phase 01 complete, ready to verify Phase 2
-last_updated: "2026-11-21T18:06:57.164Z"
+current_phase: 3
+current_phase_name: Marketplace Layers and Cross-Scope Install
+status: verifying
+stopped_at: Phase 02 complete, ready to verify Phase 3
+last_updated: "2026-11-21T20:03:41.902Z"
 last_activity: 2026-11-21
-last_activity_desc: Phase 02 execution started
-state_head: ff2b92ba3d23d06a5a666eaab000652c0a939f85
+last_activity_desc: Phase 02 complete, transitioned to Phase 3
+state_head: 506dd01ce5a0d7083b5aa78b074ba3ef29dbd25d
 progress:
   total_phases: 8
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 6
-  completed_plans: 2
-  percent: 13
+  completed_plans: 6
+  percent: 25
 ---
 
 # Project State
@@ -31,12 +31,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 02 (Plugin Layers, Names, and List Fold) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 02
-Last activity: 2026-11-21 — Phase 02 execution started
+Phase: 3 — Marketplace Layers and Cross-Scope Install
+Plan: 7
+Status: Phase complete — ready for verification
+Last activity: 2026-11-21 — Phase 02 complete, transitioned to Phase 3
 
-Progress: [█░░░░░░░░░] 13%
+Progress: [███░░░░░░░] 25%
 
 
 ### parity-gaps closeout: `override_closeout`
@@ -1289,7 +1289,7 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 ## Session Continuity
 
 Last session: 2026-11-21T18:00:00.000Z
-Stopped at: Phase 1 complete (verified 6/6, threats 0 open), ready to plan Phase 2
+Stopped at: Phase 02 complete, ready to verify Phase 3
 Resume file: None
 
 ### Phase 2 completion-helper notes
