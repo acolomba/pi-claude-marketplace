@@ -10,7 +10,9 @@
  * plugin of such a repository as a `github` source, which the GitHub base
  * override sends to the git host, or as a `url` or `git-subdir` source that
  * names the host's loopback address, unpinned or pinned to the repository's
- * latest revision, and its entry may declare dependencies.
+ * latest revision, and its entry may declare dependencies. A url marketplace
+ * can also offer a plugin of its own repository as a `git-subdir` source,
+ * unpinned or pinned to the marketplace's latest commit (D-SEED-01).
  */
 
 import assert from "node:assert/strict";
@@ -383,4 +385,58 @@ export function offerGitPlugins(text: string, entries: readonly GitPluginEntry[]
   }
 
   return JSON.stringify(manifest);
+}
+
+/**
+ * A plugin a url marketplace offers from its own repository (D-SEED-01): its
+ * name and version, the url its entry names, which may end in `.git`, and
+ * whether the entry pins the marketplace's latest commit.
+ */
+export interface OwnRepositoryOffer {
+  readonly name: string;
+  readonly version: string;
+  readonly url: string;
+  readonly pinned: boolean;
+}
+
+const OWN_REPOSITORY_COLUMNS = ["name", "version", "url", "pinned"] as const;
+
+/**
+ * Reads a `| name | version | url | pinned |` table of plugins a marketplace
+ * offers from its own repository (D-SEED-01), throwing on a missing or unknown
+ * column and on a pinned cell other than `true` and `false`. The url keeps its
+ * run tokens.
+ */
+export function readOwnRepositoryOffers(table: DataTable): OwnRepositoryOffer[] {
+  requireColumns(table, OWN_REPOSITORY_COLUMNS);
+  return table.hashes().map((row) => ({
+    name: String(row.name),
+    version: String(row.version),
+    url: String(row.url),
+    pinned: parsePinned(String(row.pinned)),
+  }));
+}
+
+/**
+ * Returns the marketplace entry that offers `offer` from the marketplace's own
+ * repository at `url`, as a `git-subdir` source at `plugins/<name>`, where the
+ * marketplace keeps the plugin's files. A pinned offer carries `commit` as its
+ * `sha`. The entry keeps the offer's version, so the install reports it
+ * (D-SEED-01).
+ */
+export function ownRepositoryEntry(
+  offer: OwnRepositoryOffer,
+  url: string,
+  commit: string,
+): GitPluginEntry & { readonly version: string } {
+  return {
+    name: offer.name,
+    version: offer.version,
+    source: {
+      source: "git-subdir",
+      url,
+      path: `plugins/${offer.name}`,
+      ...(offer.pinned ? { sha: commit } : {}),
+    },
+  };
 }

@@ -148,3 +148,22 @@ Feature: Marketplace url source
       | 500    | Internal Server Error |
       | 502    | Bad Gateway           |
       | 503    | Service Unavailable   |
+
+  Scenario: A plugin from the repository of a url marketplace lists as available right after the add (D-SEED-01)
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins from its own repository:
+      | name | version | url                           | pinned |
+      | demo | 1.0.0   | https://{git host}/acme/tools | false  |
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin list --scope project"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id         | name | status    | reasons | version |
+      | tools            | project           | demo@tools | demo | available |         | 1.0.0   |
