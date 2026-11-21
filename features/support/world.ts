@@ -135,6 +135,12 @@ export interface ScopeBytes {
 }
 
 /**
+ * Every entry under a scope's root, in path order: a directory as its path and
+ * a trailing `/`, a file beside its bytes in base64, a link beside its target.
+ */
+export type ScopeFiles = readonly (readonly [string, string])[];
+
+/**
  * What a scenario's profile Pi loads and trusts (D-CF1-15). It loads
  * `leadingExtensions` in order, then always the real extension, the scripted
  * model, and the registry probe, then `companions` in the fixed order
@@ -267,6 +273,8 @@ export class ScenarioWorld extends World {
   backgroundRequestWindow: RequestWindow | undefined = undefined;
   // The scope bytes the config steps remembered, by scope.
   readonly rememberedScopeBytes = new Map<string, ScopeBytes>();
+  // The entries of each scope tree the scope-state steps remembered, by scope.
+  readonly rememberedScopeFiles = new Map<string, ScopeFiles>();
   private readonly completionSets = new Map<string, readonly PluginCompletion[]>();
   private readonly uncomparedCompletionSets = new Set<string>();
   // Cucumber builds the world before any `Before()` hook, so the

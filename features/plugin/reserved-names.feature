@@ -395,7 +395,7 @@ Feature: Plugin reserved names
       | hello     | 1.0.0   |
     Given the marketplace "hostile" is added to the project scope
     Given the user has run "/claude:plugin install hello@hostile --scope project"
-    Given the config and installation record bytes of the project scope are remembered
+    Given the files of the project scope are remembered
     When the user runs "/claude:plugin install __proto__@hostile --scope project"
     Then the result has these fields:
       | kind         | cascade                        |
@@ -405,7 +405,7 @@ Feature: Plugin reserved names
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id                | name      | status | reasons          | scope   | cause chain                                                                                                                                                                                                                                                                                                      | cause truncated | leaks | rollback partial |
       | hostile          | project           | __proto__@hostile | __proto__ | failed | invalid manifest | project | Plugin "__proto__@hostile" cannot be installed, because its id is invalid: Each part of a plugin id (plugin@marketplace) may use only the letters a-z and A-Z, digits, ".", "_" and "-", and must start with a letter or digit. Here the plugin's name does not; the marketplace's maintainer can rename it. | false           |       |                  |
-    Then the config and installation record bytes of the project scope are unchanged
+    Then the files of the project scope are unchanged
     Then the "claude-plugins.local.json" file of the project scope does not exist
     Then the project scope stages these skills and prompts:
       | kind  | name        |
@@ -418,7 +418,7 @@ Feature: Plugin reserved names
       | hello | 1.0.0   |
     Given the marketplace "mp" is added to the project scope
     Given the user has run "/claude:plugin install hello@mp --scope project"
-    Given the config and installation record bytes of the project scope are remembered
+    Given the files of the project scope are remembered
     When the user runs "/claude:plugin <command>"
     Then the result has these fields:
       | kind         | marketplace-not-added               |
@@ -427,7 +427,7 @@ Feature: Plugin reserved names
       | summary      | A marketplace operation has failed. |
       | name         | constructor                         |
       | reasons      | marketplace not added               |
-    Then the config and installation record bytes of the project scope are unchanged
+    Then the files of the project scope are unchanged
     Then the project scope stages these skills and prompts:
       | kind  | name        |
       | skill | hello-skill |
@@ -446,7 +446,7 @@ Feature: Plugin reserved names
       | hello | 1.0.0   |
     Given the marketplace "mp" is added to the project scope
     Given the user has run "/claude:plugin install hello@mp --scope project"
-    Given the config and installation record bytes of the project scope are remembered
+    Given the files of the project scope are remembered
     When the user runs "/claude:plugin <verb> constructor@mp --scope project"
     Then the result has these fields:
       | kind         | cascade                        |
@@ -456,7 +456,7 @@ Feature: Plugin reserved names
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id             | name        | status | reasons       | scope   | leaks | rollback partial |
       | mp               | project           | constructor@mp | constructor | failed | not installed | project |       |                  |
-    Then the config and installation record bytes of the project scope are unchanged
+    Then the files of the project scope are unchanged
     Then the project scope stages these skills and prompts:
       | kind  | name        |
       | skill | hello-skill |
@@ -474,7 +474,7 @@ Feature: Plugin reserved names
       | hello | 1.0.0   |
     Given the marketplace "mp" is added to the project scope
     Given the user has run "/claude:plugin install hello@mp --scope project"
-    Given the config and installation record bytes of the project scope are remembered
+    Given the files of the project scope are remembered
     When the user runs "/claude:plugin enable constructor@mp --scope project"
     Then the result has these fields:
       | kind         | cascade                        |
@@ -484,7 +484,7 @@ Feature: Plugin reserved names
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id             | name        | status  | reasons       | scope   |
       | mp               | project           | constructor@mp | constructor | skipped | not installed | project |
-    Then the config and installation record bytes of the project scope are unchanged
+    Then the files of the project scope are unchanged
     Then the project scope stages these skills and prompts:
       | kind  | name        |
       | skill | hello-skill |
