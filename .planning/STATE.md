@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: integration-rescope
 milestone_name: Integration Test Rescope
-current_phase: 01
-current_phase_name: Duplicate Integration Files
-status: executing
-stopped_at: integration-rescope roadmap created (8 phases); next is Phase 1 discuss or plan
-last_updated: "2026-11-21T14:21:30.225Z"
+current_phase: 2
+current_phase_name: Plugin Layers, Names, and List Fold
+status: verifying
+stopped_at: Phase 01 complete, ready to verify Phase 2
+last_updated: "2026-11-21T16:41:22.143Z"
 last_activity: 2026-11-21
-last_activity_desc: Phase 01 execution started
-state_head: 8b7d332c7238b6186362420c7bdc9405ac45922b
+last_activity_desc: Phase 01 complete, transitioned to Phase 2
+state_head: c1433e6552d8efe0a9a32190968a0d90ba0cea9a
 progress:
   total_phases: 8
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 2
-  completed_plans: 0
-  percent: 0
+  completed_plans: 2
+  percent: 13
 ---
 
 # Project State
@@ -31,12 +31,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 01 (Duplicate Integration Files) — EXECUTING
-Plan: 1 of 2
-Status: Executing Phase 01
-Last activity: 2026-11-21 — Phase 01 execution started
+Phase: 2 — Plugin Layers, Names, and List Fold
+Plan: 2
+Status: Phase complete — ready for verification
+Last activity: 2026-11-21 — Phase 01 complete, transitioned to Phase 2
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█░░░░░░░░░] 13%
 
 
 ### parity-gaps closeout: `override_closeout`
@@ -1286,7 +1286,7 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 ## Session Continuity
 
 Last session: 2026-11-20T19:30:00.000Z
-Stopped at: integration-rescope roadmap created (8 phases); next is Phase 1 discuss or plan
+Stopped at: Phase 01 complete, ready to verify Phase 2
 Resume file: None
 
 ### Phase 2 completion-helper notes

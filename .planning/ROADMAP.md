@@ -113,7 +113,7 @@ them at the merge.
   gate runs `npm run check`. ITSCOPE-04 is the milestone's last gate, on the
   combined tree.
 
-- [ ] **Phase 1: Duplicate Integration Files** - The two integration files that only repeat cucumber scenarios are gone, after their scenarios are proven to fail when the behavior breaks
+- [x] **Phase 1: Duplicate Integration Files** - The two integration files that only repeat cucumber scenarios are gone, after their scenarios are proven to fail when the behavior breaks (completed 2026-11-21)
 - [ ] **Phase 2: Plugin Layers, Names, and List Fold** - Scenarios prove the LAYER-04 refusals, the plugin-layer reports, plugin names that are `Object.prototype` members, and the unfiltered `list` fold
 - [ ] **Phase 3: Marketplace Layers and Cross-Scope Install** - Scenarios prove the marketplace layer rules and a project install that adds a user marketplace to the project
 - [ ] **Phase 4: Prune** - Scenarios prove the `prune` cases a user can see that the suite left out
@@ -202,7 +202,7 @@ them at the merge.
   1. Breaking the SessionStart hook's side effect fails a scenario, and so does breaking hook spawning for a plugin whose `CLAUDE_PLUGIN_ROOT` lies outside the extension directory. With the breaks reverted, these scenarios pass under both profiles, and `test/integration/hooks-spawn-end-to-end.test.ts` no longer exists (ITDUP-01).
   2. A scenario starts a real pi-subagents child of an agent whose body is empty. The child runs detached; its `Bash` and `Read` hooks, including the `PostToolUseFailure` hook of the `Read` that fails, carry the child's agent type and session id; and no main-session hook carries a child identity (ITDUP-02).
   3. The scenarios of criterion 2 pass under both profiles and fail when the child's hook identity is broken on purpose, and `test/integration/pi-subagents-child-identity.test.ts` no longer exists (ITDUP-02).
-**Plans**: 2/2 plans executed
+**Plans**: 2/2 plans complete
 
 Plans:
 - [x] 01-01-PLAN.md -- Wave 1: record breaks E1 to E5 against the hook scenarios, then delete `hooks-spawn-end-to-end` (ITDUP-01)
@@ -308,7 +308,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Duplicate Integration Files | 2/2 | In Progress | - |
+| 1. Duplicate Integration Files | 2/2 | Complete    | 2026-11-21 |
 | 2. Plugin Layers, Names, and List Fold | 0/TBD | Not started | - |
 | 3. Marketplace Layers and Cross-Scope Install | 0/TBD | Not started | - |
 | 4. Prune | 0/TBD | Not started | - |

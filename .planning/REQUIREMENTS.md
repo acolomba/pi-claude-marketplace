@@ -18,8 +18,8 @@ Each ITMIG requirement is met only when all of these hold:
 
 ### Duplicates (ITDUP)
 
-- [ ] **ITDUP-01**: `test/integration/hooks-spawn-end-to-end.test.ts` is deleted, after the phase confirms that the hook scenarios cover the SessionStart side effect and a `CLAUDE_PLUGIN_ROOT` outside the extension directory (HOOK-E2E-05).
-- [ ] **ITDUP-02**: A scenario covers a pi-subagents child of an agent with an empty body, and the failing read in the ordinary launch case. Then `test/integration/pi-subagents-child-identity.test.ts` is deleted.
+- [x] **ITDUP-01**: `test/integration/hooks-spawn-end-to-end.test.ts` is deleted, after the phase confirms that the hook scenarios cover the SessionStart side effect and a `CLAUDE_PLUGIN_ROOT` outside the extension directory (HOOK-E2E-05).
+- [x] **ITDUP-02**: A scenario covers a pi-subagents child of an agent with an empty body, and the failing read in the ordinary launch case. Then `test/integration/pi-subagents-child-identity.test.ts` is deleted.
 
 ### Migration to cucumber (ITMIG)
 
@@ -60,8 +60,8 @@ None.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ITDUP-01 | Phase 1 | Pending |
-| ITDUP-02 | Phase 1 | Pending |
+| ITDUP-01 | Phase 1 | Complete |
+| ITDUP-02 | Phase 1 | Complete |
 | ITMIG-01 | Phase 2 | Pending |
 | ITMIG-02 | Phase 2 | Pending |
 | ITMIG-03 | Phase 2 | Pending |
