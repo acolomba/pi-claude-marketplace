@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Internal: tests now give each child process only the environment variables it needs, so a large or unusual shell environment no longer breaks them.
+- Internal: tests now give each child process only the environment variables it needs, so a large or unusual shell environment no longer breaks them. (#331)
 
 - Internal: the plugin browser now typechecks against Pi 1.6.0 as well as Pi 1.5.1. (#330)
 
