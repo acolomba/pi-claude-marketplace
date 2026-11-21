@@ -522,8 +522,11 @@ export class PluginBrowser {
     this.tui.requestRender();
   }
 
+  // pi-tui 1.6.0 returns `readonly string[]` from `Container.render` and
+  // declares it on `Component`, while 1.5.1 declares `string[]`. A mutable
+  // copy satisfies both.
   render(width: number): string[] {
-    return this.container.render(width);
+    return [...this.container.render(width)];
   }
 
   invalidate(): void {

@@ -477,6 +477,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261119-jmd | Split test/e2e/_helpers.ts into modules named by function | 2026-11-19 | bcbea72 | — | [261119-jmd-split-test-e2e-helpers-ts-by-function](./quick/261119-jmd-split-test-e2e-helpers-ts-by-function/) |
 | 261120-env | Run the portable dispatch-exec hook test on a small allowlisted environment so a large host environment cannot push its context over the cap | 2026-11-20 | f2225cc | complete | — |
 | 261120-i6p | Centralize environment allowlisting in the spawning tests: one node:test helper, one cucumber picker, each test names only the variables it needs (Windows base list included) | 2026-11-20 | e321030 | complete | [261120-i6p-centralize-environment-allowlisting-in-t](./quick/261120-i6p-centralize-environment-allowlisting-in-t/) |
+| 47 | Make PluginBrowser.render() typecheck against pi-tui 1.6.0 (copy rendered lines); CHANGELOG line | 2026-11-20 | dff44ec | — | — |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
