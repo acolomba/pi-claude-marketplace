@@ -588,6 +588,29 @@ Feature: Plugin subagent child
       | Stop             |           | none           |
       | Stop             |           | none           |
 
+  @mcp
+  Scenario: A real foreground child of an ordinary agent runs no plugin hook for its tool calls
+    When pi-subagents, with its async-by-default setting false, launches from a main pi session a real child of each of these agents of a plugin with a stub mcp server, whose hooks record every event and whose stop hook would send a main session back:
+      | name  | background | tools      | tool calls         |
+      | plain |            | Bash, Read | bash, failing read |
+    Then pi-subagents ran the real children like this:
+      | agent      | mode       | state | runner process | session |
+      | demo:plain | foreground |       | none           |         |
+    Then the plugin's hooks record these runs in order:
+      | session | event            | tool name | child identity |
+      | startup | SessionEnd       |           | none           |
+      | main    | SessionStart     |           | none           |
+      | main    | UserPromptSubmit |           | none           |
+      | main    | PreToolUse       | Bash      | none           |
+      | main    | PostToolUse      | Bash      | none           |
+      | main    | Stop             |           | none           |
+      | main    | Stop             |           | none           |
+      | main    | UserPromptSubmit |           | none           |
+      | main    | PreToolUse       | subagent  | none           |
+      | main    | PostToolUse      | subagent  | none           |
+      | main    | Stop             |           | none           |
+      | main    | Stop             |           | none           |
+
   Scenario: Concurrent companion children keep separate hook identities
     When a pi-subagents runner process starts these child sessions of a plugin whose hooks record every event at once, prompts them all at once twice, and starts them again as new sessions:
       | agent      | mode    | body                         | tool calls |
