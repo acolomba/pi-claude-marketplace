@@ -856,3 +856,216 @@ Feature: Marketplace remove
       | clone  | origin                           | revision          |
       | plugin | https://{git host}/acme/mono.git | {mono revision 1} |
     Then the git host receives no request
+
+  Scenario: A named remove of a url marketplace the scope records but no layer declares removes its record, checkout, and plugin data (D-09)
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install demo@tools --scope project"
+    Given the data directory of "demo@tools" in the project scope holds the file "notes.txt" with the text "Lost on remove."
+    Given a config in scope project and layer base, with this text:
+      """
+      { "schemaVersion": 1, "marketplaces": {}, "plugins": {} }
+      """
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id         | name | status      | reasons | scope   |
+      | tools            | project           | removed            | demo@tools | demo | uninstalled |         | project |
+    Then the project scope holds no marketplace record
+    Then the project scope holds no marketplace checkout
+    Then the project scope holds no git clones
+    Then the project scope holds no plugin data
+    Then the git host receives no request
+
+  Scenario: A named remove of an empty url marketplace the scope records but no layer declares removes its record and checkout (D-09)
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" is added to the project scope
+    Given a config in scope project and layer base, with this text:
+      """
+      { "schemaVersion": 1, "marketplaces": {} }
+      """
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status  |
+      | tools | project | removed |
+    Then the project scope holds no marketplace record
+    Then the project scope holds no marketplace checkout
+    Then the project scope holds no git clones
+
+  Scenario: Removing a url marketplace that only the base layer declares deletes its record, its checkout, and the data of its plugins (LAYER-03)
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install demo@tools --scope project"
+    Given the data directory of "demo@tools" in the project scope holds the file "notes.txt" with the text "Lost on remove."
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id         | name | status      | reasons | scope   |
+      | tools            | project           | removed            | demo@tools | demo | uninstalled |         | project |
+    Then the project scope holds no marketplace record
+    Then the project scope holds no marketplace checkout
+    Then the project scope holds no git clones
+    Then the project scope holds no plugin data
+    Then the "claude-plugins.json" file of the project scope declares no marketplaces
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+    Then the git host receives no request
+
+  Scenario: Removing a url marketplace from the base layer keeps its checkout and the data of the plugin that the local layer declares (LAYER-03)
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | alpha | 1.0.0   |
+      | beta  | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project --local"
+    Given the user has run "/claude:plugin install alpha@tools --scope project"
+    Given the user has run "/claude:plugin install beta@tools --scope project --local"
+    Given the data directory of "beta@tools" in the project scope holds the file "notes.txt" with the text "Kept by the user."
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status      | reasons | scope   |
+      | tools            | project           | removed            | alpha@tools | alpha | uninstalled |         | project |
+    Then the project scope holds these git clones:
+      | clone       | origin                            | revision |
+      | marketplace | https://{git host}/acme/tools.git |          |
+    Then the data directory of "beta@tools" in the project scope holds these files:
+      | file      | text              |
+      | notes.txt | Kept by the user. |
+    Then the "claude-plugins.json" file of the project scope declares no marketplaces
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name  | source                            |
+      | tools | https://{git host}/acme/tools.git |
+    Then the "claude-plugins.local.json" file of the project scope declares these plugins:
+      | id         |
+      | beta@tools |
+    Then the installation record of the project scope holds these plugins:
+      | id         | version | enabled |
+      | beta@tools | 1.0.0   | true    |
+    Then the project scope stages these skills and prompts:
+      | kind  | name       |
+      | skill | beta-skill |
+    Then the git host receives no request
+
+  Scenario: Removing without --local a url marketplace whose plugin the local layer installed fails as marketplace in local layer only and changes no file (LAYER-02)
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | beta | 1.0.0   |
+    Given the user has run "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project --local"
+    Given the user has run "/claude:plugin install beta@tools --scope project --local"
+    Given the files of the project scope are remembered
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons                         | scope   | cause chain                                                                                                                 | cause truncated | leaks | rollback partial |
+      | tools            | project           | failed             | tools | tools | failed | marketplace in local layer only | project | The marketplace tools is declared only in the local config (claude-plugins.local.json). Run the command again with --local. | false           |       |                  |
+    Then the files of the project scope are unchanged
+
+  Scenario: Removing a url marketplace fails as invalid manifest and changes no file while the local config cannot be read (LAYER-02, CFG-03)
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | alpha | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project --local"
+    Given the user has run "/claude:plugin install alpha@tools --scope project"
+    Given a config in scope project and layer local, with this text:
+      """
+      { not json
+      """
+    Given the files of the project scope are remembered
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons          | scope   | cause chain                                                       | cause truncated | leaks | rollback partial |
+      | tools            | project           | failed             | tools | tools | failed | invalid manifest | project | Config file "claude-plugins.local.json" failed schema validation. | false           |       |                  |
+    Then the files of the project scope are unchanged
+
+  Scenario: Removing a url marketplace keeps a dependency that a plugin of another marketplace needs, with its checkout and its data (LAYER-03)
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | alpha | 1.0.0   | lib          |
+      | lib   | 1.0.0   |              |
+    Given the marketplace "upstream" is published as a dir source
+    Given the marketplace "upstream" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@tools    |
+    Given the marketplace "upstream" allows dependencies on the marketplace "tools"
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "upstream" is added to the project scope
+    Given the user has run "/claude:plugin install alpha@tools --scope project"
+    Given the user has run "/claude:plugin install app@upstream --scope project"
+    Given the plugin "lib@tools" has written the file "notes.txt" with the text "Kept by the user." to its data directory in the project scope
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status      | reasons | scope   |
+      | tools            | project           | removed            | alpha@tools | alpha | uninstalled |         | project |
+    Then the project scope holds these git clones:
+      | clone       | origin                            | revision |
+      | marketplace | https://{git host}/acme/tools.git |          |
+    Then the data directory of "lib@tools" in the project scope holds these files:
+      | file      | text              |
+      | notes.txt | Kept by the user. |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | app@upstream | 1.0.0   | true    |
+      | lib@tools    | 1.0.0   | true    |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name     | source                       |
+      | upstream | {home}/marketplaces/upstream |
+
+  Scenario: After a url marketplace remove that kept a dependency, the scope has nothing pending (LAYER-03)
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | alpha | 1.0.0   | lib          |
+      | lib   | 1.0.0   |              |
+    Given the marketplace "upstream" is published as a dir source
+    Given the marketplace "upstream" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@tools    |
+    Given the marketplace "upstream" allows dependencies on the marketplace "tools"
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "upstream" is added to the project scope
+    Given the user has run "/claude:plugin install alpha@tools --scope project"
+    Given the user has run "/claude:plugin install app@upstream --scope project"
+    Given the user has run "/claude:plugin marketplace remove tools --scope project"
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
