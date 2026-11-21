@@ -1,137 +1,74 @@
 ---
 phase: 02-plugin-layers-names-and-list-fold
-reviewed: 2026-11-21T19:39:03Z
+reviewed: 2026-11-21T19:55:00Z
 depth: standard
-iteration: 2
-files_reviewed: 8
+iteration: 3
+files_reviewed: 2
 files_reviewed_list:
-  - features/support/world.ts
-  - features/step_definitions/scope-state.steps.ts
-  - features/plugin/configuration.feature
-  - features/plugin/config-migration.feature
   - features/plugin/reserved-names.feature
-  - features/plugin/update.feature
-  - features/plugin/list.feature
-  - test/integration/plugin-layer-verbs.test.ts
+  - features/plugin/configuration.feature
 findings:
   critical: 0
-  warning: 2
+  warning: 0
   info: 4
-  total: 6
+  total: 4
   necessity: 0
 status: issues_found
 ---
 
-# Phase 02: Code Review Report (re-review, iteration 2)
+# Phase 02: Code Review Report (re-review, iteration 3)
 
-**Reviewed:** 2026-11-21T19:39:03Z
+**Reviewed:** 2026-11-21T19:55:00Z
 **Depth:** standard
-**Files Reviewed:** 8
-**Status:** issues_found
+**Files Reviewed:** 2
+**Status:** issues_found (Info only)
 
 ## Summary
 
-Scope: the iteration-1 fix commits `4724154`, `f972b3e`, `ca3fa46`, `3f4e117`, `904daad`, `4a24414`, and `9970e43` (`git diff 211ceba..HEAD`). I read the full files in scope, the cucumber rules (`steps.md`, `world-and-stand-ins.md`, `layout.md`), and the deleted integration tests at `16c9dc1^` (`reserved-record-keys.test.ts`) and `25954ec^` (`plugin-layer-consistency.test.ts`). I did not re-run the full suite. I ran three scenarios that use the new steps under the adapter profile: `configuration.feature:117`, `configuration.feature:183` (the user scope, which snapshots the whole agent directory), and `reserved-names.feature:437`. All 3 passed (46 steps).
+Scope: the second fix pass, commits `50fed6c` (WR-01) and `a49b3a7` (WR-02), as `git diff 3eb87af HEAD -- features/plugin/reserved-names.feature features/plugin/configuration.feature` shows. The pass changed no other build input: `extensions/`, `features/support/`, and the step definitions are unchanged since `3eb87af`. I read both feature files around the changed scenarios, `features/step_definitions/scope-state.steps.ts`, `world.ts` (`scopeRoot`, `ScopeFiles`, the `session` launch option), and the fix report with its red proofs. I did not run the suite, as directed.
 
-Status of the iteration-1 findings:
+Status of the iteration-2 warnings:
 
-- **CR-01: resolved.** Both LAYER-06 apply scenarios (`configuration.feature:117`, `:183`) now compare every file of the scope and add `declares no marketplaces`. The pending scenario (`config-migration.feature:191`) adds `declares no marketplaces`. A local-layer "repair" now fails all three.
-- **WR-01: partly resolved.** The new `the files of the {word} scope are remembered` / `are unchanged` steps cover the project scope in all nine reserved-name examples. The deleted test compared the whole hermetic home, though, and four of the examples run commands with no `--scope` that also read the user scope. Their user scope is still not pinned. See WR-01 below.
-- **WR-02: resolved.** Both LAYER-04 update refusals compare every project file, so the staged `SKILL.md` bytes, which hold the version, are pinned.
-- **WR-03: resolved.** `list.feature:229` puts back the old order: a folded install, then an independent `team` project marketplace. The row table is compared whole, so a duplicate row or an extra `official [project]` header fails it.
-- **WR-04, WR-05: resolved.** The titles now say what the steps show.
-- **WR-06: resolved.** The one-plugin loop and the `version` parameter are gone. `publish(source)` writes the same bytes, and the assertions did not change.
+- **WR-01: resolved.** The Outline at `reserved-names.feature:414-442` now remembers the user scope before the command and checks `the files of the user scope are unchanged` after it, next to the project-scope pair. All four unscoped examples (`info`, `reinstall`, `marketplace update`, `marketplace remove`) carry the check. The fix report's red proof puts a write on the real bare-form miss path (`resolveScopeOrNotifyNotAdded`) and shows that the new step fails on it. The report also says a break on the orchestrated-only path left the scenario green, so the proof uses the path the typed command really runs. The snapshot is stable for the user scope: `scopeRoot("user")` is the sandbox agent directory, and the profile Pi starts with `--no-session` unless a scenario asks for `session: "saved"` (`world.ts:180-186`), so no session file appears there during the command. `configuration.feature:183` already compares that directory in the same way. The scoped Outline at `:444` and the `enable` scenario at `:472-492` name `--scope project` and keep only the project check. That is acceptable, as iteration 2 noted.
+- **WR-02: resolved.** `configuration.feature:159` and `:172` now use `the files of the project scope are remembered` / `are unchanged`, so all three scenarios of the LAYER-06 apply trio (`:117`, `:149`, `:183`) compare every file of their scope. The red proof creates `data/demo-fixtures/` before apply refuses. The new text fails on it, and the control shows that the old narrow step passed on the same break. The later `declares these plugins` / `declares these marketplaces` checks of the local layer (`:173-178`) are now implied by the byte comparison. They still state what the local layer holds, which the snapshot does not show to a reader, so they are not dead weight.
 
-The shared-harness change follows the cucumber rules:
+New defects: none. The added lines keep the `Given`-before-`Then` order and the repeated `Given`/`Then` keywords the suite uses. The new step phrases already exist, so `check:features` has nothing new to flag. The narrow `config and installation record bytes` step keeps its other uses.
 
-- `rememberedScopeFiles` is an initialized `readonly` field on the per-scenario world (`world.ts:277`), with no module state.
-- The `Given` writes the world, and the `Then` only reads it.
-- Registrations run `Given` before `Then`. The steps use `function` expressions with a typed `this`.
-- The module boundary is right: `scope-state` is a shared step module, and `ScopeFiles` sits beside `ScopeBytes` in `world.ts`.
-- The new step needs no release, because it creates nothing.
-
-There are two new findings: the user-scope gap above (WR-01), and one scenario in the LAYER-06 trio that still uses the narrow byte step (WR-02). Three Info items carry over. One new Info item covers what the snapshot leaves out.
-
-## Warnings
-
-### WR-01: The unscoped `constructor` commands read the user scope, but only the project scope is pinned
-
-**File:** `features/plugin/reserved-names.feature:414-440` (Examples `info x@constructor`, `reinstall x@constructor`, `marketplace update constructor`, `marketplace remove constructor`)
-**Issue:** The deleted `reserved-record-keys.test.ts` (at `16c9dc1^`) called `treeBytes(root)` on the whole hermetic environment, user agent directory included, before and after each absent-name command. The replacement Outline remembers and compares only `the files of the project scope`. These four commands have no `--scope`, and the product reads both scopes for them:
-
-- `orchestrators/marketplace/remove.ts:291-304` checks the project scope, then the user scope, before it returns `notAddedOutcome(name, ["project", "user"])`.
-- `orchestrators/marketplace/update.ts:333-337` loops over `["project", "user"]` when `opts.scope` is undefined.
-
-Here is a plausible wrong implementation: the unscoped miss path takes the user scope's state lock and saves its record, or creates `pi-claude-marketplace/` or a completion-cache file there, before it reports `marketplace not added`. The title promises "changes nothing", and this regression passes the scenario. The deleted test would have failed on it. This is the user-scope half of the original WR-01, which iteration 1 fixed only for the project scope.
-**Fix:** Pin both scopes in this Outline:
-
-```gherkin
-    Given the user has run "/claude:plugin install hello@mp --scope project"
-    Given the files of the project scope are remembered
-    Given the files of the user scope are remembered
-    When the user runs "/claude:plugin <command>"
-    ...
-    Then the files of the project scope are unchanged
-    Then the files of the user scope are unchanged
-```
-
-`configuration.feature:183` already shows that the user-scope snapshot, which covers the whole agent directory, is stable. The scoped scenarios (`:390`, `:442`, `:470`) can take the same two lines to match the deleted test's whole-home check, but their need is lower, because each names `--scope project`.
-
-### WR-02: The base-layer mirror of the LAYER-06 apply trio still uses the narrow byte step, so it checks less than the test it replaced
-
-**File:** `features/plugin/configuration.feature:149-181` (lines `:158` and `:171`)
-**Issue:** The deleted `plugin-layer-consistency.test.ts` (at `25954ec^`) had three "changes no file" cases, and each compared `treeBytes(scope.locations.scopeRoot)`: local-only-in-base (`:146-180`), base-only-in-local (`:184-205`), and the user scope (`:209-225`). Iteration 1 moved the first and third replacements to `the files of the <scope> scope are unchanged`. The base-layer mirror, "Applying a base layer that declares a plugin whose marketplace only the local layer declares fails as an invalid config and changes nothing", still uses `the config and installation record bytes of the project scope are remembered` / `are unchanged`. That step reads only `claude-plugins.json` and `state.json` (`config.steps.ts:55-61`).
-
-The local layer is pinned only on its `plugins` and `marketplaces` members, and the staged resources only by name. So these regressions pass the scenario:
-
-- apply creates `demo`'s plugin data directory before it refuses
-- apply writes `mcp-adapter.json` or `agents/` before it refuses
-- apply rewrites a staged `other-skill/SKILL.md`
-- apply adds another member, such as `schemaVersion`, to the local layer
-
-This is the gap WR-01 of iteration 1 named. The title says "changes nothing", the same as its two siblings.
-**Fix:** Use the whole-scope steps, as the two sibling scenarios do:
-
-```gherkin
-    Given the files of the project scope are remembered
-    When the user runs "/claude:plugin apply --scope project"
-    ...
-    Then the files of the project scope are unchanged
-```
+The four Info items of iteration 2 still apply and carry over below. I only corrected the `config-migration.feature` line numbers.
 
 ## Info
 
 ### IN-01: "fails as an invalid config" in the configuration titles, "fails as an invalid manifest" in the verb titles, for the same `invalid manifest` reason (carried over)
 
 **File:** `features/plugin/configuration.feature:117`, `:149`, `:183`, versus `features/plugin/install.feature:274` and its siblings
-**Issue:** Not changed in iteration 1. The two sets of scenarios report the same reason under two names, so a reader who searches titles for one wording misses the other set.
+**Issue:** Not changed in iterations 1 or 2. The two sets of scenarios report the same reason under two names, so a reader who searches titles for one wording misses the other set.
 **Fix:** Pick one wording. The reason column says `invalid manifest`.
 
-### IN-02: The pre-migration apply scenario does not pin the config files, and the pending scenario could pin the whole scope (carried over, extended)
+### IN-02: The pre-migration apply scenario does not pin the config files, and the pending scenario could pin the whole scope (carried over)
 
-**File:** `features/plugin/config-migration.feature:218-248`, `:191-217`
-**Issue:** The apply scenario still checks only the record and the staged skills. It says nothing about whether apply's read pass (MIG-01) writes `claude-plugins.json`, or leaves the local layer alone. The pending scenario at `:191` is a read-only command whose title says "writes no project config". It now pins the base config's absence and the local layer's two members. The new whole-scope step would state "pending writes nothing" in one line.
+**File:** `features/plugin/config-migration.feature:219-247`, `:191-217`
+**Issue:** The apply scenario still checks only the record and the staged skills. It says nothing about whether apply's read pass (MIG-01) writes `claude-plugins.json`, or leaves the local layer alone. The pending scenario at `:191` is a read-only command whose title says "writes no project config". It pins the base config's absence and the local layer's two members. The whole-scope step would state "pending writes nothing" in one line.
 **Fix:** In the apply scenario, add `Then the "claude-plugins.json" file of the project scope does not exist` (or the declarations it should hold) and `... declares no marketplaces`. In the pending scenario, consider `Given the files of the project scope are remembered` / `Then the files of the project scope are unchanged`.
 
 ### IN-03: The `computeOrphanFold` JSDoc cites scenarios as regression guards for carry-over arms they do not exercise (carried over)
 
 **File:** `extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts:544-546` (outside this iteration's file list; checked unchanged)
-**Issue:** "Regressions:" follows the paragraph about the `disabled`, `upgradable`, `partially-installed`, and `partially-upgradable` arms. The CMC-21 / D-13-17 list scenarios, including the new one at `list.feature:229`, fold only an `installed` row. Only the unit tests guard those arms.
+**Issue:** "Regressions:" follows the paragraph about the `disabled`, `upgradable`, `partially-installed`, and `partially-upgradable` arms. The CMC-21 / D-13-17 list scenarios fold only an `installed` row. Only the unit tests guard those arms.
 **Fix:** Name what the scenarios cover, for example "the CMC-21 / D-13-17 fold scenarios of features/plugin/list.feature (installed rows)".
 
-### IN-04: The scope snapshot leaves out file modes and treats every non-directory, non-link entry as a regular file
+### IN-04: The scope snapshot leaves out file modes and treats every non-directory, non-link entry as a regular file (carried over)
 
-**File:** `features/step_definitions/scope-state.steps.ts:24-35`, `features/support/world.ts:137-141`
+**File:** `features/step_definitions/scope-state.steps.ts:20-39`, `features/support/world.ts:137-141`
 **Issue:**
 
 - The snapshot records each entry's path and bytes, but not its mode. A refused command that changes a staged file's permission bits, such as the executable bit of a hook script, without changing its bytes still passes "unchanged".
-- Every entry that is not a directory or a symbolic link goes to `readFile`. Nothing creates a socket or a FIFO under a scope root today (I grepped `extensions/` and `features/`). If something did, the step would fail with an unclear `ENXIO` on a socket, or hang until the step timeout on a FIFO.
+- Every entry that is not a directory or a symbolic link goes to `readFile`. Nothing creates a socket or a FIFO under a scope root today. If something did, the step would fail with an unclear `ENXIO` on a socket, or hang until the step timeout on a FIFO. WR-01's fix now applies the snapshot to the user agent directory in four more examples, so this case is a little more likely to matter if a companion ever puts a socket there.
 - The `ScopeFiles` doc comment says "a file", which hides that choice.
 
 **Fix:** Optionally add `(await lstat(file)).mode.toString(8)` to the file and directory tuples. Assert `entry.isFile()` before `readFile`, and throw on any other entry type with its path, so a new entry type fails clearly.
 
 ---
 
-_Reviewed: 2026-11-21T19:39:03Z_
+_Reviewed: 2026-11-21T19:55:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
