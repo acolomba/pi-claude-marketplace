@@ -1,15 +1,17 @@
 /**
  * @fileoverview Steps about the hooks of an installed plugin in a pi-subagents
- * background child and in the main session beside it: a child profile Pi with
- * the profile's MCP implementation, a prompt whose turn keeps every hook run
- * since Pi started, a sibling child and a child that run beside the profile Pi,
- * the release of their waiting hooks, and the hook processes still waiting.
+ * child, background or foreground, and in the main session beside it: a child
+ * profile Pi with the profile's MCP implementation, a prompt whose turn keeps
+ * every hook run since Pi started, a sibling child and a child that run beside
+ * the profile Pi, the release of their waiting hooks, and the hook processes
+ * still waiting.
  *
- * A child runs a plugin's tool hooks and none of the main session's lifecycle
- * hooks (D-PG3-08). Pi runs a session's SessionStart hooks while it starts,
- * before any prompt, so the startup-session prompt keeps every stand-in log
- * line since the profile Pi started as the turn, and the runs step states the
- * startup run of a main session and its absence in a child.
+ * A background child runs a plugin's tool hooks and none of the main session's
+ * lifecycle hooks (D-PG3-08). A foreground child runs inside the main Pi's
+ * turn and runs no plugin hook. Pi runs a session's SessionStart hooks while
+ * it starts, before any prompt, so the startup-session prompt keeps every
+ * stand-in log line since the profile Pi started as the turn, and the runs
+ * step states the startup run of a main session and its absence in a child.
  *
  * The sibling and the child are Pis of their own in the run's sandbox, with
  * the profile Pi's scripted model and MCP implementation and pi-subagents'

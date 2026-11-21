@@ -1,9 +1,14 @@
 Feature: Plugin subagent child
 
   A load in a pi-subagents background child changes nothing installed, yet loads the installed
-  components (D-MB-12), and a child runs a plugin's tool hooks but no main-session hook (D-PG3-08). A child's tool hooks
-  name its agent (D-PG3-06) and, when the launch names it, the session that launched it (D-PG6-01). Stand-ins: Pis with the runner's marker and pi-subagents' agent tag in their
-  system prompt beside a main Pi, a json-mode Pi, a scripted model, recording hooks, and a local marketplace.
+  components (D-MB-12). A background child runs a plugin's tool hooks but no main-session hook
+  (D-PG3-08). Its tool hooks name its agent (D-PG3-06) and, when the launch names it, the session
+  that launched it (D-PG6-01). A foreground child runs inside the main Pi's turn and runs no plugin
+  hook. Stand-ins: Pis with the runner's marker and pi-subagents' agent tag in their system prompt
+  beside a main Pi, a json-mode Pi, a scripted model, recording hooks, and a local marketplace.
+  The real-child scenarios run the installed pi-subagents against a loopback scripted provider.
+  Each one installs the plugin in Pi's startup session, then starts the main session, which ends
+  the startup session.
 
   Scenario: A background child's load with autoapply on leaves a pending install, uninstall, and update for the next parent load
     Given the marketplace "fixtures" is published as a dir source
