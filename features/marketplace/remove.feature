@@ -555,6 +555,7 @@ Feature: Marketplace remove
     Given the user has run "/claude:plugin install elm@tools --scope project"
     Given the user has run "/claude:plugin install keeper-zebra@tools --scope project --local"
     Given the user has run "/claude:plugin install keeper-amber@tools --scope project --local"
+    Given the files of the project scope are remembered
     When the user runs "/claude:plugin marketplace remove tools --scope project"
     Then the result has these fields:
       | kind         | cascade                      |
@@ -580,6 +581,7 @@ Feature: Marketplace remove
       | id                 |
       | keeper-zebra@tools |
       | keeper-amber@tools |
+    Then the files of the project scope are unchanged
     When the user starts a new pi session
     Then the session offers these skills:
       | command                   | description                    |
@@ -598,6 +600,7 @@ Feature: Marketplace remove
     Given the marketplace "tools" is added to the project scope
     Given the user has run "/claude:plugin install alpha@tools --scope project"
     Given the manifest of the marketplace "tools" has become invalid
+    Given the files of the project scope are remembered
     When the user runs "/claude:plugin marketplace remove tools --scope project"
     Then the result has these fields:
       | kind         | cascade                      |
@@ -613,6 +616,7 @@ Feature: Marketplace remove
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id          |
       | alpha@tools |
+    Then the files of the project scope are unchanged
     When the user starts a new pi session
     Then the session reports these results:
       | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
