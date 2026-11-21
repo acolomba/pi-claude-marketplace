@@ -245,7 +245,13 @@ Plans:
   1. A named `marketplace autoupdate` flip adds a marketplace that the scope records and no layer declares to no layer, and an unnamed flip gives it no row while a declared marketplace flips (D-09). A named flip whose target layer is silent while the other layer's config is invalid changes no file (CFG-03). The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `marketplace-layer-autoupdate` (ITMIG-05).
   2. Declaring a url marketplace again, in the local layer or after the scope records it with no layer declaring it, makes no second clone and no git request, and so does installing a url plugin from the same repository after the add. A named remove fully removes a recorded url marketplace that no layer declares, and a remove refused because the other layer's config cannot be read changes nothing (LAYER-02). The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `marketplace-layer-redeclare`, `marketplace-layer-remove`, and `marketplace-add-seed-mirrors` (ITMIG-05).
   3. A project install from a marketplace that only the user scope records fails before the project clones when the manifest does not list the plugin (WR-07), replaces the extension's own leftover clone (MA-12), refuses a foreign tree at the clone path and keeps it (MA-13), and reads the plugin's dependencies from the fresh project clone, not from the stale user clone (D-MF-04). The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `project-install-adds-user-marketplace` (ITMIG-06).
-**Plans**: TBD
+**Plans**: 4 plans
+
+Plans:
+- [ ] 03-01-PLAN.md -- Wave 1: the D-09 named and unnamed flips and the CFG-03 flip in `marketplace/autoupdate.feature`, breaks A1 to A5b, then delete `marketplace-layer-autoupdate` (ITMIG-05)
+- [ ] 03-02-PLAN.md -- Wave 1: eight url remove scenarios in `marketplace/remove.feature` with two new steps in `plugin/installation.steps.ts`, breaks R1 to R10, then trim `marketplace-layer-remove` to its three EACCES cases (ITMIG-05)
+- [ ] 03-03-PLAN.md -- Wave 1: the re-declaration and own-repository scenarios in `marketplace/url-source.feature` with the own-repository offer step, breaks D1 and D2, the D-SEED-01 `.git` seeding fix test first, then delete `marketplace-layer-redeclare` (ITMIG-05)
+- [ ] 03-04-PLAN.md -- Wave 1: the WR-07, MA-12, MA-13, D-MF-04, and dependency-marketplace scenarios in `plugin/cross-scope-install.feature` with three new steps in `marketplace/checkout.steps.ts`, breaks C1 to C8, then delete `project-install-adds-user-marketplace` (ITMIG-06)
 
 ### Phase 4: Prune
 
