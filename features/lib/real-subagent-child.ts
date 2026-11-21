@@ -827,28 +827,39 @@ async function detachedChild(agent: string, asyncDir: string): Promise<DetachedC
   };
 }
 
-// Fails unless the child of `agent` sent the provider the results of all
-// `calls` of its tool calls. No hook shows the calls of a foreground child.
-function assertCallsAnswered(run: MainRun, agent: string, calls: number): void {
-  const answered = run.provider.requests.filter(
-    ({ lastUserText, toolResults }) =>
-      MARKER_PATTERN.exec(lastUserText)?.[0] === taskMarker(agent) && toolResults === calls,
+// Fails unless each request of the child of `agent` offered every tool of
+// `calls`, and the child sent the provider the results of all of them. No
+// hook shows the calls of a foreground child, and Pi answers a call to a tool
+// that the session does not offer with an error result and no tool event.
+function assertCallsAnswered(
+  run: MainRun,
+  agent: string,
+  calls: readonly ScriptedToolCall[],
+): void {
+  const requests = run.provider.requests.filter(
+    ({ lastUserText }) => MARKER_PATTERN.exec(lastUserText)?.[0] === taskMarker(agent),
   );
-  assert.notStrictEqual(
-    answered.length,
-    0,
-    `the child of ${agent} sent the results of its ${calls} tool calls`,
+  assert.deepStrictEqual(
+    requests.map(({ tools }) =>
+      calls.map(({ tool }) => tool).filter((tool) => !tools.includes(tool)),
+    ),
+    requests.map(() => []),
+    `the child of ${agent} was offered every tool it calls`,
+  );
+  assert.ok(
+    requests.some(({ toolResults }) => toolResults === calls.length),
+    `the child of ${agent} sent the results of its ${calls.length} tool calls`,
   );
 }
 
 // Has the main Pi's model call `subagent` for `agent`, and returns what
 // pi-subagents reported of the child once the main Pi settled, after
-// asserting that the child answered each of its `calls` tool calls. A
+// asserting that the child was offered and answered each of its `calls`. A
 // foreground child's agent is the one the tool result names.
 async function launchChild(
   run: MainRun,
   agent: string,
-  calls: number,
+  calls: readonly ScriptedToolCall[],
 ): Promise<DetachedChildObservation> {
   const from = await promptMain(run, launchMarker(agent), CHILD_TIMEOUT_MS);
   const launched = run.pi
@@ -906,7 +917,7 @@ export async function runRealSubagentChild(
     await settleMainPi(run);
     const children: DetachedChildObservation[] = [];
     for (const { agent, calls } of launches) {
-      children.push(await launchChild(run, agent, calls.length));
+      children.push(await launchChild(run, agent, calls));
     }
 
     return { ...(await observeMain(run)), children };
