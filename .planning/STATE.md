@@ -4,16 +4,16 @@ milestone: integration-rescope
 milestone_name: Integration Test Rescope
 current_phase: 3
 current_phase_name: Marketplace Layers and Cross-Scope Install
-status: verifying
+status: executing
 stopped_at: Phase 02 complete, ready to verify Phase 3
-last_updated: "2026-11-21T20:03:41.902Z"
+last_updated: "2026-11-21T21:31:40.330Z"
 last_activity: 2026-11-21
 last_activity_desc: Phase 02 complete, transitioned to Phase 3
-state_head: 506dd01ce5a0d7083b5aa78b074ba3ef29dbd25d
+state_head: d045aefba1496b2bfc24d3e8b0dfd1f274f18375
 progress:
   total_phases: 8
   completed_phases: 2
-  total_plans: 6
+  total_plans: 10
   completed_plans: 6
   percent: 25
 ---
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 3 of 8 (Marketplace Layers and Cross-Scope Install)
+Phase: 3 (Marketplace Layers and Cross-Scope Install) — READY TO EXECUTE
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-11-21 — Phase 02 complete, transitioned to Phase 3
 
 Progress: [███░░░░░░░] 25%
@@ -1198,6 +1198,7 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ### Blockers/Concerns
 
+- [integration-rescope] Phase 3 planning: decision-coverage gate `could-not-parse` (bracket-named decisions); proceeded by override after the plan checker confirmed coverage. Assumption-delta fired on "second clone" (false positive, recorded `no-change`).
 - [integration-rescope] Phase 2 planning: the decision-coverage gate returned
   `could-not-parse` (bracket-named smart-discuss decisions); proceeded by
   override after the plan checker confirmed coverage of every CONTEXT decision.

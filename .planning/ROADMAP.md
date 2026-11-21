@@ -253,6 +253,9 @@ Plans:
 - [ ] 03-03-PLAN.md -- Wave 1: the re-declaration and own-repository scenarios in `marketplace/url-source.feature` with the own-repository offer step, breaks D1 and D2, the D-SEED-01 `.git` seeding fix test first, then delete `marketplace-layer-redeclare` (ITMIG-05)
 - [ ] 03-04-PLAN.md -- Wave 1: the WR-07, MA-12, MA-13, D-MF-04, and dependency-marketplace scenarios in `plugin/cross-scope-install.feature` with three new steps in `marketplace/checkout.steps.ts`, breaks C1 to C8, then delete `project-install-adds-user-marketplace` (ITMIG-06)
 
+**Cross-cutting constraints:** <!-- gsd:generated -->
+- When the plan ends, `git diff <plan base> HEAD -- extensions/` and `git status --porcelain -- extensions/` both print nothing.
+
 ### Phase 4: Prune
 
 **Goal**: Cucumber scenarios prove every `prune` behavior a user can see that the suite left out, and `standalone-prune` keeps only its internal cases.
