@@ -52,6 +52,70 @@ Feature: Plugin enable
     When the user starts a new pi session
     Then the session offers no skills
 
+  Scenario: Enabling a plugin fails as an invalid manifest and changes nothing while the local config cannot be read (LAYER-04, CFG-03)
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+      | pp   | 1.0.0   |
+    Given the user has run "/claude:plugin install pp@fixtures --scope project"
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin disable demo@fixtures --scope project"
+    Given a config in scope project and layer local, with this text:
+      """
+      { not json
+      """
+    Given the config and installation record bytes of the project scope are remembered
+    When the user runs "/claude:plugin enable demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons          | scope   | cause chain                                                       | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | invalid manifest | project | Config file "claude-plugins.local.json" failed schema validation. | false           |       |                  |
+    Then the config and installation record bytes of the project scope are unchanged
+    Then the "claude-plugins.local.json" file of the project scope holds this text:
+      """
+      { not json
+      """
+    Then the project scope stages these skills and prompts:
+      | kind  | name     |
+      | skill | pp-skill |
+
+  Scenario: Enabling a plugin with --local fails as an invalid manifest and changes nothing while the base config cannot be read (LAYER-04, CFG-03)
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+      | pp   | 1.0.0   |
+    Given the user has run "/claude:plugin install pp@fixtures --scope project"
+    Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
+    Given the user has run "/claude:plugin disable demo@fixtures --scope project --local"
+    Given a config in scope project and layer base, with this text:
+      """
+      { not json
+      """
+    Given the config and installation record bytes of the project scope are remembered
+    When the user runs "/claude:plugin enable demo@fixtures --scope project --local"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons          | scope   | cause chain                                                 | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | invalid manifest | project | Config file "claude-plugins.json" failed schema validation. | false           |       |                  |
+    Then the config and installation record bytes of the project scope are unchanged
+    Then the "claude-plugins.local.json" file of the project scope declares these plugins:
+      | id            | enabled |
+      | demo@fixtures | false   |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+    Then the project scope stages these skills and prompts:
+      | kind  | name     |
+      | skill | pp-skill |
+
   Scenario: Enabling a disabled plugin offers its skills again and keeps one installation record
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has run "/claude:plugin disable demo@fixtures --scope project"
