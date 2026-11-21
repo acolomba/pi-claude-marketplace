@@ -1118,22 +1118,31 @@ export function parseRealChildAgents(rows: readonly (readonly string[])[]): Real
 
 /**
  * Reads a child sessions table with the columns `agent`, `mode` (`append` or
- * `replace`), `body`, and `tool calls`, named as `parseRealChildAgents`
- * names them.
+ * `replace`), `body`, an optional `fork cache key`, and `tool calls`, in that
+ * order, the calls named as `parseRealChildAgents` names them. Any other
+ * header throws. A `fork cache key` cell launches the session as
+ * pi-subagents launches a forked child, and an empty cell launches it
+ * unforked.
  */
 export function parseConcurrentLaunches(
   rows: readonly (readonly string[])[],
 ): ConcurrentChildLaunch[] {
-  return tableRecords(rows, ["agent", "mode", "body", "tool calls"]).map((row) => {
+  const withForkKey = rows[0]?.includes("fork cache key") === true;
+  const columns = withForkKey
+    ? ["agent", "mode", "body", "fork cache key", "tool calls"]
+    : ["agent", "mode", "body", "tool calls"];
+  return tableRecords(rows, columns).map((row) => {
     const mode = row.mode;
     if (mode !== "append" && mode !== "replace") {
       throw new Error(`a child session's mode is append or replace, not ${String(mode)}`);
     }
 
+    const forkCacheKey = row["fork cache key"] ?? "";
     return {
       agent: row.agent ?? "",
       mode,
       body: row.body ?? "",
+      ...(forkCacheKey === "" ? {} : { forkCacheKey }),
       calls: namedCalls(row["tool calls"] ?? ""),
     };
   });

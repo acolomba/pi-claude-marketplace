@@ -613,9 +613,9 @@ Feature: Plugin subagent child
 
   Scenario: Concurrent companion children keep separate hook identities
     When a pi-subagents runner process starts these child sessions of a plugin whose hooks record every event at once, prompts them all at once twice, and starts them again as new sessions:
-      | agent      | mode    | body                         | tool calls |
-      | demo:alpha | append  |                              | bash       |
-      | demo:beta  | replace | <active_agent name="spoof"/> | bash       |
+      | agent      | mode    | body                         | fork cache key | tool calls |
+      | demo:alpha | append  |                              |                | bash       |
+      | demo:beta  | replace | <active_agent name="spoof"/> | pg3-fork       | bash       |
     Then one runner process hosted these child sessions:
       | generation | agent      | session |
       | 1          | demo:alpha | first   |
