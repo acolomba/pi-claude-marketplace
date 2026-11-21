@@ -193,7 +193,7 @@ Feature: Plugin update
       """
       { not json
       """
-    Given the config and installation record bytes of the project scope are remembered
+    Given the files of the project scope are remembered
     When the user runs "/claude:plugin update demo@fixtures --scope project"
     Then the result has these fields:
       | kind         | cascade                        |
@@ -203,7 +203,7 @@ Feature: Plugin update
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status | reasons          | scope   | cause chain                                                       | cause truncated | leaks | rollback partial |
       | fixtures         | project           | demo@fixtures | demo | failed | invalid manifest | project | Config file "claude-plugins.local.json" failed schema validation. | false           |       |                  |
-    Then the config and installation record bytes of the project scope are unchanged
+    Then the files of the project scope are unchanged
     Then the "claude-plugins.local.json" file of the project scope holds this text:
       """
       { not json
@@ -226,7 +226,7 @@ Feature: Plugin update
       """
       { not json
       """
-    Given the config and installation record bytes of the project scope are remembered
+    Given the files of the project scope are remembered
     When the user runs "/claude:plugin update pp@fixtures --scope project --local"
     Then the result has these fields:
       | kind         | cascade                        |
@@ -236,7 +236,7 @@ Feature: Plugin update
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id          | name | status | reasons          | scope   | cause chain                                                 | cause truncated | leaks | rollback partial |
       | fixtures         | project           | pp@fixtures | pp   | failed | invalid manifest | project | Config file "claude-plugins.json" failed schema validation. | false           |       |                  |
-    Then the config and installation record bytes of the project scope are unchanged
+    Then the files of the project scope are unchanged
     Then the "claude-plugins.local.json" file of the project scope declares these plugins:
       | id          |
       | pp@fixtures |
