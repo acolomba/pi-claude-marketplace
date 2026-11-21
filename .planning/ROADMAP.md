@@ -202,11 +202,11 @@ them at the merge.
   1. Breaking the SessionStart hook's side effect fails a scenario, and so does breaking hook spawning for a plugin whose `CLAUDE_PLUGIN_ROOT` lies outside the extension directory. With the breaks reverted, these scenarios pass under both profiles, and `test/integration/hooks-spawn-end-to-end.test.ts` no longer exists (ITDUP-01).
   2. A scenario starts a real pi-subagents child of an agent whose body is empty. The child runs detached; its `Bash` and `Read` hooks, including the `PostToolUseFailure` hook of the `Read` that fails, carry the child's agent type and session id; and no main-session hook carries a child identity (ITDUP-02).
   3. The scenarios of criterion 2 pass under both profiles and fail when the child's hook identity is broken on purpose, and `test/integration/pi-subagents-child-identity.test.ts` no longer exists (ITDUP-02).
-**Plans**: 2 plans
+**Plans**: 2/2 plans executed
 
 Plans:
-- [ ] 01-01-PLAN.md -- Wave 1: record breaks E1 to E5 against the hook scenarios, then delete `hooks-spawn-end-to-end` (ITDUP-01)
-- [ ] 01-02-PLAN.md -- Wave 1: add the empty-body real-child scenario, record breaks E6 to E11, point the docs at the scenarios, then delete `pi-subagents-child-identity` (ITDUP-02)
+- [x] 01-01-PLAN.md -- Wave 1: record breaks E1 to E5 against the hook scenarios, then delete `hooks-spawn-end-to-end` (ITDUP-01)
+- [x] 01-02-PLAN.md -- Wave 1: add the empty-body real-child scenario, record breaks E6 to E11, point the docs at the scenarios, then delete `pi-subagents-child-identity` (ITDUP-02)
 
 **Cross-cutting constraints:** <!-- gsd:generated -->
 - When the plan ends, `git diff <plan base> HEAD -- extensions/` and `git status --porcelain -- extensions/` both print nothing: no break stays in the tree or reaches a commit.
@@ -308,7 +308,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Duplicate Integration Files | 0/TBD | Not started | - |
+| 1. Duplicate Integration Files | 2/2 | In Progress | - |
 | 2. Plugin Layers, Names, and List Fold | 0/TBD | Not started | - |
 | 3. Marketplace Layers and Cross-Scope Install | 0/TBD | Not started | - |
 | 4. Prune | 0/TBD | Not started | - |
