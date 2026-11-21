@@ -419,6 +419,7 @@ Feature: Plugin reserved names
     Given the marketplace "mp" is added to the project scope
     Given the user has run "/claude:plugin install hello@mp --scope project"
     Given the files of the project scope are remembered
+    Given the files of the user scope are remembered
     When the user runs "/claude:plugin <command>"
     Then the result has these fields:
       | kind         | marketplace-not-added               |
@@ -428,6 +429,7 @@ Feature: Plugin reserved names
       | name         | constructor                         |
       | reasons      | marketplace not added               |
     Then the files of the project scope are unchanged
+    Then the files of the user scope are unchanged
     Then the project scope stages these skills and prompts:
       | kind  | name        |
       | skill | hello-skill |
