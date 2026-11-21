@@ -9,7 +9,8 @@
  *
  * The setup steps also plant a checkout that an interrupted add left, with
  * the ownership marker and a stale file (MA-12), and a read step lists the
- * files a checkout holds outside `.git/`.
+ * files a checkout holds outside `.git/`. A setup step also plants a
+ * directory of the user's own at a checkout path (MA-13).
  */
 
 import assert from "node:assert/strict";
@@ -70,6 +71,17 @@ Given(
       published.source,
     );
     assert.equal(existsSync(marker), true);
+  },
+);
+
+Given(
+  "the {word} scope holds a directory of the user's own where the checkout of the marketplace {string} goes",
+  async function (this: ScenarioWorld, scope: string, name: string) {
+    const checkout = path.join(extensionRootOf(this, scope), "sources", name);
+    assert.equal(existsSync(checkout), false);
+    await mkdir(checkout, { recursive: true });
+    await writeFile(path.join(checkout, "notes.txt"), "the user's notes");
+    assert.deepStrictEqual(await readdir(checkout), ["notes.txt"]);
   },
 );
 
