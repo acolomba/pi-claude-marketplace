@@ -139,8 +139,9 @@ async function seedStateRaw(cwd: string, raw: unknown): Promise<void> {
 
 /**
  * One reconcile child, forked but not yet released. A fork inherits the
- * --import of scripts/isolated-pi-home.mjs, which replaces HOME unless
- * PI_CM_TEST_HOME is set, so the child gets that variable too.
+ * --import of scripts/isolated-pi-home.mjs, which replaces HOME and
+ * PI_CODING_AGENT_DIR with a new temporary root unless PI_CM_TEST_HOME is set,
+ * so the child gets that variable to keep the pair this test sets.
  * NODE_V8_COVERAGE lets a coverage run collect the child's coverage.
  */
 function forkReconcileChild(env: RaceEnv): ReturnType<typeof fork> {

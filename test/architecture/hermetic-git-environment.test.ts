@@ -24,7 +24,7 @@ import type {
 } from "../../features/lib/pi-rpc.ts";
 import type { TestContext } from "node:test";
 
-const INHERITED_VARIABLES = {
+const SHELL_ONLY_VARIABLES = {
   GIT_DIR: "/shell/repo/.git",
   GIT_INDEX_FILE: "/shell/repo/.git/index",
   GIT_CONFIG_SYSTEM: "/shell/etc/gitconfig",
@@ -45,12 +45,13 @@ const INHERITED_VARIABLES = {
 const SHELL_PATH = "/shell/bin";
 
 /**
- * Leaves the shell's PATH and the inherited variables in `process.env` until
- * the case `t` ends, as if the Linux shell that runs the suite had set them.
+ * Sets the shell's PATH and the shell-only variables in `process.env` until the
+ * case `t` ends, as if the Linux shell that runs the suite had set them. The
+ * cases then prove that a suite child does not receive the shell-only ones.
  */
-function inheritVariables(t: TestContext): void {
+function setShellVariables(t: TestContext): void {
   t.mock.property(process, "platform", "linux");
-  useAllowlistedProcessEnvironment(t, [], { ...INHERITED_VARIABLES, PATH: SHELL_PATH });
+  useAllowlistedProcessEnvironment(t, [], { ...SHELL_ONLY_VARIABLES, PATH: SHELL_PATH });
 }
 
 const sandbox = {
@@ -62,7 +63,7 @@ const sandbox = {
 describe("hermeticGitEnvironment", () => {
   test("returns its eight keys and no inherited git variable", (t) => {
     // arrange
-    inheritVariables(t);
+    setShellVariables(t);
 
     // act
     const environment = hermeticGitEnvironment("/scratch/home");
@@ -84,7 +85,7 @@ describe("hermeticGitEnvironment", () => {
 describe("rpcChildEnvironment", () => {
   test("adds the three git keys and the run's GitHub base override, and no inherited variable", (t) => {
     // arrange
-    inheritVariables(t);
+    setShellVariables(t);
     const git = {
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
@@ -110,7 +111,7 @@ describe("rpcChildEnvironment", () => {
 
   test("adds the run's background update delay, not the shell's", (t) => {
     // arrange
-    inheritVariables(t);
+    setShellVariables(t);
     const git = {
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
@@ -138,7 +139,7 @@ describe("rpcChildEnvironment", () => {
 
   test("omits the GitHub base override when the run's git environment has none", (t) => {
     // arrange
-    inheritVariables(t);
+    setShellVariables(t);
     const git = {
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
@@ -162,7 +163,7 @@ describe("rpcChildEnvironment", () => {
 
   test("adds the profile's TMPDIR, not the shell's, to the git environment", (t) => {
     // arrange
-    inheritVariables(t);
+    setShellVariables(t);
     const git = {
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
@@ -190,7 +191,7 @@ describe("rpcChildEnvironment", () => {
 
   test("adds the profile's background-child marker, not the shell's", (t) => {
     // arrange
-    inheritVariables(t);
+    setShellVariables(t);
     const git = {
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
@@ -222,7 +223,7 @@ describe("rpcChildEnvironment", () => {
 
   test("adds the profile's hook gate, not the shell's", (t) => {
     // arrange
-    inheritVariables(t);
+    setShellVariables(t);
     const git = {
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
@@ -254,7 +255,7 @@ describe("rpcChildEnvironment", () => {
 
   test("returns only the allowlist without a git environment", (t) => {
     // arrange
-    inheritVariables(t);
+    setShellVariables(t);
 
     // act
     const environment = rpcChildEnvironment(sandbox);

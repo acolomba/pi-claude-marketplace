@@ -50,9 +50,10 @@ test("executes a blocking hook through the portable process boundary", async (t)
   const stderrCapturePath = path.join(caseRoot, "stderr.txt");
   await Promise.all([mkdir(cwd, { recursive: true }), mkdir(pluginRoot, { recursive: true })]);
   // The hook child echoes its whole environment back as hook context, so a
-  // large host environment would push that context over the D-PG5-15 cap and
-  // into a saved file. HOME and PI_CODING_AGENT_DIR are the case's hermetic
-  // pair; the hook runs process.execPath, so it needs no PATH.
+  // large host environment would push that context over the 10,000-character
+  // cap (D-PG5-14) and into a saved file (D-PG5-15). HOME and
+  // PI_CODING_AGENT_DIR are the case's hermetic pair; the hook runs
+  // process.execPath, so it needs no PATH.
   useAllowlistedProcessEnvironment(t, ["HOME", "PI_CODING_AGENT_DIR"], {
     PI_CLAUDE_MARKETPLACE_DEBUG: "1",
     PORTABLE_HOOK_PROBE: "case-owned",
