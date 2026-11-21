@@ -10,7 +10,10 @@
  * The setup steps also plant a checkout that an interrupted add left, with
  * the ownership marker and a stale file (MA-12), and a read step lists the
  * files a checkout holds outside `.git/`. A setup step also plants a
- * directory of the user's own at a checkout path (MA-13).
+ * directory of the user's own at a checkout path (MA-13). A refused add must
+ * leave that directory exactly as it was, so one read step lists every entry
+ * it holds, directories and `.git/` included, and another proves the refusal
+ * removed the clone it staged first.
  */
 
 import assert from "node:assert/strict";
@@ -36,6 +39,27 @@ async function entryNames(directory: string): Promise<string[]> {
 // The directory under which the scope keeps its marketplace checkouts.
 function extensionRootOf(world: ScenarioWorld, scope: string): string {
   return path.join(world.scopeRoot(scope), "pi-claude-marketplace");
+}
+
+// Every entry under the checkout of the marketplace `name`, as its path
+// segments under the checkout; the checkout itself must be a directory.
+async function checkoutEntries(
+  world: ScenarioWorld,
+  name: string,
+  scope: string,
+): Promise<{ segments: string[]; isDirectory: boolean }[]> {
+  const checkout = path.join(extensionRootOf(world, scope), "sources", name);
+  assert.equal((await stat(checkout)).isDirectory(), true);
+  const entries = await readdir(checkout, { recursive: true, withFileTypes: true });
+  return entries.map((entry) => ({
+    segments: path.relative(checkout, path.join(entry.parentPath, entry.name)).split(path.sep),
+    isDirectory: entry.isDirectory(),
+  }));
+}
+
+// One table row per path, in path order.
+function pathRows(paths: readonly string[]): string[][] {
+  return [...paths].sort((left, right) => left.localeCompare(right)).map((entry) => [entry]);
 }
 
 Given(
@@ -100,6 +124,14 @@ Then(
 );
 
 Then(
+  "the {word} scope holds no staged marketplace checkout",
+  async function (this: ScenarioWorld, scope: string) {
+    const staging = path.join(extensionRootOf(this, scope), "sources-staging");
+    assert.deepStrictEqual(await entryNames(staging), []);
+  },
+);
+
+Then(
   "the {word} scope holds no marketplace record",
   async function (this: ScenarioWorld, scope: string) {
     const stateFile = path.join(extensionRootOf(this, scope), "state.json");
@@ -115,18 +147,22 @@ Then(
 Then(
   "the checkout of the marketplace {string} in the {word} scope holds these files:",
   async function (this: ScenarioWorld, name: string, scope: string, table: DataTable) {
-    const checkout = path.join(extensionRootOf(this, scope), "sources", name);
-    assert.equal((await stat(checkout)).isDirectory(), true);
-    const entries = await readdir(checkout, { recursive: true, withFileTypes: true });
-    const rows = entries
-      .filter((entry) => !entry.isDirectory())
-      .map((entry) =>
-        path.relative(checkout, path.join(entry.parentPath, entry.name)).split(path.sep),
-      )
-      .filter((segments) => segments[0] !== ".git")
-      .map((segments) => segments.join("/"))
-      .sort((left, right) => left.localeCompare(right))
-      .map((file) => [file]);
-    assert.deepStrictEqual([["file"], ...rows], table.raw());
+    const files = (await checkoutEntries(this, name, scope))
+      .filter((entry) => !entry.isDirectory && entry.segments[0] !== ".git")
+      .map((entry) => entry.segments.join("/"));
+    assert.deepStrictEqual([["file"], ...pathRows(files)], table.raw());
+  },
+);
+
+// A directory reads as its path and a trailing `/`, so a new empty directory,
+// such as a `.git/` an add began, changes the list.
+Then(
+  "the checkout of the marketplace {string} in the {word} scope holds exactly these entries:",
+  async function (this: ScenarioWorld, name: string, scope: string, table: DataTable) {
+    const entries = (await checkoutEntries(this, name, scope)).map((entry) => {
+      const entryPath = entry.segments.join("/");
+      return entry.isDirectory ? `${entryPath}/` : entryPath;
+    });
+    assert.deepStrictEqual([["entry"], ...pathRows(entries)], table.raw());
   },
 );

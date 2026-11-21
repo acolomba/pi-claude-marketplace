@@ -135,9 +135,10 @@ Feature: Plugin cross-scope install
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id         | name | status | reasons     | scope   | leaks | rollback partial | cause chain                 | cause truncated |
       | tools            | project           | demo@tools | demo | failed | stale clone | project |       |                  | stale source clone at tools | false           |
-    Then the checkout of the marketplace "tools" in the project scope holds these files:
-      | file      |
+    Then the checkout of the marketplace "tools" in the project scope holds exactly these entries:
+      | entry     |
       | notes.txt |
+    Then the project scope holds no staged marketplace checkout
     Then the project scope holds no marketplace record
     Then the "claude-plugins.json" file of the project scope does not exist
     Then the files of the user scope are unchanged
