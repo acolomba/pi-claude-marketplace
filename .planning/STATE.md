@@ -22,18 +22,18 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-11-20 when the integration-rescope milestone started)
+See: `.planning/PROJECT.md` (updated 2026-11-21 after Phase 1)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 01 — Duplicate Integration Files
+**Current focus:** Phase 2 — Plugin Layers, Names, and List Fold
 
 ## Current Position
 
-Phase: 2 — Plugin Layers, Names, and List Fold
-Plan: 2
-Status: Phase complete — ready for verification
+Phase: 2 of 8 (Plugin Layers, Names, and List Fold)
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-11-21 — Phase 01 complete, transitioned to Phase 2
 
 Progress: [█░░░░░░░░░] 13%
@@ -1285,8 +1285,8 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-20T19:30:00.000Z
-Stopped at: Phase 01 complete, ready to verify Phase 2
+Last session: 2026-11-21T18:00:00.000Z
+Stopped at: Phase 1 complete (verified 6/6, threats 0 open), ready to plan Phase 2
 Resume file: None
 
 ### Phase 2 completion-helper notes

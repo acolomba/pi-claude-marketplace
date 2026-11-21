@@ -2834,3 +2834,5 @@ _Last updated: 2026-11-17 after the parity-gaps milestone closed (`override_clos
 _Last updated: 2026-11-19 after the maintainer decision D-PG1-15: the `--map-model` alias table follows Claude Code 2.1.328 and the Pi floor is 1.5.1, which supersedes D-PG1-06 and amends D-CF4-07 and the NFR-11 floor; AGENT-06 is closed._
 
 _Last updated: 2026-11-20 after the integration-rescope milestone started._
+
+_Last updated: 2026-11-21 after integration-rescope Phase 1: both duplicate integration files are deleted after deliberate breaks failed their replacement scenarios; the user chose to keep the `fallow-audit` gate unchanged and accept its `weakened-tests` warn at PR review._
