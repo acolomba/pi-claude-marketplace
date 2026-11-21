@@ -124,7 +124,8 @@ async function runRace(
 ): Promise<RaceOutcome> {
   // A fork inherits the --import of scripts/isolated-pi-home.mjs, which replaces
   // HOME unless PI_CM_TEST_HOME is set, so the child gets that variable too.
-  const childEnvironment = allowlistedEnvironment(["PI_CM_TEST_HOME"], {
+  // NODE_V8_COVERAGE lets a coverage run collect the child's coverage.
+  const childEnvironment = allowlistedEnvironment(["PI_CM_TEST_HOME", "NODE_V8_COVERAGE"], {
     HOME: env.home,
     PI_CODING_AGENT_DIR: path.join(env.home, ".pi-agent"),
   });
