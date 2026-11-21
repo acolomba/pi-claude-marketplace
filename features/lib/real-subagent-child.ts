@@ -8,10 +8,11 @@
  * plugin `demo` holds the run's agents, a stub MCP server, and a recording
  * hook of every event. Its Stop hook asks a main session for one more turn.
  * A main Pi in RPC mode loads the real extension, pi-subagents, and the MCP
- * implementation of the profile, each from the optional peer cache, and
- * installs the plugin with `/claude:plugin` in the user scope, as a user
- * does. The user's settings name the extension and the MCP implementation,
- * so every child session loads them, as a child loads the user's extensions.
+ * implementation of the profile, each from the optional peer cache at the
+ * suite version that `resolveCompanion` checks, and installs the plugin with
+ * `/claude:plugin` in the user scope, as a user does. The user's settings
+ * name the extension and the MCP implementation, so every child session
+ * loads them, as a child loads the user's extensions.
  * The main Pi saves its session in the fixture's agent directory, so
  * pi-subagents writes that session's file into the header of each child
  * session it creates (D-PG6-02, D-PG6-16).
@@ -24,8 +25,8 @@
  * last user text holds, and with the text `Done.` past it. A marker is a
  * bracketed token looked up whole, so an agent whose name begins with
  * another agent's name never gets that agent's script. It keeps each
- * request's last user text and tool names, never a system prompt or a
- * header.
+ * request's model, last user text, and tool names, never a system prompt
+ * or a header, and a run fails unless every request named its one model.
  *
  * `runRealSubagentChild` has the main Pi's model call pi-subagents'
  * `subagent` tool for each agent in turn, naming no launch mode, so the
@@ -211,13 +212,6 @@ export interface ConcurrentChildrenOptions extends RealChildFixtureOptions {
   readonly rounds: number;
 }
 
-/** The versions of what a run executed. */
-export interface RealChildVersions {
-  readonly node: string;
-  readonly piSubagents: string;
-  readonly mcpAdapter?: string;
-}
-
 /** What pi-subagents reported about the child of one agent. */
 export interface DetachedChildObservation {
   /** The agent pi-subagents recorded that it ran, not the one the run asked for. */
@@ -242,9 +236,8 @@ export interface ConcurrentSessionObservation {
   readonly pid: number;
 }
 
-/** What every run observed of its main Pi, its hooks, and its provider. */
+/** What every run observed of its main Pi and its hooks. */
 export interface MainObservation {
-  readonly versions: RealChildVersions;
   /** The id of the session the main Pi started with, which the install's new session ended. */
   readonly startupSessionId: string;
   /** The id of the main Pi's session after the install's new session. */
@@ -253,10 +246,6 @@ export interface MainObservation {
   readonly mainSessionFile: string;
   /** Every hook run, in the order the hook processes appended them. */
   readonly hookRuns: readonly HookRun[];
-  /** The last user text of each provider request, in arrival order. */
-  readonly providerPrompts: readonly string[];
-  /** The model each provider request named, once each, in order of first use. */
-  readonly providerModels: readonly (string | undefined)[];
 }
 
 /** What one run of `runRealSubagentChild` observed. */
@@ -638,7 +627,6 @@ interface MainRun {
   readonly fixture: Fixture;
   readonly provider: ScriptedProvider;
   readonly pi: PiProcess;
-  readonly versions: RealChildVersions;
   readonly mainSession: MainSession;
   readonly subagents: Companion;
 }
@@ -721,11 +709,6 @@ async function withMainRun<T>(
       pi,
       mainSession,
       subagents,
-      versions: {
-        node: process.version,
-        piSubagents: subagents.version,
-        ...(adapter === undefined ? {} : { mcpAdapter: adapter.version }),
-      },
     });
   } finally {
     await release();
@@ -889,15 +872,20 @@ async function launchChild(
   return child;
 }
 
+// What the run observed of the main Pi and the hooks, after asserting that
+// every provider request, of the main Pi and of each child, named the
+// scripted model.
 async function observeMain(run: MainRun): Promise<MainObservation> {
+  assert.deepStrictEqual(
+    [...new Set(run.provider.requests.map(({ model }) => model))],
+    [MODEL],
+    "every provider request named the scripted model",
+  );
   return {
-    versions: run.versions,
     startupSessionId: run.mainSession.startupId,
     mainSessionId: run.mainSession.id,
     mainSessionFile: run.mainSession.file,
     hookRuns: await readHookRuns(run.fixture.harness),
-    providerPrompts: run.provider.requests.map(({ lastUserText }) => lastUserText),
-    providerModels: [...new Set(run.provider.requests.map(({ model }) => model))],
   };
 }
 
