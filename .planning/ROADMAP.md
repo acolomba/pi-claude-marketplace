@@ -115,7 +115,7 @@ them at the merge.
 
 - [x] **Phase 1: Duplicate Integration Files** - The two integration files that only repeat cucumber scenarios are gone, after their scenarios are proven to fail when the behavior breaks (completed 2026-11-21)
 - [x] **Phase 2: Plugin Layers, Names, and List Fold** - Scenarios prove the LAYER-04 refusals, the plugin-layer reports, plugin names that are `Object.prototype` members, and the unfiltered `list` fold (completed 2026-11-21)
-- [ ] **Phase 3: Marketplace Layers and Cross-Scope Install** - Scenarios prove the marketplace layer rules and a project install that adds a user marketplace to the project
+- [x] **Phase 3: Marketplace Layers and Cross-Scope Install** - Scenarios prove the marketplace layer rules and a project install that adds a user marketplace to the project (completed 2026-11-21)
 - [ ] **Phase 4: Prune** - Scenarios prove the `prune` cases a user can see that the suite left out
 - [ ] **Phase 5: MCP Install, Legacy Move, and Overrides** - Scenarios prove the MCP install refusals and warnings, the legacy `mcp.json` move, and the pi-mcp-adapter override cases
 - [ ] **Phase 6: Hooks and Auth** - Scenarios prove hooks in both scopes after `apply`, a reload that clears buffered context, no `.pi` directory from a hook dispatch, and the print-mode and credential-eviction sign-in cases
@@ -245,7 +245,7 @@ Plans:
   1. A named `marketplace autoupdate` flip adds a marketplace that the scope records and no layer declares to no layer, and an unnamed flip gives it no row while a declared marketplace flips (D-09). A named flip whose target layer is silent while the other layer's config is invalid changes no file (CFG-03). The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `marketplace-layer-autoupdate` (ITMIG-05).
   2. Declaring a url marketplace again, in the local layer or after the scope records it with no layer declaring it, makes no second clone and no git request, and so does installing a url plugin from the same repository after the add. A named remove fully removes a recorded url marketplace that no layer declares, and a remove refused because the other layer's config cannot be read changes nothing (LAYER-02). The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `marketplace-layer-redeclare`, `marketplace-layer-remove`, and `marketplace-add-seed-mirrors` (ITMIG-05).
   3. A project install from a marketplace that only the user scope records fails before the project clones when the manifest does not list the plugin (WR-07), replaces the extension's own leftover clone (MA-12), refuses a foreign tree at the clone path and keeps it (MA-13), and reads the plugin's dependencies from the fresh project clone, not from the stale user clone (D-MF-04). The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `project-install-adds-user-marketplace` (ITMIG-06).
-**Plans**: 4/4 plans executed
+**Plans**: 4/4 plans complete
 
 Plans:
 - [x] 03-01-PLAN.md -- Wave 1: the D-09 named and unnamed flips and the CFG-03 flip in `marketplace/autoupdate.feature`, breaks A1 to A5b, then delete `marketplace-layer-autoupdate` (ITMIG-05)
@@ -328,7 +328,7 @@ Plans:
 | --- | --- | --- | --- |
 | 1. Duplicate Integration Files | 2/2 | Complete    | 2026-11-21 |
 | 2. Plugin Layers, Names, and List Fold | 4/4 | Complete    | 2026-11-21 |
-| 3. Marketplace Layers and Cross-Scope Install | 4/4 | In Progress | - |
+| 3. Marketplace Layers and Cross-Scope Install | 4/4 | Complete    | 2026-11-21 |
 | 4. Prune | 0/TBD | Not started | - |
 | 5. MCP Install, Legacy Move, and Overrides | 0/TBD | Not started | - |
 | 6. Hooks and Auth | 0/TBD | Not started | - |
