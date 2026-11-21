@@ -180,6 +180,7 @@ Feature: Marketplace url source
       """
       { "schemaVersion": 1, "marketplaces": {} }
       """
+    Given the installation record bytes of the project scope are remembered
     When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project"
     Then the result has these fields:
       | kind         | cascade |
@@ -196,6 +197,7 @@ Feature: Marketplace url source
       | name  | source                            |
       | tools | https://{git host}/acme/tools.git |
     Then the "claude-plugins.local.json" file of the project scope does not exist
+    Then the installation record bytes of the project scope are unchanged
 
   Scenario: Installing a pinned plugin from the repository of a url marketplace makes no git request after the add (D-SEED-01)
     Given the marketplace "tools" is published as a url source

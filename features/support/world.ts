@@ -273,6 +273,8 @@ export class ScenarioWorld extends World {
   backgroundRequestWindow: RequestWindow | undefined = undefined;
   // The scope bytes the config steps remembered, by scope.
   readonly rememberedScopeBytes = new Map<string, ScopeBytes>();
+  // The installation record bytes the config steps remembered, by scope.
+  readonly rememberedRecordBytes = new Map<string, Buffer>();
   // The entries of each scope tree the scope-state steps remembered, by scope.
   readonly rememberedScopeFiles = new Map<string, ScopeFiles>();
   private readonly completionSets = new Map<string, readonly PluginCompletion[]>();
