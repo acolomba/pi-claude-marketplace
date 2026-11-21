@@ -67,3 +67,31 @@ Feature: Plugin cross-scope install
     Examples:
       | source kind | source     |
       | github      | acme/tools |
+
+  Scenario: Installing a plugin into the project scope replaces the leftover checkout that an interrupted add of the user-scope marketplace left (MA-12)
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is added to the user scope
+    Given the project scope holds a checkout of the marketplace "tools" that an interrupted add left
+    When the user runs "/claude:plugin install demo@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id         | name | status    | reasons | scope   | version |
+      | tools            | project           | demo@tools | demo | installed |         | project | 1.0.0   |
+    Then the checkout of the marketplace "tools" in the project scope holds these files:
+      | file                                    |
+      | .claude-plugin/marketplace.json         |
+      | plugins/demo/.claude-plugin/plugin.json |
+      | plugins/demo/skills/demo-skill/SKILL.md |
+    Then the project scope holds these git clones:
+      | clone       | origin                            | revision |
+      | marketplace | https://{git host}/acme/tools.git |          |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |

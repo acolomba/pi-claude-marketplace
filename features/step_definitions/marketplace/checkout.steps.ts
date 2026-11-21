@@ -6,14 +6,20 @@
  * directory, so the git clone steps cannot see it; the checkout step reads
  * both directories whole. The record step separately proves a failed add did
  * not retain a marketplace entry in state.json.
+ *
+ * The setup steps also plant a checkout that an interrupted add left, with
+ * the ownership marker and a stale file (MA-12), and a read step lists the
+ * files a checkout holds outside `.git/`.
  */
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { readFile, readdir, rm, stat } from "node:fs/promises";
+import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { Given, Then } from "@cucumber/cucumber";
+import { type DataTable, Given, Then } from "@cucumber/cucumber";
+
+import { runGit } from "../../lib/hermetic-git.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -41,6 +47,32 @@ Given(
   },
 );
 
+Given(
+  "the {word} scope holds a checkout of the marketplace {string} that an interrupted add left",
+  async function (this: ScenarioWorld, scope: string, name: string) {
+    const published = this.requirePublished(name);
+    if (published.kind !== "url") {
+      assert.fail(`the marketplace ${name} is not published as a url source`);
+    }
+
+    const sources = path.join(extensionRootOf(this, scope), "sources");
+    const checkout = path.join(sources, name);
+    assert.equal(existsSync(checkout), false);
+    await mkdir(sources, { recursive: true });
+    await runGit(sources, published.gitHome, "clone", "--quiet", published.bareRepository, name);
+    await runGit(checkout, published.gitHome, "remote", "set-url", "origin", published.source);
+    // Q-01: the ownership marker `marketplace add` writes into every clone it creates.
+    const marker = path.join(checkout, ".git", "pi-claude-marketplace.json");
+    await writeFile(marker, JSON.stringify({ generatedBy: "pi-claude-marketplace" }));
+    await writeFile(path.join(checkout, "stale.txt"), "left behind");
+    assert.equal(
+      await runGit(checkout, published.gitHome, "remote", "get-url", "origin"),
+      published.source,
+    );
+    assert.equal(existsSync(marker), true);
+  },
+);
+
 Then(
   "the {word} scope holds no marketplace checkout",
   async function (this: ScenarioWorld, scope: string) {
@@ -65,5 +97,24 @@ Then(
 
     const state = JSON.parse(await readFile(stateFile, "utf8")) as { marketplaces?: unknown };
     assert.deepStrictEqual(state.marketplaces ?? {}, {});
+  },
+);
+
+Then(
+  "the checkout of the marketplace {string} in the {word} scope holds these files:",
+  async function (this: ScenarioWorld, name: string, scope: string, table: DataTable) {
+    const checkout = path.join(extensionRootOf(this, scope), "sources", name);
+    assert.equal((await stat(checkout)).isDirectory(), true);
+    const entries = await readdir(checkout, { recursive: true, withFileTypes: true });
+    const rows = entries
+      .filter((entry) => !entry.isDirectory())
+      .map((entry) =>
+        path.relative(checkout, path.join(entry.parentPath, entry.name)).split(path.sep),
+      )
+      .filter((segments) => segments[0] !== ".git")
+      .map((segments) => segments.join("/"))
+      .sort((left, right) => left.localeCompare(right))
+      .map((file) => [file]);
+    assert.deepStrictEqual([["file"], ...rows], table.raw());
   },
 );
