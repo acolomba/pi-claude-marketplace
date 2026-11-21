@@ -212,7 +212,7 @@ Feature: Plugin configuration
       | kind  | name        |
       | skill | other-skill |
 
-  Scenario: Applying reports a local layer that an earlier --local install wrote without its marketplace, keeps it byte for byte, and keeps the plugin installed (LAYER-06, CFG-03)
+  Scenario: Applying reports a local layer edited to drop its marketplace, keeps it byte for byte, and keeps the plugin installed (LAYER-06, CFG-03)
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
     Given a config in scope project and layer local, with this text:
