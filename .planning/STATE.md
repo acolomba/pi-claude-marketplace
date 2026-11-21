@@ -2,13 +2,18 @@
 gsd_state_version: "1.0"
 milestone: integration-rescope
 milestone_name: Integration Test Rescope
-status: planning
-last_updated: "2026-11-20T19:30:00.000Z"
+current_phase: 1
+current_phase_name: Duplicate Integration Files
+status: executing
+stopped_at: integration-rescope roadmap created (8 phases); next is Phase 1 discuss or plan
+last_updated: "2026-11-21T14:19:14.924Z"
 last_activity: 2026-11-20
+last_activity_desc: Roadmap created (8 phases, 19/19 requirements mapped)
+state_head: 7687ebb3ee2f6c82f29b7e171f684cc7e188fdb5
 progress:
   total_phases: 8
   completed_phases: 0
-  total_plans: 0
+  total_plans: 2
   completed_plans: 0
   percent: 0
 ---
@@ -26,9 +31,9 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 1 of 8 (Duplicate Integration Files)
+Phase: 1 (Duplicate Integration Files) — READY TO EXECUTE
 Plan: —
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-11-20 — Roadmap created (8 phases, 19/19 requirements mapped)
 
 Progress: [░░░░░░░░░░] 0%
@@ -1193,6 +1198,14 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ### Blockers/Concerns
 
+- [integration-rescope] Phase 1 planning: the decision-coverage gate returned
+  `could-not-parse` (smart-discuss decisions carry no `D-NN` IDs; cited IDs such
+  as `D-PG3-01` trip the parser). Proceeded by override: the plan checker
+  confirmed every CONTEXT decision is covered by 01-01 or 01-02.
+- [integration-rescope] User decision 2026-11-21: add a `.fallowrc.json`
+  `overrides` entry that turns fallow's `weakened-tests` rule off for
+  `test/integration/**`, so the CI `fallow-audit` job does not fail on the
+  milestone's deliberate deletions. Applied after Phase 1's plans merge.
 - [integration-rescope] The audit's verdicts come from reading code; every
   phase checks a verdict again with a deliberate break before it deletes an
   integration case (REQUIREMENTS.md rule 2).

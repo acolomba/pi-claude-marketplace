@@ -205,9 +205,11 @@ them at the merge.
 **Plans**: 2 plans
 
 Plans:
-**Wave 1**
 - [ ] 01-01-PLAN.md -- Wave 1: record breaks E1 to E5 against the hook scenarios, then delete `hooks-spawn-end-to-end` (ITDUP-01)
 - [ ] 01-02-PLAN.md -- Wave 1: add the empty-body real-child scenario, record breaks E6 to E11, point the docs at the scenarios, then delete `pi-subagents-child-identity` (ITDUP-02)
+
+**Cross-cutting constraints:** <!-- gsd:generated -->
+- When the plan ends, `git diff <plan base> HEAD -- extensions/` and `git status --porcelain -- extensions/` both print nothing: no break stays in the tree or reaches a commit.
 
 ### Phase 2: Plugin Layers, Names, and List Fold
 
