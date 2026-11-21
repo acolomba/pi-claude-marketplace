@@ -27,13 +27,13 @@ See: `.planning/PROJECT.md` (updated 2026-11-21 after Phase 1)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 02 — Plugin Layers, Names, and List Fold
+**Current focus:** Phase 3 — Marketplace Layers and Cross-Scope Install
 
 ## Current Position
 
-Phase: 3 — Marketplace Layers and Cross-Scope Install
-Plan: 7
-Status: Phase complete — ready for verification
+Phase: 3 of 8 (Marketplace Layers and Cross-Scope Install)
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-11-21 — Phase 02 complete, transitioned to Phase 3
 
 Progress: [███░░░░░░░] 25%
@@ -1288,8 +1288,8 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-21T18:00:00.000Z
-Stopped at: Phase 02 complete, ready to verify Phase 3
+Last session: 2026-11-21T22:00:00.000Z
+Stopped at: Phase 2 complete (verified 4/4, threats 0 open), ready to plan Phase 3
 Resume file: None
 
 ### Phase 2 completion-helper notes
