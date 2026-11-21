@@ -214,6 +214,7 @@ Feature: Plugin config migration
     Then the "claude-plugins.local.json" file of the project scope declares these plugins:
       | id            |
       | demo@fixtures |
+    Then the "claude-plugins.local.json" file of the project scope declares no marketplaces
 
   Scenario: Applying before the first-run migration stops on the local config's missing marketplace and keeps the plugin installed (MIG-01, LAYER-06)
     Given the marketplace "fixtures" offers these plugins:

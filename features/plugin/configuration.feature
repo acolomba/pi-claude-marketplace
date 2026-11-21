@@ -141,6 +141,7 @@ Feature: Plugin configuration
     Then the "claude-plugins.local.json" file of the project scope declares these plugins:
       | id            |
       | demo@fixtures |
+    Then the "claude-plugins.local.json" file of the project scope declares no marketplaces
     Then the project scope stages these skills and prompts:
       | kind  | name        |
       | skill | other-skill |
@@ -206,6 +207,7 @@ Feature: Plugin configuration
     Then the "claude-plugins.local.json" file of the user scope declares these plugins:
       | id            |
       | demo@fixtures |
+    Then the "claude-plugins.local.json" file of the user scope declares no marketplaces
     Then the user scope stages these skills and prompts:
       | kind  | name        |
       | skill | other-skill |
