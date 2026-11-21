@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { allowlistedEnvironment } from "../platform/process-environment.ts";
+
 import type { PiRuntime } from "../../features/lib/pi-runtime.ts";
 
 const REPO_ROOT = fileURLToPath(new URL("../../", import.meta.url));
@@ -176,13 +178,12 @@ export async function runJsonOutputRuntime(options: JsonOutputOptions): Promise<
       }
     }
 
-    const env = {
-      PATH: process.env.PATH ?? "",
+    const env = allowlistedEnvironment(["PATH"], {
       HOME: home,
       PI_CODING_AGENT_DIR: agentDir,
       PI_CODING_AGENT_SESSION_DIR: sessionDir,
       PI_OFFLINE: "1",
-    };
+    });
     const versionProbe = spawnSync(process.execPath, [options.runtime.cliPath, "--version"], {
       cwd,
       env,

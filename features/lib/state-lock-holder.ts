@@ -20,6 +20,8 @@ import { fileURLToPath } from "node:url";
 
 import lockfile from "proper-lockfile";
 
+import { hostVariables } from "./child-environment.ts";
+
 const READY_LINE = "locked";
 
 // Starting Node and taking one lock takes well under a second; the margin
@@ -63,6 +65,9 @@ export async function holdStateLock(
   lockFile: string,
 ): Promise<() => Promise<void>> {
   const child = spawn(process.execPath, [thisFile, extensionRoot, lockFile], {
+    // The holder runs Node by its absolute path and resolves proper-lockfile
+    // from its own file, so it needs no variable of the worker.
+    env: hostVariables([]),
     stdio: ["pipe", "pipe", "inherit"],
   });
   const exit: Promise<unknown[]> = once(child, "exit");

@@ -15,6 +15,7 @@ import { createHooksRuntime } from "../../../extensions/pi-claude-marketplace/br
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { useAllowlistedProcessEnvironment } from "../../platform/process-environment.ts";
 
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
 import type { StopFailureEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/stop-failure.ts";
@@ -48,33 +49,16 @@ test("executes a blocking hook through the portable process boundary", async (t)
   const stdoutCapturePath = path.join(caseRoot, "stdout.txt");
   const stderrCapturePath = path.join(caseRoot, "stderr.txt");
   await Promise.all([mkdir(cwd, { recursive: true }), mkdir(pluginRoot, { recursive: true })]);
-
-  const ownedEnvironmentKeys = [
-    "PI_CLAUDE_MARKETPLACE_DEBUG",
-    "PORTABLE_HOOK_PROBE",
-    "CLAUDE_CODE_REMOTE",
-    "CLAUDE_ENV_FILE",
-    "PI_SUBAGENT_CHILD",
-  ] as const;
-  const previousEnvironment = ownedEnvironmentKeys.map((key) => ({
-    key,
-    existed: Object.hasOwn(process.env, key),
-    value: process.env[key],
-  }));
-  t.after(() => {
-    for (const previous of previousEnvironment) {
-      if (previous.existed && previous.value !== undefined) {
-        process.env[previous.key] = previous.value;
-      } else {
-        Reflect.deleteProperty(process.env, previous.key);
-      }
-    }
+  // The hook child echoes its whole environment back as hook context, so a
+  // large host environment would push that context over the 10,000-character
+  // cap (D-PG5-14) and into a saved file (D-PG5-15). HOME and
+  // PI_CODING_AGENT_DIR are the case's hermetic pair; the hook runs
+  // process.execPath, so it needs no PATH.
+  useAllowlistedProcessEnvironment(t, ["HOME", "PI_CODING_AGENT_DIR"], {
+    PI_CLAUDE_MARKETPLACE_DEBUG: "1",
+    PORTABLE_HOOK_PROBE: "case-owned",
+    PI_SUBAGENT_CHILD: "1",
   });
-  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
-  process.env.PORTABLE_HOOK_PROBE = "case-owned";
-  delete process.env.CLAUDE_CODE_REMOTE;
-  delete process.env.CLAUDE_ENV_FILE;
-  process.env.PI_SUBAGENT_CHILD = "1";
   runtime.captureChildIdentity(
     {
       type: "before_agent_start",
@@ -1167,14 +1151,8 @@ for (const translatorCase of TRANSLATOR_CASES.filter(({ claudeEvent }) =>
       { concurrency: false, timeout: 15_000 },
       async (t) => {
         // arrange
-        const previousMarker = process.env.PI_SUBAGENT_CHILD;
-        process.env.PI_SUBAGENT_CHILD = marker;
-        t.after(() => {
-          if (previousMarker === undefined) {
-            delete process.env.PI_SUBAGENT_CHILD;
-          } else {
-            process.env.PI_SUBAGENT_CHILD = previousMarker;
-          }
+        useAllowlistedProcessEnvironment(t, ["HOME", "PI_CODING_AGENT_DIR"], {
+          PI_SUBAGENT_CHILD: marker,
         });
         const runtime = createHooksRuntime();
         const identityEvent = (agent: string): BeforeAgentStartEvent =>

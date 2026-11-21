@@ -7,8 +7,10 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import { cgiEnvironment, parseCgiResponse } from "../../features/lib/https-git-host/cgi.ts";
+import { useAllowlistedProcessEnvironment } from "../platform/process-environment.ts";
 
 import type { CgiRequest, CgiResponse } from "../../features/lib/https-git-host/cgi.ts";
+import type { TestContext } from "node:test";
 
 describe("parseCgiResponse", () => {
   for (const { title, output, expectedResponse } of [
@@ -146,10 +148,18 @@ describe("parseCgiResponse", () => {
   }
 });
 
+const SHELL_PATH = "/shell/bin";
+
+/** Leaves only the shell's PATH in `process.env` until the case `t` ends. */
+function useShellPath(t: TestContext): void {
+  t.mock.property(process, "platform", "linux");
+  useAllowlistedProcessEnvironment(t, [], { PATH: SHELL_PATH });
+}
+
 /** The keys every CGI environment of the host at `/run/repositories` holds. */
 function serverEnvironment(): NodeJS.ProcessEnv {
   return {
-    PATH: process.env.PATH ?? "",
+    PATH: SHELL_PATH,
     HOME: "/run/cgi-home",
     GIT_CONFIG_NOSYSTEM: "1",
     GIT_CONFIG_GLOBAL: "/dev/null",
@@ -165,24 +175,15 @@ function serverEnvironment(): NodeJS.ProcessEnv {
 describe("cgiEnvironment", () => {
   test("builds the environment from scratch, without an inherited git variable", (t) => {
     // arrange
-    for (const [name, planted] of [
-      ["GIT_DIR", "/worker/repo/.git"],
-      ["GIT_INDEX_FILE", "/worker/repo/.git/index"],
-      ["GIT_CONFIG_SYSTEM", "/worker/gitconfig"],
-      ["GIT_CONFIG_GLOBAL", "/worker/home/.gitconfig"],
-      ["GIT_ASKPASS", "/worker/askpass"],
-    ] as const) {
-      const previous = process.env[name];
-      t.after(() => {
-        if (previous === undefined) {
-          Reflect.deleteProperty(process.env, name);
-        } else {
-          process.env[name] = previous;
-        }
-      });
-      process.env[name] = planted;
-    }
-
+    t.mock.property(process, "platform", "linux");
+    useAllowlistedProcessEnvironment(t, [], {
+      PATH: SHELL_PATH,
+      GIT_DIR: "/worker/repo/.git",
+      GIT_INDEX_FILE: "/worker/repo/.git/index",
+      GIT_CONFIG_SYSTEM: "/worker/gitconfig",
+      GIT_CONFIG_GLOBAL: "/worker/home/.gitconfig",
+      GIT_ASKPASS: "/worker/askpass",
+    });
     const request = {
       method: "GET",
       url: new URL("https://127.0.0.1:4443/acme/tools.git/info/refs?service=git-upload-pack"),
@@ -204,8 +205,9 @@ describe("cgiEnvironment", () => {
     });
   });
 
-  test("passes the Git-Protocol header and the length of the buffered body", () => {
+  test("passes the Git-Protocol header and the length of the buffered body", (t) => {
     // arrange
+    useShellPath(t);
     const request = {
       method: "POST",
       url: new URL("https://127.0.0.1:4443/acme/tools.git/git-upload-pack"),
@@ -231,8 +233,9 @@ describe("cgiEnvironment", () => {
     });
   });
 
-  test("passes the Content-Encoding header of a compressed request", () => {
+  test("passes the Content-Encoding header of a compressed request", (t) => {
     // arrange
+    useShellPath(t);
     const request = {
       method: "POST",
       url: new URL("https://127.0.0.1:4443/acme/tools.git/git-upload-pack"),

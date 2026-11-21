@@ -28,6 +28,7 @@ import { resolveOptions } from "../../../../extensions/pi-claude-marketplace/dom
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createJsonCapture } from "../../../edge/json-capture.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
+import { useAllowlistedProcessEnvironment } from "../../../platform/process-environment.ts";
 
 import type {
   OrphanProbes,
@@ -1566,19 +1567,12 @@ test(
     await mkdir(journalDir, { recursive: true });
     const parentRuntime = createHooksRuntime();
     const childRuntime = createHooksRuntime();
-    const previousMarker = process.env.PI_SUBAGENT_CHILD;
     t.after(async () => {
-      if (previousMarker === undefined) {
-        delete process.env.PI_SUBAGENT_CHILD;
-      } else {
-        process.env.PI_SUBAGENT_CHILD = previousMarker;
-      }
-
       await shutdownInMemoryChildren(parentRuntime);
       await shutdownInMemoryChildren(childRuntime);
       await rm(root, { recursive: true, force: true });
     });
-    delete process.env.PI_SUBAGENT_CHILD;
+    useAllowlistedProcessEnvironment(t, ["HOME", "PI_CODING_AGENT_DIR"]);
     const parentEntry = createEntry(root, {
       handlerDecl: {
         type: "command",
@@ -1741,7 +1735,6 @@ for (const {
       let ready: Promise<unknown[]> | undefined;
       let closed: Promise<unknown[]> | undefined;
       let child: ChildProcess | undefined;
-      const previousMarker = process.env.PI_SUBAGENT_CHILD;
       t.after(async () => {
         await shutdownInMemoryChildren(runtime);
         if (child !== undefined) {
@@ -1751,15 +1744,11 @@ for (const {
         // The hook's exit queues a PID table write that must land before the removal.
         await runtime.runPidTableOperation(pidTablePath(loc), () => Promise.resolve());
 
-        if (previousMarker === undefined) {
-          delete process.env.PI_SUBAGENT_CHILD;
-        } else {
-          process.env.PI_SUBAGENT_CHILD = previousMarker;
-        }
-
         await rm(root, { recursive: true, force: true });
       });
-      process.env.PI_SUBAGENT_CHILD = marker;
+      useAllowlistedProcessEnvironment(t, ["HOME", "PI_CODING_AGENT_DIR"], {
+        PI_SUBAGENT_CHILD: marker,
+      });
       const beforeRun: BeforeAgentStartEvent = {
         type: "before_agent_start",
         messageType: "user",
@@ -5157,8 +5146,9 @@ test(
   },
 );
 
-test("uses the real spawn and generated dispatch ID at the default boundary", async () => {
+test("uses the real spawn and generated dispatch ID at the default boundary", async (t) => {
   // arrange
+  useAllowlistedProcessEnvironment(t, ["HOME", "PI_CODING_AGENT_DIR"]);
   const runtime = createHooksRuntime();
   const root = await mkdtemp(path.join(tmpdir(), "async-registry-default-spawn-"));
   shutdownInMemoryChildren(runtime);

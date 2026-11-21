@@ -11,12 +11,14 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
+import { hostVariables } from "./child-environment.ts";
+
 const execFileAsync = promisify(execFile);
 
 /** Returns the environment of a suite git whose HOME is `home`. */
 export function hermeticGitEnvironment(home: string): NodeJS.ProcessEnv {
   return {
-    PATH: process.env.PATH ?? "",
+    ...hostVariables(["PATH"]),
     HOME: home,
     GIT_CONFIG_NOSYSTEM: "1",
     GIT_CONFIG_GLOBAL: "/dev/null",

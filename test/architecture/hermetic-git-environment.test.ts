@@ -15,6 +15,7 @@ import { describe, test } from "node:test";
 
 import { hermeticGitEnvironment } from "../../features/lib/hermetic-git.ts";
 import { rpcChildEnvironment } from "../../features/lib/pi-rpc.ts";
+import { useAllowlistedProcessEnvironment } from "../platform/process-environment.ts";
 
 import type {
   RpcGitEnvironment,
@@ -23,7 +24,7 @@ import type {
 } from "../../features/lib/pi-rpc.ts";
 import type { TestContext } from "node:test";
 
-const INHERITED_VARIABLES = {
+const SHELL_ONLY_VARIABLES = {
   GIT_DIR: "/shell/repo/.git",
   GIT_INDEX_FILE: "/shell/repo/.git/index",
   GIT_CONFIG_SYSTEM: "/shell/etc/gitconfig",
@@ -40,23 +41,17 @@ const INHERITED_VARIABLES = {
   PI_CM_HOOK_GATE: "shell-gate",
 } as const;
 
-/** Sets the inherited variables in `process.env` until the case `t` ends. */
-function inheritVariables(t: TestContext): void {
-  const saved = Object.keys(INHERITED_VARIABLES).map((name) => ({
-    name,
-    existed: Object.hasOwn(process.env, name),
-    value: process.env[name],
-  }));
-  t.after(() => {
-    for (const { name, existed, value } of saved) {
-      if (existed) {
-        process.env[name] = value;
-      } else {
-        Reflect.deleteProperty(process.env, name);
-      }
-    }
-  });
-  Object.assign(process.env, INHERITED_VARIABLES);
+// The one variable of the shell that a suite child is meant to inherit.
+const SHELL_PATH = "/shell/bin";
+
+/**
+ * Sets the shell's PATH and the shell-only variables in `process.env` until the
+ * case `t` ends, as if the Linux shell that runs the suite had set them. The
+ * cases then prove that a suite child does not receive the shell-only ones.
+ */
+function setShellVariables(t: TestContext): void {
+  t.mock.property(process, "platform", "linux");
+  useAllowlistedProcessEnvironment(t, [], { ...SHELL_ONLY_VARIABLES, PATH: SHELL_PATH });
 }
 
 const sandbox = {
@@ -68,14 +63,14 @@ const sandbox = {
 describe("hermeticGitEnvironment", () => {
   test("returns its eight keys and no inherited git variable", (t) => {
     // arrange
-    inheritVariables(t);
+    setShellVariables(t);
 
     // act
     const environment = hermeticGitEnvironment("/scratch/home");
 
     // assert
     assert.deepStrictEqual(environment, {
-      PATH: process.env.PATH ?? "",
+      PATH: SHELL_PATH,
       HOME: "/scratch/home",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/dev/null",
@@ -90,7 +85,7 @@ describe("hermeticGitEnvironment", () => {
 describe("rpcChildEnvironment", () => {
   test("adds the three git keys and the run's GitHub base override, and no inherited variable", (t) => {
     // arrange
-    inheritVariables(t);
+    setShellVariables(t);
     const git = {
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
@@ -106,7 +101,7 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      PATH: process.env.PATH ?? "",
+      PATH: SHELL_PATH,
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
@@ -116,7 +111,7 @@ describe("rpcChildEnvironment", () => {
 
   test("adds the run's background update delay, not the shell's", (t) => {
     // arrange
-    inheritVariables(t);
+    setShellVariables(t);
     const git = {
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
@@ -133,7 +128,7 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      PATH: process.env.PATH ?? "",
+      PATH: SHELL_PATH,
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
@@ -144,7 +139,7 @@ describe("rpcChildEnvironment", () => {
 
   test("omits the GitHub base override when the run's git environment has none", (t) => {
     // arrange
-    inheritVariables(t);
+    setShellVariables(t);
     const git = {
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
@@ -159,7 +154,7 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      PATH: process.env.PATH ?? "",
+      PATH: SHELL_PATH,
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
@@ -168,7 +163,7 @@ describe("rpcChildEnvironment", () => {
 
   test("adds the profile's TMPDIR, not the shell's, to the git environment", (t) => {
     // arrange
-    inheritVariables(t);
+    setShellVariables(t);
     const git = {
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
@@ -185,7 +180,7 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      PATH: process.env.PATH ?? "",
+      PATH: SHELL_PATH,
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
@@ -196,7 +191,7 @@ describe("rpcChildEnvironment", () => {
 
   test("adds the profile's background-child marker, not the shell's", (t) => {
     // arrange
-    inheritVariables(t);
+    setShellVariables(t);
     const git = {
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
@@ -216,7 +211,7 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      PATH: process.env.PATH ?? "",
+      PATH: SHELL_PATH,
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
@@ -228,7 +223,7 @@ describe("rpcChildEnvironment", () => {
 
   test("adds the profile's hook gate, not the shell's", (t) => {
     // arrange
-    inheritVariables(t);
+    setShellVariables(t);
     const git = {
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
@@ -248,7 +243,7 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      PATH: process.env.PATH ?? "",
+      PATH: SHELL_PATH,
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
@@ -260,7 +255,7 @@ describe("rpcChildEnvironment", () => {
 
   test("returns only the allowlist without a git environment", (t) => {
     // arrange
-    inheritVariables(t);
+    setShellVariables(t);
 
     // act
     const environment = rpcChildEnvironment(sandbox);
@@ -270,7 +265,7 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      PATH: process.env.PATH ?? "",
+      PATH: SHELL_PATH,
     });
   });
 });

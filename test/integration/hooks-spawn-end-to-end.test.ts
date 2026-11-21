@@ -31,6 +31,7 @@ import {
   saveState,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { useAllowlistedProcessEnvironment } from "../platform/process-environment.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -116,7 +117,9 @@ function buildStateWithHooksPlugin(sourcesPluginRoot: string): ExtensionState {
   };
 }
 
-test("HOOK-E2E-02: a real SessionStart hook fires through bash and the handler writes its sentinel file", async () => {
+test("HOOK-E2E-02: a real SessionStart hook fires through bash and the handler writes its sentinel file", async (t) => {
+  // PATH, because the hook runs bash, sleep, and date by name.
+  useAllowlistedProcessEnvironment(t, ["PATH", "HOME", "PI_CODING_AGENT_DIR"]);
   const runtime = createHooksRuntime();
   const hooksHydration = createHooksHydration(runtime, {
     loadState,
@@ -237,7 +240,9 @@ echo '{}'
 // and `${CLAUDE_PLUGIN_ROOT}` resolves to the external path.
 // ──────────────────────────────────────────────────────────────────────────
 
-test("HOOK-E2E-05: path-source plugin whose resolvedSource is OUTSIDE extensionRoot still spawns the handler", async () => {
+test("HOOK-E2E-05: path-source plugin whose resolvedSource is OUTSIDE extensionRoot still spawns the handler", async (t) => {
+  // PATH, because the hook runs bash and date by name.
+  useAllowlistedProcessEnvironment(t, ["PATH", "HOME", "PI_CODING_AGENT_DIR"]);
   const runtime = createHooksRuntime();
   const hooksHydration = createHooksHydration(runtime, {
     loadState,
