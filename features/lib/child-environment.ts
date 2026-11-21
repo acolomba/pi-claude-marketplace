@@ -19,6 +19,10 @@ const WINDOWS_BASE_VARIABLES: readonly string[] = [
   "USERPROFILE",
 ];
 
+function comparableName(name: string, windows: boolean): string {
+  return windows ? name.toUpperCase() : name;
+}
+
 /**
  * Returns the variables of this process's environment that `names` names. On
  * Windows it also returns the variables of the OS base list, and it compares
@@ -28,11 +32,14 @@ const WINDOWS_BASE_VARIABLES: readonly string[] = [
 export function hostVariables(names: readonly string[]): NodeJS.ProcessEnv {
   // Read at each call, because a test replaces the platform for one case.
   const windows = process.platform === "win32";
-  const comparable = windows ? (name: string) => name.toUpperCase() : (name: string) => name;
-  const wanted = new Set([...names, ...(windows ? WINDOWS_BASE_VARIABLES : [])].map(comparable));
+  const wanted = new Set(
+    (windows ? [...names, ...WINDOWS_BASE_VARIABLES] : names).map((name) =>
+      comparableName(name, windows),
+    ),
+  );
   const variables: NodeJS.ProcessEnv = {};
   for (const [name, value] of Object.entries(process.env)) {
-    if (value !== undefined && wanted.has(comparable(name))) {
+    if (value !== undefined && wanted.has(comparableName(name, windows))) {
       variables[name] = value;
     }
   }

@@ -138,9 +138,9 @@ async function seedStateRaw(cwd: string, raw: unknown): Promise<void> {
 }
 
 /**
- * One reconcile child, forked but not yet released. A fork passes on the
- * --import of scripts/isolated-pi-home.mjs, which keeps the HOME given here
- * only while PI_CM_TEST_HOME is set.
+ * One reconcile child, forked but not yet released. A fork inherits the
+ * --import of scripts/isolated-pi-home.mjs, which replaces HOME unless
+ * PI_CM_TEST_HOME is set, so the child gets that variable too.
  */
 function forkReconcileChild(env: RaceEnv): ReturnType<typeof fork> {
   return fork(CHILD_PATH, [], {

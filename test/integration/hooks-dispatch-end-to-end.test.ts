@@ -452,8 +452,11 @@ test(
   "a registered child records complete successful and failed tool result payloads",
   { concurrency: false },
   async (t) => {
-    // PATH, because the hook runs node by name.
-    useAllowlistedProcessEnvironment(t, ["PATH", "HOME", "PI_CODING_AGENT_DIR"]);
+    // PATH, because the hook runs node by name. PI_SUBAGENT_CHILD marks the
+    // process as a pi-subagents child for the whole case.
+    useAllowlistedProcessEnvironment(t, ["PATH", "HOME", "PI_CODING_AGENT_DIR"], {
+      PI_SUBAGENT_CHILD: "1",
+    });
     await withHermeticPiHome(async ({ agentDir, projectCwd }) => {
       const extensionRoot = path.join(agentDir, "pi-claude-marketplace");
       const pluginId = "result-recording";
@@ -493,7 +496,6 @@ test(
           getSessionName: () => undefined,
         },
       } as unknown as ExtensionContext;
-      process.env.PI_SUBAGENT_CHILD = "1";
       await hydration.registerHooksBridge(pi, { cwd: projectCwd });
       const before = registrations.find((entry) => entry.event === "before_agent_start");
       const result = registrations.find((entry) => entry.event === "tool_result");

@@ -13,9 +13,9 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { hostVariables } from "../../features/lib/child-environment.ts";
 import { hermeticGitEnvironment } from "../../features/lib/hermetic-git.ts";
 import { rpcChildEnvironment } from "../../features/lib/pi-rpc.ts";
+import { useAllowlistedProcessEnvironment } from "../platform/process-environment.ts";
 
 import type {
   RpcGitEnvironment,
@@ -41,23 +41,16 @@ const INHERITED_VARIABLES = {
   PI_CM_HOOK_GATE: "shell-gate",
 } as const;
 
-/** Sets the inherited variables in `process.env` until the case `t` ends. */
+// The one variable of the shell that a suite child is meant to inherit.
+const SHELL_PATH = "/shell/bin";
+
+/**
+ * Leaves the shell's PATH and the inherited variables in `process.env` until
+ * the case `t` ends, as if the Linux shell that runs the suite had set them.
+ */
 function inheritVariables(t: TestContext): void {
-  const saved = Object.keys(INHERITED_VARIABLES).map((name) => ({
-    name,
-    existed: Object.hasOwn(process.env, name),
-    value: process.env[name],
-  }));
-  t.after(() => {
-    for (const { name, existed, value } of saved) {
-      if (existed) {
-        process.env[name] = value;
-      } else {
-        Reflect.deleteProperty(process.env, name);
-      }
-    }
-  });
-  Object.assign(process.env, INHERITED_VARIABLES);
+  t.mock.property(process, "platform", "linux");
+  useAllowlistedProcessEnvironment(t, [], { ...INHERITED_VARIABLES, PATH: SHELL_PATH });
 }
 
 const sandbox = {
@@ -76,7 +69,7 @@ describe("hermeticGitEnvironment", () => {
 
     // assert
     assert.deepStrictEqual(environment, {
-      ...hostVariables(["PATH"]),
+      PATH: SHELL_PATH,
       HOME: "/scratch/home",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/dev/null",
@@ -107,7 +100,7 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      ...hostVariables(["PATH"]),
+      PATH: SHELL_PATH,
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
@@ -134,7 +127,7 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      ...hostVariables(["PATH"]),
+      PATH: SHELL_PATH,
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
@@ -160,7 +153,7 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      ...hostVariables(["PATH"]),
+      PATH: SHELL_PATH,
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
@@ -186,7 +179,7 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      ...hostVariables(["PATH"]),
+      PATH: SHELL_PATH,
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
@@ -217,7 +210,7 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      ...hostVariables(["PATH"]),
+      PATH: SHELL_PATH,
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
@@ -249,7 +242,7 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      ...hostVariables(["PATH"]),
+      PATH: SHELL_PATH,
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
@@ -271,7 +264,7 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      ...hostVariables(["PATH"]),
+      PATH: SHELL_PATH,
     });
   });
 });

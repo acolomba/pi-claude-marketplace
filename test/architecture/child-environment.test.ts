@@ -155,8 +155,8 @@ describe("useAllowlistedProcessEnvironment", () => {
       PI_CODING_AGENT_DIR: "/case/home/.pi/agent",
     });
     const environmentBefore = { ...process.env };
-    let piLocationsInCase = {};
-    let hermeticLocations = {};
+    let piLocationsInCase: Record<string, string | undefined> = {};
+    let hermeticLocations: Record<string, string | undefined> = {};
 
     // act
     await t.test("case", async (caseContext) => {
@@ -184,8 +184,8 @@ describe("useAllowlistedProcessEnvironment", () => {
       PI_CODING_AGENT_DIR: "/case/home/.pi/agent",
     });
     const environmentBefore = { ...process.env };
-    let piLocationsInCase = {};
-    let hermeticLocations = {};
+    let piLocationsInCase: Record<string, string | undefined> = {};
+    let hermeticLocations: Record<string, string | undefined> = {};
 
     // act
     await t.test("case", async (caseContext) => {
