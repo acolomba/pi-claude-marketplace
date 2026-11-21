@@ -63,6 +63,46 @@ describe("hostVariables", () => {
     // assert
     assert.deepStrictEqual(variables, { ...windowsBase(), Path: "C:\\Windows\\system32" });
   });
+
+  test("on Linux, matches a name in its own case only", (t) => {
+    // arrange
+    useAllowlistedProcessEnvironment(t, [], { Path: "/x", PATH: "/y" });
+    t.mock.property(process, "platform", "linux");
+
+    // act
+    const variables = hostVariables(["PATH"]);
+
+    // assert
+    assert.deepStrictEqual(variables, { PATH: "/y" });
+  });
+
+  test("on Linux, finds nothing for a name that the host spells in another case", (t) => {
+    // arrange
+    useAllowlistedProcessEnvironment(t, [], { Path: "/x" });
+    t.mock.property(process, "platform", "linux");
+
+    // act
+    const variables = hostVariables(["PATH"]);
+
+    // assert
+    assert.deepStrictEqual(variables, {});
+  });
+
+  test("on Linux, leaves out the Windows base variables", (t) => {
+    // arrange
+    useAllowlistedProcessEnvironment(t, [], {
+      SystemRoot: "/root",
+      USERPROFILE: "/home/case",
+      TEMP: "/tmp/case",
+    });
+    t.mock.property(process, "platform", "linux");
+
+    // act
+    const variables = hostVariables([]);
+
+    // assert
+    assert.deepStrictEqual(variables, {});
+  });
 });
 
 describe("allowlistedEnvironment", () => {
@@ -223,6 +263,64 @@ describe("useAllowlistedProcessEnvironment", () => {
     // assert
     assert.deepStrictEqual(environmentInCase, { PI_CM_CHILD_SECOND: "second" });
     assert.deepStrictEqual({ ...process.env }, environmentBefore);
+  });
+
+  test("on Windows, keeps the base variables and drops the other host variables", async (t) => {
+    // arrange
+    const environment = windowsProcessEnvironment(windowsHost());
+    t.mock.property(process, "env", environment);
+    t.mock.property(process, "platform", "win32");
+    let environmentInCase: NodeJS.ProcessEnv = {};
+
+    // act
+    await t.test("case", (caseContext) => {
+      useAllowlistedProcessEnvironment(caseContext, ["PATH"], { PI_CM_CHILD_VALUE: "1" });
+      environmentInCase = { ...process.env };
+    });
+
+    // assert
+    assert.deepStrictEqual(environmentInCase, {
+      ...windowsBase(),
+      Path: "C:\\Windows\\system32",
+      PI_CM_CHILD_VALUE: "1",
+    });
+    assert.deepStrictEqual({ ...environment }, windowsHost());
+  });
+
+  test("on Windows, puts back a variable that the case sets again in another case", async (t) => {
+    // arrange
+    const environment = windowsProcessEnvironment({ Path: "C:\\Windows\\system32" });
+    t.mock.property(process, "env", environment);
+    t.mock.property(process, "platform", "win32");
+
+    // act
+    await t.test("case", (caseContext) => {
+      useAllowlistedProcessEnvironment(caseContext, []);
+      process.env.PATH = "changed";
+    });
+
+    // assert
+    // The emulation keeps the spelling that the case set last, so compare the values.
+    assert.deepStrictEqual(Object.values(environment), ["C:\\Windows\\system32"]);
+  });
+
+  test("gives a named variable the value that the case sets, and puts the host value back", async (t) => {
+    // arrange
+    useAllowlistedProcessEnvironment(t, [], { PI_CM_CHILD_KEPT: "host" });
+    t.mock.property(process, "platform", "linux");
+    let valueInCase: string | undefined;
+
+    // act
+    await t.test("case", (caseContext) => {
+      useAllowlistedProcessEnvironment(caseContext, ["PI_CM_CHILD_KEPT"], {
+        PI_CM_CHILD_KEPT: "case",
+      });
+      valueInCase = process.env.PI_CM_CHILD_KEPT;
+    });
+
+    // assert
+    assert.equal(valueInCase, "case");
+    assert.deepStrictEqual({ ...process.env }, { PI_CM_CHILD_KEPT: "host" });
   });
 });
 
