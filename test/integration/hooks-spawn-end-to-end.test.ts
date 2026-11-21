@@ -118,7 +118,7 @@ function buildStateWithHooksPlugin(sourcesPluginRoot: string): ExtensionState {
 }
 
 test("HOOK-E2E-02: a real SessionStart hook fires through bash and the handler writes its sentinel file", async (t) => {
-  // PATH, because the hook runs bash (through env), sleep, and date by name.
+  // PATH, because the hook runs bash, sleep, and date by name.
   useAllowlistedProcessEnvironment(t, ["PATH", "HOME", "PI_CODING_AGENT_DIR"]);
   const runtime = createHooksRuntime();
   const hooksHydration = createHooksHydration(runtime, {
@@ -241,7 +241,7 @@ echo '{}'
 // ──────────────────────────────────────────────────────────────────────────
 
 test("HOOK-E2E-05: path-source plugin whose resolvedSource is OUTSIDE extensionRoot still spawns the handler", async (t) => {
-  // PATH, because the hook runs bash (through env) and date by name.
+  // PATH, because the hook runs bash and date by name.
   useAllowlistedProcessEnvironment(t, ["PATH", "HOME", "PI_CODING_AGENT_DIR"]);
   const runtime = createHooksRuntime();
   const hooksHydration = createHooksHydration(runtime, {

@@ -196,7 +196,7 @@ function findHandler(
 
 test("HOOK-E2E-03: SessionStart hook stdout additionalContext reaches the before_agent_start message end-to-end", async (t) => {
   // arrange
-  // PATH, because the hook runs bash (through env) and cat by name.
+  // PATH, because the hook runs bash and cat by name.
   useAllowlistedProcessEnvironment(t, ["PATH", "HOME", "PI_CODING_AGENT_DIR"]);
   const runtime = createHooksRuntime();
   const hooksHydration = createHooksHydration(runtime, {
@@ -274,7 +274,7 @@ test("HOOK-E2E-03: SessionStart hook stdout additionalContext reaches the before
 
 test("HOOK-E2E-04: registerHooksBridge clears the pending buffer on /reload (re-entry)", async (t) => {
   // arrange
-  // PATH, because the hook runs bash (through env) and cat by name.
+  // PATH, because the hook runs bash and cat by name.
   useAllowlistedProcessEnvironment(t, ["PATH", "HOME", "PI_CODING_AGENT_DIR"]);
   const runtime = createHooksRuntime();
   const hooksHydration = createHooksHydration(runtime, {
