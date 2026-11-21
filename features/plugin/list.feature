@@ -252,7 +252,7 @@ Feature: Plugin list
       | official         | user              | alpha@official | alpha | installed |         | project | 1.0.0   |
       | team             | project           | alpha@team     | alpha | available |         |         | 0.9.0   |
 
-  Scenario: The unfiltered list shows a project marketplace that shares a user marketplace's name but not its source under its own header with no duplicate row (CMC-21, D-13-17)
+  Scenario: The unfiltered list shows a plugin installed from a project marketplace that shares a user marketplace's name but not its source under the project header, and offers the user marketplace's copy as available (CMC-21, D-13-17)
     Given the marketplace "official" is published as a dir source
     Given the marketplace "official" offers these plugins:
       | name  | version |
