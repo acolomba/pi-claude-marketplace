@@ -69,9 +69,12 @@ export function pluginMirrorKey(canonicalUrl: string): string {
  *
  *   - github-object: `https://github.com/<owner>/<repo>` (D-77-06). A url
  *     entry and a github entry naming the same repo dedup to one clone.
- *   - url / git-subdir: `source.url` verbatim -- the parser already produced
- *     the parse-time canonical form (`.git`-stripped, `#ref`-split, D-76-01),
- *     so dedup is `.git`-suffix-insensitive. For git-subdir the clone url is
+ *   - url / git-subdir: `source.url` verbatim. For a url source the parser
+ *     already produced the parse-time canonical form (`.git`-stripped,
+ *     `#ref`-split, D-76-01), so its dedup is `.git`-suffix-insensitive. A
+ *     git-subdir source's `source.url` is the url its manifest wrote, `.git`
+ *     kept, so `repo` and `repo.git` name two keys; mirror seeding compares
+ *     them without the suffix (D-SEED-01). For git-subdir the clone url is
  *     the repo root; the subdir path is resolved later by the resolver
  *     (git-subdir pluginRoot = cloneRoot + path).
  *

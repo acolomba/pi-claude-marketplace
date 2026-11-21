@@ -8,7 +8,8 @@
  * step offers no plugins. Stating the plugins it offers, with or without the
  * dependencies each declares, republishes it as the same kind, so a scenario
  * states the kind before the plugins, and the plugins before the marketplaces
- * they may depend on.
+ * they may depend on. A scenario can also state plugins that a url marketplace
+ * offers from its own repository, as git-subdir sources at the url it names.
  */
 
 import assert from "node:assert/strict";
@@ -22,6 +23,12 @@ import {
   recordEarlierVersionMarketplace,
   recordedMarketplace,
 } from "../../lib/earlier-version-state.ts";
+import {
+  offerGitPlugins,
+  ownRepositoryEntry,
+  readOwnRepositoryOffers,
+} from "../../lib/git-plugin.ts";
+import { runGit } from "../../lib/hermetic-git.ts";
 import {
   readOfferedPlugins,
   readOfferedPluginsWithDependencies,
@@ -145,6 +152,41 @@ Given(
   "the marketplace {string} offers these plugins with dependencies:",
   async function (this: ScenarioWorld, name: string, table: DataTable) {
     await offer(this, name, readOfferedPluginsWithDependencies(table));
+  },
+);
+
+/** Returns `url` without one trailing `.git`, the form a url marketplace's identity takes. */
+function withoutGitSuffix(url: string): string {
+  return url.endsWith(".git") ? url.slice(0, -".git".length) : url;
+}
+
+// D-SEED-01: the marketplace publishes the plugins' files, then offers each
+// one from its own repository, so a pinned entry names a commit that holds
+// them. A github marketplace's identity names github.com, which no git-host
+// url matches, so only a url marketplace offers its own repository.
+Given(
+  "the marketplace {string} offers these plugins from its own repository:",
+  async function (this: ScenarioWorld, name: string, table: DataTable) {
+    const published = this.requirePublished(name);
+    if (published.kind !== "url") {
+      assert.fail(`the marketplace ${name} is published as a ${published.kind} source, not url`);
+    }
+
+    const offers = readOwnRepositoryOffers(table);
+    await republishMarketplace(published, name, offers);
+    const commit = await runGit(published.root, published.gitHome, "rev-parse", "HEAD");
+    const entries = offers.map((offered) => {
+      const url = expandTokens(offered.url, this.tokens);
+      assert.strictEqual(withoutGitSuffix(url), withoutGitSuffix(published.source), url);
+      return ownRepositoryEntry(offered, url, commit);
+    });
+    const republished = await readFile(published.manifestPath, "utf8");
+    await rewritePublishedManifest(published, offerGitPlugins(republished, entries));
+    // The republish offers exactly these plugins, so the entries are the whole list.
+    const { plugins } = JSON.parse(await readFile(published.manifestPath, "utf8")) as {
+      plugins: unknown;
+    };
+    assert.deepStrictEqual(plugins, entries);
   },
 );
 

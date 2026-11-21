@@ -673,6 +673,16 @@ async function deriveMarketplaceUrl(
 }
 
 /**
+ * D-SEED-01 / D-76-01: returns `url` with one trailing `.git` removed. A url
+ * marketplace's identity drops the suffix at parse time (D-76-01), but a
+ * git-subdir source keeps the url its manifest wrote, so seeding compares the
+ * two in this form to see that they name one repository.
+ */
+function withoutGitSuffix(url: string): string {
+  return url.endsWith(".git") ? url.slice(0, -".git".length) : url;
+}
+
+/**
  * D-SEED-03 / NFR-1 / NFR-10: seed ONE same-repo plugin mirror by copying the
  * marketplace checkout tree (including `.git`, so the origin remote is preserved
  * BY CONSTRUCTION -- SEED-05) into a staging dir, then an atomic same-FS rename
@@ -682,19 +692,21 @@ async function deriveMarketplaceUrl(
  * (SEED-04). The destination is composed ONLY from `pluginMirrorKey` /
  * `pluginCloneKey` outputs routed through `locations.pluginCloneDir` -- the
  * SC-7/NFR-10 containment chokepoint; no manifest/user string joins the path.
+ * Both keys hash the plugin's own `canonicalCloneUrl`, the url that install's
+ * materializer and the presence probe hash, so the seed lands where they look
+ * even when the plugin's url keeps a `.git` the marketplace url drops
+ * (D-SEED-01).
  */
 async function seedOnePluginMirror(
   ops: RemovalOps,
   locations: ScopedLocations,
   gitOps: GitOps,
   source: UrlSource | GitSubdirSource | GitHubSource,
-  marketplaceUrl: string,
   marketplaceRoot: string,
 ): Promise<void> {
+  const pluginUrl = canonicalCloneUrl(source);
   const key =
-    source.sha === undefined
-      ? pluginMirrorKey(marketplaceUrl)
-      : pluginCloneKey(marketplaceUrl, source.sha);
+    source.sha === undefined ? pluginMirrorKey(pluginUrl) : pluginCloneKey(pluginUrl, source.sha);
   const dest = await locations.pluginCloneDir(key);
 
   // Warm short-circuit: a present key dir is a byte-equivalent warm cache (same
@@ -757,12 +769,15 @@ async function seedOnePluginMirror(
  * Called best-effort post-commit from `marketplace add` (D-SEED-01): it runs
  * AFTER the add already committed, per-entry failures are swallowed, and the
  * whole sweep never disturbs the committed add. A plugin whose canonical URL
- * differs from the marketplace's is left untouched (SEED-03 different-repo). A
- * pinned source seeds only when its sha is reachable in the copied history
- * (SEED-04); an unreachable pin falls back to the normal network path. install
- * / fetch continue to handle a cold mirror through their normal materialize
- * path, so no second hook is needed. clone-cache.ts is the git-surface-allowed
- * seam, so no gated read orchestrator gains a git token (NFR-5).
+ * differs from the marketplace's, once one trailing `.git` is set aside from
+ * both, is left untouched (SEED-03 different-repo); a same-repo seed lands
+ * under the plugin's own canonical URL, the key install and the probe compute
+ * (D-SEED-01). A pinned source seeds only when its sha is reachable in the
+ * copied history (SEED-04); an unreachable pin falls back to the normal network
+ * path. install / fetch continue to handle a cold mirror through their normal
+ * materialize path, so no second hook is needed. clone-cache.ts is the
+ * git-surface-allowed seam, so no gated read orchestrator gains a git token
+ * (NFR-5).
  */
 export async function seedSameRepoPluginMirrors(args: {
   locations: ScopedLocations;
@@ -796,21 +811,15 @@ export async function seedSameRepoPluginMirrors(args: {
     }
 
     // SEED-03: a different-repo git source is unaffected -- skip it so it keeps
-    // its normal `(remote)` -> network-clone behavior.
-    if (canonicalCloneUrl(src) !== marketplaceUrl) {
+    // its normal `(remote)` -> network-clone behavior. One trailing `.git` is
+    // ignored on both sides, so `repo` and `repo.git` name one repo (D-SEED-01).
+    if (withoutGitSuffix(canonicalCloneUrl(src)) !== withoutGitSuffix(marketplaceUrl)) {
       continue;
     }
 
     try {
       // eslint-disable-next-line no-await-in-loop -- entries can share a mirror key; each seed checks the last
-      await seedOnePluginMirror(
-        removalOps,
-        locations,
-        gitOps,
-        src,
-        marketplaceUrl,
-        mp.marketplaceRoot,
-      );
+      await seedOnePluginMirror(removalOps, locations, gitOps, src, mp.marketplaceRoot);
     } catch {
       // Best-effort (D-SEED-01): a per-entry seed failure leaves the plugin
       // `(remote)` for the normal network path; the committed add is untouched.

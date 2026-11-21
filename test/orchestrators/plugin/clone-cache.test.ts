@@ -1998,6 +1998,60 @@ void test("SEED-04: a later-call rename failure is isolated and the next entry s
   assert.deepEqual(await stagingEntries(locations), []);
 });
 
+void test("D-SEED-01: a same-repository git-subdir source whose url ends in .git seeds the mirror under its own url", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const pluginUrl = `${GITHUB_REPO_URL}.git`;
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
+    originUrl: GITHUB_REPO_URL,
+    plugins: [gitSubdirEntry("subdir", pluginUrl)],
+  });
+  await saveMarketplace(locations, marketplaceRoot, GITHUB_REPO_URL);
+
+  // act
+  await seedSameRepoPluginMirrors({ locations, marketplaceName: "marketplace" });
+  const pluginMirror = await locations.pluginCloneDir(pluginMirrorKey(pluginUrl));
+  const marketplaceMirror = await locations.pluginCloneDir(pluginMirrorKey(GITHUB_REPO_URL));
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      pluginMirror: await pathExists(pluginMirror),
+      marketplaceMirror: await pathExists(marketplaceMirror),
+      staging: await stagingEntries(locations),
+    },
+    { pluginMirror: true, marketplaceMirror: false, staging: [] },
+  );
+});
+
+void test("D-SEED-01: a pinned same-repository git-subdir source whose url ends in .git seeds the per-commit clone under its own url", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const pluginUrl = `${GITHUB_REPO_URL}.git`;
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
+    originUrl: GITHUB_REPO_URL,
+    plugins: [gitSubdirEntry("subdir", pluginUrl, { sha: PIN_40 })],
+  });
+  await saveMarketplace(locations, marketplaceRoot, GITHUB_REPO_URL);
+  const { gitOps, state } = createGitOps();
+
+  // act
+  await seedSameRepoPluginMirrors({ locations, marketplaceName: "marketplace", gitOps });
+  const pluginClone = await locations.pluginCloneDir(pluginCloneKey(pluginUrl, PIN_40));
+  const marketplaceClone = await locations.pluginCloneDir(pluginCloneKey(GITHUB_REPO_URL, PIN_40));
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      pluginClone: await pathExists(pluginClone),
+      marketplaceClone: await pathExists(marketplaceClone),
+      checkouts: state.checkoutCalls.map(({ ref }) => ref),
+      staging: await stagingEntries(locations),
+    },
+    { pluginClone: true, marketplaceClone: false, checkouts: [PIN_40], staging: [] },
+  );
+});
+
 void test("PURL-03: a non-subdirectory git source resolves to the clone root", async () => {
   // arrange
   const source: GitBackedSource = {
