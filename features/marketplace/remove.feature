@@ -856,3 +856,29 @@ Feature: Marketplace remove
       | clone  | origin                           | revision          |
       | plugin | https://{git host}/acme/mono.git | {mono revision 1} |
     Then the git host receives no request
+
+  Scenario: A named remove of a url marketplace the scope records but no layer declares removes its record, checkout, and plugin data (D-09)
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install demo@tools --scope project"
+    Given the data directory of "demo@tools" in the project scope holds the file "notes.txt" with the text "Lost on remove."
+    Given a config in scope project and layer base, with this text:
+      """
+      { "schemaVersion": 1, "marketplaces": {}, "plugins": {} }
+      """
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id         | name | status      | reasons | scope   |
+      | tools            | project           | removed            | demo@tools | demo | uninstalled |         | project |
+    Then the project scope holds no marketplace record
+    Then the project scope holds no marketplace checkout
+    Then the project scope holds no git clones
+    Then the project scope holds no plugin data
+    Then the git host receives no request

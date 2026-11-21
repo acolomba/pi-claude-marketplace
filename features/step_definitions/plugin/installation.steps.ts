@@ -22,8 +22,9 @@
  * release reads, as an upgrade or a downgrade leaves it (D-BG-13); the one
  * for release 0.4.3 also deletes the scope's configs, which that release did
  * not write. The other steps
- * only read; one of them lists the files of that `agents/` directory, and one
- * checks that the user scope holds no record of project installs.
+ * only read; one of them lists the files of that `agents/` directory, one
+ * checks that the user scope holds no record of project installs, and one
+ * checks that the scope holds no plugin data.
  *
  * A missing installation record fails the step; it never reads as no plugins.
  * A scope that has a marketplace added always has one.
@@ -621,4 +622,11 @@ Then(
 
 Then("the {word} scope holds no git clones", async function (this: ScenarioWorld, scope: string) {
   assert.deepStrictEqual(await readGitClones(extensionRoot(this, scope)), []);
+});
+
+// The data directory of every plugin lives under `data`; an absent one holds none.
+Then("the {word} scope holds no plugin data", async function (this: ScenarioWorld, scope: string) {
+  const directory = path.join(extensionRoot(this, scope), "data");
+  const entries = existsSync(directory) ? await readdir(directory) : [];
+  assert.deepStrictEqual(entries, []);
 });
