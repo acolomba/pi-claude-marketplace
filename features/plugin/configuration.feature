@@ -156,7 +156,7 @@ Feature: Plugin configuration
     Given a config in scope project and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
-    Given the config and installation record bytes of the project scope are remembered
+    Given the files of the project scope are remembered
     When the user runs "/claude:plugin apply --scope project"
     Then the result has these fields:
       | kind           | reconcile-applied-cascade      |
@@ -169,7 +169,7 @@ Feature: Plugin configuration
     Then the result lists these plugins:
       | marketplace name    | marketplace scope | id                                      | name                | status | reasons          | scope   | cause chain                                                                                                                                                                                                                                                                                     | cause truncated | leaks | rollback partial |
       | claude-plugins.json | project           | claude-plugins.json@claude-plugins.json | claude-plugins.json | failed | invalid manifest | project | The base config (claude-plugins.json) declares demo@fixtures, but only the local config (claude-plugins.local.json) declares its marketplace. Run /claude:plugin marketplace add <source> --scope project with the source the local config declares, or remove the plugin from the base config. | false           |       |                  |
-    Then the config and installation record bytes of the project scope are unchanged
+    Then the files of the project scope are unchanged
     Then the "claude-plugins.local.json" file of the project scope declares these plugins:
       | id             |
       | other@fixtures |
