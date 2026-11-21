@@ -473,6 +473,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261119-59e | Bring the --map-model alias table to Claude Code 2.1.328 and raise the Pi floor to 1.5.1 (maintainer decision D-PG1-15, closes AGENT-06) | 2026-11-19 | e76a60e | complete | [261119-59e-bring-the-map-model-alias-table-to-claud](./quick/261119-59e-bring-the-map-model-alias-table-to-claud/) |
 | 261119-h5n | Pin fallow 3.44.0 and move shared harness files out of test/ to fix the degraded fallow audit | 2026-11-19 | fa449db | — | [261119-h5n-fallow-3-44-pin-and-audit-degraded-fix](./quick/261119-h5n-fallow-3-44-pin-and-audit-degraded-fix/) |
 | 261119-jmd | Split test/e2e/_helpers.ts into modules named by function | 2026-11-19 | bcbea72 | — | [261119-jmd-split-test-e2e-helpers-ts-by-function](./quick/261119-jmd-split-test-e2e-helpers-ts-by-function/) |
+| 47 | Make PluginBrowser.render() typecheck against pi-tui 1.6.0 (copy rendered lines); CHANGELOG line | 2026-11-20 | dff44ec | — | — |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
