@@ -4,16 +4,16 @@ milestone: integration-rescope
 milestone_name: Integration Test Rescope
 current_phase: 2
 current_phase_name: Plugin Layers, Names, and List Fold
-status: verifying
+status: executing
 stopped_at: Phase 01 complete, ready to verify Phase 2
-last_updated: "2026-11-21T16:41:22.143Z"
+last_updated: "2026-11-21T18:06:34.629Z"
 last_activity: 2026-11-21
 last_activity_desc: Phase 01 complete, transitioned to Phase 2
-state_head: c1433e6552d8efe0a9a32190968a0d90ba0cea9a
+state_head: 3510c8ecae0784173d82bb62cf95c99bc2b38fb5
 progress:
   total_phases: 8
   completed_phases: 1
-  total_plans: 2
+  total_plans: 6
   completed_plans: 2
   percent: 13
 ---
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 2 of 8 (Plugin Layers, Names, and List Fold)
+Phase: 2 (Plugin Layers, Names, and List Fold) — READY TO EXECUTE
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-11-21 — Phase 01 complete, transitioned to Phase 2
 
 Progress: [█░░░░░░░░░] 13%
@@ -1198,6 +1198,9 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ### Blockers/Concerns
 
+- [integration-rescope] Phase 2 planning: the decision-coverage gate returned
+  `could-not-parse` (bracket-named smart-discuss decisions); proceeded by
+  override after the plan checker confirmed coverage of every CONTEXT decision.
 - [integration-rescope] Container facts measured 2026-11-21 (Phase 1 gate):
   (1) Pi's `find` tool needs `fd` on `PATH`; without it the Glob scenarios of
   `hook/tool-use.feature` fail ("fd is not available and could not be

@@ -231,6 +231,9 @@ Plans:
 - [ ] 02-03-PLAN.md -- Wave 1: the new `plugin/reserved-names.feature` for `constructor`, `__proto__`, and `hello@constructor`, breaks B3, B4, B5, and B13, then delete `reserved-record-keys` (ITMIG-03)
 - [ ] 02-04-PLAN.md -- Wave 1: the two unfiltered `list` fold scenarios, breaks B6, B6b, and B7, the comments that cited the file, then delete `fold-adoption` (ITMIG-04)
 
+**Cross-cutting constraints:** <!-- gsd:generated -->
+- When the plan ends, `git diff <plan base> HEAD -- extensions/` and `git status --porcelain -- extensions/` both print nothing.
+
 ### Phase 3: Marketplace Layers and Cross-Scope Install
 
 **Goal**: Cucumber scenarios prove the marketplace layer rules (D-09, CFG-03, LAYER-02, a re-declaration with no git request, and the named remove of an undeclared marketplace) and a project install that adds a user marketplace to the project (WR-07, MA-12, MA-13, D-MF-04).
