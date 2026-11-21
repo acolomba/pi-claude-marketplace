@@ -155,9 +155,17 @@ Given(
   },
 );
 
-/** Returns `url` without one trailing `.git`, the form a url marketplace's identity takes. */
-function withoutGitSuffix(url: string): string {
-  return url.endsWith(".git") ? url.slice(0, -".git".length) : url;
+/**
+ * Returns `url` without its trailing slashes and then one trailing `.git`, the
+ * form a url marketplace's identity takes.
+ */
+function repositoryIdentity(url: string): string {
+  let rest = url;
+  while (rest.endsWith("/")) {
+    rest = rest.slice(0, -1);
+  }
+
+  return rest.endsWith(".git") ? rest.slice(0, -".git".length) : rest;
 }
 
 // D-SEED-01: the marketplace publishes the plugins' files, then offers each
@@ -177,7 +185,7 @@ Given(
     const commit = await runGit(published.root, published.gitHome, "rev-parse", "HEAD");
     const entries = offers.map((offered) => {
       const url = expandTokens(offered.url, this.tokens);
-      assert.strictEqual(withoutGitSuffix(url), withoutGitSuffix(published.source), url);
+      assert.strictEqual(repositoryIdentity(url), repositoryIdentity(published.source), url);
       return ownRepositoryEntry(offered, url, commit);
     });
     const republished = await readFile(published.manifestPath, "utf8");

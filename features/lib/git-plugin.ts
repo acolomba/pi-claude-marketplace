@@ -389,8 +389,8 @@ export function offerGitPlugins(text: string, entries: readonly GitPluginEntry[]
 
 /**
  * A plugin a url marketplace offers from its own repository (D-SEED-01): its
- * name and version, the url its entry names, which may end in `.git`, and
- * whether the entry pins the marketplace's latest commit.
+ * name and version, the url its entry names, which may end in `.git`, `/`, or
+ * both, and whether the entry pins the marketplace's latest commit.
  */
 export interface OwnRepositoryOffer {
   readonly name: string;

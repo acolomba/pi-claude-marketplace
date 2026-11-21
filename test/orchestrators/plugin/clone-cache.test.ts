@@ -2052,6 +2052,55 @@ void test("D-SEED-01: a pinned same-repository git-subdir source whose url ends 
   );
 });
 
+for (const suffix of ["/", ".git/"]) {
+  void test(`D-SEED-01: a same-repository git-subdir source whose url ends in ${suffix} seeds the mirror under its own url`, async (t) => {
+    // arrange
+    const locations = await freshLocations(t);
+    const pluginUrl = `${GITHUB_REPO_URL}${suffix}`;
+    const marketplaceRoot = await buildMarketplaceCheckout(t, {
+      originUrl: GITHUB_REPO_URL,
+      plugins: [gitSubdirEntry("subdir", pluginUrl)],
+    });
+    await saveMarketplace(locations, marketplaceRoot, GITHUB_REPO_URL);
+
+    // act
+    await seedSameRepoPluginMirrors({ locations, marketplaceName: "marketplace" });
+    const pluginMirror = await locations.pluginCloneDir(pluginMirrorKey(pluginUrl));
+    const marketplaceMirror = await locations.pluginCloneDir(pluginMirrorKey(GITHUB_REPO_URL));
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        pluginMirror: await pathExists(pluginMirror),
+        marketplaceMirror: await pathExists(marketplaceMirror),
+        staging: await stagingEntries(locations),
+      },
+      { pluginMirror: true, marketplaceMirror: false, staging: [] },
+    );
+  });
+}
+
+void test("D-SEED-01: a git-subdir source whose url drops one of the two .git suffixes of the marketplace origin stays cold", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const pluginUrl = "https://git.example.com/o/r";
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
+    originUrl: "https://git.example.com/o/r.git.git",
+    plugins: [gitSubdirEntry("subdir", pluginUrl)],
+  });
+  await saveMarketplace(locations, marketplaceRoot, marketplaceRoot);
+
+  // act
+  await seedSameRepoPluginMirrors({ locations, marketplaceName: "marketplace" });
+  const pluginMirror = await locations.pluginCloneDir(pluginMirrorKey(pluginUrl));
+
+  // assert
+  assert.deepStrictEqual(
+    { pluginMirror: await pathExists(pluginMirror), staging: await stagingEntries(locations) },
+    { pluginMirror: false, staging: [] },
+  );
+});
+
 void test("PURL-03: a non-subdirectory git source resolves to the clone root", async () => {
   // arrange
   const source: GitBackedSource = {
