@@ -691,3 +691,22 @@ Feature: Marketplace autoupdate
     Then the result lists no marketplaces
     Then the "claude-plugins.json" file of the project scope does not exist
     Then the "claude-plugins.json" file of the user scope does not exist
+
+  Scenario: Enabling autoupdate of a marketplace the scope records but no layer declares fails as not added and changes nothing (D-09)
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    Given a config in scope project and layer base, with this text:
+      """
+      { "schemaVersion": 1, "marketplaces": {} }
+      """
+    Given the files of the project scope are remembered
+    When the user runs "/claude:plugin marketplace autoupdate tools --scope project"
+    Then the result has these fields:
+      | kind         | marketplace-not-added               |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+      | name         | tools                               |
+      | scope        | project                             |
+      | reasons      | marketplace not added               |
+    Then the files of the project scope are unchanged
