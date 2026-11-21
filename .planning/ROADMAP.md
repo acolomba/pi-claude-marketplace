@@ -223,13 +223,13 @@ Plans:
   2. Scenarios show the user-scope local gap, a legacy local layer from an earlier `--local` install kept byte for byte, `pending` before the first-run migration, and a malformed key such as `demo@` reported as a source mismatch. They pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `plugin-layer-consistency` (ITMIG-02).
   3. A plugin named `constructor` installs, lists, shows in `info`, disables, enables, updates, uninstalls, imports, and goes when its marketplace is removed; a plugin named `__proto__` lists as unavailable; and a reload that declares `hello@constructor` records nothing. The scenarios pass under both profiles, fail under a deliberate break, and `reserved-record-keys` keeps no case they replace (ITMIG-03).
   4. The unfiltered `list` shows a project install from a user marketplace as a `[project]` row under that user marketplace, and shows an independently added project marketplace on its own, with no duplicate row. The scenarios pass under both profiles, fail under a deliberate break, and `fold-adoption` no longer exists (ITMIG-04).
-**Plans**: 4 plans
+**Plans**: 4/4 plans executed
 
 Plans:
-- [ ] 02-01-PLAN.md -- Wave 1: twelve LAYER-04 scenarios in the six verb files, breaks B1, B2, and B12, then trim `plugin-layer-verbs` to its two LAYER-06 cases (ITMIG-01)
-- [ ] 02-02-PLAN.md -- Wave 1: the plugin-layer consistency scenarios in `configuration.feature` and `config-migration.feature`, breaks B8, B9, B14, B10, and B11, then delete `plugin-layer-consistency` (ITMIG-02)
-- [ ] 02-03-PLAN.md -- Wave 1: the new `plugin/reserved-names.feature` for `constructor`, `__proto__`, and `hello@constructor`, breaks B3, B4, B5, and B13, then delete `reserved-record-keys` (ITMIG-03)
-- [ ] 02-04-PLAN.md -- Wave 1: the two unfiltered `list` fold scenarios, breaks B6, B6b, and B7, the comments that cited the file, then delete `fold-adoption` (ITMIG-04)
+- [x] 02-01-PLAN.md -- Wave 1: twelve LAYER-04 scenarios in the six verb files, breaks B1, B2, and B12, then trim `plugin-layer-verbs` to its two LAYER-06 cases (ITMIG-01)
+- [x] 02-02-PLAN.md -- Wave 1: the plugin-layer consistency scenarios in `configuration.feature` and `config-migration.feature`, breaks B8, B9, B14, B10, and B11, then delete `plugin-layer-consistency` (ITMIG-02)
+- [x] 02-03-PLAN.md -- Wave 1: the new `plugin/reserved-names.feature` for `constructor`, `__proto__`, and `hello@constructor`, breaks B3, B4, B5, and B13, then delete `reserved-record-keys` (ITMIG-03)
+- [x] 02-04-PLAN.md -- Wave 1: the two unfiltered `list` fold scenarios, breaks B6, B6b, and B7, the comments that cited the file, then delete `fold-adoption` (ITMIG-04)
 
 **Cross-cutting constraints:** <!-- gsd:generated -->
 - When the plan ends, `git diff <plan base> HEAD -- extensions/` and `git status --porcelain -- extensions/` both print nothing.
@@ -318,7 +318,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
 | 1. Duplicate Integration Files | 2/2 | Complete    | 2026-11-21 |
-| 2. Plugin Layers, Names, and List Fold | 0/4 | Not started | - |
+| 2. Plugin Layers, Names, and List Fold | 4/4 | In Progress | - |
 | 3. Marketplace Layers and Cross-Scope Install | 0/TBD | Not started | - |
 | 4. Prune | 0/TBD | Not started | - |
 | 5. MCP Install, Legacy Move, and Overrides | 0/TBD | Not started | - |
