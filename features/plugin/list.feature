@@ -226,6 +226,32 @@ Feature: Plugin list
       | official         | user              | alpha@official | alpha | installed |         | project | 1.0.0   |
       | official         | user              | beta@official  | beta  | available |         |         | 1.0.0   |
 
+  Scenario: The unfiltered list keeps a plugin the project installed from a user marketplace under that marketplace beside a project marketplace that offers a plugin of the same name (CMC-21, D-13-17)
+    Given the marketplace "official" is published as a dir source
+    Given the marketplace "official" offers these plugins:
+      | name  | version |
+      | alpha | 1.0.0   |
+    Given the marketplace "team" is published as a dir source
+    Given the marketplace "team" offers these plugins:
+      | name  | version |
+      | alpha | 0.9.0   |
+    Given the marketplace "official" is added to the user scope
+    Given the user has run "/claude:plugin install alpha@official --scope project"
+    Given the marketplace "team" is added to the project scope
+    When the user runs "/claude:plugin list"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 2           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id             | name  | status    | reasons | scope   | version |
+      | official         | user              | alpha@official | alpha | installed |         | project | 1.0.0   |
+      | team             | project           | alpha@team     | alpha | available |         |         | 0.9.0   |
+
   Scenario: The unfiltered list shows a project marketplace that shares a user marketplace's name but not its source under its own header with no duplicate row (CMC-21, D-13-17)
     Given the marketplace "official" is published as a dir source
     Given the marketplace "official" offers these plugins:
