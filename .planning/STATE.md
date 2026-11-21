@@ -1198,6 +1198,11 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ### Blockers/Concerns
 
+- [integration-rescope] CHANGELOG parent line for the milestone PR (Phase 3,
+  D-SEED-01 fix `cd728de`): "A plugin that a marketplace offers from its own
+  repository, through a `git-subdir` URL that ends in `.git`, now shows as
+  available right after `marketplace add`, and a pinned install of it makes no
+  new clone."
 - [integration-rescope] Phase 3 planning: decision-coverage gate `could-not-parse` (bracket-named decisions); proceeded by override after the plan checker confirmed coverage. Assumption-delta fired on "second clone" (false positive, recorded `no-change`).
 - [integration-rescope] Phase 2 planning: the decision-coverage gate returned
   `could-not-parse` (bracket-named smart-discuss decisions); proceeded by
