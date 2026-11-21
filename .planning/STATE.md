@@ -1202,10 +1202,12 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
   `could-not-parse` (smart-discuss decisions carry no `D-NN` IDs; cited IDs such
   as `D-PG3-01` trip the parser). Proceeded by override: the plan checker
   confirmed every CONTEXT decision is covered by 01-01 or 01-02.
-- [integration-rescope] User decision 2026-11-21: add a `.fallowrc.json`
-  `overrides` entry that turns fallow's `weakened-tests` rule off for
-  `test/integration/**`, so the CI `fallow-audit` job does not fail on the
-  milestone's deliberate deletions. Applied after Phase 1's plans merge.
+- [integration-rescope] User decision 2026-11-21: no `.fallowrc.json` change
+  for fallow's `weakened-tests` rule. Each deleted integration file gives one
+  `warn` in `fallow audit`, so the milestone PR's `fallow-audit` CI job fails
+  and a reviewer accepts it once. Measured: an `overrides` entry turning the
+  rule off is itself a `rule-severity` warn with no suppression, so it would
+  not make the audit pass. Each phase records its findings in its SUMMARY.
 - [integration-rescope] The audit's verdicts come from reading code; every
   phase checks a verdict again with a deliberate break before it deletes an
   integration case (REQUIREMENTS.md rule 2).
