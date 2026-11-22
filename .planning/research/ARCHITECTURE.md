@@ -1,595 +1,358 @@
 # Architecture Research
 
-**Domain:** Pi extension bridge -- Claude plugin MCP servers served by either of two equal MCP implementations (pi-mcp-adapter 7.x, or Pi 1.5.0's built-in MCP)
-**Milestone:** mcp-builtin
-**Researched:** 2026-11-04
-**Confidence:** HIGH for the integration map and the Pi event order (read from this repo's source and from the `@earendil-works/pi-coding-agent@1.5.0`, `pi-mcp-adapter@7.0.0` and `pi-subagents@0.84.0` tarballs). MEDIUM for the phase decomposition, which is a judgment built on the component-features precedent.
-
-The research sets out the proposed `McpImplementation` design from the brief, checks it against the code as it is now, and splits the work into phases that own disjoint files. Every `file:line` below is relative to `extensions/pi-claude-marketplace/` unless it names another root. "Pi dist" means the unpacked `@earendil-works/pi-coding-agent@1.5.0` package.
-
----
+**Domain:** System-git transport for a Pi extension that clones Claude plugin marketplaces and git-source plugins (milestone `system-git`)
+**Researched:** 2026-11-22
+**Confidence:** HIGH for the integration map (every claim is a file:line read on `features/system-git` at `0c1aeb2`). MEDIUM for the proposed components and build order (design inference). LOW for upstream behavior quoted from the Claude Code host-marketplace page: the `classify-confidence` seam rates a `webfetch` source LOW, and each claim must be re-checked against the 2.1.330 binary in the phase CONTEXT.md, as `claude-code-compat-research` requires.
 
 ## Standard Architecture
 
 ### System Overview (target)
 
-```text
+```
 ┌──────────────────────────────────────────────────────────────────────────────┐
-│ entry: index.ts                                                              │
-│  session_start ──► orchestrators/mcp/session-materialize.ts (NEW, frozen)     │
-│                     1 settings-cleanup step  2 builtin-registration step       │
-│                     3 agent-grants step                                       │
-│  resources_discover ──► loadReconcile ... then builtin re-sync (autoapply)     │
-└───────────────┬───────────────────────────────────────┬──────────────────────┘
-                │ run.softDeps.mcpImplementation (D-05 snapshot, per run)      │
-                ▼                                       ▼
-┌──────────────────────────────┐   ┌───────────────────────────────────────────┐
-│ edge/ + orchestrators/plugin │   │ orchestrators/mcp/ (NEW subdir, same zone)│
-│ list / info / install /      │   │ active-profile selection, step modules,    │
-│ apply read effective verdicts│   │ settings cleanup composition               │
-└───────┬──────────────────────┘   └──────┬───────────────┬────────────────────┘
-        │                                 │               │
-        ▼                                 ▼               ▼
-┌──────────────────────┐  ┌────────────────────────┐  ┌───────────────────────┐
-│ domain/              │  │ bridges/mcp/           │  │ bridges/agents/       │
-│ mcp-implementation.ts│  │ adapter: stage/unstage │  │ convert.ts takes the  │
-│ (NEW, frozen):       │  │ (unchanged, install)   │  │ profile's grant form  │
-│ ids, profiles,       │  │ builtin-entry/escape/  │  │ + rewrite on switch   │
-│ verdicts, naming,    │  │ registration (NEW)     │  │                       │
-│ grants, effective    │  └──────────┬─────────────┘  └───────────────────────┘
-│ compatibility        │             │
-│ mcp-server-features  │             ▼
-│ (Claude schema +     │  ┌────────────────────────────────────────────────────┐
-│ adapter table)       │  │ platform/: pi-api.ts (snapshot, McpServerConfig,   │
-│ mcp-builtin-features │  │ PiMcpRegistry), mcp-status.ts (adapter channel),   │
-│ (NEW verdict table)  │  │ mcp-builtin-status.ts (NEW reader)                 │
-└──────────────────────┘  └────────────────────────────────────────────────────┘
-                │
-                ▼
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ Disk: state.json records every declared server in Claude form (new optional  │
-│ field); mcp-adapter.json (adapter entries, written at install as today);     │
-│ agents/*.md + agents-index.json (grant form per implementation);             │
-│ ~/.pi/agent/settings.json (only the adapter's `-builtin:mcp`, decision 1)     │
-│ Pi runtime: pi.registerMcpServer registrations (per session, never saved)    │
+│ orchestrators/  (unchanged call shape: GitOps seam + clone-cache entrypoints)│
+│  marketplace/add.ts  marketplace/update.ts  plugin/clone-cache.ts            │
+│  plugin/update-flow.ts  plugin/dependency-tag-probe.ts                       │
+│  plugin/marketplace-tag-probe.ts  (callers of GitOps / platform/git.ts)      │
+│        │  GitOps (orchestrators/marketplace/shared.ts:167) -- auth param GONE │
+├────────┼─────────────────────────────────────────────────────────────────────┤
+│ platform/git.ts   REWRITTEN: same verbs, implemented as git argv             │
+│   clone / fetch / checkout / resolveRef / forceUpdateRef / currentBranch /   │
+│   resolveRemoteRef / listRemoteTags / listTags+resolveTagOid / listRemotes    │
+│   + NEW: transport selection (SSH probe -> HTTPS fallback -> SSH retry)       │
+│        │ argv + cwd + AbortSignal                                             │
+│ platform/git-process.ts  NEW: the one git/ssh spawn site                      │
+│   env builder (GIT_TERMINAL_PROMPT=0, askpass off, hardening -c flags),      │
+│   timeout, abort scope, process-group kill, stderr capture + redaction,       │
+│   Windows command lookup, typed GitCommandError                               │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ shared/  git-failure-classifiers.ts (stderr kinds, replaces HttpError ladder)│
+│          errors.ts (GitCommandError, GitRefNotFoundError, GitCommitMissing…)  │
+│          github-base-url.ts (D-MF-01: kept as -c insteadOf, or retired)        │
+├──────────────────────────────────────────────────────────────────────────────┤
+│ system git binary + the user's own config: credential helpers, ssh-agent,    │
+│ known_hosts, url.<x>.insteadOf, GIT_SSH_COMMAND                               │
 └──────────────────────────────────────────────────────────────────────────────┘
+
+REMOVED or SHRUNK when git owns credentials:
+  platform/git-auth-callbacks.ts (all of it), the isomorphic-git HTTP client in
+  platform/git.ts:207-532, orchestrators/auth-host.ts bundle builders, the
+  `auth`/`credentialOps`/`deviceFlowHttp`/`authMemo` threading in about 23
+  orchestrator files, and Device Flow (domain/github-auth.ts,
+  domain/auth-registry.ts, platform/git-credential.ts) if discuss removes it.
 ```
 
 ### Component Responsibilities
 
-| Component | Owns | Zone (per `.fallowrc.json`) |
-|---|---|---|
-| `McpImplementationProfile` (pure) | id, verdict table (supported / blocked / malformed), server naming, tool prefix, agent-grant selector | `domain` |
-| Claude schema classifier | "malformed" verdict, which is the same for every implementation (Claude Code 2.1.291 schemas) | `domain` (`mcp-server-features.ts`, split internally) |
-| Adapter materializer | `mcp-adapter.json` entries at install, update, reinstall, enable, disable and uninstall; AMIG-01 move at load | `bridges-mcp` (existing files) |
-| Builtin materializer | Claude form -> Pi `McpServerConfig` translation, Pi value encoding (`$$`, `$!`), registration sync against `pi.getMcpServers()` | `bridges-mcp` (new `builtin-*.ts` files) |
-| Status readers | adapter: `pi-mcp-adapter/status/v1` channel; builtin: `getMcpServers()` plus `getAllTools()` | `platform` |
-| Active-implementation probe | adapter, then builtin, then none, taken once per run in the D-05 snapshot | `platform/pi-api.ts` |
-| Session materialization | the ordered session_start steps; re-sync after the load reconcile | `orchestrators` (new `orchestrators/mcp/`) |
-| Settings cleanup | decision 1: remove the adapter's `-builtin:mcp` | `orchestrators` (composition), `transaction` (Pi-compatible lock), `shared/atomic-json.ts` (write) |
-| Effective compatibility | the stored (implementation-neutral) compatibility joined with the active profile's blocked servers | `domain` (pure function); readers in `orchestrators/plugin` |
-
----
-
-## 1. Map of every current adapter-coupled site
-
-### 1a. Verdicts and resolution (install time, adapter only)
-
-| Site | What is adapter-coupled | Consequence for the milestone |
-|---|---|---|
-| `domain/mcp-server-features.ts:25-35` `McpUnsupportedFeature` | The blocked-feature union is the adapter's gap list (`ws`, host types, `headersHelper`, `oauth.xaa`, `command ~`, `args ~`, `bareElicitationCapability`). It has no `sse`, which built-in rejects. | Becomes per-implementation. Add `"sse"`, a built-in gap. |
-| `domain/mcp-server-features.ts:207-217` `translateMcpServer` | Writes the adapter `ServerEntry` fields: `directTools`, `toolPrefix: "mcp"`, `auth: "oauth"`, `requestTimeoutMs`, `httpTransport: "sse"`, and the OAuth mapping at `:101-130`. | Adapter profile's translation table. Built-in needs its own table (`exposure`, `timeout` in seconds, `callbackUrl`, `cwd`). |
-| `domain/mcp-server-features.ts:421-444` `classifyMcpServer` | Mixes the implementation-neutral Claude schema (malformed) with adapter gaps (blocked) in one pass, and returns the first blocked feature only. | Split into a Claude-shape check and per-profile feature scanners. Otherwise a built-in table cannot see past the adapter's first feature. |
-| `domain/mcp-server-features.ts:335-354` `unenforcedToolRules` | "pi-mcp-adapter has no per-tool rule". Built-in has `toolExposure` but no permission rules either. | Shared result for now; a profile hook so the two can diverge. |
-| `domain/mcp-resolution.ts:87-103` `mergeServers` | Calls `classifyMcpServer` at merge time and keeps `blockedBy`. | Keep the merge. Record every non-malformed server. |
-| `domain/mcp-resolution.ts:338-359` `recordMergedServers` | Drops blocked servers from `resolution.mcpServers`, pushes `"mcpServers"` into `unsupported`, and sets `droppedMcpServers`. This makes the resolver arm (`installable` or `partially-available`) depend on the adapter. | This is the root of "install drops what the adapter can't run". Phase 1 adds a parallel `declaredMcpServers`; Phase 3 makes `state` and `unsupported` neutral. |
-| `domain/plugin-resolver.ts:150-175` `materializableFields` and `domain/resolver-types.ts:140-175` | Carry `mcpServers` (the adapter-supported subset) and `droppedMcpServers`. | Add `declaredMcpServers` (Phase 1). `droppedMcpServers` becomes read-time (Phase 3). |
-| `domain/plugin-resolver.ts:815`, `:863`, called at `orchestrators/plugin/install-outcome.ts:840-842` and `orchestrators/plugin/update-preflight.ts:514-516` | The `--partial` consent gate reads the adapter-dependent arm. | Must be split: consent at user-initiated install and update reads the active profile; re-materialization paths read the neutral state (see correction C6). |
-
-### 1b. Materialization (adapter file)
-
-| Site | Coupling |
-|---|---|
-| `bridges/mcp/stage.ts:1-40` (header), `:449` `prepareStageMcpServers`, `:46`/`:330` `unenforcedToolRules` | Writes `<scopeRoot>/mcp-adapter.json` with the adapter's grammar, collision walk over the adapter's nine config sources (AFILE-05), MC-5 marker. |
-| `bridges/mcp/adapter-entry.ts:18`, `:165-191` `translatedEntry` | `translateMcpServer`, then `substituteAndInject`, then the D-08-04 OAuth decision. The carried user fields are adapter `ServerEntry` fields (`:46-60`). |
-| `bridges/mcp/substitute.ts:1-14`, `:181` `substituteAndInject` | Expands Claude variables, then **encodes in pi-mcp-adapter's escape grammar** through `adapter-escape.ts`. User-scope `${CLAUDE_PROJECT_DIR}` is left for the adapter to expand from Pi's process (`:24-33`). |
-| `bridges/mcp/adapter-doc.ts`, `adapter-escape.ts`, `collision-*.ts`, `legacy.ts`, `marker.ts`, `unstage.ts` | Adapter-only file mechanics. They stay as they are. |
-| `orchestrators/plugin/install-outcome.ts:1408-1455` `mcpPhase` | Stages `resolved.mcpServers` (the adapter-supported subset) and records `stagedMcpServerNames`. |
-| `orchestrators/plugin/install-outcome.ts:1600-1625` `statePhase` | Records `compatibility` from the adapter-dependent resolve and `resources.mcpServers = stagedMcpServerNames`. |
-| `orchestrators/reconcile/mcp-migration.ts:516-528`, `:577` | AMIG-01 load-time move reads `droppedMcpServers` and stamps `compatibility.unsupported += "mcpServers"`. It is adapter maintenance. |
-| `shared/session-env.ts` `applyMcpAdapterEnv`, called at `index.ts:49-60`, `:84`, `:237` | Sets `CLAUDE_PROJECT_DIR` in Pi's process for the adapter's late expansion. Built-in also expands `${NAME}` in `env` and `headers` values from `process.env`, so this stays useful there. Built-in expands nothing in `command`, `args` or `url`. |
-
-### 1c. Detection, markers, status
-
-| Site | Coupling |
-|---|---|
-| `platform/pi-api.ts:140-144` `SoftDepStatus { piMcpAdapterLoaded }`; `:214-265` `hasLoadedPiMcpAdapter`; `:268-274` `softDepStatus` | The only MCP probe. The comment at `:253-255` already excludes built-in (an `mcp` command from `builtin:mcp`). It has no built-in probe. |
-| `shared/notification-run.ts:67-89` `openNotificationSnapshot` / `openNotificationRun` | **D-05: one probe per run.** Every command, load, hook and tool run carries `run.softDeps` (consumers: `notification-present.ts:267,291,305`, `install-flow-ledger.ts:1324,1390`, `info.ts:3257,3297`, `enable-disable.ts:3059`, `update-cascade.ts:209`, `reinstall-flow.ts:343-348`, `dependency-move.ts:314-315`, `dependency-bindings.ts:117`, `index.ts:141`, `bridges/hooks/dispatch.ts:553`, `settle.ts:165`, `async-rewake/registry.ts:433`). |
-| `shared/concerns/soft-dep.ts:37`, `:52`, `:64`, `:114`, `:147-149` | The `requires pi-mcp-adapter` marker and the info `requires:` companion entry. |
-| `shared/notify-reasons.ts:89-104` `companionSeverity`; `:113` and `:120-121` (`"unsupported mcp"`, "a feature the adapter lacks") | Severity and reason wording are adapter-specific. |
-| `shared/notification-types.ts:27`, `:1155-1180` `McpServerSummaryEntry.unsupportedFeature` / `status` | Closed-set reason `"requires pi-mcp-adapter"`. The status comes from "pi-mcp-adapter's last snapshot". |
-| `platform/mcp-status.ts:25`, `:58-60`, `:109` `createMcpStatusTracker(pi.events)`; wired at `index.ts:94`, `edge/register.ts:97,121`, `edge/handlers/plugin/info.ts:32` | The adapter status channel. `McpStatusReader.lookup(key)` takes the adapter config key. |
-| `orchestrators/plugin/info-mcp-status.ts:102-132` (`:80` `generatedMcpServerKey`) | Status lookup by the adapter key; the project-override rule follows the adapter's load order. |
-| Display readers of `record.compatibility.*`: `orchestrators/plugin/list-installed-row.ts:66`, `plugin-state-classifier.ts:148`, `info.ts:1716`, `:1733`, `:2067`; `info.ts:1000-1065` `composeResolvedComponents` (`droppedMcpServers`) | Show the install-time adapter verdict. |
-| Re-materialization readers of `record.compatibility.installable`: `enable-disable.ts:428,1004`, `install-cascade.ts:1463`, `install-flow-results.ts:412,514`, `update-preflight.ts:722-740`, `update-swap.ts:673-729,1672-1681`, `import/execute.ts:1160`, `reconcile/convergence.ts:436-454` | Pass `partial` consent into re-materialization, and decide growth and consent moves in `apply`. They must not flip when the implementation changes (C6). |
-
-### 1d. Agents, hooks, naming
-
-| Site | Coupling |
-|---|---|
-| `domain/name.ts:616-641` `mcpServerDisplayName`, `generatedMcpServerKey` (`plugin_<plugin>_<server>_`, trailing `_`) | Adapter key. Built-in needs `plugin_<plugin>_<server>` (no trailing `_`) to produce `mcp__plugin_<plugin>_<server>__<tool>`. |
-| `domain/name.ts:650-652` `foldedMcpServerKey` | The adapter `-`/`_` fold. Built-in treats `-` and `_` as one server too (Pi `docs/mcp.md:77`), so the fold rule applies to both. |
-| `bridges/agents/convert.ts:85-123` `McpGrant`, `MCP_ASYNC_WARNING`; `:335-375` `buildMcpGrants` / `matchMcpGrant` | Writes `mcp:<adapterKey>` grants. The warning text names pi-mcp-adapter. The grant table is fed from `install-outcome.ts:1318-1320` (`Object.keys(resolved.mcpServers)`). |
-| `bridges/hooks/dispatch.ts:611-627` `isMcpProxyCall`; used at `:757`, `:818` | Special case for the adapter's `mcp` and `mcp__<server>` proxy. Inert under built-in, which has no such tool. |
-| `domain/components/hooks/matcher.ts:87-133` (`toolPrefixes`), `bridges/hooks/if-field/index.ts:101-125,188-247` | Literal Claude names. Under built-in, `-` becomes `_`, so a matcher with `-` misses. The brief has already settled this as a licensed divergence. |
-
-### 1e. Persistence (what state.json records today)
-
-`persistence/state-io.ts:96-166` `PLUGIN_INSTALL_RECORD_SCHEMA`:
-
-- `resources.mcpServers: string[]` (`:153`) holds the **declared names of the staged (adapter-supported) servers** only.
-- `compatibility { installable, notes, supported, unsupported }` (`:143-148`) is the adapter-dependent resolve.
-- `resolvedSource` is the absolute plugin root. The hooks bridge already uses it as `CLAUDE_PLUGIN_ROOT` at load (`bridges/hooks/hook-env.ts:43`), so a load can materialize from the record without reading the catalog.
-- No server configuration is recorded. The only copy is the translated, adapter-encoded entry in `mcp-adapter.json`.
-- Additive-field precedent: `hookEntries` (`:110-130`, D-100-01), `resolvedSha`, `resolvedVersion`, `dependencyDisabled` are all optional with **no schemaVersion bump and no backfill**; records self-heal on the next install, update, reinstall or enable (D-100-09). `persistence/migrate.ts:130-160` `ensurePluginResources` is the fill-before-validate pattern used for required fields only.
-
-### 1f. Entry and reconcile wiring
-
-- `index.ts:80-293` factory. `:94` builds the adapter status tracker per load. `:136-182` `prepareResources` (hooks hydrate, `loadReconcile`, PATH) runs inside `resources_discover` (`:190-222`). `:236-244` `session_start` sets the adapter env and the session env. Nothing MCP-related is materialized at load today, except the AMIG-01 move inside `loadReconcile`.
-- `orchestrators/reconcile/load.ts` (read pass, AMIG-01 move, warnings, hook routing). It changes no installation state (APL-D1), except the autoapply path that runs `applyReconcile`.
-- **The entry zone may import only `edge`, `orchestrators`, `bridges-hooks`, `persistence`, `platform`, `shared`** (`.fallowrc.json:79-82`). It may not import `bridges-mcp`, `bridges-agents` or `domain`. Every new load step must therefore sit behind an orchestrator module.
-
----
-
-## 2. Validation of the proposed design, with corrections
-
-### Verified Pi 1.5.0 facts that drive the design
-
-| Fact | Evidence |
-|---|---|
-| **`session_start` fires BEFORE `resources_discover`**, on startup and on `/reload`. | Pi dist `core/agent-session.js:2698-2700` (`bindExtensions`: emit `session_start`, then `reportUnhandledMcpServers()`, then `extendResourcesFromExtensions`) and `:3046-3048` (`reload`). `docs/extensions.md` "resources_discover: Fired after session_start". This repo already relies on it (`index.ts:122-129`). |
-| `/reload` = `session_shutdown(reload)`, a new runtime built from re-read settings, then `session_start(reload)`, then `resources_discover(reload)`. | `agent-session.js:3016-3048`. Registrations are per runtime and never saved (`docs/extensions.md` "MCP Servers"), so re-registering on each `session_start` is the contract. |
-| A registration made after binding emits `mcp_servers_change` at once. The built-in handler connects it right away (`dist/extensions/mcp/index.js:1078-1110`), and its own `session_start` reads earlier registrations (`:971-990`, `registeredServers` at `:248-262`). | `core/extensions/runner.js:242-246`. Registering inside our `session_start` works whichever handler runs first; `session` is initialised at `mcp/index.js:224`, so an early change event does not throw. |
-| When no extension handles `mcp_servers_change`, every registration is reported as an extension error. | `runner.js:503-520`. |
-| **pi-mcp-adapter 7.0.0 handles `mcp_servers_change` and consumes registrations** (`index.ts:1259`, `:1365` `applyPiMcpServers`, `:1406`). | A registration made while the adapter is active becomes a duplicate, proxy-only server. Never register unless built-in is the active implementation. |
-| An `mcp.json` server with the same `-`/`_`-folded name overrides a registration. | `mcp/index.js:252-256`. |
-| Built-in value grammar: `env` and `headers` values are templates (`$NAME`, `${NAME}`, `$$` for a literal `$`, `$!` for a literal `!`); a value that starts with `!` runs a shell command; an unset variable throws. `command`, `args` and `cwd` are home-expanded (`~`). `url` is literal. | `core/resolve-config-value.js:21-128`, `extensions/mcp/runtime.js:43-70`. Built-in therefore has the same `command ~` and `args ~` gaps as the adapter, plus a new hazard: a literal Claude value that starts with `!` would run as a command unless it is encoded `$!`. |
-| Built-in keeps OAuth beside non-`Authorization` headers, the same rule as Claude Code. | `runtime.js:39-41`. D-08-04's `auth: "oauth"` workaround is adapter-only. |
-| Built-in detection: an extension command `mcp` whose `sourceInfo.path` is `builtin:mcp` (`sourceInfo.source` is `builtin`). An extension that registers `/mcp` replaces built-in. `--no-mcp`, a user `-builtin:mcp` and a project `-builtin:mcp` all turn it off. | `core/source-info.js:8-20`, `core/package-manager.js:764-770`, Pi `docs/mcp.md:266-268`. |
-| Pi's `SettingsManager` locks `settings.json` with `proper-lockfile` (`realpath:false`, 10 x 20 ms retries) but writes with `writeFileSync`, which is not atomic. | `core/settings-manager.js:126-170`. |
-| The adapter records `piBuiltinMcpHandledVersion` **whether or not it wrote the line**: it is also set when a `builtin:mcp` entry already existed. | `pi-mcp-adapter/pi-builtin-mcp.ts:14-26`; `onboarding-state.ts:12-13` ("Adapter version that last turned off, or found configured, Pi's built-in MCP"). The file is `<agentDir>/mcp-onboarding.json`. |
-| pi-subagents 0.84.0 resolves `mcp:` selectors against the adapter when it is installed, otherwise against built-in, and accepts `-` and `_` spellings. Servers registered with `registerMcpServer` work only in **background** children, because the registering extension loads in the child. | pi-subagents `docs/agents.md:450,573`, `CHANGELOG.md:440,480,507,530`. |
-
-### Corrections (C) and confirmations (OK)
-
-**C1. The interface cannot be one object; split it by zone.** `domain` may import only `shared` and `platform`, bridge zones may not import each other, and the entry may not import `domain` or `bridges-mcp` (`.fallowrc.json:78-147`). So:
-
-- **Pure profile in `domain/mcp-implementation.ts` (new, frozen in Phase 1):** `McpImplementationId = "adapter" | "builtin"`, `ActiveMcpImplementation = McpImplementationId | "none"`, and `McpImplementationProfile { id; classify(config) -> McpServerVerdict; serverName(plugin, server); toolNamePrefix(plugin, server); grantSelector(plugin, server) }`. It also exports `profileFor(id)` and the pure `effectiveMcpCompatibility(...)`. Every zone except the entry can import it.
-- **Effectful ports live where their side effects are allowed:** adapter materialization in `bridges/mcp/*` (existing), built-in registration in `bridges/mcp/builtin-registration.ts` behind a `PiMcpRegistry` view declared in `platform/pi-api.ts`, status readers in `platform/`, grants in `bridges/agents/convert.ts`.
-- **The composition** (pick a profile and run its effects) lives in `orchestrators/mcp/` (new subdirectory, already inside the `orchestrators` zone, so `.fallowrc.json` needs no new zone).
-
-**C2. Carry the active implementation in the D-05 run snapshot, not in state captured at session_start.** Add `mcpImplementation: ActiveMcpImplementation` to `SoftDepStatus` (`platform/pi-api.ts:140`) and compute it in `softDepStatus(pi)`: adapter if `hasLoadedPiMcpAdapter`, else builtin if `hasLoadedBuiltinMcp`, else none. The command inventory is fixed once the runtime has bound (every extension has loaded before `session_start`), so the probe gives the same answer at `session_start` and in every later run of that runtime. This removes the need for a module-level mutable "active implementation", and list, info, install, apply, tools and hook runs already receive `run.softDeps`. Keep `piMcpAdapterLoaded` (26 test and feature files read it) as `mcpImplementation === "adapter"`. `session_start` uses the probe only to trigger materialization.
-
-**C3. The event order is the reverse of what the question assumed, and that matters.** Registration in `session_start` precedes `resources_discover`, where `loadReconcile` runs and, with autoapply on, installs plugins. So the built-in sync must run **twice per load**: in `session_start` (so the first prompt's `waitForDirectServers` sees `alwaysLoad` servers) and again at the end of `prepareResources` (`index.ts:136-182`, after `loadReconcile`), which picks up plugins that autoapply installed or removed. The sync is idempotent: it diffs the desired set against `pi.getMcpServers()` filtered to this extension's registrations.
-
-**C4. Record the Claude form *before* plugin-variable substitution, not after.** The brief says "after plugin-variable substitution". Substitution output is encoding-specific (`bridges/mcp/substitute.ts:181` writes adapter escapes; built-in needs `$$`/`$!`). Substituting `${CLAUDE_PLUGIN_ROOT}` into a raw Claude string would also make a plugin path that contains `$` or `${` be read again as a variable. The values substitution needs can all be derived at materialization time:
-
-- `CLAUDE_PLUGIN_ROOT` = `record.resolvedSource` (the hooks precedent, `bridges/hooks/hook-env.ts:43`).
-- `CLAUDE_PLUGIN_DATA` = `locationsFor(scope, cwd).pluginDataDir(...)` (`persistence/locations.ts`).
-- `CLAUDE_PROJECT_DIR` = the session `ctx.cwd`. Built-in can then expand it in `command`, `args` and `url`, where Pi does not.
-
-Frozen record shape (`persistence/state-io.ts`, optional and additive, the `hookEntries` precedent, no schemaVersion bump):
-
-```ts
-// Every server the plugin declares, in D-CF6-01 merge order, malformed ones
-// excluded, verbatim Claude JSON. Absent = record predates the field.
-mcpServerConfigs?: ReadonlyArray<{ readonly name: string; readonly config: unknown }>
-```
-
-Legacy records (field absent) read through one frozen accessor, `recordedMcpServers(record, reader)` in `orchestrators/mcp/recorded-servers.ts`. Its fallback re-resolves `.mcp.json` and the manifest from `record.resolvedSource` through `domain/mcp-resolution.ts` (read-only, no state write, APL-D1 holds). Records self-heal on the next install, update, reinstall or enable. Residual risk: a path-source plugin whose marketplace clone moved since install reads the newer declaration. Accept it, as D-100-09 accepted the same for hooks.
-
-**C5. Write adapter entries at install whatever the active implementation, and drop "reconcile them on load or apply".** `bridges/mcp` keeps staging the adapter-supported subset into `mcp-adapter.json` at install and through its existing lifecycle. Built-in never reads that file, so the entries are inert. A switch to the adapter then needs nothing at load, because the adapter reads its file at its own `session_start`. That keeps APL-D1 for the adapter path and leaves `bridges/mcp/*` (except the new `builtin-*` files) almost untouched. The AMIG-01 load move stays as it is.
-
-**C6. Store compatibility neutral, compute it effective, and split the consent gate.** "A plugin's state depends on the active implementation" reaches about 15 readers (1c). If the stored `compatibility` stays implementation-dependent, a switch makes `apply`'s convergence see a "newly partial" plugin and ask for `--partial` consent (`reconcile/convergence.ts:450-456`), and `enable` re-materialization refuses (`enable-disable.ts:428`, `install-outcome.ts:840`). That breaks "a switch never requires user action". Rule:
-
-- **Stored** `compatibility` and the resolver arm hold only implementation-neutral defects (bundles, unsupported component kinds, hooks, structural).
-- **Effective** = stored, plus `"mcpServers"` when any recorded server is blocked under the active profile. The pure function is `effectiveMcpCompatibility(stored, recorded, profile) -> { installable, unsupported, blocked: DroppedMcpServer[] }` in `domain/mcp-implementation.ts`.
-- **Display** readers (list, info, classifier, reasons, markers) use the effective value.
-- **Consent:** a user-initiated `install` or `update` asks for `--partial` against the effective value (today's adapter behavior is kept). Re-materialization (enable, cascade members, convergence moves, reinstall, import promotion) checks the neutral value only, so a switch never asks for consent.
-- With today's tables the adapter's gaps are a subset of built-in's (built-in adds `sse`). Legacy adapter-era stored compatibility therefore joins correctly under built-in. The neutral write is still required by the "either could be richer" rule.
-
-**C7. Agent grants must be rewritten on a switch, and that is a load-time write (amends APL-D1).** pi-subagents accepts `mcp:<server>` for either implementation, but the server names differ (`plugin_x_y_` adapter key versus `plugin_x_y` built-in name). A file that carries both selectors fails under the adapter with "Unresolved MCP direct-tool selectors". So:
-
-- `bridges/agents/convert.ts` takes the selector from `profile.grantSelector`.
-- The agents index gains an optional `mcpImplementation` per row (`persistence/agents-index-schema.ts:24-36`, additive, schema literal stays 1).
-- A `session_start` step rewrites the rows whose recorded implementation differs from the active one, from `sourcePath`, **under the scope's state lock**. It skips an untrusted project (D-LOC-01) and does nothing when the active implementation is none.
-- `MCP_ASYNC_WARNING` (`convert.ts:120-123`) becomes per profile. Built-in has the same foreground-child gap (pi-subagents `docs/agents.md:573`), so D-CF6-10's `async: true` stays.
-- **Hazard:** a background child loads this extension too, and its `session_start` runs the same step. The child must never rewrite agents or settings. Detect a pi-subagents child, and make the step a no-op when nothing changed. This is a research flag.
-
-**C8. Settings cleanup: write it ourselves, atomically, under Pi's lock.** Pi's `SettingsManager` is not atomic (NFR-1). A bare `atomicWriteJson` ignores Pi's lock, so it can race `pi config` or the adapter. Implementation:
-
-- `transaction/with-state-guard.ts` gains `withPiSettingsLock(path, fn)`: `proper-lockfile` with `realpath:false` and short retries, the same protocol as Pi's. That file is the only sanctioned `proper-lockfile` importer, so `rule-packs/architecture.json` stays unchanged.
-- The write goes through `shared/atomic-json.ts`.
-- The paths come from new user-scope-only `ScopedLocations` getters (`piSettingsJsonPath`, `mcpOnboardingJsonPath`), so NFR-10 is amended in one place.
-- Remove only an exact `-builtin:mcp` element, keep every other field, and leave the file alone if it does not parse.
-
-Two gaps to settle in requirements:
-
-- (a) `piBuiltinMcpHandledVersion` cannot prove that the adapter wrote the line (see the facts table). The best available test is: the adapter is absent, the onboarding state has a handled version, and the only `builtin:mcp` entry is exactly `-builtin:mcp`. That still misfires for a user who wrote `-builtin:mcp` before the adapter first ran.
-- (b) The new runtime built after an adapter removal has already resolved its extension list, so built-in stays off **for that first session**. Session context has no `reload()`; only command contexts have one (Pi dist `core/extensions/types.d.ts:341`, `:1734`). The first session after uninstall is therefore "none" until the next `/reload` or start. This is a Pi capability gap that needs a decision ID, or a user-visible notice.
-
-**C9. Gate built-in registration on trust and on the active implementation.** Register only when `mcpImplementation === "builtin"`. Register project-scope servers only when `ctx.isProjectTrusted()` (registrations bypass Pi's trust gate), and skip disabled records (`isRecordedButDisabled`). Use the `exposure` from decision 2. Names come from `profile.serverName`. A name that `mcp.json` already defines is overridden by Pi; report it through the built-in status reader as overridden.
-
-**C10. Built-in status needs its own reader, with no event channel.** Built-in publishes no status. Its listeners are internal (`mcp/index.js:235-244`). `platform/mcp-builtin-status.ts` implements the existing `McpStatusReader` (`platform/mcp-status.ts:58-60`) from `pi.getMcpServers()` (registered and owned by us), the `mcp.json` override (Pi `docs/mcp.md:77`), and `pi.getAllTools()` (connected = tools with names under `mcp__<name>__` and source `builtin:mcp`). Whether deferred tools are listed before `tool_search` is a research flag. `lookup(key)` keeps its signature; `info-mcp-status.ts` passes `profile.serverName(...)` instead of `generatedMcpServerKey(...)`. `EdgeDeps.mcpStatus` becomes `{ adapter, builtin }`, and info picks the reader by `run.softDeps.mcpImplementation`.
-
-**OK. Built-in materialization fits NFR-2 as proposed.** Registrations die with the runtime, `/reload` builds a new one and fires `session_start(reload)`, and the sync re-registers. No restart is needed and no file is written. An in-session `install` or `uninstall` does not (un)register at once. The servers follow at `/reload`, the same as every other component and the adapter. That keeps the reload hint uniform. A later decision may add an immediate sync; the idempotent sync makes it a one-line call.
-
-**OK. The `@adapter` / `@builtin` cucumber profiles are feasible.** The harness launches Pi without `--no-mcp` (`test/e2e/_rpc.ts:242-253`), so built-in is already loaded in every profile Pi today. The "companion-missing" scenarios currently run with built-in present but unused. A third, "none" run needs `--no-mcp` support in `piArguments`.
-
----
+| Component | Responsibility after the milestone | New / Modified / Removed |
+|-----------|-------------------------------------|--------------------------|
+| `platform/git-process.ts` | The only module that spawns `git` (and the `ssh -T` probe). It builds the non-interactive environment, adds the hardening `-c` flags, runs asynchronously (the state-lock refresh timer needs the event loop, as `platform/package-manager.ts` notes for D-PL9-15), applies a timeout, reads the D-PL8-24 abort scope, kills the process group, caps and redacts stderr, and throws `GitCommandError` | **New** |
+| `platform/git.ts` | Keeps its exported verbs and the `ListRemotesResult`/`RemoteTag` types. Each verb becomes one or two git commands. It owns transport selection for `owner/repo`. It no longer imports `isomorphic-git` or `git-auth-callbacks.ts` | **Modified** (rewritten) |
+| `orchestrators/marketplace/shared.ts` | Owns the `GitOps` seam (`:167`), `DEFAULT_GIT_OPS` (`:223`), and the D-14 `refreshGitHubClone` (`:274`). The `auth?` members leave the seam. `isGitNotFoundError` (`:253`) becomes `instanceof GitRefNotFoundError` | **Modified** |
+| `orchestrators/plugin/clone-cache.ts` | Same entrypoints. The `CommitNotFetchedError` and `NotFoundError` name matchers (`:73`, `:78`) become `instanceof`. `resolveAuth` and `auth` leave the arguments. `resolveTagOid`'s `cache` argument goes away | **Modified** |
+| `orchestrators/auth-host.ts` | Loses the bundle builders. Its remaining job, if any, is the Device Flow retry (if kept) and `hostFromCloneUrl` for messages. Without Device Flow it can be deleted | **Removed or shrunk** |
+| `platform/git-auth-callbacks.ts` | The isomorphic-git `onAuth`/`onAuthFailure` state machine. git consults credential helpers itself | **Removed** |
+| `platform/git-credential.ts` | `git credential fill/approve/reject`. It survives only if Device Flow survives, to `approve` the minted token before the retry | **Removed, or kept for Device Flow** |
+| `domain/github-auth.ts`, `domain/auth-registry.ts` | Device Flow engine and provider registry | **Removed, or kept** (discuss) |
+| `shared/git-failure-classifiers.ts` | Classifies a failure from `GitCommandError.kind` (derived from stderr and the exit code) instead of isomorphic-git's `HttpError.data.statusCode` (`:28-30`, `:96-102`). The hosted-catalog `HttpError` path (`HostedManifestHttpError`, `shared/errors.ts:633`) stays | **Modified** |
+| `domain/source.ts` | Accepts `git@host:path` and `ssh://` for `url` and `git-subdir` sources. Today they are rejected at `:105-123` and `:467` (D-76-01) | **Modified** |
+| `domain/clone-key.ts` | `canonicalCloneUrl` (`:85`) keeps `https://github.com/<o>/<r>` as the github identity, so no `plugin-clones/` key changes. `originMatchesSource` (`:118`) and `normalizedIdentity` (`:131`) must compare scp and `ssh://` forms, which WHATWG `URL` cannot parse | **Modified** |
+| `shared/github-base-url.ts` | GHB-01 `gitHubWireUrl` (`:84`) and `gitHubOverrideHost` (`:100`). It becomes a `-c url.<base>/.insteadOf=https://github.com/` flag, or it is retired in favor of the user's own git config (decision; see D-MF-01 below) | **Modified or removed** |
+| `features/lib/https-git-host/*` | Already serves smart HTTP through `git http-backend` (`server.ts:1-19`, `cgi.ts:36-60`). It needs CA trust for system git and new request baselines | **Modified** (harness) |
 
 ## Recommended Project Structure
 
-`NEW` = created, `MOD` = modified, `(Pn)` = owning phase after Phase 1. Files marked **frozen** are created or changed by Phase 1 and edited by no later phase.
-
-```text
+```
 extensions/pi-claude-marketplace/
-├── index.ts                                  MOD P1 frozen: session_start -> materializeMcpForSession;
-│                                                prepareResources -> resyncBuiltinRegistrations; status readers
 ├── platform/
-│   ├── pi-api.ts                             MOD P1 frozen: SoftDepStatus.mcpImplementation, hasLoadedBuiltinMcp,
-│   │                                            McpServerConfig/RegisteredMcpServer types, PiMcpRegistry view
-│   ├── mcp-status.ts                         unchanged (adapter channel)
-│   └── mcp-builtin-status.ts                 NEW P1 seed ("no-snapshot") -> P3
+│   ├── git.ts               # REWRITTEN: verbs as git argv; transport selection
+│   ├── git-process.ts       # NEW: sole git/ssh spawn site (child-process allow-list)
+│   ├── windows-command.ts   # NEW (optional): PATH lookup shared with package-manager.ts
+│   ├── git-credential.ts    # KEEP only if Device Flow stays
+│   └── git-auth-callbacks.ts# DELETE
+├── shared/
+│   ├── git-failure-classifiers.ts  # stderr-kind ladder
+│   ├── git-stderr-redact.ts        # NEW (or inside git-process.ts): userinfo, tokens, abs paths
+│   ├── errors.ts                   # + GitCommandError family; - CrossOrigin/TooManyRedirects/StoredCredentialRejected
+│   └── github-base-url.ts          # + GITHUB_SSH_HOST literal (the local/no-github-literal rule exempts only this file)
 ├── domain/
-│   ├── mcp-implementation.ts                 NEW P1 frozen: ids, profile type, profileFor, effectiveMcpCompatibility
-│   ├── mcp-server-features.ts                MOD P1 frozen: Claude-shape check split from adapter scanner; "sse"
-│   ├── mcp-builtin-features.ts               NEW P1 frozen: built-in verdict table
-│   ├── mcp-builtin-translation.ts            NEW P2: Claude -> Pi McpServerConfig table
-│   ├── name.ts                               MOD P1 frozen: builtinMcpServerName (own arm)
-│   ├── mcp-resolution.ts                     MOD P1 (declaredMcpServers) -> P3 (neutral unsupported)
-│   ├── plugin-resolver.ts, resolver-types.ts MOD P1 (declaredMcpServers) -> P3 (neutral state, effective gate)
-├── bridges/mcp/
-│   ├── builtin-entry.ts                      NEW P2: substitution + translation for built-in
-│   ├── builtin-escape.ts                     NEW P2: Pi value encoding ($$, $!, leading !)
-│   ├── builtin-registration.ts               NEW P2: idempotent sync over PiMcpRegistry
-│   ├── substitute.ts                         MOD P2: encoder parameter (adapter-escape stays the default)
-│   └── stage.ts, adapter-*.ts, legacy.ts ... unchanged
-├── bridges/agents/convert.ts                 MOD P4: grant selector + async warning from profile
-├── bridges/hooks/dispatch.ts                 MOD P5: isMcpProxyCall gated on the adapter (own function)
-├── orchestrators/mcp/                        NEW dir (orchestrators zone)
-│   ├── session-materialize.ts                NEW P1 frozen: ordered steps, NFR-2 try/catch per step
-│   ├── recorded-servers.ts                   NEW P1 frozen: recordedMcpServers(record) + legacy fallback
-│   ├── builtin-registration-step.ts          NEW P1 no-op seed -> P2
-│   ├── agent-grants-step.ts                  NEW P1 no-op seed -> P4
-│   └── settings-cleanup-step.ts              NEW P1 no-op seed -> P6
-├── orchestrators/plugin/
-│   ├── install-outcome.ts                    MOD P1 statePhase (writes mcpServerConfigs); P3 gate at :840;
-│   │                                            P4 agentsPhase :1318-1320 (own function each)
-│   ├── info-mcp-status.ts, info.ts,
-│   │   list-installed-row.ts,
-│   │   plugin-state-classifier.ts            MOD P3 (effective compatibility, status reader)
-│   ├── enable-disable.ts, install-cascade.ts,
-│   │   install-flow-results.ts, update-*.ts,
-│   │   reinstall-*.ts                        MOD P3 (neutral consent only, own function)
-├── orchestrators/reconcile/
-│   ├── convergence.ts                        MOD P3 (neutral comparison)
-│   └── mcp-migration.ts                      MOD P3 (explicit adapter profile)
-├── persistence/
-│   ├── state-io.ts                           MOD P1 frozen: optional mcpServerConfigs
-│   ├── locations.ts                          MOD P1 frozen: piSettingsJsonPath, mcpOnboardingJsonPath (user only)
-│   └── agents-index-schema.ts                MOD P4: optional mcpImplementation per row
-├── transaction/with-state-guard.ts           MOD P6: withPiSettingsLock
-└── shared/
-    ├── notification-types.ts, notification-wire.ts,
-    │   notify-reasons.ts (closed set)        MOD P1 frozen: one commit adding "requires MCP support"
-    └── concerns/soft-dep.ts                  MOD P3 (MCP arm only)
-
-features/ (cucumber)                          P1 frozen: cucumber.json profiles, world parameter, companion and
-                                                "MCP implementation" steps, piArguments --no-mcp, check-features tags
-docs/mcp-compatibility.md                     MOD P2 (built-in column)
+│   ├── source.ts            # accept git@host: / ssh:// forms
+│   └── clone-key.ts         # scp/ssh identity compare; networkCloneUrl -> transport candidates
+└── orchestrators/
+    ├── marketplace/shared.ts  # GitOps without auth
+    └── auth-host.ts           # DELETE or shrink
 ```
 
 ### Structure Rationale
 
-- **`domain/mcp-implementation.ts`** is the only file every phase imports. It holds types, pure tables and a pure join, so freezing it costs little and removes every cross-phase type conflict.
-- **`orchestrators/mcp/`** exists because the entry cannot import bridges or domain. A frozen composition file with one seeded step module per phase lets three phases wire load-time behavior without editing `index.ts` or each other's files.
-- **Built-in files sit beside the adapter files in `bridges/mcp/`.** It is the same component kind, so no new fallow zone is needed, and their file names keep ownership disjoint.
+- **`platform/git-process.ts` is separate from `platform/git.ts`.** Then the child-process allow-list names one small module that holds only the spawn mechanics, as `platform/package-manager.ts` does for D-PL9-11. `git.ts` holds only git semantics and stays testable with an injected runner. This follows the CONVENTIONS rule "dependency injection over test-only seams".
+- **Transport selection lives in `platform/`, not `domain/`.** The SSH probe spawns `ssh`, and `domain/` must stay pure. The fallow `platform` zone may import only `shared` (`.fallowrc.json` boundaries; restated at `platform/git-auth-callbacks.ts:31-37`). So the URL-candidate type that `domain/clone-key.ts` produces and `platform/git.ts` consumes must be declared in `shared/` or passed as plain strings.
+- **The github.com SSH host literal goes in `shared/github-base-url.ts`.** The `local/no-github-literal` ESLint rule (GHB-02, `eslint.config.js` after BLOCK F) exempts only that module. Every other github.com literal already carries a disable comment (`domain/auth-registry.ts:52-56`, `domain/source.ts:703,720,735,858`).
 
----
+## Integration Map (question 1): `platform/git.ts`, `GitOps`, and every caller
+
+### Exported surface of `platform/git.ts` and its isomorphic-git dependency
+
+| Export | Line | isomorphic-git call | System-git equivalent (proposed) |
+|--------|------|---------------------|----------------------------------|
+| `runWithGitAbortSignal` | `:302` | AsyncLocalStorage scope read by the custom HTTP client (`:412-426`) | The same AsyncLocalStorage, read by `git-process.ts`. Spawn with `signal` and kill the process group on abort |
+| `clone` | `:566` | `git.clone` + `setConfig remote.origin.url` when GHB-01 rewrote the URL (`:597-601`) | `git clone [--depth 1] [--branch <ref>] [--recurse-submodules] -- <url> <dir>`. When the rewrite is a `-c insteadOf`, git records the canonical URL itself and the `setConfig` disappears |
+| `fetch` | `:612` | `git.getConfig` + `git.fetch` with an explicit `url` under GHB-01 (`:615-638`) | `git -C <dir> fetch [--depth 1] [--tags] [--force] origin [<ref>]` |
+| `checkout` | `:641` | `git.checkout` | `git -C <dir> checkout [--detach] <ref>`, with the hardening flags (hooks off) |
+| `resolveRef` | `:650` | `git.resolveRef` (throws `NotFoundError`) | `git rev-parse --verify --quiet <ref>^{commit}`. Exit 1 maps to `GitRefNotFoundError` |
+| `resolveRemoteRef` | `:687` | `listServerRefs` v2, `symrefs`, `peelTags` (`:544-564`) | `git ls-remote --symref <url> HEAD` or `git ls-remote <url> refs/heads/<r> refs/tags/<r> refs/tags/<r>^{}` |
+| `listRemoteTags` | `:758` | `listServerRefs` with `prefix: refs/tags/` | `git ls-remote --tags <url>`. Prefer the `^{}` peeled line, which matches today's `peeled ?? oid` at `:772` |
+| `listTags` | `:792` | `git.listTags` | `git for-each-ref --format=%(refname:strip=2) refs/tags` |
+| `resolveTagOid` | `:834` | `resolveRef` + `readTag`/`readCommit` loop with an isomorphic-git `cache` (`:162-172`) | `git rev-parse --verify --quiet refs/tags/<n>^{commit}`. The `cache` parameter disappears. Better: one `for-each-ref` with `%(*objectname) %(objecttype)` replaces `listTags` plus N peels |
+| `forceUpdateRef` | `:879` | `git.writeRef({force:true})` | `git update-ref <ref> <sha>` |
+| `currentBranch` | `:902` | `git.currentBranch` | `git symbolic-ref --quiet --short HEAD`. Exit 1 means detached, which maps to `undefined` |
+| `listRemotes` | `:946` | fs pre-read of `.git/config`, then `git.getConfigAll` | Keep the fs pre-read: it alone gives the `not-a-repo`, `permission-denied`, and `unreadable` arms. Then `git config --get-all remote.origin.url` |
+| `GitCredentials` (type) | `:980` | isomorphic-git `GitAuth` shape | Removed, or moved to `git-credential.ts` if Device Flow stays |
+| Types `CloneOptions` … `ListRemotesResult` | `:50-205` | | Kept, minus every `auth?` member (`:81`, `:90`, `:129`, `:143`) |
+| Private HTTP client `requestWithinOrigin`, `sendHop`, redirect and cross-origin rules | `:207-477` | `isomorphic-git/http/node` | **Deleted.** git applies its own redirect policy (`http.followRedirects=initial`) and its credential helper keys a redirect target by that target's host, which retires the DD-3 capability gap recorded at `:446-451` |
+| `withFetchedUrlCause` / `networkCall` | `:486-532` | | Fold into `git-process.ts`. `FetchedUrlCause` survives only if GHB-01 survives |
+
+### The `GitOps` seam
+
+`orchestrators/marketplace/shared.ts:167-215` declares eight primitives (`clone`, `fetch`, `forceUpdateRef`, `checkout`, `resolveRef`, `currentBranch`, `resolveRemoteRef`, `listRemotes`). `DEFAULT_GIT_OPS` (`:223-236`) binds them to `platform/git.ts`. `runWithGitAbortSignal` is re-exported at `:242` for `index.ts:18,352`. `GitAuthBundle` (`:139`) is the readonly `BuildAuthCallbacksOpts`. `listRemoteTags`, `listTags`, and `resolveTagOid` are **not** on `GitOps`. Three callers import them from `platform/git.ts` directly: `dependency-tag-probe.ts:33`, `marketplace-tag-probe.ts:25`, and `clone-cache.ts:35`.
+
+### Every caller
+
+| Caller | What it calls | Lines | Change needed |
+|--------|---------------|-------|---------------|
+| `orchestrators/marketplace/shared.ts::refreshGitHubClone` | `fetch` → `resolveRef(refs/remotes/origin/HEAD or <ref>)` → `currentBranch` → `forceUpdateRef` → `checkout` (D-14) | `:274-343` | Drop `auth`. See the tag pitfall below: a moved tag is not updated by a plain `git fetch origin <tag>`. Recommend `fetch --force` and checkout of `FETCH_HEAD`'s sha |
+| `…/marketplace/shared.ts::refreshUrlClone` | builds the auth bundle (`buildAuthForHost`, `:390`), calls `refreshGitHubClone`, attaches `NO_STORED_CREDENTIAL_CAUSE` (`:402-404`) | `:367-408` | Collapses to a call of `refreshGitHubClone`. `lacksStoredCredential` (`:418`) is removed |
+| `orchestrators/marketplace/add.ts::gitStagingSteps` | `gitOps.clone` with `networkCloneUrl(source)`, `singleBranch` when a ref is set, and `cloneAuthFor` | `:869-895`, `:1864-1867` | Drop auth. Transport selection runs inside `clone` |
+| `…/marketplace/add.ts::recognizeLeftover` | `gitOps.listRemotes` then `originMatchesSource` | `:1688-1720` | `originMatchesSource` must accept scp and ssh origins (an SSH clone records `git@github.com:o/r.git` as its origin) |
+| `…/marketplace/add.ts` defaulting | `args.gitOps ?? DEFAULT_GIT_OPS` | `:817`, `:1243` | none |
+| `orchestrators/marketplace/update.ts::refreshRecord` | github arm: `buildGitHubAuth` + `refreshGitHubSource`. url arm: `refreshUrlClone`. hosted arm untouched | `:502-570`, `:465-482` | Drop auth and the `NO_STORED_CREDENTIAL_CAUSE` line. Upstream re-clones after a failed background check (`CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE`): that is a features decision |
+| `…/marketplace/update.ts` defaulting | `opts.gitOps ?? DEFAULT_GIT_OPS` | `:286`, `:327` | none |
+| `orchestrators/marketplace/autoupdate.ts` | no direct git surface. It reaches git through `updateMarketplace`, and its comment at `:68` names that | | Its D-3-04 stored-credential-only rule becomes "git is non-interactive", which every call already is |
+| `orchestrators/marketplace/background-pass.ts` | `runWithAbortSignal` wraps each step (`:99`, `:197`, `:241`) | | Keep the contract. The scope must now kill a child process |
+| `orchestrators/plugin/clone-cache.ts::materializePluginClone` | `cloneIntoStaging` → `gitOps.clone` (`:121-133`). `checkoutPinWithRefetch` → `checkout`, then on `CommitNotFetchedError` a `fetch --tags` and a second `checkout` (`:148-167`) | `:208-257` | Shallow clone plus `fetch --depth 1 origin <sha>`, then the `--unshallow` fallback, replaces the refetch. The `CommitNotFetchedError` name check becomes a typed error |
+| `…/clone-cache.ts::checkoutGitDirCopy` | copies `.git`, deletes the index, then `gitOps.checkout` | `:283-292` | It works with system git, but a copied `.git` carries the source's hooks and `core.*` config. Every local command must pass `-c core.hooksPath=` and `-c core.fsmonitor=false` (pitfall) |
+| `…/clone-cache.ts::copyMirrorAtCommit` | the copy plus a `NotFoundError` or `CommitNotFetchedError` fallback | `:300-330` | A shallow mirror often lacks the sha, so the copy falls back to a clone more often (more network, same correctness) |
+| `…/clone-cache.ts::materializeOrRefreshPluginMirror` | `refreshGitHubClone` (`:539`), `resolveRef HEAD` (`:542`), `resolveTagOid` (`:531`) | `:467-545` | Drop auth |
+| `…/clone-cache.ts::seedSameRepoPluginMirrors` | copies a path-source marketplace's `.git`, then checkout | `:767-820`, `:722` | **Security:** this copies the *user's* repository `.git`, including `hooks/` and `config`. Hardening flags are mandatory |
+| `…/clone-cache.ts::resolvePluginPin` | `gitOps.resolveRemoteRef` with `networkCloneUrl` | `:835-868` | Drop auth. Transport selection applies to `ls-remote` too |
+| `…/clone-cache.ts::materializeMarketplaceTagClone` | copy plus checkout of a marketplace tag | `:944-990` | Same hardening |
+| `…/clone-cache.ts::readOriginRemoteUrl` | fs-only `.git/config` parse | `:607-640` | Keep, because it is network-free. It must accept a scp or ssh origin in `deriveMarketplaceUrl` (`:652-675`) |
+| `orchestrators/plugin/git-source-probe.ts::readMirrorHeadSha` | fs-only read of `.git/HEAD`, loose refs, and `packed-refs` | `:54-86` | Breaks on a **reftable** repository and on a `.git` *file*. Pass `--ref-format=files` on clone (git 2.45 or later; this sandbox has 2.43.0), or replace the fs read with `git rev-parse` (which spawns git on a read path, an NFR-5-neutral but chokepoint-relevant change) |
+| `orchestrators/plugin/update-flow.ts::makeSyncCloneOnce` | `buildGitHubAuth` + `refreshGitHubClone`, or `refreshUrlClone` | `:233-283` | Drop auth and `authMemo` |
+| `orchestrators/plugin/update-preflight.ts::makeUpdateCloneProbe` | `buildStoredCredentialAuth` or `buildCloneAuth` | `:343-366` | The `cloneAuth` helper disappears |
+| `orchestrators/plugin/dependency-tag-probe.ts::probeDependencyTags` | `listRemoteTags({url: networkCloneUrl, auth: buildCloneAuth(...)})` | `:153-175`, `:126` | Drop auth. `ls-remote` gets transport selection |
+| `orchestrators/plugin/marketplace-tag-probe.ts` | `listTags` + `resolveTagOid(cache)` | `:25-38`, `:97`, `:106` | Signature change. The `marketplace-tag-probe-offline` architecture test pins exactly `["listTags","resolveTagOid"]` (`test/architecture/marketplace-tag-probe-offline.test.ts:65-76`) |
+| `orchestrators/plugin/update-constraint-gate.ts` | type `RemoteTag`, and calls both tag probes | `:29-37`, `:205` | Type-only. It stays in NETWORK_SEAMS only while it imports `platform/git` |
+| `orchestrators/plugin/install-cascade.ts` | type `RemoteTag` (`:134`), `tagMemo` (`:1677`), `deviceFlowHttp` (`:960`) | | Drop the auth threading. Moving `RemoteTag` into `shared/` takes this file out of NETWORK_SEAMS |
+| `orchestrators/plugin/install-clone-probe.ts`, `fetch.ts`, `info.ts` | `buildCloneAuth` → clone-cache `resolveAuth` | `install-clone-probe.ts:74,90`; `fetch.ts:433,451`; `info.ts:2499,2519` | Drop auth (not NETWORK_SEAMS: they reach git through clone-cache by name) |
+| `orchestrators/plugin/bootstrap.ts` | passes `gitOps` to `addMarketplace` | `:47`, `:88`, `:121` | none |
+| `orchestrators/import/execute.ts` | passes `gitOps` to marketplace adds | `:368`, `:1393` | none |
+| `orchestrators/reconcile/apply.ts`, `reconcile/types.ts` | passes and declares the `gitOps` seam | `apply.ts:337`; `types.ts:60`, `:371` | none |
+| `edge/types.ts`, `edge/register.ts`, `edge/handlers/plugin/import.ts`, `index.ts` | wire `DEFAULT_GIT_OPS` | `edge/types.ts:21,37`; `register.ts:154`; `import.ts:12,21,64`; `index.ts:18,365` | none |
+
+### Typed-error contract the rewrite must keep
+
+Four orchestrator sites match isomorphic-git error **names** because D-13 forbade importing the library: `marketplace/shared.ts:253` (`NotFoundError`), and `clone-cache.ts:73` (`CommitNotFetchedError`) and `:78` (`NotFoundError`). In `shared/git-failure-classifiers.ts`, `:30` reads `code === "HttpError"`, `:102` reads `UserCanceledError`, and `:128` reads `NotFoundError`. `test/platform/git-ops-fake.ts:76-80` manufactures `NotFoundError` the same way. The rewrite should add real classes to `shared/errors.ts`: `GitCommandError { kind, exitCode, stderr (redacted), operation }`, `GitRefNotFoundError`, and `GitCommitMissingError`. Then switch those matchers to `instanceof`, which is the CONVENTIONS rule anyway ("callers narrow on `instanceof`, never on … `error.name`"). Do this in the **same** phase as the transport swap, or every refresh of a deleted branch silently stops falling back to the detached checkout (`shared.ts:326-330`).
+
+## Auth Surface (question 2)
+
+| Module | What it does today | Fate if git owns credentials |
+|--------|--------------------|------------------------------|
+| `platform/git-auth-callbacks.ts` (270 lines) | The `buildAuthCallbacks` state machine (`:176`): https-only and host-compare (`onAuth`), `credentialOps.fill`, Device Flow on a miss for `device-flow` bundles, evict on `onAuthFailure` (AUTH-07), `StoredCredentialRejectedError` for `stored-credential` bundles (GAUTH-04). It declares `AuthAttemptResult` (`:39`), `OnAuthRequiredFn` (`:48`), and `BuildAuthCallbacksOpts` (`:69`) | **Deleted.** git runs the helper protocol itself, including `approve` after a success and `reject` after a 401 |
+| `platform/git-credential.ts` (355 lines) | Spawns `git credential fill/approve/reject` with `GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never`, and a 5 s timeout (`:148-160`). It is today's only git spawn and the reason it is on the child-process allow-list | **Deleted** without Device Flow. **Kept** with Device Flow, solely to `approve` the minted token |
+| `orchestrators/auth-host.ts` (282 lines) | `DEFAULT_CREDENTIAL_OPS` (`:77`), `hostFromCloneUrl` (`:95`), `NO_STORED_CREDENTIAL_CAUSE` (`:126`), `buildStoredCredentialAuth` (`:139`), `buildAuthForHost` with the AAP-02 rule that a non-command run gets no Device Flow (`:176-218`), `buildGitHubAuth` with the GHB-02 rule that the override means no Device Flow (`:228-240`), and `buildCloneAuth` (`:260`). It re-exports the auth types so non-seam orchestrators can name them (`:57`) | **Deleted** without Device Flow. With it, it shrinks to one `runWithDeviceFlowRetry(host, run, op)` composer |
+| `domain/github-auth.ts` (426 lines) | RFC 8628 Device Flow engine, `initiateDeviceFlow` (`:402`). It is one of two `fetch` callers (the `fetch-chokepoint` rule) | **Deleted**, or kept unchanged behind the retry |
+| `domain/auth-registry.ts` (109 lines) | `GITHUB_PROVIDER` and `GITLAB_PROVIDER` descriptors, `findProviderForHost` (`:107`). It is in NETWORK_SEAMS only because it type-imports `GitCredentials` from `platform/git.ts` (`:23`) | **Deleted**, or kept with `GitCredentials` moved |
+| `shared/errors.ts` | `DeviceFlowUnavailableError` (`:6`), `CrossOriginChallengeError` (`:593`), `StoredCredentialRejectedError` (`:610`), `TooManyRedirectsError` (`:620`), `FetchedUrlCause` (`:674`) | The redirect and challenge errors have no producer, so they are **deleted**. The other two follow the Device Flow and GHB-01 decisions |
+| `shared/notification-dispatch.ts::notifyDeviceFlowPrompt`, `DeviceFlowPrompt` type | Renders the user code | Follows Device Flow |
+
+**Threading that disappears.** The names `credentialOps`, `deviceFlowHttp`, `authMemo`, and `AuthAttemptResult` appear 233 times in 23 production files. 47 test and feature files use them too. Removing them is mechanical but wide. Schedule it as its own phase, after the transport swap, so a reviewer can read the swap alone.
+
+**If Device Flow is kept (data-flow shape).** isomorphic-git called `onAuth` mid-request. System git cannot call back into Node. So Device Flow becomes **retry-after-failure**: run git, classify stderr as `auth`, check that the host is a registry host and the run is a command run (AAP-02, D-3-04, D-PL8-12), run `initiateDeviceFlow`, call `credentialOps.approve(host, cred)`, then run git once more. The retry authenticates only if the user's git **has a credential helper that stores** the token. Without one, the token must reach git inline. A `GIT_CONFIG_COUNT` credential helper or `http.extraHeader` both keep the token out of argv, but it stays readable in `/proc/<pid>/environ` for the same user. This is the main argument for removing Device Flow. Removal is upstream parity: the host-marketplace page says "Claude Code has no git token of its own" (LOW until re-checked against the binary). Note a migration detail in favor of removal: tokens that earlier Device Flow runs stored with `git credential approve` (`protocol=https`, `host=github.com`, `username=x-access-token`) stay in the user's helper. System git over HTTPS **uses them automatically**, so existing users keep access without any migration code. It is lost only when the SSH probe succeeds and SSH is used instead.
+
+## URL construction and SSH forms (question 3)
+
+| Concern | Where today | What changes |
+|---------|-------------|--------------|
+| github identity | `domain/clone-key.ts:85` `canonicalCloneUrl` → `${GITHUB_ORIGIN}/${owner}/${repo}` (`GITHUB_ORIGIN` at `shared/github-base-url.ts:30`) | **Unchanged.** It is the cache-key identity. Changing it rehashes every `plugin-clones/<hash>` directory (warning at `clone-key.ts:79-82`) |
+| github wire URL | `clone-key.ts:93-102` `networkCloneUrl` → `ensureGitSuffix` (`source.ts:650`) | Becomes a candidate pair: `git@github.com:<o>/<r>.git` (SSH) and `https://github.com/<o>/<r>.git` (HTTPS). The platform picks one by the upstream probe rules: probe `ssh -T git@github.com`, use SSH on success, fall back to HTTPS on probe failure or SSH clone failure, skip the probe under `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1`, `GIT_SSH_COMMAND`, `GIT_SSH`, or a `url.*.insteadOf` rewrite in git config. Cache the probe result once per process or per command |
+| url and git-subdir wire URL | `networkCloneUrl` `url` arm reads `source.raw`; `git-subdir` arm reads `source.url` via `stripSlashAndFragment` (`source.ts:593`) | Verbatim. A scp or ssh URL passes through unchanged |
+| String-form gate | `source.ts:455-471` `parseUrlSourceForm` rejects `git@` and any non-https `://` via `unsupportedUrlReason` (`:105-123`) | Admit `git@host:path[.git][#ref]` and `ssh://[user@]host[:port]/path`. They become `url` sources, a new `transport: "ssh"` member or a separate kind. Upstream: `git@host:path.git` is SSH. `gitHubUrlPath` (`:683-705`) must also recognize `git@github.com:o/r` so it normalizes to `github` kind with one identity |
+| Object-form gate | `urlObjectSource` gates `url` and `raw` (`:203-249`). `gitSubdirObjectSource` (`:251-258`) does **not** gate `url` at all, and `git-auth-callbacks.ts` says object sources can carry `http://` | Decide the git-subdir gate explicitly. Today the https-only `onAuth` check is the only guard, and it goes away |
+| Leftover recognition | `clone-key.ts:118-132` `originMatchesSource` + WHATWG `URL.canParse` | Needs a scp-aware normalizer. Otherwise every SSH clone is refused as `StaleSourceCloneError` on re-add (`add.ts:1697-1703`) |
+| Host for credentials and messages | `auth-host.ts:95-101` `hostFromCloneUrl` → `new URL(gitHubWireUrl(cloneUrl)).host` | Throws on scp form. It goes away with the bundles, or is rewritten for messages only |
+| Path-source origin | `clone-cache.ts:607-675` `readOriginRemoteUrl` + `parsePluginSource(origin)` | A user's path-source checkout with an SSH origin (common) now yields a seedable URL. It was silently unseedable before |
+| `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` (D-MF-01) | read only by `shared/github-base-url.ts:16,37` (`readGitHubBase`). Production consumers: `platform/git.ts:13,549,581,623` (`gitHubWireUrl`), `auth-host.ts:46,96-101,233,269` (`gitHubOverrideHost`, `gitHubWireUrl`), `shared/git-failure-classifiers.ts` (2 sites). Harness: `features/support/pi-process.ts:155`, `features/lib/pi-rpc.ts:58,207-208`, `features/support/world.ts:691,1259` | Option A (recommended for the transport swap): keep the variable and translate it to `-c url.<base>/.insteadOf=https://github.com/` on every git command. git then records the canonical origin itself, the `setConfig` at `git.ts:600` goes away, and the upstream rule "a URL rewrite in git config skips the SSH probe" treats this rewrite like the user's own. Option B (parity, later phase): retire D-MF-01 and have the harness write `url.<host>.insteadOf` into the sandbox `GIT_CONFIG_GLOBAL`. That removes a non-upstream variable and the GHB-02 special case in `buildGitHubAuth` |
+
+## Test doubles and harness (question 4)
+
+| Asset | Today | What system git needs |
+|-------|-------|-----------------------|
+| `test/platform/git-ops-fake.ts` (268 lines) | An in-memory `GitOps` fake. It records `auth` per call (`:29-55`) and fabricates `NotFoundError` by name (`:76-80`) | Drop the `auth` fields from the call records. Throw the new typed errors. Keep the `boundary: "memory"` contract |
+| `test/platform/git-test-repository.ts` (126 lines) | Builds repositories **with isomorphic-git** (`:6`, `git.init` at `:58`, in-memory packfiles at `:119`) | Rewrite on system git with the hermetic env pattern of `features/lib/hermetic-git.ts:17-41` (`GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=/dev/null`, a scratch HOME). Three files use it. `pack()` has no system-git twin (use a bare repository plus `file://` or the HTTPS host instead) |
+| `test/platform/git.test.ts` (2,977 lines) | Contract tests of the custom redirect client and the isomorphic-git wrappers | Mostly deleted (the redirect, cross-origin, and challenge rules). It is replaced by argv and env contract tests against an injected runner, plus a thin real-git suite over a `file://` bare repository |
+| 37 test and feature files import `isomorphic-git` | `test/edge/**`, `test/orchestrators/**`, `test/integration/path-source-tag-install.test.ts`, `features/lib/github-device-flow/extension.ts`, `features/marketplace/device-flow.feature` | Each must move off before the dependency is removed from `package.json` |
+| `test/architecture/hermetic-git-environment.test.ts` (276 lines) | Proves `hermeticGitEnvironment` returns exactly its **eight** keys (`:66-70`), and that `rpcChildEnvironment` passes only the run's `NODE_EXTRA_CA_CERTS`, `GIT_CONFIG_*`, and GitHub base to Pi, never the shell's (`INHERITED_VARIABLES` `:25-40`) | Add `GIT_SSL_CAINFO` (or `http.sslCAInfo`) to `RpcGitEnvironment` and its assertions. Add the SSH-probe skip (`CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` or an insteadOf rewrite) so a CI runner with an SSH key never reaches github.com. Assert that `GIT_ASKPASS` and `SSH_ASKPASS` from the shell do not reach Pi (they are already in `INHERITED_VARIABLES`) |
+| `test/integration/auth-e2e.test.ts` (462 lines) | Real isomorphic-git `clone` (`:38`), `isomorphic-git/http/node` (`:28`), `buildAuthCallbacks` + `initiateDeviceFlow` composition, and AUTH-01/02/07 | Without Device Flow, it reduces to "a real system-git clone of a credential-armed repository succeeds with a stored helper credential and fails `{authentication required}` without one" |
+| Cucumber HTTPS git host `features/lib/https-git-host/server.ts` (662 lines) + `cgi.ts` (167 lines) | Loopback `node:https` with a fresh P-256 cert for `IP:127.0.0.1` (`server.ts:37-56`). It serves bare repositories through **`git http-backend`** CGI with `GIT_PROJECT_ROOT`, `GIT_HTTP_EXPORT_ALL`, and `GIT_PROTOCOL` passthrough (`cgi.ts:36-60`). Arms: status, drop, hold, credential (401), redirect (`server.ts:64-77`). Pi trusts it via `NODE_EXTRA_CA_CERTS` (`features/support/pi-process.ts:151-156`) | **The smart-HTTP server is already right for system git.** Missing: (1) **CA trust.** `NODE_EXTRA_CA_CERTS` does not reach git's libcurl. Set `GIT_SSL_CAINFO=<cert.pem>` in `RpcGitEnvironment`, which avoids writing the global config (DRV-03 requires it to be absent until a scenario writes it, `pi-process.ts:150`). (2) **Request baselines.** System git protocol v2 sends `GET info/refs`, `POST git-upload-pack` (ls-refs), `POST git-upload-pack` (fetch), where isomorphic-git sent two requests. A 401 arm adds a retry. 79 `the git host receives these requests` tables across 20 feature files must be re-baselined (`features/marketplace/github-source.feature:20-23` is the two-row form). (3) **SHA wants.** Shallow `fetch --depth 1 origin <sha>` needs the bare repositories to allow reachable-SHA wants (`uploadpack.allowReachableSHA1InWant`, or check the protocol v2 default in the stand-in). Verify this in the phase |
+| GitHub redirect stand-in `features/lib/github-device-flow/extension.ts` | Patches `node:https` and `globalThis.fetch` **inside Pi's process** to route `github.com` to the stand-ins (`:1-26`) | **It cannot see a git subprocess.** A scenario that runs Pi without the base override (D-BG-01) and clones `github.com` would reach the real network. Replace git routing with `url.https://127.0.0.1:<port>/.insteadOf=https://github.com/` in the sandbox global config. Keep the in-process patch only for Device Flow `fetch`, if Device Flow survives |
+| Credential steps `features/step_definitions/git-host.steps.ts:75-79,204-212` | Write `credential.helper = store` and `~/.git-credentials` in the sandbox HOME. Today's real `git credential fill` reads them | **They already work for system git unchanged.** This is the strongest existing evidence that the harness is near-ready |
+| e2e (`test/e2e`, pinned and nightly) | Clones real upstream repositories over isomorphic-git | Needs `git` on the runner (GitHub-hosted runners have it). Set `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` so the SSH probe is deterministic in CI. This sandbox has no `ssh` binary (`ssh: command not found`), so the probe path must also handle ENOENT |
+
+## Rule-pack and ESLint entries that must change (question 5)
+
+| Gate | Location | Change |
+|------|----------|--------|
+| `isomorphic-git-chokepoint` | `rule-packs/architecture.json:103-109` | Turn it into a total ban (empty `exclude`) with a message citing the new decision that reverses D-21. Or delete it together with the dependency. A total ban keeps a re-add from landing silently |
+| `child-process-chokepoint` | `rule-packs/architecture.json:110-123` | Add `platform/git-process.ts`. Remove `platform/git-credential.ts` if Device Flow goes. Rewrite the message ("five sanctioned spawn sites") |
+| `SHELL_OUT_EXEMPT_TARGETS` + no-shell-out test | `test/architecture/gate-targets.ts:221-227`; `test/architecture/no-shell-out.test.ts:140-224` (literal "exactly five files", the D-21 supersession message at `:196`) | Same set as the rule pack, in the same commit. The `:196` text that says isomorphic-git supersedes MA-7 must be rewritten |
+| `no-network-modules` message | `rule-packs/architecture.json` (the message names `platform/git.ts` as the git traffic path) | Message only. It now says that git traffic goes through `platform/git-process.ts` subprocesses |
+| `fetch-chokepoint` | `rule-packs/architecture.json:165-175` | Drop the `domain/github-auth.ts` exemption if Device Flow goes |
+| ESLint `NETWORK_SEAMS` | `eslint.config.js:53-90` | Remove `domain/auth-registry.ts` and `domain/github-auth.ts` (listed only for the `GitCredentials` type import) and `orchestrators/auth-host.ts` when deleted. Remove `install-cascade.ts`, `update-constraint-gate.ts`, and the type-only half of `update-preflight.ts` once `RemoteTag` moves to `shared/` |
+| ESLint BLOCK F regex | `eslint.config.js:574-583` (`regex: "platform/git"`), `:98-117` selectors | The regex already matches `platform/git-process.ts`, which is what we want: a network-free module cannot reach the spawn site. No change |
+| BLOCK C zone for the runner | `eslint.config.js` (pattern of `PACKAGE_INSTALL_SEAM`, `:35-36`) | Add a zone: only `platform/git.ts` may import `platform/git-process.ts`, the same shape as the package-manager zone |
+| `CREDENTIAL_LEAK_TARGETS` | `test/architecture/gate-targets.ts:152-171` | Remove deleted files and add `platform/git-process.ts` (stderr redaction, environment). **Positional bindings:** the comments at `:164-167` warn that `no-credential-leak.test.ts` binds entries by position, so edit both files together |
+| `MARKETPLACE_TAG_PROBE_OFFLINE_TARGETS` test | `test/architecture/marketplace-tag-probe-offline.test.ts:65-76` | Update it if `listTags` and `resolveTagOid` merge into one local-tag verb |
+| `.fallowrc.json` | `production.deadCode` with the single entry `index.ts` | A new module that is not yet reachable fails `fallow dead-code`. Land each new module together with its first consumer, or use the per-file `ignoreExports` entry that CONVENTIONS prescribes for frozen exports. Never put a `fallow-ignore` marker in such a module |
+| Constraint text | `AGENTS.md` NFR-5, NFR-10; `.planning/codebase/{STACK,ARCHITECTURE,CONVENTIONS}.md` | **NFR-10 amendment:** git writes outside the containment roots for us: a store helper's `~/.git-credentials` on `approve`, and `known_hosts` if ssh `accept-new` were allowed. Record that writes git makes through the user's own configuration are outside NFR-10. Upstream requires the host to be in `known_hosts` already, so `StrictHostKeyChecking=yes` avoids the second write |
 
 ## Architectural Patterns
 
-### Pattern 1: Pure profile plus effect ports (strategy split by layer)
+### Pattern 1: Injected git runner (mirror of `platform/package-manager.ts`)
 
-**What:** One pure `McpImplementationProfile` per implementation in `domain`, chosen by id. Effects (file staging, registration, status) are separate modules in their own zones, each taking the profile or its id.
-**When to use:** Every implementation-dependent decision: verdict, name, grant, translation.
-**Trade-offs:** The behavior of one implementation is spread over three zones. In return the fallow boundaries hold, every piece is unit-testable with direct coverage, and a third implementation adds files without editing shared ones.
+**What:** `createGitRunner({ spawn, timeoutMs, killGraceMs, env, host })` returns `run(argv, { cwd, network: boolean }) → { stdout }` or throws `GitCommandError`. `NODE_GIT_SPAWN` is the production launcher. `platform/git.ts` takes the runner as a defaulted parameter.
+**When to use:** for every git and ssh invocation.
+**Trade-offs:** it doubles the code of the package-manager runner. Extract the shared kill-tree and Windows lookup into a pure helper (`platform/windows-command.ts`), or `fallow dupes` fails.
 
-```ts
-// domain/mcp-implementation.ts (frozen in Phase 1)
-export type McpImplementationId = "adapter" | "builtin";
-export type ActiveMcpImplementation = McpImplementationId | "none";
-export interface McpImplementationProfile {
-  readonly id: McpImplementationId;
-  classify(config: unknown): McpServerVerdict;            // malformed is shared, blocked is per profile
-  serverName(plugin: string, server: string): string;     // adapter: plugin_p_s_ ; builtin: plugin_p_s
-  toolNamePrefix(plugin: string, server: string): string; // mcp__plugin_p_s__ (builtin folds - to _)
-  grantSelector(plugin: string, server: string): string;  // mcp:<serverName>
+```typescript
+// platform/git.ts (sketch)
+export async function resolveRef(opts: ResolveRefOptions, git: GitRunner = DEFAULT_GIT): Promise<string> {
+  const { stdout, exitCode } = await git.run(
+    ["rev-parse", "--verify", "--quiet", `${opts.ref}^{commit}`],
+    { cwd: opts.dir, network: false, allowExit: [1] },
+  );
+  if (exitCode === 1) {
+    throw new GitRefNotFoundError(opts.ref);
+  }
+  return stdout.trim();
 }
-export function profileFor(id: McpImplementationId): McpImplementationProfile;
-export function effectiveMcpCompatibility(
-  stored: { readonly installable: boolean; readonly unsupported: readonly string[] },
-  recorded: readonly { readonly name: string; readonly config: unknown }[] | undefined,
-  active: ActiveMcpImplementation,
-): { installable: boolean; unsupported: readonly string[]; blocked: readonly DroppedMcpServer[] };
 ```
 
-### Pattern 2: Desired-state sync for session-scoped registrations
+### Pattern 2: One environment and flag builder for every git command
 
-**What:** `syncBuiltinRegistrations({ registry, desired })` computes the set from the records of both scopes (enabled; project only when trusted), lists this extension's current registrations (`getMcpServers()` filtered by `extensionPath`), and registers or unregisters the difference. A server whose config changed is registered again, which Pi treats as a replacement (`mcp/index.js:1086-1091`).
-**When to use:** At `session_start`, and after `loadReconcile` in `resources_discover`.
-**Trade-offs:** Two calls per load, both cheap. It never touches disk, and NFR-3 (safe to retry) holds by construction.
+**What:** a pure function returns `{ env, prefixArgs }`. `env` is `process.env` plus `GIT_TERMINAL_PROMPT=0` and `GCM_INTERACTIVE=never` (moved from `git-credential.ts:148-160`). It also sets an empty askpass (`GIT_ASKPASS`, `SSH_ASKPASS`, `-c core.askPass=`), because upstream does not run askpass, and `GIT_SSH_COMMAND=ssh -o BatchMode=yes` only when the user set neither `GIT_SSH_COMMAND` nor `GIT_SSH`. `prefixArgs` is `-c core.hooksPath=/dev/null` (or a platform-neutral empty dir), `-c core.fsmonitor=false`, `-c protocol.file.allow=user`, the GHB-01 `insteadOf` when option A applies, and `GIT_LFS_SKIP_SMUDGE=1`, because upstream "never downloads LFS content".
+**When to use:** for every spawn. Local and network commands get the same hardening, because a copied `.git` carries foreign config.
+**Trade-offs:** `-c` overrides beat the user's repository config, which is the intent. The user's *global* credential and ssh settings still apply, which is the point of the milestone.
 
-### Pattern 3: Neutral persistence, effective presentation
+### Pattern 3: Transport candidates resolved in the platform, identity fixed in the domain
 
-**What:** Persist only implementation-independent facts (the Claude configs and the neutral compatibility). Compute the implementation-dependent view at read time from `run.softDeps.mcpImplementation`.
-**When to use:** Every list, info, marker, severity and install-time consent decision.
-**Trade-offs:** About 15 reader sites move to one function (one phase owns them all). Records never need a rewrite on a switch.
-
-### Pattern 4: Frozen composition with seeded, handed-over step modules
-
-**What:** Phase 1 writes `orchestrators/mcp/session-materialize.ts`, which calls `settingsCleanupStep`, `builtinRegistrationStep` and `agentGrantsStep` in a fixed order. Each step catches its own errors (NFR-2: nothing escapes `session_start`). Each step module starts as a no-op with a paired test, and one phase owns it from then on. This is the component-features "created by Phase 1 with a seed, then handed over" pattern.
-
----
+**What:** `domain/clone-key.ts` keeps `canonicalCloneUrl` as the identity. A new `cloneTransports(source)` returns `[{ url: ssh }, { url: https }]` for github and `[{ url: verbatim }]` otherwise. `platform/git.ts` walks the list with the probe rules and returns the URL it used, so `FetchedUrlCause` (or its successor) can name it.
+**When to use:** in clone, `ls-remote` (resolveRemoteRef and listRemoteTags), and the first fetch of an existing clone. Later fetches use the recorded origin.
+**Trade-offs:** an SSH clone records `git@github.com:o/r.git` as its origin. The leftover recognizer and `readOriginRemoteUrl` must fold that back to the github identity. Otherwise the identity contract breaks.
 
 ## Data Flow
 
-### Startup and `/reload`
+### Install of a git-source plugin (cold cache), after the milestone
 
-```text
-Pi builds runtime (extension list fixed here; -builtin:mcp already applied)
-  └─ factory (index.ts): adapter env, trackers, readers {adapter, builtin}
-session_start(startup|reload|new|resume|fork)
-  └─ materializeMcpForSession(pi, ctx)
-       snapshot = softDepStatus(pi)            -> adapter | builtin | none
-       1 settingsCleanupStep  (user scope; only if adapter absent + decision-1 test; atomic, Pi lock)
-       2 builtinRegistrationStep (only if builtin): records(user, project if trusted, enabled)
-            -> recordedMcpServers -> builtin-entry (substitute, translate, encode)
-            -> syncBuiltinRegistrations      (Pi connects at once / at its session_start)
-       3 agentGrantsStep (if adapter|builtin, not in a subagent child):
-            agents-index rows with mcpImplementation != active -> rewrite under state lock
-resources_discover
-  └─ prepareResources: hooks hydrate, loadReconcile (may autoapply), PATH
-       └─ resyncBuiltinRegistrations (picks up autoapply installs and uninstalls)
-  └─ aggregateDiscoveredResources (unchanged)
+```
+edge install → install-flow → install-outcome (no auth bundle built)
+   → clone-cache.resolvePluginPin
+        → GitOps.resolveRemoteRef(networkTransports)
+            → platform/git.ts: probe? → git ls-remote --symref <ssh|https> HEAD
+                → git-process: spawn(git, env+flags, signal) → stdout | GitCommandError(kind)
+   → clone-cache.materializePluginClone
+        → GitOps.clone(depth 1, --branch ref) → GitOps.fetch(--depth 1 origin <sha>)
+          → GitOps.checkout(--detach <sha>)   [fallback: fetch --unshallow]
+        → rename staging → plugin-clones/<key>   (unchanged, NFR-1)
+   failure → shared/git-failure-classifiers (kind → closed reason token)
+           → notify (stderr redacted, IL-2)
 ```
 
-### Install (any active implementation)
+What leaves the flow: `buildCloneAuth` → `GitAuthBundle` → `buildAuthCallbacks` → isomorphic `onAuth` → `credentialOps.fill` → Device Flow → `credentialOps.approve`. git's own helper invocation replaces that whole chain.
 
-```text
-resolveStrict -> declaredMcpServers (all non-malformed) + neutral state
-consent gate: effectiveMcpCompatibility(neutral, declared, run.softDeps.mcpImplementation)
-mcp phase: stage the adapter-supported subset into mcp-adapter.json (ALWAYS; C5)
-agents phase: grants in the active profile's form (none -> adapter form) + index row records it
-state phase: compatibility = neutral; resources.mcpServers = staged names;
-             mcpServerConfigs = declared Claude configs (pre-substitution)
-reload hint -> at /reload, builtin registers from the record
-```
+### Key Data Flows
 
-### Read time (list, info, pending, tools)
-
-```text
-record + run.softDeps.mcpImplementation
-  -> effectiveMcpCompatibility -> (installed | partially-installed), reasons, unsupportedFeature per server
-  -> marker: none -> "requires MCP support"; adapter or builtin -> no MCP marker
-  -> info status: readers[active].lookup(profile.serverName(plugin, server))
-```
-
-### Switch: adapter uninstalled
-
-```text
-start 1: settings still hold -builtin:mcp -> active none -> cleanup removes it (decision 1)
-         -> servers not connected this session (C8b gap)
-start 2 or /reload: builtin loaded -> active builtin -> register from records; agents rewritten;
-         list/info now show built-in verdicts (e.g. an sse server -> partially-installed)
-```
-
-Without the adapter's line, for example after a `pi config` change, start 1 is already built-in.
-
-### State Management
-
-- `state.json` stays the only source of truth. The new field is written only in `statePhase`; uninstall, update, reinstall and disable keep its lifecycle for free (disable keeps the record, and `enabled:false` means do not register).
-- Pi registrations are derived and session-scoped. They are never authoritative.
-- `agents-index.json` records which grant form each generated agent carries.
-
----
+1. **Marketplace refresh (D-14):** `refreshGitHubClone` keeps its fetch → resolve → update-ref → checkout shape. For a tag or pinned ref, fetch with `--force` and resolve `FETCH_HEAD`, because `git fetch origin <tag>` does not move an existing local tag. isomorphic-git's resolve of `refs/remotes/origin/<tag>` failed and fell back to the stale local tag, which hid this.
+2. **Background pass abort (D-PL8-24):** `background-pass.ts:197` → `runWithAbortSignal` → AsyncLocalStorage → `git-process` reads the store and spawns detached. On abort it sends SIGTERM to the group, SIGKILL after the grace, and rejects with `signal.reason`. The "cut-short ref list read as success" guard (`git.ts:507-532`) is no longer needed: a killed `ls-remote` exits non-zero.
+3. **Failure classification:** `GitCommandError.kind` is derived from stderr patterns (`Authentication failed`, `could not read Username`, `terminal prompts disabled`, `Permission denied (publickey)`, `Host key verification failed`, `Repository not found`, `returned error: 404`, `Could not resolve host`, `Connection timed out`, `Remote branch … not found`, `couldn't find remote ref`) and from spawn `ENOENT`, which is the new "git not found on PATH" kind that D-21 originally avoided. `classifyGitFailure` maps a kind to the existing closed reason tokens.
 
 ## Scaling Considerations
 
-| Concern | Typical (1-20 plugins) | Heavy (100+ servers) |
-|---|---|---|
-| `session_start` cost | Two `loadState` reads, a few `registerMcpServer` calls. Negligible. | Registration is O(servers). Built-in connects lazily for deferred servers. The legacy re-resolve fallback reads plugin roots, so encourage self-heal. |
-| Agents rewrite | Only on an implementation change, and only for agents with MCP grants. | Bounded by the agent count. Run once per switch, not per load. |
-| Re-sync after load | Diff against `getMcpServers()`. Cheap. | The same. |
+| Scale | Architecture Adjustments |
+|-------|--------------------------|
+| A few marketplaces | Process spawn cost (~5-20 ms per git command) is noise beside the network |
+| Bulk import or apply over many plugins | One SSH probe per process, memoized. A shared `ls-remote` result per URL per command (today's `tagMemo` and `constraintTagMemo` already do this for tags) |
+| Large plugin repositories | Shallow clones cut transfer. Upstream times clones out at 120 s ("git clone timed out after 120s", troubleshooting page, LOW). Mirror that timeout in the runner |
 
 ### Scaling Priorities
 
-1. **First bottleneck:** the legacy fallback in `recordedMcpServers` re-reading plugin roots on every load. Mitigation: the record self-heals on the next materialization. An optional `apply` step could refresh the field.
-2. **Second:** project switches (`/resume` into another cwd) re-run the full sync. That is already idempotent.
-
----
+1. **First bottleneck:** a cold mirror copy falls back to a clone more often with shallow mirrors. Accept it, or fetch `--depth 1 <sha>` into the mirror before copying.
+2. **Second bottleneck:** sequential `no-await-in-loop` git calls in the tag peel loop (`git.ts:837-866`). Replace them with one `for-each-ref`.
 
 ## Anti-Patterns
 
-### Anti-Pattern 1: One `McpImplementation` object that spans zones
+### Anti-Pattern 1: Passing a token on the git command line
 
-**What people do:** Put translation, registration, status and grants on one class in `bridges/mcp`, and import it from `bridges/agents` and the entry.
-**Why it's wrong:** fallow forbids `bridges-agents -> bridges-mcp` and `entry -> bridges-mcp` (`.fallowrc.json:79-126`). `npm run fallow` fails.
-**Do this instead:** Use the pure profile in `domain` (Pattern 1), with effects in their own zones and composition in `orchestrators/mcp/`.
+**What people do:** `https://x-access-token:<token>@github.com/...` or `-c http.extraHeader=Authorization: ...` in argv.
+**Why it's wrong:** any local user can read argv in `ps`. git also echoes the URL in stderr, which feeds the failure notification (AUTH-09, `no-credential-leak.test.ts`).
+**Do this instead:** let the user's helper supply the token. If Device Flow survives, `approve` the token into the helper, or use `GIT_CONFIG_COUNT` env injection, and redact stderr regardless.
 
-### Anti-Pattern 2: A module-global "active implementation" set at `session_start`
+### Anti-Pattern 2: Running git in a copied or user-owned `.git` with its own config live
 
-**What people do:** Capture the probe result in a mutable variable read by list, info and install.
-**Why it's wrong:** It duplicates D-05, adds hidden state that tests must reset, and can disagree with the run's snapshot, which the marker and the severity share (`notify-reasons.ts:89-104`).
-**Do this instead:** Add `mcpImplementation` to `SoftDepStatus` (C2).
+**What people do:** `cp -r .git` and then `git checkout` (`clone-cache.ts:283-292`, `:722`, `:976`).
+**Why it's wrong:** a path-source marketplace's `.git/hooks/post-checkout` runs, and `core.fsmonitor` in its config runs an arbitrary command. isomorphic-git never ran either, so this is a new code-execution path.
+**Do this instead:** add `-c core.hooksPath=<empty> -c core.fsmonitor=false` to every command. Consider `safe.directory` behavior for repositories owned by another user (git refuses them, and that refusal must classify cleanly).
 
-### Anti-Pattern 3: Registering while the adapter is active, or when nothing connects
+### Anti-Pattern 3: Keeping isomorphic-git error names as the cross-tier contract
 
-**Why it's wrong:** The adapter consumes registrations as proxy-only duplicates (`pi-mcp-adapter/index.ts:1365,1406`). With built-in off, every registration is an extension error (`runner.js:503-520`).
-**Do this instead:** Register only when the snapshot says built-in.
+**What people do:** emit `err.name = "NotFoundError"` from the new transport to satisfy the old matchers.
+**Why it's wrong:** CONVENTIONS forbid name discrimination, and the shim would outlive its reason.
+**Do this instead:** real error classes in `shared/errors.ts`, with `instanceof` at the three matcher sites, in the swap phase.
 
-### Anti-Pattern 4: Persisting translated or encoded entries, or the implementation-dependent compatibility
+### Anti-Pattern 4: Re-baselining cucumber request tables by hand without one canonical change
 
-**Why it's wrong:** Escapes and encodings differ between implementations (`substitute.ts` versus `resolve-config-value.js`). An implementation-dependent stored compatibility makes convergence and enable ask for `--partial` after a switch.
-**Do this instead:** Persist the Claude form and neutral compatibility (C4, C6).
-
-### Anti-Pattern 5: Load-time writes without the lock, in an untrusted project, or in a subagent child
-
-**Why it's wrong:** Two Pi processes (parent and background child) would rewrite agent files against different probe results, so the files would flip back and forth. An untrusted project is written during load (D-LOC-01).
-**Do this instead:** Run the agents and settings steps under the state lock or the Pi settings lock, only on a real change, never in a child, and never in an untrusted project.
-
-### Anti-Pattern 6: Editing `settings.json` through Pi's `SettingsManager`, or without Pi's lock
-
-**Why it's wrong:** `SettingsManager` writes with `writeFileSync` (NFR-1). A bare atomic write can lose a concurrent `pi config` change.
-**Do this instead:** Use `withPiSettingsLock` plus `atomicWriteJson` (C8).
-
----
+**What people do:** edit 79 tables one at a time as each scenario fails.
+**Why it's wrong:** the swap and the shallow-clone change each alter the request sequence, so each table gets edited twice.
+**Do this instead:** land shallow clone **in the same phase** as the transport swap, or freeze the request shape in a shared step ("the git host receives a clone of X") before the swap.
 
 ## Integration Points
 
 ### External Services
 
-| Service | Integration pattern | Notes |
-|---|---|---|
-| Pi 1.5.0 MCP registry | `pi.registerMcpServer` / `unregisterMcpServer` / `getMcpServers` through the `PiMcpRegistry` view in `platform/pi-api.ts` (NFR-11 chokepoint) | Per runtime. Names `[A-Za-z0-9_-]`, with `-` and `_` folded. `mcp.json` overrides. Invalid configs throw, so validate before registering. The root exports only the types (`McpServerConfig`, `McpExposure`, `RegisteredMcpServer`; Pi dist `index.d.ts:11,32`), not `validateMcpServerConfig`, so wrap each register call in try/catch. |
-| Pi command inventory | `getCommands()` -> `mcp` with `sourceInfo.path === "builtin:mcp"` | Read in `softDepStatus`. |
-| pi-mcp-adapter 7.x | `mcp-adapter.json` (unchanged), `pi-mcp-adapter/status/v1`, `<agentDir>/mcp-onboarding.json` (read only) | Never import the package. The field name `piBuiltinMcpHandledVersion` is a string literal with a conformance test (the `test/integration/mcp-status-conformance.test.ts` precedent). |
-| Pi settings | `<agentDir>/settings.json` `extensions[]` | User scope only. The only edit is removing the exact element `-builtin:mcp`. |
-| pi-subagents 0.84 | `mcp:<serverName>` grants in agent frontmatter | The selector follows the active implementation. Registered servers work in background children only. |
+| Service | Integration Pattern | Notes |
+|---------|---------------------|-------|
+| `git` binary (any host OS) | `spawn` with no shell, through `git-process.ts` | Floor version matters: `--ref-format` needs git 2.45 or later, and `remote.<n>.followRemoteHEAD` needs 2.48. This sandbox has 2.43.0. A missing binary is a new user-visible failure that needs its own reason token and remedy |
+| `ssh` (probe only, plus git's own transport) | `ssh -T -o BatchMode=yes git@github.com` with a short timeout. Exit 1 plus "successfully authenticated" means success | ENOENT (no ssh) means the probe failed, so use HTTPS |
+| User git config (helpers, insteadOf, GIT_SSH_COMMAND) | Read implicitly by git. The probe-skip check reads `git config --get-regexp '^url\..*\.insteadof$'` | That read is itself a local git spawn |
+| GitHub Device Flow endpoints | `fetch` in `domain/github-auth.ts` | Only if kept |
 
 ### Internal Boundaries
 
 | Boundary | Communication | Notes |
-|---|---|---|
-| `index.ts` -> `orchestrators/mcp/session-materialize.ts` | direct call in `session_start` and after `loadReconcile` | The entry may not import domain or bridges-mcp. |
-| `orchestrators/mcp/*` -> `bridges/mcp/builtin-registration.ts`, `bridges/agents/*` | direct (orchestrators may import every bridge) | No bridge imports another bridge. |
-| any zone -> `domain/mcp-implementation.ts` | pure import | Frozen after Phase 1. |
-| `orchestrators/plugin/info*.ts` -> status readers | `McpStatusReader` interface, chosen by snapshot id | `EdgeDeps.mcpStatus: { adapter; builtin }`, frozen in Phase 1. |
-| BLOCK F (network) | none of the new modules touch git or the network | New orchestrator files are gated by default (none join `NETWORK_SEAMS`). |
-| BLOCK C (ledgers) | the new `orchestrators/mcp/*` modules are not ledgers | They must not import a plugin or marketplace ledger. |
+|----------|---------------|-------|
+| orchestrators ↔ `platform/git.ts` | `GitOps` seam (DI) plus three direct tag imports | Remove the `auth` members. Keep the seam so `git-ops-fake.ts` keeps working |
+| `platform/git.ts` ↔ `platform/git-process.ts` | Injected runner | Same zone (`platform`). An ESLint BLOCK C zone restricts the importer |
+| `platform/*` ↔ `shared/*` | Error classes, classifier kinds, redaction, the github host literal | The platform zone may import only `shared` |
+| `domain/clone-key.ts` ↔ `platform/git.ts` | Plain-string candidate list | Declare the candidate type in `shared/`, not in `domain/` |
 
----
+## Suggested Build Order (each phase leaves `npm run check` green)
 
-## 3. Phase decomposition for parallel child sessions
+1. **Harness readiness (no product change).** Rewrite `test/platform/git-test-repository.ts` on system git with the hermetic env. Add `GIT_SSL_CAINFO` to `RpcGitEnvironment` (`features/lib/pi-rpc.ts:49-65`, `:203-214`; `features/support/pi-process.ts:151-156`), plus its `hermetic-git-environment.test.ts` assertions. Allow SHA wants in the stand-in's bare repositories. Move pure types (`RemoteTag`, `ListRemotesResult`) into `shared/` if desired. *Why first:* system-git fixtures work under the current product too, and every later phase needs them.
+2. **Runner and typed errors.** Add `platform/git-process.ts` (env and flag builder, timeout, abort, group kill, redaction, Windows lookup extracted from `package-manager.ts`). Add the `GitCommandError` family and the stderr-kind classifier to `shared/`. Update the child-process allow-list in all three places (rule pack, `gate-targets.ts`, `no-shell-out.test.ts`) and add a BLOCK C zone. The runner has no production consumer yet: wire it into `listRemotes` or `currentBranch` in this phase (a local read, no network) so `fallow dead-code` stays green with no `ignoreExports` entry.
+3. **Transport swap behind an unchanged `GitOps` (keep auth as retry).** Reimplement every `platform/git.ts` verb on the runner. Switch the three name matchers to `instanceof`. Implement GHB-01 as `-c insteadOf`. Keep the `auth?` parameters and implement a `device-flow` bundle as a retry after an `auth`-classified failure, which `approve`s into the helper. The device-flow scenarios already configure `credential.helper = store`, so they stay green. Delete the HTTP client and `git-auth-callbacks.ts`. Re-baseline the cucumber request tables. Land shallow clone, `--depth 1` SHA fetch, and the `--unshallow` fallback **here**, so the tables change once. This is the riskiest phase: it needs a research flag.
+4. **URL forms and transport selection.** `source.ts` accepts scp and `ssh://`. Add scp-aware identity in `clone-key.ts` and the leftover recognizer. Add the SSH probe, HTTPS fallback, SSH retry, `CLAUDE_CODE_PLUGIN_PREFER_HTTPS`, and the probe skip. Each user-visible change needs a cucumber scenario (AGENTS.md "Behavioral tests"). Add the CI or e2e determinism variable.
+5. **Auth surface decision applied.** Without Device Flow, delete `domain/github-auth.ts`, `domain/auth-registry.ts`, `platform/git-credential.ts`, the `auth-host.ts` builders, and the `credentialOps`/`deviceFlowHttp`/`authMemo` threading (23 files), plus the device-flow feature and stand-in. Prune NETWORK_SEAMS, `fetch-chokepoint`, `CREDENTIAL_LEAK_TARGETS` (positional), and the error classes. Rewrite the AAP-02, D-3-04, and D-PL8-12 rule text as "git is non-interactive".
+6. **Failure-message parity and redaction.** Map kinds to Claude Code's wording and remedies (for example "SSH not configured, cloning via HTTPS", missing-git remedy) with the closed reason tokens. Add the stderr redaction tests.
+7. **Submodules, LFS skip, migration, and cleanup.** Add `--recurse-submodules` to clone and the submodule update after a copy checkout. Set `GIT_LFS_SKIP_SMUDGE`. Existing full isomorphic-git clones need no migration, because system git reads them. Stored Device Flow tokens keep working over HTTPS. Remove `isomorphic-git` from `package.json` after the last of the 37 test importers is gone. Turn the rule-pack entry into a total ban. Update `.planning/codebase/*.md`, `README.md`, and `README.es.md`, and record the decision that reverses D-21, plus the NFR-5, NFR-10, and D-MF-01 amendments.
 
-The model is the component-features precedent (`.planning/milestones/component-features-ROADMAP.md:48-198`, `.planning/milestones/component-features-CHILD-SESSION-BRIEF.md`): one serial foundation phase, then parallel phases that each depend only on it, each on its own `features/mcp-builtin-phase-N` branch, merged by the parent.
-
-```text
-W0  Phase 1  Foundation: Pi 1.5.0, the seam, the record field, the frozen harness   (one session)
-W1  Phases 2 3 4 5 6  in parallel                                                    (five sessions)
-    (Phase 5 is small; if the session budget is tight, run it in Phase 4's session)
-```
-
-No closing phase: the parent applies the collected lines at merge, as in the precedent.
-
-### Phase 1: Foundation (serial; everything below is frozen after it)
-
-Internal waves:
-
-1. **Wave 1:** Pi 1.5.0. `package.json` (dev `^1.5.0`, peer `>=1.5.0`, `@earendil-works/pi-ai` exact `1.5.0`, `pi-tui ^1.5.0`), `package-lock.json`, and type fixes in `platform/pi-api.ts`.
-2. **Wave 2, in parallel:**
-   - (a) The domain seam: `domain/mcp-implementation.ts`, the `mcp-server-features.ts` split plus `"sse"`, `domain/mcp-builtin-features.ts`, `domain/name.ts` `builtinMcpServerName`.
-   - (b) The closed-set commit: reason `"requires MCP support"` in `notification-types.ts`, `notification-wire.ts` `REASONS`, `notify-reasons.ts`, `notify-closed-set-locks.test.ts`, `docs/json-output.md`, catalog counters. The exact wording comes from the messaging style guide.
-   - (c) The cucumber harness: profiles in `cucumber.json` (`adapter` and `builtin` over `@mcp`, the default profile excluding `@mcp`), a world parameter `mcpImplementation`, a shared step "Given pi runs with the scripted model and the MCP implementation" (loads the adapter companion in the adapter profile, nothing in the built-in profile; a `none` variant passes `--no-mcp`), `test/e2e/_rpc.ts` `piArguments`, `features/lib/companions.ts`, `scripts/check-features.mjs` tag rules (`@adapter-only`, `@builtin-only`), `package.json` `test:cucumber` running both profiles, and splitting the MCP-07 agent scenario out of `features/mcp-server/invocation.feature` into `features/mcp-server/agent-grants.feature`.
-3. **Wave 3:**
-   - `platform/pi-api.ts` (snapshot field, `hasLoadedBuiltinMcp`, `PiMcpRegistry`, MCP config types).
-   - `persistence/state-io.ts` (`mcpServerConfigs?`), `persistence/locations.ts` (two user-scope paths).
-   - The resolver producer: `declaredMcpServers` in `mcp-resolution.ts`, `plugin-resolver.ts`, `resolver-types.ts`.
-   - `install-outcome.ts` `statePhase` writes the field.
-   - `orchestrators/mcp/{session-materialize,recorded-servers}.ts` plus three no-op step seeds.
-   - `platform/mcp-builtin-status.ts` seed.
-   - `EdgeDeps.mcpStatus` as `{adapter, builtin}`.
-   - `index.ts` wiring.
-4. **Wave 4:** the gate (`npm run check`, whole `test:modules`, both cucumber profiles), decisions, parent lines.
-
-**Visible behavior change in Phase 1: none.** Stored compatibility is still the adapter verdict, the steps are no-ops, and the built-in profile runs the existing MCP features. Tag the features that fail under built-in `@adapter-only` for now; the owning phase removes the tag. That is how the phase stays green.
-
-**Frozen after Phase 1:** `package.json`, `package-lock.json`, `.github/workflows/ci.yml`, `cucumber.json`, `scripts/check-features.mjs`, `scripts/install-test-peers.mjs`, `test/e2e/_rpc.ts`, `features/support/**`, `features/lib/{pi-process,pi-commands,companions,run-tokens,published-marketplace,mcp-stub-server}.ts`, the shared step modules (including `mcp-server/listing.steps.ts` and `companion`), `platform/pi-api.ts`, `domain/mcp-implementation.ts`, `domain/mcp-server-features.ts`, `domain/mcp-builtin-features.ts`, `domain/name.ts` (MCP functions), `persistence/state-io.ts`, `persistence/locations.ts`, `orchestrators/mcp/session-materialize.ts`, `orchestrators/mcp/recorded-servers.ts`, `index.ts`, `edge/register.ts`, the closed-set reason files, `.fallowrc.json`, `rule-packs/architecture.json`.
-
-**Frozen cross-phase interfaces** (the contract each parallel phase codes against):
-
-1. `McpImplementationProfile`, `ActiveMcpImplementation`, `profileFor`, `effectiveMcpCompatibility` signatures (Pattern 1).
-2. `SoftDepStatus.mcpImplementation` and the probe precedence (adapter, then builtin, then none).
-3. `mcpServerConfigs?: {name, config}[]` (pre-substitution Claude form) and `recordedMcpServers(record, reader)` with its legacy fallback.
-4. `resolved.declaredMcpServers: Record<string, unknown>` (all non-malformed, merge order).
-5. Step contracts: `settingsCleanupStep(ctx)`, `builtinRegistrationStep({pi, ctx, snapshot})`, `resyncBuiltinRegistrations(...)`, `agentGrantsStep({ctx, snapshot})`, each returning `Promise<void>`, never throwing.
-6. `PiMcpRegistry { registerMcpServer; unregisterMcpServer; getMcpServers }` and `McpStatusReader.lookup(serverName)`.
-7. `EdgeDeps.mcpStatus: { adapter: McpStatusReader; builtin: McpStatusReader }`.
-8. The cucumber world parameter, the profile tags, and the "MCP implementation" step wording.
-9. The reason literal `"requires MCP support"` (closed set).
-
-### Wave-1 parallel phases: file ownership
-
-| Phase | Goal | Owns (product) | Owns (tests and features) | Must not touch |
-|---|---|---|---|---|
-| **2 Built-in materialization** | Recorded servers connect through built-in on startup and `/reload`, with Claude names, configuration as upstream, trust gating, decision-2 exposure, and the adapter-to-built-in switch with no action | `domain/mcp-builtin-translation.ts` (NEW), `bridges/mcp/builtin-{entry,escape,registration}.ts` (NEW), `bridges/mcp/substitute.ts` (encoder parameter), `orchestrators/mcp/builtin-registration-step.ts`, `docs/mcp-compatibility.md` (built-in column) | `test/bridges/mcp/builtin-*`, `test/domain/mcp-builtin-translation.test.ts`, `test/orchestrators/mcp/builtin-registration-step.test.ts`, `features/mcp-server/{listing,configuration,sources,project-scope,lifecycle,invocation}.feature` (drop `@adapter-only`, add `@builtin-only` cases), new `features/mcp-server/implementation-switch.feature`, steps `mcp-server/{configuration,sources,lifecycle,invocation}.steps.ts`, `features/lib/mcp-server-{files,http,environment}.ts` | resolver, compatibility readers, agents, hooks, settings, frozen files |
-| **3 Read-time verdicts, markers, list and info** | State, reasons, markers, severity and info status follow the active implementation. Stored compatibility is neutral. Consent is split per C6 | `domain/mcp-resolution.ts` and `domain/plugin-resolver.ts` / `resolver-types.ts` (neutral state, from Phase 1), `install-outcome.ts` gate at `:840` only, `update-preflight.ts:514-516`, `list-installed-row.ts`, `plugin-state-classifier.ts`, `info.ts` (compatibility and MCP component functions), `info-mcp-status.ts`, `platform/mcp-builtin-status.ts`, `shared/concerns/soft-dep.ts` (MCP arm), `shared/notify-reasons.ts` `companionSeverity`, the `partial` sites in `enable-disable.ts`, `install-cascade.ts`, `install-flow-results.ts`, `update-swap.ts`, `import/execute.ts` (own function each), `reconcile/convergence.ts`, `reconcile/mcp-migration.ts` | the unit pairs for those files, `features/mcp-server/{companion-missing,invalid-configs}.feature`, steps `mcp-server/{status,invalid-configs}.steps.ts`, the `features/plugin/*` MCP-marker rows they pin | `bridges/**`, `orchestrators/mcp/*` steps, frozen files |
-| **4 Agent grants** | Generated agents carry the active implementation's grant; a switch rewrites them at load, safely | `bridges/agents/convert.ts` (grant and warning), `persistence/agents-index-schema.ts` (+ `agents-index-io.ts` if needed), `orchestrators/mcp/agent-grants-step.ts`, `install-outcome.ts` `agentsPhase` only (`:1300-1330`) | `test/bridges/agents/convert*.test.ts`, `test/persistence/agents-index-*`, `test/orchestrators/mcp/agent-grants-step.test.ts`, `features/mcp-server/agent-grants.feature` and its steps module | `bridges/mcp/**`, `bridges/hooks/**`, verdict readers |
-| **5 Hook and tool naming** | Hooks on built-in MCP tools fire under `mcp__plugin_<p>_<s>__<t>`; the `-` divergence is recorded and pinned; the adapter proxy rule applies only under the adapter | `bridges/hooks/dispatch.ts` (`isMcpProxyCall` and its callers only), `docs/hooks-compatibility.md` (MCP row) | `test/bridges/hooks/dispatch*` cases for the proxy, `features/hook/mcp-tool-names.feature` (NEW) and `hook/mcp-tool-names.steps.ts` (NEW) | `domain/components/hooks/**` unless a fix is unavoidable (then a parent line), everything MCP outside hooks |
-| **6 Settings cleanup** | Decision 1: the adapter's `-builtin:mcp` goes away when the adapter is gone; the user's own entries never do | `transaction/with-state-guard.ts` (`withPiSettingsLock`), `orchestrators/mcp/settings-cleanup-step.ts`, NEW `orchestrators/mcp/pi-settings-cleanup.ts` (pure decision plus edit), NEW `platform/mcp-onboarding-state.ts` (read-only reader of the adapter file) | their unit pairs, `test/integration/mcp-onboarding-conformance.test.ts` (NEW), `features/mcp-server/builtin-settings.feature` (NEW), `features/lib/pi-settings-files.ts` (NEW) and its steps | everything else. The NFR-10 and "never edit Pi settings" amendments in PROJECT.md are parent lines |
-
-The feature-file split mirrors the "own feature file and step module" rule. Every MCP feature is tagged `@mcp`, so both profiles run it. A scenario whose expectation differs per implementation (for example the adapter's `mcp` proxy search against built-in's `tool_search`) becomes an `@adapter-only` / `@builtin-only` pair in the same file, owned by the same phase. Each phase removes the `@adapter-only` tags that Phase 1 placed on its own files.
-
-### Milestone rules to carry over (with MCP-specific additions)
-
-- Never edited by a child: `CHANGELOG.md`, `README*.md`, PROJECT.md Key Decisions (`D-MB-*`), `BACKLOG.md`. Children list "Parent lines".
-- Closed sets are append-only. Phase 1 adds the one new reason. A later phase that needs another reason lands it as its own commit, and the merge keeps both entries.
-- Own arm only: `soft-dep.ts` (Phase 3 only), `domain/name.ts` (frozen), `install-outcome.ts` (Phase 1 `statePhase`, Phase 3 gate, Phase 4 `agentsPhase`; each stays inside its own function).
-- Every user-visible change ships a cucumber scenario that fails without it, under the profile(s) where it applies. Record the red proof per profile.
-- The phase gate runs `npm run check`, plus `npm run test:cucumber` under **both** profiles, plus the whole `test:modules`.
-
-### Merge procedure (suggested order, lowest conflict first)
-
-Phase 6 (isolated files), then Phase 5 (hooks only), then Phase 4, then Phase 2, then Phase 3 last. Phase 3 touches the most shared orchestrator files and changes outcomes that other phases' scenarios pin (markers, `partially-installed`). After each merge, run `npm run check` and both cucumber profiles on the combined tree. After Phase 3 merges, re-verify Phase 2's `implementation-switch.feature`, because the switch scenario asserts the state flip that Phase 3 delivers. Rerun `npx fallow dupes` after merging Phase 2: `builtin-entry.ts` and `adapter-entry.ts` and the two escape modules are likely clone pairs that need reviewed markers.
-
----
-
-## 4. Build order and dependencies
-
-```text
-Phase 1 W1 Pi 1.5.0 ──► W2 seam types │ closed-set reason │ cucumber profiles ──► W3 snapshot + record producer
-                                                                                     + steps seeds + index wiring ──► W4 gate
-        │
-        ├──► Phase 2 needs: profile.serverName, recorded-servers, PiMcpRegistry, snapshot, step seed
-        ├──► Phase 3 needs: effectiveMcpCompatibility, declaredMcpServers, snapshot, reason, readers seam
-        ├──► Phase 4 needs: profile.grantSelector, snapshot, step seed
-        ├──► Phase 5 needs: snapshot (hook runs already open a run), profile.toolNamePrefix
-        └──► Phase 6 needs: locations paths, step seed
-```
-
-Dependency notes:
-
-1. **Pi 1.5.0 comes first** because `PiMcpRegistry` and the `McpServerConfig` types are taken from 1.5.0's declarations, and `pi-schema` validation changes can break the type fixes. The extension uses no `Type.Refine`, BigInt, Undefined or codecs, per the brief.
-2. **The record producer is in Phase 1, not a parallel phase,** because Phase 2's scenarios need records that hold every server, and Phase 3's scenarios need `declaredMcpServers`. It is additive and changes no output, so the foundation stays small.
-3. **Phase 3 is the critical path** of wave 1 (the most files, the semantic change). Start it first, and do not let Phase 2 wait on it: Phase 2 asserts connection and naming, not the state reasons.
-4. **Research flags** (resolve inside the owning phase's discuss step):
-   - Phase 2: how Claude Code sets `cwd` for plugin stdio servers; the built-in `${VAR:-default}` strategy (Pi has no default syntax, so resolve at registration from the session env); whether to write `${VAR}` references or values (secrets in `/mcp` output); `timeout` ms to s rounding; `callbackPort` -> `callbackUrl http://localhost:<port>/callback` to keep Claude's redirect URI.
-   - Phase 3: what "none" means for the partial state (a neutral table plus the marker is recommended).
-   - Phase 4: how to detect a pi-subagents background child.
-   - Phase 6: the onboarding-state authorship ambiguity and the first-session gap (C8a, C8b).
-   - Phase 3/2: whether built-in lists deferred tools in `getAllTools()` before `tool_search`, for the status reader.
-
----
+**Ordering rationale:** fixtures before transport, because tests must run against real git before the product does. Runner before transport, because the allow-list change is isolated and reviewable. The swap keeps the `GitOps` and auth shapes, so the blast radius is `platform/` plus tests and the 23-file auth cleanup stays separate. URL forms come after the swap, because isomorphic-git has no SSH transport and cannot test them. The Device Flow decision lands last among behavior changes, because the retry shim keeps phases 3 and 4 green whichever way discuss decides.
 
 ## Sources
 
-- This repo (read directly): `index.ts`, `platform/pi-api.ts`, `platform/mcp-status.ts`, `shared/concerns/soft-dep.ts`, `shared/notification-run.ts`, `shared/notify-reasons.ts`, `domain/mcp-server-features.ts`, `domain/mcp-resolution.ts`, `domain/plugin-resolver.ts`, `domain/name.ts`, `bridges/mcp/{index,types,stage,adapter-entry,substitute}.ts`, `bridges/agents/convert.ts`, `bridges/hooks/dispatch.ts`, `bridges/hooks/hook-env.ts`, `persistence/state-io.ts`, `persistence/agents-index-schema.ts`, `orchestrators/plugin/{install-outcome,info,info-mcp-status,list-installed-row,plugin-state-classifier}.ts`, `orchestrators/reconcile/{convergence,mcp-migration}.ts`, `.fallowrc.json`, `test/e2e/_rpc.ts`, `cucumber.json`. Confidence HIGH.
-- Pi 1.5.0 (`npm pack @earendil-works/pi-coding-agent@1.5.0`): `docs/extensions.md` (lifecycle diagram, `resources_discover`, `mcp_servers_change`, "MCP Servers"), `docs/mcp.md` (names, `${}` and `!cmd`, "Replace the built-in MCP support"), `dist/core/agent-session.js:2678-2710,3016-3048`, `dist/core/extensions/runner.js:242-246,503-520`, `dist/extensions/mcp/index.js:224-262,971-1110`, `dist/extensions/mcp/runtime.js:39-70`, `dist/core/resolve-config-value.js`, `dist/core/settings-manager.js:120-170`, `dist/core/package-manager.js:764-770`, `dist/core/source-info.js`, `dist/core/mcp-servers.d.ts`. Confidence HIGH (primary source).
-- pi-mcp-adapter 7.0.0 (`npm pack`): `pi-builtin-mcp.ts`, `onboarding-state.ts`, `index.ts:1259,1365,1406,1705`. Confidence HIGH.
-- pi-subagents 0.84.0 (`npm pack`): `docs/agents.md:450,573`, `CHANGELOG.md:440,480,507,530`, `docs/extension-api.md:294`. Confidence HIGH for the documented behavior; the child-detection mechanism was not found (flag).
-- Precedent: `.planning/milestones/component-features-ROADMAP.md:48-198` (Parallelism, File ownership, Frozen after Phase 1, Milestone rules, Merge procedure), `.planning/milestones/component-features-CHILD-SESSION-BRIEF.md`.
+- Codebase (HIGH): `extensions/pi-claude-marketplace/platform/git.ts`, `platform/git-auth-callbacks.ts`, `platform/git-credential.ts`, `platform/package-manager.ts`, `orchestrators/marketplace/{shared,add,update}.ts`, `orchestrators/plugin/{clone-cache,git-source-probe,update-flow,update-preflight,dependency-tag-probe,marketplace-tag-probe}.ts`, `orchestrators/auth-host.ts`, `domain/{source,clone-key,auth-registry,github-auth}.ts`, `shared/{github-base-url,git-failure-classifiers,errors}.ts`, `eslint.config.js`, `rule-packs/architecture.json`, `test/architecture/{gate-targets,no-shell-out.test,hermetic-git-environment.test,marketplace-tag-probe-offline.test}.ts`, `test/platform/{git-ops-fake,git-test-repository}.ts`, `test/integration/auth-e2e.test.ts`, `features/lib/https-git-host/{server,cgi}.ts`, `features/lib/hermetic-git.ts`, `features/lib/pi-rpc.ts`, `features/support/pi-process.ts`, `features/lib/github-device-flow/extension.ts`, `features/step_definitions/git-host.steps.ts`
+- Upstream (LOW per the classify-confidence seam; re-verify against the Claude Code 2.1.330 binary): https://code.claude.com/docs/en/plugins/host-marketplace.md, sections "Grant access to a private marketplace", "What background auto-update does with credentials", and "Keep plugin files out of Git LFS"
+- `.planning/PROJECT.md`, Current Milestone: system-git
 
 ---
-*Architecture research for: mcp-builtin (Pi built-in MCP as an equal alternative to pi-mcp-adapter)*
-*Researched: 2026-11-04*
+*Architecture research for: system-git transport in pi-claude-marketplace*
+*Researched: 2026-11-22*
