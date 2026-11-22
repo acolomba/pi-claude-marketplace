@@ -18,7 +18,6 @@
  */
 
 import assert from "node:assert/strict";
-import { rm } from "node:fs/promises";
 
 import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
@@ -62,15 +61,16 @@ Given(
 
 // A profile Pi's environment is fixed when it starts, so a command that reads
 // a variable, such as an install that withholds a credential (AVAR-05), runs
-// in a Pi started with it. The variable is never set in this worker.
+// in a Pi started with it. The variable is never set in this worker. The
+// launch file lies in the sandbox home, which the next scenario's `Before()`
+// empties, so no release removes it.
 Given(
   "pi runs with the scripted model, the mcp implementation, and the environment variable {string} set to {string}",
   { timeout: PROFILE_PI_START_TIMEOUT_MS },
   async function (this: ScenarioWorld, variable: string, value: string) {
     const variables = { [variable]: value };
     const launch = mcpImplementationLaunch(this.mcpProfile);
-    const file = await writeLaunchEnvironment(this.tokens.home, variables);
-    this.onRelease(() => rm(file, { force: true }));
+    await writeLaunchEnvironment(this.tokens.home, variables);
     await this.usePiWithProfile({
       ...launch,
       extraExtensions: [...launch.extraExtensions, PI_LAUNCH_ENVIRONMENT_EXTENSION],
