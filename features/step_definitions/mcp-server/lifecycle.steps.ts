@@ -3,12 +3,13 @@
  * across the plugin verbs that rewrite its entry, including a request timeout
  * the user wrote (D-08-01, D-08-02, D-CF6-09, D-PG1-11), the fields the user
  * wrote that beat this extension's defaults or that the closed table never
- * writes (D-PG9-03, D-PG9-05), and an entry as release 0.23.0 wrote it, before
- * any default (D-PG9-04).
+ * writes (D-PG9-03, D-PG9-05), an entry as release 0.23.0 wrote it, before
+ * any default (D-PG9-04), the user's enable of a server the user had disabled,
+ * and the whole mcp-adapter.json file as the user keeps it (AFILE-06, D-08-02).
  */
 
 import assert from "node:assert/strict";
-import { readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { Given } from "@cucumber/cucumber";
@@ -17,6 +18,8 @@ import {
   writeMcpAdapterOverride,
   writeRelease0230McpAdapterEntry,
 } from "../../lib/mcp-server-files.ts";
+import { expandTokens } from "../../lib/run-tokens.ts";
+import { writeScenarioFile } from "../../lib/scenario-file.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -86,5 +89,16 @@ Given(
     const text = `${JSON.stringify({ ...doc, mcpServers: { ...servers, [key]: enabled } }, null, 2)}\n`;
     await writeFile(file, text);
     assert.strictEqual(await readFile(file, "utf8"), text);
+  },
+);
+
+// The whole file as the user keeps it, such as a choice another plugin
+// stored (D-08-02). The file must not exist yet.
+Given(
+  "the user has written the mcp-adapter.json file of the {word} scope with this text:",
+  async function (this: ScenarioWorld, scope: string, text: string) {
+    const file = path.join(this.scopeRoot(scope), "mcp-adapter.json");
+    await mkdir(path.dirname(file), { recursive: true });
+    await writeScenarioFile(this, file, expandTokens(text, this.tokens));
   },
 );
