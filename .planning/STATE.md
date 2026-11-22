@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: integration-rescope
 milestone_name: Integration Test Rescope
-current_phase: 06
-current_phase_name: Hooks and Auth
-status: executing
-stopped_at: Phase 05 complete, ready to verify Phase 6
-last_updated: "2026-11-22T11:24:00.799Z"
+current_phase: 7
+current_phase_name: Path-Source Dependency Tags
+status: verifying
+stopped_at: Phase 06 complete, ready to verify Phase 7
+last_updated: "2026-11-22T15:18:44.424Z"
 last_activity: 2026-11-22
-last_activity_desc: Phase 06 execution started
-state_head: 2e28093e013dd2de35e142eca56f3f4a8b628a68
+last_activity_desc: Phase 06 complete, transitioned to Phase 7
+state_head: b61c7f2b6eab28a3e05eb088ee2baf340b2c6055
 progress:
   total_phases: 8
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 17
-  completed_plans: 15
-  percent: 63
+  completed_plans: 17
+  percent: 75
 ---
 
 # Project State
@@ -31,12 +31,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 06 (Hooks and Auth) — EXECUTING
-Plan: 1 of 2
-Status: Executing Phase 06
-Last activity: 2026-11-22 — Phase 06 execution started
+Phase: 7 of 8 (Path-Source Dependency Tags)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-11-22 — Phase 06 complete, transitioned to Phase 7
 
-Progress: [██████░░░░] 63%
+Progress: [████████░░] 75%
 
 
 ### parity-gaps closeout: `override_closeout`

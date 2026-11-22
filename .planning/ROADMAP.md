@@ -118,7 +118,7 @@ them at the merge.
 - [x] **Phase 3: Marketplace Layers and Cross-Scope Install** - Scenarios prove the marketplace layer rules and a project install that adds a user marketplace to the project (completed 2026-11-21)
 - [x] **Phase 4: Prune** - Scenarios prove the `prune` cases a user can see that the suite left out (completed 2026-11-22)
 - [x] **Phase 5: MCP Install, Legacy Move, and Overrides** - Scenarios prove the MCP install refusals and warnings, the legacy `mcp.json` move, and the pi-mcp-adapter override cases (completed 2026-11-22)
-- [ ] **Phase 6: Hooks and Auth** - Scenarios prove hooks in both scopes after `apply`, a reload that clears buffered context, no `.pi` directory from a hook dispatch, and the print-mode and credential-eviction sign-in cases
+- [x] **Phase 6: Hooks and Auth** - Scenarios prove hooks in both scopes after `apply`, a reload that clears buffered context, no `.pi` directory from a hook dispatch, and the print-mode and credential-eviction sign-in cases (completed 2026-11-22)
 - [ ] **Phase 7: Path-Source Dependency Tags** - A step publishes a marketplace repository with a tag, and scenarios prove that a constrained path-source dependency installs from that tag, with the TAGS-02 fallback
 - [ ] **Phase 8: Integration Suite Rescope** - Every case left in `test/integration/` is conformance, a race, or internal, each file says what it guards, the charter is written down, and `npm run check` passes on the combined tree
 
@@ -309,7 +309,7 @@ Plans:
   1. With hook plugins installed in both scopes, their hooks still run after `/claude:plugin apply` and after a load. The scenarios pass under both profiles, fail under a deliberate break, and `hooks-cross-scope-reconcile` no longer exists (ITMIG-12).
   2. A `/reload` before the first prompt drops the SessionStart context buffered before it, and a hook dispatch in a project that had no `.pi` directory leaves none behind (WR-05). The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `hooks-additionalcontext-end-to-end` and `hooks-dispatch-end-to-end` (ITMIG-12).
   3. In print mode, a `marketplace add` that needs a sign-in refuses with its remedy and leaves no staged clone behind. When the git host rejects the stored credential, the credential is evicted and the next clone signs in through Device Flow again (AUTH-07). The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `auth-e2e` (ITMIG-13).
-**Plans**: 2/2 plans executed
+**Plans**: 2/2 plans complete
 
 Plans:
 - [x] 06-01-PLAN.md -- Wave 1: the ESRCH and partial-line harness race fixes as the first two commits, the WR-05, load, apply, and reload scenarios in `hook/{session,lifecycle,additional-context}.feature` with the new `project.steps.ts` step, breaks X1 to CH2 (H4a the control), then delete `hooks-cross-scope-reconcile` and `hooks-additionalcontext-end-to-end`, trim `hooks-dispatch-end-to-end` to its throwing-hydrate case, and run the full adapter suite twice (ITMIG-12)
@@ -350,7 +350,7 @@ Plans:
 | 3. Marketplace Layers and Cross-Scope Install | 4/4 | Complete    | 2026-11-21 |
 | 4. Prune | 2/2 | Complete    | 2026-11-22 |
 | 5. MCP Install, Legacy Move, and Overrides | 3/3 | Complete    | 2026-11-22 |
-| 6. Hooks and Auth | 2/2 | In Progress | - |
+| 6. Hooks and Auth | 2/2 | Complete    | 2026-11-22 |
 | 7. Path-Source Dependency Tags | 0/TBD | Not started | - |
 | 8. Integration Suite Rescope | 0/TBD | Not started | - |
 

@@ -34,8 +34,8 @@ Each ITMIG requirement is met only when all of these hold:
 - [x] **ITMIG-09**: Scenarios cover the MCP install refusals and warnings: a literal `~/` in stdio args refused as `{unsupported mcp}` and left out under `--partial`, the warning that tool permission rules are not enforced, AVAR-04 notices on update, reinstall, and enable, AVAR-05 (a deny-listed credential withheld with a notice), `${CLAUDE_PROJECT_DIR}`, `!` escaped to `!!`, a secret value kept out of `mcp-adapter.json`, and D-PG10-11 entries holding a reference and no option value in all five fields.
 - [x] **ITMIG-10**: Scenarios cover the legacy `mcp.json` move: the install-time sweep (AMIG-02) of marked entries, old-name stubs, and direct-tools copies, with the user's own servers kept; one notice for both scopes with project rows first; the AMIG-04 unowned-entry warnings; undeclared, unsupported, and malformed entries; a plugin that lists as partially installed after the move; a load with a cold clone cache; the stub notice; the user-scope stub removed from the project file; a user-scope install that leaves the project `mcp-adapter.json` alone; and the `list` row of a legacy record with no MCP trace.
 - [x] **ITMIG-11**: Scenarios cover the pi-mcp-adapter override cases: a project install that keeps a user stub and writes it back on uninstall, a user plugin disabled in the project, an `/mcp-adapter enable` that survives, an update that drops a server and a later version that restores its choice, `openUi` and trace kept on reinstall, carried fields written back with the values the entry holds at uninstall, the ANAME-07 stub timeout, a foreign `serverChoices` key left alone, and an emptied stub removed.
-- [ ] **ITMIG-12**: Scenarios cover the hook cases: hook plugins in both scopes still run after an `apply` and after a load, a reload before the first prompt drops buffered SessionStart context, and a hook dispatch creates no `.pi` directory in a project that had none.
-- [ ] **ITMIG-13**: Scenarios cover the auth cases: a print-mode `marketplace add` that needs a sign-in refuses and leaves no staging behind, and a host that rejects the stored credential leads to the credential being evicted and a new Device Flow sign-in.
+- [x] **ITMIG-12**: Scenarios cover the hook cases: hook plugins in both scopes still run after an `apply` and after a load, a reload before the first prompt drops buffered SessionStart context, and a hook dispatch creates no `.pi` directory in a project that had none.
+- [x] **ITMIG-13**: Scenarios cover the auth cases: a print-mode `marketplace add` that needs a sign-in refuses and leaves no staging behind, and a host that rejects the stored credential leads to the credential being evicted and a new Device Flow sign-in.
 
 ### Rescope (ITSCOPE)
 
@@ -73,8 +73,8 @@ None.
 | ITMIG-09 | Phase 5 | Complete |
 | ITMIG-10 | Phase 5 | Complete |
 | ITMIG-11 | Phase 5 | Complete |
-| ITMIG-12 | Phase 6 | Pending |
-| ITMIG-13 | Phase 6 | Pending |
+| ITMIG-12 | Phase 6 | Complete |
+| ITMIG-13 | Phase 6 | Complete |
 | ITSCOPE-01 | Phase 8 | Pending |
 | ITSCOPE-02 | Phase 8 | Pending |
 | ITSCOPE-03 | Phase 8 | Pending |

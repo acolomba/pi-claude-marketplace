@@ -1,7 +1,7 @@
 ---
 phase: 06-hooks-and-auth
 verified: 2026-11-22T14:20:00Z
-status: human_needed
+status: passed
 score: 9/9 must-haves verified
 covered_files:
   - .planning/phases/06-hooks-and-auth/06-01-PLAN.md
@@ -26,17 +26,16 @@ covered_files:
 covered_digest: "v4:sha256:7f5723ae93e09cbc8a141f3039cf8af5dba4ff91bd47c15ce1ac0dafb99a9d40"
 behavior_unverified: 0
 overrides_applied: 0
-human_verification:
-  - test: "Decide whether deleting the HOOK-E2E-04 integration case (hooks-additionalcontext-end-to-end.test.ts:272) stands while the parity question is open"
-    expected: "Either the user accepts AC1 (additional-context.feature:230) pinning the documented /reload drop and the deletion (record an override), or the user asks for upstream research first and the case is restored until the answer"
-    why_human: "ROADMAP milestone rule 'Upstream parity' says a case that would pin an unlicensed divergence goes to the user as a question and its integration case stays until the user answers. AC1 names no decision ID, CONTEXT [HOOK-E2E-04 parity] was decided autonomously (not by the user) and defers the question to the milestone end, and D-CF5-03/D-CF5-13 suggest upstream may keep the context. Whether the drop is a divergence at all is an upstream fact a grep cannot settle."
+human_verification_resolved:
+  - item: "HOOK-E2E-04 deletion while the parity question is open"
+    resolution: "User decision 2026-11-22: research upstream first. The integration case is restored (ea41268) with a header naming the open question; the scenario at additional-context.feature:230 stays."
 ---
 
 # Phase 6: Hooks and Auth Verification Report
 
 **Phase Goal:** Cucumber scenarios prove that hooks in both scopes still run after `apply` and after a load, that a reload before the first prompt clears buffered SessionStart context, that a hook dispatch creates no `.pi` directory, and that a print-mode sign-in refuses cleanly and a rejected credential is replaced; the integration cases they replace are gone.
 **Verified:** 2026-11-22T14:20:00Z
-**Status:** human_needed (all truths verified; one governance decision on the HOOK-E2E-04 deletion)
+**Status:** passed (all truths verified; the HOOK-E2E-04 governance item was resolved by the user on 2026-11-22: research upstream first, integration case restored in ea41268)
 **Re-verification:** No, initial verification
 
 ## Goal Achievement
