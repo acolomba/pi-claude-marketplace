@@ -66,3 +66,46 @@ Feature: Hook lifecycle
     Then the hooks record these runs:
       | event      | session | tool name | tool use id  | tool input                    | cwd           | transcript path | arguments   | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | PreToolUse | first   | Bash      | {tool use 1} | {"command":"echo from-model"} | {project dir} |                 | fresh-guard | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+
+  Scenario: A load keeps the hooks of the plugins in both scopes running (DISP-02)
+    Given the marketplace "shared" is published as a dir source
+    Given the marketplace "shared" offers these plugins:
+      | name  | version |
+      | audit | 1.0.0   |
+    Given the published plugin "audit" of the marketplace "shared" has these hooks, each recording its runs:
+      | name  | event      | matcher |
+      | watch | PreToolUse | Bash    |
+    Given the marketplace "shared" is added to the user scope
+    Given the user has run "/claude:plugin install audit@shared --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                      |
+      |       | bash | {"command": "echo from-model"} |
+      | Done. |      |                                |
+    When the user prompts "run the echo"
+    Then the hooks record these runs in any order:
+      | event      | session | tool name | tool use id  | tool input                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {tool use 1} | {"command":"echo from-model"} | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PreToolUse | first   | Bash      | {tool use 1} | {"command":"echo from-model"} | {project dir} |                 | watch     | {project dir}      | {home}/marketplaces/shared/plugins/audit  | {agent dir}/pi-claude-marketplace/data/shared/audit        | first                  | first             | 1          |
+
+  Scenario: An apply keeps the hooks of the plugins in both scopes running (DISP-02)
+    Given the marketplace "shared" is published as a dir source
+    Given the marketplace "shared" offers these plugins:
+      | name  | version |
+      | audit | 1.0.0   |
+    Given the published plugin "audit" of the marketplace "shared" has these hooks, each recording its runs:
+      | name  | event      | matcher |
+      | watch | PreToolUse | Bash    |
+    Given the marketplace "shared" is added to the user scope
+    Given the user has run "/claude:plugin install audit@shared --scope user"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply | tool | arguments                      |
+      |       | bash | {"command": "echo from-model"} |
+      | Done. |      |                                |
+    Given the user has run "/claude:plugin apply"
+    When the user prompts "run the echo"
+    Then the hooks record these runs in any order:
+      | event      | session | tool name | tool use id  | tool input                    | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | PreToolUse | first   | Bash      | {tool use 1} | {"command":"echo from-model"} | {project dir} |                 | guard     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | first                  | first             | 1          |
+      | PreToolUse | first   | Bash      | {tool use 1} | {"command":"echo from-model"} | {project dir} |                 | watch     | {project dir}      | {home}/marketplaces/shared/plugins/audit  | {agent dir}/pi-claude-marketplace/data/shared/audit        | first                  | first             | 1          |
