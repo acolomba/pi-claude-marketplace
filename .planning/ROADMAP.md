@@ -288,12 +288,12 @@ Plans:
   2. AVAR-04 notices follow the result rows on `update`, `reinstall`, and `enable`; a deny-listed credential is withheld with a notice (AVAR-05); `${CLAUDE_PROJECT_DIR}` reaches the server expanded; `!` is written as `!!`; and a secret value never appears in `mcp-adapter.json`. The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `mcp-variable-expansion` (ITMIG-09).
   3. An install removes a plugin's marked entries, old-name stubs, and direct-tools copies from a legacy `mcp.json` and keeps the user's own servers (AMIG-02). A load that moves both scopes shows one notice, with the project rows first, warns about unowned entries (AMIG-04), reports undeclared, unsupported, and malformed entries, and leaves a plugin that lists as partly installed. The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `mcp-legacy-sweep`, `mcp-migration`, and `mcp-verdict-migration` (ITMIG-10).
   4. Under pi-mcp-adapter, a project install keeps a user stub and writes it back on uninstall, a user plugin disabled in the project stays disabled through install, update, reinstall, and uninstall, an `/mcp-adapter enable` survives, an update that drops a server keeps its choice and a later version that restores the server restores the choice, and `openUi` and `trace` survive a reinstall. The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `mcp-override-lifecycle` (ITMIG-11).
-**Plans**: 3 plans
+**Plans**: 3/3 plans executed
 
 Plans:
-- [ ] 05-01-PLAN.md -- Wave 1: eight AVAR and ANAME-07 scenarios and three Outline rows in `mcp-server/configuration.feature`, the D-PG10-11 scenario in `mcp-server/options.feature`, the environment-variable profile Pi Given, breaks M1 to M10 under both profiles, then delete `mcp-home-path-partial`, `mcp-tool-rules`, and `mcp-variable-expansion` (ITMIG-09)
-- [ ] 05-02-PLAN.md -- Wave 1: sixteen sweep and move scenarios in `mcp-server/legacy-move.feature` and three list scenarios in `mcp-server/verdict-list.feature`, two new Givens, breaks L1b to L15, M2, and V1 to V3b under both profiles, then delete `mcp-legacy-sweep` and trim `mcp-migration`, `mcp-verdict-migration`, and `mcp-verdict-list` (ITMIG-10)
-- [ ] 05-03-PLAN.md -- Wave 1: twenty-five override and choice scenarios in `mcp-server/lifecycle.feature`, two new Givens, breaks O1 to O10 under both profiles, then delete `mcp-override-lifecycle` (ITMIG-11)
+- [x] 05-01-PLAN.md -- Wave 1: eight AVAR and ANAME-07 scenarios and three Outline rows in `mcp-server/configuration.feature`, the D-PG10-11 scenario in `mcp-server/options.feature`, the environment-variable profile Pi Given, breaks M1 to M10 under both profiles, then delete `mcp-home-path-partial`, `mcp-tool-rules`, and `mcp-variable-expansion` (ITMIG-09)
+- [x] 05-02-PLAN.md -- Wave 1: sixteen sweep and move scenarios in `mcp-server/legacy-move.feature` and three list scenarios in `mcp-server/verdict-list.feature`, two new Givens, breaks L1b to L15, M2, and V1 to V3b under both profiles, then delete `mcp-legacy-sweep` and trim `mcp-migration`, `mcp-verdict-migration`, and `mcp-verdict-list` (ITMIG-10)
+- [x] 05-03-PLAN.md -- Wave 1: twenty-five override and choice scenarios in `mcp-server/lifecycle.feature`, two new Givens, breaks O1 to O10 under both profiles, then delete `mcp-override-lifecycle` (ITMIG-11)
 
 **Cross-cutting constraints:** <!-- gsd:generated -->
 - When the plan ends, its commits change only the files of `files_modified` and `files_deleted`, no file under `extensions/` changed, and `git status --porcelain -- extensions/ features/ test/` prints nothing.
@@ -345,7 +345,7 @@ Plans:
 | 2. Plugin Layers, Names, and List Fold | 4/4 | Complete    | 2026-11-21 |
 | 3. Marketplace Layers and Cross-Scope Install | 4/4 | Complete    | 2026-11-21 |
 | 4. Prune | 2/2 | Complete    | 2026-11-22 |
-| 5. MCP Install, Legacy Move, and Overrides | 0/3 | Not started | - |
+| 5. MCP Install, Legacy Move, and Overrides | 3/3 | In Progress | - |
 | 6. Hooks and Auth | 0/TBD | Not started | - |
 | 7. Path-Source Dependency Tags | 0/TBD | Not started | - |
 | 8. Integration Suite Rescope | 0/TBD | Not started | - |
