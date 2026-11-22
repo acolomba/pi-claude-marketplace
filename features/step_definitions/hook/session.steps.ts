@@ -476,6 +476,21 @@ When(
   },
 );
 
+// The terminal Pi starts beside the profile Pi in the same sandbox and plays
+// its script. The step waits for the startup SessionStart run, so the turn
+// holds that run and a later reload cannot overtake it.
+When(
+  "the user starts pi in the terminal with the scripted model and the hooks recording",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    const harness = this.profileHarness();
+    await recordTerminalAction(this, "start", async () => {
+      await this.startTuiSession("scripted");
+      await waitForStartupRun(harness);
+    });
+  },
+);
+
 When(
   "the user starts pi again with the hooks recording",
   { timeout: PROFILE_PI_START_TIMEOUT_MS },

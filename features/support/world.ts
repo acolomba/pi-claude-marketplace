@@ -995,6 +995,11 @@ export class ScenarioWorld extends World {
     return tui;
   }
 
+  /** Returns the contained TUI this scenario started, or nothing when none started. */
+  startedTuiSession(): PiTuiSession | undefined {
+    return this.tuiSession;
+  }
+
   /** Returns the contained TUI this scenario started. */
   requireTuiSession(): PiTuiSession {
     if (this.tuiSession === undefined) {

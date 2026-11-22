@@ -139,18 +139,19 @@ When("the user prompts {string}", async function (this: ScenarioWorld, text: str
   this.recordTurn({ prompt, disposition, records, logs });
 });
 
-// Pi offers `/reload` only in the terminal, so the step starts a terminal Pi
-// with the scripted model beside the profile Pi, in the same sandbox, where it
-// plays the profile Pi's script (D-CF2-05). Pi reports the reload done only
-// after the new extensions' session handlers ran, and the turn keeps every
-// stand-in log line from the reload on.
+// Pi offers `/reload` only in the terminal, so the step reloads the terminal
+// Pi the scenario started, which a step started with the scripted model, or
+// else starts one with the scripted model beside the profile Pi, in the same
+// sandbox, where it plays the profile Pi's script (D-CF2-05). Pi reports the
+// reload done only after the new extensions' session handlers ran, and the
+// turn keeps every stand-in log line from the reload on.
 When(
   "the user reloads pi in the terminal and then prompts {string}",
   { timeout: TERMINAL_RELOAD_STEP_TIMEOUT_MS },
   async function (this: ScenarioWorld, text: string): Promise<void> {
     const harness = this.profileHarness();
     const reply = await lastScriptReply(harness);
-    const tui = await this.startTuiSession("scripted");
+    const tui = this.startedTuiSession() ?? (await this.startTuiSession("scripted"));
     const lengths = await readLogLengths(harness);
     await tui.reload();
     const prompt = expandTokens(text, this.tokens);

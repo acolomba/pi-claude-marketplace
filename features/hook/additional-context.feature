@@ -241,6 +241,10 @@ Feature: Hook additional context
     Given the scripted model plays these steps:
       | reply | tool | arguments |
       | Done. |      |           |
+    When the user starts pi in the terminal with the scripted model and the hooks recording
+    Then the hooks record these runs:
+      | event        | session | source  | model  | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_ENV_FILE                                                           | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | SessionStart | first   | startup | faux-1 | {project dir} |                 | primer    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | {project dir}/.pi/pi-claude-marketplace/data/_shared/claude-env-first.env | first                  | first             | 1          |
     When the user reloads pi in the terminal and then prompts "hello there"
     Then the model receives these calls:
       | call | role | text        |
