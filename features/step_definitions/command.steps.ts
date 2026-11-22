@@ -207,6 +207,13 @@ Then(
   },
 );
 
+Then(
+  "pi's print mode exits with code {int} and prints nothing",
+  function (this: ScenarioWorld, exitCode: number) {
+    assert.deepStrictEqual(printModeOutput(this), { exitCode, stdout: "", stderr: "" });
+  },
+);
+
 Then("the result has these fields:", function (this: ScenarioWorld, table: DataTable) {
   const stated = table.raw().map(([name]) => String(name));
   const fields = envelopeFields(this.lastResult(), this.tokens);
