@@ -1206,6 +1206,8 @@ Feature: MCP server lifecycle
       }
 
       """
+    Then the mcp configuration file "mcp.json" of the project scope does not exist
+    Then the mcp configuration file "mcp.json" of the user scope does not exist
 
   @mcp
   Scenario: An uninstall writes the user's override of a plugin server's key back as the user wrote it (AFILE-06)
@@ -1247,6 +1249,8 @@ Feature: MCP server lifecycle
       }
 
       """
+    Then the mcp configuration file "mcp.json" of the project scope does not exist
+    Then the mcp configuration file "mcp.json" of the user scope does not exist
 
   @mcp
   Scenario: A project install of a plugin the user scope also installs keeps the project's disable stub and leaves the user scope's files alone (AFILE-06)
@@ -1304,6 +1308,7 @@ Feature: MCP server lifecycle
       }
 
       """
+    Then the mcp configuration file "mcp.json" of the project scope does not exist
     Then the files of the user scope are unchanged
 
   @mcp
@@ -1365,6 +1370,7 @@ Feature: MCP server lifecycle
       }
 
       """
+    Then the mcp configuration file "mcp.json" of the project scope does not exist
     Then the files of the user scope are unchanged
 
   @mcp
@@ -1423,6 +1429,7 @@ Feature: MCP server lifecycle
       }
 
       """
+    Then the mcp configuration file "mcp.json" of the project scope does not exist
     Then the files of the user scope are unchanged
 
   @mcp
@@ -1460,6 +1467,7 @@ Feature: MCP server lifecycle
       }
 
       """
+    Then the mcp configuration file "mcp.json" of the project scope does not exist
     Then the files of the user scope are unchanged
 
   @mcp

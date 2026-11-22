@@ -124,9 +124,13 @@ Lines at 55cd91f.
 All twelve cases are replaced, so the file is deleted whole. Its helper
 `test/integration/mcp-plugin-seed.ts` stays, because other integration files import it.
 
-The `:117` case also checked that no `mcp.json` file is created. That check is left out. No
-step fits it, and the whole-scope steps and the `mcp-adapter.json` texts already cover the
-user's files (CONTEXT [Optional cases]).
+The `:46` and `:117` cases also checked that no `mcp.json` file is created. The first version
+of this plan left that check out, on the reason that the whole-scope steps and the
+`mcp-adapter.json` texts cover the user's files. That reason held only for the user scope: no
+override scenario remembers the project scope, and the text steps do not read `mcp.json`. The
+code review fix adds the step `the mcp configuration file "mcp.json" of the {word} scope does not
+exist`: LC1 and LC2 check both scopes, and LC3 to LC6 check the project scope beside the
+remembered user scope (CONTEXT [Optional cases]).
 
 ## Checks
 
