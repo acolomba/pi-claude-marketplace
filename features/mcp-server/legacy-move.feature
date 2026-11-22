@@ -683,12 +683,15 @@ Feature: MCP server legacy move
       """
 
   @mcp
-  Scenario: A load leaves an mcp.json entry that no installed plugin owns and warns about it (AMIG-04)
+  Scenario: A load leaves the mcp.json entries that no installed plugin owns, a remote one among them, and warns about them (AMIG-04)
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
-    Given the published plugin "demo" of the marketplace "fixtures" declares the mcp server "srv"
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}, "web": {"type": "http", "url": "https://127.0.0.1:9/mcp"}}}
+      """
     Given the marketplace "fixtures" is added to the project scope
     Given the mcp.json file of the project scope holds this text, as release 0.19.2 wrote it:
       """
@@ -705,6 +708,14 @@ Feature: MCP server legacy move
               "plugin": "demo",
               "marketplace": "fixtures"
             }
+          },
+          "web": {
+            "type": "http",
+            "url": "https://127.0.0.1:9/mcp",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures"
+            }
           }
         }
       }
@@ -714,9 +725,9 @@ Feature: MCP server legacy move
     When the user starts a new pi session
     Then the files of the project scope are unchanged
     Then the session reports these results:
-      | kind          | severity | needs reload | notices | rows                                                                                              |
-      | mcp-migration | warning  | false        |         | [{"kind":"unowned","scope":"project","plugin":"demo","marketplace":"fixtures","servers":["srv"]}] |
-      | mcp-migration | warning  | false        |         | [{"kind":"unowned","scope":"project","plugin":"demo","marketplace":"fixtures","servers":["srv"]}] |
+      | kind          | severity | needs reload | notices | rows                                                                                                    |
+      | mcp-migration | warning  | false        |         | [{"kind":"unowned","scope":"project","plugin":"demo","marketplace":"fixtures","servers":["srv","web"]}] |
+      | mcp-migration | warning  | false        |         | [{"kind":"unowned","scope":"project","plugin":"demo","marketplace":"fixtures","servers":["srv","web"]}] |
 
   @mcp
   Scenario: A user-scope install does not own the project's mcp.json entry, which the load leaves and warns about (AMIG-04)

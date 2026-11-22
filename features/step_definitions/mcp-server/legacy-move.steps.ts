@@ -59,17 +59,24 @@ function markedEntriesByPlugin(
 }
 
 // The one `CLAUDE_PLUGIN_ROOT` that the stdio entries of `pluginId` name.
+// Release 0.19.2 put env only on a stdio entry, so a remote entry names no
+// root, and a plugin with only remote entries takes the writer step instead.
 function pluginRootOf(entries: Readonly<Record<string, unknown>>, pluginId: string): string {
   const roots = new Set(
-    Object.values(entries).map((entry): unknown => {
-      const env: unknown = isPlainObject(entry) ? Reflect.get(entry, "env") : undefined;
-      return isPlainObject(env) ? Reflect.get(env, "CLAUDE_PLUGIN_ROOT") : undefined;
-    }),
+    Object.values(entries)
+      .filter(
+        (entry): entry is object =>
+          isPlainObject(entry) && typeof Reflect.get(entry, "command") === "string",
+      )
+      .map((entry): unknown => {
+        const env: unknown = Reflect.get(entry, "env");
+        return isPlainObject(env) ? Reflect.get(env, "CLAUDE_PLUGIN_ROOT") : undefined;
+      }),
   );
   const [root, ...others]: unknown[] = [...roots];
   assert.ok(
     typeof root === "string" && others.length === 0,
-    `${pluginId} names no one plugin root`,
+    `the stdio entries of ${pluginId} name no one plugin root (a plugin with only remote servers needs the writer step)`,
   );
   return root;
 }
