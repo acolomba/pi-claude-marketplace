@@ -12,7 +12,7 @@ Feature: Plugin prune
       | needs reload | false       |
       | scope        | project     |
 
-  Scenario: Pruning a scope uninstalls a dependency that no installed plugin needs
+  Scenario: Pruning a scope uninstalls a dependency that no installed plugin needs and releases the state lock
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
       | name | version | dependencies |
@@ -30,6 +30,12 @@ Feature: Plugin prune
       | marketplace name | marketplace scope | id        | name | status      | reasons           | scope   | version |
       | tools            | project           | lib@tools | lib  | uninstalled | dependency pruned | project | 1.2.0   |
     Then the project scope has no installed plugins
+    When the user runs "/claude:plugin prune --scope project"
+    Then the result has these fields:
+      | kind         | prune-empty |
+      | severity     | info        |
+      | needs reload | false       |
+      | scope        | project     |
 
   Scenario: Pruning a git-source dependency removes its clone
     Given the git repository "ghp" holds these plugins:
