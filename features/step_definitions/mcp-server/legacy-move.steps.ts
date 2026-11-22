@@ -11,8 +11,10 @@ import path from "node:path";
 
 import { Given } from "@cucumber/cucumber";
 
+import { jsonObject } from "../../lib/earlier-version-state.ts";
 import { isPlainObject } from "../../lib/field-rows.ts";
 import { readPluginRecord, rewritePluginRecord } from "../../lib/installation-record.ts";
+import { legacyMcpServers } from "../../lib/mcp-configuration.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
 import { writeScenarioFile } from "../../lib/scenario-file.ts";
 
@@ -35,6 +37,41 @@ function mcpJsonText(
     return isPlainObject(entry) && "_piClaudeMarketplace" in entry;
   });
   return { file, expanded, markedNames };
+}
+
+// The marked entries of `servers` grouped by the `<plugin>@<marketplace>` their
+// marker names, each group in file order.
+function markedEntriesByPlugin(
+  servers: Readonly<Record<string, unknown>>,
+  markedNames: readonly string[],
+): Map<string, Record<string, unknown>> {
+  const byPlugin = new Map<string, Record<string, unknown>>();
+  for (const name of markedNames) {
+    const entry = jsonObject(Reflect.get(servers, name), name);
+    const marker = jsonObject(entry._piClaudeMarketplace, `the marker of ${name}`);
+    const pluginId = `${String(marker.plugin)}@${String(marker.marketplace)}`;
+    const entries = byPlugin.get(pluginId) ?? {};
+    entries[name] = entry;
+    byPlugin.set(pluginId, entries);
+  }
+
+  return byPlugin;
+}
+
+// The one `CLAUDE_PLUGIN_ROOT` that the stdio entries of `pluginId` name.
+function pluginRootOf(entries: Readonly<Record<string, unknown>>, pluginId: string): string {
+  const roots = new Set(
+    Object.values(entries).map((entry): unknown => {
+      const env: unknown = isPlainObject(entry) ? Reflect.get(entry, "env") : undefined;
+      return isPlainObject(env) ? Reflect.get(env, "CLAUDE_PLUGIN_ROOT") : undefined;
+    }),
+  );
+  const [root, ...others]: unknown[] = [...roots];
+  assert.ok(
+    typeof root === "string" && others.length === 0,
+    `${pluginId} names no one plugin root`,
+  );
+  return root;
 }
 
 // D-BG-905: the user's own, unmarked servers, written in the two-space form
@@ -70,12 +107,35 @@ Given(
 
 // D-BG-13: a scope's mcp.json as release 0.19.2 left it, holding the marked
 // entries of a plugin that the scope may not record (AMIG-02, AMIG-04). The
-// file must not exist yet.
+// text must be what that release wrote: its two-space form, and the marked
+// entries of each plugin exactly as it built them from the servers the
+// plugin at the entries' `CLAUDE_PLUGIN_ROOT` declares now. The file must not
+// exist yet.
 Given(
   "the mcp.json file of the {word} scope holds this text, as release 0.19.2 wrote it:",
   async function (this: ScenarioWorld, scope: string, text: string) {
     const { file, expanded, markedNames } = mcpJsonText(this, scope, text);
     assert.notDeepStrictEqual(markedNames, [], `the text for ${file} holds no marked server`);
+    assert.strictEqual(expanded, `${JSON.stringify(JSON.parse(expanded), null, 2)}\n`);
+    const servers = jsonObject(
+      Reflect.get(jsonObject(JSON.parse(expanded), file), "mcpServers"),
+      file,
+    );
+    const groups = [...markedEntriesByPlugin(servers, markedNames)];
+    const released = await Promise.all(
+      groups.map(([pluginId, entries]) =>
+        legacyMcpServers({
+          scopeRoot: this.scopeRoot(scope),
+          pluginId,
+          pluginRoot: pluginRootOf(entries, pluginId),
+        }),
+      ),
+    );
+    assert.deepStrictEqual(
+      groups.map(([, entries]) => JSON.stringify(entries, null, 2)),
+      released.map((entries) => JSON.stringify(entries, null, 2)),
+    );
+
     await mkdir(path.dirname(file), { recursive: true });
     await writeScenarioFile(this, file, expanded);
   },

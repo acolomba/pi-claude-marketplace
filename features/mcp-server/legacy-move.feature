@@ -311,7 +311,23 @@ Feature: MCP server legacy move
     Given the marketplace "fixtures" is added to the project scope
     Given the mcp.json file of the project scope holds this text, as release 0.19.2 wrote it:
       """
-      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": [], "_piClaudeMarketplace": {"plugin": "demo", "marketplace": "fixtures"}}}}
+      {
+        "mcpServers": {
+          "srv": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures"
+            }
+          }
+        }
+      }
+
       """
     Given the user has written these fields on the mcp server "srv" in the mcp-adapter.json file of the project scope:
       """
@@ -378,7 +394,23 @@ Feature: MCP server legacy move
     Given the marketplace "fixtures" is added to the project scope
     Given the mcp.json file of the project scope holds this text, as release 0.19.2 wrote it:
       """
-      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": [], "_piClaudeMarketplace": {"plugin": "demo", "marketplace": "fixtures"}}}}
+      {
+        "mcpServers": {
+          "srv": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures"
+            }
+          }
+        }
+      }
+
       """
     Given the user has written these fields on the mcp server "srv" in the mcp-adapter.json file of the project scope:
       """
@@ -445,7 +477,23 @@ Feature: MCP server legacy move
     Given the marketplace "fixtures" is added to the project scope
     Given the mcp.json file of the project scope holds this text, as release 0.19.2 wrote it:
       """
-      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": [], "_piClaudeMarketplace": {"plugin": "demo", "marketplace": "fixtures"}}}}
+      {
+        "mcpServers": {
+          "srv": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures"
+            }
+          }
+        }
+      }
+
       """
     Given the user has written these fields on the mcp server "srv" in the mcp-adapter.json file of the project scope:
       """
@@ -510,7 +558,23 @@ Feature: MCP server legacy move
     Given the marketplace "fixtures" is added to the user scope
     Given the mcp.json file of the user scope holds this text, as release 0.19.2 wrote it:
       """
-      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": [], "_piClaudeMarketplace": {"plugin": "demo", "marketplace": "fixtures"}}}}
+      {
+        "mcpServers": {
+          "srv": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{agent dir}/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures"
+            }
+          }
+        }
+      }
+
       """
     Given the user has written these fields on the mcp server "srv" in the mcp-adapter.json file of the project scope:
       """
@@ -628,7 +692,23 @@ Feature: MCP server legacy move
     Given the marketplace "fixtures" is added to the project scope
     Given the mcp.json file of the project scope holds this text, as release 0.19.2 wrote it:
       """
-      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": [], "_piClaudeMarketplace": {"plugin": "demo", "marketplace": "fixtures"}}}}
+      {
+        "mcpServers": {
+          "srv": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures"
+            }
+          }
+        }
+      }
+
       """
     Given the files of the project scope are remembered
     When the user starts a new pi session
@@ -649,7 +729,23 @@ Feature: MCP server legacy move
     Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
     Given the mcp.json file of the project scope holds this text, as release 0.19.2 wrote it:
       """
-      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": [], "_piClaudeMarketplace": {"plugin": "demo", "marketplace": "fixtures"}}}}
+      {
+        "mcpServers": {
+          "srv": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures"
+            }
+          }
+        }
+      }
+
       """
     Given the files of the project scope are remembered
     When the user starts a new pi session
@@ -672,7 +768,23 @@ Feature: MCP server legacy move
       | fixtures    | demo   | true    |
     Given the mcp.json file of the project scope holds this text, as release 0.19.2 wrote it:
       """
-      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": [], "_piClaudeMarketplace": {"plugin": "demo", "marketplace": "fixtures"}}}}
+      {
+        "mcpServers": {
+          "srv": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures"
+            }
+          }
+        }
+      }
+
       """
     When the user runs "/claude:plugin apply --scope project"
     Then the command reports these results:
