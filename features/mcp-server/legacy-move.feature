@@ -1084,7 +1084,7 @@ Feature: MCP server legacy move
       """
 
   @mcp
-  Scenario: A load leaves a git plugin's entries in mcp.json while its clone is not cached and names the reinstall that moves them (AMIG-01)
+  Scenario: A load leaves a git plugin's entries in mcp.json while its clone is not cached, and warns that its source is unreadable (AMIG-01)
     Given the git repository "ghp" holds these plugins:
       | name | version | path |
       | ghp  | 1.0.0   |      |
