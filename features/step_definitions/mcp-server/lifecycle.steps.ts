@@ -8,7 +8,7 @@
  */
 
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { Given } from "@cucumber/cucumber";
@@ -66,5 +66,25 @@ Given(
     const file = path.join(this.scopeRoot(scope), "mcp-adapter.json");
     const written = await writeRelease0230McpAdapterEntry(file, key);
     assert.strictEqual(await readFile(file, "utf8"), written);
+  },
+);
+
+// pi-mcp-adapter 7.0.1's `/mcp-adapter enable <key>` removes `disabled` from
+// the entry under the key and keeps every other member, the marker included.
+Given(
+  "the user has enabled the mcp server {string} in the mcp-adapter.json file of the {word} scope",
+  async function (this: ScenarioWorld, key: string, scope: string) {
+    const file = path.join(this.scopeRoot(scope), "mcp-adapter.json");
+    const doc: unknown = JSON.parse(await readFile(file, "utf8"));
+    const servers: unknown = isRecord(doc) ? doc.mcpServers : undefined;
+    assert.ok(isRecord(doc) && isRecord(servers), `${file} holds no mcpServers object`);
+    const entry = servers[key];
+    assert.ok(isRecord(entry) && entry.disabled === true, `${key} is not disabled in ${file}`);
+    const enabled = Object.fromEntries(
+      Object.entries(entry).filter(([field]) => field !== "disabled"),
+    );
+    const text = `${JSON.stringify({ ...doc, mcpServers: { ...servers, [key]: enabled } }, null, 2)}\n`;
+    await writeFile(file, text);
+    assert.strictEqual(await readFile(file, "utf8"), text);
   },
 );
