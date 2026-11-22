@@ -2,9 +2,10 @@ Feature: MCP server options
 
   A plugin's MCP servers receive the plugin's options under both MCP implementations, and a server
   that names an option with no value is left out and reported (PG-CORE-03, D-PG10-11, D-PG10-12,
-  D-PG10-21). A server that names an option of a record whose options do not parse is held back
-  (D-PG10-25). A stdio stub server and a loopback HTTP server stand in for real servers, and a local
-  marketplace for a published one.
+  D-PG10-21). An install writes a reference to each option's variable, and no option value, in all
+  five fields of an entry (D-PG10-11, D-PG10-20). A server that names an option of a record whose
+  options do not parse is held back (D-PG10-25). A stdio stub server and a loopback HTTP server
+  stand in for real servers, and a local marketplace for a published one.
 
   Background:
     Given the marketplace "fixtures" is published as a dir source
@@ -608,6 +609,83 @@ Feature: MCP server options
               "defaultFields": {
                 "requestTimeoutMs": 1800000,
                 "lifecycle": "lazy-keep-alive"
+              }
+            }
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: A project install writes a reference to each option's variable in all five fields and no option value (D-PG10-11, D-PG10-20)
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
+      """
+      {
+        "name": "demo",
+        "version": "1.0.0",
+        "userConfig": {
+          "bin": { "type": "string", "title": "Bin", "description": "The server.", "default": "/opt/sentinel-bin" },
+          "mode": { "type": "string", "title": "Mode", "description": "The mode.", "default": "sentinel-mode" },
+          "token": { "type": "string", "title": "Token", "description": "The token.", "default": "!echo sentinel" },
+          "base": { "type": "string", "title": "Base", "description": "The base.", "default": "https://sentinel.test" },
+          "team": { "type": "string", "title": "Team", "description": "The team.", "default": "sentinel-team" }
+        }
+      }
+      """
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "${user_config.bin}", "args": ["--mode=${user_config.mode}"], "env": {"TOKEN": "${user_config.token}"}}, "web": {"type": "http", "url": "${user_config.base}/mcp", "headers": {"X-Team": "${user_config.team}"}}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "command": "${PI_CLAUDE_MARKETPLACE_OPTION_6a5842ad7e4c0fc9}",
+            "args": [
+              "--mode=${PI_CLAUDE_MARKETPLACE_OPTION_34f6bcb3de70f47b}"
+            ],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo",
+              "TOKEN": "${PI_CLAUDE_MARKETPLACE_OPTION_3a682b5e5419c027}"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              }
+            }
+          },
+          "plugin_demo_web_": {
+            "url": "${PI_CLAUDE_MARKETPLACE_OPTION_d67d32b4704c49d5}/mcp",
+            "headers": {
+              "X-Team": "${PI_CLAUDE_MARKETPLACE_OPTION_79e27a896a32f1b0}"
+            },
+            "auth": "oauth",
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 300000,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 300000
               }
             }
           }
