@@ -109,7 +109,7 @@ Lines at 55cd91f.
 | Case at 55cd91f | Replaced by | Breaks | Deleted in |
 | --- | --- | --- | --- |
 | `:46` "AFILE-06: a project install keeps the user's override in its entry and uninstall writes it back" | LC1, LC2 | O8a | `5e7cb8f` |
-| `:117` "AFILE-06: a user-scope plugin disabled in the project keeps that disable through a project install, update, reinstall and uninstall" | LC3, LC4, LC5, LC6, LC25 | O8a, O8b, O9, O10 (LC25) | `5e7cb8f` |
+| `:117` "AFILE-06: a user-scope plugin disabled in the project keeps that disable through a project install, update, reinstall and uninstall" | LC3, LC4, LC5, LC6, LC25 | O8a, O8b, O9, O10 (LC25); review K1 on LC4 after it publishes changed args (`7ec7e16`, 05-REVIEW-FIX.md) | `5e7cb8f` |
 | `:329` "AFILE-06: a /mcp-adapter enable made while the plugin is installed survives plugin disable, enable and uninstall" | LC7, LC8, LC9 | O2b, O8a | `26e7ec6` |
 | `:412` "AFILE-06: uninstall writes back no carried field the plugin's entry declares and the user's override lacks" | LC10, LC11 | O8a | `5e7cb8f` |
 | `:458` "ANAME-07: a project install over a stub keeps the user's timeout for write-back while the plugin's timeout applies" | LC12, LC13 | O3, O2b, O8a | `5e7cb8f` |

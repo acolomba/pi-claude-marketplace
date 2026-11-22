@@ -1,13 +1,16 @@
 ---
 phase: 05-mcp-install-legacy-move-and-overrides
-reviewed: 2026-11-22T00:00:00Z
+reviewed: 2026-11-22T12:00:00Z
 depth: standard
-files_reviewed: 12
+iteration: 2
+files_reviewed: 14
 files_reviewed_list:
   - features/step_definitions/mcp-implementation.steps.ts
   - features/step_definitions/session.steps.ts
+  - features/step_definitions/mcp-configuration.steps.ts
   - features/step_definitions/mcp-server/legacy-move.steps.ts
   - features/step_definitions/mcp-server/lifecycle.steps.ts
+  - features/lib/mcp-configuration.ts
   - features/mcp-server/configuration.feature
   - features/mcp-server/options.feature
   - features/mcp-server/legacy-move.feature
@@ -17,228 +20,143 @@ files_reviewed_list:
   - test/integration/mcp-verdict-migration.test.ts
   - test/integration/mcp-verdict-list.test.ts
 findings:
-  critical: 2
-  warning: 4
+  critical: 0
+  warning: 1
   info: 3
-  total: 9
-  necessity: 2
+  total: 4
+  necessity: 0
 status: issues_found
 ---
 
-# Phase 5: Code Review Report
+# Phase 5: Code Review Report (iteration 2)
 
 **Reviewed:** 2026-11-22
 **Depth:** standard
-**Files Reviewed:** 12
+**Files Reviewed:** 14
 **Status:** issues_found
 
 ## Summary
 
-Scope: the diff since `356f8bb` of the four step modules, the five feature files, and the three
-trimmed integration files. I compared each deleted or trimmed integration case
-(`git show 356f8bb:test/integration/{mcp-home-path-partial,mcp-tool-rules,mcp-variable-expansion,mcp-legacy-sweep,mcp-migration,mcp-verdict-migration,mcp-verdict-list,mcp-override-lifecycle}.test.ts`)
-with the scenario that the 05-02 and 05-03 SUMMARY case maps say replaces it.
+Scope: the fix commits `b35272b..5643754`, read against the iteration-1 findings and the red
+proofs in `05-REVIEW-FIX.md`. I also re-read the phase diff since `356f8bb` for the files listed
+above. Two files are new to the scope: `features/lib/mcp-configuration.ts` and
+`features/step_definitions/mcp-configuration.steps.ts`. The fixes changed both. I did not re-run
+cucumber, because `npm run check` is running on this tree. Each red proof below was checked by
+tracing the changed step or scenario against the break that REVIEW-FIX names.
 
-Most replacements check at least as much as the deleted cases. The `mcp-adapter.json` and
-`mcp.json` claims compare whole files. "Leaves alone" uses the whole-scope remembered/unchanged
-steps. `the command reports these results:` and `the session reports these results:` compare the
-whole envelope of every payload (`namesLike` in `features/lib/field-rows.ts` appends every column
-the table leaves out), so a leaked sentinel or an extra notice fails them. The tags follow CONTEXT
-[Tags, after research]: every new legacy-move, override, and variable scenario is `@mcp`, and the
-only licensed pair is the MREC-03 pair (`verdict-list.feature:304`/`:333`).
-`npm run check:features` passes on this tree, and Prettier passes on the changed TypeScript files.
+Status of the iteration-1 findings in scope:
 
-Two replacements do not fail on the bug their deleted case caught:
+| ID | Status | Evidence |
+| --- | --- | --- |
+| CR-01 | Fixed | LC4 (`lifecycle.feature:1315`) now publishes `"args": ["v2"]` with 1.1.0 and compares the whole project `mcp-adapter.json`: `"args": ["v2"]`, `"disabled": true`, and the `keptOverride` marker. An update that skips the restage, or that keeps the previous entry, leaves `args: []`, so the text step fails. K1 (`stampServers` keeps the previous entry) is the break the review asked for. O8a and O8b still fail LC4. |
+| CR-02 | Fixed | New `@mcp` scenario at `legacy-move.feature:897`. It installs `ghp@gits`, keeps the clone, writes the 0.19.2 `mcp.json`, and starts a session. It compares the `moved` row, the whole `mcp-adapter.json` (with `CLAUDE_PLUGIN_ROOT` set to the clone directory), and the whole `mcp.json`. C2a (`offlineCloneRead` returns `not-cached`) fails only this scenario, so LM10 and LM16 do not catch that break. This confirms the gap. LM10 (`:833`) now compares the whole `mcp-adapter.json` too (C2b). |
+| WR-01 | Fixed | New step `the mcp configuration file {string} of the {word} scope does not exist` (`mcp-configuration.steps.ts:146-153`). It takes only names in `MCP_CONFIG_FILES` and asserts `ENOENT`. Its text cannot match the `the {string} file of the {word} scope does not exist` config step, because that step needs a quote right after "the". LC1 and LC2 check both scopes. LC3 to LC6 check the project scope, and the remembered user scope covers the user side. Breaks W1a to W1e cover each verb. |
+| WR-02 | Fixed (one gap, see WR-01 below) | The doc-string step now requires the two-space form. It groups the marked entries by marker and requires each group to equal `legacyMcpServers(...)`, key order included. All seven doc strings now carry the injected `env`. The red proof is a failing `Given` on a copy with the env removed. That is the right kind of proof for a precondition step. |
+| WR-03 | Fixed | `:1199` now claims only the `source-unreadable` warning, which the table compares. |
+| WR-04 | Fixed | `listText(cwd)` inlines the built-in inventory (`mcp-verdict-migration.test.ts:185-200`). The map and the parameter are gone. |
+| IN-01 | Fixed | The header (`:11-15`) now says that the first two cases pin the rendered move notice and the third pins the `list` row. The assertions at `:134-145`, `:164-176`, and `:249-254` match that claim. |
+| IN-03 | Fixed | The release and the `rm` import are gone. `features/support/pi-process.ts:228-236` empties every sandbox directory, home included, before each scenario. So the launch file cannot outlive its scenario. `writeLaunchEnvironment` opens with `wx` (`pi-launch-environment.ts:55`). |
+| IN-02 | Open by decision | Carried below as IN-01. |
 
-- The project update in the cross-scope override flow republishes the same server definition.
-- The warm-cache half of the git-plugin load move now goes through `reinstall`, a different code
-  path.
+Regression check on the shared legacy writer: `writeLegacyMcpConfig` keeps its behavior. The
+entry building moved into `legacyMcpServers` unchanged. `Object.fromEntries` builds the same
+key order, and `...legacy` spreads the same members that `...Object.fromEntries(legacy)` did.
+`plugin` and `marketplace` are still used by the `isMarkedFor` filter. So the other callers
+(`verdict-list.feature`, `plugin/subagent-child.feature`, and the writer-step scenarios in
+`legacy-move.feature`) see the same files. The fixer's runs of those features under both
+profiles agree with this.
 
-Both are BLOCKERs under the cucumber skill's review rule: a plausible wrong implementation passes
-the scenario. The other findings are a dropped absence check, a step name that claims a provenance
-it does not enforce, a title that claims more than the scenario checks, and some test-code
-leftovers.
+The remaining findings come from the new 0.19.2 doc-string validation and from the shared library
+module that the fixes touched. None of them lets a wrong product implementation pass.
 
-## Critical Issues
-
-### CR-01: The project update over a kept disable stub republishes the same server, so an update that never restages the entry still passes
-
-**File:** `features/mcp-server/lifecycle.feature:1310`
-**Issue:** The deleted case `mcp-override-lifecycle.test.ts:117` republished `hello` at 1.1.0 with
-a changed server (`args: ["v2.js"]`). It then asserted that the updated entry held the new args
-and also kept `disabled: true` and the `keptOverride` marker. That proves the update restages the
-entry and keeps the user's stub. The replacement (LC4) changes only the version, with
-`Given the marketplace "fixtures" offers these plugins: | demo | 1.1.0 |`, and leaves `.mcp.json`
-as it was. Its expected `mcp-adapter.json` text is therefore the same as the text before the
-update. An update that skips the MCP restage when an entry carries a `keptOverride` would pass,
-and so would an update that keeps the old entry in place of the new definition. The deleted case
-failed on both. The older `@adapter-only` scenario `lifecycle.feature:317` changes the server, but
-it covers a disable the user makes after the install, which has no `keptOverride`. It does not
-cover the kept-override path either.
-**Fix:** Publish a changed server with the new version, and expect the new definition with the
-stub still applied:
-
-```gherkin
-    Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.1.0   |
-    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
-      """
-      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": ["v2"]}}}
-      """
-    ...
-    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
-      """
-      ...
-          "plugin_demo_srv_": {
-            "command": "pi-features-absent-mcp-server",
-            "args": [
-              "v2"
-            ],
-            ...
-            "disabled": true,
-            ...
-              "keptOverride": { "disabled": true, "env": { "STUB_TOKEN": "stub-secret" } }
-      """
-```
-
-Then re-run the O8a/O8b breaks, plus a break that makes the update keep the old entry when a
-`keptOverride` exists. Record both in the SUMMARY.
-
-### CR-02: No scenario shows a load moving a git plugin's legacy entries once its clone is cached, and the reinstall stand-in checks only mcp.json
-
-**File:** `features/mcp-server/legacy-move.feature:721` (and `:999`)
-**Issue:** The deleted case `mcp-migration.test.ts:448` had two halves. On a cold cache the load
-leaves the entry and warns. Once the recorded clone exists, the next load moves the entry, writes
-`plugin_hello_srv_` with `CLAUDE_PLUGIN_ROOT` set to the recorded clone directory, and empties
-`mcp.json`. The 05-02 case map gives the cold half to LM16 (`:999`) and the warm half to LM10
-(`:721`, "through the reinstall that the notice names"). `reinstall` runs the install-time sweep
-(AMIG-02), not the load's move (AMIG-01). A load that cannot resolve a git plugin's recorded clone
-when the clone is present, and so reports `source-unreadable` for every git plugin, passes both
-scenarios:
-
-- LM16 expects `source-unreadable`.
-- LM10 never runs a load.
-
-No other scenario moves a git plugin at load. Both 0.19.2-move scenarios for `ghp@gits` delete the
-clone cache first (`grep "as release 0.19.2 wrote them" features` shows only `:735` and `:1013`).
-LM10 also checks only `mcp.json`. The written `mcp-adapter.json` entry, including the clone-rooted
-`CLAUDE_PLUGIN_ROOT`, goes unchecked.
-**Fix:** Add a scenario with the cache kept warm:
-
-```gherkin
-  @mcp
-  Scenario: A load moves a git plugin's servers out of a release 0.19.2 mcp.json while its clone is cached (AMIG-01)
-    Given the git repository "ghp" holds these plugins: ...
-    Given the git repository "ghp" adds this .mcp.json to the plugin "ghp": ...
-    Given the marketplace "gits" ... is added to the project scope
-    Given the user has run "/claude:plugin install ghp@gits --scope project", which did not fail
-    Given the mcp.json file of the project scope holds the servers of the plugin "ghp@gits" as release 0.19.2 wrote them, beside the user's own server "mine"
-    When the user starts a new pi session
-    Then the session reports these results:
-      | kind          | severity | needs reload | notices | rows |
-      | mcp-migration | info     | true         |         | [{"kind":"moved","scope":"project","plugin":"ghp","marketplace":"gits","from":"srv","to":"plugin_ghp_srv_"}] |
-    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text: ... (CLAUDE_PLUGIN_ROOT under the plugin clone)
-    Then the mcp configuration file "mcp.json" of the project scope holds this text: ... (only "mine")
-```
-
-In LM10, also compare the whole `mcp-adapter.json` of the project scope.
+Out-of-scope note (planning artifacts, not reviewed as source): the case map in
+`05-02-SUMMARY.md:126` still gives the warm half of `mcp-migration.test.ts:448` to LM10. C2a shows
+that LM10 does not catch it; the new scenario at `legacy-move.feature:897` does. The iteration-1
+CR-01 fix asked for its breaks to be recorded in the SUMMARY. `05-03-SUMMARY.md` has no K1 entry,
+and only `05-REVIEW-FIX.md` records it. Phase 8 triage reads those case maps, so point both at the
+new scenario and the K1 break.
 
 ## Warnings
 
-### WR-01: The check that no legacy mcp.json is created through the override lifecycle was dropped, and the SUMMARY's reason is wrong for the project scope
+### WR-01: The 0.19.2 doc-string step refuses a real release shape: a plugin that has a remote server
 
-**File:** `features/mcp-server/lifecycle.feature:1149-1465`
-**Issue:** The deleted cases `mcp-override-lifecycle.test.ts:46` and `:117` asserted that neither
-`<project>/.pi/mcp.json` nor `<agent dir>/mcp.json` exists after install, update, reinstall, and
-uninstall (`legacyMcpJsonExists`). 05-03-SUMMARY says this check is left out because "the
-whole-scope steps and the `mcp-adapter.json` texts already cover the user's files". That holds for
-the user scope only: LC3 to LC6 remember and compare the user scope. No new lifecycle scenario
-remembers the project scope. The `mcp-adapter.json` text steps do not read `mcp.json`. So a
-regression that writes the project's legacy `mcp.json` during a project install or uninstall
-passes every replacement. Under Pi's built-in MCP, `<scope>/mcp.json` is a file the user owns
-(BLT-04/05). The project's "never in the file" claim is now narrower than the deleted check.
-**Fix:** Add an absence step for the MCP configuration files, for example
-`Then the mcp configuration file "mcp.json" of the project scope does not exist`. Use
-`MCP_CONFIG_FILES` the way the config step at `config.steps.ts:286` uses `CONFIG_FILES`. Add it to
-LC1, LC2, and LC6, and correct the SUMMARY sentence.
+**File:** `features/step_definitions/mcp-server/legacy-move.steps.ts:61-75` (called at `:130`)
+**Issue:** The comment says `pluginRootOf` returns "the one `CLAUDE_PLUGIN_ROOT` that the stdio
+entries of `pluginId` name". The code collects a root from every marked entry of the group. In
+release 0.19.2, `legacyEntry` (`features/lib/mcp-configuration.ts:130-136`) puts `env` only on a
+stdio entry (`typeof declared.command === "string"`). So a remote entry adds `undefined` to the
+set. Two shapes that release wrote are refused, with the wrong message
+`<plugin> names no one plugin root`:
 
-### WR-02: The new "as release 0.19.2 wrote it" step claims a provenance that it neither builds nor checks
+- A plugin with one stdio server and one http/sse server gives `{root, undefined}`.
+- A plugin with only remote servers gives `{undefined}`.
 
-**File:** `features/step_definitions/mcp-server/legacy-move.steps.ts:71-82` (used at
-`legacy-move.feature:312, :379, :446, :511, :629, :650, :673`)
-**Issue:** The step writes any doc string that has at least one marked entry, and its name says the
-text is "as release 0.19.2 wrote it". The doc strings that use it are compact one-line JSON of
-stdio entries with no `env`. Release 0.19.2 injected `CLAUDE_PLUGIN_ROOT` and `CLAUDE_PLUGIN_DATA`
-into every stdio entry it wrote (`features/lib/mcp-configuration.ts:117-135`, `legacyEntry`). So
-the step text tells the reader something that is not true. CONTEXT [Earlier records] says
-scenarios use real released-build shapes, "no hand-made record that no release wrote". Today the
-mismatch hides no behavior, because the sweep keys on the marker. But the next scenario that
-depends on the legacy body will pass against a shape no release produced.
-**Fix:** Name the step for what it checks, for example
-`the mcp.json file of the {word} scope holds this text, with marked entries of a plugin the scope does not record:`.
-Or build each marked entry through `legacyEntry` from a declared server and a plugin id, as
-`writeLegacyMcpConfig` does.
+The writer step can produce both shapes: `legacy-move.feature:647` uses it for an http-only
+plugin. So the two "as release 0.19.2 wrote" steps now disagree on what that release wrote. No
+current scenario hits this, because all seven doc strings are stdio-only. But the next AMIG-04
+scenario with a remote server fails in its `Given` for a reason that the step's own comment says
+cannot happen.
+**Fix:** Read the root only from stdio entries. When the group has no stdio entry, fail and say so
+plainly:
 
-### WR-03: The cold-cache scenario's title says the warning names the reinstall, but nothing checks it
-
-**File:** `features/mcp-server/legacy-move.feature:999`
-**Issue:** The title is "... and names the reinstall that moves them". The deleted case checked the
-rendered text "Run /claude:plugin reinstall hello@mp to move it." The scenario compares only the
-JSON row `{"kind":"source-unreadable",...}`, which holds no command. A notice that drops or
-misnames the reinstall hint passes. A reader sees from the title alone that the hint was proved,
-which is the "point lives only in a step's code" finding of the cucumber review rules.
-**Fix:** Drop the claim from the title, for example "A load leaves a git plugin's entries in
-mcp.json while its clone is not cached, and warns". Or add a terminal step
-(`pi's terminal shows this result of the command:`) that shows the rendered hint.
-
-### WR-04: Generality without instantiation: `MCP_INVENTORY` and `listText` keep an implementation parameter that has one value
-
-**File:** `test/integration/mcp-verdict-migration.test.ts:183-206`
-**Category:** necessity
-**Issue:** The trim removed the `adapter` key. `MCP_INVENTORY` now holds only `builtin`, and the
-only call site of `listText` passes `"builtin"` (`:233`). The `implementation:
-keyof typeof MCP_INVENTORY` parameter and the lookup table select among a single option. The
-`adapterCommand` and `adapterProxyTool` imports were removed with it, which proves that no other
-value remains.
-**Fix:** Inline the built-in inventory into `listText(cwd)` and drop the map and the parameter.
+```ts
+// The one `CLAUDE_PLUGIN_ROOT` that the stdio entries of `pluginId` name. A
+// remote entry carries no env in release 0.19.2, so it names no root.
+function pluginRootOf(entries: Readonly<Record<string, unknown>>, pluginId: string): string {
+  const roots = new Set(
+    Object.values(entries)
+      .filter((entry) => isPlainObject(entry) && typeof Reflect.get(entry, "command") === "string")
+      .map((entry): unknown => {
+        const env: unknown = Reflect.get(entry as object, "env");
+        return isPlainObject(env) ? Reflect.get(env, "CLAUDE_PLUGIN_ROOT") : undefined;
+      }),
+  );
+  const [root, ...others]: unknown[] = [...roots];
+  assert.ok(
+    typeof root === "string" && others.length === 0,
+    `the stdio entries of ${pluginId} name no one plugin root (a remote-only plugin needs the writer step)`,
+  );
+  return root;
+}
+```
 
 ## Info
 
-### IN-01: The kept-case headers say the cases check only fields no user sees, but they assert user-visible text
+### IN-01: Three near-identical launch-environment steps (carried from iteration 1, IN-02, open by decision)
 
-**File:** `test/integration/mcp-verdict-migration.test.ts:3-12`
-**Issue:** The header says that each of the three kept cases "checks the record fields that the
-move writes, which no user sees". But `:134-145` and `:164-176` also assert the whole rendered move
-notice, and `:250` asserts the rendered `list` row "partially-upgradable {unsupported mcp}". That
-row is user-visible, and no feature file shows it for a 0.19.2 record whose catalog moved. Phase 8
-triage will read this header to decide what stays internal.
-**Fix:** Say that the cases also pin the move notice and the list row, and that those parts have no
-scenario yet.
+**File:** `features/step_definitions/mcp-implementation.steps.ts:67-80`
+**Issue:** These three steps still repeat the same body: this step,
+`mcp-server/configuration.steps.ts:247-262`, and `mcp-server/listing.steps.ts:125-141`. The
+iteration-1 IN-03 fix made the copies differ. This step no longer registers a release for the
+launch file. The two siblings still do: `this.onRelease(() => rm(file, { force: true }))` at
+`configuration.steps.ts:257` and `listing.steps.ts:130`. The reason in the new comment, that
+`Before()` empties the sandbox home, applies to all three just as much. So the suite now has two
+conventions for the same file.
+**Fix:** If IN-02 is reopened, a `startPiWithLaunchEnvironment(world, profile, variables)` helper
+in `features/lib/pi-launch-environment.ts` settles both the duplication and the release rule. Until
+then, drop the release in the two siblings too, or restore it here, so that all three match.
 
-### IN-02: Three near-identical launch-environment steps
+### IN-02: The module overview of `mcp-configuration.ts` no longer describes its functions
 
-**File:** `features/step_definitions/mcp-implementation.steps.ts:63-80`
-**Issue:** The new step has the same body as
-`mcp-server/configuration.steps.ts:247-262` (built-in) and `mcp-server/listing.steps.ts:125-141`
-(adapter): write the launch file, register its removal, start the profile Pi with
-`PI_LAUNCH_ENVIRONMENT_EXTENSION`, and check the applied variables. Only the profile differs. The
-new step's own "enabled" sibling in `lifecycle.steps.ts:77-93` also repeats the read-modify-write
-and `isRecord` logic of `writeMcpAdapterOverride`.
-**Fix:** Move a `startPiWithLaunchEnvironment(world, profile, variables)` helper into
-`features/lib/pi-launch-environment.ts` and call it from all three steps.
+**File:** `features/lib/mcp-configuration.ts:9-12`
+**Issue:** The overview says "Each function but the legacy writer writes one file it creates and
+refuses to replace a file it did not create". The new export `legacyMcpServers` (`:150-174`) writes
+no file. It reads the plugin's `.mcp.json` and returns entries. The first paragraph also does not
+say that the module now builds the 0.19.2 entries for the doc-string step in
+`legacy-move.steps.ts`.
+**Fix:** Name the reader, for example: "`legacyMcpServers` builds, without writing, the entries
+release 0.19.2 wrote for a plugin; each other function but the legacy writer writes one file it
+creates ...".
 
-### IN-03: Already defended elsewhere: removing the launch file at release
+### IN-03: The `<plugin>@<marketplace>` split is written twice in one module
 
-**File:** `features/step_definitions/mcp-implementation.steps.ts:73`
-**Category:** necessity
-**Issue:** `this.onRelease(() => rm(file, { force: true }))` removes
-`<home>/pi-launch-environment.json`. The `Before()` hook already empties every sandbox directory
-for the next scenario (`features/support/pi-process.ts:8`, `features/support/isolated-pi-home.ts:66`),
-and the module comment of `features/lib/pi-launch-environment.ts` says so. The copied pattern
-guards against nothing. This is a judgment call, because the two older steps do the same.
-**Fix:** Drop the release, or keep it and say why, for example to allow a second launch in one
-scenario.
+**File:** `features/lib/mcp-configuration.ts:156-158` and `:198-200`
+**Issue:** `legacyMcpServers` and `writeLegacyMcpConfig` each repeat the same
+`lastIndexOf("@")` / `slice` lines. The writer now passes `pluginId` to `legacyMcpServers` and
+parses it again only for `isMarkedFor`. If one copy changes, for example to refuse an id with no
+`@`, the other copy keeps the old rule.
+**Fix:** Add one private `splitPluginId(pluginId): { plugin; marketplace }` and call it from both
+functions.
 
 ---
 
