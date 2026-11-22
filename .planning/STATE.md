@@ -4,16 +4,16 @@ milestone: integration-rescope
 milestone_name: Integration Test Rescope
 current_phase: 6
 current_phase_name: Hooks and Auth
-status: verifying
+status: executing
 stopped_at: Phase 05 complete, ready to verify Phase 6
-last_updated: "2026-11-22T09:29:55.513Z"
+last_updated: "2026-11-22T11:23:56.832Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 05 complete, transitioned to Phase 6
-state_head: 8f1a87b3fd08de65f3d1ecb919a42e5740915e6c
+state_head: 2d235665aeef109313c8ea4e5389250dc3ee4f96
 progress:
   total_phases: 8
   completed_phases: 5
-  total_plans: 15
+  total_plans: 17
   completed_plans: 15
   percent: 63
 ---
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 6 of 8 (Hooks and Auth)
+Phase: 6 (Hooks and Auth) — READY TO EXECUTE
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-11-22 — Phase 05 complete, transitioned to Phase 6
 
 Progress: [██████░░░░] 63%
@@ -1198,6 +1198,7 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ### Blockers/Concerns
 
+- [integration-rescope] Phase 6 planning: decision-coverage gate `could-not-parse` (bracket-named decisions); proceeded by override after the plan checker confirmed coverage. Assumption-delta fired on "additional" (file name, false positive, `no-change`). Research found the async.feature:261 flake cause (ESRCH in `features/lib/hook-files.ts`, a zombie hook under PID 1) and a partial-line race in `features/lib/turn-records.ts`; plan 06-01 fixes both. Open parity question for the user at milestone end: whether Claude Code keeps SessionStart context across `/reload-plugins` (HOOK-E2E-04 pins today's documented drop). A planning commit title (`965c0ec`) names the milestone, against the committing skill; history is not rewritten.
 - [integration-rescope] Phase 5 gate: `features/hook/async.feature:261` ("A plain async hook runs past its declared timeout") failed in its After hook (`scenario releases failed`, `features/support/world.ts:1053`) in 2 of 4 full adapter runs on 8f1a87b, and passed alone (4/4), with its feature (3/3), and in an instrumented full run. Cause not captured; candidates: `pi.stop()` or the scenario cwd removal while the timed-out hook still runs. Input for Phase 6 (Hooks). The gate verdict on 8f1a87b is composed: check:static and direct coverage (p5d), test:unpaired and test:integration (p5e), adapter 2259/2259 (instrumented run, release message only), builtin 260/260.
 - [integration-rescope] Harness race fixed in 2c7d42d: `features/lib/subagent-hook-session.ts` read an exited child's `/proc/<pid>/environ` and failed with ESRCH (`subagent-hook-ownership.test.ts:232`).
 - [integration-rescope] Phase 5 planning: decision-coverage gate `could-not-parse` (bracket-named decisions); proceeded by override after the plan checker confirmed coverage. Research measured the legacy-move and override scenarios byte-identical under both profiles, so they are tagged `@mcp` (CONTEXT [Tags, after research]) where the ROADMAP note said `@adapter-only`. The planner run was lost once to a container restart and re-run. A planning commit body (`b935623`) names a phase, against the committing skill; history is not rewritten.
