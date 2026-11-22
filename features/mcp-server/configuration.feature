@@ -666,3 +666,49 @@ Feature: MCP server configuration
       | 3    | tool result | tool_search returned: found mcp__plugin_demo_stub__echo: Echoes the text it is given.                                                          |
       | 3    | assistant   | tool call mcp__plugin_demo_stub__echo {"text":"ping"}                                                                                          |
       | 3    | tool result | mcp__plugin_demo_stub__echo returned: {home}/marketplaces/fixtures/plugins/demo,{agent dir}/pi-claude-marketplace/data/fixtures/demo:echo:ping |
+
+  @mcp
+  Scenario: A remote server's headers never hold a set credential that Claude Code keeps from remote servers, and the install says so (AVAR-05)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"type": "http", "url": "https://127.0.0.1:9/mcp", "headers": {"Authorization": "Bearer ${ANTHROPIC_API_KEY}", "X-Fallback": "${ANTHROPIC_API_KEY:-unused}"}}}}
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given pi runs with the scripted model, the mcp implementation, and the environment variable "ANTHROPIC_API_KEY" set to "avar-sentinel-04-03"
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind               | severity | needs reload | notices                                                                                                                                  |
+      | cascade            | info     | true         |                                                                                                                                          |
+      | mcp-config-notices | warning  | false        | [{"kind":"credentials-blanked","scope":"project","file":"mcp-adapter.json","plugin":"demo","server":"plugin_demo_srv_","names":["ANTHROPIC_API_KEY"]}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_demo_srv_": {
+            "url": "https://127.0.0.1:9/mcp",
+            "headers": {
+              "Authorization": "Bearer ",
+              "X-Fallback": ""
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 300000,
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 300000
+              }
+            }
+          }
+        }
+      }
+
+      """
