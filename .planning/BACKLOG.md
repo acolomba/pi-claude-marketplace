@@ -4617,7 +4617,7 @@ Added 2026-11-01 (component-features Phase 6, D-CF6-01 residual). A path such as
 
 ## MCPMIG-01: the MCP move says the plugin no longer declares a skipped server
 
-Added 2026-11-01 (component-features Phase 6, review WR-04, D-CF6-02). The AMIG-01 move reports `<server> (<plugin>) [<scope>] <plugin> no longer declares it.` for a server that the plugin still declares in a file source, but that the resolver skipped as malformed. Reconcile owns the message. Either report such a server under the existing `malformed mcp` reason, or word the line so it does not say the plugin dropped the server. The change is user-visible, so it needs a cucumber scenario, and it also changes `test/integration/mcp-migration.test.ts` (the commented expected line) and "Entries that the move removes" in `docs/mcp-compatibility.md`.
+Added 2026-11-01 (component-features Phase 6, review WR-04, D-CF6-02). The AMIG-01 move reports `<server> (<plugin>) [<scope>] <plugin> no longer declares it.` for a server that the plugin still declares in a file source, but that the resolver skipped as malformed. Reconcile owns the message. Either report such a server under the existing `malformed mcp` reason, or word the line so it does not say the plugin dropped the server. The change is user-visible, so it needs a cucumber scenario, and it also changes the LM13 scenario of `features/mcp-server/legacy-move.feature` ("A load skips a malformed server, moves its valid sibling, and removes the skipped server's old entry"), whose comment names MCPMIG-01 and "Entries that the move removes" in `docs/mcp-compatibility.md`.
 
 ## MCPLINK-01: the link rule for MCP files
 
