@@ -384,8 +384,13 @@ async function grantBackupWrites(root: string): Promise<void> {
  * NFR-3: removes the backup root, even one that holds a read-only directory.
  * An absent root counts as removed, as a forced removal treats it. The
  * snapshot failure path catches and logs any failure here, so it rethrows its
- * own error. A rollback with failures keeps its backup for manual recovery and
- * never calls this, so the permission walk never changes a kept backup.
+ * own error. A rollback with restore failures keeps its backup for manual
+ * recovery and never calls this. A removal that fails after the permission
+ * walk also keeps the backup, and each directory the walk reached is then
+ * writable by its owner: `rollback` reports this as a `backup cleanup`
+ * failure, and `discard` and the snapshot failure path log it. A manual
+ * restore from such a backup gives writable directories, not the plugin's
+ * read-only modes.
  */
 async function removeBackupRoot(ops: PruneRestoreOps, backupRoot: string): Promise<void> {
   if (await pathExists(backupRoot)) {
