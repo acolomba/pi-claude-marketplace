@@ -35,6 +35,11 @@ Feature files this phase may edit: `features/hook/*.feature` (e.g. `additional-c
 - [Bugs] Q: "What if a scenario exposes a product bug?" → Selected: "Rule 4: fix it when small, with a unit test beside its source pair and a CHANGELOG parent line; otherwise a BACKLOG.md entry and the guarding integration case stays" — milestone rule.
 - [Parallelism] Q: "How are plans split?" → Selected: "By feature-file ownership (hooks vs auth) so plans in a wave touch disjoint files; a shared step module or `features/lib/**` file changes in only one plan per wave" — wave layout is local to the plan.
 
+- [HOOK-E2E-04 parity] Q: "The reload-before-first-prompt scenario pins that a `/reload` drops buffered SessionStart context (documented in `docs/hooks-compatibility.md:449`, asserted by the integration case), but D-CF5-03/D-CF5-13 suggest upstream may keep it and no decision ID licenses the drop; pin it?" → Selected: "Pin the current, documented behavior with a neutral title that cites the doc: this milestone moves tests and changes no behavior. The possible parity gap is reported to the user at the end of the milestone as a question (and a BACKLOG entry if they want it researched), not decided here" — a scenario is cheap to change; changing the behavior would be a product decision for the user.
+- [Print apply] Q: "Include the print-mode `apply` scenario that shows print mode prints nothing?" → Selected: "Yes, titled as a Pi gap and citing the accepted limitation in PROJECT.md" — documents a known limitation.
+- [JSONL race] Q: "Fix the second harness race research found (`features/lib/turn-records.ts:37` parsing a half-written JSONL line)?" → Selected: "Yes, in the hooks plan beside the ESRCH fix in `features/lib/hook-files.ts`, each as its own first commits, with the suite passing in at least two more full adapter runs" — same reason as [Async flake].
+- [Assumption delta] Q: "The detector fired on 'additional' (pluralization)?" → Selected: "False positive: it matched the file name `additional-context.feature`; decision `no-change`" — no identity-model change.
+
 ### Claude's Discretion
 - Scenario titles, step wording, tables; break edits; plan count and waves.
 
