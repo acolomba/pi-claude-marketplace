@@ -1741,6 +1741,39 @@ test("NFR-3: discard removes a backup that holds a read-only directory", async (
   });
 });
 
+test("NFR-3: discard changes no mode behind a backup symlink or in the live tree", async () => {
+  await withHermeticEnvironment("prune-rollback-read-only-symlink-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const readOnly = await addReadOnlySkillDirectory(fixture.skill);
+    const outside = path.join(cwd, "outside-dir");
+    await mkdir(outside);
+    await chmod(outside, 0o555);
+    await symlink(outside, path.join(path.dirname(fixture.skill), "linked"));
+    try {
+      const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
+
+      // act
+      await rollback.discard();
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          outside: (await lstat(outside)).mode & 0o777,
+          live: (await lstat(readOnly)).mode & 0o777,
+          backups: (await readdir(locations.extensionRoot)).filter((name) =>
+            name.startsWith("prune-backup-"),
+          ),
+        },
+        { outside: 0o555, live: 0o555, backups: [] },
+      );
+    } finally {
+      await restoreReadOnlyWrites(locations, readOnly);
+    }
+  });
+});
+
 test("NFR-3: a rollback that restores everything removes a backup that holds a read-only directory", async () => {
   await withHermeticEnvironment("prune-rollback-read-only-rollback-", async ({ cwd }) => {
     // arrange
