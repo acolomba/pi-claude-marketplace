@@ -485,14 +485,20 @@ Each edit is an exact-substring replacement that matched once. The definitions a
 | A4 | Pinning `cause: "not-declared"` (MCPMIG-01) in a scenario is acceptable with a comment | Summary | The integration case `:640` stays instead |
 | A5 | The info row `plugin:hello:live (unsupported ws)` that `:509` also asserted needs no scenario (the move rows and list cover the user's view) | Case inventory | Add a `plugin info` scenario after the move |
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+Each question is settled by a CONTEXT.md decision; the plans follow those decisions.
 
 1. **`@mcp` instead of `@adapter-only` for the legacy-move and override scenarios** (deviation from CONTEXT [Tags]).
    - Known: all 16 legacy-move drafts, all 24 override drafts, and the optional 25th give byte-identical payloads and files under both profiles (dump diff per scenario). The skill defines `@adapter-only` as holding only under pi-mcp-adapter. Success criteria 3 and 4 require "pass under both profiles". The existing `legacy-move.feature` scenarios are `@mcp`.
    - Recommendation: `@mcp`, confirmed by the user before planning locks it. Name the IDs in the titles anyway.
+   - RESOLVED by CONTEXT [Tags, after research]: the legacy-move and override scenarios carry `@mcp`; the one case that differs, the MREC-03 list row of a moved plugin (D-P3-16), is a licensed `@adapter-only`/`@builtin-only` pair.
 2. **What "the `keptOverride` and `serverChoices` field checks" (CONTEXT, ROADMAP) refers to.** No case in `mcp-override-lifecycle` checks those fields other than through the file's text. Recommendation: delete the whole file once the scenarios land. If the user meant something else, the planner keeps the named cases.
+   - RESOLVED by CONTEXT [Override file]: no case checks those fields except through the file text a user sees, so `mcp-override-lifecycle` is deleted whole once its cases move.
 3. **Optional additions.** `final-lifecycle-extra.feature:17` (the user re-install after the project cycle, the last assertion of `:117`) is validated. Recommendation: include it. The integration case's "no `mcp.json` is created" check has no step; it would need a new `Then ... does not exist` step in `mcp-configuration.steps.ts`. Recommendation: skip it, because the `mcp-adapter.json` checks cover the user's file.
+   - RESOLVED by CONTEXT [Optional cases]: the re-install scenario is included; the no-`mcp.json` claim has no step that fits, so it is left out and the SUMMARY says so.
 4. **`options.feature:221` is `@adapter-only` though the file is identical under `builtin`** (measured with the five-field draft). It is out of scope; leave it.
+   - RESOLVED as out of scope: no plan changes `options.feature:221`; it stays `@adapter-only` (no CONTEXT decision is needed).
 
 ## Environment Availability
 
