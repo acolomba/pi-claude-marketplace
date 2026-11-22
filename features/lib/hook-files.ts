@@ -679,22 +679,29 @@ async function carriesMarker(pid: number, entry: RegisteredHookProcess): Promise
 }
 
 // The process group of `pid` from /proc/<pid>/stat, or nothing when the
-// process is gone. The command name in parentheses may hold spaces, so the
-// fields are read after its closing parenthesis: state, ppid, pgrp.
+// process is gone. Any other read error throws. The command name in
+// parentheses may hold spaces, so the fields are read after its closing
+// parenthesis: state, ppid, pgrp.
 async function processGroupOf(pid: number): Promise<number | undefined> {
   let stat: string;
   try {
     stat = await readFile(`/proc/${pid}/stat`, "utf8");
-  } catch {
-    return undefined;
+  } catch (error: unknown) {
+    const code = errorCode(error);
+    if (code === "ENOENT" || code === "ESRCH") {
+      return undefined;
+    }
+
+    throw error;
   }
 
   return Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[2]);
 }
 
-// Whether a live member of the process group `entry.pid` carries the dispatch
-// marker. A member that exited, or whose environment /proc does not show,
-// does not count.
+// Whether a member of the process group `entry.pid` carries the dispatch
+// marker. A member that exited (ENOENT, ESRCH), or whose environment /proc
+// does not show (EACCES), does not count. Any other read error throws, so a
+// failed scan never skips the kill without a word.
 async function groupHoldsMarker(entry: RegisteredHookProcess): Promise<boolean> {
   const pids = (await readdir("/proc")).filter((name) => /^\d+$/.test(name)).map(Number);
   const marked = await Promise.all(
@@ -703,19 +710,30 @@ async function groupHoldsMarker(entry: RegisteredHookProcess): Promise<boolean> 
         return false;
       }
 
-      return carriesMarker(pid, entry).catch(() => false);
+      return carriesMarker(pid, entry).catch((error: unknown) => {
+        const code = errorCode(error);
+        if (code === "ENOENT" || code === "ESRCH" || code === "EACCES") {
+          return false;
+        }
+
+        throw error;
+      });
     }),
   );
   return marked.includes(true);
 }
 
-async function isRegisteredHookProcess(entry: RegisteredHookProcess): Promise<boolean> {
+// Which process of `entry` carries its dispatch marker: the leader itself, a
+// member of its group once the leader exited, or none.
+type RegisteredHookMatch = "leader" | "group" | "none";
+
+async function registeredHookMatch(entry: RegisteredHookProcess): Promise<RegisteredHookMatch> {
   if (process.platform !== "linux") {
-    return true;
+    return "leader";
   }
 
   try {
-    return await carriesMarker(entry.pid, entry);
+    return (await carriesMarker(entry.pid, entry)) ? "leader" : "none";
   } catch (error: unknown) {
     // A leader that exited fails the read: with ESRCH while it is not yet
     // reaped and keeps its /proc entry, with ENOENT once it is reaped. Its
@@ -724,26 +742,39 @@ async function isRegisteredHookProcess(entry: RegisteredHookProcess): Promise<bo
     // can take the group ID, so a marked member makes the group the hook's.
     const code = errorCode(error);
     if (code === "ESRCH" || code === "ENOENT") {
-      return groupHoldsMarker(entry);
+      return (await groupHoldsMarker(entry)) ? "group" : "none";
     }
 
     throw error;
   }
 }
 
+// Sends SIGKILL to `target`. An ESRCH means the target already exited.
+function killIfPresent(target: number): boolean {
+  try {
+    process.kill(target, "SIGKILL");
+    return true;
+  } catch (error: unknown) {
+    if (errorCode(error) === "ESRCH") {
+      return false;
+    }
+
+    throw error;
+  }
+}
+
+// Kills the group of `entry`. When the leader itself carries the marker and
+// leads no group, the leader alone is killed. A group found through a member
+// gets no such fallback: its leader already exited, so `entry.pid` could
+// only name a process that reused the PID.
 async function stopRegisteredHookProcess(entry: RegisteredHookProcess): Promise<void> {
-  if (!(await isRegisteredHookProcess(entry))) {
+  const match = await registeredHookMatch(entry);
+  if (match === "none") {
     return;
   }
 
-  try {
-    process.kill(-entry.pid, "SIGKILL");
-  } catch {
-    try {
-      process.kill(entry.pid, "SIGKILL");
-    } catch {
-      // The child already exited.
-    }
+  if (!killIfPresent(-entry.pid) && match === "leader") {
+    killIfPresent(entry.pid);
   }
 }
 
