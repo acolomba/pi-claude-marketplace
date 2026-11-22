@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: system-git
 milestone_name: System Git
 status: planning
-last_updated: "2026-11-22T15:18:49.600Z"
+last_updated: "2026-11-22T15:56:17.000Z"
 last_activity: 2026-11-22
 progress:
-  total_phases: 0
+  total_phases: 8
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,19 +17,21 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-11-17 when the parity-gaps milestone closed)
+See: `.planning/PROJECT.md` (updated 2026-11-22 when the system-git milestone started)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Planning the next milestone; parity-gaps waits for a PR from `features/gaps`
+**Current focus:** Phase 1 -- Harness on System Git (milestone system-git, 8 phases)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-11-22 — Milestone system-git started
+Phase: 1 of 8 (Harness on System Git)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-11-22 — Roadmap created for system-git (8 phases, 35/35 requirements mapped)
+
+Progress: [░░░░░░░░░░] 0%
 
 
 ### parity-gaps closeout: `override_closeout`
@@ -555,7 +557,7 @@ archived milestone artifacts.
 ## Operator Next Steps
 
 - Offer the version bump, then open the PR for `features/gaps`; its CI `behavioral` job on Node 24 closes Phase 5 A9
-- Start the next milestone with /gsd-new-milestone
+- system-git: discuss Phase 1 with `/gsd-discuss-phase 1`, then plan it with `/gsd-plan-phase 1`
 
 
 ## Performance Metrics
@@ -1104,6 +1106,15 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ### Roadmap Evolution
 
+- system-git roadmap created 2026-11-22 (phase numbers reset to 1), in
+  SUMMARY.md's eight-phase order with no change: Phase 1 (Harness on System
+  Git), 2 (Git Process Seam and Typed Failures), 3 (System Git Transport and
+  Clone Shape), 4 (SSH Sources and Transport Selection), 5 (Credential
+  Surface), 6 (Failure-Message Parity), 7 (Submodules and Marketplace Pins),
+  8 (Close). Phase 3 stays one phase, so the cucumber request tables change
+  once and old-clone normalization lands with the swap. Each phase lists the
+  SUMMARY.md open questions (Q1 to Q21) its discuss step answers; the roadmap
+  decides none.
 - behavioral-gaps roadmap created 2026-11-07 (phase numbers reset to 1), with
   the phase structure the user fixed for maximum concurrency: Phase 1
   (Foundation, serial in the parent session; builds every stand-in and shared
@@ -1181,6 +1192,17 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ### Blockers/Concerns
 
+- [system-git] Q1 (Phase 2), Q2 (Phase 5), Q7 (Phase 4), and Q10 (Phase 3)
+  change what their phase builds. A fallback chosen for Q1 keeps
+  `isomorphic-git`, which moves SG-CLS-01 to Out of Scope.
+- [system-git] Phase 3 deletes the `isomorphic-git` auth callbacks before
+  Phase 5 answers Q2, so Phase 3's discuss step settles how the Device Flow
+  scenarios stay green until Phase 5.
+- [system-git] No Windows or macOS host ran the research, and the experiments
+  ran on git 2.43.0 only; Phase 2 plans a manual check on macOS and Windows,
+  and CI logs its git version (SG-HRN-04).
+- [system-git] Phase 1 measures the request-table re-baseline (estimated at
+  79 tables in 20 feature files) that Phase 3 carries out.
 - [behavioral-gaps] Phase 1 must settle how Pi reaches the Device Flow
   stand-in: GHB-02 turns Device Flow off while
   `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` points GitHub sources at the
@@ -1237,8 +1259,8 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-17T12:15:00.000Z
-Stopped at: Milestone parity-gaps completed and archived (override_closeout); next is the PR for `features/gaps`
+Last session: 2026-11-22T15:56:17.000Z
+Stopped at: Roadmap created for milestone system-git (8 phases, 35/35 requirements mapped); next is `/gsd-discuss-phase 1`
 Resume file: None
 
 ### Phase 2 completion-helper notes

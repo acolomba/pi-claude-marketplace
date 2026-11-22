@@ -98,14 +98,49 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| SG-HRN-01 | Phase 1 | Pending |
+| SG-HRN-02 | Phase 1 | Pending |
+| SG-HRN-03 | Phase 1 | Pending |
+| SG-HRN-04 | Phase 1 | Pending |
+| SG-PRC-01 | Phase 2 | Pending |
+| SG-PRC-02 | Phase 2 | Pending |
+| SG-PRC-03 | Phase 2 | Pending |
+| SG-PRC-04 | Phase 2 | Pending |
+| SG-PRC-05 | Phase 2 | Pending |
+| SG-PRC-06 | Phase 2 | Pending |
+| SG-TRN-01 | Phase 3 | Pending |
+| SG-TRN-02 | Phase 3 | Pending |
+| SG-TRN-03 | Phase 3 | Pending |
+| SG-TRN-04 | Phase 3 | Pending |
+| SG-TRN-05 | Phase 3 | Pending |
+| SG-TRN-06 | Phase 3 | Pending |
+| SG-TRN-07 | Phase 3 | Pending |
+| SG-MIG-01 | Phase 3 | Pending |
+| SG-SSH-01 | Phase 4 | Pending |
+| SG-SSH-02 | Phase 4 | Pending |
+| SG-SSH-03 | Phase 4 | Pending |
+| SG-SSH-04 | Phase 4 | Pending |
+| SG-SSH-05 | Phase 4 | Pending |
+| SG-SSH-06 | Phase 4 | Pending |
+| SG-AUTH-01 | Phase 5 | Pending |
+| SG-AUTH-02 | Phase 5 | Pending |
+| SG-AUTH-03 | Phase 5 | Pending |
+| SG-ERR-01 | Phase 6 | Pending |
+| SG-ERR-02 | Phase 6 | Pending |
+| SG-SUB-01 | Phase 7 | Pending |
+| SG-SUB-02 | Phase 7 | Pending |
+| SG-PIN-01 | Phase 7 | Pending |
+| SG-CLS-01 | Phase 8 | Pending |
+| SG-CLS-02 | Phase 8 | Pending |
+| SG-CLS-03 | Phase 8 | Pending |
 
 **Coverage:**
 
 - v1 requirements: 35 total
-- Mapped to phases: 0
-- Unmapped: 35
+- Mapped to phases: 35
+- Unmapped: 0
 
 ---
 
 *Requirements defined: 2026-11-22*
-*Last updated: 2026-11-22 after milestone requirements definition*
+*Last updated: 2026-11-22 after roadmap creation (8 phases, 35/35 requirements mapped)*
