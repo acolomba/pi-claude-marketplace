@@ -296,3 +296,70 @@ Feature: MCP server legacy move
       }
 
       """
+
+  @mcp
+  Scenario: An install removes the plugin's marked mcp.json entry and the disable stub under its old name, keeps the user's own server, and says so (AMIG-02)
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" declares the mcp server "srv"
+    Given the marketplace "fixtures" is added to the project scope
+    Given the mcp.json file of the project scope holds this text, as release 0.19.2 wrote it:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": [], "_piClaudeMarketplace": {"plugin": "demo", "marketplace": "fixtures"}}}}
+      """
+    Given the user has written these fields on the mcp server "srv" in the mcp-adapter.json file of the project scope:
+      """
+      {"disabled": true}
+      """
+    Given the user has written these fields on the mcp server "other" in the mcp-adapter.json file of the project scope:
+      """
+      {"command": "pi-features-users-own-mcp-server"}
+      """
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind               | severity | needs reload | notices                                                                                                  |
+      | cascade            | info     | true         |                                                                                                          |
+      | mcp-config-notices | warning  | false        | [{"kind":"leftover-removed","scope":"project","file":"mcp-adapter.json","plugin":"demo","server":"srv"}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "other": {
+            "command": "pi-features-users-own-mcp-server"
+          },
+          "plugin_demo_srv_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "demo",
+              "marketplace": "fixtures",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              }
+            }
+          }
+        }
+      }
+
+      """
+    Then the mcp configuration file "mcp.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {}
+      }
+
+      """

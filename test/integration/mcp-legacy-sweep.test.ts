@@ -84,35 +84,6 @@ async function install(cwd: string, scope: Scope): Promise<NotifyRecord[]> {
   return notifications;
 }
 
-test("AMIG-02: installing a plugin whose old entry is in mcp.json writes the new entry and removes the old entry and its leftovers", async () => {
-  await withHermeticEnvironment("mcp-legacy-sweep-install-", async ({ cwd }) => {
-    // arrange
-    const pluginRoot = await seedMcpPlugin(cwd, ["project"]);
-    const locations = locationsFor("project", cwd);
-    await seedLegacyEntry(locations);
-    await writeJson(locations.mcpAdapterJsonPath, {
-      mcpServers: { srv: { disabled: true }, other: { command: "x" } },
-    });
-
-    // act
-    const notifications = await install(cwd, "project");
-
-    // assert
-    assert.deepStrictEqual(await readJson(locations.mcpAdapterJsonPath), {
-      mcpServers: { other: { command: "x" }, plugin_hello_srv_: helloEntry(pluginRoot, locations) },
-    });
-    assert.strictEqual(await readFile(locations.mcpJsonPath, "utf8"), EMPTIED_MCP_JSON);
-    assert.deepStrictEqual(notifications.at(-1), {
-      message: [
-        LEFTOVER_SUMMARY,
-        "",
-        'Removed "srv" from the project-scope mcp-adapter.json: pi-mcp-adapter had written it under the old name of a server from hello, for example for /mcp-adapter disable, and it no longer applies.',
-      ].join("\n"),
-      severity: "warning",
-    });
-  });
-});
-
 test("AMIG-01: a direct-tools copy under the old name is removed, and an unrelated marker-less server stays", async () => {
   await withHermeticEnvironment("mcp-legacy-sweep-panel-", async ({ cwd }) => {
     // arrange
