@@ -1312,7 +1312,7 @@ Feature: MCP server lifecycle
     Then the files of the user scope are unchanged
 
   @mcp
-  Scenario: A project update keeps the project's disable stub of a plugin the user scope also installs and leaves the user scope's files alone (AFILE-06)
+  Scenario: A project update writes the plugin's new server definition, keeps the project's disable stub of a plugin the user scope also installs, and leaves the user scope's files alone (AFILE-06)
     Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
       """
       {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
@@ -1327,6 +1327,10 @@ Feature: MCP server lifecycle
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has the file ".mcp.json" with these stub mcp servers:
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": ["v2"]}}}
+      """
     Given the files of the user scope are remembered
     When the user runs "/claude:plugin update demo@fixtures --scope project"
     Then the command reports these results:
@@ -1341,7 +1345,9 @@ Feature: MCP server lifecycle
         "mcpServers": {
           "plugin_demo_srv_": {
             "command": "pi-features-absent-mcp-server",
-            "args": [],
+            "args": [
+              "v2"
+            ],
             "env": {
               "CLAUDE_PLUGIN_ROOT": "{home}/marketplaces/fixtures/plugins/demo",
               "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/fixtures/demo"
