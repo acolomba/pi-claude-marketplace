@@ -95,7 +95,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { chmod, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { HOOK_RECORDER_PATH } from "./hook-recorder.ts";
@@ -667,25 +667,64 @@ async function registeredHookProcesses(scopeRoot: string): Promise<RegisteredHoo
   });
 }
 
+function errorCode(error: unknown): unknown {
+  return error instanceof Error && "code" in error ? error.code : undefined;
+}
+
+// Whether the environment of `pid` holds the dispatch marker of `entry`.
+// Throws when /proc cannot read it.
+async function carriesMarker(pid: number, entry: RegisteredHookProcess): Promise<boolean> {
+  const environ = await readFile(`/proc/${pid}/environ`, "utf8");
+  return environ.split("\0").includes(`PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=${entry.dispatchId}`);
+}
+
+// The process group of `pid` from /proc/<pid>/stat, or nothing when the
+// process is gone. The command name in parentheses may hold spaces, so the
+// fields are read after its closing parenthesis: state, ppid, pgrp.
+async function processGroupOf(pid: number): Promise<number | undefined> {
+  let stat: string;
+  try {
+    stat = await readFile(`/proc/${pid}/stat`, "utf8");
+  } catch {
+    return undefined;
+  }
+
+  return Number(stat.slice(stat.lastIndexOf(")") + 2).split(" ")[2]);
+}
+
+// Whether a live member of the process group `entry.pid` carries the dispatch
+// marker. A member that exited, or whose environment /proc does not show,
+// does not count.
+async function groupHoldsMarker(entry: RegisteredHookProcess): Promise<boolean> {
+  const pids = (await readdir("/proc")).filter((name) => /^\d+$/.test(name)).map(Number);
+  const marked = await Promise.all(
+    pids.map(async (pid) => {
+      if (pid === entry.pid || (await processGroupOf(pid)) !== entry.pid) {
+        return false;
+      }
+
+      return carriesMarker(pid, entry).catch(() => false);
+    }),
+  );
+  return marked.includes(true);
+}
+
 async function isRegisteredHookProcess(entry: RegisteredHookProcess): Promise<boolean> {
   if (process.platform !== "linux") {
     return true;
   }
 
   try {
-    const environ = await readFile(`/proc/${entry.pid}/environ`, "utf8");
-    return environ
-      .split("\0")
-      .includes(`PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=${entry.dispatchId}`);
+    return await carriesMarker(entry.pid, entry);
   } catch (error: unknown) {
-    // A process that exited but is not yet reaped keeps its /proc entry, and
-    // reading its environ then fails with ESRCH instead of ENOENT.
-    if (
-      error instanceof Error &&
-      "code" in error &&
-      (error.code === "ENOENT" || error.code === "ESRCH")
-    ) {
-      return false;
+    // A leader that exited fails the read: with ESRCH while it is not yet
+    // reaped and keeps its /proc entry, with ENOENT once it is reaped. Its
+    // group can outlive it, because a child the hook started stays in the
+    // group with the marker. While a member lives, no new process or group
+    // can take the group ID, so a marked member makes the group the hook's.
+    const code = errorCode(error);
+    if (code === "ESRCH" || code === "ENOENT") {
+      return groupHoldsMarker(entry);
     }
 
     throw error;
