@@ -639,6 +639,30 @@ Feature: Plugin prune
       | tools            | project           | lib@tools | lib  | uninstalled | dependency pruned | project | 1.2.0   |
     Then the project scope has no installed plugins
 
+  Scenario: Pruning leaves no backup in the scope when it could not remove a member (NFR-3)
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | mid, free    |
+      | mid  | 1.1.0   | lib          |
+      | free | 1.3.0   |              |
+      | lib  | 1.2.0   |              |
+    Given the published plugin "mid" of the marketplace "tools" has a read-only skill directory
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the user has run "/claude:plugin uninstall app@tools --scope project"
+    When the user runs "/claude:plugin prune --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | warning                             |
+      | needs reload | true                                |
+      | summary      | A plugin operation needs attention. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id         | name | status      | reasons           | scope   | version | cause chain                               | cause truncated | leaks | rollback partial |
+      | tools            | project           | free@tools | free | uninstalled | dependency pruned | project | 1.3.0   |                                           |                 |       |                  |
+      | tools            | project           | mid@tools  | mid  | failed      | permission denied | project | 1.1.0   | {read-only skill directory removal error} | false           |       |                  |
+    Then the prune has left no backup in the project scope
+
   Scenario: Previewing a prune of a record an earlier release wrote lists nothing and changes no file (D-04-03)
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
