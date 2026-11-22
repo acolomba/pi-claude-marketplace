@@ -21,7 +21,7 @@ import path from "node:path";
 
 import { jsonObject, readObject } from "./earlier-version-state.ts";
 import { isPlainObject } from "./field-rows.ts";
-import { readPluginRecord } from "./installation-record.ts";
+import { readPluginRecord, splitPluginId } from "./installation-record.ts";
 import { writePublishedPluginFile } from "./published-marketplace.ts";
 
 import type { PublishedMarketplace } from "./published-marketplace.ts";
@@ -156,9 +156,7 @@ export async function legacyMcpServers(args: {
   readonly pluginRoot: string;
 }): Promise<Record<string, unknown>> {
   const { scopeRoot, pluginId, pluginRoot } = args;
-  const at = pluginId.lastIndexOf("@");
-  const plugin = pluginId.slice(0, at);
-  const marketplace = pluginId.slice(at + 1);
+  const { plugin, marketplace } = splitPluginId(pluginId);
   const declaredFile = path.join(pluginRoot, ".mcp.json");
   const declared = serversOf(
     jsonObject(JSON.parse(await readFile(declaredFile, "utf8")), declaredFile),
@@ -198,9 +196,7 @@ export async function writeLegacyMcpConfig(args: {
   readonly userServer: { readonly name: string; readonly command: string };
 }): Promise<Record<string, unknown>> {
   const { scopeRoot, pluginId, userServer } = args;
-  const at = pluginId.lastIndexOf("@");
-  const plugin = pluginId.slice(0, at);
-  const marketplace = pluginId.slice(at + 1);
+  const { plugin, marketplace } = splitPluginId(pluginId);
   const { resolvedSource } = await readPluginRecord(scopeRoot, pluginId);
   if (typeof resolvedSource !== "string") {
     throw new Error(`the record of ${pluginId} names no plugin root`);
