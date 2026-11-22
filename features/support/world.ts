@@ -78,6 +78,7 @@ import type { GitHostTraffic, HttpsGitHost, RequestWindow } from "../lib/https-g
 import type { McpImplementation, McpProfile } from "../lib/mcp-implementation.ts";
 import type { NpmRegistryRequest } from "../lib/npm-registry.ts";
 import type { NotificationPayload, OfferedSkill, SessionReport } from "../lib/pi-commands.ts";
+import type { OneShotOutput } from "../lib/pi-one-shot.ts";
 import type { RpcGitEnvironment, RpcRecord, RpcRequest, RpcSandbox } from "../lib/pi-process.ts";
 import type { RegistrySnapshot } from "../lib/pi-registry-probe/snapshot.ts";
 import type { PiSessionLaunch, RpcProfileEnvironment } from "../lib/pi-rpc.ts";
@@ -221,6 +222,12 @@ export interface OneShotPiLaunch {
   readonly sandbox: RpcSandbox;
   readonly git: RpcGitEnvironment;
   readonly environment: RpcProfileEnvironment;
+  /**
+   * The GitHub redirect, when the scenario's profile Pi runs without the
+   * GitHub base override, so the one-shot Pi keeps its requests on this
+   * machine too (D-BG-01); otherwise none.
+   */
+  readonly extensions: readonly string[];
 }
 
 // The restarts whose new session holds the entries of the stopped Pi's session.
@@ -287,6 +294,8 @@ export class ScenarioWorld extends World {
   // step reads only that command's traffic. The `BeforeStep` hook in
   // `support/https-git-host.ts` sets it.
   requestWindow: RequestWindow | undefined = undefined;
+  // What the last one-shot Pi in print mode left, which a print-mode `Then` reads.
+  printModeRun: OneShotOutput | undefined = undefined;
   // The npm registry this scenario started, which only a scenario that ships plugin packages needs.
   npmRegistry: NpmRegistry | undefined = undefined;
   // The npm registry's log length when the last `When` step started; `support/npm-registry.ts` sets it.
@@ -775,15 +784,23 @@ export class ScenarioWorld extends World {
 
   /**
    * Prepares `{home}/tmp` with its compile-cache link and returns what a
-   * one-shot Pi in the run's sandbox starts with: the run's sandbox, the
-   * run's git environment, and that `TMPDIR` (D-BG-09). A step that starts a
-   * one-shot Pi, such as one in json mode, reads it here, so no step module
-   * reaches the run's state.
+   * one-shot Pi in the run's sandbox starts with: the run's sandbox, the git
+   * environment and the extensions that a terminal session of this scenario
+   * gets, and that `TMPDIR` (D-BG-09). So a scenario whose profile Pi runs
+   * without the GitHub base override gives its one-shot Pi the GitHub
+   * redirect too, which keeps its requests on this machine (D-BG-01). A step
+   * that starts a one-shot Pi, such as one in json or print mode, reads it
+   * here, so no step module reaches the run's state.
    */
   async oneShotPiLaunch(): Promise<OneShotPiLaunch> {
     const { sandbox, piEnvironment } = currentRun();
     const temporary = await this.prepareTemporaryDirectory();
-    return { sandbox, git: piEnvironment, environment: { TMPDIR: temporary } };
+    return {
+      sandbox,
+      git: this.tuiEnvironment ?? piEnvironment,
+      environment: { TMPDIR: temporary },
+      extensions: this.tuiExtensions,
+    };
   }
 
   /**

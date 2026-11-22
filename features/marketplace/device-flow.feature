@@ -252,3 +252,27 @@ Feature: Marketplace device flow
       | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
       | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
       | POST   | https://github.com/acme/tools.git/git-upload-pack                   | git host  |
+
+  Scenario: Adding a private GitHub marketplace in pi's print mode refuses with the remedy and leaves the scope as it was (MODE-04)
+    Given the marketplace "fixtures" is published as a url source
+    Given the marketplace "fixtures" is added to the project scope
+    Given the marketplace "tools" is published as a github source
+    Given the git host requires the user "x-access-token" with the password "stand-in-access-token" for the marketplace "tools"
+    Given github's sign-in answers its polls with these outcomes:
+      | outcome               |
+      | authorization_pending |
+    Given pi runs with github's requests routed to the stand-ins
+    Given the files of the project scope are remembered
+    When the user runs "/claude:plugin marketplace add acme/tools --scope project" in pi's print mode
+    Then pi's print mode exits with code 0 and prints this error:
+      """
+      Extension error (command:claude:plugin): Device-flow authentication is unavailable in print mode. Retry with --mode json or interactive Pi.
+      """
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+    Then github's sign-in receives no request
+    Then pi routes these github requests:
+      | method | url                                                                 | routed to |
+      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
+    Then the files of the project scope are unchanged
