@@ -27,7 +27,7 @@ See: `.planning/PROJECT.md` (updated 2026-11-21 after Phase 1)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 06 — Hooks and Auth
+**Current focus:** Phase 7 — Path-Source Dependency Tags
 
 ## Current Position
 
@@ -1304,8 +1304,8 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-22T10:00:00.000Z
-Stopped at: Phase 5 complete (verified 4/4, threats 0 open), ready to plan Phase 6
+Last session: 2026-11-22T15:00:00.000Z
+Stopped at: Phase 6 complete (verified 9/9, threats 0 open; HOOK-E2E-04 case kept pending upstream research), ready to plan Phase 7
 Resume file: None
 
 ### Phase 2 completion-helper notes
