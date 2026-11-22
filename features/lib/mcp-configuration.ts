@@ -6,10 +6,13 @@
  *
  * A declared server runs a command that does not exist, so nothing ever
  * starts it: a scenario observes only how Pi stages the server in the scope's
- * MCP configuration. Each function but the legacy writer writes one file it
- * creates and refuses to replace a file it did not create. The legacy writer
- * rewrites a scope's two MCP configuration files, under the scope root its
- * caller names, which lies in the scenario's sandbox (D-BG-13).
+ * MCP configuration. `legacyMcpServers` builds, without writing, the entries
+ * release 0.19.2 wrote for a plugin, which the legacy writer and the step
+ * that checks a 0.19.2 `mcp.json` text share. Each other function but the
+ * legacy writer writes one file it creates and refuses to replace a file it
+ * did not create. The legacy writer rewrites a scope's two MCP configuration
+ * files, under the scope root its caller names, which lies in the scenario's
+ * sandbox (D-BG-13).
  */
 
 import assert from "node:assert/strict";
