@@ -24,6 +24,12 @@ const PID_SUFFIX = ".pid";
 const STAND_IN_EXIT_TIMEOUT_MS = 10_000;
 const STAND_IN_EXIT_POLL_MS = 50;
 
+// A stand-in writes each line with one append, so a read sees a line half
+// written only for a moment; a second covers a loaded CI runner. A line still
+// unfinished after it fails the read.
+const PARTIAL_LINE_WAIT_MS = 1_000;
+const PARTIAL_LINE_POLL_MS = 10;
+
 /** Returns the harness directory of the sandbox home `home`: `<home>/harness`. */
 export function harnessDirectory(home: string): string {
   return path.join(home, "harness");
@@ -69,13 +75,31 @@ export async function readLogLengths(directory: string): Promise<ReadonlyMap<str
   return new Map(names.map((name, index) => [name, lengths[index] ?? 0]));
 }
 
+// The complete lines of `file` once the line that its first read saw
+// unfinished, if any, has finished. Later lines that this wait sees come
+// along, and the next `readLogLengths()` counts them, so no line is counted
+// twice. Fails when that line is still unfinished after `PARTIAL_LINE_WAIT_MS`.
+async function finishedLogLines(file: string): Promise<readonly string[]> {
+  const first = await logText(file);
+  const deadline = Date.now() + PARTIAL_LINE_WAIT_MS;
+  let { complete } = first;
+  while (first.partial && complete.length <= first.complete.length) {
+    assert.ok(Date.now() < deadline, `${file} ends in a line whose write never finished`);
+    await delay(PARTIAL_LINE_POLL_MS);
+    ({ complete } = await logText(file));
+  }
+
+  return complete;
+}
+
 /**
  * Returns the lines every `*.jsonl` log in `directory` gained since `lengths`
  * was read, each parsed as JSON, by file name. A log that `lengths` does not
  * name gained all its lines. A log that gained no line is left out. A line
- * whose write has not finished is left for the next read; once the stand-ins
- * have stopped, `assertStandInsStopped()` fails on a log that still ends in
- * one.
+ * whose write began before this read belongs to the lines it returns, as
+ * `readLogLengths()` counts it: the read waits a bounded time for that line
+ * to finish, and fails when it does not, so the line lands in exactly one
+ * turn.
  */
 export async function readLogLinesSince(
   directory: string,
@@ -83,7 +107,7 @@ export async function readLogLinesSince(
 ): Promise<ReadonlyMap<string, readonly unknown[]>> {
   const gained = await Promise.all(
     (await logNames(directory)).map(async (name): Promise<[string, unknown[]]> => {
-      const { complete } = await logText(path.join(directory, name));
+      const complete = await finishedLogLines(path.join(directory, name));
       const added = complete.slice(lengths.get(name) ?? 0).map((line): unknown => JSON.parse(line));
       return [name, added];
     }),
@@ -160,8 +184,8 @@ function stillRunning(standIns: readonly PidFile[]): PidFile[] {
  * processes to exit, because a stand-in that Pi stopped tracking exits only
  * when its stdin closes, a moment after Pi exits (P2-DC-77). A process that
  * still runs after the wait fails the scenario. So does a `*.jsonl` log that
- * does not end in a newline: no stand-in is left to finish its last line, so
- * the line would otherwise drop out of every read.
+ * does not end in a newline: no stand-in is left to finish its last line, and
+ * no later read of the scenario would report it.
  */
 export async function assertStandInsStopped(directory: string): Promise<void> {
   const standIns = await readPidFiles(directory, (name) => name.endsWith(PID_SUFFIX));
