@@ -21,6 +21,63 @@ Use these terms in code, messages, docs, and planning (user decisions 2026-10-17
 - **Declaration:** an entry in a layer. **Installation:** the plugin's artifacts and record in a scope.
 - **Effective configuration:** a scope's two layers merged field by field, local winning on conflicts. The same intent may be declared in both layers.
 
+## Current Milestone: system-git -- System Git (branch: features/system-git, started 2026-11-22)
+
+**Goal:** Clone and fetch marketplaces and git-source plugins with the
+system `git` binary, as Claude Code does, instead of `isomorphic-git`, so
+that a user who authenticates git over SSH can install from a private
+repository, and the extension needs no git credential of its own.
+
+**Target features:**
+
+- A system-git transport in place of the `isomorphic-git` calls of
+  `platform/git.ts`: shallow clone, `--branch`, SHA pins through
+  `fetch --depth 1` with an `--unshallow` fallback, submodules, and
+  `GIT_TERMINAL_PROMPT=0` on every remote command.
+- Upstream URL selection for `owner/repo` sources: the SSH probe, the HTTPS
+  fallback and the SSH retry, the `CLAUDE_CODE_PLUGIN_PREFER_HTTPS`
+  override, and the probe skip under `GIT_SSH_COMMAND`, `GIT_SSH`, or a URL
+  rewrite in git config.
+- Authentication through the credentials the machine already holds (ssh
+  keys, git credential helpers such as gh's), with no token of the
+  extension's own. What remains of the GitHub OAuth Device Flow is decided
+  in discuss.
+- Error messages and failure classification that follow Claude Code's,
+  with git's stderr redacted.
+- The constraints this changes: NFR-5 and ESLint BLOCK F `NETWORK_SEAMS`,
+  the `child-process-chokepoint` allow-list, NFR-10, D-MF-01
+  (`PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`), D-PL8-12, the AAP no-Device-Flow
+  rules, the cucumber HTTPS git-host stand-in and its CA trust, and
+  `test/architecture/hermetic-git-environment.test.ts`.
+- Migration of existing clones and stored credentials, and updates to
+  `.planning/codebase/*.md`, `README.md`, and `README.es.md`.
+
+**Key context:**
+
+- The milestone reverses D-21 ("Adopt `isomorphic-git`; supersede MA-7"),
+  whose one recorded reason was the "git not found on PATH" failure. The
+  maintainer agreed in principle to reverse it. The reversal is recorded as
+  a new decision with its own ID that cites D-21.
+- It answers issue #325 at the root cause: `isomorphic-git` has no SSH
+  transport. It supersedes contributor PRs #326 (a direct `gh auth token`
+  fallback ahead of Device Flow, whose rejected-token retry never reaches
+  Device Flow) and #327 (a global `PI_CLAUDE_MARKETPLACE_DEVICE_FLOW=off`
+  setting, a design the maintainer rejected). The maintainer handles both
+  PRs; this milestone does not touch them.
+- Upstream evidence: the Claude Code 2.1.330 binary and the host-marketplace
+  documentation (`https://code.claude.com/docs/en/plugins/host-marketplace.md`),
+  both observed 2026-11-21. Each claim is re-checked against the binary and
+  carried into the phase CONTEXT.md as an evidence record per
+  `.agents/skills/claude-code-compat-research`.
+- Pi evidence: Pi's own `pi install git:...` runs the system `git` with
+  `GIT_TERMINAL_PROMPT=0` and accepts `git@host:` and `ssh://` URLs, with no
+  OAuth.
+- Open for discuss, each with the compat-research option format: git only or
+  an `isomorphic-git` fallback; remove or keep Device Flow; how often git is
+  missing on the platforms that matter (Windows); error and failure
+  classification parity; migration of existing clones and Device Flow
+  keychain entries.
+
 ## Previous Milestone: parity-gaps -- Claude Code Parity Gaps and Defects (branch: features/gaps, started 2026-11-11, completed 2026-11-17, not yet pushed, no PR or npm release yet)
 
 **Goal:** Close every P0 and P1 gap that
@@ -1142,7 +1199,10 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ### Active
 
-No milestone is active. The 42 parity-gaps requirements are validated and
+The system-git milestone is active. Its requirements are in
+[REQUIREMENTS.md](REQUIREMENTS.md).
+
+The 42 parity-gaps requirements are validated and
 archived in
 [milestones/parity-gaps-REQUIREMENTS.md](milestones/parity-gaps-REQUIREMENTS.md).
 The 34 behavioral-gaps requirements are validated and
@@ -2794,3 +2854,5 @@ _Last updated: 2026-11-16 after the maintainer review of the last two pending ro
 _Last updated: 2026-11-17 after the parity-gaps milestone closed (`override_closeout`, Phase 5 A9 waits for the PR's CI); every D-PG decision row is kept as locked._
 
 _Last updated: 2026-11-19 after the maintainer decision D-PG1-15: the `--map-model` alias table follows Claude Code 2.1.328 and the Pi floor is 1.5.1, which supersedes D-PG1-06 and amends D-CF4-07 and the NFR-11 floor; AGENT-06 is closed._
+
+_Last updated: 2026-11-22 when the system-git milestone started._
