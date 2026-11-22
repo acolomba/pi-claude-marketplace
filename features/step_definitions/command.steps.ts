@@ -268,6 +268,13 @@ Then("the command result contains no absolute sandbox path", function (this: Sce
   }
 });
 
+// AUTH-09: a secret, such as a token, appears in no field of any result of
+// the command, the fields no table states included.
+Then("no result of the command contains {string}", function (this: ScenarioWorld, secret: string) {
+  const rendered = JSON.stringify(this.resultsOf("command"));
+  assert.strictEqual(rendered.includes(secret), false, `a command result contains ${secret}`);
+});
+
 // The notice of the command the terminal ran, read from the current screen
 // from its own first row down to Pi's editor. A redraw that replaced the
 // notice shows its last value.

@@ -5,10 +5,12 @@
 // (MODE-04), and when `fs.rm` cannot remove its staged clone, the refusal
 // stays the primary cause and the cleanup failure joins its text. A scenario
 // cannot make that removal fail. The case compares the whole notify log, so
-// token material would show up as a difference (AUTH-09). Everything a user
-// can see of the sign-in is in `features/marketplace/device-flow.feature`:
-// the print refusal and the scope it leaves (MODE-04), AUTH-01, AUTH-02 and
-// AUTH-08, and AUTH-07.
+// token material would show up as a difference (AUTH-09). The scenarios of
+// the sign-in are in `features/marketplace/device-flow.feature`: the print
+// refusal and the scope it leaves (MODE-04), AUTH-01, AUTH-02 and AUTH-08,
+// and AUTH-07. They compare the result fields that their tables state, and
+// the AUTH-01 and AUTH-07 scenarios also check that no field of any result
+// holds the stored or the signed-in token (AUTH-09).
 
 import assert from "node:assert/strict";
 import fs, { readFile, readdir } from "node:fs/promises";

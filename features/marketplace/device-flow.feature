@@ -24,6 +24,7 @@ Feature: Marketplace device flow
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | marketplace status |
       | tools            | user              | added              |
+    Then no result of the command contains "stand-in-access-token"
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
@@ -270,6 +271,7 @@ Feature: Marketplace device flow
     Then the result lists these marketplaces:
       | name       | scope | status | reasons                 |
       | acme/tools | user  | failed | authentication required |
+    Then no result of the command contains "expired-token"
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
@@ -302,6 +304,8 @@ Feature: Marketplace device flow
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | marketplace status |
       | tools            | user              | added              |
+    Then no result of the command contains "expired-token"
+    Then no result of the command contains "stand-in-access-token"
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
