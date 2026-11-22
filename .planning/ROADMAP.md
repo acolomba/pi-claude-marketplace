@@ -270,7 +270,10 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
+**Wave 1**
 - [ ] 04-01-PLAN.md -- Wave 1: twelve prune scenarios (E01, M01, FL01, S01, C01, A01, P01, N02, U01, F01, F02, L01) in `plugin/prune.feature` with three Givens in the new `plugin/prune.steps.ts`, breaks K1 to K29 (K2 the accepted survivor), then trim `standalone-prune` to its two call-absence carriers (ITMIG-08)
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 04-02-PLAN.md -- Wave 2: the backup-leak fix in `orchestrators/plugin/prune-rollback.ts` test first, with four unit cases, the no-backup scenario F03 and its `Then`, and break B1 on the fixed tree (ITMIG-08, rule 4)
 
 ### Phase 5: MCP Install, Legacy Move, and Overrides

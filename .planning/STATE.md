@@ -4,16 +4,16 @@ milestone: integration-rescope
 milestone_name: Integration Test Rescope
 current_phase: 4
 current_phase_name: Prune
-status: verifying
+status: executing
 stopped_at: Phase 03 complete, ready to verify Phase 4
-last_updated: "2026-11-21T23:34:44.967Z"
+last_updated: "2026-11-22T01:04:49.090Z"
 last_activity: 2026-11-21
 last_activity_desc: Phase 03 complete, transitioned to Phase 4
-state_head: 8865f3b93e95d82319ea27b1839f8238d7395569
+state_head: 3a6b3df17c16b30a6571e60ac84d24f856cb3466
 progress:
   total_phases: 8
   completed_phases: 3
-  total_plans: 10
+  total_plans: 12
   completed_plans: 10
   percent: 38
 ---
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 4 of 8 (Prune)
+Phase: 4 (Prune) — READY TO EXECUTE
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-11-21 — Phase 03 complete, transitioned to Phase 4
 
 Progress: [████░░░░░░] 38%
@@ -1198,6 +1198,7 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ### Blockers/Concerns
 
+- [integration-rescope] Phase 4 planning: decision-coverage gate `could-not-parse` (bracket-named decisions); proceeded by override after the plan checker confirmed coverage. Research found a prune backup leak (a failed member with a read-only directory leaves `prune-backup-*`); plan 04-02 fixes it under rule 4.
 - [integration-rescope] CHANGELOG parent line for the milestone PR (Phase 3,
   D-SEED-01 fix `cd728de`): "A plugin that a marketplace offers from its own
   repository, through a `git-subdir` URL that ends in `.git` or `/`, now shows as
