@@ -1,7 +1,8 @@
 /**
  * @fileoverview Steps about plugin prune: a preview whose rows it states, an
- * installation record the prune cannot read, and the skill directories a
- * failed prune left that the user repairs.
+ * installation record the prune cannot read, the skill directories a failed
+ * prune left that the user repairs, and the backups a prune leaves. A prune
+ * backs up what it removes until its state save succeeds (NFR-3).
  */
 
 import assert from "node:assert/strict";
@@ -9,7 +10,7 @@ import { existsSync } from "node:fs";
 import { readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { type DataTable, Given } from "@cucumber/cucumber";
+import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
 import { recordTable } from "../../lib/field-rows.ts";
 import { runCommandPayloads } from "../../lib/pi-commands.ts";
@@ -62,5 +63,18 @@ Given(
       const directory = path.join(entry.parentPath, entry.name);
       assert.notStrictEqual((await stat(directory)).mode & 0o200, 0, `${directory} is read-only`);
     }
+  },
+);
+
+// The backups a prune keeps in the scope's extension directory carry the
+// prefix the prune gives them.
+Then(
+  "the prune has left no backup in the {word} scope",
+  async function (this: ScenarioWorld, scope: string) {
+    const names = await readdir(extensionRoot(this, scope));
+    assert.deepStrictEqual(
+      names.filter((name) => name.startsWith("prune-backup-")),
+      [],
+    );
   },
 );
