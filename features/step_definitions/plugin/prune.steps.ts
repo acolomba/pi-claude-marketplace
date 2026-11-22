@@ -1,13 +1,14 @@
 /**
  * @fileoverview Steps about plugin prune: a preview whose rows it states, an
- * installation record the prune cannot read, the skill directories a failed
- * prune left that the user repairs, and the backups a prune leaves. A prune
- * backs up what it removes until its state save succeeds (NFR-3).
+ * installation record the prune cannot read, a scope to prune that holds no
+ * files, the skill directories a failed prune left that the user repairs, and
+ * the backups a prune leaves. A prune backs up what it removes until its
+ * state save succeeds (NFR-3).
  */
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
@@ -48,6 +49,17 @@ Given(
     assert.ok(existsSync(file), `${file} does not exist`);
     await writeFile(file, "{");
     assert.strictEqual(await readFile(file, "utf8"), "{");
+  },
+);
+
+// A scope root with no config file, no installation record, and no extension
+// directory, so a prune that creates any file in it changes the scope's files.
+Given(
+  "the {word} scope to prune exists and holds no files",
+  async function (this: ScenarioWorld, scope: string) {
+    const root = this.scopeRoot(scope);
+    await mkdir(root, { recursive: true });
+    assert.deepStrictEqual(await readdir(root), []);
   },
 );
 

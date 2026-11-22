@@ -527,10 +527,7 @@ Feature: Plugin prune
     Given the marketplace "tools" is added to the user scope
     Given the user has run "/claude:plugin install app@tools --scope user"
     Given the user has run "/claude:plugin uninstall app@tools --scope user"
-    Given a config in scope project and layer base, with this text:
-      """
-      { "schemaVersion": 1, "marketplaces": {}, "plugins": {} }
-      """
+    Given the project scope to prune exists and holds no files
     Given the files of the user scope are remembered
     Given the files of the project scope are remembered
     When the user runs "/claude:plugin prune --scope project --dry-run"
