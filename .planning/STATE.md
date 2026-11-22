@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: integration-rescope
 milestone_name: Integration Test Rescope
-current_phase: 05
-current_phase_name: MCP Install, Legacy Move, and Overrides
-status: executing
-stopped_at: Phase 04 complete, ready to verify Phase 5
-last_updated: "2026-11-22T05:48:12.666Z"
+current_phase: 6
+current_phase_name: Hooks and Auth
+status: verifying
+stopped_at: Phase 05 complete, ready to verify Phase 6
+last_updated: "2026-11-22T09:29:55.513Z"
 last_activity: 2026-11-22
-last_activity_desc: Phase 05 execution started
-state_head: 5027a3adb6bc4144d242e8a153a9b0b8f5993db0
+last_activity_desc: Phase 05 complete, transitioned to Phase 6
+state_head: 8f1a87b3fd08de65f3d1ecb919a42e5740915e6c
 progress:
   total_phases: 8
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 15
-  completed_plans: 12
-  percent: 50
+  completed_plans: 15
+  percent: 63
 ---
 
 # Project State
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-11-21 after Phase 1)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 05 — MCP Install, Legacy Move, and Overrides
+**Current focus:** Phase 6 — Hooks and Auth
 
 ## Current Position
 
-Phase: 05 (MCP Install, Legacy Move, and Overrides) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 05
-Last activity: 2026-11-22 — Phase 05 execution started
+Phase: 6 of 8 (Hooks and Auth)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-11-22 — Phase 05 complete, transitioned to Phase 6
 
-Progress: [█████░░░░░] 50%
+Progress: [██████░░░░] 63%
 
 
 ### parity-gaps closeout: `override_closeout`
@@ -1198,6 +1198,8 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ### Blockers/Concerns
 
+- [integration-rescope] Phase 5 gate: `features/hook/async.feature:261` ("A plain async hook runs past its declared timeout") failed in its After hook (`scenario releases failed`, `features/support/world.ts:1053`) in 2 of 4 full adapter runs on 8f1a87b, and passed alone (4/4), with its feature (3/3), and in an instrumented full run. Cause not captured; candidates: `pi.stop()` or the scenario cwd removal while the timed-out hook still runs. Input for Phase 6 (Hooks). The gate verdict on 8f1a87b is composed: check:static and direct coverage (p5d), test:unpaired and test:integration (p5e), adapter 2259/2259 (instrumented run, release message only), builtin 260/260.
+- [integration-rescope] Harness race fixed in 2c7d42d: `features/lib/subagent-hook-session.ts` read an exited child's `/proc/<pid>/environ` and failed with ESRCH (`subagent-hook-ownership.test.ts:232`).
 - [integration-rescope] Phase 5 planning: decision-coverage gate `could-not-parse` (bracket-named decisions); proceeded by override after the plan checker confirmed coverage. Research measured the legacy-move and override scenarios byte-identical under both profiles, so they are tagged `@mcp` (CONTEXT [Tags, after research]) where the ROADMAP note said `@adapter-only`. The planner run was lost once to a container restart and re-run. A planning commit body (`b935623`) names a phase, against the committing skill; history is not rewritten.
 - [integration-rescope] CHANGELOG parent line for the milestone PR (Phase 4,
   prune backup fix `d24f937`): "A prune that cannot remove a plugin's read-only
@@ -1300,8 +1302,8 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-22T04:00:00.000Z
-Stopped at: Phase 4 complete (verified 5/5, threats 0 open), ready to plan Phase 5
+Last session: 2026-11-22T10:00:00.000Z
+Stopped at: Phase 5 complete (verified 4/4, threats 0 open), ready to plan Phase 6
 Resume file: None
 
 ### Phase 2 completion-helper notes

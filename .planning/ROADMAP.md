@@ -117,7 +117,7 @@ them at the merge.
 - [x] **Phase 2: Plugin Layers, Names, and List Fold** - Scenarios prove the LAYER-04 refusals, the plugin-layer reports, plugin names that are `Object.prototype` members, and the unfiltered `list` fold (completed 2026-11-21)
 - [x] **Phase 3: Marketplace Layers and Cross-Scope Install** - Scenarios prove the marketplace layer rules and a project install that adds a user marketplace to the project (completed 2026-11-21)
 - [x] **Phase 4: Prune** - Scenarios prove the `prune` cases a user can see that the suite left out (completed 2026-11-22)
-- [ ] **Phase 5: MCP Install, Legacy Move, and Overrides** - Scenarios prove the MCP install refusals and warnings, the legacy `mcp.json` move, and the pi-mcp-adapter override cases
+- [x] **Phase 5: MCP Install, Legacy Move, and Overrides** - Scenarios prove the MCP install refusals and warnings, the legacy `mcp.json` move, and the pi-mcp-adapter override cases (completed 2026-11-22)
 - [ ] **Phase 6: Hooks and Auth** - Scenarios prove hooks in both scopes after `apply`, a reload that clears buffered context, no `.pi` directory from a hook dispatch, and the print-mode and credential-eviction sign-in cases
 - [ ] **Phase 7: Path-Source Dependency Tags** - A step publishes a marketplace repository with a tag, and scenarios prove that a constrained path-source dependency installs from that tag, with the TAGS-02 fallback
 - [ ] **Phase 8: Integration Suite Rescope** - Every case left in `test/integration/` is conformance, a race, or internal, each file says what it guards, the charter is written down, and `npm run check` passes on the combined tree
@@ -288,7 +288,7 @@ Plans:
   2. AVAR-04 notices follow the result rows on `update`, `reinstall`, and `enable`; a deny-listed credential is withheld with a notice (AVAR-05); `${CLAUDE_PROJECT_DIR}` reaches the server expanded; `!` is written as `!!`; and a secret value never appears in `mcp-adapter.json`. The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `mcp-variable-expansion` (ITMIG-09).
   3. An install removes a plugin's marked entries, old-name stubs, and direct-tools copies from a legacy `mcp.json` and keeps the user's own servers (AMIG-02). A load that moves both scopes shows one notice, with the project rows first, warns about unowned entries (AMIG-04), reports undeclared, unsupported, and malformed entries, and leaves a plugin that lists as partly installed. The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `mcp-legacy-sweep`, `mcp-migration`, and `mcp-verdict-migration` (ITMIG-10).
   4. Under pi-mcp-adapter, a project install keeps a user stub and writes it back on uninstall, a user plugin disabled in the project stays disabled through install, update, reinstall, and uninstall, an `/mcp-adapter enable` survives, an update that drops a server keeps its choice and a later version that restores the server restores the choice, and `openUi` and `trace` survive a reinstall. The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `mcp-override-lifecycle` (ITMIG-11).
-**Plans**: 3/3 plans executed
+**Plans**: 3/3 plans complete
 
 Plans:
 - [x] 05-01-PLAN.md -- Wave 1: eight AVAR and ANAME-07 scenarios and three Outline rows in `mcp-server/configuration.feature`, the D-PG10-11 scenario in `mcp-server/options.feature`, the environment-variable profile Pi Given, breaks M1 to M10 under both profiles, then delete `mcp-home-path-partial`, `mcp-tool-rules`, and `mcp-variable-expansion` (ITMIG-09)
@@ -345,7 +345,7 @@ Plans:
 | 2. Plugin Layers, Names, and List Fold | 4/4 | Complete    | 2026-11-21 |
 | 3. Marketplace Layers and Cross-Scope Install | 4/4 | Complete    | 2026-11-21 |
 | 4. Prune | 2/2 | Complete    | 2026-11-22 |
-| 5. MCP Install, Legacy Move, and Overrides | 3/3 | In Progress | - |
+| 5. MCP Install, Legacy Move, and Overrides | 3/3 | Complete    | 2026-11-22 |
 | 6. Hooks and Auth | 0/TBD | Not started | - |
 | 7. Path-Source Dependency Tags | 0/TBD | Not started | - |
 | 8. Integration Suite Rescope | 0/TBD | Not started | - |
