@@ -267,14 +267,14 @@ Plans:
   1. Each remaining empty-scope variant of `prune` and `prune --dry-run`, with and without `--scope`, reports the empty scope and changes nothing, and both forms report a malformed state file without showing its path. The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `standalone-prune` (ITMIG-08).
   2. A prune keeps held neighbours across marketplaces, selects again when a stale preview has changed on disk, keeps a failed member's dependency until a later retry removes both, previews with no project state and leaves both scopes as they were, and refuses without changing either scope when a declarer's manifest cannot be read. The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `standalone-prune` (ITMIG-08).
   3. `prune -y`, `prune --keep-data`, and `prune --prune` are refused with the prune usage line before any orphan is selected, and both scopes stay unchanged. The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `standalone-prune` (ITMIG-08).
-**Plans**: 1/2 plans executed
+**Plans**: 2/2 plans executed
 
 Plans:
 **Wave 1**
 - [x] 04-01-PLAN.md -- Wave 1: twelve prune scenarios (E01, M01, FL01, S01, C01, A01, P01, N02, U01, F01, F02, L01) in `plugin/prune.feature` with three Givens in the new `plugin/prune.steps.ts`, breaks K1 to K29 (K2 the accepted survivor), then trim `standalone-prune` to its two call-absence carriers (ITMIG-08)
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 04-02-PLAN.md -- Wave 2: the backup-leak fix in `orchestrators/plugin/prune-rollback.ts` test first, with four unit cases, the no-backup scenario F03 and its `Then`, and break B1 on the fixed tree (ITMIG-08, rule 4)
+- [x] 04-02-PLAN.md -- Wave 2: the backup-leak fix in `orchestrators/plugin/prune-rollback.ts` test first, with four unit cases, the no-backup scenario F03 and its `Then`, and break B1 on the fixed tree (ITMIG-08, rule 4)
 
 ### Phase 5: MCP Install, Legacy Move, and Overrides
 
@@ -336,7 +336,7 @@ Plans:
 | 1. Duplicate Integration Files | 2/2 | Complete    | 2026-11-21 |
 | 2. Plugin Layers, Names, and List Fold | 4/4 | Complete    | 2026-11-21 |
 | 3. Marketplace Layers and Cross-Scope Install | 4/4 | Complete    | 2026-11-21 |
-| 4. Prune | 1/2 | In Progress | - |
+| 4. Prune | 2/2 | In Progress | - |
 | 5. MCP Install, Legacy Move, and Overrides | 0/TBD | Not started | - |
 | 6. Hooks and Auth | 0/TBD | Not started | - |
 | 7. Path-Source Dependency Tags | 0/TBD | Not started | - |
