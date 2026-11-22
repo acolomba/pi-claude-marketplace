@@ -486,50 +486,6 @@ test("preview and actual preserve alternating marketplaces and held neighbors", 
   });
 });
 
-test("actual prune reselects after a stale preview changes on disk", async () => {
-  await withHermeticEnvironment("standalone-prune-stale-", async ({ cwd }) => {
-    // arrange
-    await seedGraphScope("user", cwd, {
-      mp: { old: { provenance: "dependency" }, keeper: { provenance: "explicit" } },
-    });
-    const locations = locationsFor("user", cwd);
-    const { command, ctx, notifications, gitCalls } = registeredCommand(cwd);
-
-    // act
-    await command.handler("prune --dry-run", ctx);
-    await seedGraphScope("user", cwd, {
-      mp: {
-        old: { provenance: "explicit" },
-        fresh: { provenance: "dependency" },
-        keeper: { provenance: "explicit" },
-      },
-    });
-    await command.handler("prune", ctx);
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      { message: "● mp [user]\n  ○ old v1.0.0 (will uninstall) {dependency pruned}" },
-      {
-        message:
-          "● mp [user]\n  ○ fresh v1.0.0 (uninstalled) {dependency pruned}\n\n/reload to pick up changes",
-      },
-    ]);
-    assert.deepStrictEqual(installedKeys(await loadState(locations.extensionRoot)), [
-      "keeper@mp",
-      "old@mp",
-    ]);
-    assert.equal(
-      await readFile(path.join(locations.skillsTargetDir, "mp-old-skill", "SKILL.md"), "utf8"),
-      "---\nname: mp-old-skill\n---\nbody\n",
-    );
-    await assert.rejects(stat(path.join(locations.skillsTargetDir, "mp-fresh-skill")), {
-      code: "ENOENT",
-    });
-    assert.deepStrictEqual(gitCalls.clone, []);
-    assert.deepStrictEqual(gitCalls.fetch, []);
-  });
-});
-
 test("failed actual member holds its dependency until a later retry", async () => {
   await withHermeticEnvironment("standalone-prune-failed-member-", async ({ cwd }) => {
     // arrange

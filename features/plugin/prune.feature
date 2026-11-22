@@ -290,3 +290,35 @@ Feature: Plugin prune
       """
       { not json
       """
+
+  Scenario: Pruning after a preview selects again from what the scope holds now
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | app   | 1.0.0   | old          |
+      | tool  | 1.0.0   | fresh        |
+      | old   | 1.1.0   |              |
+      | fresh | 1.2.0   |              |
+    Given the marketplace "tools" is added to the user scope
+    Given the user has run "/claude:plugin install app@tools"
+    Given the user has run "/claude:plugin uninstall app@tools"
+    Given the user has previewed the prune with "/claude:plugin prune --dry-run", which listed these plugins:
+      | marketplace name | marketplace scope | id        | name | status         | reasons           | scope | version |
+      | tools            | user              | old@tools | old  | will uninstall | dependency pruned | user  | 1.1.0   |
+    Given the user has run "/claude:plugin install old@tools"
+    Given the user has run "/claude:plugin install tool@tools"
+    Given the user has run "/claude:plugin uninstall tool@tools"
+    When the user runs "/claude:plugin prune"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id          | name  | status      | reasons           | scope | version |
+      | tools            | user              | fresh@tools | fresh | uninstalled | dependency pruned | user  | 1.2.0   |
+    Then the installation record of the user scope holds these plugins:
+      | id        | version | enabled |
+      | old@tools | 1.1.0   | true    |
+    Then the user scope stages these skills and prompts:
+      | kind  | name      |
+      | skill | old-skill |
