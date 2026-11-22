@@ -1,365 +1,386 @@
 # Feature Research
 
-**Domain:** Claude plugin MCP servers on Pi, served by one of two equal MCP implementations (pi-mcp-adapter 7.x or Pi 1.5.0 built-in MCP), chosen per session
-**Milestone:** mcp-builtin
-**Researched:** 2026-11-04
-**Confidence:** HIGH for the field and transport verdicts (read from the Claude Code 2.1.318 binary, the Pi 1.5.0 and pi-mcp 1.5.0 package sources, and the pi-mcp-adapter 7.0.0 and pi-subagents 0.84.0 package sources). MEDIUM for the user-visible wording and the switch UX, which are recommendations with no direct upstream counterpart.
+**Domain:** Claude Code-compatible git transport for plugin marketplaces and git-source plugins (milestone system-git: replace `isomorphic-git` with the system `git` binary)
+**Researched:** 2026-11-22
+**Confidence:** HIGH for the marketplace and plugin clone paths (read in the 2.1.330 binary and confirmed by the docs); MEDIUM for background autoupdate wiring, plugin clone timeouts, and the marketplace SHA-pin path (behind a feature flag); LOW where marked unverified.
 
-## Evidence base
+## How the evidence was gathered
 
-Claude Code facts come from `/opt/claude-code/bin/claude`. `claude --version` prints **2.1.318**, not 2.1.316 as the brief assumed. I extracted strings from the binary and grepped them. Nothing ran beyond `--version`. Pi facts come from `npm pack @earendil-works/pi-coding-agent@1.5.0` and `@earendil-works/pi-mcp@1.5.0`. pi-mcp-adapter facts come from `npm pack pi-mcp-adapter@7.0.0`, and pi-subagents facts from `npm pack pi-subagents@0.84.0`. Each tarball was unpacked into its own scratch directory, and none of its code ran. Primary-source reads like these rank first in the compat-research skill's evidence order, so they are tagged HIGH. The `classify-confidence` seam has no provider for direct source reads. It rates every web provider MEDIUM, and no web source decided anything here.
+- **Binary:** `/opt/claude-code/bin/claude`, `VERSION:"2.1.330"`, `BUILD_TIME:"2026-11-20T17:34:37Z"`, `GIT_SHA:"8c664bec500172ded713624f9ecac0eb7e714829"`. Grepped on 2026-11-22 with `grep -oa` and a byte-offset context extractor. No Claude Code process was run. Minified names such as `hCi`, `X$t`, and `qpt` belong to this build only. Use the quoted string literals to find the code again in a later build.
+- **Docs, fetched 2026-11-22:** `https://code.claude.com/docs/en/plugins/host-marketplace.md`, `https://code.claude.com/docs/en/plugin-marketplaces` (now the "Create a marketplace" page), `https://code.claude.com/docs/en/plugins/troubleshooting.md`, `https://code.claude.com/docs/en/plugins/cli-reference.md`.
+- **Confidence tiers:** `.agents/skills/claude-code-compat-research` ranks the binary above the docs. A record is HIGH when the binary shows the behavior, and the docs agree where they say anything. The GSD `classify-confidence` seam rates `webfetch` LOW, even with `--verified`. So a fact that only the docs support is rated MEDIUM here, never HIGH.
 
-### Claude Code 2.1.318 facts this milestone depends on
+## Corrections to the prior-session claims
 
-| # | Fact | Evidence |
-|---|------|----------|
-| CC-1 | The plugin server config union is `stdio`, `sse`, `http`/`streamable-http`, `ws`, `sse-ide`, `ws-ide`, `sdk`, `claudeai-proxy` (schema `Lse`). The stdio fields are `type, command, args, env, timeout, alwaysLoad, bareElicitationCapability, role`. **There is no `cwd`.** The remote fields add `url, headers, headersHelper, oauth, request_timeout_ms, tools[], displayName, discoveryCache, toolPermissions`. | binary strings: `Ugt=…u({type:T("stdio").optional(),command:…,args:…,env:…,timeout:…,alwaysLoad:…,bareElicitationCapability:…,role:…})`; `q$t`/`xon` for http/sse |
-| CC-2 | `oauth` accepts only `clientId, callbackPort, authServerMetadataUrl (https://), scopes, xaa`. It has no `clientSecret`. | `Qa=…u({clientId,callbackPort,authServerMetadataUrl…startsWith("https://"),scopes,xaa})` |
-| CC-3 | `displayName` is new since 2.1.291 and marked `@internal`. It labels the server's tools and is `.catch(void 0)`, so it can never make a config malformed. | `WA=…describe("@internal A readable name for this server…")` |
-| CC-4 | A plugin server whose type is host-only (`sse-ide`, `ws-ide`, `sdk`) or `claudeai-proxy` is **dropped at plugin load**. Claude records a plugin error, `MCP server "<name>" invalid: type "<t>" servers cannot be declared by a plugin; only the host application registers them`, and the plugin's other components still load. | `n.push({type:"mcp-config-invalid",…validationError:qe==="host-only"?…})`; render `case"mcp-config-invalid":return\`MCP server ${…} invalid: ${…}\`` |
-| CC-5 | Claude has its own case of "the client will not run this server type". Under `CLAUDE_CODE_SKIP_PLUGIN_LOCAL_MCP_SERVERS`, a plugin's stdio servers are skipped with a debug-log line only (`only sse, http and ws servers load while … is set`), and the plugin stays enabled. So upstream's pattern for a server it will not run is to skip the server and keep the plugin. Claude never refuses the install. | binary string quoted |
-| CC-6 | `bareElicitationCapability` exists only as a workaround for servers that reject Claude's elicitation capability object: `This server (Java MCP SDK 0.17.0 or older) rejected Claude Code's elicitation capability. Set "bareElicitationCapability": true…` | binary string quoted |
-| CC-7 | Claude's OAuth redirect URI is `http://localhost:<port>/callback`, and its dynamic client registration sends `client_name: "Claude Code (<serverName>)"`. | `clientMetadata(){let e={client_name:\`Claude Code (${this.serverName})\`,redirect_uris:[this.redirectUri]…` |
-| CC-8 | Tool names are `mcp__<normalized server>__<tool>`, and plugin servers are named `plugin:<plugin>:<server>`. The normalization replaces characters outside `[A-Za-z0-9_-]` with `_`, so **`-` is kept**. Hook matchers and agent `tools:` entries address `mcp__plugin_<plugin>_<server>__<tool>`. | binary `\`mcp__${En(n)}__\``; existing record ANAME-01/02 in `docs/mcp-compatibility.md` (2.1.291) |
-| CC-9 | A config with `headersHelper` runs the helper only in a trusted workspace (`headersHelper not run — this workspace has no persisted trust`). | binary string quoted |
-| CC-10 | Plugin load errors surface as `… error(s) during load. Run /plugin for details.` in the reload summary. | binary string; MEDIUM: the call site is minified |
-
-### Pi 1.5.0 built-in MCP facts (beyond the brief)
-
-| # | Fact | Evidence |
-|---|------|----------|
-| PI-1 | **Pi expands variables only in `env`, `headers` and `oauth.clientSecret`.** `url`, `command` and `args` are used verbatim. | `dist/extensions/mcp/runtime.js` `createDefaultTransport`: `resolveHeadersOrThrow(config.headers)`, `resolveConfigValueOrThrow` per env value; `command: expandHome(config.command)` |
-| PI-2 | Pi's template syntax is `${NAME}` **and bare `$NAME`**. It has no `${NAME:-default}`: a `${…}` body that is not a plain name stays literal. A value that starts with `!` runs a shell command. `$$` escapes `$`, and `$!` escapes `!`. A variable that is unset **or empty** makes the value unresolved, and the `…OrThrow` call fails the connection. | `dist/core/resolve-config-value.js` `parseConfigValueTemplate`, `resolveEnvConfigValue` (`env?.[name] \|\| process.env[name] \|\| undefined`) |
-| PI-3 | A leading `~`, `~/` (and `~\` on Windows) in `command`, `args` and `cwd` becomes the home directory. | `runtime.js` `expandHome` |
-| PI-4 | `validateMcpServerConfig` rejects `type: "sse"` (`legacy SSE transport is not supported; use the streamable HTTP URL`) and a url that is not http/https. It passes unknown keys through. | `dist/core/mcp-servers.js` |
-| PI-5 | HTTP servers use OAuth unless they have an `Authorization` header (in any case) or `auth`. This is Claude's rule, natively. | `runtime.js` `usesOAuth` |
-| PI-6 | `auth: { provider }` sends a Pi `/login` provider token to `url`. It is a Pi-only power that a plugin must never set. | `mcp-servers.d.ts` `McpHttpServerConfig.auth` |
-| PI-7 | `timeout` is in **seconds**, a positive number, and resets on progress. The default is 60. | `mcp-servers.d.ts` |
-| PI-8 | Tool names are `mcp__<server>__<tool>` with `[^A-Za-z0-9_]`→`_`. **A name over 64 characters is cut and gets an 8-hex hash.** Tools whose names collide after sanitizing also get the hash. | `dist/extensions/mcp/tools.js` `createMcpToolName`, `MAX_TOOL_NAME_LENGTH = 64` |
-| PI-9 | The client announces only `roots`. It announces no elicitation and no sampling, and it does not handle prompts. It does offer resources (`list_mcp_resources`, `list_mcp_resource_templates`, `read_mcp_resource`). | `dist/extensions/mcp/runtime.js` `new McpClient({name:"pi",…roots})`; pi-mcp `dist/client.js` initialize; `docs/mcp.md` "Use resources" |
-| PI-10 | Pi connects every enabled server in the background at session start and keeps it connected. A dropped connection reconnects on the next call. Pi turns `tool_search` on by itself when a `deferred` server exists. | `docs/mcp.md` "Diagnose connection problems", "Control tool exposure" |
-| PI-11 | Handling `mcp_servers_change` "marks an extension as the one that connects registered servers". The extension must never subscribe to it. | `dist/core/extensions/types.d.ts` `McpServersChangeEvent` doc |
-| PI-12 | Pi exposes no status channel. `getAllTools()` returns `name, description, parameters, exposure, namespace{name, aliases:[server]}, sourceInfo`, but not the tool `label` (`<server>/<original tool>`). Withdrawn and disabled tools are re-registered as `exposure: "hidden"`. | `dist/core/agent-session.js` `getAllTools`; `mcp/index.js` `hideTools` |
-| PI-13 | Built-in MCP reads `~/.pi/agent/mcp.json` and `<project>/.pi/mcp.json`. **These are the same files that pre-AMIG releases of this extension wrote plugin servers into.** An `mcp.json` server whose namespace equals a registration wins, and the registration shows as overridden. | `docs/mcp.md`; `mcp/index.js` `registeredServers` |
-| PI-14 | The extension set is computed from settings **before** any extension code runs. The only exception is the interactive project-trust pre-pass. So removing `-builtin:mcp` in session N loads built-in MCP from session N+1 on. | `dist/core/resource-loader.js` `reload()`, `dist/main.js` `shouldResolveProjectTrust` |
-| PI-15 | `/mcp` changes to the enabled state or exposure of a registered server apply to the current session only. | `docs/mcp.md` "Add servers from extensions" |
-| PI-16 | pi-subagents 0.84.0 already resolves `mcp:<server>[/<tool>]` against built-in MCP when the adapter is absent. Detection: `/mcp` with `sourceInfo.path === "builtin:mcp"`. Tool names are taken as the server reports them, and the server part may use `-` or `_`. A server registered by an extension works only in background children, because the registering extension loads there too. | `docs/agents.md` line 573; `src/runs/shared/mcp-direct-tool-allowlist.js` |
-| PI-17 | The adapter's onboarding state is `<agentDir>/mcp-onboarding.json`. `piBuiltinMcpHandledVersion` records the adapter version that "last turned off, **or found configured**," built-in MCP. | pi-mcp-adapter 7.0.0 `onboarding-state.ts`, `pi-builtin-mcp.ts` |
-
-## Three-column verdict table
-
-Verdict vocabulary: **supported** (written as is), **translated** (written in the implementation's own form), **blocked** (the server is left out and the plugin is `(partially-available)` / `(partially-installed)` with `{unsupported mcp}` and `(unsupported <feature>)`), and **dropped-with-note** (the field is not written, the server runs, and the note or warning says what is lost). The Claude Code column states what upstream does with a plugin server.
-
-### Transports and sources
-
-| Claude field / transport | Claude Code 2.1.318 | pi-mcp-adapter 7.0.0 | Pi 1.5.0 built-in |
-|---|---|---|---|
-| `type` absent or `stdio` | runs | supported | supported |
-| `type: "http"` / `"streamable-http"` | runs | supported (Streamable HTTP; falls back to SSE on 404/405/406/415) | supported (Streamable HTTP only; retries transient errors twice) |
-| `type: "sse"` | runs | translated: `httpTransport: "sse"` | **blocked, `(unsupported sse)`**. Pi rejects SSE (PI-4). New feature token, licensed by a Pi gap |
-| `type: "ws"` | runs | blocked `(unsupported ws)` | blocked `(unsupported ws)` |
-| `sse-ide`, `ws-ide`, `sdk`, `claudeai-proxy` | dropped at load with a plugin error; the plugin stays (CC-4) | blocked | blocked |
-| `mcpServers` path to `.mcpb` / `.dxt` | unpacks and runs | blocked | blocked |
-
-### Stdio fields
-
-| Field | Claude Code | Adapter | Built-in |
-|---|---|---|---|
-| `command` | `${…}` expanded at load | translated (variable rewrite into adapter syntax, AVAR-01..03) | **translated**: Pi expands nothing here (PI-1), so the extension expands `${NAME}` / `${NAME:-default}` itself, with Claude's rules, at registration |
-| `args` | expanded | translated | translated (as `command`) |
-| `env` | expanded | translated (split tokens, `!`→`!!`) | translated: escape `$`→`$$` and a leading `!`→`$!` (PI-2). Unset with no default → Claude's literal `${NAME}`, written `$${NAME}` |
-| `CLAUDE_PLUGIN_ROOT` / `CLAUDE_PLUGIN_DATA` added to `env` | yes | translated | translated |
-| leading `~` in `command` / `args` | kept literal | blocked `(unsupported command ~)` / `(unsupported args ~)` | blocked, same tokens (PI-3) |
-| `cwd` | **not a Claude field** (CC-1); stripped | dropped | dropped. Never written; Pi's default is the session directory. Corrects the brief, which listed `cwd` as a built-in gain |
-
-### Remote fields
-
-| Field | Claude Code | Adapter | Built-in |
-|---|---|---|---|
-| `url` | expanded | translated | **translated**: the extension expands it, since Pi does not (PI-1) |
-| `headers` | expanded | translated | translated (escaped as `env`) |
-| OAuth beside headers without `Authorization` | OAuth stays on | translated: `auth: "oauth"` when every value is clean (D-08-04) | **supported natively** (PI-5). No field is written, and the D-08-04 residual gap does not exist here |
-| `headersHelper` | runs (trusted workspace only, CC-9) | blocked | blocked. Pi has no helper; `!cmd` works per header and cannot produce header names |
-| `oauth.clientId` | used | supported | supported |
-| `oauth.callbackPort` | redirect `http://localhost:<port>/callback` (CC-7) | translated → `redirectUri` | **translated → `callbackUrl: "http://localhost:<port>/callback"`**. With `callbackPort` alone, Pi would use `127.0.0.1`, which a client registered for Claude Code rejects |
-| `oauth.authServerMetadataUrl` | https only | supported | supported (Claude's stricter https check stays the malformed rule) |
-| `oauth.scopes` | used | translated → `scope` | translated → `scope` |
-| truthy `oauth.xaa` | cross-app access | blocked | blocked |
-| any other `oauth` key (`clientSecret`, …) | not in the schema (CC-2) | dropped | dropped; never pass `clientSecret`, `clientName`, `clientRegistration`, `callbackUrl` from a plugin |
-| `timeout` (ms, hard limit) | used | translated → `requestTimeoutMs` (≥1000, capped) | translated → `timeout: ms / 1000` seconds (≥1000 ms rule kept). Same gap: resets on progress, 60 s default |
-| `request_timeout_ms` | stands in for `timeout`, capped at 300000 | via the timeout rule | via the timeout rule |
-| `tools[].permission_policy`, `toolPermissions` | accepted; enforcement for plugin servers unknown | dropped-with-note: `MCP server tool rules not enforced.` (ANAME-07) | dropped-with-note, same warning (MVP). A differentiator below maps deny rules to `toolExposure: "hidden"` |
-| `discoveryCache`, `role`, `displayName` | internal | dropped silently | dropped silently |
-
-### Common fields and capabilities
-
-| Field / capability | Claude Code | Adapter | Built-in |
-|---|---|---|---|
-| `alwaysLoad: true` | tools always in the prompt | translated → `directTools: true` | translated → `exposure: "direct"` (decision 2) |
-| `alwaysLoad` other / absent | deferred behind tool search | translated → `directTools: "search"` | translated → `exposure: "deferred"` (decision 2) |
-| `_meta["anthropic/alwaysLoad"]` per tool | honored | gap (entry written before the tool list is known) | gap (same reason; `toolExposure` exists but needs tool names up front) |
-| `bareElicitationCapability: true` | sends a bare capability (CC-6) | blocked (adapter always announces form+url) | **supported**. Built-in announces no elicitation at all (PI-9), so the handshake the flag protects cannot fail. Recommendation, see Dubious Choices |
-| plugin `description` (extension-owned) | -- | written as `description` | written as `description`; Pi also lists it in the system prompt and ranks tool search by it |
-| Pi-only powers a plugin must never set | -- | dropped: `auth`, `approveTools`, `lifecycle`, … | dropped: `auth.provider` (PI-6), `enabled`, `exposure`, `toolExposure`, `cwd`, `oauth.clientName`/`clientRegistration`/`callbackUrl`/`clientSecret` |
-| tools | yes | yes | yes |
-| resources | yes | yes (`server-manager.ts` `readResource`) | yes (PI-9) |
-| prompts as `/mcp__<server>__<prompt>` | yes | yes (`prompts.ts`) | **no**. Pi gap; the server still runs, no verdict |
-| elicitation | form + url | form + url | **no** (Pi gap) |
-| sampling | not checked | yes (`init.ts`) | no |
-| connection lifecycle | connect at start, keep | lazy (ANAME-05) | connect at start, keep (PI-10). The ANAME-05 divergence disappears |
-| project-scope approval | never asked for plugin servers | per-server approval (D-CF6-03) | none. Registered only when `ctx.isProjectTrusted()`; closer to Claude |
-| tool-name length | no limit | no limit | **cut to 64 with a hash** (PI-8). New divergence, Pi gap |
-| name sanitizing | `-` kept (CC-8) | `-` kept in tool names | `-`→`_` (PI-8). Brief's divergence, Pi gap |
-| persisted `/mcp` choices | per project in `~/.claude.json` | `mcp-adapter.json` user overrides kept (D-08-01/02) | **session only** (PI-15). Pi gap |
-
-The read-time verdict rule: a server is blocked when the **active** implementation cannot run it. When no implementation is active, blocked means "neither implementation can run it", and the soft-dependency marker says why nothing runs (see below).
-
-## User-visible behavior per implementation
-
-### Detection (one snapshot per command run)
-
-| Active | Condition at `session_start` | Source |
+| Claim | Verdict | Correction |
 |---|---|---|
-| `adapter` | `/mcp-adapter` loaded (today's `hasLoadedPiMcpAdapter`) | `platform/pi-api.ts` |
-| `builtin` | not adapter, and `/mcp`'s `sourceInfo.path === "builtin:mcp"` | the same test pi-subagents uses (PI-16) |
-| `none` | neither, e.g. `-builtin:mcp` in settings, `--no-mcp`, `--no-extensions` | -- |
+| `ssh -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com`, 3 s timeout | **Confirmed** | Success needs exit 1 **and** `successfully authenticated` in the output. |
+| SSH when the probe succeeds, else `SSH not configured, cloning via HTTPS: <url>`, then HTTPS | **Confirmed, with a split** | Marketplaces and plugins read the probe differently (E-SG-02 vs E-SG-04). A marketplace goes SSH-first only on `configured`. A plugin goes HTTPS-first only on `not-configured`, and an `unknown` result means SSH only. |
+| If HTTPS fails, retry SSH (`HTTPS clone failed, retrying with SSH: <url>`) | **Confirmed, too narrow** | Marketplaces retry in both directions (`SSH clone failed, retrying with HTTPS: …` too). The plugin CLI install retries HTTPS→SSH only. Its SSH→HTTPS retry runs only on Windows. |
+| Probe skipped when `GIT_SSH_COMMAND`/`GIT_SSH` is set or git config rewrites the URL | **Partly wrong** | The skip happens only on the plugin CLI install path. It also covers `core.sshCommand` and an `ssh -G` ProxyCommand/ProxyJump check, and it means SSH only, with no fallback. The marketplace path always probes, unless HTTPS is forced. |
+| `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` (or `CLAUDE_CODE_REMOTE`) forces HTTPS | **Confirmed** | `function k4t(){return s.CLAUDE_CODE_REMOTE\|\|s.CLAUDE_CODE_PLUGIN_PREFER_HTTPS}`. It also changes the URL that git-subdir `owner/repo` and SHA resolution use. |
+| `GIT_TERMINAL_PROMPT=0`, askpass not run | **Confirmed, more than that** | Also `GIT_ASKPASS=""`, `GCM_INTERACTIVE=never`, `credential.interactive=false`, and SSH `BatchMode=yes` plus `StrictHostKeyChecking=yes`. |
+| Background autoupdate never prompts, fails quietly, keeps the checkout | **Confirmed (docs + code path)** | An update is an `ls-remote` check, then a **full re-clone and swap**, never `fetch`/`pull`. |
+| `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE=1` | **Confirmed** | It applies only when `ls-remote` says `unreachable` and the checkout already has `.claude-plugin/marketplace.json`. |
+| Env tokens like `GITHUB_TOKEN` alone don't authenticate | **Confirmed (docs)** | The binary's clone paths inject no token. |
+| No OAuth or Device Flow for plugins | **Confirmed (docs)** | "Claude Code has no git token of its own." A claude.ai GitHub-connection proxy exists only in remote sessions. |
+| `--depth 1`; `--recurse-submodules --shallow-submodules` or `--no-recurse-submodules`; `--branch <ref>`; SHA via `fetch --depth 1 origin <sha>`, then `--unshallow`, then `checkout` | **Confirmed for plugin clones** | Marketplaces clone `--no-recurse-submodules`, then run `submodule update --init --recursive --depth 1` on only the submodules that hold plugin files. A marketplace pinned to a SHA ref is not shallow. |
+| stderr redacted | **Confirmed** | Credentials in the URL are scrubbed from stderr. Plugin clones also force `LC_MESSAGES=C`. |
+| `Failed to clone marketplace repository: ...` and `SSH authentication failed. Please ensure your SSH keys are configured for <host>, or use an HTTPS URL instead.` | **Confirmed** | `<host>` is `GitHub` for github.com, else the host, else `your git host`. Nine message classes in total (E-SG-10). |
+| In-session `/plugin` installs and plugin updates don't fall back to HTTPS | **Confirmed** | Only `claude plugin install` from the shell passes the fallback context. Every other plugin clone of a `github` source is SSH only unless HTTPS is forced. |
 
-### list / install / update / enable rows
+## Upstream evidence records
 
-| Situation | adapter | builtin | none |
-|---|---|---|---|
-| Plugin with a stdio server, installed | `● demo v1.0.0 (installed)` | `● demo v1.0.0 (installed)` | `● demo v1.0.0 (installed) {requires mcp support}` |
-| Not installed, with an `sse` server | `(available)` | `⊖ … (partially-available) {unsupported mcp}` | `(available) {requires mcp support}`: the union rule, since the adapter could run it |
-| `install` of that plugin without `--partial` | installs | refused at error severity, `(partially-available) {unsupported mcp}` + `Re-run with --partial to install the supported components.` | installs with the marker |
-| That plugin installed earlier, after a switch to built-in | -- | `◉ … (partially-installed) {unsupported mcp}`. The state is derived, never persisted (FSTAT-02 already works this way) | -- |
-| Plugin installed `--partial` under the adapter only for `bareElicitationCapability` | `◉ (partially-installed)` | `● (installed)`: the full record now serves every server | marker |
+Each record uses the skill's fields, so a phase CONTEXT.md can carry it over unchanged.
 
-Soft-dependency marker: **`requires mcp support`**, in place of `requires pi-mcp-adapter`, and only when `none` is active. The style guide (D-16-15) keeps reason tokens lowercase. Every `requires …` marker names what is missing, and the package name no longer fits here, because either implementation satisfies the plugin. The marker keeps the agents → mcp → workflows order inside the brace. `{requires pi-mcp-adapter}` leaves the REASONS closed set, or stays unused there (a breaking JSON-output change, so record it in the CHANGELOG).
+### E-SG-01: The SSH probe
 
-### `info`
+- **Question:** What does Claude Code run to decide whether GitHub SSH is configured, and how does it read the result?
+- **Behavior:** It runs `ssh -T -o BatchMode=yes -o ConnectTimeout=2 -o StrictHostKeyChecking=yes git@github.com` with a 3000 ms timeout. The result has three states:
+  - `configured`: exit 1 and `successfully authenticated` in stdout+stderr.
+  - `unknown`: a timeout, a thrown error, or anything else when `ssh` is on PATH.
+  - `not-configured`: exit 255 with `Permission denied (publickey` or `Host key verification failed`, or no `ssh` on PATH.
 
-```text
-● community-mp [user] <no autoupdate>
-  ● analytics v1.0.0 (installed)
-    mcp: plugin:analytics:api (connected; withheld ANTHROPIC_API_KEY)
-    requires: builtin:mcp
-```
+  The probe always targets github.com. GHES and other hosts are never probed.
+- **Evidence (binary 2.1.330, 2026-11-22):** `async function DCn(){try{let e=await kt("ssh",["-T","-o","BatchMode=yes","-o","ConnectTimeout=2","-o","StrictHostKeyChecking=yes","git@github.com"],{cwd:Jut(),timeout:3000}),o=...,r=e.code===1&&o.includes("successfully authenticated");...if(r)return"configured";if(e.timedOut)return"unknown";if(e.code===255&&zpt(o))return"not-configured";return await Bf("ssh")===null?"not-configured":"unknown"}`, where `function zpt(e){return e.includes("Permission denied (publickey")||e.includes("Host key verification failed")}`. Docs (host-marketplace, 2026-11-22): "Claude Code probes `ssh -T git@github.com` and clones over SSH when the probe succeeds."
+- **Confidence:** HIGH. The code is explicit.
+- **Open questions:** Neither path memoizes the probe across commands. The plugin CLI install memoizes it within one command (`probeSsh:()=>o??=DCn()`). The marketplace path calls it once per marketplace fetch.
+- **Pi/project constraints:** `child-process-chokepoint` must admit the module that spawns `ssh`. NFR-5 allows network only on the listed operations, and the probe is network. It runs only inside operations that already have network.
+- **Divergence:** None proposed.
 
-- `mcp:` keeps Claude's name, `plugin:<plugin>:<server>`, under every implementation, and so do the `unset`/`withheld` lists (AVAR-04/05).
-- `requires:` names the implementation that serves the servers: `pi-mcp-adapter`, or `builtin:mcp` (Pi's own name for the extension, in settings and in `sourceInfo`), or `mcp support (missing)` under `none`. JSON: `{"companion":"builtin:mcp","missing":false}`. The `Companion` union widens. The catalog sentence "Pi's built-in MCP client does not count as pi-mcp-adapter" goes.
-- Status tokens:
+### E-SG-02: GitHub `owner/repo` marketplace: transport choice and retry
 
-| Token | adapter (unchanged, ASTAT-01) | builtin (derived from `getMcpServers` + `getAllTools` + the scope's `mcp.json` files) |
-|---|---|---|
-| `connected` | yes | a non-hidden tool under the server's namespace alias |
-| `cached, connects on first use` | yes | never (Pi connects eagerly) |
-| `not connected` | yes | registered, no tools yet (connecting, failed, or needs sign-in, which Pi does not tell apart; Pi reports sign-in and failures itself once after start) |
-| `needs authentication`, `failed`, `pending approval` | yes | not derivable (PI-12) |
-| `disabled` | yes | every tool of the server is `hidden` |
-| `project not trusted` | -- | **new**: a project-scope server held back because the project is untrusted |
-| `overridden by mcp.json` | -- | **new**: an `mcp.json` server with the same namespace wins (PI-13). Follows Claude's "overridden by" wording, as `overridden by project scope` does |
-| `overridden by project scope` | yes | yes (register the project record and skip the user one) |
-| `not loaded` | yes | only if installs register at the next load and not at once (see D2) |
-| `status unknown` | adapter absent or no report | also under `none` |
+- **Question:** Which URL does a `github` marketplace source clone, and what happens when it fails?
+- **Behavior:** `git@github.com:<repo>.git` is the SSH URL and `https://github.com/<repo>.git` the HTTPS one.
+  - If `CLAUDE_CODE_PLUGIN_PREFER_HTTPS` or `CLAUDE_CODE_REMOTE` is set, Claude Code clones HTTPS only, with the progress line `Cloning via HTTPS: <url>`.
+  - Otherwise it probes. On `configured` it tries SSH first (`Cloning via SSH: <url>`). On `unknown` or `not-configured` it tries HTTPS first (`SSH not configured, cloning via HTTPS: <url>`).
+  - When the first attempt fails for any reason, on any OS, it prints `<First> clone failed, retrying with <Second>: <url>` and tries the other transport.
+  - When both fail and the messages differ, the error is `Fetching the marketplace from GitHub failed on both attempts. <T1> (<url1>): <msg1>\n\n<T2> (<url2>): <msg2>`.
+  - The path checks nothing about `GIT_SSH_COMMAND`, `GIT_SSH`, `core.sshCommand`, or `insteadOf`.
+- **Which operations:** All marketplace clones go through the same `X$t` function: `marketplace add` (`Bie`), a load that finds the cache corrupt or missing (`q9`), and the bulk refresh behind `marketplace update` (the loop that logs `Skipping marketplace '…' in bulk refresh`). The "is the clone at this commit" check (`rOo`) also uses both URLs, ordered by the probe.
+- **Evidence (binary):** `case"github":{let At=\`git@${Kr}:${e.repo}.git\`,pt=\`https://github.com/${e.repo}.git\`;...if(k4t()){fE(r,\`Cloning via HTTPS: ${pt}\`),...break}let jt=await LNe(),[sn,Gt]=z$t(jt,At,pt);fE(r,jt?\`Cloning via SSH: ${At}\`:DNe(pt))...catch(Jt){...fE(r,\`${sn.transport} clone failed, retrying with ${Gt.transport}: ${Gt.url}\`)...throw ...QMo(...)}`. `async function LNe(){return await DCn()==="configured"}`. `function z$t(e,o,r){let g={transport:"SSH",url:o},h={transport:"HTTPS",url:r};return e?[g,h]:[h,g]}`. Docs (host-marketplace): "If the probe fails, or the SSH clone itself fails, it clones over HTTPS. Users on machines without a GitHub SSH key can set `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` to skip the probe and clone over HTTPS." Docs (troubleshooting): "Without it, Claude Code clones those sources over SSH when an SSH key for `github.com` looks configured, and falls back to HTTPS when the SSH clone fails."
+- **Confidence:** HIGH.
+- **Open questions:** `Kr` is almost certainly `github.com`. The docs say `git@github.com`, but the constant itself was not traced.
+- **Pi/project constraints:** D-MF-01 (`PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`) overrides the github.com base. Upstream has no such override, so it is a recorded project divergence and needs a rule for which host the SSH URL and the probe use under the override.
+- **Divergence:** Possibly D-MF-01's interplay. Decide in discuss.
 
-### The switch (installing or uninstalling the adapter, then `/reload`)
+### E-SG-03: `git` marketplace sources (any URL)
 
-**Built-in → adapter** (`pi install npm:pi-mcp-adapter`, `/reload`):
-1. The adapter loads, takes `/mcp`, and writes `-builtin:mcp` once per version. The adapter reports that write itself.
-2. The extension detects `adapter`, registers nothing, and reconciles `mcp-adapter.json` from the install records. Entries already exist when every install also writes them; a server the adapter blocks is removed or kept out.
-3. It re-materializes generated agents: `mcp:plugin_<p>_<s>_/<tool>`.
-4. Output: nothing for a clean switch. Each plugin the adapter runs only partly shows `◉ (partially-installed) {unsupported mcp}` in `list`/`info`, plus one load-time warning row per such plugin (recommended, see Gaps item 4).
+- **Question:** Does a non-GitHub git URL get a probe or a fallback?
+- **Behavior:** No. It clones `e.url` exactly once, over whichever transport the URL names. An scp-form `user@host:path` URL uses SSH, and `https://` uses HTTPS.
+- **Evidence (binary):** `case"git":{be=Ih(z,Ge),ve=!0,qe=await PG(e.url,be,g,e.path,e.ref,e.sparsePaths,r),...}`. Docs (host-marketplace): "`git@host:path.git`: SSH. `https://example.com/repo.git`: HTTPS."
+- **Confidence:** HIGH.
 
-**Adapter → built-in** (`pi remove pi-mcp-adapter`, start Pi or `/reload`):
-1. Load N: the adapter is absent, but `-builtin:mcp` is still in `~/.pi/agent/settings.json`, so built-in MCP did not load (PI-14). Active = `none`.
-2. If `mcp-onboarding.json` holds a `piBuiltinMcpHandledVersion` **and** the user settings' `extensions` hold exactly `-builtin:mcp`, the extension removes that one entry atomically (decision 1). It never touches `+builtin:mcp`, never touches a project `settings.json`, and never writes `mcp-onboarding.json`.
-3. The extension **notifies**. Recommended standalone info message, through the notify chokepoint:
-   `Turned Pi's built-in MCP back on: removed "-builtin:mcp", which pi-mcp-adapter had added, from ~/.pi/agent/settings.json.` followed by the `/reload to pick up changes` trailer. Reason to notify: the extension changed a user-owned settings file. The adapter reports its own write of the same line, and silence would leave rows showing `{requires mcp support}` with no explanation.
-4. Load N+1 (`/reload`): active = `builtin`. The extension registers the servers and re-materializes the agents (`mcp:plugin_<p>_<s>/<tool>`). No output for a clean switch.
+### E-SG-04: GitHub `owner/repo` plugin source: transport choice and retry
 
-The extra `/reload` in step 4 conflicts with "a switch must never require action from the user." Pi's capability gap (PI-14) licenses it, with the same shape as the existing AMIG "one more `/reload`" divergence. Phase research should still test removing the line from the extension factory during the interactive trust pre-pass, where it would take effect at once.
+- **Question:** Which transport does a `github` plugin source use, and when does it fall back?
+- **Behavior:** This differs from the marketplace path.
+  1. With `CLAUDE_CODE_PLUGIN_PREFER_HTTPS` or `CLAUDE_CODE_REMOTE` set, it clones HTTPS only.
+  2. Without a fallback context it clones **SSH only** (`git@github.com:<repo>.git`). Every caller except `claude plugin install` from the shell lacks that context: in-session `/plugin` installs, `plugin update`, autoupdate, dependency installs, and session-start loads.
+  3. With the context, it first asks whether to go to HTTPS (`qpt`). On non-Windows the answer is yes only if all of these hold:
+     - no `GIT_SSH_COMMAND` and no `GIT_SSH`;
+     - no `core.sshCommand` in git config;
+     - `git ls-remote --get-url -- <ssh-url>` returns the URL unchanged, so no `insteadOf` rewrite (5 s timeout);
+     - the probe says `not-configured`;
+     - and either `ssh` is absent, or `ssh -G git@github.com` shows `hostname github.com` with no ProxyCommand or ProxyJump (5 s timeout).
+
+     If any check fails, it logs `... staying on SSH` and clones SSH only, with no fallback on non-Windows.
+  4. When it goes to HTTPS, it notifies `SSH not configured, cloning via HTTPS: <https-url>` and clones HTTPS. On a clone-step failure of any kind it notifies `HTTPS clone failed, retrying with SSH: <ssh-url>` and retries SSH. If that also fails, the error is `<https error>\nThe retry over SSH failed too: <ssh error>\nCheck the repository and ref in the marketplace entry and that github.com can be reached. If the repository is private, add an SSH key to your GitHub account or set up a git credential helper for https://github.com. Then install again.`
+  5. On Windows, the path always tries SSH first. If SSH fails with `Permission denied (publickey` or `Host key verification failed`, and a `git ls-remote` with `GIT_SSH_COMMAND="<cmd> -G >&2"` shows github.com reached directly, it falls through to step 4.
+- **Evidence (binary):** `async function hCi(e,o,r,g,h,y){...let k=\`git@${Kr}:${e}.git\`,R=\`https://github.com/${e}.git\`;if(k4t())return Aoe(R,o,r,g,h);if(y===void 0)return Aoe(k,o,r,g,h);if(!await qpt(y,k,o,!1))try{return await Aoe(k,o,r,g,h)}catch(H){if(!oUt(H)||!zpt(d(H))||!await qpt(y,k,o,!0))throw H;...}y.notify(DNe(R));try{return await Aoe(R,o,r,g,h)}catch(H){...y.notify(ICn(k));try{return await Aoe(k,o,r,g,h)}catch(z){...throw new C(\`${d(H)}\nThe retry over SSH failed too: ...\`` ; `qpt`: `if(tA(y,"GIT_SSH_COMMAND")!==void 0||tA(y,"GIT_SSH")!==void 0)return!1;let k=await OF(o);if(k.command!==void 0)return!1;...["ls-remote","--get-url","--",o]...timeout:5000});if(z.code!==0||z.stdout.trim()!==o)return t(\`GitHub SSH URL is rewritten by git config, or git could not say ...: staying on SSH\`),!1;...if(await e.probeSsh()!=="not-configured")return!1;if(await Bf("ssh")===null)return!0;let X=await kt("ssh",["-G","git@github.com"],...timeout:5000});if(X.code===0&&OCn(X.stdout))return!0;` The fallback context is built only in the CLI install: `Mvn(..., {..., gitHubHttpsFallback:kWa((k)=>{f.push(k)})}, l)` inside the function that emits `tengu_plugin_installed_cli` with `install_source:S("cli-explicit")`. Docs (host-marketplace): "For a `github` source, that command can fall back to HTTPS on its own, printing `SSH not configured, cloning via HTTPS`. Installs from `/plugin` inside a session and plugin updates don't fall back, so without the variable they fail for users who have no GitHub SSH key."
+- **Confidence:** HIGH for steps 1 to 4 and for the caller scope. MEDIUM for step 5's Windows detail and for whether the CLI install's dependency cascade inherits the context (`fdr` receives it with `explicit:!0`, but the hand-off to dependency members was not traced).
+- **Pi/project constraints:** Pi has no shell-versus-session split. Every `/claude:plugin install` runs inside a Pi session, so we must choose which upstream surface it mirrors.
+- **Divergence:** This is a genuine question for discuss. Matching the in-session `/plugin` behavior (SSH only) is strict parity. Matching `claude plugin install` (probe plus fallback) is the friendlier upstream surface. Neither license applies by itself, so the user decides.
+
+### E-SG-05: `url` and `git-subdir` plugin sources
+
+- **Question:** Do they probe or fall back?
+- **Behavior:**
+  - `url`: validates the URL (E-SG-08) and clones it as written. No probe, no fallback.
+  - `git-subdir`: if `url` matches `^[a-zA-Z0-9-_.]+\/[a-zA-Z0-9-_.]+$`, it becomes `https://github.com/<r>.git` when HTTPS is forced, else `git@github.com:<r>.git`. Otherwise the URL is used as written. No probe, no fallback. It first checks that git exists: `git-subdir plugin source requires git to be installed and on PATH. Install git (version 2.25 or later for sparse-checkout cone mode) and try again.`
+  - When a git-subdir plugin's version comes from a SHA, the clone URL follows the same rule (`function Upt(e){return k4t()?\`https://github.com/${e}.git\`:\`git@${Kr}:${e}.git\`}`).
+- **Evidence (binary):** `case"url":...X=await Aoe(e.url,k,e.ref,e.sha,{...})`; `function yCi(e){if(/^[a-zA-Z0-9-_.]+\/[a-zA-Z0-9-_.]+$/.test(e))return k4t()?\`https://github.com/${e}.git\`:\`git@${Kr}:${e}.git\`;return vas(e)}`. Docs (host-marketplace): "Claude Code clones a public `url` or `git-subdir` source over HTTPS without credentials when the entry gives an `https://` URL. For a `github` source, or a `git-subdir` source written as `owner/repo`, tell users without a GitHub SSH key to set `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1`."
+- **Confidence:** HIGH.
+
+### E-SG-06: Plugin clone commands, refs, SHAs, and submodules
+
+- **Question:** What exact git commands does a plugin clone run?
+- **Behavior:**
+  - Clone: `git -c core.sshCommand="ssh -o BatchMode=yes -o StrictHostKeyChecking=yes" <pinArgs> [-c submodule.recurse=false] clone --depth 1 (--recurse-submodules --shallow-submodules | --no-recurse-submodules) [--branch <ref>] [--no-checkout] -- <url> <dir>`.
+  - `--branch` is added only when there is no SHA. `--no-checkout` is added when there is one.
+  - Submodules are off when the plugin has a "directory pin" (`noSubmodules:o.directoryPin!==null`), else recursive and shallow.
+  - SHA pins: `fetch --upload-pack=git-upload-pack --depth 1 origin <sha>`. On failure, log `Shallow fetch of SHA … failed, falling back to unshallow fetch` and run `fetch --upload-pack=git-upload-pack --unshallow [origin <ref>]`. Then `checkout <sha>`, and `rev-parse HEAD` must equal the SHA, else `SHA pin verification failed: expected HEAD to be <sha>, got <x>. The pinned commit may have been removed upstream, or a ref with the same name exists. Refusing to install.`
+  - Submodule commits are checked against what the parent repository records (`SHA pin verification failed: submodule … is on commit …`). That check runs behind a feature flag.
+  - Input guards: a SHA must be 40 or 64 hex digits (`Invalid sha "<x>": must be a full commit hash (40 or 64 hex digits)`), and a ref may not start with `-` (`Invalid ref "<x>": cannot start with "-"`).
+  - git-subdir: `clone --depth 1 [--filter=tree:0] --no-checkout [--branch <ref>]`, sparse-checkout of the path, `read-tree -u --reset HEAD` (or `<sha>`), the same SHA fetch and unshallow fallback, a refusal for a path through a symlink, and `Subdirectory '<p>' not found in repository <url> (ref: <r>). Check that the path is correct and exists at the specified ref/sha.`
+- **Evidence (binary):** `let be=[...fxt,...H,...X,"clone","--depth","1",...y?["--no-recurse-submodules"]:["--recurse-submodules","--shallow-submodules"]];if(r&&!g)be.push("--branch",r);if(g)be.push("--no-checkout");be.push("--",e,o);` and `[...Q,"fetch",A8,"--depth","1","origin",g]` … `t(\`Shallow fetch of SHA ${g} failed, falling back to unshallow fetch\`);let Ke=await ut(Dt(),[...Q,"fetch",A8,"--unshallow",...r?["origin",r]:[]]` … `[...Q,"checkout",g]`. `var A8="--upload-pack=git-upload-pack"`. `var fxt=["-c","core.sshCommand=ssh -o BatchMode=yes -o StrictHostKeyChecking=yes"]`.
+- **Confidence:** HIGH for the commands. MEDIUM for what sets `directoryPin`: `lve(pluginId, source)`, which looks tied to Anthropic's official directory listing. Not traced.
+
+### E-SG-07: Marketplace clone, update, submodules, sparse paths, SHA refs
+
+- **Question:** How is a marketplace cloned and updated?
+- **Behavior:**
+  - Clone into a `<name>..clone` staging directory: `git -c core.sshCommand=… <pinArgs> clone [--depth 1] [--filter=blob:none] (--no-checkout | --no-recurse-submodules) [--no-checkout --origin origin | --branch <ref>] -- <url> <dir>`.
+    - `--depth 1` is dropped only for a SHA ref.
+    - `--filter=blob:none` is added for sparse paths or a SHA ref, when the protocol supports it.
+    - `--no-checkout` is used when `--sparse` paths are set.
+  - Submodules (v2.1.295+, per the docs): after the clone, `submodule update --init --recursive --depth 1 [-- <paths>]` runs for only the submodules that hold plugin files. A plugin at the root that names a submodule path gets every submodule (`-c submodule.active=.`).
+  - Sparse: `sparse-checkout` for each recorded path, then `read-tree -u --reset HEAD`. The paths are saved in `.git` so a later change of paths forces a re-clone.
+  - Update (the freshness probe `$Ft`): no `fetch` or `pull` ever runs.
+    - If the sparse paths changed, or HEAD is unreadable, the result is `stale`.
+    - If `ref` is a full SHA, compare it to HEAD.
+    - Otherwise run `git ls-remote -- <url> HEAD` (or `refs/heads/<ref>`, `refs/tags/<ref>^{}`, `refs/tags/<ref>`). An equal SHA means `current`. A non-zero exit means `unreachable`. A different SHA, or a ref not advertised, means `stale`.
+    - `current` returns at once. `unreachable` with `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE` set and an existing `.claude-plugin/marketplace.json` keeps the clone, with the log `Marketplace remote unreachable, keeping existing clone (CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE)`. Anything else re-clones into staging, renames the live directory to `<name>.bak`, moves the staged clone in, and deletes `.bak`. A failed re-clone leaves the old checkout in place.
+  - A marketplace `ref` that is a 40/64-hex SHA (behind the `tengu_tender_raven` flag) clones with full depth and `--filter=blob:none`. It then fetches `+refs/heads/*` and `+refs/tags/*` into `refs/marketplace-pin/*`, checks that a branch or tag contains the commit, and runs `update-ref --no-deref HEAD <sha>` and `read-tree`. An uppercase SHA ref is refused, and reserved official names refuse SHA refs.
+  - Progress lines: `Refreshing marketplace cache (timeout: <n>s)…`, `Cloning repository (timeout: <n>s): <url>[ (ref: <r>)]`, `Replacing the existing marketplace clone…`, `Clone complete, validating marketplace…`.
+  - After a clone, a Git LFS pointer scan warns (`… checked out as Git LFS pointer files … Claude Code never downloads Git LFS content there`).
+- **Evidence (binary):** `ae=[...fxt,...X,"clone",...z===void 0?["--depth","1"]:[]];if((H||z!==void 0)&&Tis(e))ae.push("--filter=blob:none");if(H)ae.push("--no-checkout");else ae.push("--no-recurse-submodules");if(z!==void 0)ae.push("--no-checkout","--origin","origin");else if(r)ae.push("--branch",r);ae.push("--",e,o);`. `"submodule","update","--init","--recursive","--depth","1",...Q==="all"?[]:["--",...Q]`. `$Ft`: `Q=await bNe(o,{patterns:r===void 0?["HEAD"]:[\`refs/heads/${r}\`,\`refs/tags/${r}^{}\`,\`refs/tags/${r}\`],timeout:h})` … `if(Q.code!==0)return ... "unreachable"`. Docs (host-marketplace): "The check finds new commits, or fails because it can't reach or authenticate to the remote: Claude Code clones the marketplace again and replaces the existing checkout with the new clone. If that clone fails, the existing checkout stays in place." Docs (plugin-marketplaces): "Claude Code clones the repository and fetches only the git submodules that hold plugin files. Requires Claude Code v2.1.295 or later."
+- **Confidence:** HIGH for clone, update, and KEEP. MEDIUM for the SHA-ref path, which a feature flag gates.
+- **Pi/project constraints:** Today `platform/git.ts` keeps full history, follows no submodules, and updates with `fetch` plus `checkout`. Upstream's re-clone-and-swap fits NFR-1 (atomic rename) and NFR-3 (retry-safe) better than an in-place fetch.
+
+### E-SG-08: Accepted URL forms
+
+- **Question:** Which git addresses does Claude Code accept?
+- **Behavior:**
+  - The validator (`vas`, `Invalid git URL…`) accepts `https:`, `http:`, `ssh:`, `git+ssh:`, `ssh+git:`, a local `file://` with no host, and scp form `user@host:path` (no `://` allowed in it). It refuses `git://` ("isn't supported because it isn't encrypted"), control characters, `%00`, square brackets except around an IPv6 host, a backslash in an http(s) authority, and an ssh URL with `?` or `#` or an odd host or user.
+  - Separately, every git command carries `-c protocol.{ext,fd,git,ftp,ftps}.allow=never`, and a user's `GIT_ALLOW_PROTOCOL` only narrows `https,http,ssh,file` further.
+  - `marketplace add` source strings (CLI reference): `owner/repo`, `owner/repo#ref`, `owner/repo@ref` → `github`; `user@host:path[.git][#ref]` → `git` over SSH; an `http(s)://` URL ending `.git[#ref]` or containing `/_git/` → `git`; `https://github.com/owner/repo` or `https://gitlab.com/ns/project` → `git` with `.git` appended; any other `http(s)://` URL → hosted `marketplace.json`; paths → `directory` or `file`. `ssh://` is not in the CLI table, but the validator accepts it for settings entries and plugin `url` sources.
+- **Evidence (binary):** `var U="https, http, ssh (also written git+ssh or ssh+git), user@host:path, or a local file:// address with no host. git:// isn't supported because it isn't encrypted."` and `if(!["https:","http:","ssh:","file:","git+ssh:","ssh+git:"].includes(i.protocol))`. `var zt=["-c","protocol.ext.allow=never","-c","protocol.fd.allow=never","-c","protocol.git.allow=never","-c","protocol.ftp.allow=never","-c","protocol.ftps.allow=never"]`. Docs (cli-reference, 2026-11-22): the source-form table quoted above.
+- **Confidence:** HIGH for the validator. MEDIUM for whether `marketplace add ssh://…` parses as a `git` source, because the CLI source parser itself was not traced.
+- **Pi/project constraints:** **D-76-01** ("`url` marketplace sources accept https:// only … `http://`, `ssh://`, and `git@host:` scp-form all reject") rests on `isomorphic-git` having no SSH. This milestone removes that reason, so accepting `git@host:` and `ssh://` needs an amendment of D-76-01 with its own ID. `http://` is a separate question: D-PL5-04/05/33 keep it refused. Only the user can relax that.
+
+### E-SG-09: Non-interactive environment and hardening
+
+- **Question:** What environment and config does every remote git command run under?
+- **Behavior:**
+  - Env: `GIT_TERMINAL_PROMPT=0`, `GIT_ASKPASS=""`, `GCM_INTERACTIVE=never`, plus `credential.interactive=false` appended through `GIT_CONFIG_COUNT`/`KEY_n`/`VALUE_n`, keeping any count the user already set.
+  - SSH: `GIT_SSH_COMMAND` becomes `<chosen ssh> -o BatchMode=yes -o StrictHostKeyChecking=yes`. The chosen ssh is the user's `GIT_SSH_COMMAND`, else `core.sshCommand`, else `GIT_SSH`, else `ssh`. The `ssh.variant` and `GIT_SSH_VARIANT` handling covers `plink` (`-batch`) and `tortoiseplink`.
+  - Config pins: `init.defaultRefFormat=files`, `core.longpaths=true`, the protocol bans above, and `GIT_CEILING_DIRECTORIES=<dir>`.
+  - In-checkout hardening: `core.fsmonitor=`, `core.hooksPath=/dev/null`, `core.askPass=`, `protocol.ext.allow=never`, `submodule.recurse=false`, every `hook.<name>.enabled=false`, `gc.auto=0`, `maintenance.auto=false`.
+  - Plugin clones force `LC_MESSAGES=C` so stderr matching works in any locale.
+  - The credential helper stays enabled but cannot prompt. Docs: "Claude Code leaves the user's git credential helper enabled but forbids it from prompting, and doesn't run askpass programs such as one set in `GIT_ASKPASS`."
+- **Evidence (binary):** `var vve={GIT_TERMINAL_PROMPT:"0",GIT_ASKPASS:"",GCM_INTERACTIVE:"never"};function GJe(e=process.env){return{...e,...,...vve,...w1(tA(e,"GIT_CONFIG_COUNT"),[["credential.interactive","false"]],e)}}`. `function nn(e=GJe(rn()),n){let r=[...Qt(e),...en,...tn]...}`, `var en=["-c","init.defaultRefFormat=files"]`, `tn=["-c","core.longpaths=true"]`. `function sLo(e){let{LC_ALL:o,...r}=e;return{...r,LC_ALL:void 0,...,LC_MESSAGES:"C"}}`. `function uxt(){return[["core.fsmonitor",""],["core.hooksPath",KLr()],["core.askPass",""],["protocol.ext.allow","never"],...,["submodule.recurse","false"],...]}`.
+- **Confidence:** HIGH for env and pins. MEDIUM for which commands carry the `uxt` in-checkout list. It sits in the `inCheckoutArgs` family, but that was not traced line by line.
+- **Pi/project constraints:** `platform/git-credential.ts` already sets `GIT_TERMINAL_PROMPT=0` and `GCM_INTERACTIVE=never` for `git credential`. `test/architecture/hermetic-git-environment.test.ts` must be rebuilt around a real git binary.
+
+### E-SG-10: Error classification and messages
+
+- **Question:** How are clone failures classified and worded?
+- **Behavior (marketplace clone, `ZMo`):** each class prepends one message to `\n\nOriginal error: <redacted stderr>`. The command then throws `Failed to clone marketplace repository: <that>`.
+
+  | Trigger in stderr | Message |
+  |---|---|
+  | Clone timed out | `Git clone timed out after <n>s. The repository may be too large for the current timeout. Set CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS to increase it (e.g., 300000 for 5 minutes).` |
+  | `REMOTE HOST IDENTIFICATION HAS CHANGED` | `SSH host key has changed (server key rotation or possible MITM). Remove the stale known_hosts entry:\n  ssh-keygen -R <host>\nThen connect once manually to verify and accept the new key.` |
+  | `Host key verification failed` | `SSH host key is not in your known_hosts file. To add it, connect once manually (this will show the fingerprint for you to verify):\n  ssh -T git@<host>\n\nOr use an HTTPS URL instead (recommended for public repos).` |
+  | `Permission denied (publickey)` or `Could not read from remote repository` | `SSH authentication failed. Please ensure your SSH keys are configured for <GitHub\|host\|your git host>, or use an HTTPS URL instead.` |
+  | `Authentication failed`, `could not read Username`, `unable to get password from user`, `terminal prompts disabled`, or 401/403 | `HTTPS authentication failed. Please ensure <your credential helper is configured (e.g., gh auth login) \| your git credential helper has valid credentials for <host> (e.g., a personal access token)>. Claude Code runs this clone with terminal prompts and askpass programs turned off and tells credential helpers not to prompt, so git needs a credential it can get without asking you, such as one a credential helper already holds.` |
+  | `timed out`, `timeout`, or `Could not resolve host` | `Network error or timeout while cloning repository. Please check your internet connection and try again.` |
+  | Empty stderr | `git clone exited with code <n> (no stderr output). Run with --debug to see the full command.` |
+
+  For the SSH messages, `<host>` comes from the scp form only; a `://` URL gives `<host>`.
+
+  Plugin clones (`rLo`) use other wording: `Failed to clone repository: [timed out after <n>s (CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS sets the limit). ]<redacted stderr>`. They sort failures into typed classes: `fatal: remote error:` is generic; `xcrun: error:` or git missing on macOS is a "git missing" class (`git is not installed on this Mac. To install it, run xcode-select --install, then try again.`); a git-proxy 403 is a proxy class; a network regex (`fatal: unable to access '…': `, `error: RPC failed; curl (6|7|18|28|35|52|55|56|60|92)`, `HTTP 4xx/5xx`, `ssh: Could not resolve hostname `, `ssh: connect to host … port …: `, `fatal: unable to connect to `) is a network class.
+
+  Telemetry buckets (`Epe`): `dns_or_refused`, `timeout`, `conn_reset`, `auth`, `not_found`, `tls`, `invalid_schema`, `other`.
+
+  Redaction: `Dve(stderr, url)` replaces every credential-bearing spelling of the URL with its redacted form before any message is built.
+
+  Windows git lookup: `Command 'git' not found or is in an unsafe location (current directory)`.
+- **Evidence (binary):** the message literals above, all inside `async function ZMo(` and `function rLo(`; `var SCi=/^(?:fatal: unable to access '[^']*': |error: RPC failed; (?:curl (?:6|7|18|28|35|52|55|56|60|92)\b|HTTP [45]\d\d)|ssh: Could not resolve hostname |ssh: connect to host \S+ port \d+: |fatal: unable to connect to )/`. Docs (troubleshooting): sections `SSH authentication failed or HTTPS authentication failed`, `SSH host key is not in your known_hosts file`, `Command 'git' not found or is in an unsafe location`, `Git clone timed out after 120s`, `Invalid git URL`.
+- **Confidence:** HIGH.
+- **Pi/project constraints:** IL-1 (English only) fits. IL-2 means every message goes through `notify()`. The NFR-10/IL-2 rule on redacting absolute paths (`shared/redact-absolute-paths.ts`) still applies on top of URL redaction. `shared/git-failure-classifiers.ts` is the natural owner.
+
+### E-SG-11: Timeouts and environment variables read
+
+- **Behavior:**
+  - Marketplace clone, re-clone, and freshness `ls-remote`: `CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS` when greater than 0 (capped at 2147483647), default 120000 ms.
+  - Probe: 3000 ms. `ls-remote --get-url` and `ssh -G`: 5000 ms each.
+  - Plugin clones take `gitTimeoutMs`, which the session-start load sets to the same 120 s value. Whether an explicit install sets a timeout is unverified.
+  - Variables read on this surface: `CLAUDE_CODE_PLUGIN_PREFER_HTTPS`, `CLAUDE_CODE_REMOTE`, `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE`, `CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS`, `GIT_SSH_COMMAND`, `GIT_SSH`, `GIT_SSH_VARIANT`, `GIT_CONFIG_COUNT`, `GIT_ALLOW_PROTOCOL`, `LC_ALL` (moved to `LC_CTYPE`), and `CLAUDE_CODE_TMPDIR` (used to read ssh settings), plus git config `core.sshCommand` and `ssh.variant`.
+- **Evidence (binary):** `var pbi=120000,...;function Wto(){let e=s.CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS;if(e!==void 0&&e>0)return Math.min(e,au);return pbi}` with `var au=2147483647`. `gitTimeoutMs:Wto()` in the session-load call. The `OF` function reads `"^(core\\.sshcommand|ssh\\.variant)$"`. Docs (troubleshooting): "Cloning a marketplace, and re-cloning one to update it, gets 120 seconds by default."
+- **Confidence:** HIGH for the marketplace timeout and the variable list. LOW for the explicit-install plugin clone timeout (unverified).
+
+### E-SG-12: Background autoupdate and credentials
+
+- **Question:** How does background autoupdate authenticate, and what does it do on failure?
+- **Behavior:** It uses the same non-interactive git as everything else, so it never prompts.
+  - SSH remotes work with an agent-loaded key.
+  - HTTPS remotes work with a helper that already holds a credential.
+  - A helper that needs to prompt fails quietly and keeps the checkout.
+  - New commits, or an unreachable or unauthenticated remote, trigger a re-clone and swap. A failed re-clone keeps the old checkout.
+  - `GITHUB_TOKEN` alone does nothing. A token takes effect only through a helper such as `gh`'s.
+  - Autoupdate is off by default except for the official marketplaces (`xFe`: `autoUpdate` setting, else claude.ai and plugin-directory sources, else the reserved official names).
+- **Evidence:** Docs (host-marketplace, "What background auto-update does with credentials"), quoted in the corrections table. Binary: the bulk refresh loop calls `X$t(H.source,R,void 0,e,R,void 0,y)`, so E-SG-02's probe and retry apply to it too. `function xFe(e,o,r){if(r!==void 0)return r;if(o.autoUpdate!==void 0)return o.autoUpdate;if(o.source?.source==="claudeai")return!0;if(o.source?.source==="pluginDirectory")return!0;...}`.
+- **Confidence:** MEDIUM. The docs say it explicitly and the bulk refresh path is in the binary, but the hop from the background trigger to that loop was not traced.
+- **Pi/project constraints:** D-PL8-01 and D-PL8-12 (stored credentials only, no Device Flow), and the AAP rules (autoapply uses stored credentials only). With system git, "stored credentials" becomes "whatever the machine's git and ssh already hold". That is upstream's model exactly, so these decisions get simpler.
+
+### E-SG-13: No token or OAuth of Claude Code's own
+
+- **Behavior:** Claude Code has no git token of its own. `marketplace.json` has no credential field. No Device Flow exists on this surface. The claude.ai GitHub connection matters only in remote sessions, through a git proxy (`proxy: [github_link_required]`, `remote: access denied by the git proxy`).
+- **Evidence:** Docs (host-marketplace): "Claude Code runs `git` on their machine with interactive prompts turned off and relies on whatever credentials that machine already holds. Claude Code has no git token of its own, and `marketplace.json` has no field for one." Binary: `MCn` parses `remote: access denied by the git proxy` plus `The requested URL returned error: 403` into `not-in-session` or `no-github-connection`.
+- **Confidence:** HIGH for "no token of its own". MEDIUM for the remote-session proxy scope.
+- **Pi/project constraints:** The project's GitHub OAuth Device Flow (`domain/github-auth.ts`, `domain/auth-registry.ts`, `orchestrators/auth-host.ts`, `platform/git-auth-callbacks.ts`, `platform/git-credential.ts`) has no upstream analogue. Keeping it is a divergence that needs a recorded decision. Removing it is parity.
 
 ## Feature Landscape
 
-### Table Stakes (Users Expect These)
+### Table Stakes (users coming from Claude Code expect these)
 
-| # | Feature | Why Expected | Complexity | Depends on existing code |
-|---|---|---|---|---|
-| T1 | Pi 1.5.0: dev deps, peer floor `>=1.5.0`, lockfile | `registerMcpServer` exists since 1.4, but the 1.5.0 OAuth fix, tool-search ranking and argument coercion are what users get | LOW | `package.json`, `platform/pi-api.ts` (pi-schema move: unaffected per brief) |
-| T2 | Active-implementation snapshot (`adapter`/`builtin`/`none`) taken once per run | Every verdict, marker and materialization keys on it | LOW | `platform/pi-api.ts` `softDepStatus`, `SoftDepStatus`, `shared/notify-reasons.ts` |
-| T3 | Implementation-neutral install records: every declared server in its Claude-shaped form after plugin-variable substitution, plus a backfill for existing records that hold only names | Read-time verdicts and built-in registration need the full config; existing installs must work under built-in with no reinstall | HIGH | `persistence/state-io.ts` (`mcpServers: string[]` today), `domain/mcp-resolution.ts`, migration path (NFR-1, APL-D1 interaction) |
-| T4 | Read-time verdicts per implementation on `list`, `info`, `install`, `update`, `enable`, `pending`, `apply` | "A plugin's state depends on the active implementation" (brief) | HIGH | `domain/mcp-server-features.ts` `classifyMcpServer` splits into per-implementation tables; resolver `partially-available`; FSTAT-02 derived state |
-| T5 | Built-in verdict table: `sse` blocked (new `(unsupported sse)`), `bareElicitationCapability` supported, everything else as the adapter | Truthful `{unsupported mcp}` per implementation | MEDIUM | `McpUnsupportedFeature` union, output catalog |
-| T6 | Built-in translation table (the verdict table above): extension-side expansion for `url`/`command`/`args`, `$$`/`$!` escaping in `env`/`headers`, seconds `timeout`, `callbackUrl` on localhost, `scope`, `description`, `exposure` | Servers must receive what Claude gives them | HIGH | `bridges/mcp/substitute.ts`, `adapter-escape.ts` (adapter-only), deny-lists (AVAR-05) reused |
-| T7 | Built-in materialization: `pi.registerMcpServer` at `session_start` for every enabled record, project scope only when trusted, the project record winning over the user record, never under `adapter`/`none`, never handling `mcp_servers_change` (PI-11), registration errors reported as rows | "Materialize correctly on startup and /reload" | MEDIUM | `index.ts` `session_start`, notify chokepoint |
-| T8 | Built-in naming: server `plugin_<plugin>_<server>` by ANAME-01 (keeps `-`); collision check against both scopes' `mcp.json` by namespace (`-`≡`_`) and against other extensions' registrations | Claude names wherever Pi allows; refuse a collision as ANAME-03 does | MEDIUM | `bridges/mcp/collision-*.ts` |
-| T9 | Marker and `requires:` per implementation (`requires mcp support`; `requires: pi-mcp-adapter` / `builtin:mcp` / `mcp support (missing)`) | Today's `{requires pi-mcp-adapter}` lies under built-in | LOW | `shared/concerns/soft-dep.ts`, `notification-types.ts` REASONS, output catalog, JSON docs |
-| T10 | Built-in status reader for `info` | `info` shows server state today | MEDIUM | `platform/mcp-status.ts` gains a sibling |
-| T11 | Agent grants per implementation, re-materialized on load (`mcp:plugin_<p>_<s>_/<t>` vs `mcp:plugin_<p>_<s>/<t>`) | A generated agent must launch with its tools after a switch | MEDIUM | `bridges/agents/convert.ts`; **APL-D1 says a load changes no installation state, so this needs a recorded amendment** (like AMIG-01's load-time move) |
-| T12 | Adapter `mcp-adapter.json` reconciled from the records on load or apply | Built-in → adapter switch; servers recorded while built-in was active | MEDIUM | `bridges/mcp/stage.ts`, AMIG-01 precedent for load-time writes |
-| T13 | `-builtin:mcp` cleanup with a notice (decision 1) | Without it, uninstalling the adapter leaves no MCP | MEDIUM | new settings writer; NFR-10 amendment; `shared/atomic-json.ts` |
-| T14 | Hooks under built-in: direct calls fire `PreToolUse`/`PostToolUse` with no adapter `mcp`-proxy special case; codemode-nested calls also fire | Hook parity on MCP tools (ANAME-02) | LOW | `bridges/hooks/dispatch.ts` `MCP_PROXY_TOOL` becomes adapter-only |
-| T15 | Every MCP cucumber scenario runs under `@adapter` and `@builtin` profiles, with shared steps and implementation-specific expectations in their own scenarios | Brief requirement and the behavioral-test rule | HIGH | `features/mcp-server/*`, `features/lib/companions.ts`, `cucumber.json` (one `default` profile today) |
-| T16 | `docs/mcp-compatibility.md` built-in column, output catalog, README, CHANGELOG | Parity reference | MEDIUM | docs |
+| Feature | Why Expected | Complexity | Notes / Dependencies |
+|---------|--------------|------------|----------------------|
+| System `git` transport behind `platform/git.ts`'s operations (clone, ls-remote, fetch-at-SHA, checkout, rev-parse, read-tree, sparse-checkout, submodule update) | Upstream runs the machine's git (E-SG-06, E-SG-07). It is the only way to get SSH and credential helpers. | HIGH | Replaces `isomorphic-git` (reverses D-21 with a new decision ID). Spawning moves into the `child-process-chokepoint` allow-list. ESLint BLOCK F `NETWORK_SEAMS` keeps naming the same seams if the `platform/git.ts` API shape survives. The fallow `isomorphic-git-chokepoint` rule is retired. |
+| Non-interactive env on every git command: `GIT_TERMINAL_PROMPT=0`, `GIT_ASKPASS=""`, `GCM_INTERACTIVE=never`, `credential.interactive=false` via `GIT_CONFIG_COUNT`, SSH `BatchMode=yes` + `StrictHostKeyChecking=yes` | E-SG-09. Without it, a background autoupdate or autoapply can hang on a prompt. NFR-2 forbids a hung session. | MEDIUM | Reuse the env-building pattern in `platform/git-credential.ts`. `GIT_CONFIG_COUNT` must append to the user's count, not overwrite it. |
+| Protocol and hook hardening: `protocol.{ext,fd,git,ftp,ftps}.allow=never`, `GIT_ALLOW_PROTOCOL` narrowing only, `core.hooksPath=/dev/null`, `core.fsmonitor=`, hooks disabled, `GIT_CEILING_DIRECTORIES` | E-SG-09. A cloned repository is untrusted. Running its hooks or fsmonitor is code execution. | MEDIUM | Security surface; add threat-model rows. `isomorphic-git` never ran hooks, so this is a new risk that system git brings in. |
+| Shallow clones (`--depth 1`), `--branch <ref>`, SHA pins via `fetch --depth 1 origin <sha>` → `--unshallow` fallback → `checkout` → `rev-parse` verification | E-SG-06. Upstream behavior and message wording. | MEDIUM | The current code keeps full history. The plugin version derivation (`domain/version.ts`) and `dependency-tag-probe.ts` must not need history a shallow clone lacks. Check `resolveTagOid` and `listTags` callers. |
+| Submodules: plugin clones `--recurse-submodules --shallow-submodules`; marketplaces `--no-recurse-submodules`, then only the submodules that hold plugin files | E-SG-06, E-SG-07. Today submodules are not followed at all, so plugins that need them break. | HIGH (marketplace selective rule) / LOW (plugin recursive) | Start with the plugin rule and a marketplace "all submodules" rule. Upstream's selective rule (read plugin config paths and file text) can follow. Note the `directoryPin` exception (MEDIUM evidence). |
+| GitHub `owner/repo` **marketplace** transport: probe → SSH-first only on `configured`, else HTTPS-first; retry the other transport on any failure; the `Cloning via …`, `SSH not configured, cloning via HTTPS: <url>`, and `<T> clone failed, retrying with <T2>: <url>` lines; `failed on both attempts` error | E-SG-01, E-SG-02. Users who learned the upstream messages see the same ones. | MEDIUM | Applies to add, update, autoupdate, cascade add (D-MF-04), and apply. D-MF-01 host override: decide which host gets the SSH URL. The probe always targets github.com upstream. |
+| `CLAUDE_CODE_PLUGIN_PREFER_HTTPS` forces HTTPS (no probe) for marketplaces, plugins, git-subdir shorthand, and SHA resolution URLs | E-SG-02, E-SG-04, E-SG-05. Documented upstream as the fix for users without an SSH key. | LOW | Read the upstream name, not a `PI_` alias, so upstream instructions work verbatim. `CLAUDE_CODE_REMOTE` has no Pi meaning; see Anti-Features. |
+| Accept `git@host:path` and `ssh://` (`git+ssh://`, `ssh+git://`) addresses for `url`/git marketplace sources and plugin `url`/`git-subdir` sources; refuse `git://` | E-SG-08. Private-repo SSH users need these forms, and they are the point of issue #325. | MEDIUM | Needs a new decision amending **D-76-01**, because its reason (no SSH transport) goes away. Port upstream's validator rules (brackets, `%00`, control characters, backslash in authority, ssh host/user charset). `http://` stays refused under D-76-01 and D-PL5-04/05/33 unless the user decides otherwise. |
+| Error classification and wording matching E-SG-10, with stderr URL redaction | Upstream parity on messages users search for. Leaking a token in an error is a security bug. | MEDIUM | `shared/git-failure-classifiers.ts` is rewritten from isomorphic-git error codes to stderr patterns. Force `LC_MESSAGES=C` (and move `LC_ALL` to `LC_CTYPE`) so matching works in any locale. Keep `redact-absolute-paths` on top. |
+| `CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS`, default 120 s, for marketplace clone, re-clone, and `ls-remote`; probe 3 s, `--get-url` and `ssh -G` 5 s | E-SG-11. | LOW | Kill the process group on timeout; Windows needs care. The `Git clone timed out after <n>s …` message names the upstream variable. |
+| Marketplace update as `ls-remote` freshness check, then **re-clone into staging and atomic swap** (with `.bak` rollback); no in-place fetch | E-SG-07. Upstream semantics, and it fits NFR-1 and NFR-3 better than fetch+checkout. | MEDIUM | Changes `orchestrators/marketplace/update.ts`, `update-preflight.ts`, and `clone-cache.ts`. Containment (NFR-10) must hold for the `..clone` and `.bak` siblings: they live inside `<scopeRoot>/pi-claude-marketplace/`. |
+| `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE=1`: on `unreachable`, keep a checkout that has `.claude-plugin/marketplace.json` | E-SG-07. A documented offline escape hatch. | LOW | Depends on the freshness check returning a typed `unreachable`. |
+| Authentication only through what the machine holds (ssh-agent keys, credential helpers such as `gh auth setup-git`); `GITHUB_TOKEN` alone does nothing | E-SG-12, E-SG-13. The milestone goal: "needs no git credential of its own". | LOW (behavior) / HIGH (removal blast radius) | The fate of Device Flow is a discuss decision (see Differentiators and Anti-Features). D-PL8-12 and the AAP rules collapse to "git is non-interactive". |
+| Git-missing detection with a clear message | Upstream: `Command 'git' not found or is in an unsafe location (current directory)` (Windows), the macOS `xcode-select --install` message, and the git-subdir "requires git … 2.25 or later" message. D-21's one reason was exactly this failure. | LOW | MA-7 comes back in spirit. Never run a `git` found only in the current directory (Windows `PATH` search order). |
 
-### Differentiators (Competitive Advantage)
+### Differentiators (go beyond upstream; each one is a divergence needing a license)
 
-| # | Feature | Value Proposition | Complexity | Notes |
-|---|---|---|---|---|
-| D1 | **Hook `tool_name` server-segment restoration under built-in**: map `mcp__plugin_my_plugin_api__x` back to `mcp__plugin_my-plugin_api__x` before matching and before the hook gets its input | Most real plugin names contain `-`. Without this, hook matchers break under built-in for most plugins | MEDIUM | The extension owns the server half of the mapping, so the Pi gap licenses only the **tool** segment (Pi does not expose the original tool name, PI-12). **Parity question, see Gaps item 1** |
-| D2 | Register and unregister at once on `install`/`uninstall`/`enable`/`disable` under built-in (Pi connects later registrations right away) | The MCP part needs no `/reload` | MEDIUM | The rest of the plugin still needs `/reload`, so the trailer stays; `not loaded` disappears under built-in |
-| D3 | `tools[].permission_policy: "always_deny"` and `toolPermissions: "blocked"` → `toolExposure: "hidden"` | Built-in can enforce deny rules the adapter cannot | LOW | Ask rules stay unenforced with the warning; first establish whether Claude enforces them for plugin servers |
-| D4 | Claude-literal variable semantics under built-in: unset `${NAME}` stays literal, empty stays empty, no split tokens, no install-time-only defaults | Removes six adapter-licensed divergences in the Variables section | (part of T6) | Keep set non-empty references as `${NAME}` for Pi to expand, so secrets stay out of `getMcpServers()` copies |
-| D5 | pi-subagents bug A (`directTools: "search"` rejected) does not apply under built-in | Background agents may really get plugin MCP tools under built-in | LOW (verify) | Re-test MCPBG-01 under `@builtin` |
+| Feature | Value Proposition | Complexity | Notes |
+|---------|-------------------|------------|-------|
+| Probe and HTTPS fallback on **every** `/claude:plugin install` of a `github` plugin, not only the shell CLI install | Pi has no shell-versus-session split, so users without an SSH key would otherwise fail on every github plugin install, the exact pain the upstream docs warn about. | MEDIUM | Upstream's `claude plugin install` does this (E-SG-04 step 3+). Its in-session `/plugin` install does not. Which surface Pi mirrors is a user question. It is not a Pi capability gap, since Pi could do either. Recommendation: mirror `claude plugin install`, because `/claude:plugin install` is typed like a CLI command. Keep `plugin update` and dependency installs SSH-only as upstream does, or ask. |
+| Keep the GitHub Device Flow as an opt-in credential source that feeds a git credential helper | Users with no `gh` and no SSH key keep a working path. | HIGH | No upstream analogue (E-SG-13). It needs a recorded decision. It conflicts with the milestone goal ("no token of the extension's own") and with the maintainer's rejection of a global Device Flow toggle (PR #327). Recommendation: remove it. |
+| `isomorphic-git` fallback when `git` is missing | Restores D-21's original benefit. | HIGH | Two transports with diverging behavior (no SSH, no submodules in one) is a parity bug factory. Recommendation: do not build it; see Anti-Features. |
 
-### Anti-Features (Commonly Requested, Often Problematic)
+### Anti-Features
 
 | Feature | Why Requested | Why Problematic | Alternative |
-|---|---|---|---|
-| A `/claude:plugin mcp use adapter\|builtin` switch or setting | Explicit control | The brief forbids it; the trigger is installing or uninstalling the adapter | Detection at `session_start` |
-| One registration path for both (`registerMcpServer` + the adapter's `applyPiMcpServers`) | Less code | The adapter drops `directTools`, so `alwaysLoad` is lost (brief) | Separate materialization per implementation |
-| Writing plugin servers into Pi's `mcp.json` for built-in | Persistent, with `/mcp` choices that persist | It edits a user-owned file outside NFR-10, an `mcp.json` entry outranks every registration, and it re-creates the legacy entries that AMIG-01 had to move out | Session registrations from the records |
-| Handling `mcp_servers_change` | Status tracking | It marks the extension as the connector (PI-11) | Read `getAllTools` on demand |
-| Writing `mcp-onboarding.json` or `mcp-project-approvals.json` | Clean state after cleanup | Adapter-owned files (NFR-10, D-CF6-03) | Read only |
-| Turning on `tool_search`/`codemode` in settings | Make tools findable | Built-in turns `tool_search` on itself for `deferred` servers (PI-10) | Nothing to do |
-| `exposure: "codemode"` for plugin servers | Pi's default | Decision 2 chose `deferred`/`direct`, the closest to Claude's tool search | Keep decision 2 |
-| A load notice on every switch | Visibility | Claude has no switch; the noise repeats every session | Notice only for the settings cleanup and for plugins that become partial |
-| Refusing or disabling a plugin that becomes partial after a switch, or asking for `--partial` again | Consent purity | Breaks "never require action"; upstream skips a server it will not run and keeps the plugin (CC-4, CC-5) | Derived `(partially-installed)` plus the warning row |
-| Expanding every variable into the registration | Simpler | Copies secrets into a structure every extension can read through `getMcpServers()` | Expand only what Pi cannot or must not expand |
-| Persisting `/mcp` disable choices for built-in plugin servers in an extension store | Parity with adapter overrides | New store and new UX surface for a session-only Pi feature | Document the gap; revisit if Pi adds persistence |
-| `oauth.clientName: "Claude Code (<server>)"` under built-in | Servers that allow only Claude clients would sign in | It presents Pi as Claude Code to third-party authorization servers, and setting it turns CIMD off | User question (see Gaps item 2) |
+|---------|---------------|-----------------|-------------|
+| Reading `GITHUB_TOKEN`/`GH_TOKEN` directly and injecting it into the clone URL or an `http.extraHeader` | "Make it just work in CI" | Upstream explicitly doesn't (E-SG-12). A token in a URL leaks through stderr, `.git/config`, and process lists. It diverges from docs users follow. | Document `gh auth setup-git` or a credential helper, as upstream does. |
+| PR #326's `gh auth token` shortcut ahead of Device Flow | Convenience for gh users | Superseded by the milestone; system git with `gh auth setup-git` already uses gh's helper. | System git plus the user's helper. |
+| PR #327's global `PI_CLAUDE_MARKETPLACE_DEVICE_FLOW=off` | Turn off prompts | The maintainer rejected the design. System git makes it moot. | Non-interactive git everywhere. |
+| Honoring `CLAUDE_CODE_REMOTE` to force HTTPS | Literal parity with `k4t()` | `CLAUDE_CODE_REMOTE` marks a Claude Code remote (cloud) session. A Pi process inheriting it from a cloud shell would silently change transport. | Read only `CLAUDE_CODE_PLUGIN_PREFER_HTTPS`. Record the omission as a Pi capability gap (Pi has no Claude remote-session mode). |
+| Auto-accepting unknown SSH host keys (`StrictHostKeyChecking=accept-new`) | Fewer first-run failures | Upstream uses `=yes` on purpose (troubleshooting: "refuses a host whose key you haven't accepted yet rather than accepting the key automatically"). | Match upstream and show its `ssh -T git@<host>` hint. |
+| Interactive prompts (passphrase, username/password, GCM GUI) in a TUI session | "I'm at the keyboard anyway" | Pi's background autoupdate and autoapply cannot prompt. Upstream never prompts on this surface. Prompting in some paths and not others is confusing. | Fail with the E-SG-10 message telling the user to load the key into ssh-agent or store a credential. |
+| Following the repository's git hooks, LFS smudge, or fsmonitor during clone | "Full fidelity" | Code execution from an untrusted repository. Upstream disables hooks and never downloads LFS content. | Hooks off, LFS pointer warning as upstream. |
+| `git pull`/`fetch` in place for marketplace update | Faster for big repos | Not upstream (E-SG-07). A half-applied fetch breaks NFR-1 atomicity. | `ls-remote` check, then re-clone and swap. |
+| A `--depth`/`--full` knob or per-marketplace git options | Power users | No upstream knob. Extra divergence surface. | Upstream defaults plus `--sparse`, which upstream has. Sparse support is a separate feature if it isn't already present. |
 
 ## Feature Dependencies
 
 ```
-T1 Pi 1.5.0
- └─> T2 detection snapshot
-      ├─> T9 markers / requires:
-      ├─> T4 read-time verdicts ──requires──> T3 Claude-shaped records (+ backfill)
-      │                         └─requires──> T5 built-in verdict table
-      ├─> T7 built-in materialization ──requires──> T3, T6 translation, T8 naming
-      │     ├─> T10 status reader
-      │     ├─> T14 hooks (proxy case adapter-only) ──enhanced by──> D1
-      │     └─> D2 immediate registration
-      ├─> T12 adapter reconcile from records ──requires──> T3
-      ├─> T11 agent grants per implementation ──requires──> T8 naming, APL-D1 amendment
-      └─> T13 settings cleanup (independent of T3; needs only T2)
-T15 cucumber profiles ──requires──> T2 + harness Pi with and without the adapter (+ a `none` arrangement)
-T16 docs ──requires──> T5, T6 frozen
+System git transport (platform/git.ts rewrite)
+    ├──requires──> child-process-chokepoint allow-list update + rule-pack retirement of isomorphic-git-chokepoint
+    ├──requires──> non-interactive env + hardening config
+    ├──requires──> git-missing detection (replaces D-21's rationale)
+    └──requires──> stderr-based failure classifiers + URL redaction + LC_MESSAGES=C
+                       └──enables──> E-SG-10 message parity
+
+URL validator (ssh://, git@host:) ──requires──> new decision amending D-76-01
+                                  └──enables──> SSH for non-GitHub git sources (E-SG-03)
+
+SSH probe (E-SG-01)
+    ├──enables──> marketplace github transport + bidirectional retry (E-SG-02)
+    └──enables──> plugin github fallback (E-SG-04) ──requires──> discuss decision on which upstream surface Pi mirrors
+                     └──requires──> git ls-remote --get-url, git config read, ssh -G checks
+
+CLAUDE_CODE_PLUGIN_PREFER_HTTPS ──short-circuits──> SSH probe (all paths)
+
+Marketplace freshness check (ls-remote) ──requires──> system git
+    ├──enables──> re-clone-and-swap update (staging + .bak, NFR-1/NFR-10)
+    └──enables──> CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE
+
+Shallow clone ──conflicts──> any code that walks history (tag listing, version-from-history); verify domain/version.ts, dependency-tag-probe.ts, marketplace-tag-probe.ts first
+
+Device Flow removal ──requires──> migration of stored keychain entries + D-PL8-12/AAP rule rewrites + README/README.es.md updates
+                    ──conflicts──> "keep Device Flow" differentiator (pick one in discuss)
+
+Test infra: cucumber HTTPS git-host stand-in (CA trust) ──must change──> real git needs GIT_SSL_CAINFO / http.sslCAInfo for the stand-in; SSH paths need an sshd or GIT_SSH_COMMAND stand-in
+test/architecture/hermetic-git-environment.test.ts ──must change──> hermetic HOME, GIT_CONFIG_GLOBAL/NOSYSTEM, no ambient ssh-agent
 ```
 
-- **T4 requires T3.** A server the adapter blocked was dropped at install and is not in today's record, so no read-time verdict can bring it back without the full config.
-- **T11 conflicts with APL-D1** until a decision lets a load rewrite generated agent files, as AMIG-01 lets a load rewrite `mcp-adapter.json`.
-- **T13 is independent.** It can ship in its own parallel phase.
+### Dependency Notes
+
+- **The transport rewrite comes first.** Every other row needs system git running under the hardened, non-interactive env.
+- **The D-76-01 amendment gates SSH URL forms.** Record it before the source parser changes. It is also the visible fix for issue #325.
+- **The probe and fallback depend on two discuss answers:** (a) for plugins, which upstream surface `/claude:plugin install` mirrors (E-SG-04); (b) how D-MF-01's host override interacts with the github.com-only probe.
+- **The shallow clone could break history readers.** `resolveTagOid`, `listTags`, `listRemoteTags`, and the version derivation must work on a depth-1 clone, or use `ls-remote` as upstream does (`ls-remote --tags` for `<plugin>--v<version>` tags, upstream `Wpt`).
+- **Removing Device Flow touches many modules:** `domain/github-auth.ts`, `domain/auth-registry.ts`, `orchestrators/auth-host.ts`, `platform/git-auth-callbacks.ts`, and the `fetch-chokepoint` exemption for `domain/github-auth.ts`. The `fetch-chokepoint` allow-list then shrinks to `platform/hosted-manifest-fetch.ts`.
 
 ## MVP Definition
 
-### Launch With
+### Launch With (v1 of this milestone)
 
-- [ ] T1–T16. The brief makes each one a requirement. The only build choice is order.
+- [ ] System git transport with the non-interactive env and hardening config. This is the core of the milestone.
+- [ ] Shallow clone, `--branch`, the SHA fetch→unshallow→checkout→verify sequence, and recursive shallow submodules for plugins. This is upstream's install shape.
+- [ ] Marketplace github probe, ordering, and bidirectional retry, with the upstream messages, plus `CLAUDE_CODE_PLUGIN_PREFER_HTTPS`. Without these, users with no SSH key regress.
+- [ ] Accept `git@host:` and `ssh://` addresses (D-76-01 amendment) with upstream's validator. This fixes issue #325.
+- [ ] Error classification and wording per E-SG-10, with URL redaction. This is parity plus safety.
+- [ ] Git-missing detection message.
+- [ ] Marketplace update as `ls-remote` plus re-clone-and-swap, and `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE`.
+- [ ] `CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS` with the 120 s default.
+- [ ] Device Flow decision carried out (removal recommended) and migration of existing clones and keychain entries.
 
 ### Add After Validation
 
-- [ ] D1 hook server-segment restoration: P1 if the user rules that parity applies (the default under the upstream-parity constraint)
-- [ ] D2 immediate registration: when users report needing `/reload` just for MCP
-- [ ] D5 re-test of background agents under built-in: alongside MCPBG-01
+- [ ] Plugin `github` probe and fallback on `/claude:plugin install`, if discuss picks the `claude plugin install` surface. It could also ship in v1 if chosen.
+- [ ] Upstream's selective marketplace submodule rule (only the submodules that hold plugin files). v1 can fetch every submodule (pre-2.1.295 upstream behavior).
+- [ ] Marketplace SHA-ref path (`refs/marketplace-pin/*` with containment check). Upstream gates it behind a flag.
+- [ ] Windows-specific SSH-first path for plugins (E-SG-04 step 5).
 
 ### Future Consideration
 
-- [ ] D3 deny rules → `hidden`: after establishing whether Claude enforces them for plugin servers
-- [ ] Persisted built-in choices: only if Pi persists registration overrides
+- [ ] Git LFS pointer scan warning after clone.
+- [ ] Sparse marketplace checkout (`--sparse`), if not already supported.
 
 ## Feature Prioritization Matrix
 
 | Feature | User Value | Implementation Cost | Priority |
-|---|---|---|---|
-| T2, T7, T6, T8 (built-in actually runs servers) | HIGH | MEDIUM–HIGH | P1 |
-| T3 records + backfill | HIGH | HIGH | P1 |
-| T4, T5, T9 read-time verdicts and markers | HIGH | HIGH | P1 |
-| T13 settings cleanup | HIGH | MEDIUM | P1 |
-| T11 agents, T12 adapter reconcile | MEDIUM | MEDIUM | P1 |
-| T10 status | MEDIUM | MEDIUM | P1 |
-| T15 dual-profile cucumber | HIGH (gate) | HIGH | P1 |
-| D1 hook restoration | HIGH | MEDIUM | P1/P2 (user ruling) |
-| D2 immediate registration | MEDIUM | MEDIUM | P2 |
-| D3 deny rules | LOW | LOW | P3 |
+|---------|------------|---------------------|----------|
+| System git transport + hardened env | HIGH | HIGH | P1 |
+| SSH URL forms (D-76-01 amendment) | HIGH | MEDIUM | P1 |
+| Marketplace probe + bidirectional retry + PREFER_HTTPS | HIGH | MEDIUM | P1 |
+| Shallow/branch/SHA/submodule clone shape | HIGH | MEDIUM | P1 |
+| Error classification + redaction | HIGH | MEDIUM | P1 |
+| Re-clone-and-swap update + KEEP_ON_FAILURE | MEDIUM | MEDIUM | P1 |
+| Git-missing message | MEDIUM | LOW | P1 |
+| Device Flow removal + migration | MEDIUM | HIGH | P1 (decision) |
+| Plugin github fallback on install | HIGH | MEDIUM | P1/P2 (discuss) |
+| Selective marketplace submodules | MEDIUM | HIGH | P2 |
+| Marketplace SHA-ref pin path | LOW | MEDIUM | P3 |
+| Windows SSH-first plugin path | LOW | MEDIUM | P2 |
 
-## Parity flags (every behavior where Claude parity is unavailable)
-
-| Behavior under built-in | Claude Code | License |
-|---|---|---|
-| Model-visible tool names turn `-` into `_` | keeps `-` | Pi gap (PI-8). Covers names the model and agents see |
-| Hook matchers containing `-` in the **server** segment do not match | match | **Not licensed.** The extension can restore the segment (D1). The gap covers only the tool segment |
-| Tool names over 64 characters are cut with a hash | no limit | Pi gap (PI-8), new |
-| SSE servers left out (`unsupported sse`) | runs | Pi gap (PI-4) |
-| `headersHelper`, `ws`, `xaa`, bundles, leading `~` left out | runs | Pi gap (same as adapter) |
-| No MCP prompts as slash commands; no elicitation | yes | Pi gap (PI-9) |
-| Timeout resets on progress; 60 s default | hard limit, ~28 h default | Pi gap |
-| `_meta["anthropic/alwaysLoad"]` ignored | honored | Pi gap |
-| `/mcp` choices for plugin servers last one session | persisted per project | Pi gap (PI-15) |
-| Project-scope servers need project trust | Claude's workspace trust gates project settings too | Matches, no license needed |
-| One extra `/reload` after uninstalling the adapter | no counterpart | Pi gap (PI-14) |
-| A plugin that becomes partial after a switch keeps loading, with no `--partial` consent | Claude skips unrunnable servers and keeps the plugin (CC-4, CC-5) | Matches upstream; the project's own `--partial` refusal still applies to an explicit install |
-| OAuth client name `pi` (or CIMD), not `Claude Code (<server>)` | `Claude Code (<server>)` | **Not licensed yet.** Parity is possible with `clientName`; user question |
-| Deny rules not enforced (MVP) | unknown | Project decision ANAME-07, extended to built-in |
-| Under the adapter, every existing divergence stays as recorded | -- | existing IDs |
-
-## Cucumber-observable outcomes per implementation
-
-Shared fixtures should use a plugin and server name with no `-` (`demo`/`stub`), so that the tool name `mcp__plugin_demo_stub__echo` is identical under both profiles and the steps can be shared. Implementation-specific scenarios carry the differences:
-
-| Scenario family | `@adapter` expectation | `@builtin` expectation |
-|---|---|---|
-| Listing / search | `mcp({search})` result `found mcp__plugin_demo_stub__echo…`, then the tool is offered | `tool_search` call loads `mcp__plugin_demo_stub__echo`, then the tool is offered; first request offers `tool_search`, not `mcp` |
-| `alwaysLoad: true` | tool offered in call 1 (`directTools: true`) | tool offered in call 1 (`exposure: "direct"`) |
-| Stub `initialize` params | `clientInfo.name: "pi-mcp-plugin_demo_stub_"`, capabilities with elicitation, sampling, roots, ui extension | `clientInfo: {name:"pi", version:"1.5.0"}`, capabilities `{roots:{}}` only |
-| Stub `tools/call` | `_meta` with `pi-mcp-adapter/toolCallId` and `progressToken` | no adapter `_meta` (assert exact params from a run) |
-| Server start count | lazy: one start for listing, a second for the call | one start at session start, kept |
-| Invocation through a proxy | `mcp({tool:…})` reaches the server | adapter-only scenario |
-| Variables (`configuration.feature`) | as today, including the empty-header gap | unset `${NAME}` in a header reaches the server **literally** (Claude parity); `$`/`!` literals arrive unchanged |
-| OAuth beside headers | `auth: "oauth"` in `mcp-adapter.json` | nothing written; connects with no sign-in |
-| SSE server | installs and answers | `(partially-available) {unsupported mcp}`; info `(unsupported sse)` |
-| `bareElicitationCapability: true` | `(partially-available)` | installs and answers |
-| Project scope | approval rules (`pending approval`) | trusted: answers with no approval; untrusted: not registered, info `project not trusted` |
-| Lifecycle disable/uninstall/enable/update | adapter no longer offers / offers the server | server not registered after `/reload` (or at once with D2) |
-| User's disabled choice survives | adapter-only scenarios | none (PI-15) |
-| Hook on an MCP tool | fires for the nested call under the `mcp` proxy and for direct calls | fires for the direct call; plugin `my-plugin` matcher with `-` fires only with D1 |
-| `none` | arranged with `-builtin:mcp` in the sandbox user settings and no adapter onboarding state, or `--no-mcp` | -- |
-| Switch built-in → adapter | install under built-in, start with the adapter: answers with no reinstall | -- |
-| Switch adapter → built-in | -- | sandbox settings hold `-builtin:mcp` and `mcp-onboarding.json` a handled version; first start shows the cleanup notice and `{requires mcp support}`; the settings file loses only that entry; the next start answers through built-in |
-| Cleanup refusal | -- | `-builtin:mcp` with no onboarding state, or `+builtin:mcp`: file unchanged, no notice |
-| `info` | `requires: pi-mcp-adapter`, adapter status tokens | `requires: builtin:mcp`, built-in tokens (`connected`, `overridden by mcp.json`, …) |
-
-## Gaps and Open Questions (for requirements)
-
-1. **D1 parity ruling.** The brief records `-` in hook matchers as a divergence licensed by a Pi gap. The extension can restore the server segment, so under AGENTS.md's parity rule only the tool segment is licensed. Ask the user whether D1 is table stakes.
-2. **OAuth client name.** Claude sends `Claude Code (<server>)`. Built-in sends `pi` or uses CIMD. Should the extension set `oauth.clientName` for parity? Neither license covers leaving it unset, so this goes to the user.
-3. **Cleanup ambiguity.** `piBuiltinMcpHandledVersion` also records "found configured" (PI-17). A `-builtin:mcp` that the user wrote before installing the adapter is indistinguishable from one the adapter wrote, so decision 1's "shows the adapter wrote it" cannot be proven from the adapter's state alone. Ask whether to accept that, or to have the extension record its own evidence while the adapter is present (for example, the user settings' `extensions` as seen at a session start before the adapter's first write).
-4. **Warning row when a switch makes a plugin partial.** Recommended: a load-time warning row for each enabled plugin that the active implementation runs only partly. It would be shown each load, as Claude lists plugin errors each reload (CC-10). The alternative is to rely on `list`/`info` alone. This needs a messaging decision.
-5. **Verdict under `none`.** Recommended: the union rule (blocked only if neither implementation runs the server), so an install in a session with no MCP is not refused for a server the adapter could run.
-6. **APL-D1 amendment** for load-time agent rewrites (T11) and load-time `mcp-adapter.json` reconcile (T12).
-7. **Legacy `mcp.json` entries** (AMIG "entries that stay") are read by built-in MCP too (PI-13), with adapter-only syntax (`{env:PI_CLAUDE_MARKETPLACE_EMPTY}` split tokens, `directTools`). Under built-in they can run beside the registration under another name, or receive mangled values. The AMIG notice may need a built-in variant.
-8. **Built-in status precision.** `needs authentication` and `failed` cannot be told apart from `not connected` (PI-12). Confirm the reduced token set with the user, or look for a Pi API in a later release.
-9. **Removal timing (PI-14).** A phase spike should test whether removal in the extension factory during the interactive trust pre-pass takes effect in the same session.
+**Priority key:** P1 must ship in this milestone; P2 should ship when possible; P3 later.
 
 ## Competitor Feature Analysis
 
-| Feature | Claude Code 2.1.318 | pi-mcp-adapter 7.0.0 path | Built-in path (recommended) |
-|---|---|---|---|
-| Server a client will not run | skipped, plugin stays, error in `/plugin` (CC-4/5) | blocked, `--partial`, derived partial state | same as adapter, per active implementation |
-| Tool discovery | ToolSearch, `alwaysLoad` | `mcp` proxy + deferred tools | Pi `tool_search` (auto-on) + `direct` |
-| Trust | workspace trust | per-server approval | project trust only |
-| Status | `/mcp` | status channel | derived from tool registry |
+| Feature | Claude Code 2.1.330 | Pi (`pi install git:...`) | Our Approach |
+|---------|---------------------|---------------------------|--------------|
+| Git engine | System `git`, hardened | System `git`, `GIT_TERMINAL_PROMPT=0` (PROJECT.md, observed 2026-11-21; not re-verified here) | System `git` with upstream's hardening |
+| SSH URL forms | `git@host:`, `ssh://`, `git+ssh://`, `ssh+git://` | `git@host:`, `ssh://` | Accept upstream's set (amend D-76-01) |
+| `owner/repo` transport | Probe → SSH or HTTPS, retry the other (marketplace); CLI install only for plugins | n/a | Marketplace: match. Plugin: discuss |
+| Auth | Machine credentials only; no token, no OAuth | Machine credentials, no OAuth | Machine credentials only (Device Flow removal recommended) |
+| Update | `ls-remote` → re-clone + swap | n/a | Match |
+| Prompts | Never (`BatchMode`, no askpass, `credential.interactive=false`) | `GIT_TERMINAL_PROMPT=0` | Match upstream's full set |
+
+## Gaps and open questions for discuss
+
+1. **Plugin fallback surface (E-SG-04).** Mirror `claude plugin install` (probe + fallback) or in-session `/plugin` (SSH only)? No license covers either choice, so the user decides.
+2. **D-MF-01 under SSH.** With `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` set, is the SSH URL `git@<override-host>:` and is the probe skipped? Upstream has no override.
+3. **D-76-01 amendment scope.** Accept `ssh://`/`git@` only, or also `http://` (upstream accepts it)? D-PL5-04/05/33 currently refuse `http://`.
+4. **Device Flow: remove or keep.** Also how to migrate existing keychain entries and clones made with full history.
+5. **Unverified:** the explicit-install plugin clone timeout; whether the CLI install's fallback context reaches dependency installs; what sets `directoryPin`; the exact trigger hop from background autoupdate to the bulk refresh loop; which commands carry the `uxt` in-checkout hardening list; whether `marketplace add ssh://…` parses as a `git` source. Each needs a narrower grep in the phase that uses it.
+6. **How often git is missing on Windows.** No upstream data. Upstream simply requires git and shows a message.
+7. **CHANGELOG history** of the probe and fallback (when HTTPS fallback and the bidirectional retry arrived) was not checked. It matters only if users on older upstream versions report different behavior.
 
 ## Sources
 
-- Claude Code 2.1.318 binary `/opt/claude-code/bin/claude`, strings extracted 2026-11-04 (CC-1..CC-10). HIGH.
-- `@earendil-works/pi-coding-agent@1.5.0`: `docs/mcp.md`, `docs/extensions.md` (MCP Servers, `getAllTools`), `dist/core/mcp-servers.{d.ts,js}`, `dist/core/resolve-config-value.js`, `dist/extensions/mcp/{runtime,index,tools,config}.js`, `dist/core/resource-loader.js`, `dist/main.js`, `dist/core/agent-session.js`. HIGH.
-- `@earendil-works/pi-mcp@1.5.0` `dist/client.js` (initialize capabilities). HIGH.
-- `pi-mcp-adapter@7.0.0`: `pi-builtin-mcp.ts`, `onboarding-state.ts`, `prompts.ts`, `server-manager.ts`, `init.ts`. HIGH.
-- `pi-subagents@0.84.0`: `docs/agents.md`, `docs/extension-api.md`, `src/runs/shared/mcp-direct-tool-allowlist.js`. HIGH.
-- Repo: `docs/mcp-compatibility.md`, `docs/output-catalog.md` (ADET-01, ASTAT-01/02, FSTAT-02), `docs/messaging-style-guide.md` (D-16-15), `domain/mcp-server-features.ts`, `shared/concerns/soft-dep.ts`, `platform/pi-api.ts`, `persistence/state-io.ts`, `features/mcp-server/*.feature`, `features/lib/companions.ts`, `.planning/PROJECT.md` (APL-D1, D-CF6-03, D-CF6-10).
+- Claude Code binary `/opt/claude-code/bin/claude` 2.1.330 (build 2026-11-20T17:34:37Z, git 8c664bec), grepped 2026-11-22. Primary evidence, HIGH per `.agents/skills/claude-code-compat-research`.
+- https://code.claude.com/docs/en/plugins/host-marketplace.md, "Grant access to a private marketplace", "Serve users who have no git-host account", "What background auto-update does with credentials" (fetched 2026-11-22; seam tier LOW, corroborating).
+- https://code.claude.com/docs/en/plugin-marketplaces, now "Create a marketplace", "Keep unused submodules out of the clone" (fetched 2026-11-22).
+- https://code.claude.com/docs/en/plugins/troubleshooting.md, "SSH authentication failed or HTTPS authentication failed", "SSH host key is not in your known_hosts file", "Command 'git' not found …", "Git clone timed out after 120s", "Marketplace updates keep failing offline", "Invalid git URL" (fetched 2026-11-22).
+- https://code.claude.com/docs/en/plugins/cli-reference.md, "plugin marketplace add" source-form table (fetched 2026-11-22).
+- Project context: `.planning/PROJECT.md` (Current Milestone system-git; D-21, D-76-01, D-MF-01, D-PL5-04/05/33, D-PL8-12), `extensions/pi-claude-marketplace/domain/source.ts` (current SSH/http rejection), `extensions/pi-claude-marketplace/platform/git.ts` (full-history, no-submodule `isomorphic-git` wrapper).
 
 ---
-*Feature research for: mcp-builtin (Pi built-in MCP as an equal alternative to pi-mcp-adapter)*
-*Researched: 2026-11-04*
+*Feature research for: Claude Code-compatible system-git transport (milestone system-git)*
+*Researched: 2026-11-22*
