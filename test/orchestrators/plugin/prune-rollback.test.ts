@@ -1826,3 +1826,26 @@ test("NFR-3: a refused snapshot with an absent backup root rethrows the refusal"
     );
   });
 });
+
+test("NFR-3: a refused snapshot whose backup cleanup fails rethrows the refusal", async () => {
+  await withHermeticEnvironment("prune-rollback-refusal-cleanup-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const outside = await saveOutsideAgentIndex(locations, cwd);
+    const failingCleanupOps = {
+      ...restoreOps,
+      removeBackup: () => Promise.reject(new Error("backup cleanup refused")),
+    } satisfies PruneRestoreOps;
+
+    // act & assert
+    await assert.rejects(
+      preparePruneRollback(locations, [fixture.member], failingCleanupOps),
+      (error: unknown) => {
+        assert.ok(error instanceof PathContainmentError);
+        assert.strictEqual(error.child, outside);
+        return true;
+      },
+    );
+  });
+});

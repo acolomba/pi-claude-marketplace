@@ -382,10 +382,10 @@ async function grantBackupWrites(root: string): Promise<void> {
 
 /**
  * NFR-3: removes the backup root, even one that holds a read-only directory.
- * An absent root counts as removed, as a forced removal treats it, so the
- * snapshot failure path rethrows its own error. A rollback with failures keeps
- * its backup for manual recovery and never calls this, so the permission walk
- * never changes a kept backup.
+ * An absent root counts as removed, as a forced removal treats it. The
+ * snapshot failure path catches and logs any failure here, so it rethrows its
+ * own error. A rollback with failures keeps its backup for manual recovery and
+ * never calls this, so the permission walk never changes a kept backup.
  */
 async function removeBackupRoot(ops: PruneRestoreOps, backupRoot: string): Promise<void> {
   if (await pathExists(backupRoot)) {
@@ -471,7 +471,14 @@ export async function preparePruneRollback(
       `${JSON.stringify({ schemaVersion: 1, entries }, null, 2)}\n`,
     );
   } catch (error: unknown) {
-    await removeBackupRoot(ops, backupRoot);
+    try {
+      await removeBackupRoot(ops, backupRoot);
+    } catch (cleanupError: unknown) {
+      // The snapshot error is the one the user acts on; a backup cleanup
+      // leak is diagnostic only.
+      hookDebugLog(`prune: backup cleanup failed: ${errorMessage(cleanupError)}`);
+    }
+
     throw error;
   }
 
