@@ -116,7 +116,7 @@ them at the merge.
 - [x] **Phase 1: Duplicate Integration Files** - The two integration files that only repeat cucumber scenarios are gone, after their scenarios are proven to fail when the behavior breaks (completed 2026-11-21)
 - [x] **Phase 2: Plugin Layers, Names, and List Fold** - Scenarios prove the LAYER-04 refusals, the plugin-layer reports, plugin names that are `Object.prototype` members, and the unfiltered `list` fold (completed 2026-11-21)
 - [x] **Phase 3: Marketplace Layers and Cross-Scope Install** - Scenarios prove the marketplace layer rules and a project install that adds a user marketplace to the project (completed 2026-11-21)
-- [ ] **Phase 4: Prune** - Scenarios prove the `prune` cases a user can see that the suite left out
+- [x] **Phase 4: Prune** - Scenarios prove the `prune` cases a user can see that the suite left out (completed 2026-11-22)
 - [ ] **Phase 5: MCP Install, Legacy Move, and Overrides** - Scenarios prove the MCP install refusals and warnings, the legacy `mcp.json` move, and the pi-mcp-adapter override cases
 - [ ] **Phase 6: Hooks and Auth** - Scenarios prove hooks in both scopes after `apply`, a reload that clears buffered context, no `.pi` directory from a hook dispatch, and the print-mode and credential-eviction sign-in cases
 - [ ] **Phase 7: Path-Source Dependency Tags** - A step publishes a marketplace repository with a tag, and scenarios prove that a constrained path-source dependency installs from that tag, with the TAGS-02 fallback
@@ -267,7 +267,7 @@ Plans:
   1. Each remaining empty-scope variant of `prune` and `prune --dry-run`, with and without `--scope`, reports the empty scope and changes nothing, and both forms report a malformed state file without showing its path. The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `standalone-prune` (ITMIG-08).
   2. A prune keeps held neighbours across marketplaces, selects again when a stale preview has changed on disk, keeps a failed member's dependency until a later retry removes both, previews with no project state and leaves both scopes as they were, and refuses without changing either scope when a declarer's manifest cannot be read. The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `standalone-prune` (ITMIG-08).
   3. `prune -y`, `prune --keep-data`, and `prune --prune` are refused with the prune usage line before any orphan is selected, and both scopes stay unchanged. The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `standalone-prune` (ITMIG-08).
-**Plans**: 2/2 plans executed
+**Plans**: 2/2 plans complete
 
 Plans:
 **Wave 1**
@@ -336,7 +336,7 @@ Plans:
 | 1. Duplicate Integration Files | 2/2 | Complete    | 2026-11-21 |
 | 2. Plugin Layers, Names, and List Fold | 4/4 | Complete    | 2026-11-21 |
 | 3. Marketplace Layers and Cross-Scope Install | 4/4 | Complete    | 2026-11-21 |
-| 4. Prune | 2/2 | In Progress | - |
+| 4. Prune | 2/2 | Complete    | 2026-11-22 |
 | 5. MCP Install, Legacy Move, and Overrides | 0/TBD | Not started | - |
 | 6. Hooks and Auth | 0/TBD | Not started | - |
 | 7. Path-Source Dependency Tags | 0/TBD | Not started | - |

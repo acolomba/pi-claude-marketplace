@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: integration-rescope
 milestone_name: Integration Test Rescope
-current_phase: 04
-current_phase_name: Prune
-status: executing
-stopped_at: Phase 03 complete, ready to verify Phase 4
-last_updated: "2026-11-22T01:04:52.967Z"
+current_phase: 5
+current_phase_name: MCP Install, Legacy Move, and Overrides
+status: verifying
+stopped_at: Phase 04 complete, ready to verify Phase 5
+last_updated: "2026-11-22T02:46:37.101Z"
 last_activity: 2026-11-22
-last_activity_desc: Phase 04 execution started
-state_head: bfcb6ecb761410a9ba31a2a1ff4809f2dc8a6131
+last_activity_desc: Phase 04 complete, transitioned to Phase 5
+state_head: 84df58f76b70e839830d47a96d774405e9f3431d
 progress:
   total_phases: 8
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 12
-  completed_plans: 10
-  percent: 38
+  completed_plans: 12
+  percent: 50
 ---
 
 # Project State
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-11-21 after Phase 1)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 04 — Prune
+**Current focus:** Phase 5 — MCP Install, Legacy Move, and Overrides
 
 ## Current Position
 
-Phase: 04 (Prune) — EXECUTING
-Plan: 1 of 2
-Status: Executing Phase 04
-Last activity: 2026-11-22 — Phase 04 execution started
+Phase: 5 of 8 (MCP Install, Legacy Move, and Overrides)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-11-22 — Phase 04 complete, transitioned to Phase 5
 
-Progress: [████░░░░░░] 38%
+Progress: [█████░░░░░] 50%
 
 
 ### parity-gaps closeout: `override_closeout`
@@ -1299,8 +1299,8 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-22T03:00:00.000Z
-Stopped at: Phase 3 complete (verified 3/3, threats 0 open), ready to plan Phase 4
+Last session: 2026-11-22T04:00:00.000Z
+Stopped at: Phase 4 complete (verified 5/5, threats 0 open), ready to plan Phase 5
 Resume file: None
 
 ### Phase 2 completion-helper notes
