@@ -1,13 +1,16 @@
 ---
 phase: 06-hooks-and-auth
-fixed_at: 2026-11-22T13:07:30Z
+fixed_at: 2026-11-22T14:02:44Z
 review_path: .planning/phases/06-hooks-and-auth/06-REVIEW.md
-iteration: 1
-findings_in_scope: 4
-fixed: 4
+iteration: 2
+findings_in_scope: 3
+fixed: 3
 skipped: 0
 status: all_fixed
 ---
+
+The frontmatter describes iteration 2. Iteration 1 (4 of 4 fixed) follows
+first, unchanged; the iteration 2 report is at the end.
 
 # Phase 6: Code Review Fix Report
 
@@ -167,3 +170,161 @@ Scratch files: `/tmp/claude-0/-home-user-pi-claude-marketplace/36571f01-5770-4f5
 _Fixed: 2026-11-22T13:07:30Z_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 1_
+
+---
+
+# Phase 6: Code Review Fix Report (iteration 2)
+
+**Fixed at:** 2026-11-22T14:02:44Z
+**Source review:** .planning/phases/06-hooks-and-auth/06-REVIEW.md (iteration 2)
+**Iteration:** 2
+
+**Summary:**
+- Findings in scope: 3 (WR-01, IN-02, IN-03, by the orchestrator's binding
+  note; IN-01 and IN-04 stay open)
+- Fixed: 3 (each `fixed: requires human verification`, because each changes
+  timing or kill logic that a syntax check cannot judge)
+- Skipped: 0
+
+Every fix ran in the main checkout on `claude/stoic-shannon-la9q7o` (the
+orchestrator's binding note), not in an isolated worktree, so every number
+below can be reproduced from this tree.
+
+## Fixed Issues
+
+### WR-01: A log line in flight at the end of one turn lands in no turn, and the stop check cannot see it
+
+**Status:** fixed: requires human verification
+**Files modified:** `features/lib/turn-records.ts`
+**Commit:** d6136f4
+**Applied fix:** `readLogLinesSince` now reads each log through a new
+`finishedLogLines`. When its first read of a log ends in an unfinished line,
+it reads the log again every 10 ms until that line has finished, for at most
+`PARTIAL_LINE_WAIT_MS` (1 s), and then returns the complete lines. If the
+line is still unfinished at the deadline, the read fails with
+`<file> ends in a line whose write never finished`. Both readers now agree:
+a line whose write began before a read belongs to the window that the read
+closes. The baseline (`readLogLengths`) is unchanged. The wait tracks only
+the line that the first read saw unfinished, so a busy writer cannot keep it
+waiting. Lines that finish during the wait come along, and the next baseline
+counts them, so no line is counted twice. `assertStandInsStopped` keeps its
+partial-line check as a last guard.
+
+**Proof (scratch reproductions, each run alone; "before" is `git archive`
+of `eda4a23`'s `features/lib`):**
+- New `fix-06b/lost-line-concurrent-repro.ts`: the reviewer's case, with the
+  writer running beside the reader, as a stand-in process does. The line is
+  half written when turn N's final read starts, and it finishes 50 ms later,
+  before turn N+1's baseline. Before:
+  `turn N: [] turn N+1: [] FAIL (line in 0 turns)`, exit 1. After:
+  `turn N: [["hook-runs.jsonl",[{"event":"Stop"}]]] turn N+1: [] ok (line in 1 turns)`,
+  exit 0.
+- The reviewer's `lost-line-repro.ts` is sequential: it finishes the line only
+  after the final read has returned. Before: `turn N: [] turn N+1: [] stop check: passed`
+  (silent loss). After: the final read fails with
+  `.../hook-runs.jsonl ends in a line whose write never finished`. No design
+  without state carried between reads can put a line into turn N when its
+  write finishes only after turn N's read returned. Turn N+1's baseline then
+  counts the finished line. So a loud failure is the outcome this repro can
+  show, and the concurrent version above shows the line landing in exactly
+  one turn.
+- `fix-06/baseline-partial-repro.ts`: `baseline: ok [["hook-runs.jsonl",[{"during":1}]]]`
+  and `unfinished line at stop: ok`, exit 0.
+- **Deviation, for the orchestrator to judge:** the research
+  `partial-line-repro.ts` (`plan-06/inputs/repro/`) never finishes its last
+  line. It printed `readLogLinesSince: ok [["hook-runs.jsonl",[{"a":1}]]]`.
+  It now prints
+  `readLogLinesSince threw: .../hook-runs.jsonl ends in a line whose write never finished`
+  after 1 s. The binding note requires a line that never finishes to fail
+  loudly, and both designs it names make the closing read wait, so this output
+  cannot stay `ok`. The race that the repro stood for (async.feature:538, a
+  poll that reads while a hook still writes) still passes. The new
+  `fix-06b/partial-line-finishes-repro.ts` finishes the line 50 ms into the
+  read. Before: `readLogLinesSince: FAIL [["hook-runs.jsonl",[{"a":1}]]]`
+  (the line was left out). After:
+  `readLogLinesSince: ok [["hook-runs.jsonl",[{"a":1},{"b":"unfinished"}]]]`.
+  Neither version raises the original `SyntaxError`.
+
+### IN-02: The group scan treats every read error as "not marked", and a failed group kill after a scan falls back to a PID that is known not to be the hook
+
+**Status:** fixed: requires human verification
+**Files modified:** `features/lib/hook-files.ts`
+**Commit:** 1c6e3ff
+**Applied fix:**
+- `processGroupOf` returns `undefined` only on `ENOENT` or `ESRCH` and
+  rethrows any other error.
+- In `groupHoldsMarker`, a `carriesMarker` rejection counts as "not marked"
+  only for `ENOENT`, `ESRCH`, or `EACCES`. Any other error, such as `EMFILE`
+  from the unbounded `/proc` scan, now fails the release.
+- `isRegisteredHookProcess` became `registeredHookMatch`, which returns
+  `"leader" | "group" | "none"` (non-Linux hosts keep the old answer,
+  `"leader"`). `stopRegisteredHookProcess` sends `kill(-pid)` and falls back
+  to `kill(pid)` only for `"leader"`. A group found through a member gets no
+  single-PID fallback.
+- The kill helper `killIfPresent` absorbs only `ESRCH`. Before, the code
+  absorbed every kill error. Other kill errors now throw.
+
+**Proof:** these races have no deterministic reproduction. They need an error
+other than ENOENT, ESRCH, or EACCES from `/proc`, or a group that empties
+between the scan and the kill. The earlier repros still pass at `HEAD`:
+`fix-06/zombie-group-repro.ts` and `fix-06/reaped-group-repro.ts` print
+`child killed: ok` (exit 0), and the research
+`plan-06/inputs/repro/zombie-repro.ts` prints `stopHookScripts: ok`.
+
+### IN-03: The new terminal start step waits for any startup run in the log, and its inner waits add up to its step timeout
+
+**Status:** fixed: requires human verification
+**Files modified:** `features/step_definitions/hook/session.steps.ts`, `features/support/world.ts`
+**Commit:** 5dc92b2
+**Applied fix:**
+- `recordTerminalAction` passes the log lengths that its turn began at to its
+  action.
+- `readHookRuns`, `waitForRun`, and `waitForStartupRun` take those lengths and
+  accept only runs that the log gained since then, as `waitForHookLifecycle`
+  does.
+- The scripted terminal start step (`the user starts pi in the terminal with the scripted model and the hooks recording`)
+  waits for its own startup run. The terminal reload step waits for its
+  prompt's run after its turn began.
+- The non-scripted Given (`the user has started pi in the terminal with the hooks recording`)
+  now reads a baseline before it starts the TUI, because it shares
+  `waitForStartupRun`.
+- The scripted start step's timeout is now `SCRIPTED_TERMINAL_START_TIMEOUT_MS`
+  = `SCRIPTED_TUI_READY_MS` + `TERMINAL_STARTUP_RUN_TIMEOUT_MS` + 10 s
+  (100 s), above the sum of its inner deadlines. `SCRIPTED_TUI_READY_MS` is
+  now exported from `world.ts` for this.
+
+**Proof:** no current scenario logs a startup run before the scripted start
+(the review says so too), so no red case exists. The scenarios that use the
+changed steps (`additional-context.feature:244`, `session.feature:404/422`,
+`session-end.feature:125`, the `async.feature` reloads) pass in the runs
+below.
+
+## Verification
+
+All runs below ran in the main checkout, with the three fixes in place.
+
+- `features/hook/` plus `features/marketplace/device-flow.feature`, adapter:
+  `312 scenarios (312 passed)`, `4364 steps (4364 passed)`, exit 0
+  (`fix-06b/hook-device-adapter.log`).
+- Full adapter run (`npm run test:cucumber:profile -- --profile adapter`):
+  `2267 scenarios (2267 passed)`, `28401 steps (28401 passed)`, exit 0, no
+  flake (`fix-06b/final-full-adapter.log`).
+- `npm run check:static`: all seven members passed (typecheck, lint,
+  lint:workflows, fallow, format:check, test:corresponding, check:features),
+  exit 0 (`fix-06b/final-check-static.log`).
+- The pre-commit hook passed on each commit, including `npm run check:commit`.
+  No commit used `--no-verify`, and this run set no `SKIP` (only the session's
+  own `SKIP=trufflehog`). The auto-mode classifier denied the skill's
+  pre-run `SKIP=npm-check pre-commit run --files`, so this run used
+  `npx prettier --check` and `npx eslint` on the changed files, and then the
+  hook itself.
+
+Scratch files: `/tmp/claude-0/-home-user-pi-claude-marketplace/36571f01-5770-4f51-bd77-b22d58691339/scratchpad/fix-06b/`
+(`lost-line-concurrent-repro.ts`, `partial-line-finishes-repro.ts`, the
+`before/` tree, and the logs).
+
+---
+
+_Fixed: 2026-11-22T14:02:44Z_
+_Fixer: Claude (gsd-code-fixer)_
+_Iteration: 2_
