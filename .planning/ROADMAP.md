@@ -309,11 +309,11 @@ Plans:
   1. With hook plugins installed in both scopes, their hooks still run after `/claude:plugin apply` and after a load. The scenarios pass under both profiles, fail under a deliberate break, and `hooks-cross-scope-reconcile` no longer exists (ITMIG-12).
   2. A `/reload` before the first prompt drops the SessionStart context buffered before it, and a hook dispatch in a project that had no `.pi` directory leaves none behind (WR-05). The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `hooks-additionalcontext-end-to-end` and `hooks-dispatch-end-to-end` (ITMIG-12).
   3. In print mode, a `marketplace add` that needs a sign-in refuses with its remedy and leaves no staged clone behind. When the git host rejects the stored credential, the credential is evicted and the next clone signs in through Device Flow again (AUTH-07). The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `auth-e2e` (ITMIG-13).
-**Plans**: 2 plans
+**Plans**: 2/2 plans executed
 
 Plans:
-- [ ] 06-01-PLAN.md -- Wave 1: the ESRCH and partial-line harness race fixes as the first two commits, the WR-05, load, apply, and reload scenarios in `hook/{session,lifecycle,additional-context}.feature` with the new `project.steps.ts` step, breaks X1 to CH2 (H4a the control), then delete `hooks-cross-scope-reconcile` and `hooks-additionalcontext-end-to-end`, trim `hooks-dispatch-end-to-end` to its throwing-hydrate case, and run the full adapter suite twice (ITMIG-12)
-- [ ] 06-02-PLAN.md -- Wave 1: the NEW one-shot print-mode driver `features/lib/pi-one-shot.ts` that the json driver delegates to, the routed one-shot launch in `world.ts`, three print-mode steps in `command.steps.ts`, the AUTH-07 and print-mode scenarios in `marketplace/device-flow.feature`, breaks E1 to R3, then trim `auth-e2e` to its fault-injection case (ITMIG-13)
+- [x] 06-01-PLAN.md -- Wave 1: the ESRCH and partial-line harness race fixes as the first two commits, the WR-05, load, apply, and reload scenarios in `hook/{session,lifecycle,additional-context}.feature` with the new `project.steps.ts` step, breaks X1 to CH2 (H4a the control), then delete `hooks-cross-scope-reconcile` and `hooks-additionalcontext-end-to-end`, trim `hooks-dispatch-end-to-end` to its throwing-hydrate case, and run the full adapter suite twice (ITMIG-12)
+- [x] 06-02-PLAN.md -- Wave 1: the NEW one-shot print-mode driver `features/lib/pi-one-shot.ts` that the json driver delegates to, the routed one-shot launch in `world.ts`, three print-mode steps in `command.steps.ts`, the AUTH-07 and print-mode scenarios in `marketplace/device-flow.feature`, breaks E1 to R3, then trim `auth-e2e` to its fault-injection case (ITMIG-13)
 
 ### Phase 7: Path-Source Dependency Tags
 
@@ -350,7 +350,7 @@ Plans:
 | 3. Marketplace Layers and Cross-Scope Install | 4/4 | Complete    | 2026-11-21 |
 | 4. Prune | 2/2 | Complete    | 2026-11-22 |
 | 5. MCP Install, Legacy Move, and Overrides | 3/3 | Complete    | 2026-11-22 |
-| 6. Hooks and Auth | 0/2 | Planned | - |
+| 6. Hooks and Auth | 2/2 | In Progress | - |
 | 7. Path-Source Dependency Tags | 0/TBD | Not started | - |
 | 8. Integration Suite Rescope | 0/TBD | Not started | - |
 
