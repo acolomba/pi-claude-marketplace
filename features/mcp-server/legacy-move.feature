@@ -741,6 +741,94 @@ Feature: MCP server legacy move
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id       | name | status      | reasons | scope   | version |
       | gits             | project           | ghp@gits | ghp  | reinstalled |         | project | 1.0.0   |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_ghp_srv_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{project dir}/.pi/pi-claude-marketplace/plugin-clones/66356916cc08-{ghp revision 2}",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/gits/ghp"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "ghp",
+              "marketplace": "gits",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              }
+            }
+          }
+        }
+      }
+
+      """
+    Then the mcp configuration file "mcp.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "mine": {
+            "command": "pi-features-users-own-mcp-server"
+          }
+        }
+      }
+
+      """
+
+  @mcp
+  Scenario: A load moves a git plugin's servers out of a release 0.19.2 mcp.json while its clone is cached (AMIG-01)
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the git repository "ghp" adds this .mcp.json to the plugin "ghp":
+      """
+      {"mcpServers": {"srv": {"command": "pi-features-absent-mcp-server", "args": []}}}
+      """
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@gits --scope project", which did not fail
+    Given the mcp.json file of the project scope holds the servers of the plugin "ghp@gits" as release 0.19.2 wrote them, beside the user's own server "mine"
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind          | severity | needs reload | notices | rows                                                                                                         |
+      | mcp-migration | info     | true         |         | [{"kind":"moved","scope":"project","plugin":"ghp","marketplace":"gits","from":"srv","to":"plugin_ghp_srv_"}] |
+    Then the mcp configuration file "mcp-adapter.json" of the project scope holds this text:
+      """
+      {
+        "mcpServers": {
+          "plugin_ghp_srv_": {
+            "command": "pi-features-absent-mcp-server",
+            "args": [],
+            "env": {
+              "CLAUDE_PLUGIN_ROOT": "{project dir}/.pi/pi-claude-marketplace/plugin-clones/66356916cc08-{ghp revision 2}",
+              "CLAUDE_PLUGIN_DATA": "{project dir}/.pi/pi-claude-marketplace/data/gits/ghp"
+            },
+            "directTools": "search",
+            "toolPrefix": "mcp",
+            "requestTimeoutMs": 1800000,
+            "lifecycle": "lazy-keep-alive",
+            "_piClaudeMarketplace": {
+              "plugin": "ghp",
+              "marketplace": "gits",
+              "defaultFields": {
+                "requestTimeoutMs": 1800000,
+                "lifecycle": "lazy-keep-alive"
+              }
+            }
+          }
+        }
+      }
+
+      """
     Then the mcp configuration file "mcp.json" of the project scope holds this text:
       """
       {
