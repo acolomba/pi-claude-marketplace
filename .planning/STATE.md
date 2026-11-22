@@ -1198,6 +1198,10 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ### Blockers/Concerns
 
+- [integration-rescope] CHANGELOG parent line for the milestone PR (Phase 4,
+  prune backup fix `d24f937`): "A prune that cannot remove a plugin's read-only
+  directory no longer leaves its `prune-backup-` folder behind in the scope's
+  `pi-claude-marketplace` folder."
 - [integration-rescope] Phase 4 planning: decision-coverage gate `could-not-parse` (bracket-named decisions); proceeded by override after the plan checker confirmed coverage. Research found a prune backup leak (a failed member with a read-only directory leaves `prune-backup-*`); plan 04-02 fixes it under rule 4.
 - [integration-rescope] CHANGELOG parent line for the milestone PR (Phase 3,
   D-SEED-01 fix `cd728de`): "A plugin that a marketplace offers from its own
