@@ -179,23 +179,13 @@ test("D-P3-16: a load writes a record whose ws server no implementation runs as 
   });
 });
 
-/** What each MCP implementation adds to the session's tools and commands. */
-const MCP_INVENTORY = {
-  builtin: { getAllTools: () => [builtinMcpTool()], getCommands: () => [builtinMcpCommand()] },
-} as const;
-
-/**
- * The `list` text for the project scope from a session whose snapshot finds
- * `implementation` loaded.
- */
-async function listText(
-  cwd: string,
-  implementation: keyof typeof MCP_INVENTORY,
-): Promise<readonly string[]> {
+/** The `list` text for the project scope from a session that runs Pi's built-in MCP. */
+async function listText(cwd: string): Promise<readonly string[]> {
   const { session, notifications } = makeCtx();
   const run = openNotificationRun(
     {
-      ...MCP_INVENTORY[implementation],
+      getAllTools: () => [builtinMcpTool()],
+      getCommands: () => [builtinMcpCommand()],
       appendEntry(): never {
         throw new Error("a text-mode session appends no entry");
       },
@@ -230,7 +220,7 @@ test("MREC-02 / D-P3-16: a legacy plugin whose catalog moved before the load kee
     await runLoad(cwd);
 
     // act
-    const listed = await listText(cwd, "builtin");
+    const listed = await listText(cwd);
 
     // assert
     const record = await projectRecord(cwd);
