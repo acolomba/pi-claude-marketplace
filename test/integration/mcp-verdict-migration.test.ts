@@ -1,10 +1,15 @@
-// AMIG-01 / D-P3-16: the load's MCP move stages only the servers
-// pi-mcp-adapter runs, because `mcp-adapter.json` is pi-mcp-adapter's file
-// under every implementation, and it writes the neutral verdict with its basis
-// into the record a released build left, unless the catalog moved past the
-// recorded version (MREC-02). Each case seeds a hermetic home
-// with a real install, strips what a released build did not write, and runs
-// the real load.
+// test/integration/mcp-verdict-migration.test.ts
+//
+// AMIG-01 / D-P3-16 / MREC-02: three internal cases (ITSCOPE-01) of the
+// load's MCP move over a record that a released build left. Each checks the
+// record fields that the move writes, which no user sees: the move stages
+// only the servers pi-mcp-adapter runs, because `mcp-adapter.json` is
+// pi-mcp-adapter's file under every implementation, and it writes the neutral
+// verdict with its basis into the record, unless the catalog moved past the
+// recorded version. Each case seeds a hermetic home with a real install,
+// strips what a released build did not write, and runs the real load. The
+// list rows a user sees after the move are in
+// `features/mcp-server/verdict-list.feature`.
 
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
@@ -27,12 +32,7 @@ import {
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
-import {
-  adapterCommand,
-  adapterProxyTool,
-  builtinMcpCommand,
-  builtinMcpTool,
-} from "../platform/pi-inventory-seed.ts";
+import { builtinMcpCommand, builtinMcpTool } from "../platform/pi-inventory-seed.ts";
 
 import { makeCtx, seedLegacyMcpInstall } from "./mcp-plugin-seed.ts";
 
@@ -181,7 +181,6 @@ test("D-P3-16: a load writes a record whose ws server no implementation runs as 
 
 /** What each MCP implementation adds to the session's tools and commands. */
 const MCP_INVENTORY = {
-  adapter: { getAllTools: () => [adapterProxyTool()], getCommands: () => [adapterCommand()] },
   builtin: { getAllTools: () => [builtinMcpTool()], getCommands: () => [builtinMcpCommand()] },
 } as const;
 
@@ -206,46 +205,6 @@ async function listText(
   await listPlugins({ ctx: session.ctx, run, cwd, scope: "project" });
   return notifications.map((notification) => notification.message);
 }
-
-test("MREC-03 / D-P3-16: a moved legacy plugin whose only server pi-mcp-adapter blocks lists as partially installed under the adapter", async () => {
-  await withHermeticEnvironment("mcp-verdict-migration-asker-", async ({ cwd }) => {
-    // arrange
-    const asker = { command: "node", bareElicitationCapability: true };
-    const { pluginRoot } = await seedLegacyMcpInstall(cwd, "project", asker, STDIO_SERVER);
-    await writeFile(
-      path.join(pluginRoot, ".mcp.json"),
-      JSON.stringify({ mcpServers: { srv: asker } }),
-    );
-    await stripReleasedFields(cwd, ["srv"]);
-    await runLoad(cwd);
-
-    // act
-    const listed = await listText(cwd, "adapter");
-
-    // assert
-    const record = await projectRecord(cwd);
-    assert.deepStrictEqual(
-      {
-        compatibilityBasis: record?.compatibilityBasis,
-        mcpServerConfigs: record?.mcpServerConfigs,
-        stagedMcpServers: record?.resources.mcpServers,
-      },
-      {
-        compatibilityBasis: "neutral",
-        mcpServerConfigs: [{ name: "srv", config: asker }],
-        stagedMcpServers: [],
-      },
-    );
-    assert.deepStrictEqual(listed, [
-      [
-        "● mp [project]",
-        "  ◉ hello v1.0.0 (partially-installed) {unsupported mcp, requires builtin mcp}",
-        "",
-        "Plugin list: 1 success",
-      ].join("\n"),
-    ]);
-  });
-});
 
 test("MREC-02 / D-P3-16: a legacy plugin whose catalog moved before the load keeps its stored verdict and lists no newer server's verdict", async () => {
   await withHermeticEnvironment("mcp-verdict-migration-moved-", async ({ cwd }) => {

@@ -7,7 +7,8 @@
  * session also reports its own payloads, such as its reconcile report. They
  * become the last results, so the row steps compare them and a scenario
  * fails when their rows go uncompared. A new session can also be set up, so a
- * scenario shows that what it set up survives the session. A session in
+ * scenario shows that what it set up survives the session, and a setup
+ * session can be one that warns. A session in
  * another project runs in a project directory of its own, so it shows what
  * the user scope alone offers. A plain message is sent in the current
  * session, and the results that follow it, such as a background update's
@@ -74,6 +75,17 @@ Given("the user has started a new pi session", async function (this: ScenarioWor
   const { payloads } = await startSession(this.pi);
   assert.deepStrictEqual(
     payloads.filter((payload) => payload.severity !== "info"),
+    [],
+  );
+});
+
+// A setup session whose every result warns, such as a legacy move that removed
+// a server pi-mcp-adapter cannot run (D-P3-16).
+Given("the user has started a new pi session, which warned", async function (this: ScenarioWorld) {
+  const { payloads } = await startSession(this.pi);
+  assert.notDeepStrictEqual(payloads, []);
+  assert.deepStrictEqual(
+    payloads.filter((payload) => payload.severity !== "warning"),
     [],
   );
 });
