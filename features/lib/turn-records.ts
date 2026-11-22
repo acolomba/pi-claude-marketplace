@@ -33,9 +33,15 @@ async function logNames(directory: string): Promise<string[]> {
   return (await readdir(directory)).filter((name) => name.endsWith(LOG_SUFFIX)).sort();
 }
 
-// A stand-in appends whole lines, each ending in a newline.
+// A stand-in appends whole lines, each ending in a newline. A read can see a
+// line whose write has not finished, so it keeps only the lines that end in a
+// newline and leaves the rest for the next read.
 async function logLines(file: string): Promise<string[]> {
-  return (await readFile(file, "utf8")).split("\n").filter((line) => line !== "");
+  const text = await readFile(file, "utf8");
+  return text
+    .slice(0, text.lastIndexOf("\n") + 1)
+    .split("\n")
+    .filter((line) => line !== "");
 }
 
 /** Returns the line count of every `*.jsonl` log in `directory`, by file name. */

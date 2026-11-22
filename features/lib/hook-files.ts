@@ -678,7 +678,13 @@ async function isRegisteredHookProcess(entry: RegisteredHookProcess): Promise<bo
       .split("\0")
       .includes(`PI_CLAUDE_MARKETPLACE_REWAKE_DISPATCH=${entry.dispatchId}`);
   } catch (error: unknown) {
-    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+    // A process that exited but is not yet reaped keeps its /proc entry, and
+    // reading its environ then fails with ESRCH instead of ENOENT.
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error.code === "ENOENT" || error.code === "ESRCH")
+    ) {
       return false;
     }
 

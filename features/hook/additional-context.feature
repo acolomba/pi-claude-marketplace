@@ -226,3 +226,22 @@ Feature: Hook additional context
       | 2    | user      | SessionStart hook additional context: ss-ctx |
       | 2    | assistant | First.                                       |
       | 2    | user      | second prompt                                |
+
+  Scenario: Reloading pi before the first prompt drops the session start hook's additional context, as docs/hooks-compatibility.md describes
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event        | matcher | form   | output                                                                               |
+      | primer | SessionStart |         | script | {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"ss-ctx"}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the scripted model plays these steps:
+      | reply | tool | arguments |
+      | Done. |      |           |
+    When the user reloads pi in the terminal and then prompts "hello there"
+    Then the model receives these calls:
+      | call | role | text        |
+      | 1    | user | hello there |
