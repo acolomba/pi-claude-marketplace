@@ -1,15 +1,18 @@
 ---
 phase: 05-mcp-install-legacy-move-and-overrides
-fixed_at: 2026-11-22T08:08:46Z
+fixed_at: 2026-11-22T08:36:51Z
 review_path: .planning/phases/05-mcp-install-legacy-move-and-overrides/05-REVIEW.md
-iteration: 1
-findings_in_scope: 8
-fixed: 8
+iteration: 2
+findings_in_scope: 3
+fixed: 3
 skipped: 0
 status: all_fixed
 ---
 
 # Phase 5: Code Review Fix Report
+
+The frontmatter counts the latest iteration. Iteration 1 fixed 8 of 8 findings in scope. Its
+report comes first, and the iteration 2 report follows it.
 
 **Fixed at:** 2026-11-22T08:08:46Z
 **Source review:** .planning/phases/05-mcp-install-legacy-move-and-overrides/05-REVIEW.md
@@ -165,3 +168,90 @@ All checks ran in the main checkout, with
 _Fixed: 2026-11-22T08:08:46Z_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 1_
+
+## Iteration 2
+
+**Fixed at:** 2026-11-22T08:36:51Z
+**Source review:** .planning/phases/05-mcp-install-legacy-move-and-overrides/05-REVIEW.md
+(iteration 2)
+**Iteration:** 2
+
+**Summary:**
+
+- Findings in scope: 3 (WR-01, IN-02, IN-03, as the orchestrator set the scope; IN-01 stays
+  open)
+- Fixed: 3
+- Skipped: 0
+
+The work ran in the main checkout on `claude/stoic-shannon-la9q7o`, as the orchestrator said
+(no worktree). All checks below ran there, so they reproduce from this tree.
+
+## Iteration 2: Fixed Issues
+
+### WR-01: The 0.19.2 doc-string step refuses a real release shape: a plugin that has a remote server
+
+**Files modified:** `features/step_definitions/mcp-server/legacy-move.steps.ts`,
+`features/mcp-server/legacy-move.feature`
+**Commit:** d4f87c6
+**Applied fix:** `pluginRootOf` now reads `CLAUDE_PLUGIN_ROOT` only from the stdio entries of a
+plugin (an entry whose `command` is a string), because release 0.19.2 put env only on those. A
+plugin with no stdio entry fails with "the stdio entries of `<id>` name no one plugin root (a
+plugin with only remote servers needs the writer step)". The red proof is a committed scenario:
+the AMIG-04 unowned scenario (now `legacy-move.feature:686`, retitled "A load leaves the mcp.json
+entries that no installed plugin owns, a remote one among them, and warns about them") now
+publishes `demo` with a stdio server `srv` and an http server `web`. Its 0.19.2 doc string holds
+both entries in the release shape, and its two `unowned` rows list `["srv","web"]`.
+
+| Run | adapter | builtin |
+| --- | --- | --- |
+| New scenario, old step | fails in the `Given` "holds this text, as release 0.19.2 wrote it", with `demo@fixtures names no one plugin root` (12 steps: 7 passed, 1 failed, 4 skipped) | same |
+| New scenario, fixed step | 1 scenario, 12 steps passed | same |
+
+### IN-02: The module overview of `mcp-configuration.ts` no longer describes its functions
+
+**Files modified:** `features/lib/mcp-configuration.ts`
+**Commit:** 2cb9e3d
+**Applied fix:** The overview now says that `legacyMcpServers` builds, without writing, the
+entries release 0.19.2 wrote for a plugin, which the legacy writer and the 0.19.2 doc-string step
+share. The write rule now covers "each other function but the legacy writer". Comment only, so no
+red proof applies.
+
+### IN-03: The `<plugin>@<marketplace>` split is written twice in one module
+
+**Files modified:** `features/lib/mcp-configuration.ts`, `features/lib/installation-record.ts`
+**Commit:** c74269f
+**Applied fix:** The review asked for a private helper in `mcp-configuration.ts`. But
+`features/lib/installation-record.ts`, which that module already imports, has a private
+`splitPluginId` that also refuses an id with an empty half. A second private copy would leave
+three split sites. So that helper is now exported with a doc comment, and `legacyMcpServers` and
+`writeLegacyMcpConfig` call it. One behavior change: both functions now throw for an id with no
+`@` or an empty half, where they used to split it silently. Every current caller passes a valid
+id, and the feature runs below pass.
+
+## Iteration 2: Open
+
+- IN-01 (three near-identical launch-environment steps, with two release conventions) stays
+  open, as the orchestrator scoped it.
+- The review's out-of-scope note stays open: the case map in `05-02-SUMMARY.md:126` still gives
+  the warm half of `mcp-migration.test.ts:448` to LM10, not to the warm-clone scenario at
+  `legacy-move.feature:897`, and `05-03-SUMMARY.md` records no K1 break.
+
+## Iteration 2: Verification
+
+All checks ran in the main checkout, with
+`npm_config_script_shell=<scratch>/nondac-sh NODE_OPTIONS=--max-old-space-size=6144`.
+
+- `features/mcp-server/legacy-move.feature`, `features/mcp-server/verdict-list.feature`, and
+  `features/plugin/subagent-child.feature` after all three commits: 54/54 scenarios (715 steps)
+  under adapter, 47/47 (616 steps) under builtin.
+- `npm run check:static`: every member passed (typecheck, lint, lint:workflows, fallow,
+  format:check, test:corresponding, check:features).
+- Each commit ran the full pre-commit hook, `npm run check:commit` included. No hook was
+  skipped by this run and no `SKIP=` was set. The hook output listed TruffleHog as skipped, so the
+  session's environment already skips it.
+
+---
+
+_Fixed: 2026-11-22T08:36:51Z_
+_Fixer: Claude (gsd-code-fixer)_
+_Iteration: 2_
