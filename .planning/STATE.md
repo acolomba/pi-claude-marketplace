@@ -4,16 +4,16 @@ milestone: integration-rescope
 milestone_name: Integration Test Rescope
 current_phase: 5
 current_phase_name: MCP Install, Legacy Move, and Overrides
-status: verifying
+status: executing
 stopped_at: Phase 04 complete, ready to verify Phase 5
-last_updated: "2026-11-22T02:46:37.101Z"
+last_updated: "2026-11-22T05:48:08.637Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 04 complete, transitioned to Phase 5
-state_head: 84df58f76b70e839830d47a96d774405e9f3431d
+state_head: 43fd88a5b1c53cb9a77a79b1aa9084f843928fbf
 progress:
   total_phases: 8
   completed_phases: 4
-  total_plans: 12
+  total_plans: 15
   completed_plans: 12
   percent: 50
 ---
@@ -31,9 +31,9 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 5 of 8 (MCP Install, Legacy Move, and Overrides)
+Phase: 5 (MCP Install, Legacy Move, and Overrides) — READY TO EXECUTE
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-11-22 — Phase 04 complete, transitioned to Phase 5
 
 Progress: [█████░░░░░] 50%
@@ -1198,6 +1198,7 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ### Blockers/Concerns
 
+- [integration-rescope] Phase 5 planning: decision-coverage gate `could-not-parse` (bracket-named decisions); proceeded by override after the plan checker confirmed coverage. Research measured the legacy-move and override scenarios byte-identical under both profiles, so they are tagged `@mcp` (CONTEXT [Tags, after research]) where the ROADMAP note said `@adapter-only`. The planner run was lost once to a container restart and re-run. A planning commit body (`b935623`) names a phase, against the committing skill; history is not rewritten.
 - [integration-rescope] CHANGELOG parent line for the milestone PR (Phase 4,
   prune backup fix `d24f937`): "A prune that cannot remove a plugin's read-only
   directory no longer leaves its `prune-backup-` folder behind in the scope's

@@ -291,10 +291,12 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-**Wave 1**
 - [ ] 05-01-PLAN.md -- Wave 1: eight AVAR and ANAME-07 scenarios and three Outline rows in `mcp-server/configuration.feature`, the D-PG10-11 scenario in `mcp-server/options.feature`, the environment-variable profile Pi Given, breaks M1 to M10 under both profiles, then delete `mcp-home-path-partial`, `mcp-tool-rules`, and `mcp-variable-expansion` (ITMIG-09)
 - [ ] 05-02-PLAN.md -- Wave 1: sixteen sweep and move scenarios in `mcp-server/legacy-move.feature` and three list scenarios in `mcp-server/verdict-list.feature`, two new Givens, breaks L1b to L15, M2, and V1 to V3b under both profiles, then delete `mcp-legacy-sweep` and trim `mcp-migration`, `mcp-verdict-migration`, and `mcp-verdict-list` (ITMIG-10)
 - [ ] 05-03-PLAN.md -- Wave 1: twenty-five override and choice scenarios in `mcp-server/lifecycle.feature`, two new Givens, breaks O1 to O10 under both profiles, then delete `mcp-override-lifecycle` (ITMIG-11)
+
+**Cross-cutting constraints:** <!-- gsd:generated -->
+- When the plan ends, its commits change only the files of `files_modified` and `files_deleted`, no file under `extensions/` changed, and `git status --porcelain -- extensions/ features/ test/` prints nothing.
 
 ### Phase 6: Hooks and Auth
 
