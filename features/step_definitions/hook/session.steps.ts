@@ -59,7 +59,7 @@ import { expandTokens } from "../../lib/run-tokens.ts";
 import { latestSessionFile, sessionsFolder } from "../../lib/saved-sessions.ts";
 import { modelCallsOf, readModelCalls } from "../../lib/scripted-model/script.ts";
 import { isRunning, readLogLengths, readLogLinesSince } from "../../lib/turn-records.ts";
-import { PROFILE_PI_START_TIMEOUT_MS } from "../../support/world.ts";
+import { PROFILE_PI_START_TIMEOUT_MS, SCRIPTED_TUI_READY_MS } from "../../support/world.ts";
 
 import type { HookRun } from "../../lib/hook-recorder.ts";
 import type { RpcRecord } from "../../lib/pi-process.ts";
@@ -81,6 +81,12 @@ const DIALOG_METHODS: ReadonlySet<string> = new Set(["select", "confirm", "input
 // the compile cache, so its first SessionStart run lands within seconds; the
 // margin covers a slow worker.
 const TERMINAL_STARTUP_RUN_TIMEOUT_MS = 30_000;
+
+// The scripted terminal start waits for the TUI, then for its startup run.
+// The step's timeout lies above the sum of those waits, so a slow start fails
+// with the message of the wait that ran out.
+const SCRIPTED_TERMINAL_START_TIMEOUT_MS =
+  SCRIPTED_TUI_READY_MS + TERMINAL_STARTUP_RUN_TIMEOUT_MS + 10_000;
 
 // How often the terminal Given reads the hook log while it waits for the
 // startup run; a short interval keeps the wait close to the run itself.
@@ -148,44 +154,55 @@ async function recordSessionAction(
 
 // Runs `action` on the terminal Pi and keeps the hook log lines it added as
 // the last turn. The terminal Pi prints no RPC record, so the turn has none.
+// `action` gets the log lengths the turn began at.
 async function recordTerminalAction(
   world: ScenarioWorld,
   prompt: string,
-  action: () => Promise<void>,
+  action: (lengths: ReadonlyMap<string, number>) => Promise<void>,
 ): Promise<void> {
   const harness = world.profileHarness();
   const lengths = await readLogLengths(harness);
-  await action();
+  await action(lengths);
   const logs = await readLogLinesSince(harness, lengths);
   world.recordTurn({ prompt, disposition: "interactive", records: [], logs });
 }
 
-// The hook runs the log holds so far, in the order they were appended.
-async function readHookRuns(harness: string): Promise<readonly HookRun[]> {
-  const lines = await readLogLinesSince(harness, new Map());
+// The hook runs the log gained since `lengths` was read, in the order they
+// were appended.
+async function readHookRuns(
+  harness: string,
+  lengths: ReadonlyMap<string, number>,
+): Promise<readonly HookRun[]> {
+  const lines = await readLogLinesSince(harness, lengths);
   return (lines.get(HOOK_RUNS_LOG) ?? []) as readonly HookRun[];
 }
 
-// Waits until the log holds a run that `isRun` accepts, by reading it again
-// every `HOOK_LOG_POLL_MS`, never for a fixed time alone, and fails with
-// `missing` after `timeoutMs`.
+// Waits until the log gained, since `lengths` was read, a run that `isRun`
+// accepts, by reading it again every `HOOK_LOG_POLL_MS`, never for a fixed
+// time alone, and fails with `missing` after `timeoutMs`.
 async function waitForRun(
   harness: string,
+  lengths: ReadonlyMap<string, number>,
   isRun: (run: HookRun) => boolean,
   timeoutMs: number,
   missing: string,
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
-  while (!(await readHookRuns(harness)).some(isRun)) {
+  while (!(await readHookRuns(harness, lengths)).some(isRun)) {
     assert.ok(Date.now() < deadline, missing);
     await new Promise((resolve) => setTimeout(resolve, HOOK_LOG_POLL_MS));
   }
 }
 
-// Waits until the log holds a SessionStart run with the source `startup`.
-async function waitForStartupRun(harness: string): Promise<void> {
+// Waits until the log gained, since `lengths` was read, a SessionStart run
+// with the source `startup`.
+async function waitForStartupRun(
+  harness: string,
+  lengths: ReadonlyMap<string, number>,
+): Promise<void> {
   await waitForRun(
     harness,
+    lengths,
     (run) => run.event === "SessionStart" && run.stdin.source === "startup",
     TERMINAL_STARTUP_RUN_TIMEOUT_MS,
     "the terminal pi ran no SessionStart startup hook",
@@ -352,8 +369,9 @@ Given(
   { timeout: PROFILE_PI_START_TIMEOUT_MS },
   async function (this: ScenarioWorld) {
     const harness = this.profileHarness();
+    const lengths = await readLogLengths(harness);
     await this.startTuiSession();
-    await waitForStartupRun(harness);
+    await waitForStartupRun(harness, lengths);
   },
 );
 // A waiting hook that the terminal Pi's start ran logs its start right after
@@ -477,16 +495,17 @@ When(
 );
 
 // The terminal Pi starts beside the profile Pi in the same sandbox and plays
-// its script. The step waits for the startup SessionStart run, so the turn
-// holds that run and a later reload cannot overtake it.
+// its script. The step waits for a startup SessionStart run that the log
+// gained during the turn, so the turn holds the terminal Pi's own run and a
+// later reload cannot overtake it.
 When(
   "the user starts pi in the terminal with the scripted model and the hooks recording",
-  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  { timeout: SCRIPTED_TERMINAL_START_TIMEOUT_MS },
   async function (this: ScenarioWorld) {
     const harness = this.profileHarness();
-    await recordTerminalAction(this, "start", async () => {
+    await recordTerminalAction(this, "start", async (lengths) => {
       await this.startTuiSession("scripted");
-      await waitForStartupRun(harness);
+      await waitForStartupRun(harness, lengths);
     });
   },
 );
@@ -548,11 +567,12 @@ When(
     const tui = this.requireTuiSession();
     const harness = this.profileHarness();
     const prompt = expandTokens(text, this.tokens);
-    await recordTerminalAction(this, "/reload", async () => {
+    await recordTerminalAction(this, "/reload", async (lengths) => {
       await tui.reload();
       tui.sendLine(prompt);
       await waitForRun(
         harness,
+        lengths,
         (run) => run.event === "UserPromptSubmit" && run.stdin.prompt === prompt,
         TERMINAL_PROMPT_RUN_TIMEOUT_MS,
         "the terminal pi ran no UserPromptSubmit hook for the prompt after the reload",

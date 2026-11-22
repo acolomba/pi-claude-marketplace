@@ -124,10 +124,12 @@ const SCRIPTED_MODEL_ARGUMENTS = ["--provider", "faux", "--model", "faux-1"];
 // keystroke.
 const SCRIPTED_TUI_READY_TEXT = "[Extensions]";
 
-// The profile Pi already compiled every extension into the shared jiti cache,
-// so a terminal Pi with the scripted model starts in seconds; a minute covers
-// a slow worker.
-const SCRIPTED_TUI_READY_MS = 60_000;
+/**
+ * How long a terminal Pi with the scripted model gets to become ready. The
+ * profile Pi already compiled every extension into the shared jiti cache, so
+ * it starts in seconds; a minute covers a slow worker.
+ */
+export const SCRIPTED_TUI_READY_MS = 60_000;
 
 /** The bytes of a scope's base config and installation record. */
 export interface ScopeBytes {
