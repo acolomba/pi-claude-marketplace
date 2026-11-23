@@ -5510,3 +5510,17 @@ Noted 2026-11-15 (parity-gaps, Phase 11, research Open Question 2). Unverified: 
 ## MENTIONDIR-01: attach a directory `@` mention as an `ls` listing
 
 Noted 2026-11-16 (parity-gaps, Phase 11, D-PG11-06, deferred by the maintainer review 2026-11-16). A typed command or skill whose body mentions a directory, such as `@src/`, attaches nothing: the mention stays as text, and the invocation goes on with no notice. Claude Code 2.1.323 attaches a directory as the output of `ls`. The requirement named regular text files only, so the directory case was left out. `docs/skills-commands-compatibility.md` lists it as deferred. The work: attach the listing, as Claude Code does, with a scenario that fails without the change.
+
+## DIRGITTAG-01: no scenario installs a dependency from a tag of a local git marketplace
+
+Noted 2026-11-23 (integration-rescope, Phase 7, ITMIG-07). Claude Code also resolves a
+relative-path dependency against the `<plugin>--v<version>` tags of a marketplace added from a
+local folder that is a git repository, and the integration case that Phase 7 deleted used that
+form. The cucumber harness publishes a marketplace as `dir`, `file`, `url`, `github`, or `hosted`,
+but not as a dir source whose folder is a git work tree, so the tag scenarios of
+`features/plugin/install-dependencies.feature` use a github marketplace. The product path is the
+same: the tag probe and `materializeMarketplaceTagClone` read the record's `marketplaceRoot`. Only
+the tag clone's key differs, because a folder with no `origin` keys it by `marketplace-name:<name>`
+(`orchestrators/plugin/clone-cache.ts`). The work: a publication kind for a dir marketplace in a
+git work tree in `features/lib/published-marketplace.ts`, and a scenario that installs a
+constrained dependency from its tag.
