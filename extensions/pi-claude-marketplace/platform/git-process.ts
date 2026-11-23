@@ -425,11 +425,12 @@ const LANES: Readonly<Record<GitLane, LaneRules>> = {
 // D-SG-05, Q14 `nn`: the one read of the user's ssh choice. It runs on the
 // local lane without a working directory, so it runs in the neutral
 // directory, and a repository's own config never answers it. Exit 1 means
-// that neither key is set.
+// that neither key is set. IN-02: `--null` ends each record with NUL, so a
+// value that holds a newline cannot pose as another key.
 const SSH_CONFIG_READ = {
   subcommand: "config",
   lane: "local",
-  options: ["--get-regexp"],
+  options: ["--get-regexp", "--null"],
   operands: [String.raw`^(core\.sshcommand|ssh\.variant)$`],
   allowExit: [1],
 } as const satisfies Omit<GitRequest, "timeoutMs">;
@@ -496,13 +497,16 @@ function userValue(env: NodeJS.ProcessEnv, name: string, rules: PlatformRules): 
   return value === "" ? undefined : value;
 }
 
-// The values of `git config --get-regexp`, one `<key> <value>` per line. The
-// last line of a key wins, and an empty value counts as unset.
+// The values of `git config --get-regexp --null`. Each record is the key, a
+// newline, and the value, and ends with NUL; a key set with no value has no
+// newline. A CR before the newline goes with it. The last record of a key
+// wins, and an empty or missing value counts as unset.
 function configValues(stdout: string): ReadonlyMap<string, string> {
   const values = new Map<string, string>();
-  for (const line of stdout.split(/\r?\n/)) {
-    const key = line.replace(/ [\s\S]*/, "");
-    const value = line.slice(key.length + 1);
+  for (const record of stdout.split("\0")) {
+    const newline = record.indexOf("\n");
+    const key = (newline === -1 ? record : record.slice(0, newline)).replace(/\r$/, "");
+    const value = newline === -1 ? "" : record.slice(newline + 1);
     if (value === "") {
       values.delete(key);
     } else {

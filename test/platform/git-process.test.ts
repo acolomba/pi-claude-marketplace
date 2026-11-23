@@ -550,6 +550,7 @@ const SSH_READ = [
   ...LOCAL_LANE,
   "config",
   "--get-regexp",
+  "--null",
   "--end-of-options",
   String.raw`^(core\.sshcommand|ssh\.variant)$`,
 ];
@@ -584,7 +585,8 @@ interface ConfigAnswer {
 // `git config --get-regexp` exits 1 when no key matches.
 const NO_SSH_CONFIG: ConfigAnswer = { code: 1, stdout: "" };
 
-function sshConfigLines(stdout: string): ConfigAnswer {
+// IN-02: the records of `git config --get-regexp --null`, each `<key>\n<value>\0`.
+function sshConfigRecords(stdout: string): ConfigAnswer {
   return { code: 0, stdout };
 }
 
@@ -2783,14 +2785,14 @@ describe("createGitProcess ssh", () => {
     {
       label: "a non-empty GIT_SSH_COMMAND before core.sshCommand and GIT_SSH",
       env: { GIT_SSH_COMMAND: "ssh -i /home/user/key", GIT_SSH: "/usr/bin/other-ssh" },
-      answer: sshConfigLines("core.sshcommand config-ssh\n"),
+      answer: sshConfigRecords("core.sshcommand\nconfig-ssh\0"),
       command: `ssh -i /home/user/key ${BATCH_OPTIONS}`,
       variables: { GIT_SSH_VARIANT: "ssh" },
     },
     {
       label: "core.sshCommand under an empty GIT_SSH_COMMAND, before GIT_SSH",
       env: { GIT_SSH_COMMAND: "", GIT_SSH: "/usr/bin/other-ssh" },
-      answer: sshConfigLines("core.sshcommand config-ssh -F /home/user/ssh-config\n"),
+      answer: sshConfigRecords("core.sshcommand\nconfig-ssh -F /home/user/ssh-config\0"),
       command: `config-ssh -F /home/user/ssh-config ${BATCH_OPTIONS}`,
       variables: {},
     },
@@ -2811,28 +2813,28 @@ describe("createGitProcess ssh", () => {
     {
       label: "the last value of a repeated core.sshCommand",
       env: {},
-      answer: sshConfigLines("core.sshcommand first-ssh\ncore.sshcommand second-ssh\n"),
+      answer: sshConfigRecords("core.sshcommand\nfirst-ssh\0core.sshcommand\nsecond-ssh\0"),
       command: `second-ssh ${BATCH_OPTIONS}`,
       variables: {},
     },
     {
-      label: "config lines that end in CRLF",
+      label: "records whose keys end in CR",
       env: {},
-      answer: sshConfigLines("core.sshcommand my-ssh\r\nssh.variant plink\r\n"),
+      answer: sshConfigRecords("core.sshcommand\r\nmy-ssh\0ssh.variant\r\nplink\0"),
       command: "my-ssh -batch",
       variables: { GIT_SSH_VARIANT: "plink" },
     },
     {
       label: "an empty last core.sshCommand as unset",
       env: {},
-      answer: sshConfigLines("core.sshcommand first-ssh\ncore.sshcommand \n"),
+      answer: sshConfigRecords("core.sshcommand\nfirst-ssh\0core.sshcommand\n\0"),
       command: `ssh ${BATCH_OPTIONS}`,
       variables: { GIT_SSH_VARIANT: "ssh" },
     },
     {
       label: "a valueless last ssh.variant as unset",
       env: { GIT_SSH_COMMAND: "plink" },
-      answer: sshConfigLines("ssh.variant ssh\nssh.variant\n"),
+      answer: sshConfigRecords("ssh.variant\nssh\0ssh.variant\0"),
       command: "plink -batch",
       variables: { GIT_SSH_VARIANT: "plink" },
     },
@@ -2846,14 +2848,14 @@ describe("createGitProcess ssh", () => {
     {
       label: "ssh.variant=putty",
       env: {},
-      answer: sshConfigLines("ssh.variant putty\n"),
+      answer: sshConfigRecords("ssh.variant\nputty\0"),
       command: "ssh -batch",
       variables: { GIT_SSH_VARIANT: "putty" },
     },
     {
       label: "the user's GIT_SSH_VARIANT before ssh.variant",
       env: { GIT_SSH_COMMAND: "plink", GIT_SSH_VARIANT: "ssh" },
-      answer: sshConfigLines("ssh.variant plink\n"),
+      answer: sshConfigRecords("ssh.variant\nplink\0"),
       command: `plink ${BATCH_OPTIONS}`,
       variables: { GIT_SSH_VARIANT: "ssh" },
     },
@@ -2928,6 +2930,13 @@ describe("createGitProcess ssh", () => {
       variables: { GIT_SSH_VARIANT: "plink" },
     },
     {
+      label: "a core.sshCommand value with a newline, which forges no ssh.variant",
+      env: {},
+      answer: sshConfigRecords("core.sshcommand\nsafe-ssh\nssh.variant tortoiseplink\0"),
+      command: `safe-ssh\nssh.variant tortoiseplink ${BATCH_OPTIONS}`,
+      variables: {},
+    },
+    {
       label: "the base name ssh.exe",
       env: { GIT_SSH_COMMAND: "C:/OpenSSH/ssh.exe" },
       answer: NO_SSH_CONFIG,
@@ -2977,7 +2986,7 @@ describe("createGitProcess ssh", () => {
     };
 
     // act
-    const launches = await runAfterSshRead(base, sshConfigLines("ssh.variant ssh\n"), SSH_LIST, {
+    const launches = await runAfterSshRead(base, sshConfigRecords("ssh.variant\nssh\0"), SSH_LIST, {
       platform: "win32",
       files: [String.raw`C:\Git\cmd\git.exe`],
       cwd: String.raw`C:\work\project`,
