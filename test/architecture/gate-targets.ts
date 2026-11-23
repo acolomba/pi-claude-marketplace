@@ -168,6 +168,10 @@ export const CREDENTIAL_LEAK_TARGETS = [
   // D-PL5-07: the hosted catalog download, which must send no header,
   // credential, or cookie. Appended last for the reason given above.
   "extensions/pi-claude-marketplace/platform/hosted-manifest-fetch.ts",
+  // AUTH-09: the git process module writes a `git credential` request to
+  // stdin and reads the `fill` answer, password included, from stdout.
+  // Appended last for the reason given above.
+  "extensions/pi-claude-marketplace/platform/git-process.ts",
 ] as const;
 
 /**

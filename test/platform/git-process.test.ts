@@ -14,6 +14,7 @@ import {
 import { GitCommandError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { hermeticGitEnvironment } from "../../features/lib/hermetic-git.ts";
 
+import { captureDebugLog } from "./debug-log-capture.ts";
 import { createGitTestRepository } from "./git-test-repository.ts";
 import { createProcessFake } from "./process-fake.ts";
 
@@ -24,7 +25,7 @@ import type {
 } from "../../extensions/pi-claude-marketplace/platform/git-process.ts";
 import type { ProcessSpawn } from "../../extensions/pi-claude-marketplace/platform/process-run.ts";
 import type { GitFailure } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
-import type { ProcessControl } from "./process-fake.ts";
+import type { ProcessControl, ProcessLaunch } from "./process-fake.ts";
 import type { TestContext } from "node:test";
 
 const NODE_SPAWN = spawn as ProcessSpawn;
@@ -112,6 +113,8 @@ interface HostSetup {
   readonly realpaths?: Readonly<Record<string, string>>;
   readonly cwd?: string;
   readonly tmpdir?: string;
+  /** The paths whose real path cannot be read. */
+  readonly unresolvable?: readonly string[];
 }
 
 interface RecordingHost {
@@ -143,7 +146,10 @@ function createHost(setup: HostSetup = {}): RecordingHost {
       signalGroup: (pid, signal) => {
         groupSignals.push([pid, signal]);
       },
-      realpath: (file) => Promise.resolve(setup.realpaths?.[file] ?? file),
+      realpath: (file) =>
+        setup.unresolvable?.includes(file) === true
+          ? Promise.reject(Object.assign(new Error(`ENOENT: ${file}`), { code: "ENOENT" }))
+          : Promise.resolve(setup.realpaths?.[file] ?? file),
       cwd: () => recording.cwd,
       tmpdir: () => setup.tmpdir ?? "/tmp",
     },
@@ -179,11 +185,13 @@ interface FakeGit {
   readonly host: RecordingHost;
 }
 
+// A null `pid` makes a process that never starts, so only an `error` settles it.
 function createFakeGit(
   env: NodeJS.ProcessEnv = { PATH: "/usr/bin" },
   setup: HostSetup = {},
+  pid: number | null = 4242,
 ): FakeGit {
-  const control = createProcessFake(4242);
+  const control = createProcessFake(pid ?? undefined);
   const launcher = startedLauncher(control);
   const host = createHost(setup);
   const git = createGitProcess({
@@ -193,6 +201,56 @@ function createFakeGit(
     killGraceMs: KILL_GRACE_MS,
   });
   return { git, control, started: launcher.started, host };
+}
+
+interface LaunchSequence {
+  readonly spawn: ProcessSpawn;
+  /** Settles at the launch with this index, once the run watches its process. */
+  readonly at: (index: number) => Promise<ProcessControl>;
+  readonly all: () => readonly ProcessLaunch[];
+}
+
+// Gives every launch its own fake process, so one run can start several.
+function launchSequence(): LaunchSequence {
+  const controls: ProcessControl[] = [];
+  const waiting = new Map<number, (control: ProcessControl) => void>();
+  const launched: ProcessLaunch[] = [];
+  return {
+    spawn: (command, args, options) => {
+      const control = createProcessFake(4242 + controls.length);
+      const process = control.spawn(command, args, options);
+      launched.push([command, args, options]);
+      waiting.get(controls.length)?.(control);
+      controls.push(control);
+      return process;
+    },
+    at: (index) =>
+      new Promise((resolve) => {
+        const control = controls[index];
+        if (control === undefined) {
+          waiting.set(index, resolve);
+        } else {
+          resolve(control);
+        }
+      }),
+    all: () => [...launched],
+  };
+}
+
+function createSequencedGit(setup: HostSetup = {}): {
+  readonly git: GitProcess;
+  readonly launches: LaunchSequence;
+  readonly host: RecordingHost;
+} {
+  const launches = launchSequence();
+  const host = createHost(setup);
+  const git = createGitProcess({
+    spawn: launches.spawn,
+    host: host.host,
+    env: { PATH: "/usr/bin" },
+    killGraceMs: KILL_GRACE_MS,
+  });
+  return { git, launches, host };
 }
 
 interface ExpectedFailure {
@@ -586,6 +644,224 @@ describe("createGitProcess", () => {
     assert.deepStrictEqual(host.probes, ["/usr/bin/git", "/usr/bin/git"]);
   });
 
+  for (const { label, env, setup } of [
+    { label: "/usr/bin/git", env: { PATH: "/usr/bin" }, setup: {} },
+    {
+      label: "a git whose real path is /usr/bin/git",
+      env: { PATH: "/usr/local/bin" },
+      setup: {
+        files: ["/usr/local/bin/git"],
+        realpaths: { "/usr/local/bin/git": "/usr/bin/git" },
+      },
+    },
+    {
+      label: "/usr/bin/git with a relative DEVELOPER_DIR",
+      env: { PATH: "/usr/bin", DEVELOPER_DIR: "Developer" },
+      setup: { files: ["/usr/bin/git", "Developer/usr/bin/git"] },
+    },
+    {
+      label: "/usr/bin/git with an unreadable xcode-select link",
+      env: { PATH: "/usr/bin" },
+      setup: { unresolvable: ["/var/db/xcode_select_link"] },
+    },
+  ]) {
+    test(`D-SG-04, SG-PRC-06: on macOS refuses ${label} as the xcrun shim before any spawn`, async () => {
+      // arrange
+      const { git, control } = createFakeGit(env, { platform: "darwin", ...setup });
+
+      // act & assert
+      await assert.rejects(
+        git.run(FILL),
+        gitFailure({
+          failure: { kind: "git-missing", detail: "macos-shim" },
+          operation: "lookup",
+          exitCode: null,
+          stderr: "",
+        }),
+      );
+      assert.deepStrictEqual(control.launches(), []);
+    });
+  }
+
+  test("D-SG-04: on macOS looks for a real git in DEVELOPER_DIR, the xcode-select choice, and the Command Line Tools", async () => {
+    // arrange
+    const { git, host } = createFakeGit(
+      { PATH: "/usr/bin", DEVELOPER_DIR: "/Applications/Xcode.app/Contents/Developer" },
+      {
+        platform: "darwin",
+        realpaths: {
+          "/var/db/xcode_select_link": "/Applications/Xcode-beta.app/Contents/Developer",
+        },
+      },
+    );
+
+    // act
+    await assert.rejects(git.locate(), GitCommandError);
+
+    // assert
+    assert.deepStrictEqual(host.probes, [
+      "/usr/bin/git",
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/git",
+      "/Applications/Xcode-beta.app/Contents/Developer/usr/bin/git",
+      "/Library/Developer/CommandLineTools/usr/bin/git",
+    ]);
+  });
+
+  for (const { label, env, setup } of [
+    {
+      label: "DEVELOPER_DIR",
+      env: { PATH: "/usr/bin", DEVELOPER_DIR: "/Applications/Xcode.app/Contents/Developer" },
+      setup: { files: ["/usr/bin/git", "/Applications/Xcode.app/Contents/Developer/usr/bin/git"] },
+    },
+    {
+      label: "the xcode-select choice",
+      env: { PATH: "/usr/bin" },
+      setup: {
+        files: ["/usr/bin/git", "/Applications/Xcode.app/Contents/Developer/usr/bin/git"],
+        realpaths: { "/var/db/xcode_select_link": "/Applications/Xcode.app/Contents/Developer" },
+      },
+    },
+    {
+      label: "the Command Line Tools",
+      env: { PATH: "/usr/bin" },
+      setup: { files: ["/usr/bin/git", "/Library/Developer/CommandLineTools/usr/bin/git"] },
+    },
+  ]) {
+    test(`D-SG-04: on macOS runs /usr/bin/git when ${label} holds a real git`, async () => {
+      // arrange
+      const { git } = createFakeGit(env, { platform: "darwin", ...setup });
+
+      // act
+      const found = await git.locate();
+
+      // assert
+      assert.strictEqual(found, "/usr/bin/git");
+    });
+  }
+
+  test("D-SG-04: on macOS runs a git found before /usr/bin with no shim check", async () => {
+    // arrange
+    const { git, host } = createFakeGit(
+      { PATH: "/opt/homebrew/bin:/usr/bin" },
+      {
+        platform: "darwin",
+        files: ["/opt/homebrew/bin/git", "/usr/bin/git"],
+        realpaths: { "/opt/homebrew/bin/git": "/opt/homebrew/Cellar/git/2.47.0/bin/git" },
+      },
+    );
+
+    // act
+    const found = await git.locate();
+
+    // assert
+    assert.strictEqual(found, "/opt/homebrew/bin/git");
+    assert.deepStrictEqual(host.probes, ["/opt/homebrew/bin/git"]);
+  });
+
+  test("NFR-2: finds the Command Line Tools installed after a shim verdict", async () => {
+    // arrange
+    const { git, host } = createFakeGit({ PATH: "/usr/bin" }, { platform: "darwin" });
+    await assert.rejects(git.locate(), GitCommandError);
+    host.files.add("/Library/Developer/CommandLineTools/usr/bin/git");
+
+    // act
+    const found = await git.locate();
+
+    // assert
+    assert.strictEqual(found, "/usr/bin/git");
+  });
+
+  for (const { code } of [{ code: "ENOENT" }, { code: "EACCES" }]) {
+    test(`D-SG-04: reports a git that is gone at a spawn ${code} as git-missing and looks it up again`, async () => {
+      // arrange
+      const startError = Object.assign(new Error(`spawn /usr/bin/git ${code}`), { code });
+      const { git, control, started, host } = createFakeGit(undefined, undefined, null);
+      const pending = git.run(FILL);
+      await started;
+      host.files.delete("/usr/bin/git");
+      control.fail(startError);
+      await assert.rejects(
+        pending,
+        gitFailure({
+          failure: { kind: "git-missing", detail: "not-found" },
+          operation: "credential fill",
+          exitCode: null,
+          stderr: "",
+          cause: startError,
+        }),
+      );
+      host.files.add("/usr/bin/git");
+
+      // act
+      const found = await git.locate();
+
+      // assert
+      assert.strictEqual(found, "/usr/bin/git");
+      assert.deepStrictEqual(host.probes, ["/usr/bin/git", "/usr/bin/git", "/usr/bin/git"]);
+    });
+  }
+
+  test("D-SG-04: keeps a git that still exists after a spawn ENOENT and reports failed", async () => {
+    // arrange
+    const startError = Object.assign(new Error("spawn /usr/bin/git ENOENT"), { code: "ENOENT" });
+    const { git, control, started, host } = createFakeGit(undefined, undefined, null);
+    const pending = git.run(FILL);
+    await started;
+    control.fail(startError);
+    await assert.rejects(
+      pending,
+      gitFailure({
+        failure: { kind: "failed" },
+        operation: "credential fill",
+        exitCode: null,
+        stderr: "",
+        cause: startError,
+      }),
+    );
+
+    // act
+    const found = await git.locate();
+
+    // assert
+    assert.strictEqual(found, "/usr/bin/git");
+    assert.deepStrictEqual(host.probes, ["/usr/bin/git", "/usr/bin/git"]);
+  });
+
+  for (const { label, code, stderr, failure } of [
+    {
+      label: "an exit 127",
+      code: 127,
+      stderr: "",
+      failure: { kind: "git-missing", detail: "not-found" },
+    },
+    {
+      label: "an xcrun error",
+      code: 1,
+      stderr: "xcrun: error: invalid active developer path (/Library/Developer/CommandLineTools)\n",
+      failure: { kind: "git-missing", detail: "macos-shim" },
+    },
+  ] as const) {
+    test(`D-SG-04: reports ${label} as git-missing and looks git up again`, async () => {
+      // arrange
+      const { git, control, started, host } = createFakeGit();
+      const pending = git.run(FILL);
+      await started;
+      control.writeStderr(stderr);
+      control.close(code);
+      await assert.rejects(
+        pending,
+        gitFailure({ failure, operation: "credential fill", exitCode: code, stderr }),
+      );
+
+      // act
+      const found = await git.locate();
+
+      // assert
+      assert.strictEqual(found, "/usr/bin/git");
+      assert.deepStrictEqual(host.probes, ["/usr/bin/git", "/usr/bin/git"]);
+    });
+  }
+
   test("resolves a run that exits with 0 under a signal that never aborts", async () => {
     // arrange
     const { git, control, started } = createFakeGit();
@@ -628,7 +904,9 @@ describe("createGitProcess", () => {
       // act
       const pending = git.run({ ...FILL, ...(allowExit !== undefined && { allowExit }) });
       await started;
-      control.writeStderr("fatal: unable to access 'https://user:secret@example.test/x.git/'\n");
+      control.writeStderr(
+        "fatal: unexpected answer from 'https://user:secret@example.test/x.git/'\n",
+      );
       control.close(code);
 
       // assert
@@ -638,13 +916,13 @@ describe("createGitProcess", () => {
           failure: { kind: "failed" },
           operation: "credential fill",
           exitCode: code,
-          stderr: "fatal: unable to access 'https://***@example.test/x.git/'\n",
+          stderr: "fatal: unexpected answer from 'https://***@example.test/x.git/'\n",
         }),
       );
     });
   }
 
-  test("SG-PRC-05: rejects a run that closes without an exit code as failed", async () => {
+  test("SG-PRC-05: rejects a run that closes without an exit code or stderr as no-stderr", async () => {
     // arrange
     const { git, control, started } = createFakeGit();
 
@@ -657,12 +935,95 @@ describe("createGitProcess", () => {
     await assert.rejects(
       pending,
       gitFailure({
-        failure: { kind: "failed" },
+        failure: { kind: "no-stderr" },
         operation: "credential fill",
         exitCode: null,
         stderr: "",
       }),
     );
+  });
+
+  test("SG-PRC-05: rejects a disallowed exit with the kind its C-locale stderr names", async () => {
+    // arrange
+    const { git, control, started } = createFakeGit();
+
+    // act
+    const pending = git.run(FILL);
+    await started;
+    control.writeStderr("fatal: transport 'ext' not allowed\n");
+    control.close(128);
+
+    // assert
+    await assert.rejects(
+      pending,
+      gitFailure({
+        failure: { kind: "protocol-refused" },
+        operation: "credential fill",
+        exitCode: 128,
+        stderr: "fatal: transport 'ext' not allowed\n",
+      }),
+    );
+  });
+
+  test("D-SG-06: logs the git version once after a git-too-old failure", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const { git, launches } = createSequencedGit({ realpaths: { "/tmp": "/private/tmp" } });
+
+    // act
+    const pending = git.run(FILL);
+    const fill = await launches.at(0);
+    fill.writeStderr("error: unknown option `no-such-flag'\n");
+    fill.close(129);
+    const version = await launches.at(1);
+    version.writeStdout("git version 2.17.1\nextra\n");
+    version.close(0);
+
+    // assert
+    await assert.rejects(
+      pending,
+      gitFailure({
+        failure: { kind: "git-too-old" },
+        operation: "credential fill",
+        exitCode: 129,
+        stderr: "error: unknown option `no-such-flag'\n",
+      }),
+    );
+    assert.deepStrictEqual(logged, ["[git] git version: git version 2.17.1"]);
+    assert.deepStrictEqual(
+      launches.all().map(([command, args, options]) => [command, args, options.cwd]),
+      [
+        ["/usr/bin/git", [...hardening("/dev/null"), "credential", "fill"], "/private/tmp"],
+        ["/usr/bin/git", [...hardening("/dev/null"), "version"], "/private/tmp"],
+      ],
+    );
+  });
+
+  test("D-SG-06: logs an unreadable version and keeps the git-too-old failure when the version read fails", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const { git, launches } = createSequencedGit();
+
+    // act
+    const pending = git.run(FILL);
+    const fill = await launches.at(0);
+    fill.close(129);
+    const version = await launches.at(1);
+    version.writeStderr("error: unknown option `version'\n");
+    version.close(129);
+
+    // assert
+    await assert.rejects(
+      pending,
+      gitFailure({
+        failure: { kind: "git-too-old" },
+        operation: "credential fill",
+        exitCode: 129,
+        stderr: "",
+      }),
+    );
+    assert.deepStrictEqual(logged, ["[git] git version: unreadable"]);
+    assert.strictEqual(launches.all().length, 2);
   });
 
   test("SG-PRC-01: rejects a run past its timeout with the limit after stopping its process tree", async (t) => {
@@ -878,7 +1239,7 @@ describe("createGitProcess", () => {
       // assert
       await assert.rejects(filled, (error: unknown) => {
         assert.ok(error instanceof GitCommandError);
-        assert.deepStrictEqual([error.kind, error.exitCode], ["failed", 128]);
+        assert.deepStrictEqual([error.kind, error.exitCode], ["https-auth", 128]);
         return true;
       });
       await assert.rejects(access(askpass.record), { code: "ENOENT" });
@@ -910,7 +1271,7 @@ describe("createGitProcess", () => {
     // assert
     await assert.rejects(filled, (error: unknown) => {
       assert.ok(error instanceof GitCommandError);
-      assert.deepStrictEqual([error.kind, error.exitCode], ["failed", 128]);
+      assert.deepStrictEqual([error.kind, error.exitCode], ["https-auth", 128]);
       return true;
     });
     await assert.rejects(access(helper.record), { code: "ENOENT" });
