@@ -26,7 +26,7 @@ Feature: Plugin disable
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id            |
       | demo@fixtures |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -51,7 +51,7 @@ Feature: Plugin disable
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id            |
       | demo@fixtures |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -136,7 +136,7 @@ Feature: Plugin disable
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status   | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | disabled |         | project | 1.0.0   |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
 
   Scenario: Disabling a disabled plugin is skipped as already disabled
@@ -193,7 +193,7 @@ Feature: Plugin disable
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id            |
       | demo@fixtures |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -253,7 +253,7 @@ Feature: Plugin disable
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id        |
       | app@tools |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command          | description           |
       | /skill:app-skill | A skill of app 1.0.0. |

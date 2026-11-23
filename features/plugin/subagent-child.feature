@@ -34,16 +34,12 @@ Feature: Plugin subagent child
       | fixtures    | demo   |         |
       | fixtures    | upd    |         |
     Given pi runs with the scripted model as a pi-subagents background child
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 3                   |
-      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 3                   |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status         | reasons | scope   | version | from  | to    |
-      | fixtures         | project           | demo@fixtures | demo | will install   |         | project |         |       |       |
-      | fixtures         | project           | old@fixtures  | old  | will uninstall |         | project | 1.0.0   |       |       |
-      | fixtures         | project           | upd@fixtures  | upd  | will update    |         | project |         | 1.0.0 | 1.1.0 |
       | fixtures         | project           | demo@fixtures | demo | will install   |         | project |         |       |       |
       | fixtures         | project           | old@fixtures  | old  | will uninstall |         | project | 1.0.0   |       |       |
       | fixtures         | project           | upd@fixtures  | upd  | will update    |         | project |         | 1.0.0 | 1.1.0 |
@@ -76,7 +72,7 @@ Feature: Plugin subagent child
     Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
     Given the mcp.json file of the user scope holds the servers of the plugin "demo@fixtures" as release 0.19.2 wrote them, beside the user's own server "mine"
     Given pi runs with the scripted model as a pi-subagents background child
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports no results
     Then the mcp configuration file "mcp.json" of the user scope holds this text:
       """
@@ -167,7 +163,7 @@ Feature: Plugin subagent child
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given pi runs with the scripted model as a pi-subagents background child
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports no results
     Then the session offers these skills:
       | command           | description            |

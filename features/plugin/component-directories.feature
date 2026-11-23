@@ -126,7 +126,7 @@ Feature: Plugin component directories
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
       | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
-    When the user starts a new pi session
+    When the user reloads pi
     When the user prompts "List the agents."
     Then the model receives these calls:
       | call | role        | text                                                                                      |
@@ -168,7 +168,7 @@ Feature: Plugin component directories
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
       | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
-    When the user starts a new pi session
+    When the user reloads pi
     When the user lists the slash commands pi offers
     Then pi offers these workflow commands:
       | command   | description       |

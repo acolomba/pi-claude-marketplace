@@ -44,7 +44,7 @@ Feature: Plugin state migration
 
   Scenario: The first load after an upgrade from release 0.6.0 rewrites the installation record in the current schema
     Given the installation record of the user scope is rewritten as release "0.6.0" wrote it
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports no results
     Then the session offers these skills:
       | command           | description            |
@@ -55,7 +55,7 @@ Feature: Plugin state migration
 
   Scenario: The first load after an upgrade from release 0.19.2 rewrites the installation record in the current schema
     Given the installation record of the user scope is rewritten as release "0.19.2" wrote it
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports no results
     Then the session offers these skills:
       | command           | description            |
@@ -66,9 +66,9 @@ Feature: Plugin state migration
 
   Scenario: A second load after an upgrade from release 0.6.0 changes nothing
     Given the installation record of the user scope is rewritten as release "0.6.0" wrote it
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the config and installation record bytes of the user scope are remembered
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports no results
     Then the session offers these skills:
       | command           | description            |
@@ -77,9 +77,9 @@ Feature: Plugin state migration
 
   Scenario: A second load after an upgrade from release 0.19.2 changes nothing
     Given the installation record of the user scope is rewritten as release "0.19.2" wrote it
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the config and installation record bytes of the user scope are remembered
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports no results
     Then the session offers these skills:
       | command           | description            |
@@ -89,7 +89,7 @@ Feature: Plugin state migration
   Scenario: A plugin disabled before an upgrade from release 0.19.2 stays disabled
     Given the user has run "/claude:plugin disable demo@fixtures --scope user"
     Given the installation record of the user scope is rewritten as release "0.19.2" wrote it
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports no results
     Then the session offers no skills
     Then the migrated installation record of the user scope has schema version 3 and these plugins:
@@ -116,16 +116,13 @@ Feature: Plugin state migration
   Scenario: A load refuses a newer installation record, leaves it as it was, and offers none of its plugins' skills
     Given the installation record of the user scope is rewritten with a schema version this release does not read
     Given the config and installation record bytes of the user scope are remembered
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind                      | severity | needs reload | summary                      | tally label | tally failures | tally warnings | reason                                                                                       | scope |
       | reconcile-applied-cascade | error    | false        | Some operations have failed. | Reconcile   | 2              | 0              |                                                                                              |       |
       | plugin-path-skipped       | warning  | false        |                              |             |                |                | state.json at {agent dir}/pi-claude-marketplace/state.json has an unsupported schema version | user  |
-      | reconcile-applied-cascade | error    | false        | Some operations have failed. | Reconcile   | 2              | 0              |                                                                                              |       |
-      | plugin-path-skipped       | warning  | false        |                              |             |                |                | state.json at {agent dir}/pi-claude-marketplace/state.json has an unsupported schema version | user  |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | marketplace status | marketplace reasons | id                    | name       | status | reasons    | scope | cause chain                                                | cause truncated | leaks | rollback partial |
-      | state.json       | user              | failed             | unreadable          | state.json@state.json | state.json | failed | unreadable | user  | state.json at state.json has an unsupported schema version | false           |       |                  |
       | state.json       | user              | failed             | unreadable          | state.json@state.json | state.json | failed | unreadable | user  | state.json at state.json has an unsupported schema version | false           |       |                  |
     Then the session offers no skills
     Then the config and installation record bytes of the user scope are unchanged
@@ -141,16 +138,13 @@ Feature: Plugin state migration
     Given the marketplace "tools" is added to the project scope
     Given the user has run "/claude:plugin install helper@tools --scope project"
     Given the installation record of the user scope is rewritten with a schema version this release does not read
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind                      | severity | needs reload | summary                      | tally label | tally failures | tally warnings | reason                                                                                       | scope |
       | reconcile-applied-cascade | error    | false        | Some operations have failed. | Reconcile   | 2              | 0              |                                                                                              |       |
       | plugin-path-skipped       | warning  | false        |                              |             |                |                | state.json at {agent dir}/pi-claude-marketplace/state.json has an unsupported schema version | user  |
-      | reconcile-applied-cascade | error    | false        | Some operations have failed. | Reconcile   | 2              | 0              |                                                                                              |       |
-      | plugin-path-skipped       | warning  | false        |                              |             |                |                | state.json at {agent dir}/pi-claude-marketplace/state.json has an unsupported schema version | user  |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | marketplace status | marketplace reasons | id                    | name       | status | reasons    | scope | cause chain                                                | cause truncated | leaks | rollback partial |
-      | state.json       | user              | failed             | unreadable          | state.json@state.json | state.json | failed | unreadable | user  | state.json at state.json has an unsupported schema version | false           |       |                  |
       | state.json       | user              | failed             | unreadable          | state.json@state.json | state.json | failed | unreadable | user  | state.json at state.json has an unsupported schema version | false           |       |                  |
     Then the session offers these skills:
       | command             | description              |

@@ -26,7 +26,7 @@ Feature: Plugin reinstall
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id            |
       | demo@fixtures |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -222,7 +222,7 @@ Feature: Plugin reinstall
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | reinstalled |         | project | 1.0.0   |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -332,9 +332,9 @@ Feature: Plugin reinstall
       | marketplace name | marketplace scope | id       | name | status | reasons        | scope   | version | cause chain                                                                                                  | cause truncated | leaks | rollback partial |
       | gits             | project           | ghp@gits | ghp  | failed | source missing | project | 1.0.0   | 404 on https://{git host}/acme/ghp.git, HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git | false           |       |                  |
 
-  Scenario: A new session offers the skills of the reinstalled plugin
+  Scenario: A reload offers the skills of the reinstalled plugin
     Given the user has run "/claude:plugin reinstall demo@fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -366,9 +366,9 @@ Feature: Plugin reinstall
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
 
-  Scenario: Deleting the installed skills of a plugin takes them out of a new session before any reinstall
+  Scenario: Deleting the installed skills of a plugin takes them out at the next reload before any reinstall
     Given the user has deleted the installed skills of "demo@fixtures" in the project scope
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
 
   Scenario: Reinstalling a plugin that is not installed fails as not installed and changes nothing
@@ -478,13 +478,13 @@ Feature: Plugin reinstall
       | plugin components resolved     | true          |
       | plugin components skills       | demo-skill    |
 
-  Scenario: A new session offers the skills of the version a reinstall installed
+  Scenario: A reload offers the skills of the version a reinstall installed
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.1.0   |
     Given the user has run "/claude:plugin marketplace update fixtures --scope project"
     Given the user has run "/claude:plugin reinstall demo@fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.1.0. |

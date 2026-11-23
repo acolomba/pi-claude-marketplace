@@ -103,9 +103,9 @@ Feature: Plugin install
     Then the command result contains no absolute sandbox path
     Then the project scope has no installed plugins
 
-  Scenario: A new session offers the skills of the installed plugin
+  Scenario: A reload offers the skills of the installed plugin
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -247,7 +247,7 @@ Feature: Plugin install
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id            |
       | demo@fixtures |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -351,7 +351,7 @@ Feature: Plugin install
   Scenario: A plugin installed with --local from a marketplace the base layer declares stays installed after the user removes the marketplace from the base layer
     Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
     Given the user has run "/claude:plugin marketplace remove fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |

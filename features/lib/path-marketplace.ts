@@ -3,7 +3,7 @@
  *
  * The marketplace is a directory with a `marketplace.json` manifest and one
  * plugin per entry, each with a single skill whose description names the
- * plugin version, so a new session shows which version is installed. Pi adds
+ * plugin version, so a reload shows which version is installed. Pi adds
  * it as a path source, so no scenario touches the network (NFR-5). Writing it
  * again with new versions publishes an update. A plugin's dependencies go in
  * its own `plugin.json`, which outranks the marketplace entry when Pi reads

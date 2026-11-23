@@ -17,7 +17,7 @@ Feature: Marketplace refused name
       | marketplace name        | marketplace scope | marketplace status | id                      | name                    | status | reasons          | scope   | leaks | rollback partial | cause chain                                                                                                                                                                                                                                                                                                                                                                      | cause truncated |
       | claude-plugins-official | project           | failed             | claude-plugins-official | claude-plugins-official | failed | invalid manifest | project |       |                  | Failed to update marketplace "claude-plugins-official"., Marketplace "claude-plugins-official" is registered from an untrusted source: The name 'claude-plugins-official' is reserved for official Anthropic marketplaces and can only be used with GitHub sources from the 'anthropics' organization. To fix it, remove the marketplace and re-add it from the official source. | false           |
 
-  Scenario: Every new session warns about an installed plugin whose marketplace manifest now declares a look-alike name and keeps it working
+  Scenario: Every reload warns about an installed plugin whose marketplace manifest now declares a look-alike name and keeps it working
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins:
       | name | version |
@@ -28,14 +28,12 @@ Feature: Marketplace refused name
       """
       {"name":"claude-plugins-v2","owner":{"name":"features"},"plugins":[{"name":"demo","source":"./plugins/demo","version":"1.0.0"}]}
       """
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
       | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
-      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id         | name | status | reasons          | scope   | cause chain                                                                            | cause truncated | leaks | rollback partial |
-      | tools            | project           | demo@tools | demo | failed | invalid manifest | project | Claude Code refuses the marketplace name "tools": it looks like one of Anthropic's own | false           |       |                  |
       | tools            | project           | demo@tools | demo | failed | invalid manifest | project | Claude Code refuses the marketplace name "tools": it looks like one of Anthropic's own | false           |       |                  |
     Then the session offers these skills:
       | command           | description            |

@@ -1,6 +1,6 @@
 Feature: Plugin configuration
 
-  Each scope has a base layer and a local layer, and a new session loads what
+  Each scope has a base layer and a local layer, and a reload loads what
   the two layers declare once merged. The scenarios run the real extension in a
   headless Pi and use a local marketplace in place of a published one.
 
@@ -15,7 +15,7 @@ Feature: Plugin configuration
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has run "/claude:plugin disable demo@fixtures --scope project"
     Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id            | enabled |
@@ -30,7 +30,7 @@ Feature: Plugin configuration
     Given the user has run "/claude:plugin disable demo@fixtures --scope project"
     Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
     Given the user has run "/claude:plugin enable demo@fixtures --scope project --local"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id            | enabled |
       | demo@fixtures | false   |
@@ -76,19 +76,17 @@ Feature: Plugin configuration
       | marketplace name          | marketplace scope | id                                                  | name                      | status | reasons          | scope   | cause chain                                                                                                                                                                                                                                                                                             | cause truncated | leaks | rollback partial |
       | claude-plugins.local.json | project           | claude-plugins.local.json@claude-plugins.local.json | claude-plugins.local.json | failed | invalid manifest | project | The local config (claude-plugins.local.json) declares demo@fixtures, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config. | false           |       |                  |
 
-  Scenario: A new session does not install a plugin whose local layer lacks its marketplace
+  Scenario: A reload does not install a plugin whose local layer lacks its marketplace
     Given the marketplace "fixtures" is added to the project scope
     Given a config in scope project and layer local, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | summary                        | tally label       | tally failures | tally warnings |
       | cascade | error    | false        | A plugin operation has failed. | Reconcile pending | 1              | 0              |
-      | cascade | error    | false        | A plugin operation has failed. | Reconcile pending | 1              | 0              |
     Then the results list these marketplaces and plugins:
       | marketplace name          | marketplace scope | id                                                  | name                      | status | reasons          | scope   | cause chain                                                                                                                                                                                                                                                                                             | cause truncated | leaks | rollback partial |
-      | claude-plugins.local.json | project           | claude-plugins.local.json@claude-plugins.local.json | claude-plugins.local.json | failed | invalid manifest | project | The local config (claude-plugins.local.json) declares demo@fixtures, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config. | false           |       |                  |
       | claude-plugins.local.json | project           | claude-plugins.local.json@claude-plugins.local.json | claude-plugins.local.json | failed | invalid manifest | project | The local config (claude-plugins.local.json) declares demo@fixtures, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config. | false           |       |                  |
     Then the session offers no skills
     Then the "claude-plugins.local.json" file of the project scope declares these plugins:
