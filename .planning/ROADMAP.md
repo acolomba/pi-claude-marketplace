@@ -327,10 +327,10 @@ Plans:
   1. After a hook's startup SessionStart context and a `/reload` before the first prompt, the first prompt's model call carries that context. The scenario at `features/hook/additional-context.feature:230` asserts this, passes, and fails under a deliberate break; the HOOK-E2E-04 integration case is flipped to match or deleted once the scenario covers it (HKRL-01).
   2. A new session, a resume, and a fork carry no SessionStart context from the session before (the existing no-leak scenarios still pass), and SessionStart context still reaches the first prompt without a reload (HKRL-01).
   3. `docs/hooks-compatibility.md` describes the new behavior, the change has unit tests with 100% direct coverage, and `npm run check` passes (HKRL-01).
-**Plans:** 1 plan
+**Plans:** 1/1 plans executed
 
 Plans:
-- [ ] 06.1-01-PLAN.md -- Wave 1: the five flipped SessionStart scenarios of `hook/additional-context.feature`, ten unit cases, and HOOK-E2E-04 rewritten to the post-fix shape, all red on the current code, then the SessionStart send through one shared context message helper in `bridges/hooks/event-adapters.ts`, in one commit with the integration suite green; breaks B1 and B2 on the fix commit; then the SessionStart buffer removed from the hooks runtime and routing state with the integration file `hooks-additionalcontext-end-to-end` deleted; then the docs and the D-CF5-13 amendment, B1f and B2f on the final tree, the hook-wide set, and one full adapter run (HKRL-01)
+- [x] 06.1-01-PLAN.md -- Wave 1: the five flipped SessionStart scenarios of `hook/additional-context.feature`, ten unit cases, and HOOK-E2E-04 rewritten to the post-fix shape, all red on the current code, then the SessionStart send through one shared context message helper in `bridges/hooks/event-adapters.ts`, in one commit with the integration suite green; breaks B1 and B2 on the fix commit; then the SessionStart buffer removed from the hooks runtime and routing state with the integration file `hooks-additionalcontext-end-to-end` deleted; then the docs and the D-CF5-13 amendment, B1f and B2f on the final tree, the hook-wide set, and one full adapter run (HKRL-01)
 
 ### Phase 7: Path-Source Dependency Tags
 
