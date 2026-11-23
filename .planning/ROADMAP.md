@@ -318,14 +318,14 @@ Plans:
 
 ### Phase 06.1: Reload Keeps SessionStart Context (INSERTED)
 
-**Goal**: A Pi `/reload` before the first prompt keeps the SessionStart context that a hook produced at startup, so the model receives it on the first prompt, matching Claude Code's `/reload-plugins`; a new session, a resume, or a fork still drops context from another session.
+**Goal**: A Pi `/reload` before the first prompt keeps the SessionStart context that a hook produced at startup, so the model receives it on the first prompt, matching Claude Code's `/reload-plugins`; a new session starts with no context from another session, and a resume or a fork shows each earlier context value once (HKRL-02).
 **Depends on**: Phase 6
 **Requirements**: HKRL-01, HKRL-02, HKRL-03
 **Evidence**: Phase 6 verification raised the milestone's parity rule on HOOK-E2E-04; upstream research (Claude Code 2.1.330 binary and the hooks and plugins docs) found that Claude Code writes startup SessionStart context into the conversation and `/reload-plugins` leaves it alone (`06.1-UPSTREAM-EVIDENCE.md`). User decision 2026-11-22: fix it in this milestone.
 **Notes**: Pi's `/reload` builds a new hooks runtime (`extensions/pi-claude-marketplace/index.ts:116`), so removing the buffer clear in `event-router.ts` alone does not fix it. Research's two candidate designs: send the context as a hidden session message at SessionStart (closest to upstream; the SessionStart part becomes its own message), or persist undrained entries on `session_shutdown` with reason `reload` and restore them on `session_start` with reason `reload`. Product change: rule 4 (unit tests beside each source pair, 100% direct coverage, a CHANGELOG parent line).
 **Success Criteria** (what must be TRUE):
   1. After a hook's startup SessionStart context and a `/reload` before the first prompt, the first prompt's model call carries that context. The scenario at `features/hook/additional-context.feature:230` asserts this, passes, and fails under a deliberate break; the HOOK-E2E-04 integration case is flipped to match or deleted once the scenario covers it (HKRL-01).
-  2. A new session, a resume, and a fork carry no SessionStart context from the session before (the existing no-leak scenarios still pass), and SessionStart context still reaches the first prompt without a reload (HKRL-01).
+  2. A new session carries no SessionStart context from the session before, and SessionStart context still reaches the first prompt without a reload (HKRL-01); a resume or a fork keeps the earlier context once, as criterion 4 says.
   3. `docs/hooks-compatibility.md` describes the new behavior, the change has unit tests with 100% direct coverage, and `npm run check` passes (HKRL-01).
   4. After a fork or a resume, a SessionStart context value the conversation already holds is not sent again; a changed value is added; scenarios show both, and a new session carries nothing from the old one (HKRL-02, user decision 2026-11-23 after review CR-01).
   5. After a compaction in the middle of a run and after an overflow compaction with a retry, the next model call carries the SessionStart(compact) context; after a manual `/compact` it lands after the summary; scenarios show each path (HKRL-03, user decision 2026-11-23).
