@@ -1,14 +1,16 @@
 ---
 phase: 08-integration-suite-rescope
-reviewed: 2026-11-23T04:57:42Z
+reviewed: 2026-11-23T05:21:30Z
 depth: standard
-files_reviewed: 31
+iteration: 2
+files_reviewed: 32
 files_reviewed_list:
   - .agents/skills/cucumber/SKILL.md
   - .agents/skills/typescript-unit-tests/SKILL.md
   - .planning/codebase/TESTING.md
   - docs/mcp-compatibility.md
   - docs/output-catalog.md
+  - test/bridges/mcp/builtin-entry.test.ts
   - test/integration/adapter-expansion-conformance.test.ts
   - test/integration/adapter-tool-name-conformance.test.ts
   - test/integration/agents-adapter-grant-conformance.test.ts
@@ -37,126 +39,126 @@ files_reviewed_list:
   - test/orchestrators/reconcile/plan.test.ts
 findings:
   critical: 0
-  warning: 5
-  info: 5
-  total: 10
+  warning: 3
+  info: 6
+  total: 9
   necessity: 0
 status: issues_found
 ---
 
-# Phase 8: Code Review Report
+# Phase 8: Code Review Report (iteration 2)
 
-**Reviewed:** 2026-11-23T04:57:42Z
+**Reviewed:** 2026-11-23T05:21:30Z
 **Depth:** standard
-**Files Reviewed:** 31
+**Files Reviewed:** 32
 **Status:** issues_found
 
 ## Summary
 
-I reviewed every file changed since `17fca7a` outside `.planning/phases/`. That includes the two deleted files, which I read with `git show 17fca7a:<path>`. The hook files that Phase 6.1 owns and the 08-05 edit to `docs/hooks-compatibility.md:77` were left out, as asked.
+I re-reviewed every file changed since `17fca7a` outside `.planning/phases/` and outside the Phase 6.1 files. I read the iteration-1 fix commits `7d76c64..dc8aa81` in full. `.planning/REQUIREMENTS.md` and `.planning/ROADMAP.md` are planning files, so they are out of the review set.
 
-These checks pass:
+All ten iteration-1 findings are fixed:
 
-- The charter text is the same in all three places. I extracted each section and compared them with `diff`: no difference.
-- Every helper module in `test/integration/` still has an importer. No remaining file names a deleted test file.
-- `tsc --noEmit` passes. `eslint --no-cache` on the changed test files passes.
-- `plan.test.ts` runs 71 cases, and `plan.ts` has 100% line, branch, and function coverage when the pair runs alone.
-- Each deletion has a cover: B1 to B7c in the SUMMARYs. I re-read the covering scenario or unit case for D-13, the child stages, the workflow install, and the lifecycle cascade.
-- The composed fixed point "migrate, then plan nothing" is still covered from the outside: `features/plugin/config-migration.feature:19` ("the session reports no results") and `:44` ("Pending shows nothing to apply").
-- The `docs/output-catalog.md` pointer is correct. The `openUi` hash claim in `docs/mcp-compatibility.md:770` matches the peer sources: pi-mcp-adapter 7.0.1 `dist/metadata-cache.js:148`, and pi-subagents 0.88.1 `computeMcpServerHash` at `mcp-direct-tool-allowlist.js:381-411`.
+- **WR-01.** 22 `EXPANSION_CASES` rows and 6 `OPTION_FIELD_CASES` rows moved to `test/bridges/mcp/builtin-entry.test.ts:316-408`. Each of the 49 cases left in `mcp-builtin-encoding-conformance.test.ts` calls `piConfigValues` or `piMcpServers`. The row counts match the doc: 30 + 22 = 52 expansion rows, 8 + 6 = 14 option rows. `node --test test/bridges/mcp/builtin-entry.test.ts` passed 47 of 47. Direct coverage, run alone under `env -i`, gives `builtin-entry.ts` 100% (branches 19/19, functions 4/4, lines 75/75). The conformance file passed 49 of 49 under `isolated-pi-home.mjs`.
+- **WR-02, IN-03.** Both race headers now name the real gap. `state-lock.feature` holds the lock from a helper process and runs one command per scenario, as the header says.
+- **WR-03.** The header and the title now say "leaves the bytes of state.json as they were", which is what `unchangedBytes` checks.
+- **WR-04.** The header names what case 1 adds. `builtin-status.feature:191` is `@builtin-only`, as claimed. See IN-01 for what is still open.
+- **WR-05, IN-05.** I extracted the charter from all three files and compared them with `diff`. Apart from TESTING.md's two-space nesting, they are word for word the same. They now have the `test/architecture/` bullet and the narrowed earlier-release sentence.
+- **IN-01.** The `parent-wait` row is gone, and nothing names it.
+- **IN-02.** `git-ops-fake.ts` pushes to `calls` for every member except `listRemotes` (`:155-253`), as the header now says.
+- **IN-04.** The doc now cites `child-tool-plan.js`.
+- The two rewritten claims in `docs/mcp-compatibility.md` (`:225`, `:621`) match the moved tests.
+- ESLint, run with no cache on the touched test files, passes.
 
-No blocker. The findings are about classification and header accuracy:
+No new blocker. The open findings come from header and title text that iteration 1 did not check:
 
-- Many cases in a file labelled peer conformance run no peer code.
-- Two headers make a false claim about the cucumber harness.
-- One header says "writes nothing" where the case compares only bytes.
-- One header admits that scenarios cover a case it keeps, without saying what the case adds.
-- The charter has no place for the `test/architecture/` category.
+- The moved unit cases carry row titles that describe the adapter path.
+- The conformance header still claims a validator check over "the table".
+- One race case claims "exactly one process writes" with no assertion that can see it.
 
 ## Warnings
 
-### WR-01: 28 "is written as Claude Code's value" cases in a peer conformance file run no Pi code
+### WR-01: The moved unit cases' titles name behavior they do not check, and some of it is false on the built-in path
 
-**File:** `test/integration/mcp-builtin-encoding-conformance.test.ts:172-183`, `:318-329` (header `:3`)
-**Issue:** The header says the file is "Peer conformance (ITSCOPE-01) against Pi's own resolver and validator". Two loops do not fit that class:
+**File:** `test/bridges/mcp/builtin-entry.test.ts:373-374`, `:391-392` (row titles at `test/bridges/mcp/expansion-cases.ts:73`, `:84`, `:354`, `:385`)
+**Issue:** The moved loops make each title as `${row.title} is written as Claude Code's value`. The row titles were written for the adapter path. They describe its install-time `written` and `missing` values, which these cases never read. Some run titles, from the spec reporter:
 
-- The loop at `:172` makes 22 cases from the non-secret `EXPANSION_CASES` rows.
-- The loop at `:318` makes 6 cases from the non-secret `OPTION_FIELD_CASES` rows.
+- `BLT-02: AVAR-01: args ${CLAUDE_PROJECT_DIR} stays a reference at user scope is written as Claude Code's value`. On the built-in path `projectDir` is the session directory at both scopes (P2-DC-03). So the case asserts `/work/project`, not a kept reference. The title says the opposite of what the case checks.
+- `BLT-02: AVAR-02: args with a variable unset at install keeps the reference and reports it is written ...`. The built-in path resolves `${PI_CM_SITE}` from `runtimeEnv` to `--site=us5`, so it keeps no reference. No case asserts "reports it" (`missing`).
+- `BLT-02: AVAR-05: url unset AWS_SESSION_TOKEN is written empty and never missing ...`. "never missing" is the `missing` field, which this case does not assert.
+- `BLT-02: AVAR-01: args ~user/x is literal and the adapter leaves it ...`. This is a built-in unit case, and the adapter is not involved.
 
-Each of these cases calls only `builtinServerConfig` (through `builtinConfig` at `:144-148`, or `optionWritten`). It then compares the result with `row.claudeOutput` and never calls `piConfigValues` or `piMcpServers`. These cases check one source module, `bridges/mcp/builtin-entry.ts`. The charter says such a case "moves to the unit test of its source pair". The premise "Pi resolves only `env` and `headers`, so every other field must be Claude's value as written" is a claim about Pi, but these cases do not check it. 08-RESEARCH.md:120 kept the whole file as "keep all" without looking at each case.
-**Fix:** Move the two non-secret loops to `test/bridges/mcp/builtin-entry.test.ts`, which can import `test/bridges/mcp/expansion-cases.ts` as `substitute.test.ts` does, and delete them here in the same commit. Another option: make each row run through Pi, for example `piMcpServers.validateMcpServerConfig(SERVER_NAME, config)`, and check that the field comes back unchanged. That turns the premise into a peer assertion. In both cases, change the header so that it describes only the cases that run Pi's code.
+The unit-test skill says: "Every case must discriminate the behavior named in its title." These titles name behavior that no assertion checks, and some say the opposite of the assertion. The same row titles also appear in the 30 `env`/`headers` cases of `mcp-builtin-encoding-conformance.test.ts:143-144`. They were there before this phase, but the phase's brief covers that file's text too.
+**Fix:** Give the built-in loops a title that names only what they assert, for example:
 
-### WR-02: "A scenario runs one Pi at a time" is false
+```ts
+test(`BLT-02: the ${row.field} value ${JSON.stringify(row.raw)} is written as Claude Code's ${JSON.stringify(row.claudeOutput)}`, ...)
+```
 
-**File:** `test/integration/concurrent-install.test.ts:8-9`, `test/integration/load-reconcile-race.test.ts:7`
-**Issue:** Both new headers say the case must stay in integration because "A scenario runs one Pi at a time". The cucumber harness runs several Pi processes at once:
+Another option: add an optional `builtinTitle` to `ExpansionCase` for the rows whose adapter wording does not hold on the built-in path, and use it in both built-in files.
 
-- `features/step_definitions/plugin/subagent-hooks.steps.ts:379-386` starts a background sibling child beside the profile Pi.
-- `:396-397` says: "The sibling is a stand-in child of its own agent, started beside the profile Pi".
-- The scenario at `features/plugin/subagent-child.feature:364-403` has the main Pi, a sibling child, and a third child alive at the same time.
+### WR-02: The encoding conformance header says Pi's validator accepts "each config the table builds", but it never sees a table config
 
-What the harness actually lacks is a step that starts two `/claude:plugin` commands so that they meet at the state lock at the same moment. The fork, IPC, and ready-sync harness of these files provides that. A reader who trusts the header could reject a scenario that is in fact possible, or could repeat the false claim in a later header.
-**Fix:** State the real gap. For example: "No step starts two installs (or two applies) at the same moment, so no scenario can make them meet at the state lock; `features/plugin/state-lock.feature` holds the lock from a separate process but runs one command."
-
-### WR-03: The header says "writes nothing", but the case compares only bytes
-
-**File:** `test/integration/mcp-verdict-update.test.ts:9-10` (assertion at `:240`)
-**Issue:** The new header says "a repeated disabled update writes nothing". The case checks this with `unchangedBytes: (await readFile(stateJsonPath, "utf8")) === refreshedBytes`. An atomic rewrite of the same content passes that check. `test/integration/workflow-kind-inversion.test.ts:201-204` says this directly: "Byte equality alone is satisfied by an atomic rewrite of identical content, which is a write". That file uses inode and `mtimeNs` for the same claim. So the header claims more than the case checks, which the phase brief forbids. The "write that must not happen" class needs a check that can see a write. The test title at `:214` has the same wording.
+**File:** `test/integration/mcp-builtin-encoding-conformance.test.ts:10-12` (cases at `:199-259`)
+**Issue:** The header says: "Pi's own `validateMcpServerConfig` accepts each config the table builds and returns it with the same JSON". In this header, "the table" means the shared expansion table (`:6-7`, and again at `:19`: "the table, the PI-1 and PI-2 cases, and the validator check"). No expansion row reaches `validateMcpServerConfig`. The validator runs only on the three hand-written `VALID_SERVERS` configs (`:199-225`) and on one refused url (`:241`). A wrong encoding that gives a table config Pi refuses, such as a malformed header object from a `headers` row, still passes every case. So the header claims more than the cases assert, which this phase set out to remove. The sentence was already there before this phase, and iteration 1 did not flag it.
 **Fix:** Do one of these:
 
-- Change the header and the title to what the case checks: "a repeated disabled update leaves the bytes of state.json as they were". `mcp-verdict-list.test.ts:7-8` already uses this wording.
-- Backdate `state.json` before the repeated update, then compare a `{ bytes, inode, mtimeNs }` snapshot, as `workflow-kind-inversion.test.ts:205-216` does.
+- Say what the cases check: "Pi's own `validateMcpServerConfig` returns a stdio config, a remote config with Claude Code's OAuth fields, and a direct-exposure config with the same JSON, so a re-registration does not reconnect (P2-DC-08), and it refuses a url that keeps an unset `${NAME}`."
+- Make the claim true: in the `env`/`headers` loop, also assert that `JSON.stringify(piMcpServers.validateMcpServerConfig(SERVER_NAME, config))` equals `JSON.stringify(config)`.
 
-### WR-04: The `mcp-status-conformance` header says scenarios cover ASTAT-01, yet the ASTAT-01 case stays with no stated reason
+### WR-03: The concurrent first-run migration case claims "exactly one process writes the config", but no assertion can see that
 
-**File:** `test/integration/mcp-status-conformance.test.ts:11-14` (case at `:84`)
-**Issue:** The header says: "ASTAT-01 is also in `features/mcp-server/companion-missing.feature` and `features/mcp-server/project-scope.feature`; the shutdown snapshot and the drift guard need the adapter's own code." By the charter, the first case (ASTAT-01 through Pi's event bus, `:84-142`) must then either go after a break or name what it observes that the scenarios do not. The header does neither.
+**File:** `test/integration/load-reconcile-race.test.ts:414` (title), `:28-29` (header bullet "captures legacy autoupdate exactly once")
+**Issue:** The case asserts these things:
 
-This case also runs no adapter code. It emits a snapshot that the test itself builds, and it uses only the adapter's constants, which case 3 (`:183`) already pins. What the case adds is the whole rendered `info` text in both scopes, with the user row `(overridden by project scope)` under pi-mcp-adapter. `features/mcp-server/builtin-status.feature:191` shows that row only for Pi's built-in MCP. The header does not name this.
-**Fix:** Name what case 1 adds, for example: "the scenarios show the adapter's `connected` status in one scope; only this case compares the whole `info` text of both scopes, with the user row overridden by the project scope under pi-mcp-adapter". If that is not worth keeping, delete the case after a break that fails one of those scenarios.
+- Both children exit 0.
+- The config exists and has one marketplace key, `mp-legacy`.
+- That key has `autoupdate: true`.
+- `state.json` still records `mp-legacy`.
 
-### WR-05: The charter has no place for the existing `test/architecture/` category
-
-**File:** `.agents/skills/typescript-unit-tests/SKILL.md:26-38`, `.agents/skills/cucumber/SKILL.md:10-22`, `.planning/codebase/TESTING.md:187-197`
-**Issue:** The charter lists three places for a case: a scenario, the unit pair of one source module, or `test/integration/`. It ends with "A case that fits none of these classes moves to the unit test of its source pair."
-
-Some cases check an invariant across modules and have no single source pair. TESTING.md documents a fourth home for them, `test/architecture/` (`TESTING.md:185`: "a distinct category from unit tests"). For example, `test/architecture/config-state-consistency.test.ts` runs `planReconcile` over what the config writers produce. `npm run test:unpaired` runs this category. The charter's last bullet would send such a case to "the unit test of its source pair", which does not exist. It could also push a planner to break up a cross-module check, as this phase did when it replaced the migration-to-planner round trip with a hand-written config. The same section of TESTING.md now holds both texts, so the conflict is inside one file.
-**Fix:** Add one bullet to all three copies, for example: "A structural invariant across the whole source tree, or a contract between modules with no single source pair, is an architecture test under `test/architecture/`." Then let the last bullet name both places: "moves to the unit test of its source pair, or to `test/architecture/` when no single pair owns it."
+If both processes ran the `absent` arm and both wrote the same config, every one of these assertions would still pass. `migrateFirstRunConfig`'s result is thrown away at `read-pass.ts:317`. No child reports which arm it took, and the case does not compare the inode or the mtime of the file. So "exactly one process writes the config, the other observes 'valid' and short-circuits" and "exactly once" are claims that the case cannot make fail. This header was rewritten in this phase, and the `workflow-kind-inversion.test.ts:201-204` precedent ("byte equality ... is satisfied by an atomic rewrite of identical content") applies here as well.
+**Fix:** Reword the title and the bullet to what is asserted, for example "two concurrent first applies leave one config whose single marketplace carries the legacy autoupdate". If the one-writer claim matters, make it observable: have the child report the `migrated` arm of `migrateFirstRunConfig` over IPC through a seam it already holds, and assert that exactly one child reports `migrated: true`.
 
 ## Info
 
-### IN-01: A leftover `parent-wait` hook and its comment describe a deleted case
+### IN-01: The `mcp-status-conformance` case 1 is kept for a missing scenario, not because a scenario cannot see it
 
-**File:** `test/integration/subagent-hook-ownership.test.ts:52-59`
-**Issue:** Test 1 was deleted, and with it the only parent prompt. The one remaining case never prompts the main session (`:173-216`, which only runs `session.start("main")`). So `parent-wait` (UserPromptSubmit) is published but never runs. The comment "One waiting hook per session: the parent's prompt, the sibling's bash call, and the child's read each start one" no longer describes the file.
-**Fix:** Remove the `parent-wait` row, and change the comment so that it describes only the sibling and child hooks.
+**File:** `test/integration/mcp-status-conformance.test.ts:11-17` (case at `:84-142`)
+**Issue:** The new header says that only this case compares the whole `info` text of both scopes, with the row `(overridden by project scope)` under pi-mcp-adapter. That row is user-visible `info` output. A scenario under the adapter profile could check it the same way that `builtin-status.feature:191` checks it under the built-in profile. The charter keeps a case in integration "only when neither a scenario nor a unit test can observe what it checks". The header now names what the case adds, as iteration 1 asked. But the reason it gives is a scenario that does not exist, not one that cannot exist. The case runs no adapter code: the test builds the snapshot itself, and the drift guard of case 3 already pins the constants.
+**Fix:** Add an adapter-profile twin of `builtin-status.feature:191`. Then delete case 1 after a break that makes the new scenario fail. If you keep it, record why in a decision.
 
-### IN-02: The mirror-seeding header says "no git call", the wording just fixed in `standalone-prune`
+### IN-02: The charter's `test/architecture/` bullet does not describe the harness tests that the cucumber rules put there
 
-**File:** `test/integration/marketplace-add-seed-mirrors.test.ts:6`
-**Issue:** The header says "a path marketplace seeds with no git call". The case checks `gitBoundary.state.calls`, which records every git operation except `listRemotes` (`test/platform/git-ops-fake.ts:248-257`, "no call ledger"). This phase changed `standalone-prune.test.ts:6-9` for exactly this imprecision (Phase 4 IN-03).
-**Fix:** Reword as in `standalone-prune`, for example: "a path marketplace seeds with none of the git calls the double records".
+**File:** `.agents/skills/typescript-unit-tests/SKILL.md:32`, `.agents/skills/cucumber/SKILL.md:16`, `.planning/codebase/TESTING.md:191`
+**Issue:** The cucumber rules put harness tests in `test/architecture/`: `pi-tui-screen.test.ts`, `github-device-flow-redirect.test.ts`, and `hermetic-git-environment.test.ts` (`.agents/skills/cucumber/rules/layout.md:139`, `world-and-stand-ins.md:41`, `:56`, `:151`). `pi-tui-screen.test.ts` pins one module, `features/lib/pi-tui.ts`. That is neither "a structural invariant across the whole source tree" nor "a contract between modules". The last bullet's fallback ("or to `test/architecture/` when no single source pair owns it") still sends these tests to the right place. But the bullet that defines the category does not describe them, and neither does TESTING.md's "Architecture Tests" paragraph.
+**Fix:** Extend the bullet in all three copies, for example "..., or a test of a cucumber harness module under `features/lib/`, is an architecture test under `test/architecture/`."
 
-### IN-03: The header says "first loads", but the children run `applyReconcile`
+### IN-03: The Internal class uses two words for one gate, "no command shows" and "no step shows"
 
-**File:** `test/integration/load-reconcile-race.test.ts:5-6`
-**Issue:** The header calls the second case "the first-run migration (MIG-01, D-13) of two concurrent first loads". Each child calls `applyReconcile` (`load-reconcile-race-child.ts:31`, `:70`), not the load. The migration runs in the read pass that both share, so the behavior is the same. The word "loads" still names an entry point that the case does not call, right beside the pointer to the load scenario in `config-migration.feature`.
-**Fix:** Write "two concurrent first applies (their shared read pass runs the MIG-01 migration)".
+**File:** `.agents/skills/typescript-unit-tests/SKILL.md:36` (same text in `cucumber/SKILL.md:20` and `TESTING.md:195`)
+**Issue:** The first sentence admits "a stored record field that no command shows". The new second sentence admits earlier-release state "only for a stored field that no step shows". Some steps read stored fields that no command prints, such as `the installation record of the {word} scope holds these options of {string}:` and `... holds these agents of {string}:` (`features/step_definitions/plugin/installation.steps.ts:508`, `:529`). So the two tests are not the same. A field that no command shows but a step reads passes the first sentence and fails the charter's opening gate. The cited rule file also lists only three earlier-release writers (`world-and-stand-ins.md:45`). The suite has more: the agents-index rows, the agents-folder file, the record with no `mcpServerConfigs`, and the record with no options. So "the earlier-release writers of the cucumber world rebuild it" points at a partial list.
+**Fix:** Use "no step shows" in both sentences. Separately, list the four other earlier-release writers in `world-and-stand-ins.md:45`.
 
-### IN-04: The doc's source note leaves out the file that refuses the launch
+### IN-04: The deny-list pin cites the encoding conformance file, which does not pin the lists
 
-**File:** `docs/mcp-compatibility.md:770`
-**Issue:** "(read in source, `dist/metadata-cache.js` and `src/runs/shared/mcp-direct-tool-allowlist.js`). From the same source, an agent with a plugin MCP grant then does not launch." The two cited files show only that the hashes differ, and that a stale cache leaves the selectors unresolved. The throw that stops the launch is in pi-subagents 0.88.1 `src/runs/shared/child-tool-plan.js:234-238`. Line 762 of the same doc cites that file for the same kind of claim.
-**Fix:** Add `src/runs/shared/child-tool-plan.js` to the source note, or write "pi-subagents' `child-tool-plan.js` then refuses to launch an agent with a plugin MCP grant".
+**File:** `docs/mcp-compatibility.md:826`
+**Issue:** The line reads: "The lists are pinned until a later release checks them again (`test/integration/mcp-builtin-encoding-conformance.test.ts`)." `test/domain/claude-credential-denylist.test.ts:48`, `:86`, and `:122` pin the lists: the name counts and SHA-256 digests of the Claude Code 2.1.291 sets. After WR-01, the conformance file holds no `url` deny-list row (`AWS_SESSION_TOKEN`, `GIT_CONFIG_VALUE_0`); those rows moved to `builtin-entry.test.ts`. The line was there before this phase, but this phase edited the neighboring claims about the same test.
+**Fix:** Cite `test/domain/claude-credential-denylist.test.ts`.
 
-### IN-05: The charter's "state that only an earlier release wrote" overlaps the cucumber earlier-release writers
+### IN-05: The header of `expansion-cases.ts` does not name its new consumers
 
-**File:** `.agents/skills/cucumber/SKILL.md:19` (same text in the other two copies)
-**Issue:** The Internal class lists "state that only an earlier release wrote". The same skill already gives scenarios writers for that state: `rewriteStateAsRelease()` for 0.4.3, 0.6.0, and 0.19.2, and `writeLegacyMcpConfig()` (`.agents/skills/cucumber/rules/world-and-stand-ins.md:45`). The gate earlier in the bullet ("only when neither a scenario nor a unit test can observe") limits the class. But a reader who scans the class list can take "earlier-release state" as a reason for integration by itself.
-**Fix:** Qualify the class, for example: "state that only an earlier release wrote and that no earlier-release writer of the cucumber world rebuilds".
+**File:** `test/bridges/mcp/expansion-cases.ts:5-10`
+**Issue:** The header names only `substitute.test.ts` and the adapter conformance test as consumers of the rows. It does not name `builtin-entry.test.ts`, which since `7d76c64` checks `claudeOutput` for the fields Pi does not resolve, or `mcp-builtin-encoding-conformance.test.ts`. `ROADMAP.md:360` also still says the file "serves only the conformance tests", which was already false for `substitute.test.ts`. ROADMAP is out of the review set and is noted here only.
+**Fix:** Add one sentence: "The built-in unit test and the Pi conformance test run each row through `builtinServerConfig` and expect `claudeOutput`."
+
+### IN-06: `SecretField` and `isSecret` name the fields Pi resolves, not secrets
+
+**File:** `test/integration/mcp-builtin-encoding-conformance.test.ts:75-76`, `:103-107`
+**Issue:** The doc comment on `SecretField` says "The fields whose values Pi resolves when it connects". The type includes `env-builtin`, the injected `CLAUDE_PLUGIN_ROOT`, which is not a secret. The name is left over from the removed `secret` flag. The unit side calls the complement `WrittenAsIsField`, so the two files name one split in two ways.
+**Fix:** Rename the type to `PiResolvedField` and the guard to `isPiResolved`.
 
 ---
 
-_Reviewed: 2026-11-23T04:57:42Z_
+_Reviewed: 2026-11-23T05:21:30Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
