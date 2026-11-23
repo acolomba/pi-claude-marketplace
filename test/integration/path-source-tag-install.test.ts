@@ -8,8 +8,8 @@
 // marketplace checkout never reaches the tag clone under `plugin-clones/`.
 // The planted files are not plugin components, so only that directory on
 // disk would hold them, and no command lists it. D-07-04: two cascade members
-// that read one marketplace clone's tags leave its `.git/index` and
-// `.git/HEAD` byte for byte as they were, which no command shows either.
+// that read one marketplace clone's tags, with its HEAD past them, leave its
+// `.git/HEAD`, `.git/index`, and tracked files byte for byte as they were.
 // What a user sees is in `features/plugin/install-dependencies.feature`: a
 // dependency installed from the release tag its version constraint selects
 // while the marketplace has moved past it (TAGS-01, TAGS-03), and its current
@@ -222,7 +222,8 @@ test("CR-01: an untracked file in the marketplace root does not leak into the ma
 /**
  * Builds a real git repository marketplace declaring TWO independently-tagged
  * path-source plugins (`formatter--v1.0.0`, `linter--v1.0.0`) and one
- * dependent plugin `app` constraining both.
+ * dependent plugin `app` constraining both. A second commit on top bumps
+ * both to `2.0.0`, so the checkout's HEAD is past the tags.
  */
 async function buildTwoTagMarketplace(cwd: string): Promise<{
   readonly marketplaceRoot: string;
@@ -286,7 +287,53 @@ async function buildTwoTagMarketplace(cwd: string): Promise<{
   await git.tag({ fs, dir: marketplaceRoot, ref: "formatter--v1.0.0", object: tagOid });
   await git.tag({ fs, dir: marketplaceRoot, ref: "linter--v1.0.0", object: tagOid });
 
+  // Advance the checkout PAST both tags, so a checkout of a tag in the
+  // marketplace root itself changes the index and the work-tree files.
+  await writeFile(
+    path.join(formatterDir, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "formatter", version: "2.0.0" }),
+  );
+  await writeFile(
+    path.join(linterDir, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "linter", version: "2.0.0" }),
+  );
+  await git.add({
+    fs,
+    dir: marketplaceRoot,
+    filepath: "plugins/formatter/.claude-plugin/plugin.json",
+  });
+  await git.add({
+    fs,
+    dir: marketplaceRoot,
+    filepath: "plugins/linter/.claude-plugin/plugin.json",
+  });
+  await git.commit({ fs, dir: marketplaceRoot, message: "release 2.0.0", author: AUTHOR });
+
   return { marketplaceRoot, tagOid };
+}
+
+/**
+ * The bytes of the marketplace checkout that a checkout of a tag in place
+ * would change while HEAD is past the tag: `.git/HEAD`, `.git/index`, and
+ * every tracked work-tree file.
+ */
+async function marketplaceCheckoutSnapshot(marketplaceRoot: string): Promise<{
+  readonly head: Buffer;
+  readonly index: Buffer;
+  readonly files: Readonly<Record<string, string>>;
+}> {
+  const tracked = await git.listFiles({ fs, dir: marketplaceRoot, ref: "main" });
+  const files = await Promise.all(
+    tracked.map(
+      async (filepath) =>
+        [filepath, await readFile(path.join(marketplaceRoot, filepath), "utf8")] as const,
+    ),
+  );
+  return {
+    head: await readFile(path.join(marketplaceRoot, ".git", "HEAD")),
+    index: await readFile(path.join(marketplaceRoot, ".git", "index")),
+    files: Object.fromEntries(files),
+  };
 }
 
 test("TAGS-01: two cascade members resolving against the SAME marketplace clone leave its git state untouched", async (t) => {
@@ -294,8 +341,7 @@ test("TAGS-01: two cascade members resolving against the SAME marketplace clone 
   // named path-source members against the SAME marketplace clone's tags.
   const environment = await createHermeticEnvironment(t, "path-source-tag-concurrency-");
   const { marketplaceRoot, tagOid } = await buildTwoTagMarketplace(environment.cwd);
-  const before = await readFile(path.join(marketplaceRoot, ".git", "index"));
-  const beforeHead = await readFile(path.join(marketplaceRoot, ".git", "HEAD"));
+  const before = await marketplaceCheckoutSnapshot(marketplaceRoot);
   const locations = locationsFor("project", environment.cwd);
   const addCtx = makeCtx(environment.cwd);
   const installCtx = makeCtx(environment.cwd);
@@ -338,8 +384,8 @@ test("TAGS-01: two cascade members resolving against the SAME marketplace clone 
   assert.strictEqual(formatterRecord.resolvedSha, tagOid);
   assert.strictEqual(linterRecord.resolvedSha, tagOid);
 
-  // The marketplace clone's `.git/index` and `.git/HEAD` are byte-identical
-  // to the pre-run snapshot -- two members read it, and it stayed read-only.
-  assert.deepStrictEqual(await readFile(path.join(marketplaceRoot, ".git", "index")), before);
-  assert.deepStrictEqual(await readFile(path.join(marketplaceRoot, ".git", "HEAD")), beforeHead);
+  // The marketplace checkout's `.git/HEAD`, `.git/index`, and tracked files
+  // are byte-identical to the pre-run snapshot, with HEAD past the tags --
+  // two members read it, and it stayed read-only.
+  assert.deepStrictEqual(await marketplaceCheckoutSnapshot(marketplaceRoot), before);
 });
