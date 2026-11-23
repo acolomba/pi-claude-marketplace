@@ -30,6 +30,14 @@
  * GitHub source clones from it (GHB-01). `Before()` resets the host with Pi
  * and checks that it holds no repository, arm, request, connection, or CGI
  * child (HOST-02, HOST-03).
+ *
+ * The run starts the SSH stand-in right after the git host, and every Pi of
+ * the run, armed or not, starts with the stand-in's stub `ssh` first on its
+ * PATH, so git's SSH transport and an ssh probe reach the stub and never a
+ * real ssh, the developer's SSH agent, or their keys. The stub serves the git
+ * host's repositories over SSH. `Before()` resets the stand-in with the git
+ * host and checks that it registers no host and recorded no launch
+ * (SG-HRN-03, HOST-02).
  */
 
 import assert from "node:assert/strict";
@@ -51,17 +59,20 @@ import {
 import { runCommand, startSession } from "../lib/pi-commands.ts";
 import { PiProcess } from "../lib/pi-process.ts";
 import { listedCommands } from "../lib/pi-rpc.ts";
+import { SshGitHost } from "../lib/ssh-git-host/host.ts";
 import { harnessDirectory } from "../lib/turn-records.ts";
 
 import type { McpImplementation, McpProfile } from "../lib/mcp-implementation.ts";
 import type { RpcGitEnvironment, RpcProfile, RpcSandbox } from "../lib/pi-process.ts";
 
-/** The Pi process, the sandbox it runs in, and its git host, which last the whole run. */
+/** The Pi process, the sandbox it runs in, and its git and SSH hosts, which last the whole run. */
 export interface PiRun {
   readonly root: string;
   readonly sandbox: RpcSandbox;
   readonly marketplacesRoot: string;
   readonly gitHost: HttpsGitHost;
+  /** The SSH stand-in whose stub `ssh` is first on every Pi's PATH (SG-HRN-03). */
+  readonly sshHost: SshGitHost;
   /** The git and trust environment every Pi of the run starts with. */
   readonly piEnvironment: RpcGitEnvironment;
   /** The MCP implementation that the profile names and the shared Pi runs (DUAL-01). */
@@ -136,6 +147,7 @@ BeforeAll({ timeout: RUN_START_TIMEOUT_MS }, async (): Promise<void> => {
   // same spelling and `{home}` matches the paths Pi reports.
   const root = await realpath(await mkdtemp(path.join(tmpdir(), "pi-cm-features-")));
   let gitHost: HttpsGitHost | undefined = undefined;
+  let sshHost: SshGitHost | undefined = undefined;
   let pi: PiProcess | undefined = undefined;
   try {
     const sandbox = {
@@ -147,15 +159,19 @@ BeforeAll({ timeout: RUN_START_TIMEOUT_MS }, async (): Promise<void> => {
       Object.values(sandbox).map((location) => mkdir(location, { recursive: true })),
     );
     gitHost = await HttpsGitHost.start(path.join(root, "git-host"));
+    sshHost = await SshGitHost.start(path.join(root, "ssh-host"), {
+      repositoriesRoot: gitHost.repositoriesRoot,
+    });
     // The global git config is absent until a scenario writes it (DRV-03).
     // System git trusts the git host through the same certificate that Node
-    // trusts through NODE_EXTRA_CA_CERTS (SG-HRN-02).
+    // trusts through NODE_EXTRA_CA_CERTS (SG-HRN-02). The stub `ssh` comes
+    // first on PATH (SG-HRN-03).
     const piEnvironment = {
       NODE_EXTRA_CA_CERTS: gitHost.certificatePath,
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: path.join(sandbox.home, ".gitconfig"),
       GIT_SSL_CAINFO: gitHost.certificatePath,
-      PATH: process.env.PATH ?? "",
+      PATH: sshHost.searchPath(),
       PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: `https://${gitHost.address}`,
     } satisfies RpcGitEnvironment;
     let piProfile: RpcProfile | undefined = undefined;
@@ -191,6 +207,7 @@ BeforeAll({ timeout: RUN_START_TIMEOUT_MS }, async (): Promise<void> => {
       // `{home}`.
       marketplacesRoot: path.join(sandbox.home, "marketplaces"),
       gitHost,
+      sshHost,
       piEnvironment,
       mcpImplementation,
       piProfile,
@@ -202,9 +219,11 @@ BeforeAll({ timeout: RUN_START_TIMEOUT_MS }, async (): Promise<void> => {
     // root, which holds the host's private key once it has started, behind.
     const startedPi = pi;
     const startedHost = gitHost;
+    const startedSshHost = sshHost;
     const failures = await settleInOrder([
       () => startedPi?.stop() ?? Promise.resolve(),
       () => startedHost?.close() ?? Promise.resolve(),
+      () => startedSshHost?.close() ?? Promise.resolve(),
       () => rm(root, { recursive: true, force: true }),
     ]);
     throw failures.length === 0
@@ -230,6 +249,7 @@ Before(async (): Promise<void> => {
   const stubPids =
     run.mcpImplementation === "builtin" ? await stubPidsIn(harnessDirectory(run.sandbox.home)) : [];
   await run.gitHost.reset();
+  await run.sshHost.reset();
   // Empties each sandbox directory but keeps it, because Pi holds it as HOME,
   // agent directory, or cwd.
   const entries = await Promise.all(
@@ -261,6 +281,7 @@ Before(async (): Promise<void> => {
       payloads,
       marketplaces: listed.marketplaces,
       gitHost: await run.gitHost.snapshot(),
+      sshHost: await run.sshHost.snapshot(),
       mcpImplementation: await runningMcpImplementation(run.pi),
     },
     {
@@ -275,6 +296,7 @@ Before(async (): Promise<void> => {
         connections: 0,
         children: 0,
       },
+      sshHost: { hosts: [], launches: [] },
       mcpImplementation: run.mcpImplementation,
     },
   );
@@ -290,6 +312,7 @@ AfterAll(async (): Promise<void> => {
   const failures = await settleInOrder([
     () => run.pi.stop(),
     () => run.gitHost.close(),
+    () => run.sshHost.close(),
     () => rm(run.root, { recursive: true, force: true }),
   ]);
   if (failures.length > 0) {
