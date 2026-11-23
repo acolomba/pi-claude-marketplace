@@ -48,6 +48,8 @@
 // remote-helper aliases, and the lane's `-c` pairs close the rest. Unlike
 // upstream's lane, it keeps the user's git configuration. No production
 // caller uses the local lane until the clone transport moves to system git.
+// The network lane removes the user's GIT_ALLOW_PROTOCOL, which could
+// re-allow `ext`, and keeps its narrowing as `-c` bans (D-SG-05).
 //
 // SG-PRC-05: a run that exits with a code its request does not allow rejects
 // with the kind platform/git-failure-kind.ts reads from the exit code and the
@@ -191,8 +193,9 @@ const HOOK_NAMES = [
 // alternate repository itself.
 const ALTERNATE_REFS_COMMAND = `f() { git --git-dir="$1" for-each-ref --format='%(objectname)'; }; f`;
 
-// D-SG-05: Claude Code's `-c` pairs, in its order, plus `credential.interactive`
-// and an empty `init.templateDir`, so a template directory copies no hook.
+// D-SG-05: Claude Code's `-c` pairs, in its order, through the transport bans.
+// The network lane's bans from the user's GIT_ALLOW_PROTOCOL follow them, and
+// PIN_PAIRS ends the list.
 function configPairs(hooksPath: string): readonly string[] {
   return [
     "core.fsmonitor=",
@@ -211,12 +214,21 @@ function configPairs(hooksPath: string): readonly string[] {
     "protocol.git.allow=never",
     "protocol.ftp.allow=never",
     "protocol.ftps.allow=never",
-    "init.defaultRefFormat=files",
-    "core.longpaths=true",
-    "credential.interactive=false",
-    "init.templateDir=",
   ];
 }
+
+// D-SG-05: the end of Claude Code's `pinArgs`, plus `credential.interactive`
+// and an empty `init.templateDir`, so a template directory copies no hook.
+const PIN_PAIRS = [
+  "init.defaultRefFormat=files",
+  "core.longpaths=true",
+  "credential.interactive=false",
+  "init.templateDir=",
+] as const;
+
+// D-SG-05: the transports the network lane bans when the user's
+// GIT_ALLOW_PROTOCOL leaves them out, in Claude Code's order.
+const USER_PROTOCOL_NAMES = ["https", "http", "ssh", "file"] as const;
 
 // SG-PRC-01, E7: how a subcommand takes operands, from git 2.43's answers.
 // `clone`, `fetch`, `ls-remote`, `config`, `tag`, and `update-ref` accept
@@ -283,12 +295,33 @@ const LOCAL_LANE_PAIRS = [
   "protocol.file.allow=never",
 ] as const;
 
-// What a lane adds to every command on it.
+// What a lane does to every command on it.
 interface LaneRules {
+  /** Removed in every spelling. */
+  readonly removed: readonly string[];
   /** Set over the user's values, every spelling replaced. */
   readonly variables: Readonly<Record<string, string>>;
+  /** The `-c` bans between the transport bans and PIN_PAIRS. */
+  readonly bans: (base: NodeJS.ProcessEnv, rules: PlatformRules) => readonly string[];
   /** The `-c` pairs after the D-SG-05 pairs. */
   readonly pairs: readonly string[];
+}
+
+// D-SG-05, Q14 `nn`: a GIT_ALLOW_PROTOCOL that names `ext` lets git run an
+// `ext::` command despite `-c protocol.ext.allow=never` (verified on git
+// 2.43). So the network lane removes the variable and bans each of
+// USER_PROTOCOL_NAMES that a spelling's colon list leaves out, comparing
+// names exactly, as git does. git reads an empty list as allowing nothing.
+// An unset variable adds no ban, nor does an undefined value, which Node
+// leaves out of the child's environment.
+function userProtocolBans(base: NodeJS.ProcessEnv, rules: PlatformRules): string[] {
+  const lists = spellingsOf(base, "GIT_ALLOW_PROTOCOL", rules)
+    .map((key) => base[key])
+    .filter((value) => value !== undefined)
+    .map((value) => value.split(":"));
+  return USER_PROTOCOL_NAMES.filter((name) => lists.some((list) => !list.includes(name))).map(
+    (name) => `protocol.${name}.allow=never`,
+  );
 }
 
 // D-SG-02: a user's `protocol.<name>.allow=always` beats
@@ -297,15 +330,22 @@ interface LaneRules {
 // user's config, unlike upstream's lane, which strips it.
 const LANES: Readonly<Record<GitLane, LaneRules>> = {
   local: {
+    removed: [],
     variables: {
       GIT_ALLOW_PROTOCOL: "/",
       GIT_SSH_COMMAND: "false",
       GIT_NO_LAZY_FETCH: "1",
       GIT_LFS_SKIP_SMUDGE: "1",
     },
+    bans: () => [],
     pairs: LOCAL_LANE_PAIRS,
   },
-  network: { variables: {}, pairs: [] },
+  network: {
+    removed: ["GIT_ALLOW_PROTOCOL"],
+    variables: {},
+    bans: userProtocolBans,
+    pairs: [],
+  },
 };
 
 // The variables that point git at another repository, and GIT_TEMPLATE_DIR,
@@ -439,7 +479,7 @@ function gitEnvironment(
   cwd: string,
 ): NodeJS.ProcessEnv {
   const env = { ...base };
-  for (const name of REMOVED_VARIABLES) {
+  for (const name of [...REMOVED_VARIABLES, ...LANES[lane].removed]) {
     removeVariable(env, name, rules);
   }
 
@@ -482,16 +522,16 @@ function subcommandWords(request: GitRequest): readonly string[] | undefined {
   return rule.accepts(options, operands) ? rule.words(options, operands) : undefined;
 }
 
+// A pure function of the request, the base environment, and the platform.
 function gitArguments(
   request: GitRequest,
+  base: NodeJS.ProcessEnv,
   rules: PlatformRules,
   words: readonly string[],
 ): string[] {
-  return [
-    ...[...rules.config, ...LANES[request.lane].pairs].flatMap((pair) => ["-c", pair]),
-    request.subcommand,
-    ...words,
-  ];
+  const lane = LANES[request.lane];
+  const pairs = [...rules.config, ...lane.bans(base, rules), ...PIN_PAIRS, ...lane.pairs];
+  return [...pairs.flatMap((pair) => ["-c", pair]), request.subcommand, ...words];
 }
 
 function gitMissing(
@@ -726,7 +766,7 @@ export function createGitProcess(options: GitProcessOptions): GitProcess {
       { spawn: options.spawn, host },
       {
         command: git,
-        args: gitArguments(request, rules, words),
+        args: gitArguments(request, options.env, rules, words),
         cwd,
         env: gitEnvironment(options.env, rules, request.lane, cwd),
         timeoutMs: request.timeoutMs,

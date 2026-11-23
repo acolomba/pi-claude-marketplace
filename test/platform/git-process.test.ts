@@ -41,9 +41,10 @@ const FILL: GitRequest = {
   timeoutMs: 5_000,
 };
 
-// D-SG-05: the `-c` pairs of every command, in their order.
-function hardening(hooksPath: string): string[] {
-  return `core.fsmonitor=
+// D-SG-05: the `-c` pairs of every command, in their order, with the
+// network lane's `bans` after the transport bans.
+function hardening(hooksPath: string, bans: readonly string[] = []): string[] {
+  const pairs = `core.fsmonitor=
 core.hooksPath=${hooksPath}
 core.askPass=
 protocol.ext.allow=never
@@ -89,9 +90,9 @@ protocol.ftps.allow=never
 init.defaultRefFormat=files
 core.longpaths=true
 credential.interactive=false
-init.templateDir=`
-    .split("\n")
-    .flatMap((pair) => ["-c", pair]);
+init.templateDir=`.split("\n");
+  const pins = pairs.indexOf("init.defaultRefFormat=files");
+  return [...pairs.slice(0, pins), ...bans, ...pairs.slice(pins)].flatMap((pair) => ["-c", pair]);
 }
 
 // The values every child gets on POSIX, besides PATH and the ceiling.
@@ -352,6 +353,8 @@ interface LaneFixture {
   readonly bare: string;
   /** The module, with the case's HOME and its permissive user config. */
   readonly git: GitProcess;
+  /** The same module with `variables` and `config` over its base environment. */
+  readonly gitWith: (variables: NodeJS.ProcessEnv, config?: string) => Promise<GitProcess>;
 }
 
 // A committed repository with an `origin`, a `v1.0.0` tag, and a `feature`
@@ -364,15 +367,22 @@ async function laneFixture(t: TestContext): Promise<LaneFixture> {
   await repository.run("remote", "add", "origin", bare);
   await repository.run("tag", "v1.0.0");
   await repository.run("branch", "feature");
-  const configPath = path.join(root, "gitconfig");
-  await writeFile(configPath, PERMISSIVE_CONFIG);
-  const git = createGitProcess({
-    spawn: NODE_SPAWN,
-    host: { ...NODE_GIT_HOST, tmpdir: () => root },
-    env: { ...hermeticGitEnvironment(root), GIT_CONFIG_GLOBAL: configPath },
-    killGraceMs: KILL_GRACE_MS,
-  });
-  return { root, repository, bare, git };
+  const gitWith = async (variables: NodeJS.ProcessEnv, config = ""): Promise<GitProcess> => {
+    const configPath = path.join(await mkdtemp(path.join(root, "gitconfig-")), "config");
+    await writeFile(configPath, `${PERMISSIVE_CONFIG}${config}`);
+    return createGitProcess({
+      spawn: NODE_SPAWN,
+      host: { ...NODE_GIT_HOST, tmpdir: () => root },
+      env: {
+        ...hermeticGitEnvironment(root),
+        GIT_CONFIG_GLOBAL: configPath,
+        ...variables,
+      },
+      killGraceMs: KILL_GRACE_MS,
+    });
+  };
+
+  return { root, repository, bare, git: await gitWith({}), gitWith };
 }
 
 describe("createGitProcess", () => {
@@ -1355,7 +1365,9 @@ describe("createGitProcess", () => {
     });
     await assert.rejects(access(helper.record), { code: "ENOENT" });
   });
+});
 
+describe("createGitProcess operands and lanes", () => {
   for (const { label, request, words } of [
     {
       label: "clone",
@@ -1825,6 +1837,287 @@ describe("createGitProcess", () => {
     // assert
     await assert.rejects(listed, rejectsAs("failed", 128));
     await assert.rejects(access(program.record), { code: "ENOENT" });
+  });
+
+  for (const { label, variables, bans } of [
+    { label: "an unset GIT_ALLOW_PROTOCOL", variables: {}, bans: [] },
+    {
+      label: "a GIT_ALLOW_PROTOCOL key whose value is undefined",
+      variables: { GIT_ALLOW_PROTOCOL: undefined },
+      bans: [],
+    },
+    {
+      label: "GIT_ALLOW_PROTOCOL=https:ssh",
+      variables: { GIT_ALLOW_PROTOCOL: "https:ssh" },
+      bans: ["protocol.http.allow=never", "protocol.file.allow=never"],
+    },
+    {
+      label: "GIT_ALLOW_PROTOCOL=ext:https",
+      variables: { GIT_ALLOW_PROTOCOL: "ext:https" },
+      bans: ["protocol.http.allow=never", "protocol.ssh.allow=never", "protocol.file.allow=never"],
+    },
+    {
+      label: "an empty GIT_ALLOW_PROTOCOL",
+      variables: { GIT_ALLOW_PROTOCOL: "" },
+      bans: [
+        "protocol.https.allow=never",
+        "protocol.http.allow=never",
+        "protocol.ssh.allow=never",
+        "protocol.file.allow=never",
+      ],
+    },
+    {
+      label: "GIT_ALLOW_PROTOCOL=HTTPS, which no name matches exactly",
+      variables: { GIT_ALLOW_PROTOCOL: "HTTPS" },
+      bans: [
+        "protocol.https.allow=never",
+        "protocol.http.allow=never",
+        "protocol.ssh.allow=never",
+        "protocol.file.allow=never",
+      ],
+    },
+    {
+      label: "GIT_ALLOW_PROTOCOL=https::file, with an empty segment",
+      variables: { GIT_ALLOW_PROTOCOL: "https::file" },
+      bans: ["protocol.http.allow=never", "protocol.ssh.allow=never"],
+    },
+  ]) {
+    test(`D-SG-05: turns ${label} into network-lane bans`, async () => {
+      // arrange
+      const { git, control, started } = createFakeGit({ PATH: "/usr/bin", ...variables });
+
+      // act
+      const pending = git.run(FILL);
+      await started;
+      control.close(0);
+      await pending;
+
+      // assert
+      const [launch] = control.launches();
+      assert.deepStrictEqual(
+        [launch?.[1], launch?.[2].env],
+        [
+          [...hardening("/dev/null", bans), "credential", "fill"],
+          { ...POSIX_FORCED, PATH: "/usr/bin", GIT_CEILING_DIRECTORIES: "/" },
+        ],
+      );
+    });
+  }
+
+  test("D-SG-05: on Windows removes every spelling of GIT_ALLOW_PROTOCOL and bans what each omits", async () => {
+    // arrange
+    const { git, control, started } = createFakeGit(
+      {
+        Path: String.raw`C:\Git\cmd`,
+        git_allow_protocol: "https:ssh:file",
+        Git_Allow_Protocol: "https:ssh:http",
+      },
+      {
+        platform: "win32",
+        files: [String.raw`C:\Git\cmd\git.exe`],
+        cwd: String.raw`C:\work\project`,
+        tmpdir: String.raw`C:\Temp`,
+      },
+    );
+
+    // act
+    const pending = git.run(FILL);
+    await started;
+    control.close(0);
+    await pending;
+
+    // assert
+    const [launch] = control.launches();
+    assert.deepStrictEqual(
+      [launch?.[1], launch?.[2].env],
+      [
+        [
+          ...hardening(String.raw`\\.\NUL`, [
+            "protocol.http.allow=never",
+            "protocol.file.allow=never",
+          ]),
+          "credential",
+          "fill",
+        ],
+        { ...POSIX_FORCED, Path: String.raw`C:\Git\cmd`, GIT_CEILING_DIRECTORIES: "C:\\" },
+      ],
+    );
+  });
+
+  test("SG-PRC-03: refuses an ext:: command on the network lane under a user protocol list that names ext", async (t) => {
+    // arrange
+    const fixture = await laneFixture(t);
+    const marker = path.join(fixture.root, "ext-ran");
+    const command = `ext::sh -c touch% ${marker}`;
+    await assert.rejects(
+      runSystemGit(
+        { cwd: fixture.root, home: fixture.root },
+        "-c",
+        "protocol.ext.allow=always",
+        "ls-remote",
+        command,
+      ),
+    );
+    await access(marker);
+    await rm(marker);
+    const git = await fixture.gitWith({ GIT_ALLOW_PROTOCOL: "ext:https" });
+
+    // act
+    const listed = git.run({
+      subcommand: "ls-remote",
+      lane: "network",
+      operands: [command],
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    await assert.rejects(listed, rejectsAs("protocol-refused", 128));
+    await assert.rejects(access(marker), { code: "ENOENT" });
+  });
+
+  for (const { operand } of [
+    { operand: "fd::0" },
+    { operand: "git://127.0.0.1:9/x" },
+    { operand: "ftp://127.0.0.1:9/x" },
+    { operand: "ftps://127.0.0.1:9/x" },
+  ]) {
+    test(`SG-PRC-03: refuses ${operand} on the network lane under a user protocol list that names ext`, async (t) => {
+      // arrange
+      const fixture = await laneFixture(t);
+      const git = await fixture.gitWith({ GIT_ALLOW_PROTOCOL: "ext:https" });
+
+      // act
+      const listed = git.run({
+        subcommand: "ls-remote",
+        lane: "network",
+        operands: [operand],
+        timeoutMs: 10_000,
+      });
+
+      // assert
+      await assert.rejects(listed, rejectsAs("protocol-refused", 128));
+    });
+  }
+
+  test("D-SG-05: keeps the user's protocol list from allowing a file:// URL it leaves out", async (t) => {
+    // arrange
+    const fixture = await laneFixture(t);
+    const git = await fixture.gitWith({ GIT_ALLOW_PROTOCOL: "https:ssh" });
+
+    // act
+    const listed = git.run({
+      subcommand: "ls-remote",
+      lane: "network",
+      operands: [`file://${fixture.bare}`],
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    await assert.rejects(listed, rejectsAs("protocol-refused", 128));
+  });
+
+  test("D-SG-05: lists a file:// URL that the user's protocol list names", async (t) => {
+    // arrange
+    const fixture = await laneFixture(t);
+    const git = await fixture.gitWith({ GIT_ALLOW_PROTOCOL: "file" });
+    const oid = fixture.repository.initialOid;
+
+    // act
+    const listed = await git.run({
+      subcommand: "ls-remote",
+      lane: "network",
+      operands: [`file://${fixture.bare}`],
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    assert.deepStrictEqual(listed, {
+      exitCode: 0,
+      stdout: `${oid}\tHEAD\n${oid}\trefs/heads/main\n`,
+      stderr: "",
+    });
+  });
+
+  test("SG-PRC-03, E5: runs neither a repository hook nor an fsmonitor program during a checkout", async (t) => {
+    // arrange
+    const fixture = await laneFixture(t);
+    const call = { cwd: fixture.repository.dir, home: fixture.root };
+    const hook = await recordingScript(
+      path.join(fixture.repository.gitdir, "hooks"),
+      "post-checkout",
+      "exit 0",
+    );
+    const monitor = await recordingScript(fixture.root, "fsmonitor", "exit 1");
+    await fixture.repository.run("config", "core.hooksPath", ".git/hooks");
+    await fixture.repository.run("config", "core.fsmonitor", monitor.script);
+    await runSystemGit(call, "checkout", "--quiet", "feature");
+    await Promise.all([access(hook.record), access(monitor.record)]);
+    await runSystemGit(call, "checkout", "--quiet", "main");
+    await Promise.all([rm(hook.record), rm(monitor.record)]);
+
+    // act
+    const checkedOut = await fixture.git.run({
+      subcommand: "checkout",
+      lane: "local",
+      options: ["--quiet"],
+      operands: ["feature"],
+      cwd: fixture.repository.dir,
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    assert.deepStrictEqual(checkedOut, { exitCode: 0, stdout: "", stderr: "" });
+    await assert.rejects(access(hook.record), { code: "ENOENT" });
+    await assert.rejects(access(monitor.record), { code: "ENOENT" });
+  });
+
+  test("SG-PRC-03, E5, E6: copies and runs no template hook during a clone", async (t) => {
+    // arrange
+    const fixture = await laneFixture(t);
+    const call = { cwd: fixture.root, home: fixture.root };
+    const configured = path.join(fixture.root, "configured-template");
+    const named = path.join(fixture.root, "named-template");
+    await mkdir(path.join(configured, "hooks"), { recursive: true });
+    await mkdir(path.join(named, "hooks"), { recursive: true });
+    const configuredHook = await recordingScript(
+      path.join(configured, "hooks"),
+      "post-checkout",
+      "exit 0",
+    );
+    const namedHook = await recordingScript(path.join(named, "hooks"), "post-checkout", "exit 0");
+    const source = `file://${fixture.bare}`;
+    await runSystemGit(call, "-c", `init.templateDir=${configured}`, "clone", "-q", source, "a");
+    await runSystemGit(call, "clone", "-q", `--template=${named}`, source, "b");
+    await Promise.all([
+      access(configuredHook.record),
+      access(namedHook.record),
+      access(path.join(fixture.root, "a", ".git", "hooks", "post-checkout")),
+      access(path.join(fixture.root, "b", ".git", "hooks", "post-checkout")),
+    ]);
+    await Promise.all([rm(configuredHook.record), rm(namedHook.record)]);
+    const git = await fixture.gitWith(
+      { GIT_TEMPLATE_DIR: named },
+      `[init]\n\ttemplateDir = ${configured}\n`,
+    );
+    const clone = path.join(fixture.root, "clone");
+
+    // act
+    const cloned = await git.run({
+      subcommand: "clone",
+      lane: "network",
+      options: ["--quiet"],
+      operands: [source, clone],
+      cwd: fixture.root,
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    assert.deepStrictEqual(cloned, { exitCode: 0, stdout: "", stderr: "" });
+    await assert.rejects(access(configuredHook.record), { code: "ENOENT" });
+    await assert.rejects(access(namedHook.record), { code: "ENOENT" });
+    await assert.rejects(access(path.join(clone, ".git", "hooks", "post-checkout")), {
+      code: "ENOENT",
+    });
   });
 });
 
