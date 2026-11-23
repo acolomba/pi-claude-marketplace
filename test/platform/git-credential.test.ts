@@ -3,8 +3,10 @@ import { describe, test } from "node:test";
 
 import {
   createCredentialOps,
+  NODE_CREDENTIAL_GIT,
   type CredentialOps,
 } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
+import { NODE_GIT_PROCESS } from "../../extensions/pi-claude-marketplace/platform/git-process.ts";
 import { GitCommandError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import { registerCredentialOpsContract } from "./credential-ops-contract.ts";
@@ -120,6 +122,16 @@ function createProductionCredentialOps(): CredentialOps {
 
   return createCredentialOps({ git, timeoutMs: DEFAULT_TIMEOUT_MS });
 }
+
+describe("NODE_CREDENTIAL_GIT", () => {
+  test("D-SG-04: is the process's one production git process", () => {
+    // act
+    const productionGit: unknown = NODE_CREDENTIAL_GIT;
+
+    // assert
+    assert.strictEqual(productionGit, NODE_GIT_PROCESS);
+  });
+});
 
 describe("createCredentialOps", () => {
   registerCredentialOpsContract(createProductionCredentialOps);

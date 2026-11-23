@@ -30,9 +30,14 @@
 // real path of the host's temporary directory, so the repository Pi runs in
 // never steers the command.
 //
-// D-PL9-11: this module imports nothing from Node's child-process module yet.
-// Its one production launcher is still bound in platform/git-credential.ts.
+// D-SG-01, D-PL9-11: this module is the extension's sanctioned git spawn site,
+// and the ssh one once the SSH probe lands. It may import Node's child-process
+// module, for its own spawn binding; the rule pack's child-process-chokepoint
+// rule and test/architecture/no-shell-out.test.ts name every module that may.
+// Only platform/git.ts and platform/git-credential.ts may import this module
+// (the GIT_PROCESS_IMPORTERS zone of BLOCK C in eslint.config.js).
 
+import { spawn } from "node:child_process";
 import { constants } from "node:fs";
 import { access, realpath, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -409,6 +414,7 @@ function settleRun(run: ProcessRun, request: GitRequest, operation: string): Git
  * Binds a git process to one launcher, host, and base environment.
  * Construction does no I/O; the instance owns the cache of found gits.
  */
+// fallow-ignore-next-line unused-export -- NODE_GIT_PROCESS below composes it in production, and the module test composes it with a fake launcher and host.
 export function createGitProcess(options: GitProcessOptions): GitProcess {
   const { host } = options;
   const found = new Map<string, string>();
@@ -481,10 +487,34 @@ async function isExecutableFile(file: string): Promise<boolean> {
 }
 
 /** The shared process host, plus an execute probe, `realpath`, Pi's cwd, and the temp directory. */
+// fallow-ignore-next-line unused-export -- NODE_GIT_PROCESS below binds it in production, and the real-git cases of the module test run through it.
 export const NODE_GIT_HOST: GitProcessHost = Object.freeze({
   ...NODE_PROCESS_HOST,
   isExecutable: isExecutableFile,
   realpath: (file: string) => realpath(file),
   cwd: () => process.cwd(),
   tmpdir: () => tmpdir(),
+});
+
+/**
+ * The real process launcher: Node's own `spawn`, narrowed to the
+ * `ProcessSpawn` contract. The cast narrows `ChildProcess` to the streams,
+ * events, and `kill` a run uses.
+ */
+// fallow-ignore-next-line unused-export -- NODE_GIT_PROCESS below binds it in production, and the module test pins it to Node's spawn.
+export const NODE_GIT_SPAWN = spawn as ProcessSpawn;
+
+// Milliseconds after SIGTERM before a git that is still running gets SIGKILL.
+const KILL_GRACE_MS = 1_000;
+
+/**
+ * D-SG-04: the process's one production git process, bound to this process's
+ * environment, so a found git is looked up once per PATH and working
+ * directory.
+ */
+export const NODE_GIT_PROCESS: GitProcess = createGitProcess({
+  spawn: NODE_GIT_SPAWN,
+  host: NODE_GIT_HOST,
+  env: process.env,
+  killGraceMs: KILL_GRACE_MS,
 });

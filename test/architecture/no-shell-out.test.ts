@@ -11,6 +11,28 @@ import { REPO_ROOT } from "./source-scan.ts";
 
 const EXTENSION_ROOT = path.join(REPO_ROOT, EXTENSION_ROOT_REL);
 
+// The rule ids ESLint reports for `importer` importing `target`, both relative
+// to the extension root, under the computed config of `importer`. Computing it
+// per file catches a flat-config block that replaces another block's zones.
+async function importViolations(importer: string, target: string): Promise<Array<string | null>> {
+  const filename = path.join(EXTENSION_ROOT, importer);
+  const eslint = new ESLint({ cwd: REPO_ROOT });
+  const config = (await eslint.calculateConfigForFile(filename)) as Linter.Config;
+  const restriction = config.rules?.["import-x/no-restricted-paths"];
+  assert.ok(restriction !== undefined);
+  const specifier = path.relative(path.dirname(filename), path.join(EXTENSION_ROOT, target));
+  const messages = new Linter().verify(
+    `import "./${specifier.split(path.sep).join("/")}";`,
+    {
+      files: ["**/*.ts"],
+      plugins: { "import-x": importX },
+      rules: { "import-x/no-restricted-paths": restriction },
+    },
+    { filename },
+  );
+  return messages.map((message) => message.ruleId);
+}
+
 for (const { importer, violations } of [
   { importer: "orchestrators/plugin/package-install.ts", violations: [] },
   { importer: "edge/package-install.ts", violations: ["import-x/no-restricted-paths"] },
@@ -27,42 +49,45 @@ for (const { importer, violations } of [
 ]) {
   test(`the package runner import gate reports ${violations.length} violations for ${importer}`, async () => {
     // arrange
-    const filename = path.join(EXTENSION_ROOT, importer);
-    const eslint = new ESLint({ cwd: REPO_ROOT });
-    const config = (await eslint.calculateConfigForFile(filename)) as Linter.Config;
-    const restriction = config.rules?.["import-x/no-restricted-paths"];
-    assert.ok(restriction !== undefined);
-    const runner = path.relative(
-      path.dirname(filename),
-      path.join(EXTENSION_ROOT, "platform/package-manager.ts"),
-    );
+    const target = "platform/package-manager.ts";
 
     // act
-    const messages = new Linter().verify(
-      `import "./${runner.split(path.sep).join("/")}";`,
-      {
-        files: ["**/*.ts"],
-        plugins: { "import-x": importX },
-        rules: { "import-x/no-restricted-paths": restriction },
-      },
-      { filename },
-    );
+    const reported = await importViolations(importer, target);
 
     // assert
-    assert.deepStrictEqual(
-      messages.map((message) => message.ruleId),
-      violations,
-    );
+    assert.deepStrictEqual(reported, violations);
+  });
+}
+
+for (const { importer, violations } of [
+  { importer: "platform/git.ts", violations: [] },
+  { importer: "platform/git-credential.ts", violations: [] },
+  { importer: "platform/other.ts", violations: ["import-x/no-restricted-paths"] },
+  { importer: "orchestrators/auth-host.ts", violations: ["import-x/no-restricted-paths"] },
+  {
+    importer: "orchestrators/plugin/package-install.ts",
+    violations: ["import-x/no-restricted-paths"],
+  },
+  { importer: "edge/commands.ts", violations: ["import-x/no-restricted-paths"] },
+]) {
+  test(`D-SG-01: the git process import gate reports ${violations.length} violations for ${importer}`, async () => {
+    // arrange
+    const target = "platform/git-process.ts";
+
+    // act
+    const reported = await importViolations(importer, target);
+
+    // assert
+    assert.deepStrictEqual(reported, violations);
   });
 }
 
 /**
- * D-21 supersession defense (W-8). MA-7 (PRD §5.1.1) requires the extension
- * to handle "git not found on PATH" gracefully. D-21 satisfies that by
- * adopting `isomorphic-git` -- a pure-JS implementation that eliminates the
- * shell-out entirely. This test asserts the supersession holds: no file
- * under `extensions/pi-claude-marketplace/` may import `node:child_process`,
- * `child_process`, or its named members.
+ * D-SG-01 spawn-site defense. D-SG-01 reverses D-21: the extension runs the
+ * user's system git, and only the git process module may start it. This test
+ * asserts that no other file under `extensions/pi-claude-marketplace/` imports
+ * `node:child_process`, `child_process`, or its named members, beyond the five
+ * sanctioned spawn sites below.
  *
  * Mirrors the no-telemetry-deps test's structure -- read every .ts under the
  * extension tree, refuse if a forbidden import is detected.
@@ -74,24 +99,19 @@ for (const { importer, violations } of [
  *   - `require("node:child_process")`
  *
  * Why this test is NOT replaceable by a fallow rule pack (measured):
- *   A `banned-import` rule with these two specifiers and the three exempt
- *   files as `exclude` rejects the static `import` and `export ... from`
- *   forms, but it passes `await import("node:child_process")` and a
- *   `createRequire` `require("child_process")` untouched, both of which the
- *   regexes below reject. Keep this test.
+ *   A `banned-import` rule with these two specifiers and the exempt files as
+ *   `exclude` rejects the static `import` and `export ... from` forms, but it
+ *   passes `await import("node:child_process")` and a `createRequire`
+ *   `require("child_process")` untouched, both of which the regexes below
+ *   reject. Keep this test.
  *
- * AUTH-06 / AUTH-08 / AUTH-09 narrowing:
- * child_process is permitted ONLY for the `git credential`
- * subprocess in extensions/pi-claude-marketplace/platform/git-credential.ts,
- * which is fundamentally different from a clone shell-out:
- *   - it never executes git clone/fetch/pull/etc.
- *   - it accesses the OS keychain via git's helper chain (osxkeychain,
- *     manager-core, libsecret), which has no pure-JS equivalent (keytar
- *     adds native deps).
- *   - the missing-git-binary failure mode is non-fatal (degrades to
- *     "no credential reuse"; the current operation still works via Device
- *     Flow). The MA-7 "git CLI not found" hard-fail concern is therefore
- *     not reintroduced by this narrowing.
+ * D-SG-01 / SG-PRC-01 first sanctioned site:
+ * extensions/pi-claude-marketplace/platform/git-process.ts starts every git
+ * process, the `git credential` launch of platform/git-credential.ts included,
+ * and, once the SSH probe lands, the ssh one. It spawns an absolute git with
+ * `shell: false`, an argv, and the D-SG-05 hardening, through the shared
+ * launcher. Only platform/git.ts and platform/git-credential.ts may import it
+ * (the GIT_PROCESS_IMPORTERS zone in eslint.config.js).
  *
  * EXEC-01..04 / D-60-01 second sanctioned site:
  * The hook execution layer at
@@ -160,7 +180,7 @@ const FORBIDDEN_PATTERNS: ReadonlyArray<RegExp> = [
   /import\s*\(\s*["']child_process["']\s*\)/,
 ];
 
-test("no child_process imports outside the platform/git-credential whitelist (D-21)", async () => {
+test("D-SG-01: only the sanctioned spawn sites import node:child_process", async () => {
   // arrange
   assert.ok(
     SHELL_OUT_EXEMPT_TARGETS.length > 0,
@@ -193,11 +213,11 @@ test("no child_process imports outside the platform/git-credential whitelist (D-
   assert.deepEqual(
     offenders,
     [],
-    `D-21 violation: child_process import detected outside the platform/git-credential whitelist:\n  ${offenders.join("\n  ")}\n  (MA-7's "git CLI not found" failure mode is superseded by isomorphic-git for clone/fetch/pull; only platform/git-credential.ts is permitted to spawn git subprocesses, and only for OS keychain access per AUTH-06/08/09. Reintroducing child_process anywhere else would re-open the supersession)`,
+    `D-SG-01 violation: child_process import detected outside the sanctioned spawn sites:\n  ${offenders.join("\n  ")}\n  (every git process starts from platform/git-process.ts; a new spawn site needs its own entry in SHELL_OUT_EXEMPT_TARGETS and in the whitelist test below)`,
   );
 });
 
-// AUTH-06/08/09 + EXEC-01..04 + EXEC-05 / HOOK-06 + D-PL9-11 + D-CF1-02 assertion:
+// D-SG-01 + EXEC-01..04 + EXEC-05 / HOOK-06 + D-PL9-11 + D-CF1-02 assertion:
 // the whitelist is exactly the five load-bearing sites named below -- nobody silently
 // widened it. If a future change needs another file with node:child_process,
 // it MUST update both SHELL_OUT_EXEMPT_TARGETS in the registry AND this
@@ -210,7 +230,7 @@ test("whitelist: exactly five files may import node:child_process", () => {
   const expectedFiles = [
     "bridges/hooks/async-rewake/registry.ts",
     "bridges/hooks/dispatch-exec.ts",
-    "platform/git-credential.ts",
+    "platform/git-process.ts",
     "platform/package-manager.ts",
     "platform/prompt-shell.ts",
   ];

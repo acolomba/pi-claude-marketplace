@@ -1,7 +1,8 @@
 /**
  * AUTH-06 / AUTH-08 / AUTH-09. The CredentialOps surface speaks the
  * `git credential fill/approve/reject` protocol over an injected git process
- * (platform/git-process.ts).
+ * (platform/git-process.ts). This module spawns nothing: the git process
+ * module is the extension's sanctioned git spawn site (D-SG-01).
  *
  * REJECTED: `pi.exec` from @earendil-works/pi-coding-agent -- verified at
  * node_modules/@earendil-works/pi-coding-agent/dist/core/exec.js:15 to use
@@ -37,16 +38,13 @@
  * the helper never waits for more input.
  */
 
-import { spawn } from "node:child_process";
-
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
 
-import { createGitProcess, NODE_GIT_HOST } from "./git-process.ts";
+import { NODE_GIT_PROCESS } from "./git-process.ts";
 
 import type { GitProcess } from "./git-process.ts";
 import type { GitCredentials } from "./git.ts";
-import type { ProcessSpawn } from "./process-run.ts";
 
 /**
  * D-31: Credential helper surface. Mirrors the GitOps pattern in
@@ -82,22 +80,12 @@ export interface CredentialOps {
 /** The part of a git process the credential protocol uses. */
 export type CredentialGit = Pick<GitProcess, "run">;
 
-// Milliseconds after SIGTERM before a `git credential` that is still running
-// gets SIGKILL.
-const KILL_GRACE_MS = 1_000;
-
 /**
- * The production git process of the credential protocol: Node's own `spawn`,
- * narrowed to the `ProcessSpawn` contract, the Node host, and this process's
- * environment. The cast narrows `ChildProcess` to the streams, events, and
- * `kill` a run uses.
+ * The production git process of the credential protocol: the process's one
+ * git process, so a credential lookup shares its git lookup with every other
+ * git command (D-SG-04).
  */
-export const NODE_CREDENTIAL_GIT: CredentialGit = createGitProcess({
-  spawn: spawn as ProcessSpawn,
-  host: NODE_GIT_HOST,
-  env: process.env,
-  killGraceMs: KILL_GRACE_MS,
-});
+export const NODE_CREDENTIAL_GIT: CredentialGit = NODE_GIT_PROCESS;
 
 export interface CreateCredentialOpsOptions {
   /** The git process. `NODE_CREDENTIAL_GIT` in production. */

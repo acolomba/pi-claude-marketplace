@@ -8,6 +8,8 @@ import { describe, test } from "node:test";
 import {
   createGitProcess,
   NODE_GIT_HOST,
+  NODE_GIT_PROCESS,
+  NODE_GIT_SPAWN,
 } from "../../extensions/pi-claude-marketplace/platform/git-process.ts";
 import { GitCommandError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { hermeticGitEnvironment } from "../../features/lib/hermetic-git.ts";
@@ -972,5 +974,35 @@ describe("NODE_GIT_HOST", () => {
 
     // assert
     assert.deepStrictEqual(directories, expected);
+  });
+});
+
+describe("NODE_GIT_SPAWN", () => {
+  test("D-SG-01: is Node's own spawn", () => {
+    // arrange
+    const nodeLauncher: unknown = spawn;
+
+    // act
+    const productionLauncher: unknown = NODE_GIT_SPAWN;
+
+    // assert
+    assert.strictEqual(productionLauncher, nodeLauncher);
+  });
+});
+
+describe("NODE_GIT_PROCESS", () => {
+  test("D-SG-04: locates an absolute, executable git on this process's PATH", async () => {
+    // act
+    const found = await NODE_GIT_PROCESS.locate();
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        absolute: path.isAbsolute(found),
+        name: path.basename(found),
+        executable: await NODE_GIT_HOST.isExecutable(found),
+      },
+      { absolute: true, name: "git", executable: true },
+    );
   });
 });
