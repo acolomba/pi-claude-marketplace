@@ -6,8 +6,14 @@
 // `blanked`. The adapter conformance test feeds `written` through
 // pi-mcp-adapter's real call chain for `field` with
 // `PI_CLAUDE_MARKETPLACE_EMPTY=""` and `runtimeEnv`, and expects
-// `claudeOutput`. Every reference a row keeps without a default is set in
-// `runtimeEnv`; a reference with a default may be unset there (D-CF1-13).
+// `claudeOutput`. Between them, the built-in unit test
+// (`builtin-entry.test.ts`) and the Pi conformance test
+// (`mcp-builtin-encoding-conformance.test.ts`) run each row through
+// `builtinServerConfig` with `runtimeEnv` as the session environment and
+// expect `claudeOutput`: the unit test for the fields Pi does not resolve, and
+// the conformance test, through Pi's resolver, for `env` and `headers`.
+// Every reference a row keeps without a default is set in `runtimeEnv`; a
+// reference with a default may be unset there (D-CF1-13).
 
 /** Where a raw value sits in the translated entry. */
 export type ExpansionField =
@@ -605,9 +611,11 @@ export interface OptionFieldCase {
 }
 
 // D-PG10-11: Claude Code passes an option's value as written, so a value that
-// holds a variable or an adapter marker reaches the server as that text. Both
-// conformance tests run every row: pi-mcp-adapter through the reference it
-// expands, and Pi's built-in MCP through the value it holds (D-PG10-12).
+// holds a variable or an adapter marker reaches the server as that text. The
+// adapter conformance test runs every row through the reference
+// pi-mcp-adapter expands. For Pi's built-in MCP, which writes the value it
+// holds (D-PG10-12), the Pi conformance test runs the `env` and `headers`
+// rows through Pi's resolver, and the built-in unit test checks the others.
 export const OPTION_FIELD_CASES: readonly OptionFieldCase[] = [
   {
     title: "an args element that names an option",
