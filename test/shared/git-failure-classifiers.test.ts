@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   appendLeakToError,
   CrossOriginChallengeError,
+  GitCommandError,
   HostedManifestHttpError,
   PinnedCommitMissingError,
   StoredCredentialRejectedError,
@@ -16,11 +17,17 @@ import {
   hostHttpFailureFrame,
 } from "../../extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts";
 
+import type { GitFailure } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+
 function httpFailure(statusCode: unknown): Error {
   return Object.assign(new Error(`HTTP Error: ${String(statusCode)}`), {
     code: "HttpError",
     data: { statusCode },
   });
+}
+
+function gitCommandFailure(failure: GitFailure): GitCommandError {
+  return new GitCommandError(failure, { operation: "clone", exitCode: 128 });
 }
 
 function remoteNotFound(): Error {
@@ -33,6 +40,7 @@ function remoteNotFound(): Error {
 const PLUGIN_CLONE_RULE = { notFound: "source missing" } as const;
 const MARKETPLACE_ADD_RULE = { notFound: "source missing", missingRef: "source missing" } as const;
 const MARKETPLACE_REFRESH_RULE = { notFound: "network error" } as const;
+const UNKNOWN_RULE = { notFound: "source missing", unknown: "network error" } as const;
 const REMOTE_URL = "https://git.example.com/acme/mp.git";
 
 describe("classifyGitFailure", () => {
@@ -371,6 +379,168 @@ describe("classifyGitFailure", () => {
       remoteUrl: undefined,
       expected: { reason: "network unreachable" },
     },
+    {
+      title: "D-SG-07: classifies a git-missing failure as git missing",
+      createFailure: () => gitCommandFailure({ kind: "git-missing", detail: "not-found" }),
+      rule: UNKNOWN_RULE,
+      remoteUrl: REMOTE_URL,
+      expected: { reason: "git missing" },
+    },
+    {
+      title: "D-SG-07: classifies a git-missing failure behind a cleanup leak as git missing",
+      createFailure: () =>
+        appendLeakToError(
+          gitCommandFailure({ kind: "git-missing", detail: "macos-shim" }),
+          "staging leaked",
+        ),
+      rule: PLUGIN_CLONE_RULE,
+      remoteUrl: undefined,
+      expected: { reason: "git missing" },
+    },
+    ...(["https-auth", "ssh-auth", "ssh-host-key-unknown", "ssh-host-key-changed"] as const).map(
+      (kind) => ({
+        title: `SG-PRC-05: classifies a ${kind} failure as authentication required with no frame`,
+        createFailure: () => gitCommandFailure({ kind }),
+        rule: UNKNOWN_RULE,
+        remoteUrl: REMOTE_URL,
+        expected: { reason: "authentication required" },
+      }),
+    ),
+    {
+      title: "SG-PRC-05: classifies a timeout as network unreachable",
+      createFailure: () => gitCommandFailure({ kind: "timeout", timeoutMs: 5000 }),
+      rule: UNKNOWN_RULE,
+      remoteUrl: REMOTE_URL,
+      expected: { reason: "network unreachable" },
+    },
+    {
+      title: "SG-PRC-05: classifies a network failure with no status as network unreachable",
+      createFailure: () => gitCommandFailure({ kind: "network", curlCode: 7 }),
+      rule: UNKNOWN_RULE,
+      remoteUrl: REMOTE_URL,
+      expected: { reason: "network unreachable" },
+    },
+    {
+      title: "UPD-11: classifies a network HTTP 404 as source missing under the plugin-clone rule",
+      createFailure: () => gitCommandFailure({ kind: "network", httpStatus: 404 }),
+      rule: PLUGIN_CLONE_RULE,
+      remoteUrl: undefined,
+      expected: { reason: "source missing" },
+    },
+    {
+      title: "UPD-11: classifies and frames a network HTTP 404 under the refresh rule",
+      createFailure: () => gitCommandFailure({ kind: "network", httpStatus: 404 }),
+      rule: MARKETPLACE_REFRESH_RULE,
+      remoteUrl: REMOTE_URL,
+      expected: { reason: "network error", frame: "404 on https://git.example.com/acme/mp.git" },
+    },
+    {
+      title: "UPD-11: classifies a network HTTP 410 as source missing under the plugin-clone rule",
+      createFailure: () => gitCommandFailure({ kind: "network", httpStatus: 410 }),
+      rule: PLUGIN_CLONE_RULE,
+      remoteUrl: undefined,
+      expected: { reason: "source missing" },
+    },
+    {
+      title: "ADD-10: classifies and frames a network HTTP 503 as network error",
+      createFailure: () => gitCommandFailure({ kind: "network", httpStatus: 503 }),
+      rule: MARKETPLACE_ADD_RULE,
+      remoteUrl: REMOTE_URL,
+      expected: { reason: "network error", frame: "503 on https://git.example.com/acme/mp.git" },
+    },
+    {
+      title:
+        "D-PL7-02: classifies a missing repository as source missing under the plugin-clone rule",
+      createFailure: () => gitCommandFailure({ kind: "repository-not-found" }),
+      rule: PLUGIN_CLONE_RULE,
+      remoteUrl: REMOTE_URL,
+      expected: { reason: "source missing" },
+    },
+    {
+      title: "D-PL7-02: classifies a missing repository as network error under the refresh rule",
+      createFailure: () => gitCommandFailure({ kind: "repository-not-found" }),
+      rule: MARKETPLACE_REFRESH_RULE,
+      remoteUrl: undefined,
+      expected: { reason: "network error" },
+    },
+    {
+      title: "ADD-10: frames a missing repository's HTTP status on the fetched URL",
+      createFailure: () => gitCommandFailure({ kind: "repository-not-found", httpStatus: 404 }),
+      rule: MARKETPLACE_ADD_RULE,
+      remoteUrl: REMOTE_URL,
+      expected: { reason: "source missing", frame: "404 on https://git.example.com/acme/mp.git" },
+    },
+    {
+      title: "ADD-10: frames nothing for a missing repository's HTTP status without a URL",
+      createFailure: () => gitCommandFailure({ kind: "repository-not-found", httpStatus: 404 }),
+      rule: MARKETPLACE_ADD_RULE,
+      remoteUrl: undefined,
+      expected: { reason: "source missing" },
+    },
+    {
+      title: "SG-PRC-05: classifies a remote error as network error",
+      createFailure: () => gitCommandFailure({ kind: "remote-error" }),
+      rule: PLUGIN_CLONE_RULE,
+      remoteUrl: REMOTE_URL,
+      expected: { reason: "network error" },
+    },
+    ...(["commit-missing", "pin-mismatch"] as const).map((kind) => ({
+      title: `INR-03: classifies a ${kind} failure as source missing`,
+      createFailure: () => gitCommandFailure({ kind }),
+      rule: MARKETPLACE_REFRESH_RULE,
+      remoteUrl: REMOTE_URL,
+      expected: { reason: "source missing" },
+    })),
+    {
+      title: "ADD-09: classifies a remote ref missing as source missing under the add rule",
+      createFailure: () => gitCommandFailure({ kind: "remote-ref-missing" }),
+      rule: MARKETPLACE_ADD_RULE,
+      remoteUrl: undefined,
+      expected: { reason: "source missing" },
+    },
+    {
+      title:
+        "SG-PRC-05: leaves a remote ref missing unclassified under a rule with no missing-ref answer",
+      createFailure: () => gitCommandFailure({ kind: "remote-ref-missing" }),
+      rule: UNKNOWN_RULE,
+      remoteUrl: undefined,
+      expected: undefined,
+    },
+    {
+      title: "SG-PRC-05: leaves a local ref missing unclassified under the add rule",
+      createFailure: () => gitCommandFailure({ kind: "local-ref-missing" }),
+      rule: { ...MARKETPLACE_ADD_RULE, unknown: "network error" as const },
+      remoteUrl: undefined,
+      expected: undefined,
+    },
+    ...(
+      [
+        "git-too-old",
+        "aborted",
+        "proxy-refused",
+        "refused-input",
+        "protocol-refused",
+        "dubious-ownership",
+        "not-a-repository",
+        "no-stderr",
+        "failed",
+      ] as const
+    ).flatMap((kind) => [
+      {
+        title: `SG-PRC-05: classifies a ${kind} failure as network error under the unknown rule`,
+        createFailure: () => gitCommandFailure({ kind }),
+        rule: UNKNOWN_RULE,
+        remoteUrl: REMOTE_URL,
+        expected: { reason: "network error" },
+      },
+      {
+        title: `SG-PRC-05: leaves a ${kind} failure unclassified under the plugin-clone rule`,
+        createFailure: () => gitCommandFailure({ kind }),
+        rule: PLUGIN_CLONE_RULE,
+        remoteUrl: REMOTE_URL,
+        expected: undefined,
+      },
+    ]),
   ]) {
     test(title, () => {
       // arrange
@@ -407,12 +577,45 @@ describe("classifyGitHostFailure", () => {
     // assert
     assert.strictEqual(reason, "source missing");
   });
+
+  test("D-SG-07: classifies a git-missing failure as git missing", () => {
+    // arrange
+    const failure = gitCommandFailure({ kind: "git-missing", detail: "not-found" });
+
+    // act
+    const reason = classifyGitHostFailure(failure);
+
+    // assert
+    assert.strictEqual(reason, "git missing");
+  });
+
+  test("SG-PRC-05: leaves a remote ref missing unclassified", () => {
+    // arrange
+    const failure = gitCommandFailure({ kind: "remote-ref-missing" });
+
+    // act
+    const reason = classifyGitHostFailure(failure);
+
+    // assert
+    assert.strictEqual(reason, undefined);
+  });
 });
 
 describe("classifyGitSourceAccessFailure", () => {
   test("classifies a ref the remote does not have as source missing", () => {
     // arrange
     const failure = remoteNotFound();
+
+    // act
+    const reason = classifyGitSourceAccessFailure(failure);
+
+    // assert
+    assert.strictEqual(reason, "source missing");
+  });
+
+  test("ADD-09: classifies a remote ref missing as source missing", () => {
+    // arrange
+    const failure = gitCommandFailure({ kind: "remote-ref-missing" });
 
     // act
     const reason = classifyGitSourceAccessFailure(failure);

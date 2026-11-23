@@ -39,6 +39,7 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import {
   CleanupLeakError,
   FetchedUrlCause,
+  GitCommandError,
   HostedManifestFetchError,
   HostedManifestHttpError,
   InvalidGitHubBaseUrlError,
@@ -5094,6 +5095,143 @@ test("D-76-08: a url clone HttpError with statusCode 403 also renders (failed) {
     // assert
     assert.ok(note);
     assert.ok(note.message.includes("(failed) {authentication required}"));
+  });
+});
+
+test("SG-PRC-06: a url clone with no git on PATH renders {git missing} with the requirement", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows: new GitCommandError(
+        { kind: "git-missing", detail: "not-found" },
+        { operation: "clone" },
+      ),
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/private-mp",
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n\n" +
+          "⊘ https://gitlab.example.com/team/private-mp [project] (failed)\n" +
+          "  ⊘ https://gitlab.example.com/team/private-mp (failed) {git missing}\n" +
+          "    cause: Git is required to install marketplaces.",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("SG-PRC-06: a GitHub clone with no git on PATH renders {git missing} with the requirement", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-git-missing-github-home-");
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows: new GitCommandError(
+        { kind: "git-missing", detail: "not-found" },
+        { operation: "clone" },
+      ),
+    });
+
+    // act
+    await addMarketplace({ ctx, run, scope: "project", cwd, rawSource: "acme/mp", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n\n" +
+          "⊘ acme/mp [project] (failed)\n" +
+          "  ⊘ acme/mp (failed) {git missing}\n" +
+          "    cause: Git is required to install marketplaces.",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("D-SG-07: a git auth failure keeps the bare failed row with {authentication required}", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows: new GitCommandError(
+        { kind: "https-auth" },
+        { operation: "clone", exitCode: 128, stderr: "fatal: Authentication failed" },
+      ),
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/private-mp",
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n" +
+          "⊘ https://gitlab.example.com/team/private-mp [project] (failed) {authentication required}",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("SG-PRC-05: a git failure with a cause is classified itself, not by its cause", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-git-missing-cause-home-");
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx(0);
+    const cloneThrows = new GitCommandError(
+      { kind: "git-missing", detail: "not-found" },
+      { operation: "clone" },
+      { cause: Object.assign(new Error("spawn git ENOENT"), { code: "ENOENT" }) },
+    );
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows,
+    });
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/private-mp",
+      gitOps,
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      reason: "git missing",
+      error: cloneThrows,
+      cause: "Git is required to install marketplaces.",
+    });
+    assert.deepStrictEqual(notifications, []);
   });
 });
 

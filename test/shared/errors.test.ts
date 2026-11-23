@@ -22,6 +22,7 @@ import {
   FetchedUrlCause,
   findManualRecoveryError,
   formatCauseChain,
+  GitCommandError,
   hasFetchedUrlCause,
   HostedManifestFetchError,
   HostedManifestHttpError,
@@ -702,6 +703,148 @@ describe("PinnedCommitMissingError", () => {
         cause: undefined,
       },
     );
+  });
+});
+
+describe("GitCommandError", () => {
+  test("SG-PRC-05: names the git requirement when no git is found", () => {
+    // act
+    const error = new GitCommandError(
+      { kind: "git-missing", detail: "not-found" },
+      { operation: "lookup" },
+    );
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        kind: error.kind,
+        failure: error.failure,
+        operation: error.operation,
+        exitCode: error.exitCode,
+        stderr: error.stderr,
+        message: error.message,
+        cause: error.cause,
+      },
+      {
+        name: "GitCommandError",
+        kind: "git-missing",
+        failure: { kind: "git-missing", detail: "not-found" },
+        operation: "lookup",
+        exitCode: null,
+        stderr: "",
+        message: "Git is required to install marketplaces.",
+        cause: undefined,
+      },
+    );
+  });
+
+  test("D-SG-01: names the xcode-select remedy when the macOS shim stands in for git", () => {
+    // act
+    const error = new GitCommandError(
+      { kind: "git-missing", detail: "macos-shim" },
+      { operation: "lookup" },
+    );
+
+    // assert
+    assert.strictEqual(
+      error.message,
+      "git is not installed on this Mac. To install it, run xcode-select --install, then try again.",
+    );
+  });
+
+  test("D-SG-04: names the git requirement when only a batch launcher is found", () => {
+    // act
+    const error = new GitCommandError(
+      { kind: "git-missing", detail: "batch-launcher" },
+      { operation: "lookup" },
+    );
+
+    // assert
+    assert.strictEqual(error.message, "Git is required to install marketplaces.");
+  });
+
+  test("SG-PRC-05: names the operation and the limit of a timeout", () => {
+    // act
+    const error = new GitCommandError(
+      { kind: "timeout", timeoutMs: 5000 },
+      { operation: "credential fill" },
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      { kind: error.kind, message: error.message },
+      { kind: "timeout", message: "git credential fill timed out after 5000 ms" },
+    );
+  });
+
+  test("SG-PRC-05: names the operation, the kind, and the exit code but never stderr", () => {
+    // act
+    const error = new GitCommandError(
+      { kind: "failed" },
+      { operation: "clone", exitCode: 128, stderr: "fatal: secret-looking detail" },
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        kind: error.kind,
+        exitCode: error.exitCode,
+        stderr: error.stderr,
+        message: error.message,
+      },
+      {
+        kind: "failed",
+        exitCode: 128,
+        stderr: "fatal: secret-looking detail",
+        message: "git clone failed: failed, exit code 128",
+      },
+    );
+  });
+
+  test("SG-PRC-05: names the operation and the kind when git gave no exit code", () => {
+    // act
+    const error = new GitCommandError({ kind: "aborted" }, { operation: "fetch" });
+
+    // assert
+    assert.deepStrictEqual(
+      { exitCode: error.exitCode, message: error.message },
+      { exitCode: null, message: "git fetch failed: aborted" },
+    );
+  });
+
+  test("PMOD-04: stores git's stderr with the URL credentials redacted", () => {
+    // act
+    const error = new GitCommandError(
+      { kind: "network" },
+      {
+        operation: "clone",
+        exitCode: 128,
+        stderr: "fatal: unable to access 'https://alice:s3cret@host/x.git/': Failed to connect",
+      },
+    );
+
+    // assert
+    assert.strictEqual(
+      error.stderr,
+      "fatal: unable to access 'https://***@host/x.git/': Failed to connect",
+    );
+  });
+
+  test("keeps the cause passed in its options", () => {
+    // arrange
+    const cause = new Error("spawn git ENOENT");
+
+    // act
+    const error = new GitCommandError(
+      { kind: "git-missing", detail: "not-found" },
+      { operation: "clone" },
+      { cause },
+    );
+
+    // assert
+    assert.strictEqual(error.cause, cause);
   });
 });
 

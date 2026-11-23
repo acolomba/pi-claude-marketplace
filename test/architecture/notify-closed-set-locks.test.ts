@@ -121,6 +121,7 @@ const REASON_ENROLLMENT: Record<Reason, true> = {
   "requires mcp": true,
   "requires builtin mcp": true,
   "options not set": true,
+  "git missing": true,
 };
 
 const STATUS_TOKEN_ENROLLMENT: Record<StatusToken, true> = {
@@ -235,7 +236,7 @@ test("OUT-08: Reason is the closed 81-entry reason set", () => {
   const memberCount = Object.keys(REASON_ENROLLMENT).length;
 
   // assert
-  assert.strictEqual(memberCount, 81);
+  assert.strictEqual(memberCount, 82);
 });
 
 test("SNM-02: StatusToken is the closed 27-entry token set", () => {

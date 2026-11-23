@@ -13,6 +13,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
 import {
   appendLeakToError,
+  GitCommandError,
   InstallMarketplaceAddError,
   PluginShapeError,
   StateLockHeldError,
@@ -629,6 +630,36 @@ describe("composeInstallFailureMessage", () => {
       status: "failed",
       name: "helper",
       reasons: ["network unreachable"],
+      scope: "project",
+      cause: failure,
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("SG-PRC-06: classifies a git-missing failure as git missing and keeps its cause", () => {
+    // arrange
+    const failure = new GitCommandError(
+      { kind: "git-missing", detail: "not-found" },
+      { operation: "clone" },
+    );
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "project",
+      version: undefined,
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: ["git missing"],
       scope: "project",
       cause: failure,
       severity: "error",

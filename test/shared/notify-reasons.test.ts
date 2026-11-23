@@ -35,6 +35,7 @@ void ("source mismatch" satisfies FailureReason);
 void ("dangling reference" satisfies FailureReason);
 void ("concurrently uninstalled" satisfies FailureReason);
 void ("concurrently updated" satisfies FailureReason);
+void ("git missing" satisfies FailureReason);
 void ("cross-marketplace" satisfies Reason);
 // @ts-expect-error cascade-specific reasons are not shared failure-class reasons
 void ("cross-marketplace" satisfies FailureReason);

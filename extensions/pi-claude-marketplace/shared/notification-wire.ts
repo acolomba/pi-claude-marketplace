@@ -164,6 +164,7 @@ const REASONS = {
   "requires mcp": true,
   "requires builtin mcp": true,
   "options not set": true,
+  "git missing": true,
 } as const satisfies Record<Reason, true>;
 
 const SEVERITIES = {

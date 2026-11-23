@@ -318,6 +318,8 @@ const EXPECTED_REASONS = [
   "requires builtin mcp",
   // D-PG10-06: a required plugin option has no default.
   "options not set",
+  // D-SG-07: a git-source operation found no usable git on PATH.
+  "git missing",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

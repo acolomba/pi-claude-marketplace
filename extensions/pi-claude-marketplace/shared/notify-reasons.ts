@@ -186,7 +186,9 @@ export type FailureReason =
   // declare the plugin and the other layer does. Uninstall, enable, disable,
   // update, and reinstall share both refusals.
   | "plugin in local layer only"
-  | "plugin in base layer only";
+  | "plugin in base layer only"
+  // D-SG-07: no usable git on PATH, so the git-source operation could not run.
+  | "git missing";
 
 /**
  * D-102-06: author-declared install-time state -- a fact the plugin's OWN

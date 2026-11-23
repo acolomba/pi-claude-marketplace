@@ -1292,6 +1292,111 @@ export class PinnedCommitMissingError extends Error {
   }
 }
 
+/**
+ * SG-PRC-05: the closed set of git failure kinds a `GitCommandError` carries,
+ * read from git's exit status and its stderr under `LC_MESSAGES=C`. It holds
+ * Claude Code's classes (timeout with its limit, the host key and auth
+ * classes, network, git missing, proxy refused, remote error, no stderr, pin
+ * mismatch, refused input) and Pi's own (the ref and commit classes,
+ * repository not found, protocol refused, dubious ownership, aborted, git too
+ * old). `not-a-repository` and `failed` complete that list, so every git
+ * failure has a kind and the set is total.
+ *
+ * `git-missing` records how the lookup failed (D-SG-04): no git on PATH, the
+ * macOS xcrun shim in its place, or only a batch launcher.
+ */
+export type GitFailure =
+  | {
+      readonly kind: "git-missing";
+      readonly detail: "not-found" | "macos-shim" | "batch-launcher";
+    }
+  | { readonly kind: "timeout"; readonly timeoutMs: number }
+  | { readonly kind: "network"; readonly httpStatus?: number; readonly curlCode?: number }
+  | { readonly kind: "repository-not-found"; readonly httpStatus?: number }
+  | {
+      readonly kind:
+        | "git-too-old"
+        | "aborted"
+        | "https-auth"
+        | "ssh-auth"
+        | "ssh-host-key-unknown"
+        | "ssh-host-key-changed"
+        | "proxy-refused"
+        | "remote-ref-missing"
+        | "local-ref-missing"
+        | "commit-missing"
+        | "pin-mismatch"
+        | "refused-input"
+        | "protocol-refused"
+        | "dubious-ownership"
+        | "not-a-repository"
+        | "remote-error"
+        | "no-stderr"
+        | "failed";
+    };
+
+/**
+ * SG-PRC-05: one git command failed. Callers narrow with `instanceof
+ * GitCommandError` and then read `kind` (or `failure` for the fields of a
+ * kind), never the error's name or message.
+ *
+ * `stderr` is git's stderr with its credentials redacted (PMOD-04). The
+ * message holds the operation, the kind, a timeout's limit, and the exit code
+ * only, never stderr, an operand, or stdin, because a cause chain is shown to
+ * the user and the wording of each kind is decided later.
+ *
+ * A `git-missing` message names the requirement in Claude Code's words
+ * (D-SG-01): its macOS text for the xcrun shim, and otherwise its
+ * marketplace text without the restart hint, because a later lookup finds a
+ * newly installed git with no Pi restart (D-SG-04, NFR-2).
+ */
+export class GitCommandError extends Error {
+  readonly failure: GitFailure;
+  readonly kind: GitFailure["kind"];
+  readonly operation: string;
+  readonly exitCode: number | null;
+  readonly stderr: string;
+
+  constructor(
+    failure: GitFailure,
+    details: { readonly operation: string; readonly exitCode?: number; readonly stderr?: string },
+    options?: ErrorOptions,
+  ) {
+    const exitCode = details.exitCode ?? null;
+    super(gitCommandMessage(failure, details.operation, exitCode), options);
+    this.name = "GitCommandError";
+    this.failure = failure;
+    this.kind = failure.kind;
+    this.operation = details.operation;
+    this.exitCode = exitCode;
+    this.stderr = redactCredentials(details.stderr ?? "");
+  }
+}
+
+/**
+ * SG-PRC-05: only `git-missing` and `timeout` have their own text; every other
+ * kind names the operation, the kind, and the exit code when there is one.
+ */
+function gitCommandMessage(
+  failure: GitFailure,
+  operation: string,
+  exitCode: number | null,
+): string {
+  if (failure.kind === "git-missing") {
+    return failure.detail === "macos-shim"
+      ? "git is not installed on this Mac. To install it, run xcode-select --install, then try again."
+      : "Git is required to install marketplaces.";
+  }
+
+  if (failure.kind === "timeout") {
+    return `git ${operation} timed out after ${failure.timeoutMs} ms`;
+  }
+
+  return exitCode === null
+    ? `git ${operation} failed: ${failure.kind}`
+    : `git ${operation} failed: ${failure.kind}, exit code ${exitCode}`;
+}
+
 function quotedName(name: string): string {
   return `"${name}"`;
 }
