@@ -690,7 +690,7 @@ Feature: Plugin install dependencies
     Given the marketplace "tools" offers these plugins with dependencies:
       | name      | version | dependencies     |
       | app       | 1.1.0   | formatter@^1.0.0 |
-      | formatter | 2.0.0   |                  |
+      | formatter | 1.9.0   |                  |
       | linter    | 1.2.0   |                  |
     Given the marketplace "tools" is added to the project scope
     When the user runs "/claude:plugin install app@tools --scope project"
