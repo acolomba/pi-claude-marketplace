@@ -1,8 +1,11 @@
 // test/integration/load-reconcile-race.test.ts
 //
-// RECON-06: two-process load-time apply race.
-// + first-run migrate lock-coverage proof (discharges the
-//   test/persistence/migrate-config.test.ts hand-off).
+// Two multi-process cases (ITSCOPE-01), each between two forked processes
+// that run load-reconcile-race-child.ts: RECON-06, two concurrent applies of
+// one declared path-source marketplace and plugin, and the first-run
+// migration (MIG-01, D-13) of two concurrent first loads. A scenario runs one
+// Pi at a time. The single-process first load after an upgrade is in
+// `features/plugin/config-migration.feature`.
 //
 // Test design constraint: what a contended reconcile guarantees is
 // NON-CORRUPTION, not completion. The apply loop deliberately holds no outer
@@ -22,8 +25,6 @@
 //     meaningful no matter who won the race -- or whether anybody did
 //   - first-run migrate captures legacy autoupdate exactly once under the
 //     cross-process lock
-//   - D-13 gate single-process happy path produces a config that carries the
-//     captured autoupdate
 //
 // Mirrors test/integration/concurrent-install.test.ts for the fork + IPC +
 // ready-sync harness; uses a path-source marketplace fixture so the test is
@@ -481,101 +482,6 @@ test("Concurrent first-load race: two processes race against state with legacy a
     assert.ok(
       "mp-legacy" in state.marketplaces,
       `expected mp-legacy still recorded in state; got ${JSON.stringify(state.marketplaces)}`,
-    );
-  } finally {
-    await env.cleanup();
-  }
-});
-
-// ---------------------------------------------------------------------------
-// Scenario C: D-13 gate single-process integration cover
-// ---------------------------------------------------------------------------
-
-test("D-13 gate (single-process): state with legacy autoupdate + ENOENT claude-plugins.json -> single applyReconcile observes the gate at loadState (before the closure runs), captures autoupdate via migrate inside the locked closure, writes the config carrying autoupdate", async () => {
-  const env = await setupRaceEnv("pi-cm-recon06-mig24-");
-  try {
-    await seedStateRaw(env.cwd, {
-      schemaVersion: 1,
-      marketplaces: {
-        "mp-d13": {
-          name: "mp-d13",
-          scope: "project",
-          source: { kind: "path", raw: "./mp-d13-src" },
-          addedFromCwd: env.cwd,
-          manifestPath: path.join(env.cwd, "mp-d13-src", ".claude-plugin", "marketplace.json"),
-          marketplaceRoot: path.join(env.cwd, "mp-d13-src"),
-          autoupdate: false,
-          plugins: {},
-        },
-      },
-    });
-
-    const projectScopeRoot = path.join(env.cwd, ".pi");
-    const configPath = path.join(projectScopeRoot, "claude-plugins.json");
-    assert.equal(existsSync(configPath), false, "test precondition: config must be absent");
-
-    // Single process via fork (same child entry point; one child only) to
-    // exercise the same code path the integration scenarios exercise.
-    const child = fork(CHILD_PATH, [], {
-      cwd: env.cwd,
-      env: {
-        ...process.env,
-        HOME: env.home,
-        PI_CODING_AGENT_DIR: path.join(env.home, ".pi-agent"),
-      },
-      stdio: ["ignore", "ignore", "ignore", "ipc"],
-    });
-
-    await new Promise<void>((resolve, reject) => {
-      child.once("error", reject);
-      child.once("exit", (code) => {
-        reject(new Error(`child exited ${String(code)} before ready`));
-      });
-      child.once("message", (message) => {
-        if (message === "ready") {
-          resolve();
-        } else {
-          reject(new Error(`unexpected child ready message: ${JSON.stringify(message)}`));
-        }
-      });
-    });
-
-    const resultPromise = new Promise<{ result: ChildResult; code: number | null }>(
-      (resolve, reject) => {
-        let resultMessage: ChildResult | undefined;
-        child.once("error", reject);
-        child.once("message", (message) => {
-          resultMessage = message as ChildResult;
-        });
-        child.once("exit", (code) => {
-          if (resultMessage === undefined) {
-            reject(new Error(`child exited ${String(code)} before result message`));
-            return;
-          }
-
-          resolve({ result: resultMessage, code });
-        });
-      },
-    );
-
-    child.send({ cwd: env.cwd });
-    const { result, code } = await resultPromise;
-
-    assert.equal(code, 0, `child must exit 0 (NFR-2); message=${result.message ?? "(none)"}`);
-    assert.equal(
-      result.ok,
-      true,
-      `child must report ok=true; message=${result.message ?? "(none)"}`,
-    );
-
-    // Config was written + carries autoupdate: false captured from state.
-    assert.equal(existsSync(configPath), true, "claude-plugins.json must exist after run");
-    const config = await readConfigRaw(env.cwd);
-    assert.deepStrictEqual(Object.keys(config.marketplaces ?? {}), ["mp-d13"]);
-    assert.equal(
-      config.marketplaces!["mp-d13"]!.autoupdate,
-      false,
-      "D-13 gate: legacy autoupdate must be captured before the loadState scrub",
     );
   } finally {
     await env.cleanup();

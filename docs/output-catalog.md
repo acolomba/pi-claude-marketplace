@@ -692,7 +692,7 @@ A `--partial` install that succeeds with one or more components dropped (the res
 
 A plain install -- no flag opt-in -- materializes the supported components of a workflow-bearing plugin and renders the clean `(installed)` row with no reason brace. The existing reload trailer appears because the command changed the installed resources.
 
-The workflow-specific half of that claim is enforced by `test/integration/workflow-kind-inversion.test.ts`, not by this block's byte pairing. These bytes are identical to the generic `(installed)` success row by construction (D-109-04), and the paired fixture carries no workflow signal, so `catalog-uat` would stay green if a workflow reason token came back.
+The workflow-specific half of that claim is enforced by the scenario "Installing a plugin into the project saves its workflow in the project and nothing in the user's workflow directory" in `features/workflow/storage.feature`, whose result row is `installed` with no reason, not by this block's byte pairing. These bytes are identical to the generic `(installed)` success row by construction (D-109-04), and the paired fixture carries no workflow signal, so `catalog-uat` would stay green if a workflow reason token came back.
 
 ### Install that lands disabled (DFEN-04 / OUT-01 / OUT-04)
 
