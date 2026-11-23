@@ -128,6 +128,27 @@ describe("translateSessionStart", () => {
     });
   }
 
+  test("writes no run delivery hint of a compaction to the SessionStart envelope (HKRL-03)", () => {
+    // arrange
+    const context = {
+      sessionId: "session-start-startup",
+      transcriptPath: "/sessions/session-start-startup.jsonl",
+      cwd: "/workspaces/session-start-startup",
+    } satisfies TranslationContext;
+
+    // act
+    const payload = translateSessionStart({ source: "compact", nextCallInRun: true }, context);
+
+    // assert
+    assert.deepStrictEqual(payload, {
+      session_id: "session-start-startup",
+      transcript_path: "/sessions/session-start-startup.jsonl",
+      cwd: "/workspaces/session-start-startup",
+      hook_event_name: "SessionStart",
+      source: "compact",
+    });
+  });
+
   test("sends the model and the session title after the source (D-PG6-09)", () => {
     // arrange
     const context = {

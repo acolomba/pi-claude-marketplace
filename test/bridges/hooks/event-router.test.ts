@@ -627,6 +627,7 @@ test(
       "register:tool_call",
       "register:tool_result",
       "register:before_agent_start",
+      "register:turn_start",
       "register:turn_end",
       "register:agent_end",
       "register:agent_before_settle",
@@ -645,6 +646,7 @@ test(
         { event: "tool_call", handlerType: "function" },
         { event: "tool_result", handlerType: "function" },
         { event: "before_agent_start", handlerType: "function" },
+        { event: "turn_start", handlerType: "function" },
         { event: "turn_end", handlerType: "function" },
         { event: "agent_end", handlerType: "function" },
         { event: "agent_before_settle", handlerType: "function" },
@@ -2790,7 +2792,7 @@ test(
     assert.strictEqual(sessionStartUpdate, undefined);
     assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
     assert.deepStrictEqual(messages, []);
-    assert.strictEqual(registrations.length, 14);
+    assert.strictEqual(registrations.length, 15);
     assert.deepStrictEqual(diagnostics, [
       `[hooks] hydrate: loadState failed for scope=project extensionRoot=${factoryProjectLocations.extensionRoot}: factory project state refused`,
     ]);
@@ -2844,7 +2846,7 @@ test("same-runtime registration invalidates an earlier callback before lazy hydr
     locationsFor("project", projectRoot).extensionRoot,
   ]);
   assert.deepStrictEqual(messages, []);
-  assert.strictEqual(registrations.length, 28);
+  assert.strictEqual(registrations.length, 30);
 });
 
 test(
@@ -2934,7 +2936,7 @@ test(
     assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
     assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
     assert.deepStrictEqual(messages, []);
-    assert.strictEqual(registrations.length, 28);
+    assert.strictEqual(registrations.length, 30);
   },
 );
 
@@ -3670,6 +3672,7 @@ test(
         { event: "tool_call", handlerType: "function" },
         { event: "tool_result", handlerType: "function" },
         { event: "before_agent_start", handlerType: "function" },
+        { event: "turn_start", handlerType: "function" },
         { event: "turn_end", handlerType: "function" },
         { event: "agent_end", handlerType: "function" },
         { event: "agent_before_settle", handlerType: "function" },
@@ -3724,7 +3727,7 @@ test(
     assert.deepStrictEqual(dispatched, ["project", "user"]);
     assert.strictEqual(userSharedBytes, "regular-file-boundary");
     assert.strictEqual(projectSharedStat.isDirectory(), true);
-    assert.strictEqual(registrations.length, 14);
+    assert.strictEqual(registrations.length, 15);
   },
 );
 
@@ -3777,7 +3780,7 @@ for (const mode of ["tui", "print", "json", "rpc"] as const) {
     assert.deepStrictEqual(messages, []);
     assert.deepStrictEqual(capture.entries, []);
     capture.assertValid();
-    assert.strictEqual(registrations.length, 14);
+    assert.strictEqual(registrations.length, 15);
   });
 }
 
@@ -4591,7 +4594,7 @@ test("session_start contains a lazy project cwd failure and still delegates safe
   assert.strictEqual(sessionStartUpdate, undefined);
   assert.deepStrictEqual(dispatches, []);
   assert.deepStrictEqual(messages, []);
-  assert.strictEqual(registrations.length, 14);
+  assert.strictEqual(registrations.length, 15);
 });
 
 /** A manual compaction event whose entry carries `summary`. */
@@ -4654,7 +4657,7 @@ test("session_compact runs SessionStart with source compact to completion, then 
   // assert
   assert.strictEqual(update, undefined);
   assert.deepStrictEqual(log, [
-    { start: "SessionStart", event: { source: "compact" } },
+    { start: "SessionStart", event: { source: "compact", nextCallInRun: false } },
     { end: "SessionStart" },
     { start: "PostCompact", event },
     { end: "PostCompact" },
@@ -4797,6 +4800,107 @@ test("session_compact dispatches nothing when the generation goes stale while it
     true,
   );
 });
+
+/** The Pi events of an agent run that come before a compaction in a delivery row. */
+const RUN_EVENTS = {
+  turn_start: { type: "turn_start" },
+  turn_end: {
+    type: "turn_end",
+    message: { role: "assistant", content: [{ type: "text", text: "Done." }], stopReason: "stop" },
+    context: { pendingMessages: [] },
+  },
+  agent_end: { type: "agent_end", messages: [] },
+} as const;
+
+for (const { title, before, reason, willRetry, options } of [
+  {
+    title:
+      "steers the SessionStart context of an overflow compaction into the retried model call (HKRL-03)",
+    before: [],
+    reason: "overflow",
+    willRetry: true,
+    options: { deliverAs: "steer" },
+  },
+  {
+    title: "holds the SessionStart context of a manual compaction for the next prompt (HKRL-03)",
+    before: [],
+    reason: "manual",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "steers the SessionStart context of a compaction between two turns into the next model call (HKRL-03)",
+    before: ["turn_end"],
+    reason: "threshold",
+    willRetry: false,
+    options: { deliverAs: "steer" },
+  },
+  {
+    title:
+      "holds the SessionStart context of a compaction after the run ended for the next prompt (HKRL-03)",
+    before: ["turn_end", "agent_end"],
+    reason: "threshold",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "holds the SessionStart context of a compaction during a model call to the turn end (HKRL-03)",
+    before: ["turn_end", "turn_start"],
+    reason: "threshold",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+] satisfies ReadonlyArray<{
+  readonly title: string;
+  readonly before: ReadonlyArray<keyof typeof RUN_EVENTS>;
+  readonly reason: SessionCompactEvent["reason"];
+  readonly willRetry: boolean;
+  readonly options: unknown;
+}>) {
+  test(title, async (t) => {
+    // arrange
+    const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-delivery-");
+    const runtime = createHooksRuntime();
+    const { pi, registrations, messages } = makeRecordingPi();
+    await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+      cwd: root,
+      executor: (entry) =>
+        Promise.resolve(
+          entry.claudeEvent === "SessionStart"
+            ? { kind: "mutate", additionalContext: "compact context" }
+            : { kind: "noop" },
+        ),
+    });
+    routeCompactionHooks(runtime, root);
+    const context = makeContext(root, root);
+    for (const runEvent of before) {
+      await registeredHandler(registrations, runEvent)(RUN_EVENTS[runEvent], context);
+    }
+
+    // act
+    await registeredHandler(registrations, "session_compact")(
+      { ...compactionEvent("delivery summary"), reason, willRetry },
+      context,
+    );
+
+    // assert
+    assert.deepStrictEqual(messages, [
+      {
+        message: {
+          customType: "claude-hook-additional-context",
+          content: [
+            { type: "text", text: "SessionStart hook additional context: compact context" },
+          ],
+          display: false,
+          details: { event: "SessionStart", values: ["compact context"] },
+        },
+        options,
+      },
+    ]);
+  });
+}
 
 /** Collects the OBS-01 debug lines a case emits, restoring the flag afterwards. */
 function observeRouterDebug(t: TestContext): () => string[] {

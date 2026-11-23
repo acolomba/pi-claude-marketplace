@@ -111,9 +111,13 @@ function createMessagePi(sent: SentMessage[], failure?: Error): ExtensionAPI {
 
 /**
  * The hidden message that carries SessionStart hook values to the model,
- * with the values in its details (HKRL-01, HKRL-02).
+ * with the values in its details (HKRL-01, HKRL-02), sent with `options`
+ * (HKRL-03).
  */
-function sessionStartContextMessage(values: readonly string[]): SentMessage {
+function sessionStartContextMessage(
+  values: readonly string[],
+  options: unknown = { triggerTurn: false },
+): SentMessage {
   return {
     message: {
       customType: "claude-hook-additional-context",
@@ -121,7 +125,7 @@ function sessionStartContextMessage(values: readonly string[]): SentMessage {
       display: false,
       details: { event: "SessionStart", values },
     },
-    options: { triggerTurn: false },
+    options,
   };
 }
 
@@ -139,11 +143,16 @@ interface SessionStartDispatch {
   readonly values: readonly string[];
 }
 
+// `nextCallInRun` stands for the compaction leg's delivery hint (HKRL-03).
 function sessionStartDispatch(
   source: SessionStartSource,
   values: readonly string[],
+  nextCallInRun?: boolean,
 ): SessionStartDispatch {
-  return { event: { source }, values };
+  return {
+    event: nextCallInRun === undefined ? { source } : { source, nextCallInRun },
+    values,
+  };
 }
 
 type SessionAppend = (sessionManager: SessionManager) => void;
@@ -2006,6 +2015,42 @@ describe("adaptObservationResultForEvent", () => {
     assert.deepStrictEqual(sent, [
       sessionStartContextMessage(["first context"]),
       sessionStartContextMessage(["second context"]),
+    ]);
+  });
+
+  test("steers a compaction's SessionStart context into a run whose next model call follows (HKRL-03)", () => {
+    // arrange
+    const sent: SentMessage[] = [];
+
+    // act
+    adaptObservationResultForEvent(
+      { kind: "mutate", additionalContext: "compact context" },
+      "SessionStart",
+      { ...adapterContext(guardEntry()), pi: createMessagePi(sent) },
+      sessionStartDispatch("compact", ["compact context"], true),
+    );
+
+    // assert
+    assert.deepStrictEqual(sent, [
+      sessionStartContextMessage(["compact context"], { deliverAs: "steer" }),
+    ]);
+  });
+
+  test("holds a compaction's SessionStart context when no model call of the run follows (HKRL-03)", () => {
+    // arrange
+    const sent: SentMessage[] = [];
+
+    // act
+    adaptObservationResultForEvent(
+      { kind: "mutate", additionalContext: "compact context" },
+      "SessionStart",
+      { ...adapterContext(guardEntry()), pi: createMessagePi(sent) },
+      sessionStartDispatch("compact", ["compact context"], false),
+    );
+
+    // assert
+    assert.deepStrictEqual(sent, [
+      sessionStartContextMessage(["compact context"], { triggerTurn: false }),
     ]);
   });
 

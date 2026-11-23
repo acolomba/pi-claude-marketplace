@@ -587,6 +587,7 @@ interface SessionStartContextDetails {
 /** What a hook context message carries besides its text. */
 interface HookContextSend {
   readonly details?: SessionStartContextDetails;
+  readonly steer?: boolean;
 }
 
 /**
@@ -594,7 +595,10 @@ interface HookContextSend {
  * message, with `send.details` when given. `triggerTurn: false` never starts
  * or steers a run: while Pi is idle, Pi writes the message into the session
  * at once, and while a run streams, Pi holds it until the turn ends, so the
- * model reads it on the next model call. No value with text, or no Pi API,
+ * model reads it on the next model call. HKRL-03: with `send.steer`, a
+ * compaction's context whose next model call follows in the same run is
+ * steered in (`deliverAs: "steer"`), which Pi's loop reads on that call;
+ * while idle, Pi appends a steer at once. No value with text, or no Pi API,
  * sends nothing. Only a synchronous throw, such as Pi's stale-context error
  * after a session replacement, is debug-logged with `failureLog` and never
  * thrown (NFR-2); Pi reports a rejected asynchronous write itself, through
@@ -620,7 +624,7 @@ function sendHookContextMessage(
         display: false,
         ...(send.details === undefined ? {} : { details: send.details }),
       },
-      { triggerTurn: false },
+      send.steer === true ? { deliverAs: "steer" } : { triggerTurn: false },
     );
   } catch (error: unknown) {
     hookDebugLog(`${failureLog}: ${errorMessage(error)}`);
@@ -898,6 +902,7 @@ function sendSessionStartContext(
     sessionStartFailureLog(context.attributedTo),
     {
       details: { event: "SessionStart", values: sent },
+      steer: start.event.nextCallInRun === true,
     },
   );
 }
