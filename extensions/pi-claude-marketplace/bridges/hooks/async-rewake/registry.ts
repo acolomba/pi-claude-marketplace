@@ -78,6 +78,12 @@ import { translateStop } from "../payloads/stop.ts";
 import { translateUserPromptExpansion } from "../payloads/user-prompt-expansion.ts";
 import { translateUserPromptSubmit } from "../payloads/user-prompt-submit.ts";
 import { asGroupLeader, type SignalGroup } from "../process-group.ts";
+import {
+  ASYNC_RESPONSE_CUSTOM_TYPE,
+  asyncAnswerHeld,
+  type AsyncAnswerHook,
+  type AsyncSessionStartDetails,
+} from "../session-start-context.ts";
 import { planSpawn, serializeWithTruncation } from "../spawn-helpers.ts";
 import { ceilingBound, collectStreamText, type StreamTextBound } from "../stream-text.ts";
 import { resolveTimeoutSeconds } from "../timeout.ts";
@@ -139,12 +145,6 @@ const PLAIN_ASYNC_STREAM_TAIL = 64 * 1024;
  */
 export const REWAKE_CUSTOM_TYPE = "claude-hook-rewake" as const;
 
-/**
- * D-BG-205: custom-message type of a plain async hook's answer, named after
- * Claude Code's `async_hook_response` attachment.
- */
-const ASYNC_RESPONSE_CUSTOM_TYPE = "claude-hook-async-response" as const;
-
 // ──────────────────────────────────────────────────────────────────────────
 // Translator dispatch (PAYL-01 reuse; mirrors dispatch-exec.ts)
 // ──────────────────────────────────────────────────────────────────────────
@@ -181,8 +181,10 @@ export type AsyncRewakeEntry = HooksRuntimeChildEntry;
 /**
  * What the exit handler of one child needs from its dispatch: the event's
  * context and API, the runtime that records a sent wake (D-PG5-06), the
- * hook's Claude label for the default rewake prefix, and the writer that
- * saves an answer's text over the model's limit (D-PG5-15).
+ * hook's Claude label for the default rewake prefix, the command the hook
+ * declares, which names the hook of a SessionStart answer
+ * (HOOKASYNCRESUME-01), and the writer that saves an answer's text over the
+ * model's limit (D-PG5-15).
  */
 interface RewakeExit {
   readonly ctx: ExtensionContext;
@@ -190,6 +192,7 @@ interface RewakeExit {
   readonly runtime: HooksRuntime;
   readonly label: string;
   readonly lane: BackgroundLane;
+  readonly command: string | undefined;
   readonly saveHookOutput: typeof saveHookOutput;
 }
 
@@ -373,6 +376,7 @@ export async function spawnAndRegister(
       runtime,
       label: rewakeLabel(entry.claudeEvent, stdinPayload),
       lane: laneOf(entry),
+      command: entry.handlerDecl.command,
       saveHookOutput: deps.saveHookOutput ?? saveHookOutput,
     };
     const stdinJson = serializeWithTruncation(stdinPayload);
@@ -709,17 +713,35 @@ async function removeCapturedChildRow(
  * reload during a save makes the old `pi` stale, so its `sendMessage` throws
  * and the answer is dropped; the generation check after the save covers a
  * runtime that is registered twice. A file the save wrote stays until the
- * 30-day sweep. Never rejects.
+ * 30-day sweep. A SessionStart answer whose every text the conversation
+ * already holds is not sent and saves no file, as Claude Code 2.1.295 decides
+ * it, and each message of a SessionStart answer keeps the hook and every
+ * uncapped text in its details (HOOKASYNCRESUME-01). Never rejects.
  */
-async function sendAsyncAnswer(
-  entry: HooksRuntimeChildEntry,
-  { pi, runtime, saveHookOutput: save }: RewakeExit,
-): Promise<void> {
+async function sendAsyncAnswer(entry: HooksRuntimeChildEntry, exit: RewakeExit): Promise<void> {
+  const { pi, runtime, saveHookOutput: save } = exit;
   const answer = asyncAnswerTexts(entry.stdout.text(), entry.claudeEvent);
   if (answer.length === 0) {
     hookDebugLog(`async-hook: no answer on stdout (${entry.pluginId}/${entry.claudeEvent})`);
   }
 
+  const values = answer.map(({ text }) => text);
+  const hook: AsyncAnswerHook = {
+    pluginId: entry.pluginId,
+    marketplace: entry.marketplace,
+    command: exit.command,
+  };
+  if (
+    entry.claudeEvent === "SessionStart" &&
+    sessionStartAnswerHeld(entry, exit.ctx, hook, values)
+  ) {
+    hookDebugLog(
+      `async-hook: answer not added, the conversation holds its text (${entry.pluginId}/${entry.claudeEvent})`,
+    );
+    return;
+  }
+
+  const details = answerDetails(entry, hook, values);
   const texts = await Promise.all(
     answer.map(({ source, text }) =>
       capHookContext(text, source, (whole) => save(entry.loc, entry.dispatchId, source, whole)),
@@ -739,7 +761,7 @@ async function sendAsyncAnswer(
           customType: ASYNC_RESPONSE_CUSTOM_TYPE,
           content,
           display: false,
-          details: { pluginId: entry.pluginId, dispatchId: entry.dispatchId },
+          details,
         },
         { deliverAs: "nextTurn" },
       );
@@ -747,6 +769,36 @@ async function sendAsyncAnswer(
       hookDebugLog(`async-hook: sendMessage threw (${entry.pluginId}): ${errorMessage(err)}`);
     }
   }
+}
+
+// HOOKASYNCRESUME-01: whether the conversation that the session holds has
+// every text of the SessionStart answer `values` (`asyncAnswerHeld`). The
+// projection, never the branch, as the synchronous resume check reads it. A
+// read that throws holds nothing, so the answer is sent (NFR-2).
+function sessionStartAnswerHeld(
+  entry: HooksRuntimeChildEntry,
+  ctx: ExtensionContext,
+  hook: AsyncAnswerHook,
+  values: readonly string[],
+): boolean {
+  try {
+    return asyncAnswerHeld(ctx.sessionManager.buildSessionProjection().messages, hook, values);
+  } catch (err: unknown) {
+    hookDebugLog(`async-hook: session read failed (${entry.pluginId}): ${errorMessage(err)}`);
+    return false;
+  }
+}
+
+// The details of each message of an answer: a SessionStart answer also keeps
+// its hook and every one of its texts (HOOKASYNCRESUME-01).
+function answerDetails(
+  entry: HooksRuntimeChildEntry,
+  hook: AsyncAnswerHook,
+  values: readonly string[],
+): AsyncSessionStartDetails | { readonly pluginId: string; readonly dispatchId: string } {
+  return entry.claudeEvent === "SessionStart"
+    ? { ...hook, dispatchId: entry.dispatchId, event: "SessionStart", values }
+    : { pluginId: entry.pluginId, dispatchId: entry.dispatchId };
 }
 
 /**

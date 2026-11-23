@@ -83,6 +83,11 @@ import {
   hookStoppedText,
   promptStoppedText,
 } from "./hook-labels.ts";
+import {
+  HOOK_CONTEXT_MESSAGE_TYPE,
+  sessionStartValues,
+  type SessionStartContextDetails,
+} from "./session-start-context.ts";
 import { decodeHookToolInput } from "./tool-input.ts";
 import { renderFileToolOutput } from "./tool-output-files.ts";
 import { renderSearchShellToolOutput } from "./tool-output-search-shell.ts";
@@ -552,9 +557,6 @@ export function adaptPreCompactResult(
 // adaptInputResult -- the prompt events
 // ──────────────────────────────────────────────────────────────────────────
 
-/** The custom type of the message that carries prompt and session hook context to the model. */
-export const HOOK_CONTEXT_MESSAGE_TYPE = "claude-hook-additional-context";
-
 /**
  * HOOK-05 / D-PG6-20: one `<Event> hook additional context: <values>` text
  * part, the values joined by `\n` in buffer order, as Claude Code 2.1.316
@@ -572,16 +574,6 @@ export function hookContextPart(
   }
 
   return { type: "text", text: `${claudeEvent} hook additional context: ${texts.join("\n")}` };
-}
-
-/**
- * HKRL-02: the values a SessionStart context message carries, one per hook,
- * as Claude Code keeps one string per hook in its attachment. A resumed or
- * forked session reads them back to tell which values it already holds.
- */
-interface SessionStartContextDetails {
-  readonly event: "SessionStart";
-  readonly values: readonly string[];
 }
 
 /** What a hook context message carries besides its text. */
@@ -789,9 +781,6 @@ export function adaptInputResult(
 //                                   (per-event narrowing)
 // ──────────────────────────────────────────────────────────────────────────
 
-// The label of a SessionStart context part (`hookContextPart`).
-const SESSION_START_CONTEXT_LABEL = "SessionStart hook additional context: ";
-
 // The first line of the wrapper of a context saved to a file (`context-cap.ts`).
 const PERSISTED_OUTPUT_PREFIX = "<persisted-output>";
 
@@ -804,44 +793,11 @@ function contextKey(value: string): string {
     : value;
 }
 
-// Whether `value`, read back from a session file, is the `details` of a
-// SessionStart context message.
-function isSessionStartContextDetails(value: unknown): value is SessionStartContextDetails {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    "event" in value &&
-    "values" in value &&
-    value.event === "SessionStart" &&
-    Array.isArray(value.values) &&
-    value.values.every((item: unknown) => typeof item === "string")
-  );
-}
-
-// The keys of the SessionStart values that `message` holds, read from the
-// text the model sees: the rest of each part that carries the SessionStart
-// label. Text content is one such part, as a context edit may write it.
-// `details` only splits that rest into its values, when they join to it; a
-// context edit replaces the text and keeps the details, and a message
-// written before details existed, or by a release whose details this one
-// does not read, keys its whole rest.
+// The keys of the SessionStart values that `message` holds
+// (`sessionStartValues`). The sync check reads no async answer, as Claude
+// Code 2.1.330's resume check reads no `async_hook_response`.
 function messageKeys(message: AgentMessage): readonly string[] {
-  if (message.role !== "custom" || message.customType !== HOOK_CONTEXT_MESSAGE_TYPE) {
-    return [];
-  }
-
-  const { content, details } = message;
-  const parts = typeof content === "string" ? [{ type: "text" as const, text: content }] : content;
-  return parts.flatMap((part) => {
-    if (part.type !== "text" || !part.text.startsWith(SESSION_START_CONTEXT_LABEL)) {
-      return [];
-    }
-
-    const text = part.text.slice(SESSION_START_CONTEXT_LABEL.length);
-    return isSessionStartContextDetails(details) && details.values.join("\n") === text
-      ? details.values.map((value) => contextKey(value))
-      : [contextKey(text)];
-  });
+  return sessionStartValues(message).map((value) => contextKey(value));
 }
 
 // The keys of every SessionStart value the conversation the model sees

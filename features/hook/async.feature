@@ -258,6 +258,37 @@ Feature: Hook async
       | 2    | user      | remember the tests     |
       | 2    | user      | the tests live in test |
 
+  Scenario: A continued session adds an async session start answer only when the conversation does not hold it
+    Given pi runs with the scripted model and saves its session
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event        | matcher | form   | async | waits | output                                                                                  |
+      | later | SessionStart |         | script | true  | true  | {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"async-ctx"}} |
+      | fresh | SessionStart | resume  | script | true  | true  | {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"fresh-ctx"}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Hello. |
+      | Done.  |
+    Given the user has released the hook "later" and pi has handled its exit
+    Given the user has prompted "first prompt"
+    Given the user has started pi again and continued the last session
+    Given the user has released the hook "later" and pi has handled its exit
+    Given the user has released the hook "fresh" and pi has handled its exit
+    When the user prompts "second prompt"
+    Then the model receives these calls:
+      | call | role      | text          |
+      | 2    | user      | first prompt  |
+      | 2    | user      | async-ctx     |
+      | 2    | assistant | Hello.        |
+      | 2    | user      | second prompt |
+      | 2    | user      | fresh-ctx     |
+
   Scenario: A plain async hook runs past its declared timeout
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source

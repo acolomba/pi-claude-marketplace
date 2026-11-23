@@ -86,7 +86,6 @@ import {
 } from "./dispatch.ts";
 import {
   endsTheWork,
-  HOOK_CONTEXT_MESSAGE_TYPE,
   hookContextPart,
   sendDueFollowUpContext,
   userMessageText,
@@ -110,6 +109,7 @@ import {
   type RoutingEntry,
   type RoutingStateOperations,
 } from "./routing-state.ts";
+import { HOOK_CONTEXT_MESSAGE_TYPE } from "./session-start-context.ts";
 import {
   agentEndCacheHandler,
   beforeSettleHandlerFor,
