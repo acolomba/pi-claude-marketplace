@@ -5,6 +5,11 @@
  * The host buffers each request body before it runs the CGI, so a chunked
  * request still gets a `CONTENT_LENGTH`. The CGI runs with the suite's
  * hermetic git environment and nothing from the worker's own (DRV-03).
+ *
+ * A SHA-want policy decides whether the backend serves a want of a commit
+ * that no ref advertises (SG-HRN-02). Its upload-pack settings reach the
+ * backend as `-c` arguments of `git http-backend`, so no `GIT_CONFIG_*`
+ * variable is ever in a CGI environment (DRV-03).
  */
 
 import { spawn } from "node:child_process";
@@ -29,6 +34,35 @@ export interface CgiResponse {
   readonly body: Buffer;
 }
 
+/**
+ * How the backend treats a want of a commit that no ref advertises (SG-HRN-02).
+ * `"allow-reachable"` serves a want of any commit a ref reaches, as GitHub
+ * does: protocol v2 serves any want, and a protocol v0 client gets
+ * `uploadpack.allowReachableSHA1InWant`. `"refuse"` serves protocol v0 with
+ * neither allow key, so a fetch by SHA fails and a caller can drive its
+ * fallback.
+ */
+export type ShaWantPolicy = "allow-reachable" | "refuse";
+
+/**
+ * Returns the arguments of the git that runs `git http-backend` under
+ * `policy`: its upload-pack settings as `-c` arguments, then `http-backend`.
+ */
+export function httpBackendArguments(policy: ShaWantPolicy): string[] {
+  switch (policy) {
+    case "allow-reachable":
+      return ["-c", "uploadpack.allowReachableSHA1InWant=true", "http-backend"];
+    case "refuse":
+      return [
+        "-c",
+        "uploadpack.allowReachableSHA1InWant=false",
+        "-c",
+        "uploadpack.allowAnySHA1InWant=false",
+        "http-backend",
+      ];
+  }
+}
+
 function optionalHeader(headers: IncomingHttpHeaders, name: string): string | undefined {
   const value = headers[name];
   return value === undefined ? undefined : String(value);
@@ -36,12 +70,15 @@ function optionalHeader(headers: IncomingHttpHeaders, name: string): string | un
 
 /**
  * Returns the CGI environment of `request` for a backend that serves the
- * repositories under `projectRoot` and runs with the HOME `home`.
+ * repositories under `projectRoot` and runs with the HOME `home`. Under the
+ * `"refuse"` policy it passes no `GIT_PROTOCOL`, so the backend answers
+ * protocol v0, because protocol v2 ignores both SHA-want allow keys.
  */
 export function cgiEnvironment(
   request: CgiRequest,
   projectRoot: string,
   home: string,
+  policy: ShaWantPolicy = "allow-reachable",
 ): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {
     ...hermeticGitEnvironment(home),
@@ -55,7 +92,7 @@ export function cgiEnvironment(
     CONTENT_LENGTH: String(request.body.length),
   };
   const protocol = optionalHeader(request.headers, "git-protocol");
-  if (protocol !== undefined) {
+  if (protocol !== undefined && policy === "allow-reachable") {
     environment.GIT_PROTOCOL = protocol;
   }
 
@@ -127,17 +164,19 @@ export function parseCgiResponse(output: Buffer): CgiResponse {
 }
 
 /**
- * Runs `git http-backend` with `env`, writes `body` to it, and resolves with
- * everything it prints. Hands the child to `track` first, so the host can
- * kill it. Rejects with the exit code and stderr when it fails.
+ * Runs git with `args`, the arguments `httpBackendArguments` returns, and with
+ * `env`, writes `body` to it, and resolves with everything it prints. Hands
+ * the child to `track` first, so the host can kill it. Rejects with the exit
+ * code and stderr when it fails.
  */
 export function runHttpBackend(
+  args: readonly string[],
   env: NodeJS.ProcessEnv,
   body: Buffer,
   track: (child: ChildProcess) => void,
 ): Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    const child = spawn("git", ["http-backend"], { env, stdio: ["pipe", "pipe", "pipe"] });
+    const child = spawn("git", args, { env, stdio: ["pipe", "pipe", "pipe"] });
     track(child);
     const chunks: Buffer[] = [];
     let stderr = "";

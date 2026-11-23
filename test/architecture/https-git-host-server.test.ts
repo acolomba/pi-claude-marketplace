@@ -2,7 +2,9 @@
  * @fileoverview Checks the https git host's own answers: a request it cannot
  * serve, a body the backend never reads, an armed repository whose name the
  * request percent-encodes, and the catalog files it serves for hosted
- * marketplaces (HOST-01, HOST-03, HOST-04, D-PL5-06).
+ * marketplaces (HOST-01, HOST-03, HOST-04, D-PL5-06). It also checks that a
+ * system git client trusts the host through the host's CA file alone and
+ * fetches a commit by SHA over protocols v2 and v0 (SG-HRN-02).
  */
 
 import assert from "node:assert/strict";
@@ -14,7 +16,15 @@ import { describe, test } from "node:test";
 
 import { runGit } from "../../features/lib/hermetic-git.ts";
 import { HttpsGitHost } from "../../features/lib/https-git-host/server.ts";
+import {
+  createGitTestDirectory,
+  createGitTestRepository,
+  runSystemGit,
+  SystemGitError,
+} from "../platform/git-test-repository.ts";
 
+import type { GitHostRequest } from "../../features/lib/https-git-host/server.ts";
+import type { SystemGitCall } from "../platform/git-test-repository.ts";
 import type { TestContext } from "node:test";
 
 const INFO_REFS = "/acme/tools.git/info/refs?service=git-upload-pack";
@@ -28,6 +38,73 @@ async function startHost(t: TestContext): Promise<HttpsGitHost> {
   t.after(() => host.close());
   await runGit(root, host.gitHome, "init", "-q", "--bare", host.repositoryPath("tools"));
   return host;
+}
+
+/** The first commit and the tip of a repository the host serves. */
+interface PublishedCommits {
+  readonly first: string;
+  readonly tip: string;
+}
+
+/**
+ * Builds a two-commit repository and publishes it bare as `directory` of the
+ * host's default owner, so the first commit is reachable but no ref names it.
+ */
+async function publish(
+  t: TestContext,
+  host: HttpsGitHost,
+  directory: string,
+): Promise<PublishedCommits> {
+  const repository = await createGitTestRepository(t, { boundary: "local" });
+  const tip = await repository.commit([{ filepath: "NOTES.md", contents: "notes\n" }], "second");
+  await repository.cloneBare(host.repositoryPath(directory));
+  return { first: repository.initialOid, tip };
+}
+
+/** A system git client with its own scratch HOME and a directory to clone into. */
+interface GitClient {
+  readonly root: string;
+  /** Runs in `root` and trusts the host through its CA file and nothing else. */
+  readonly trusted: SystemGitCall;
+  /** Runs in `root` and names no CA file. */
+  readonly untrusted: SystemGitCall;
+  /** Runs in the clone `clone` under `root` and trusts the host as `trusted` does. */
+  inClone(clone: string): SystemGitCall;
+}
+
+async function gitClient(t: TestContext, host: HttpsGitHost): Promise<GitClient> {
+  const root = await createGitTestDirectory(t, { boundary: "local" });
+  const home = await createGitTestDirectory(t, { boundary: "local" });
+  const variables = { GIT_SSL_CAINFO: host.certificatePath };
+  return {
+    root,
+    trusted: { cwd: root, home, variables },
+    untrusted: { cwd: root, home },
+    inClone: (clone) => ({ cwd: path.join(root, clone), home, variables }),
+  };
+}
+
+/**
+ * Returns `requests` with each run of equal requests kept once, so a check
+ * states which requests a git command sent and in what order, but not how
+ * many negotiation rounds the client's git version needed.
+ */
+function distinctRequests(requests: readonly GitHostRequest[]): GitHostRequest[] {
+  const key = (request: GitHostRequest | undefined): string =>
+    request === undefined ? "" : `${request.method} ${request.path} ${String(request.status)}`;
+  return requests.filter((request, index) => key(request) !== key(requests[index - 1]));
+}
+
+/** The requests of a clone or fetch of `directory` that the host served in full. */
+function servedUploadPack(directory: string): GitHostRequest[] {
+  return [
+    {
+      method: "GET",
+      path: `/acme/${directory}.git/info/refs?service=git-upload-pack`,
+      status: 200,
+    },
+    { method: "POST", path: `/acme/${directory}.git/git-upload-pack`, status: 200 },
+  ];
 }
 
 interface Answer {
@@ -257,4 +334,87 @@ describe("HttpsGitHost", () => {
     // assert
     assert.deepStrictEqual({ files, status }, { files: [], status: 404 });
   });
+});
+
+describe("HttpsGitHost with system git", () => {
+  test("serves a shallow clone to a git that trusts only the host's CA file", async (t) => {
+    // arrange
+    const host = await startHost(t);
+    const { tip } = await publish(t, host, "published");
+    const client = await gitClient(t, host);
+    const window = host.mark();
+
+    // act
+    await runSystemGit(
+      client.trusted,
+      "clone",
+      "-q",
+      "--depth",
+      "1",
+      host.repositoryUrl("published"),
+      "clone",
+    );
+    const head = await runSystemGit(client.inClone("clone"), "rev-parse", "HEAD");
+
+    // assert
+    assert.deepStrictEqual(
+      { head, requests: distinctRequests(host.requestsSince(window).requests) },
+      { head: tip, requests: servedUploadPack("published") },
+    );
+  });
+
+  test("fails certificate verification for a git that names no CA file", async (t) => {
+    // arrange
+    const host = await startHost(t);
+    await publish(t, host, "published");
+    const client = await gitClient(t, host);
+
+    // act & assert
+    await assert.rejects(
+      runSystemGit(client.untrusted, "clone", "-q", host.repositoryUrl("published"), "clone"),
+      (error: unknown) => {
+        assert.ok(error instanceof SystemGitError);
+        assert.strictEqual(error.exitCode, 128);
+        assert.match(error.stderr, /certificate/i);
+        return true;
+      },
+    );
+  });
+
+  for (const { title, protocol } of [
+    { title: "fetches a commit no ref names by its SHA over protocol v2", protocol: [] },
+    {
+      title: "fetches a commit no ref names by its SHA over protocol v0",
+      protocol: ["-c", "protocol.version=0"],
+    },
+  ]) {
+    test(title, async (t) => {
+      // arrange
+      const host = await startHost(t);
+      const { first } = await publish(t, host, "published");
+      const client = await gitClient(t, host);
+      const url = host.repositoryUrl("published");
+      await runSystemGit(client.trusted, "clone", "-q", "--depth", "1", url, "clone");
+      const window = host.mark();
+
+      // act
+      await runSystemGit(
+        client.inClone("clone"),
+        ...protocol,
+        "fetch",
+        "-q",
+        "--depth",
+        "1",
+        "origin",
+        first,
+      );
+      const fetched = await runSystemGit(client.inClone("clone"), "rev-parse", "FETCH_HEAD");
+
+      // assert
+      assert.deepStrictEqual(
+        { fetched, requests: distinctRequests(host.requestsSince(window).requests) },
+        { fetched: first, requests: servedUploadPack("published") },
+      );
+    });
+  }
 });

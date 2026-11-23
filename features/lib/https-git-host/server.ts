@@ -26,7 +26,7 @@ import { createServer } from "node:https";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { cgiEnvironment, parseCgiResponse, runHttpBackend } from "./cgi.ts";
+import { cgiEnvironment, httpBackendArguments, parseCgiResponse, runHttpBackend } from "./cgi.ts";
 
 import type { CgiResponse } from "./cgi.ts";
 import type { ChildProcess } from "node:child_process";
@@ -647,9 +647,10 @@ export class HttpsGitHost {
         headers,
         body,
       };
-      const env = cgiEnvironment(request, this.repositories, this.gitHome);
+      const env = cgiEnvironment(request, this.repositories, this.gitHome, "allow-reachable");
+      const args = httpBackendArguments("allow-reachable");
       const response = parseCgiResponse(
-        await runHttpBackend(env, body, (child) => {
+        await runHttpBackend(args, env, body, (child) => {
           this.track(child);
         }),
       );
