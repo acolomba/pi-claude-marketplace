@@ -121,7 +121,7 @@ them at the merge.
 - [x] **Phase 6: Hooks and Auth** - Scenarios prove hooks in both scopes after `apply`, a reload that clears buffered context, no `.pi` directory from a hook dispatch, and the print-mode and credential-eviction sign-in cases (completed 2026-11-22)
 - [x] **Phase 06.1: Reload Keeps SessionStart Context** (INSERTED) - A `/reload` before the first prompt keeps the startup SessionStart context, as Claude Code's `/reload-plugins` does (completed 2026-11-23)
 - [x] **Phase 7: Path-Source Dependency Tags** - A step publishes a marketplace repository with a tag, and scenarios prove that a constrained path-source dependency installs from that tag, with the TAGS-02 fallback (completed 2026-11-23)
-- [ ] **Phase 8: Integration Suite Rescope** - Every case left in `test/integration/` is conformance, a race, or internal, each file says what it guards, the charter is written down, and `npm run check` passes on the combined tree
+- [x] **Phase 8: Integration Suite Rescope** - Every case left in `test/integration/` is conformance, a race, or internal, each file says what it guards, the charter is written down, and `npm run check` passes on the combined tree (completed 2026-11-23)
 
 <details>
 <summary>✅ parity-gaps — Claude Code Parity Gaps and Defects — SHIPPED 2026-11-17</summary>
@@ -363,7 +363,7 @@ Plans:
   2. The opening comment of each remaining integration file names its class and the behavior that cucumber does not cover (ITSCOPE-02).
   3. The `typescript-unit-tests` skill, the `cucumber` skill, and `.planning/codebase/TESTING.md` each state the suite's charter: what belongs in an integration test, and what goes to cucumber or to a unit test (ITSCOPE-03).
   4. `npm run check` exits 0 on the combined tree at the end of the milestone, with both cucumber profiles green and 100% direct coverage for every source-test pair (ITSCOPE-04).
-**Plans**: 5/5 plans executed
+**Plans**: 5/5 plans complete
 
 Plans:
 **Wave 1**
@@ -386,7 +386,7 @@ Plans:
 | 5. MCP Install, Legacy Move, and Overrides | 3/3 | Complete    | 2026-11-22 |
 | 6. Hooks and Auth | 2/2 | Complete    | 2026-11-22 |
 | 7. Path-Source Dependency Tags | 1/1 | Complete    | 2026-11-23 |
-| 8. Integration Suite Rescope | 5/5 | In Progress | - |
+| 8. Integration Suite Rescope | 5/5 | Complete    | 2026-11-23 |
 
 ## Carried Forward
 

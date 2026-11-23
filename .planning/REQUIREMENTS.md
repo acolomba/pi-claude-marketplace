@@ -46,10 +46,10 @@ Each ITMIG requirement is met only when all of these hold:
 
 ### Rescope (ITSCOPE)
 
-- [ ] **ITSCOPE-01**: Every case left in `test/integration/` is one of these: peer conformance against a peer's own code, a multi-process race, or an internal case (stored record fields, state that only older releases wrote, fault injection, or calls that must not happen). Any other case moves to a unit test with its source pair, or is deleted when cucumber or a unit test already covers it.
-- [ ] **ITSCOPE-02**: The header of each remaining integration file names its class and the behavior that cucumber does not cover.
-- [ ] **ITSCOPE-03**: The suite's charter, what belongs in an integration test and what goes to cucumber or a unit test, is written in the `typescript-unit-tests` and `cucumber` skills and in `.planning/codebase/TESTING.md`.
-- [ ] **ITSCOPE-04**: `npm run check` passes on the combined tree at the end of the milestone.
+- [x] **ITSCOPE-01**: Every case left in `test/integration/` is one of these: peer conformance against a peer's own code, a multi-process race, or an internal case (stored record fields, state that only older releases wrote, fault injection, or calls that must not happen). Any other case moves to a unit test with its source pair, or is deleted when cucumber or a unit test already covers it.
+- [x] **ITSCOPE-02**: The header of each remaining integration file names its class and the behavior that cucumber does not cover.
+- [x] **ITSCOPE-03**: The suite's charter, what belongs in an integration test and what goes to cucumber or a unit test, is written in the `typescript-unit-tests` and `cucumber` skills and in `.planning/codebase/TESTING.md`.
+- [x] **ITSCOPE-04**: `npm run check` passes on the combined tree at the end of the milestone.
 
 ## Future Requirements
 
@@ -85,10 +85,10 @@ None.
 | HKRL-01 | Phase 6.1 | Complete |
 | HKRL-02 | Phase 6.1 | Complete |
 | HKRL-03 | Phase 6.1 | Complete |
-| ITSCOPE-01 | Phase 8 | Pending |
-| ITSCOPE-02 | Phase 8 | Pending |
-| ITSCOPE-03 | Phase 8 | Pending |
-| ITSCOPE-04 | Phase 8 | Pending |
+| ITSCOPE-01 | Phase 8 | Complete |
+| ITSCOPE-02 | Phase 8 | Complete |
+| ITSCOPE-03 | Phase 8 | Complete |
+| ITSCOPE-04 | Phase 8 | Complete |
 
 **Coverage:**
 - Milestone requirements: 19 total

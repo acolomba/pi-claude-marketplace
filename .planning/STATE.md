@@ -4,18 +4,18 @@ milestone: integration-rescope
 milestone_name: Integration Test Rescope
 current_phase: 08
 current_phase_name: Integration Suite Rescope
-status: executing
-stopped_at: Phase 06.1 complete, ready to execute Phase 08
-last_updated: "2026-11-23T09:00:57.438Z"
+status: completed
+stopped_at: Phase 08 complete — all phases complete
+last_updated: "2026-11-23T09:37:19.769Z"
 last_activity: 2026-11-23
-last_activity_desc: Phase 06.1 complete, transitioned to Phase 08
-state_head: 85a817a847780baa986ff02f81c083c42f3dbd89
+last_activity_desc: Phase 08 complete
+state_head: 5ed9a1b3fc955a520bbf52484df7fa25bc1a5f09
 progress:
   total_phases: 9
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 26
-  completed_plans: 25
-  percent: 78
+  completed_plans: 26
+  percent: 89
 ---
 
 # Project State
@@ -32,11 +32,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 08 of 8 (Integration Suite Rescope)
-Plan: 5
-Status: Ready to execute
-Last activity: 2026-11-23 — Phase 06.1 complete, transitioned to Phase 08
+Plan: Not started
+Status: All phases complete
+Last activity: 2026-11-23 — Phase 08 complete
 
-Progress: [████████░░] 78%
+Progress: [█████████░] 89%
 
 
 ### parity-gaps closeout: `override_closeout`
@@ -1312,7 +1312,7 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 ## Session Continuity
 
 Last session: 2026-11-22T15:00:00.000Z
-Stopped at: Phase 06.1 complete, ready to execute Phase 08
+Stopped at: Phase 08 complete — all phases complete
 Resume file: None
 
 ### Phase 2 completion-helper notes
