@@ -4,8 +4,8 @@ milestone: system-git
 milestone_name: System Git
 current_phase: 2
 current_phase_name: Git Process Seam and Typed Failures
-status: verifying
-stopped_at: Phase 01 complete, ready to verify Phase 2
+status: planning
+stopped_at: Phase 01 complete, ready to plan Phase 2
 last_updated: "2026-11-23T10:53:35.763Z"
 last_activity: 2026-11-23
 last_activity_desc: Phase 01 complete, transitioned to Phase 2
@@ -22,18 +22,18 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-11-22 when the system-git milestone started)
+See: `.planning/PROJECT.md` (updated 2026-11-23 after Phase 1)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 01 — Harness on System Git
+**Current focus:** Phase 2 — Git Process Seam and Typed Failures
 
 ## Current Position
 
 Phase: 2 — Git Process Seam and Typed Failures
-Plan: 2
-Status: Phase complete — ready for verification
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-11-23 — Phase 01 complete, transitioned to Phase 2
 
 Progress: [█░░░░░░░░░] 13%
@@ -1309,8 +1309,8 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-22T15:56:17.000Z
-Stopped at: Phase 01 complete, ready to verify Phase 2
+Last session: 2026-11-23
+Stopped at: Phase 1 complete, ready to plan Phase 2
 Resume file: None
 
 ### Phase 2 completion-helper notes

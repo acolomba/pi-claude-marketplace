@@ -2855,4 +2855,4 @@ _Last updated: 2026-11-17 after the parity-gaps milestone closed (`override_clos
 
 _Last updated: 2026-11-19 after the maintainer decision D-PG1-15: the `--map-model` alias table follows Claude Code 2.1.328 and the Pi floor is 1.5.1, which supersedes D-PG1-06 and amends D-CF4-07 and the NFR-11 floor; AGENT-06 is closed._
 
-_Last updated: 2026-11-22 when the system-git milestone started._
+_Last updated: 2026-11-23 after system-git Phase 1 (Harness on System Git): the test suites run git through the system binary under a hermetic environment; no product decision was made._
