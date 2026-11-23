@@ -6,8 +6,9 @@
 // the neutral MCP verdict with `compatibilityBasis: "neutral"`, a reinstall
 // of a record an earlier release wrote does the same, a failed update keeps
 // the basis that its intent mark carries, and a repeated disabled update
-// writes nothing. No command shows `compatibilityBasis`; the update rows a
-// user sees are in `features/mcp-server/verdict-update.feature`.
+// leaves the bytes of state.json as they were. No command shows
+// `compatibilityBasis`; the update rows a user sees are in
+// `features/mcp-server/verdict-update.feature`.
 
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -211,7 +212,7 @@ test("D-P3-02: a failed update keeps the basis of the record its intent mark car
   });
 });
 
-test("D-P3-02: a disabled update stores the neutral verdict with its basis, and repeating it writes nothing", async () => {
+test("D-P3-02: a disabled update stores the neutral verdict with its basis, and repeating it leaves the bytes of state.json as they were", async () => {
   await withHermeticEnvironment("mcp-verdict-update-disabled-", async ({ cwd }) => {
     // arrange
     const pluginRoot = await installHello(cwd);
