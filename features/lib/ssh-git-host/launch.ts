@@ -188,6 +188,63 @@ export function uploadPackEnvironment(
   );
 }
 
+/** What the stub writes to stderr for a probe, and the code it exits with. */
+export interface SshProbeAnswer {
+  readonly stderr: string;
+  readonly exitCode: number;
+}
+
+/**
+ * Returns the answer of the arm `arm` to a probe of `destination`, or `"hold"`
+ * when the stub answers nothing until its caller kills it. The strings and
+ * exit codes are the ones Claude Code 2.1.330 reads: success is exit 1 with
+ * `successfully authenticated`, and a not-configured answer is exit 255 with
+ * `Permission denied (publickey` or `Host key verification failed`. The denied
+ * line names the destination's user, `git` when it names none, and its host.
+ */
+export function probeAnswer(arm: SshProbeArm, destination: string): SshProbeAnswer | "hold" {
+  switch (arm.kind) {
+    case "authenticated":
+      return {
+        stderr: `Hi ${arm.user}! You've successfully authenticated, but GitHub does not provide shell access.\n`,
+        exitCode: 1,
+      };
+    case "denied": {
+      const { user, host } = destinationParts(destination);
+      return {
+        stderr: `${user ?? "git"}@${host}: Permission denied (publickey).\n`,
+        exitCode: 255,
+      };
+    }
+
+    case "host-key":
+      return { stderr: "Host key verification failed.\n", exitCode: 255 };
+    case "hold":
+      return "hold";
+  }
+}
+
+/**
+ * Returns the lines `ssh -G <destination>` prints: `host`, `user` (`git` when
+ * the destination names none), `hostname`, and `port` (22 unless `-p` named
+ * one), then the arm's proxy line when it names one. Claude Code 2.1.330 runs
+ * `ssh -G git@github.com` to find a `proxycommand` or `proxyjump` line.
+ */
+export function configLines(
+  destination: string,
+  port: string | undefined,
+  proxy: string | undefined,
+): string[] {
+  const { user, host } = destinationParts(destination);
+  return [
+    `host ${host}`,
+    `user ${user ?? "git"}`,
+    `hostname ${host}`,
+    `port ${port ?? "22"}`,
+    ...(proxy === undefined ? [] : [proxy]),
+  ];
+}
+
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

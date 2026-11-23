@@ -8,9 +8,11 @@
  * directory. It appends every launch to the log, then answers a host the run
  * did not register as an unreachable host, so no scenario reaches a real ssh
  * server, and serves a `git-upload-pack` command from the repositories root
- * with `git upload-pack` in the hermetic environment. Of its own environment
- * it reads only `GIT_PROTOCOL`, which git sends for protocol v2 (SG-HRN-03,
- * DRV-03).
+ * with `git upload-pack` in the hermetic environment. It answers `ssh -G` and
+ * a probe launch with no remote command as the host's arm scripts, with the
+ * strings and exit codes Claude Code 2.1.330 reads, and a held probe answers
+ * nothing until its caller kills it. Of its own environment it reads only
+ * `GIT_PROTOCOL`, which git sends for protocol v2 (SG-HRN-03, DRV-03).
  */
 
 import { spawn } from "node:child_process";
@@ -19,18 +21,20 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  configLines,
   destinationParts,
   HOME_DIRECTORY,
   HOSTS_FILE,
   isSshHostsFile,
   LAUNCHES_FILE,
   parseSshLaunch,
+  probeAnswer,
   servedRepository,
   uploadPackEnvironment,
   uploadPackPath,
 } from "./launch.ts";
 
-import type { SshHostArm, SshHostsFile, SshLaunchRecord } from "./launch.ts";
+import type { SshHostArm, SshHostsFile, SshLaunch, SshLaunchRecord } from "./launch.ts";
 
 /** The absolute path of this module, which the stand-in's wrapper runs. */
 export const STUB_ENTRY = fileURLToPath(import.meta.url);
@@ -40,6 +44,10 @@ const SSH_FAILURE = 255;
 
 // git's exit code for a fatal error, such as a path that names no repository.
 const GIT_FATAL = 128;
+
+// A held probe wakes this often only so that a timer keeps the stub alive
+// until a signal ends it.
+const HOLD_INTERVAL_MS = 60_000;
 
 /** Writes `message` as one stderr line and sets the stub's exit code. */
 function fail(message: string, exitCode: number): void {
@@ -96,6 +104,25 @@ async function serveUploadPack(
   });
 }
 
+/** Prints the config `ssh -G` resolves for `launch` to a registered host. */
+function printConfig(launch: SshLaunch, destination: string, arm: SshHostArm): void {
+  const port = launch.options.filter((option) => option.name === "-p").at(-1)?.value;
+  process.stdout.write(`${configLines(destination, port, arm.proxy).join("\n")}\n`);
+  process.exitCode = 0;
+}
+
+/** Answers a probe of `destination` as `arm` scripts, or holds it until a signal ends the stub. */
+function answerProbe(destination: string, arm: SshHostArm): void {
+  const answered = probeAnswer(arm.probe, destination);
+  if (answered === "hold") {
+    setInterval(() => undefined, HOLD_INTERVAL_MS);
+    return;
+  }
+
+  process.stderr.write(answered.stderr);
+  process.exitCode = answered.exitCode;
+}
+
 /** Answers the launch whose ssh arguments are `argv`. */
 async function answer(directory: string, argv: readonly string[]): Promise<void> {
   await recordLaunch(directory, argv);
@@ -107,8 +134,19 @@ async function answer(directory: string, argv: readonly string[]): Promise<void>
 
   const hosts = await readHosts(directory);
   const { host } = destinationParts(launch.destination);
-  if (hostArm(hosts, host) === undefined) {
+  const arm = hostArm(hosts, host);
+  if (arm === undefined) {
     fail(`ssh: Could not resolve hostname ${host}: Name or service not known`, SSH_FAILURE);
+    return;
+  }
+
+  if (launch.printConfig) {
+    printConfig(launch, launch.destination, arm);
+    return;
+  }
+
+  if (launch.command === "") {
+    answerProbe(launch.destination, arm);
     return;
   }
 
