@@ -39,6 +39,51 @@ Last activity: 2026-11-23 — Phase 01 execution started
 Progress: [░░░░░░░░░░] 0%
 
 
+### system-git Phase 1 (Harness on System Git): records for Phase 3
+
+- `Then the git host receives these requests:` occurs in 79 tables in 19
+  files: `marketplace/hosted-source` 12, `marketplace/device-flow` 7,
+  `marketplace/url-source` 7, `plugin/git-source` 7, `marketplace/git-source`
+  6, `marketplace/hosted-source-update` 6, `plugin/fetch` 5,
+  `marketplace/github-source` 4, `plugin/info` 4, `marketplace/add` 3,
+  `marketplace/failed-add` 3, `plugin/bootstrap` 3, `plugin/git-source-update`
+  3, `marketplace/url-source-update` 2, `mcp-server/verdict-fetch` 2,
+  `plugin/install-dependencies` 2, `plugin/apply` 1, `plugin/autoapply` 1,
+  `plugin/url-marketplace-update` 1 (all under `features/`).
+- The transport swap re-baselines the 59 tables in 17 files that hold
+  smart-HTTP rows (`info/refs` or `git-upload-pack`):
+  `marketplace/device-flow` 7, `marketplace/url-source` 7, `plugin/git-source`
+  7, `marketplace/git-source` 6, `plugin/fetch` 5, `marketplace/github-source`
+  4, `plugin/info` 4, `marketplace/failed-add` 3, `plugin/bootstrap` 3,
+  `plugin/git-source-update` 3, `marketplace/url-source-update` 2,
+  `mcp-server/verdict-fetch` 2, `plugin/install-dependencies` 2,
+  `marketplace/add` 1, `marketplace/hosted-source` 1, `plugin/autoapply` 1,
+  `plugin/url-marketplace-update` 1.
+- The other 20 tables hold only hosted-catalog GETs, which Node `fetch` sends
+  and the swap does not change: `marketplace/hosted-source` 11,
+  `marketplace/hosted-source-update` 6, `marketplace/add` 2, `plugin/apply` 1.
+- Other git-traffic assertions: 7 `Then pi routes these github requests:`
+  tables in `features/marketplace/device-flow.feature`; 2 inline
+  `requestsSince` assertions in
+  `features/step_definitions/marketplace/background-update.steps.ts` (lines
+  68-70 and 92-101, `GET /acme/ghp.git/info/refs?service=git-upload-pack` as
+  `pending` and as `dropped`); 49 `Then the git host receives no request`
+  steps in 17 files, which the swap does not change.
+- Baselines under system git: a clone, a `--depth 1` clone, and a v2 SHA fetch
+  each send one `GET info/refs` and then `POST git-upload-pack` requests; under
+  `refuse-sha-want` a SHA fetch sends only the `GET`.
+- The git host still answers an upload-pack error (`not our ref`) with HTTP
+  500, because `runHttpBackend` rejects a non-zero exit of `git http-backend`.
+  Forwarding the backend's answer is Phase 3's work, with
+  `PinnedCommitMissingError`.
+- Five test files keep a value import of isomorphic-git for the production
+  module's contract, and a later phase removes them with `platform/git.ts`:
+  `test/integration/auth-e2e.test.ts`,
+  `test/orchestrators/plugin/reinstall-flow.test.ts`,
+  `test/orchestrators/plugin/update-flow.test.ts`,
+  `test/orchestrators/plugin/update-preflight.test.ts`,
+  `test/platform/git.test.ts`.
+
 ### parity-gaps closeout: `override_closeout`
 
 Completed 2026-11-17 on `features/gaps` (not yet pushed, no PR or npm
