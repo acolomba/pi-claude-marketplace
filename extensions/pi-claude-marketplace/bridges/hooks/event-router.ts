@@ -1239,15 +1239,19 @@ function sessionShutdownCallback(
  * The SessionStart leg of a compaction (D-CF5-04): it prepares the shared
  * data directories, as the `session_start` path does, so the compaction
  * SessionStart gets its `CLAUDE_ENV_FILE` too, then runs the SessionStart
- * composite with `source: "compact"` to completion. A failure is debug-logged
- * and never thrown out of Pi's event (NFR-2). Returns whether the generation
- * is still current, so a stale one stops the compaction's dispatch.
+ * composite with `source: "compact"` to completion. `nextCallInRun` says
+ * whether a model call of the running agent follows the compaction; the
+ * adapter then steers the context in, so the retry after an overflow
+ * compaction reads it (HKRL-03). A failure is debug-logged and never thrown
+ * out of Pi's event (NFR-2). Returns whether the generation is still
+ * current, so a stale one stops the compaction's dispatch.
  */
 async function runCompactionSessionStart(
   sessionStartHandler: CompositeHandler<"SessionStart">,
   routingState: EventRouterRoutingState,
   ctx: ExtensionContext,
   generationIsCurrent: GenerationGuard,
+  nextCallInRun: boolean,
 ): Promise<boolean> {
   try {
     if (!(await prepareSessionStartDataDirs(routingState, ctx, generationIsCurrent))) {
@@ -1255,7 +1259,7 @@ async function runCompactionSessionStart(
     }
 
     requireNotificationMode(ctx.mode);
-    await sessionStartHandler({ source: "compact" }, ctx);
+    await sessionStartHandler({ source: "compact", nextCallInRun }, ctx);
   } catch (err) {
     hookDebugLog(`session_compact SessionStart skipped: ${errorMessage(err)}`);
   }
@@ -1268,9 +1272,10 @@ async function runCompactionSessionStart(
  * SessionStart with `source: "compact"` to completion and then PostCompact,
  * as upstream in main sessions. Child sessions dispatch neither event. The
  * compaction SessionStart never passes the SSDEDUP-01 guard of
- * `session_start`, so each main-session compaction runs it again. A context
- * whose mode is not a notification mode is skipped with a debug line before
- * the event is read.
+ * `session_start`, so each main-session compaction runs it again. The
+ * retry after an overflow compaction (`willRetry`) reads the steered
+ * SessionStart context (HKRL-03). A context whose mode is not a notification
+ * mode is skipped with a debug line before the event is read.
  */
 function sessionCompactCallback(
   handlers: {
@@ -1298,6 +1303,7 @@ function sessionCompactCallback(
         routingState,
         ctx,
         generationIsCurrent,
+        event.willRetry,
       ))
     ) {
       return undefined;

@@ -4654,7 +4654,7 @@ test("session_compact runs SessionStart with source compact to completion, then 
   // assert
   assert.strictEqual(update, undefined);
   assert.deepStrictEqual(log, [
-    { start: "SessionStart", event: { source: "compact" } },
+    { start: "SessionStart", event: { source: "compact", nextCallInRun: false } },
     { end: "SessionStart" },
     { start: "PostCompact", event },
     { end: "PostCompact" },
@@ -4797,6 +4797,83 @@ test("session_compact dispatches nothing when the generation goes stale while it
     true,
   );
 });
+
+/** The Pi events of an agent run that come before a compaction in a delivery row. */
+const RUN_EVENTS = {
+  turn_start: { type: "turn_start" },
+  turn_end: {
+    type: "turn_end",
+    message: { role: "assistant", content: [{ type: "text", text: "Done." }], stopReason: "stop" },
+    context: { pendingMessages: [] },
+  },
+  agent_end: { type: "agent_end", messages: [] },
+} as const;
+
+for (const { title, before, reason, willRetry, options } of [
+  {
+    title:
+      "steers the SessionStart context of an overflow compaction into the retried model call (HKRL-03)",
+    before: [],
+    reason: "overflow",
+    willRetry: true,
+    options: { deliverAs: "steer" },
+  },
+  {
+    title: "holds the SessionStart context of a manual compaction for the next prompt (HKRL-03)",
+    before: [],
+    reason: "manual",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+] satisfies ReadonlyArray<{
+  readonly title: string;
+  readonly before: ReadonlyArray<keyof typeof RUN_EVENTS>;
+  readonly reason: SessionCompactEvent["reason"];
+  readonly willRetry: boolean;
+  readonly options: unknown;
+}>) {
+  test(title, async (t) => {
+    // arrange
+    const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-delivery-");
+    const runtime = createHooksRuntime();
+    const { pi, registrations, messages } = makeRecordingPi();
+    await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+      cwd: root,
+      executor: (entry) =>
+        Promise.resolve(
+          entry.claudeEvent === "SessionStart"
+            ? { kind: "mutate", additionalContext: "compact context" }
+            : { kind: "noop" },
+        ),
+    });
+    routeCompactionHooks(runtime, root);
+    const context = makeContext(root, root);
+    for (const runEvent of before) {
+      await registeredHandler(registrations, runEvent)(RUN_EVENTS[runEvent], context);
+    }
+
+    // act
+    await registeredHandler(registrations, "session_compact")(
+      { ...compactionEvent("delivery summary"), reason, willRetry },
+      context,
+    );
+
+    // assert
+    assert.deepStrictEqual(messages, [
+      {
+        message: {
+          customType: "claude-hook-additional-context",
+          content: [
+            { type: "text", text: "SessionStart hook additional context: compact context" },
+          ],
+          display: false,
+          details: { event: "SessionStart", values: ["compact context"] },
+        },
+        options,
+      },
+    ]);
+  });
+}
 
 /** Collects the OBS-01 debug lines a case emits, restoring the flag afterwards. */
 function observeRouterDebug(t: TestContext): () => string[] {

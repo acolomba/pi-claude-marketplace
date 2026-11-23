@@ -2,8 +2,9 @@
  * @fileoverview Steps about the scripted model of a profile Pi: starting the
  * profile Pi with it, arming its script, and the calls it receives (D-CF1-17).
  *
- * A feature file writes the whole script as literals. The calls step reads
- * the call log, never the script, so it states what Pi sent the model. A
+ * A feature file writes the whole script as literals. The calls step and the
+ * single-call step `the model call {int} receives these messages:` read the
+ * call log, never the script, so they state what Pi sent the model. A
  * companion's tool result or task message reads as `features/lib/upstream/`
  * reduces it, so a row states only the facts this extension owns.
  */
@@ -20,6 +21,7 @@ import { expandTokens, projectTokens } from "../lib/run-tokens.ts";
 import {
   callMessageRows,
   modelCallsOf,
+  numberedModelCall,
   parseScriptTable,
   readModelScript,
   writeModelScript,
@@ -141,3 +143,20 @@ Then("the model receives these calls:", function (this: ScenarioWorld, table: Da
   assert.deepStrictEqual([["call", "role", "text"], ...rows], table.raw());
   this.markTurnCompared();
 });
+
+// One row per message of one call of the last turn, system messages aside,
+// numbered from 1 as the calls step numbers them. A scenario about one call
+// of a long turn, such as the call after a compaction, states that call
+// whole, while the script bounds the turn's calls.
+Then(
+  "the model call {int} receives these messages:",
+  function (this: ScenarioWorld, number: number, table: DataTable) {
+    const call = numberedModelCall(this.requireTurn().logs, number);
+    const rows = callMessageRows([call]).map(([, role, text]) => [
+      role,
+      projectCallText(text, this.tokens),
+    ]);
+    assert.deepStrictEqual([["role", "text"], ...rows], table.raw());
+    this.markTurnCompared();
+  },
+);
