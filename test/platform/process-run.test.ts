@@ -14,6 +14,7 @@ import { createHermeticEnvironment } from "./hermetic-environment.ts";
 import { createProcessFake } from "./process-fake.ts";
 
 import type {
+  OutputCapture,
   ProcessHost,
   ProcessLauncher,
   ProcessRequest,
@@ -43,8 +44,10 @@ function linuxHost(groupSignals: GroupSignal[] = []): ProcessHost {
 }
 
 function launcherFor(control: ProcessControl, host: ProcessHost = linuxHost()): ProcessLauncher {
-  return { spawn: () => control.process, host };
+  return { spawn: control.spawn, host };
 }
+
+const HEAD: OutputCapture = { limit: 65_536, keep: "head" };
 
 const request: ProcessRequest = {
   command: "npm",
@@ -53,6 +56,9 @@ const request: ProcessRequest = {
   env: {},
   timeoutMs: TIMEOUT_MS,
   killGraceMs: KILL_GRACE_MS,
+  stdout: HEAD,
+  stderr: HEAD,
+  windowsHide: false,
 };
 
 // A grandchild that ignores SIGTERM, prints "started" at once, and prints
@@ -112,7 +118,17 @@ function runIsolatedTimeoutProbe(): Promise<{
     setTimeout(() => {}, 80);
     const run = await runProcess(
       { spawn: () => child, host },
-      { command: "npm", args: ["ci"], cwd: "/work", env: {}, timeoutMs: 20, killGraceMs: 50 },
+      {
+        command: "npm",
+        args: ["ci"],
+        cwd: "/work",
+        env: {},
+        timeoutMs: 20,
+        killGraceMs: 50,
+        stdout: { limit: 100, keep: "head" },
+        stderr: { limit: 100, keep: "tail" },
+        windowsHide: false,
+      },
     );
     process.stdout.write(JSON.stringify(run));
   `;
@@ -144,8 +160,8 @@ interface WindowsTimeout {
   readonly pending: Promise<ProcessRun>;
 }
 
-// Runs C:\\tools\\npm.exe on a win32 host. Every later launch is a taskkill,
-// which `startKiller` stands in for.
+// Runs C:\\tools\\npm.exe on a win32 host with its console hidden. Every later
+// launch is a taskkill, which `startKiller` stands in for.
 function startOnWindows(env: NodeJS.ProcessEnv, startKiller: () => RunningProcess): WindowsTimeout {
   const control = createProcessFake(42);
   const launches: Launched[] = [];
@@ -165,6 +181,7 @@ function startOnWindows(env: NodeJS.ProcessEnv, startKiller: () => RunningProces
     command: "C:\\tools\\npm.exe",
     cwd: "C:\\work",
     env,
+    windowsHide: true,
   });
   return { control, launches, pending };
 }
@@ -176,23 +193,17 @@ function windowsSpawnOptions(env: NodeJS.ProcessEnv): ProcessSpawnOptions {
     shell: false,
     stdio: ["ignore", "pipe", "pipe"],
     detached: false,
+    windowsHide: true,
   };
 }
 
 const TASKKILL_ARGS = ["/PID", "42", "/T", "/F"];
 
 describe("runProcess", () => {
-  test("spawns the command with its arguments verbatim, no shell, the request directory, and the request environment", async () => {
+  test("SG-PRC-01: spawns the command with its arguments verbatim, no shell, no stdin, the request directory, and the request environment", async () => {
     // arrange
     const control = createProcessFake();
-    const launches: Launched[] = [];
-    const launcher: ProcessLauncher = {
-      spawn: (command, args, options) => {
-        launches.push([command, args, options]);
-        return control.process;
-      },
-      host: linuxHost(),
-    };
+    const launcher = launcherFor(control);
 
     // act
     const pending = runProcess(launcher, {
@@ -205,7 +216,7 @@ describe("runProcess", () => {
     await pending;
 
     // assert
-    assert.deepStrictEqual(launches, [
+    assert.deepStrictEqual(control.launches(), [
       [
         "bun",
         ["install", "--frozen-lockfile"],
@@ -215,9 +226,17 @@ describe("runProcess", () => {
           shell: false,
           stdio: ["ignore", "pipe", "pipe"],
           detached: true,
+          windowsHide: false,
         },
       ],
     ]);
+    assert.deepStrictEqual(
+      { input: control.input(), ended: control.inputEnded() },
+      {
+        input: "",
+        ended: false,
+      },
+    );
   });
 
   test("starts no process for a request whose operation was already cancelled", async () => {
@@ -258,6 +277,159 @@ describe("runProcess", () => {
 
     // assert
     assert.deepStrictEqual(run, { code: 1, stdout: "ab", stderr: "c", timedOut: false });
+  });
+
+  for (const input of ["protocol=https\nhost=example.com\n\n", ""]) {
+    test(`SG-PRC-01: writes the input ${JSON.stringify(input)} to a stdin pipe and then ends it`, async () => {
+      // arrange
+      const control = createProcessFake();
+      const launcher = launcherFor(control);
+
+      // act
+      const pending = runProcess(launcher, { ...request, input });
+      control.close(0);
+      const run = await pending;
+
+      // assert
+      assert.deepStrictEqual(
+        control.launches().map(([, , options]) => options.stdio),
+        [["pipe", "pipe", "pipe"]],
+      );
+      assert.deepStrictEqual(
+        { input: control.input(), ended: control.inputEnded() },
+        {
+          input,
+          ended: true,
+        },
+      );
+      assert.deepStrictEqual(run, { code: 0, stdout: "", stderr: "", timedOut: false });
+    });
+  }
+
+  test("SG-PRC-01: settles on close with its exit code when stdin fails because the process exited first", async () => {
+    // arrange
+    const control = createProcessFake();
+    const launcher = launcherFor(control);
+    const epipe = Object.assign(new Error("write EPIPE"), { code: "EPIPE" });
+
+    // act
+    const pending = runProcess(launcher, { ...request, input: "protocol=https\n\n" });
+    control.failInput(epipe);
+    control.writeStderr("fatal: no helper");
+    control.close(128);
+    const run = await pending;
+
+    // assert
+    assert.deepStrictEqual(run, {
+      code: 128,
+      stdout: "",
+      stderr: "fatal: no helper",
+      timedOut: false,
+    });
+  });
+
+  test("SG-PRC-02: settles with its own exit code when the process closes just before its timeout", async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const control = createProcessFake(42);
+    const groupSignals: GroupSignal[] = [];
+    const launcher = launcherFor(control, linuxHost(groupSignals));
+
+    // act
+    const pending = runProcess(launcher, request);
+    t.mock.timers.tick(TIMEOUT_MS - 1);
+    control.close(0);
+    t.mock.timers.tick(1);
+    const run = await pending;
+
+    // assert
+    assert.deepStrictEqual(run, { code: 0, stdout: "", stderr: "", timedOut: false });
+    assert.deepStrictEqual(groupSignals, []);
+  });
+
+  test("SG-PRC-02: reports a timeout with the exit code of a process that closes during the kill grace", async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const control = createProcessFake(42);
+    const launcher = launcherFor(control);
+
+    // act
+    const pending = runProcess(launcher, request);
+    t.mock.timers.tick(TIMEOUT_MS);
+    control.close(143);
+    t.mock.timers.tick(KILL_GRACE_MS);
+    t.mock.timers.tick(KILL_GRACE_MS);
+    const run = await pending;
+
+    // assert
+    assert.deepStrictEqual(run, { code: 143, stdout: "", stderr: "", timedOut: true });
+  });
+
+  test("keeps the first characters of a head capture and the last characters of a tail capture", async () => {
+    // arrange
+    const control = createProcessFake();
+    const launcher = launcherFor(control);
+    const output = "0123456789abcdef";
+
+    // act
+    const pending = runProcess(launcher, {
+      ...request,
+      stdout: { limit: 8, keep: "head" },
+      stderr: { limit: 8, keep: "tail" },
+    });
+    control.writeStdout(output.slice(0, 5));
+    control.writeStderr(output.slice(0, 5));
+    control.writeStdout(output.slice(5));
+    control.writeStderr(output.slice(5));
+    control.close(128);
+    const run = await pending;
+
+    // assert
+    assert.deepStrictEqual(run, {
+      code: 128,
+      stdout: "01234567",
+      stderr: "89abcdef",
+      timedOut: false,
+    });
+  });
+
+  test("keeps the fatal line at the end of a stderr longer than its tail capture", async () => {
+    // arrange
+    const control = createProcessFake();
+    const launcher = launcherFor(control);
+
+    // act
+    const pending = runProcess(launcher, { ...request, stderr: { limit: 64, keep: "tail" } });
+    control.writeStderr("remote: counting objects\n".repeat(100));
+    control.writeStderr("fatal: repository not found\n");
+    control.close(128);
+    const run = await pending;
+
+    // assert
+    assert.strictEqual(
+      run.stderr,
+      "ng objects\nremote: counting objects\nfatal: repository not found\n",
+    );
+  });
+
+  test("never keeps half a surrogate pair at the cut of a head or a tail capture", async () => {
+    // arrange
+    const control = createProcessFake();
+    const launcher = launcherFor(control);
+
+    // act
+    const pending = runProcess(launcher, {
+      ...request,
+      stdout: { limit: 2, keep: "head" },
+      stderr: { limit: 3, keep: "tail" },
+    });
+    control.writeStdout("a😀b");
+    control.writeStderr("a😀bc");
+    control.close(0);
+    const run = await pending;
+
+    // assert
+    assert.deepStrictEqual(run, { code: 0, stdout: "a", stderr: "bc", timedOut: false });
   });
 
   test("decodes split UTF-8 characters independently in both output streams", async () => {
@@ -620,6 +792,54 @@ describe("runProcess", () => {
     assert.deepStrictEqual(run, { code: 3, stdout: "out", stderr: "err", timedOut: false });
   });
 
+  test("SG-PRC-01: feeds the input to a real child, which then reads the end of its stdin", async () => {
+    // arrange
+    const launcher: ProcessLauncher = { spawn: NODE_SPAWN, host: NODE_PROCESS_HOST };
+    const script = [
+      'let text = "";',
+      'process.stdin.on("data", (chunk) => { text += chunk; });',
+      'process.stdin.on("end", () => { process.stdout.write(`read ${JSON.stringify(text)}`); });',
+    ].join("\n");
+
+    // act
+    const run = await runProcess(launcher, {
+      ...request,
+      command: process.execPath,
+      args: ["-e", script],
+      cwd: process.cwd(),
+      timeoutMs: 10_000,
+      killGraceMs: 1_000,
+      input: "protocol=https\n\n",
+    });
+
+    // assert
+    assert.deepStrictEqual(run, {
+      code: 0,
+      stdout: 'read "protocol=https\\n\\n"',
+      stderr: "",
+      timedOut: false,
+    });
+  });
+
+  test("SG-PRC-01: settles a real child that exits before it reads a large input", async () => {
+    // arrange
+    const launcher: ProcessLauncher = { spawn: NODE_SPAWN, host: NODE_PROCESS_HOST };
+
+    // act
+    const run = await runProcess(launcher, {
+      ...request,
+      command: process.execPath,
+      args: ["-e", "process.exit(4)"],
+      cwd: process.cwd(),
+      timeoutMs: 10_000,
+      killGraceMs: 1_000,
+      input: "x".repeat(4_194_304),
+    });
+
+    // assert
+    assert.deepStrictEqual(run, { code: 4, stdout: "", stderr: "", timedOut: false });
+  });
+
   test("D-PL9-19: stops the whole process tree of a process that outlives the timeout", async () => {
     // arrange
     const timeoutMs = 2_000;
@@ -846,6 +1066,9 @@ function windowsHost(files: readonly string[], probes: string[]): ProcessHost {
   };
 }
 
+const NPM_LOOKUP = { extensions: [".exe", ".cmd"] } as const;
+const GIT_EXTENSIONS = [".exe", ".cmd", ".bat"] as const;
+
 describe("findOnWindowsPath", () => {
   test("D-PL9-18: reads Path in any case, strips its quotes, and never probes an empty, current, or relative entry", async () => {
     // arrange
@@ -857,6 +1080,7 @@ describe("findOnWindowsPath", () => {
       "npm",
       { Path: '"C:\\Quoted Dir";;.;relative\\bin;C:\\tools' },
       host,
+      NPM_LOOKUP,
     );
 
     // assert
@@ -874,7 +1098,12 @@ describe("findOnWindowsPath", () => {
     const host = windowsHost(["C:\\first\\npm.cmd", "C:\\second\\npm.exe"], probes);
 
     // act
-    const found = await findOnWindowsPath("npm", { PATH: "C:\\first;C:\\second" }, host);
+    const found = await findOnWindowsPath(
+      "npm",
+      { PATH: "C:\\first;C:\\second" },
+      host,
+      NPM_LOOKUP,
+    );
 
     // assert
     assert.strictEqual(found, "C:\\first\\npm.cmd");
@@ -895,13 +1124,69 @@ describe("findOnWindowsPath", () => {
       const host = windowsHost([], probes);
 
       // act
-      const found = await findOnWindowsPath("npm", env, host);
+      const found = await findOnWindowsPath("npm", env, host, NPM_LOOKUP);
 
       // assert
       assert.strictEqual(found, undefined);
       assert.deepStrictEqual(probes, expectedProbes);
     });
   }
+
+  for (const { situation, files, found: expectedFound, probes: expectedProbes } of [
+    {
+      situation: "an .exe",
+      files: ["C:\\Git\\cmd\\git.exe", "C:\\Git\\cmd\\git.bat"],
+      found: "C:\\Git\\cmd\\git.exe",
+      probes: ["C:\\Git\\cmd\\git.exe"],
+    },
+    {
+      situation: "a .bat after an .exe and a .cmd it does not find",
+      files: ["C:\\Git\\cmd\\git.bat"],
+      found: "C:\\Git\\cmd\\git.bat",
+      probes: ["C:\\Git\\cmd\\git.exe", "C:\\Git\\cmd\\git.cmd", "C:\\Git\\cmd\\git.bat"],
+    },
+  ]) {
+    test(`D-SG-04: tries the caller's extensions in order and finds ${situation}`, async () => {
+      // arrange
+      const probes: string[] = [];
+      const host = windowsHost(files, probes);
+
+      // act
+      const found = await findOnWindowsPath("git", { PATH: "C:\\Git\\cmd" }, host, {
+        extensions: GIT_EXTENSIONS,
+      });
+
+      // assert
+      assert.strictEqual(found, expectedFound);
+      assert.deepStrictEqual(probes, expectedProbes);
+    });
+  }
+
+  test("D-SG-04: skips a file the caller refuses and keeps searching PATH", async () => {
+    // arrange
+    const probes: string[] = [];
+    const host = windowsHost(["C:\\project\\git.exe", "C:\\Git\\cmd\\git.exe"], probes);
+    const asked: string[] = [];
+
+    // act
+    const found = await findOnWindowsPath("git", { PATH: "C:\\project;C:\\Git\\cmd" }, host, {
+      extensions: GIT_EXTENSIONS,
+      accept: (candidate) => {
+        asked.push(candidate);
+        return Promise.resolve(!candidate.startsWith("C:\\project\\"));
+      },
+    });
+
+    // assert
+    assert.strictEqual(found, "C:\\Git\\cmd\\git.exe");
+    assert.deepStrictEqual(asked, ["C:\\project\\git.exe", "C:\\Git\\cmd\\git.exe"]);
+    assert.deepStrictEqual(probes, [
+      "C:\\project\\git.exe",
+      "C:\\project\\git.cmd",
+      "C:\\project\\git.bat",
+      "C:\\Git\\cmd\\git.exe",
+    ]);
+  });
 });
 
 describe("NODE_PROCESS_HOST", () => {

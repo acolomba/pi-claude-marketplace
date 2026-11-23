@@ -132,9 +132,37 @@ test("spawns the command with its arguments verbatim, no shell, the request dire
         shell: false,
         stdio: ["ignore", "pipe", "pipe"],
         detached: true,
+        windowsHide: false,
       },
     ],
   ]);
+});
+
+test("keeps the first 65536 characters of each stream of a package-manager run", async () => {
+  // arrange
+  const control = createProcessFake();
+  const runPackageManager = createPackageManagerRunner({
+    spawn: control.spawn,
+    timeoutMs: TIMEOUT_MS,
+    killGraceMs: KILL_GRACE_MS,
+    env: {},
+    host: LINUX_HOST,
+  });
+
+  // act
+  const pending = runPackageManager(request);
+  control.writeStdout(`${"o".repeat(65_536)}npm notice`);
+  control.writeStderr(`${"e".repeat(65_536)}npm error`);
+  control.close(1);
+  const run = await pending;
+
+  // assert
+  assert.deepStrictEqual(run, {
+    code: 1,
+    stdout: "o".repeat(65_536),
+    stderr: "e".repeat(65_536),
+    timedOut: false,
+  });
 });
 
 test("runs on the platform and the Node binary of this process", () => {

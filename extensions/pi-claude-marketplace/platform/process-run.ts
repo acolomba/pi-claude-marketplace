@@ -3,7 +3,9 @@
 // SG-PRC-01, SG-PRC-02: the one process launcher that the package manager and
 // the git module share. A run starts one command with an argument array and no
 // shell, keeps a bounded part of each output stream, and stops the whole
-// process tree at its timeout or when its signal aborts. A run never rejects
+// process tree at its timeout or when its signal aborts. Without input, stdin
+// is closed from the start; with input, the input goes through a stdin pipe,
+// which then ends. A run never rejects
 // for a process failure: a process that cannot start, exits non-zero, or
 // outlives the timeout resolves with what happened. A run that outlives the
 // timeout settles one kill grace after its SIGKILL even when the process never
@@ -19,8 +21,9 @@
 // process.
 //
 // D-PL9-18: on Windows a command is looked up only in the absolute entries of
-// PATH, never in the current directory. In each directory, in PATH order,
-// <command>.exe comes before <command>.cmd.
+// PATH, never in the current directory. In each directory, in PATH order, the
+// caller's extensions are tried in the caller's order, and the caller may
+// refuse a candidate (D-SG-04 refuses one inside the current directory).
 //
 // D-PL9-11, D-SG-01: the launcher is injected. This module imports nothing from
 // Node's child-process module, so the rule pack's child-process-chokepoint rule
@@ -36,6 +39,12 @@ type KillSignal = "SIGTERM" | "SIGKILL";
 export interface RunningProcess {
   /** Absent when the process could not start. */
   readonly pid?: number | undefined;
+  /** The stdin pipe, present when the launch asked for one. */
+  readonly stdin?: {
+    on(event: "error", listener: (error: Error) => void): void;
+    write(text: string): void;
+    end(): void;
+  } | null;
   readonly stdout: { on(event: "data", listener: (chunk: Buffer) => void): void };
   readonly stderr: { on(event: "data", listener: (chunk: Buffer) => void): void };
   kill(signal: "SIGTERM" | "SIGKILL"): boolean;
@@ -45,14 +54,19 @@ export interface RunningProcess {
   ): void;
 }
 
-/** The options the launcher receives: no shell, piped output, and no stdin. */
+/**
+ * The options the launcher receives: no shell, piped output, and a stdin pipe
+ * only for a run with input.
+ */
 export interface ProcessSpawnOptions {
   readonly cwd: string;
   readonly env: NodeJS.ProcessEnv;
   readonly shell: false;
-  readonly stdio: readonly ["ignore", "pipe", "pipe"];
+  readonly stdio: readonly ["ignore" | "pipe", "pipe", "pipe"];
   /** POSIX: the process leads a process group of its own. */
   readonly detached: boolean;
+  /** Windows: the process gets no console window of its own. */
+  readonly windowsHide: boolean;
 }
 
 /** Starts one process. Throws when it cannot start one. */
@@ -77,6 +91,16 @@ export interface ProcessLauncher {
   readonly host: ProcessHost;
 }
 
+/**
+ * How much of one output stream a run keeps: the first `limit` characters
+ * (`head`) or the last (`tail`). Either way a run never keeps half a
+ * surrogate pair at the cut.
+ */
+export interface OutputCapture {
+  readonly limit: number;
+  readonly keep: "head" | "tail";
+}
+
 /** One process to run. */
 export interface ProcessRequest {
   readonly command: string;
@@ -90,6 +114,17 @@ export interface ProcessRequest {
   readonly killGraceMs: number;
   /** Stops the process and its process tree when the owning operation is cancelled. */
   readonly signal?: AbortSignal | undefined;
+  /**
+   * Written to stdin, which then ends; the empty string still gets a pipe.
+   * Without input, stdin is closed from the start.
+   */
+  readonly input?: string;
+  /** What the run keeps of stdout. */
+  readonly stdout: OutputCapture;
+  /** What the run keeps of stderr. A failure reason is often the last line. */
+  readonly stderr: OutputCapture;
+  /** Passed to every launch of the run, the taskkill launches included. */
+  readonly windowsHide: boolean;
 }
 
 /** What happened to a run; `error` is set when the process could not start. */
@@ -114,24 +149,27 @@ export const NODE_PROCESS_HOST: ProcessHost = Object.freeze({
   },
 });
 
-// A caller reads at most a short note from the output, so a run keeps a
-// bounded prefix of each stream rather than everything the process prints.
-const OUTPUT_LIMIT = 65_536;
-
 interface CapturedOutput {
   stdout: string;
   stderr: string;
   timedOut: boolean;
 }
 
-function appendCapped(captured: string, text: string): string {
-  return (captured + text).slice(0, OUTPUT_LIMIT);
+function appendCapped(captured: string, text: string, capture: OutputCapture): string {
+  const joined = captured + text;
+  return capture.keep === "head"
+    ? joined.slice(0, capture.limit)
+    : joined.slice(Math.max(0, joined.length - capture.limit));
 }
 
-function finishOutput(captured: string, decoder: StringDecoder): string {
-  // Keep the bounded prefix during capture, then drop a high surrogate the
-  // cap separated from its low surrogate.
-  return appendCapped(captured, decoder.end()).replace(/[\uD800-\uDBFF]$/u, "");
+// Keep the bounded part during capture, then drop the half of a surrogate
+// pair that the cut separated from its other half: a high surrogate at the end
+// of a head, a low surrogate at the start of a tail.
+function finishOutput(captured: string, decoder: StringDecoder, capture: OutputCapture): string {
+  const finished = appendCapped(captured, decoder.end(), capture);
+  return capture.keep === "head"
+    ? finished.replace(/[\uD800-\uDBFF]$/u, "")
+    : finished.replace(/^[\uDC00-\uDFFF]/u, "");
 }
 
 interface KillTimers {
@@ -196,10 +234,10 @@ function watchProcess(
   const stdoutDecoder = new StringDecoder("utf8");
   const stderrDecoder = new StringDecoder("utf8");
   child.stdout.on("data", (chunk: Buffer) => {
-    captured.stdout = appendCapped(captured.stdout, stdoutDecoder.write(chunk));
+    captured.stdout = appendCapped(captured.stdout, stdoutDecoder.write(chunk), request.stdout);
   });
   child.stderr.on("data", (chunk: Buffer) => {
-    captured.stderr = appendCapped(captured.stderr, stderrDecoder.write(chunk));
+    captured.stderr = appendCapped(captured.stderr, stderrDecoder.write(chunk), request.stderr);
   });
   // Node emits `close` after `error` for a process that cannot start. A close
   // after termination begins waits for the process-group escalation before it
@@ -224,8 +262,8 @@ function watchProcess(
     }
 
     settled = true;
-    captured.stdout = finishOutput(captured.stdout, stdoutDecoder);
-    captured.stderr = finishOutput(captured.stderr, stderrDecoder);
+    captured.stdout = finishOutput(captured.stdout, stdoutDecoder, request.stdout);
+    captured.stderr = finishOutput(captured.stderr, stderrDecoder, request.stderr);
     killTimers.cancel();
     signal?.removeEventListener("abort", abort);
 
@@ -254,7 +292,7 @@ function variable(env: NodeJS.ProcessEnv, name: string): string | undefined {
   return Object.entries(env).find(([key]) => key.toUpperCase() === name)?.[1];
 }
 
-function ignoreKillError(): undefined {
+function ignoreError(): undefined {
   return undefined;
 }
 
@@ -269,7 +307,7 @@ function killWindowsTree(
   const taskkill = path.win32.join(systemRoot, "System32", "taskkill.exe");
   try {
     const killer = launcher.spawn(taskkill, ["/PID", String(pid), "/T", "/F"], spawnOptions);
-    killer.on("error", ignoreKillError);
+    killer.on("error", ignoreError);
   } catch {
     // The deadline settles the run when the tree outlives a failed taskkill.
   }
@@ -301,6 +339,21 @@ function stopTree(
   }
 }
 
+// A process that exits before it reads its input closes the pipe, so the write
+// fails with EPIPE. The listener keeps that error from crashing Pi; the run
+// still settles on the process's own `close`. Node gives a launch with a stdin
+// pipe a stdin stream, so a missing one only means there is nowhere to write.
+function writeInput(child: RunningProcess, input: string | undefined): void {
+  const { stdin } = child;
+  if (input === undefined || !stdin) {
+    return;
+  }
+
+  stdin.on("error", ignoreError);
+  stdin.write(input);
+  stdin.end();
+}
+
 function notStarted(error: Error): ProcessRun {
   return { code: null, stdout: "", stderr: "", timedOut: false, error };
 }
@@ -326,8 +379,9 @@ export function runProcess(
       cwd: request.cwd,
       env: request.env,
       shell: false,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [request.input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
       detached: launcher.host.platform !== "win32",
+      windowsHide: request.windowsHide,
     };
     let child: RunningProcess;
     try {
@@ -339,9 +393,15 @@ export function runProcess(
       return;
     }
 
+    // taskkill reads no input, so its launch closes stdin.
     watchProcess(child, request, resolve, (signal) => {
-      stopTree(child, signal, launcher, { ...spawnOptions, detached: false });
+      stopTree(child, signal, launcher, {
+        ...spawnOptions,
+        stdio: ["ignore", "pipe", "pipe"],
+        detached: false,
+      });
     });
+    writeInput(child, request.input);
   });
 }
 
@@ -354,19 +414,26 @@ function windowsPathDirectories(env: NodeJS.ProcessEnv): string[] {
 }
 
 /**
- * D-PL9-18: the first `<command>.exe` or `<command>.cmd` that is a file, in
- * PATH order, looking only in the absolute entries of the PATH in `env`.
+ * D-PL9-18, D-SG-04: the first `<command><extension>` that is a file and that
+ * `lookup.accept` does not refuse, looking only in the absolute entries of the
+ * PATH in `env`: directories in PATH order, and in each directory the
+ * extensions in `lookup.extensions` order. A refused candidate is skipped and
+ * the search goes on. Without `accept`, every file is accepted.
  */
 export async function findOnWindowsPath(
   command: string,
   env: NodeJS.ProcessEnv,
   host: ProcessHost,
+  lookup: {
+    readonly extensions: readonly string[];
+    readonly accept?: (candidate: string) => Promise<boolean>;
+  },
 ): Promise<string | undefined> {
   for (const directory of windowsPathDirectories(env)) {
-    for (const extension of [".exe", ".cmd"]) {
+    for (const extension of lookup.extensions) {
       const candidate = path.win32.join(directory, `${command}${extension}`);
       // eslint-disable-next-line no-await-in-loop -- PATH order decides which file runs
-      if (await host.isFile(candidate)) {
+      if ((await host.isFile(candidate)) && (await (lookup.accept?.(candidate) ?? true))) {
         return candidate;
       }
     }

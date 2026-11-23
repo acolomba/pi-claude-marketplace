@@ -32,7 +32,7 @@ import path from "node:path";
 
 import { findOnWindowsPath, NODE_PROCESS_HOST, runProcess } from "./process-run.ts";
 
-import type { ProcessHost, ProcessRun, ProcessSpawn } from "./process-run.ts";
+import type { OutputCapture, ProcessHost, ProcessRun, ProcessSpawn } from "./process-run.ts";
 
 /**
  * The real process launcher: Node's own `spawn`, narrowed to the
@@ -88,6 +88,13 @@ interface Launch {
   readonly args: readonly string[];
 }
 
+// A note uses at most 500 characters of the output, so a run keeps a bounded
+// prefix of each stream rather than everything npm prints.
+const OUTPUT_CAPTURE: OutputCapture = { limit: 65_536, keep: "head" };
+
+// D-PL9-18: an .exe starts directly; an npm.cmd becomes npm-cli.js.
+const WINDOWS_LOOKUP = { extensions: [".exe", ".cmd"] } as const;
+
 function notStarted(error: Error): PackageManagerRun {
   return { code: null, stdout: "", stderr: "", timedOut: false, error };
 }
@@ -113,6 +120,10 @@ function startProcess(
       timeoutMs: options.timeoutMs,
       killGraceMs: options.killGraceMs,
       signal: request.signal,
+      stdout: OUTPUT_CAPTURE,
+      stderr: OUTPUT_CAPTURE,
+      // Node's default, so a package manager starts as it always did.
+      windowsHide: false,
     },
   );
 }
@@ -122,7 +133,7 @@ async function windowsLaunch(
   options: PackageManagerRunnerOptions,
 ): Promise<Launch | Error> {
   const { host } = options;
-  const found = await findOnWindowsPath(request.command, options.env, host);
+  const found = await findOnWindowsPath(request.command, options.env, host, WINDOWS_LOOKUP);
   if (found === undefined) {
     return new Error(`${request.command} was not found on PATH`);
   }
