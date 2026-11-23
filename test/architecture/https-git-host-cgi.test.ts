@@ -1,7 +1,9 @@
 /**
  * @fileoverview Checks the CGI bridge of the https git host: the parser of the
  * `git http-backend` output, the CGI environment it runs with (HOST-01), and
- * the arguments that carry each SHA-want policy (SG-HRN-02).
+ * the arguments that carry each SHA-want policy (SG-HRN-02). The CGI
+ * environment's exact key set under the runner's planted git and ssh
+ * variables is checked in `hermetic-git-environment.test.ts` (SG-HRN-04).
  */
 
 import assert from "node:assert/strict";
@@ -193,47 +195,6 @@ function protocolV2PostEnvironment(): NodeJS.ProcessEnv {
 }
 
 describe("cgiEnvironment", () => {
-  test("builds the environment from scratch, without an inherited git variable", (t) => {
-    // arrange
-    for (const [name, planted] of [
-      ["GIT_DIR", "/worker/repo/.git"],
-      ["GIT_INDEX_FILE", "/worker/repo/.git/index"],
-      ["GIT_CONFIG_SYSTEM", "/worker/gitconfig"],
-      ["GIT_CONFIG_GLOBAL", "/worker/home/.gitconfig"],
-      ["GIT_ASKPASS", "/worker/askpass"],
-    ] as const) {
-      const previous = process.env[name];
-      t.after(() => {
-        if (previous === undefined) {
-          Reflect.deleteProperty(process.env, name);
-        } else {
-          process.env[name] = previous;
-        }
-      });
-      process.env[name] = planted;
-    }
-
-    const request = {
-      method: "GET",
-      url: new URL("https://127.0.0.1:4443/acme/tools.git/info/refs?service=git-upload-pack"),
-      headers: {},
-      body: Buffer.alloc(0),
-    } satisfies CgiRequest;
-
-    // act
-    const environment = cgiEnvironment(request, "/run/repositories", "/run/cgi-home");
-
-    // assert
-    assert.deepStrictEqual(environment, {
-      ...serverEnvironment(),
-      PATH_INFO: "/acme/tools.git/info/refs",
-      QUERY_STRING: "service=git-upload-pack",
-      REQUEST_METHOD: "GET",
-      CONTENT_TYPE: "",
-      CONTENT_LENGTH: "0",
-    });
-  });
-
   test("passes the Git-Protocol header and the length of the buffered body", () => {
     // arrange
     const request = protocolV2Post();
