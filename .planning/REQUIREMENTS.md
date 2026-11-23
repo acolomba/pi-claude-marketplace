@@ -37,6 +37,10 @@ Each ITMIG requirement is met only when all of these hold:
 - [x] **ITMIG-12**: Scenarios cover the hook cases: hook plugins in both scopes still run after an `apply` and after a load, a reload before the first prompt drops buffered SessionStart context, and a hook dispatch creates no `.pi` directory in a project that had none.
 - [x] **ITMIG-13**: Scenarios cover the auth cases: a print-mode `marketplace add` that needs a sign-in refuses and leaves no staging behind, and a host that rejects the stored credential leads to the credential being evicted and a new Device Flow sign-in.
 
+### Upstream parity found by the migration (HKRL)
+
+- [ ] **HKRL-01**: A Pi `/reload` before the first prompt keeps the SessionStart `additionalContext` that a hook produced at startup, so it reaches the model on the first prompt, as Claude Code's `/reload-plugins` does (it leaves the conversation alone; evidence in `.planning/phases/06.1-reload-keeps-sessionstart-context/06.1-UPSTREAM-EVIDENCE.md`). A new session, a resume, or a fork still drops context from another session. The scenario at `features/hook/additional-context.feature:230` and the integration case HOOK-E2E-04 flip to the new behavior, `docs/hooks-compatibility.md` says so, and the fix has unit tests and a CHANGELOG line.
+
 ### Rescope (ITSCOPE)
 
 - [ ] **ITSCOPE-01**: Every case left in `test/integration/` is one of these: peer conformance against a peer's own code, a multi-process race, or an internal case (stored record fields, state that only older releases wrote, fault injection, or calls that must not happen). Any other case moves to a unit test with its source pair, or is deleted when cucumber or a unit test already covers it.
@@ -75,6 +79,7 @@ None.
 | ITMIG-11 | Phase 5 | Complete |
 | ITMIG-12 | Phase 6 | Complete |
 | ITMIG-13 | Phase 6 | Complete |
+| HKRL-01 | Phase 6.1 | Pending |
 | ITSCOPE-01 | Phase 8 | Pending |
 | ITSCOPE-02 | Phase 8 | Pending |
 | ITSCOPE-03 | Phase 8 | Pending |
