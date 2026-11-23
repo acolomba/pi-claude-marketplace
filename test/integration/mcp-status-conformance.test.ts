@@ -1,12 +1,16 @@
 // test/integration/mcp-status-conformance.test.ts
 //
+// Peer conformance (ITSCOPE-01) against pi-mcp-adapter's own status contract.
 // ASTAT-01 / ASTAT-02: the MCP status tracker reads pi-mcp-adapter's own
 // status contract. The tracker subscribes to the adapter's own channel and
 // accepts its own snapshot version, and `/claude:plugin info` joins the
 // snapshot on the keys a real install wrote to `mcp-adapter.json`, in both
 // scopes, through Pi's real event bus. The adapter's empty shutdown snapshot
 // reads as no usable snapshot. A drift guard pins the channel, the version and
-// the status union in the adapter's `dist/types.d.ts`.
+// the status union in the adapter's `dist/types.d.ts`. ASTAT-01 is also in
+// `features/mcp-server/companion-missing.feature` and
+// `features/mcp-server/project-scope.feature`; the shutdown snapshot and the
+// drift guard need the adapter's own code.
 //
 // pi-mcp-adapter is an optional peer. The test imports its compiled
 // `dist/types.js` constants in place from the declared floor that
