@@ -58,7 +58,7 @@ last_mapped_at: 2026-10-05
 ## Key Dependencies
 
 **Critical:**
-- `isomorphic-git` `^1.41.8` - pure-JS git implementation used for marketplace clone/fetch/pull (no dependency on a `git` binary on PATH); wrapped in `extensions/pi-claude-marketplace/platform/git.ts`, paired with `isomorphic-git/http/node` as its HTTP transport (`platform/git.ts:4`)
+- `isomorphic-git` `^1.41.8` - pure-JS git implementation used for marketplace clone/fetch/pull. Clone and fetch still run in-process, but a git-source operation first needs a usable system git on PATH: `platform/git.ts` asks `platform/git-process.ts` for git before each network verb (D-SG-01). Wrapped in `extensions/pi-claude-marketplace/platform/git.ts`, paired with `isomorphic-git/http/node` as its HTTP transport (`platform/git.ts:4`)
 - `typebox` `^1.1.38` (also a peer dep `*`) - runtime schema validation and discriminated-union modeling (e.g. `installable: true | false`)
 - `write-file-atomic` `^8.0.0` - atomic JSON writes for `state.json`, `mcp.json`, `agents-index.json` (`atomicWriteJson`), and atomic text writes for saved hook output (`atomicWriteText`), both in `shared/atomic-json.ts`
 - `proper-lockfile` `^4.1.2` - cross-process file locking for `withStateGuard` concurrent-write detection
@@ -73,7 +73,7 @@ last_mapped_at: 2026-10-05
 - `PI_CODING_AGENT_DIR` - honored to relocate the Pi user-scope agent directory (defaults to `~/.pi/agent/`)
 - `TEST_CONCURRENCY` - optional env var controlling `node --test` concurrency in npm scripts
 - `PI_CM_E2E_REF` - set to `pinned` (default `test:e2e`) or `main` (`test:e2e:nightly`) to select which upstream ref the e2e suite exercises
-- `GIT_TERMINAL_PROMPT=0` and `GCM_INTERACTIVE=never` - set by `platform/git-credential.ts` when spawning `git credential` subprocesses to force non-interactive behavior
+- `GIT_TERMINAL_PROMPT=0`, an empty `GIT_ASKPASS`, `GCM_INTERACTIVE=never`, and `credential.interactive=false` - set by `platform/git-process.ts` on every git command it starts, `git credential` included, so git never prompts (D-SG-05)
 
 **Build:**
 - `tsconfig.json` - strict TypeScript compiler options (`exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `noUnusedLocals`, etc.), includes `extensions/**/*.ts` and `test/**/*.ts`
