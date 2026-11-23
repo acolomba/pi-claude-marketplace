@@ -8,11 +8,12 @@
 // verdict with its basis into the record, unless the catalog moved past the
 // recorded version. Each case seeds a hermetic home with a real install,
 // strips what a released build did not write, and runs the real load. The
-// cases also pin user-visible text that no scenario shows yet: the first two
-// pin the rendered move notice for these records, and the third pins the
-// rendered `list` row "partially-upgradable {unsupported mcp}" of a record
-// whose catalog moved. The other list rows a user sees after the move are in
-// `features/mcp-server/verdict-list.feature`.
+// first two cases also compare the whole rendered text of the move notice,
+// and the third the whole `list` text, including the row
+// `(partially-upgradable) {unsupported mcp}` of a record whose catalog moved.
+// The scenarios compare result fields, not rendered text: the move is in
+// `features/mcp-server/legacy-move.feature`, and the other list rows a user
+// sees after the move are in `features/mcp-server/verdict-list.feature`.
 
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";

@@ -1,3 +1,14 @@
+// test/integration/concurrent-install.test.ts
+//
+// Two multi-process cases (ITSCOPE-01). Two forked processes run
+// concurrent-install-child.ts and install into one project scope at the same
+// moment, the same plugin or two different ones. The state lock (D-15) lets
+// one install win and refuses the other: the scope records exactly one
+// plugin, and the skills on disk are exactly the winner's, so the loser
+// leaves no orphan. A scenario runs one Pi at a time, so
+// `features/plugin/state-lock.feature` can hold the lock but cannot race two
+// installs.
+
 import assert from "node:assert/strict";
 import { fork } from "node:child_process";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";

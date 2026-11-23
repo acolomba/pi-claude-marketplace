@@ -3,12 +3,12 @@
 // Two cases of `/claude:plugin prune` through the registered command, kept
 // for the calls that must not happen (ITSCOPE-01). `registeredCommand` makes
 // the reconcile apply and the missing-dependency install throw, and a git
-// double records every clone and fetch, so the actual prune and the
-// `--dry-run` preview each prove that prune runs neither seam and makes no
-// git call. The preview case also pins the mtimes of the state and config
-// files, which the cucumber whole-scope step does not compare. Everything a
-// user can see of prune is in `features/plugin/prune.feature`,
-// `features/plugin/state-lock.feature`, and
+// double records every git operation it serves except `listRemotes`, so the
+// actual prune and the `--dry-run` preview each prove that prune runs neither
+// seam and makes none of those git calls. The preview case also pins the
+// mtimes of the state and config files, which the cucumber whole-scope step
+// does not compare. Everything a user can see of prune is in
+// `features/plugin/prune.feature`, `features/plugin/state-lock.feature`, and
 // `features/plugin/usage-errors.feature`.
 
 import assert from "node:assert/strict";
@@ -192,8 +192,15 @@ test("prune removes an orphan dependency through the registered command", async 
           "● mp [user]\n  ○ orphan v1.0.0 (uninstalled) {dependency pruned}\n\n/reload to pick up changes",
       },
     ]);
-    assert.deepStrictEqual(gitCalls.clone, []);
-    assert.deepStrictEqual(gitCalls.fetch, []);
+    assert.deepStrictEqual(gitCalls, {
+      checkout: [],
+      clone: [],
+      currentBranch: [],
+      fetch: [],
+      forceUpdateRef: [],
+      resolveRef: [],
+      resolveRemoteRef: [],
+    });
   });
 });
 
@@ -226,7 +233,14 @@ test("prune --dry-run previews the orphan without writing current state", async 
     );
     assert.deepStrictEqual(await scopeTree("user", cwd), treeBefore);
     await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
-    assert.deepStrictEqual(gitCalls.clone, []);
-    assert.deepStrictEqual(gitCalls.fetch, []);
+    assert.deepStrictEqual(gitCalls, {
+      checkout: [],
+      clone: [],
+      currentBranch: [],
+      fetch: [],
+      forceUpdateRef: [],
+      resolveRef: [],
+      resolveRemoteRef: [],
+    });
   });
 });

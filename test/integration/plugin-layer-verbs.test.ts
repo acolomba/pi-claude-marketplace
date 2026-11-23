@@ -6,8 +6,11 @@
 // marketplace source, an install with --local declares the marketplace in the
 // local layer with the base layer's source. When no layer declares the
 // marketplace either, the install is refused and changes nothing (LAYER-06).
-// Each case rewrites the recorded marketplace source to a kind this release
-// does not know, a state that no user command can produce.
+// Two internal cases (ITSCOPE-01) of fault injection: each rewrites the
+// recorded marketplace source to a kind this release does not know, a state
+// that no user command can produce. What a user sees of install --local is in
+// `features/plugin/install.feature` and
+// `features/plugin/configuration.feature`.
 
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";

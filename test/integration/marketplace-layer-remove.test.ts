@@ -1,13 +1,15 @@
 // test/integration/marketplace-layer-remove.test.ts
 //
-// Removing a marketplace while a plugin fails to unstage (MR-7, PRUNE-03),
-// across the remove orchestrator, both config files, the state file, the
-// bridges' staged artifacts, and the git clone. The remove's `cascade` seam
-// injects an EACCES unstage failure, which the cucumber harness cannot do: a
-// partial remove, a remove in which every plugin fails, and a dependency that
-// stays installed while the plugin that declares it fails to unstage. A
-// url-source marketplace is added through the git double cloning a local
-// checkout, and its plugins install through the production install operation.
+// Three internal cases (ITSCOPE-01) of fault injection. Removing a marketplace
+// while a plugin fails to unstage (MR-7, PRUNE-03), across the remove
+// orchestrator, both config files, the state file, the bridges' staged
+// artifacts, and the git clone. The remove's `cascade` seam injects an EACCES
+// unstage failure, which the cucumber harness cannot do: a partial remove, a
+// remove in which every plugin fails, and a dependency that stays installed
+// while the plugin that declares it fails to unstage. A url-source marketplace
+// is added through the git double cloning a local checkout, and its plugins
+// install through the production install operation. What a user sees of a
+// remove is in `features/marketplace/remove.feature`.
 
 import assert from "node:assert/strict";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";

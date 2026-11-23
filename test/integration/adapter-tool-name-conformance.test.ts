@@ -1,7 +1,11 @@
 // test/integration/adapter-tool-name-conformance.test.ts
 //
+// Peer conformance (ITSCOPE-01) against pi-mcp-adapter's own tool names.
 // PG-MCP-02, D-PG1-09: compare this extension's adapter tool names with
 // pi-mcp-adapter's own formatToolName, including length and encoding edges.
+// A few cut names are also in `features/mcp-server/listing.feature` and
+// `features/hook/mcp-tool-names.feature`; the other edges and the pinned name
+// of the screenshot tool need the adapter's own function.
 //
 // pi-mcp-adapter is an optional peer. The test loads formatToolName from the
 // compiled dist/types.js of the version the suites run. A missing or wrong-

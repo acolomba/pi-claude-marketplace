@@ -1,8 +1,13 @@
-// D-P3-02 / MREC-03: the update path writes the neutral MCP verdict with
-// `compatibilityBasis: "neutral"`. Each case drives the real update,
-// reinstall, or disabled update in a hermetic home and reads the saved
-// state.json: the swap's final write, the reinstall through the same swap,
-// the intent mark a failed update leaves, and the disabled pin refresh.
+// test/integration/mcp-verdict-update.test.ts
+//
+// Four internal cases (ITSCOPE-01) of a stored record field (D-P3-02,
+// MREC-03). Each case runs the real update, reinstall, or disabled update in a
+// hermetic home and reads the saved state.json: the swap's final write stores
+// the neutral MCP verdict with `compatibilityBasis: "neutral"`, a reinstall
+// of a record an earlier release wrote does the same, a failed update keeps
+// the basis that its intent mark carries, and a repeated disabled update
+// writes nothing. No command shows `compatibilityBasis`; the update rows a
+// user sees are in `features/mcp-server/verdict-update.feature`.
 
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";

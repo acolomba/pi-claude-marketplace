@@ -1,9 +1,12 @@
 // test/integration/skill-path-resolution.test.ts
 //
+// Peer conformance (ITSCOPE-01) against pi-subagents' own skill resolver.
 // SC-2 resolver-contract coverage: proves the `skillPath` this extension
 // emits (AGSK-06 / D-84-04) actually resolves the bridged skill through
 // pi-subagents' own `resolveSkillsWithFallback`, and that the resolved
-// skill never enters the parent/global catalog (invocation-private).
+// skill never enters the parent/global catalog (invocation-private). A child
+// that runs with a preloaded plugin skill is in
+// `features/agent/invocation.feature`; the catalog check is only here.
 //
 // pi-subagents is an optional peer -- never a `dependencies` or
 // `devDependencies` entry. The resolver lives in its internal skills module,

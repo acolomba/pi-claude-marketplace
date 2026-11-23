@@ -1,5 +1,6 @@
 // test/integration/mcp-builtin-encoding-conformance.test.ts
 //
+// Peer conformance (ITSCOPE-01) against Pi's own resolver and validator.
 // BLT-02: every value the built-in path writes for a plugin MCP server comes
 // out of Pi 1.5.0 as Claude Code's value. Each row of the shared expansion
 // table runs through `builtinServerConfig`, with the session environment as
@@ -12,7 +13,10 @@
 // returns it with the same JSON, so a re-registration does not reconnect
 // (P2-DC-08). D-PG10-12: each option row runs through `builtinServerConfig`
 // with the option's default filled in, and comes out of Pi as Claude Code's
-// value, with no command run and no variable of Pi's environment read.
+// value, with no command run and no variable of Pi's environment read. A few
+// env and option values are also in the scenarios of `features/mcp-server/`;
+// the table, the PI-1 and PI-2 cases, and the validator check need Pi's own
+// functions.
 //
 // Pi publishes neither module in its `exports` map, so the test imports both
 // by absolute file URL from the repository's devDependency. It changes no
