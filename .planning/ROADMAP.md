@@ -361,7 +361,14 @@ Plans:
   2. The opening comment of each remaining integration file names its class and the behavior that cucumber does not cover (ITSCOPE-02).
   3. The `typescript-unit-tests` skill, the `cucumber` skill, and `.planning/codebase/TESTING.md` each state the suite's charter: what belongs in an integration test, and what goes to cucumber or to a unit test (ITSCOPE-03).
   4. `npm run check` exits 0 on the combined tree at the end of the milestone, with both cucumber profiles green and 100% direct coverage for every source-test pair (ITSCOPE-04).
-**Plans**: TBD
+**Plans**: 5 plans
+
+Plans:
+- [ ] 08-01-PLAN.md -- Wave 1: the eight in-memory fixed points of `reconcile-plan-convergence` move into `test/orchestrators/reconcile/plan.test.ts` (71 cases, `plan.ts` 100% direct coverage), breaks B1 to B3 prove its two other cases covered by unit cases, and the file goes in the same commit (ITSCOPE-01)
+- [ ] 08-02-PLAN.md -- Wave 1: the single-process D-13 case of `load-reconcile-race`, test 1 of `subagent-hook-ownership`, test 1 of `workflow-kind-inversion`, and the whole of `transaction-lifecycle-cascade` go after breaks B4 to B7c fail their scenario or unit covers (B7c the survivor row), with the three trimmed headers and the `docs/output-catalog.md:695` pointer (ITSCOPE-01, ITSCOPE-02)
+- [ ] 08-03-PLAN.md -- Wave 1: the ITSCOPE-01 headers of the twenty other files (the two carried overclaims with the whole-object prune assertion, six internal and multi-process headers, twelve peer conformance headers) and the read-in-source wording of `docs/mcp-compatibility.md:770` (ITSCOPE-02)
+- [ ] 08-04-PLAN.md -- Wave 1: the charter "Where a test goes", one rule in the same words, in the `typescript-unit-tests` and `cucumber` skills and `.planning/codebase/TESTING.md` (ITSCOPE-03)
+- [ ] 08-05-PLAN.md -- Wave 2, after Phase 6.1 completes: the read-in-source wording of `docs/hooks-compatibility.md:77`, the combined-tree checks (28 files with headers, 265 cases, no orphan helper, the charter in three places), and `npm run check` on the combined tree (ITSCOPE-04)
 
 ## Progress
 
