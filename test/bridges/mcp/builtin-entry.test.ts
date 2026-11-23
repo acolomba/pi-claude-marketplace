@@ -5,6 +5,7 @@ import { builtinServerConfig } from "../../../extensions/pi-claude-marketplace/b
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 
 import {
+  builtinRowInput,
   EXPANSION_BUILTINS,
   EXPANSION_CASES,
   OPTION_FIELD_CASES,
@@ -371,7 +372,7 @@ function writtenField(
 // The built-in path registers per session, so `projectDir` is the session's
 // working directory at both scopes (P2-DC-03).
 for (const row of EXPANSION_CASES.filter(isWrittenAsIs)) {
-  test(`BLT-02: ${row.title} is written as Claude Code's value`, () => {
+  test(`BLT-02: ${builtinRowInput(row)} is written as Claude Code's value ${JSON.stringify(row.claudeOutput)}`, () => {
     // arrange
     const context: McpSubstitutionContext = {
       ...EXPANSION_BUILTINS,

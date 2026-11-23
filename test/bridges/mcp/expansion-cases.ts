@@ -44,6 +44,20 @@ export const EXPANSION_BUILTINS = {
   projectDir: "/work/project",
 } as const;
 
+/**
+ * One row's input as the built-in tests use it: the field, the raw value, and
+ * the session environment. A row title names pi-mcp-adapter's install-time
+ * values, which the built-in path does not write, so a built-in case title
+ * names this input instead.
+ */
+export function builtinRowInput(row: ExpansionCase): string {
+  const variables =
+    Object.keys(row.runtimeEnv).length === 0
+      ? "no session variable"
+      : `the session variables ${JSON.stringify(row.runtimeEnv)}`;
+  return `the ${row.field} value ${JSON.stringify(row.raw)} with ${variables}`;
+}
+
 const SPLIT = "{env:PI_CLAUDE_MARKETPLACE_EMPTY}";
 
 const SECRET_ENV = { PI_CM_SECRET: "secret-value" };

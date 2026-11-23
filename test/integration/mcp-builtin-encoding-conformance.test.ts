@@ -30,6 +30,7 @@ import { pathToFileURL } from "node:url";
 import { builtinServerConfig } from "../../extensions/pi-claude-marketplace/bridges/mcp/builtin-entry.ts";
 import { resolveOptions } from "../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import {
+  builtinRowInput,
   EXPANSION_BUILTINS,
   EXPANSION_CASES,
   OPTION_FIELD_CASES,
@@ -141,7 +142,7 @@ function piResolved(written: string, raw: string, env: Environment): readonly st
 }
 
 for (const row of EXPANSION_CASES.filter(isSecret)) {
-  test(`BLT-02: ${row.title} comes out of Pi's resolver as Claude Code's value`, () => {
+  test(`BLT-02: ${builtinRowInput(row)} comes out of Pi's resolver as Claude Code's value ${JSON.stringify(row.claudeOutput)}`, () => {
     // arrange
     const shape = FIELD_SHAPES[row.field];
 
