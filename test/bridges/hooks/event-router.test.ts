@@ -832,6 +832,7 @@ function makeContext(
   sessionRoot: string,
   projectTrusted = true,
   notices: string[] = [],
+  pendingMessages = false,
 ): ExtensionContext {
   return {
     ui: {
@@ -855,7 +856,7 @@ function makeContext(
     abort(): never {
       throw new Error("event router must not abort Pi");
     },
-    hasPendingMessages: () => false,
+    hasPendingMessages: () => pendingMessages,
     shutdown(): never {
       throw new Error("event router must not shut down Pi");
     },
@@ -4947,7 +4948,7 @@ function runEventHandler(
   return registeredHandler(registrations, type, type === "input" ? 2 : 0);
 }
 
-for (const { title, before, reason, willRetry, options } of [
+for (const { title, before, queuedAtRunEnd = false, reason, willRetry, options } of [
   {
     title:
       "steers the SessionStart context of an overflow compaction into the retried model call (HKRL-03)",
@@ -5093,11 +5094,25 @@ for (const { title, before, reason, willRetry, options } of [
   },
   {
     title:
-      "forgets the follow-up inputs of an ended run, so the same text queued later holds the SessionStart context (HKRL-03)",
+      "forgets the follow-up inputs of a run that ended with nothing queued, so the same text queued later holds the SessionStart context (HKRL-03)",
     before: ["follow_up_input", "agent_end", "tool_turn_end_with_queued_follow_up"],
     reason: "threshold",
     willRetry: false,
     options: { triggerTurn: false },
+  },
+  {
+    title:
+      "keeps the follow-up inputs of a failed run that leaves them queued, so a compaction after a tool call of the retried run steers the SessionStart context (HKRL-03)",
+    before: [
+      "follow_up_input",
+      "overflow_turn_end_with_queued_follow_up",
+      "agent_end",
+      "tool_turn_end_with_queued_follow_up",
+    ],
+    queuedAtRunEnd: true,
+    reason: "threshold",
+    willRetry: false,
+    options: { deliverAs: "steer" },
   },
   {
     title:
@@ -5134,6 +5149,7 @@ for (const { title, before, reason, willRetry, options } of [
 ] satisfies ReadonlyArray<{
   readonly title: string;
   readonly before: ReadonlyArray<keyof typeof RUN_EVENTS>;
+  readonly queuedAtRunEnd?: boolean;
   readonly reason: SessionCompactEvent["reason"];
   readonly willRetry: boolean;
   readonly options: unknown;
@@ -5153,7 +5169,7 @@ for (const { title, before, reason, willRetry, options } of [
         ),
     });
     routeCompactionHooks(runtime, root);
-    const context = makeContext(root, root);
+    const context = makeContext(root, root, true, [], queuedAtRunEnd);
     for (const runEvent of before) {
       await runEventHandler(registrations, runEvent)(RUN_EVENTS[runEvent], context);
     }

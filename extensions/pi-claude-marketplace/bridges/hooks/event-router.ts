@@ -650,7 +650,7 @@ interface RunPhaseTracker {
   readonly turnStarted: () => void;
   readonly turnEnded: (turn: FollowUpTurnEnd) => void;
   readonly inputQueued: (event: InputEvent) => void;
-  readonly runEnded: () => void;
+  readonly runEnded: (stillQueued: boolean) => void;
   readonly nextCallReadsSteer: (willRetry: boolean) => boolean;
 }
 
@@ -693,7 +693,9 @@ function remainingFollowUps(
  * the next call when the turn ends the work, which also reads them; after a
  * tool call the call for its results comes first and reads the steer. A
  * steer input waits ahead of a steer sent after it. A follow-up input keeps
- * its text until the run reads that follow-up or ends.
+ * its text until the run reads that follow-up or a run ends with no user
+ * input queued. A model call that ends in `error` or `aborted` ends the run
+ * without reading the follow-up queue, and Pi's retry of that call reads it.
  */
 function createRunPhaseTracker(): RunPhaseTracker {
   let phase: RunPhase = "idle";
@@ -720,9 +722,11 @@ function createRunPhaseTracker(): RunPhaseTracker {
 
       steerWaits ||= event.streamingBehavior === "steer";
     },
-    runEnded: () => {
+    runEnded: (stillQueued) => {
       phase = "idle";
-      followUps = [];
+      if (!stillQueued) {
+        followUps = [];
+      }
     },
     nextCallReadsSteer: (willRetry) => !steerWaits && (willRetry || phase === "between"),
   };
@@ -1752,14 +1756,15 @@ async function registerHooksBridgeWith(
   // (STOP-01, D-PG5-01, D-PG5-03). A pi-subagents child runs no Stop hook
   // (D-PG3-04), and its boundary handler leaves the cache for agent_settled.
   // agent_end also marks the agent idle, so a compaction after the run ends
-  // holds its context for the next prompt (HKRL-03).
+  // holds its context for the next prompt, and keeps the follow-up texts
+  // while Pi still queues user input for a retried run (HKRL-03).
   pi.on(
     "agent_end",
     bindWithMode((generation) => {
       const cacheLastAssistant = agentEndCacheHandler(runtime, generation);
-      return (event: AgentEndEvent) => {
-        runPhase.runEnded();
+      return (event: AgentEndEvent, ctx: ExtensionContext) => {
         cacheLastAssistant(event);
+        runPhase.runEnded(ctx.hasPendingMessages());
       };
     }),
   );
