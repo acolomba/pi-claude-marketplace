@@ -25,8 +25,10 @@
 //     exactly one plugin record. That is NFR-2's "a /reload converges"
 //     contract, and running it is what keeps the record assertions
 //     meaningful no matter who won the race -- or whether anybody did
-//   - first-run migrate captures legacy autoupdate exactly once under the
-//     cross-process lock
+//   - of the first-run migration: two concurrent first applies leave one
+//     config whose single marketplace carries the legacy autoupdate, and
+//     state.json still records that marketplace. The case cannot tell one
+//     writer from two that wrote the same config, so it does not claim one
 //
 // Mirrors test/integration/concurrent-install.test.ts for the fork + IPC +
 // ready-sync harness; uses a path-source marketplace fixture so the test is
@@ -411,7 +413,7 @@ test("RECON-06 (two-process race): config declares one path-source mp-a + plugin
 // Scenario B: concurrent first-load race
 // ---------------------------------------------------------------------------
 
-test("Concurrent first-load race: two processes race against state with legacy autoupdate + ENOENT claude-plugins.json -> migrate trichotomy serializes; exactly one process writes the config, the other observes 'valid' and short-circuits", async () => {
+test("Concurrent first-load race: two first applies against state with legacy autoupdate and no claude-plugins.json leave one config whose single marketplace carries the legacy autoupdate", async () => {
   const env = await setupRaceEnv("pi-cm-recon06-mig22-");
   try {
     // Pre-record a marketplace in state with the legacy `autoupdate: true`
@@ -458,16 +460,16 @@ test("Concurrent first-load race: two processes race against state with legacy a
     );
     const config = await readConfigRaw(env.cwd);
 
-    // Exactly one marketplace entry (no double-merge -- the second process
-    // saw 'valid' and short-circuited per migrate-config.ts's trichotomy).
+    // Exactly one marketplace entry (no double-merge). One writer and two
+    // writers of the same config read the same here.
     assert.deepStrictEqual(
       Object.keys(config.marketplaces ?? {}),
       ["mp-legacy"],
       `expected exactly one mp entry; got ${JSON.stringify(config.marketplaces ?? {})}`,
     );
 
-    // The legacy autoupdate field is captured byte-stably -- whichever
-    // process won the migration race wrote it from the in-memory state
+    // The legacy autoupdate field is captured -- each process that wrote
+    // the config wrote it from the in-memory state
     // record (the D-13 gate preserved the field on the first loadState
     // because the config did not yet exist).
     assert.equal(
