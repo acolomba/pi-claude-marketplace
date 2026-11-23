@@ -13,10 +13,10 @@
 
 ### Harness (SG-HRN)
 
-- [ ] **SG-HRN-01**: The unit, integration, and cucumber suites build their fixture repositories and run every git operation with the system `git` binary under a hermetic environment (no user, system, or sandbox-injected git config, including `GIT_CONFIG_COUNT`, reaches a test).
-- [ ] **SG-HRN-02**: The cucumber HTTPS git-host stand-in is trusted by system git (`GIT_SSL_CAINFO` or `http.sslCAInfo`), serves fetch-by-SHA, and has a refusing arm for the fallback path.
-- [ ] **SG-HRN-03**: The cucumber suite can drive the SSH probe and SSH transport through a stand-in (stub `ssh` on `PATH` or `GIT_SSH_COMMAND`) with no real network.
-- [ ] **SG-HRN-04**: `test/architecture/hermetic-git-environment.test.ts` fails when any git- or ssh-steering variable (the `GIT_CONFIG_*` family, `GIT_SSL_CAINFO`, `GIT_SSH`, `GIT_SSH_COMMAND`, `SSH_AUTH_SOCK`, proxies, `XDG_CONFIG_HOME`, `CLAUDE_CODE_PLUGIN_PREFER_HTTPS`) leaks into a test process, and CI logs the git version it ran.
+- [x] **SG-HRN-01**: The unit, integration, and cucumber suites build their fixture repositories and run every git operation with the system `git` binary under a hermetic environment (no user, system, or sandbox-injected git config, including `GIT_CONFIG_COUNT`, reaches a test).
+- [x] **SG-HRN-02**: The cucumber HTTPS git-host stand-in is trusted by system git (`GIT_SSL_CAINFO` or `http.sslCAInfo`), serves fetch-by-SHA, and has a refusing arm for the fallback path.
+- [x] **SG-HRN-03**: The cucumber suite can drive the SSH probe and SSH transport through a stand-in (stub `ssh` on `PATH` or `GIT_SSH_COMMAND`) with no real network.
+- [x] **SG-HRN-04**: `test/architecture/hermetic-git-environment.test.ts` fails when any git- or ssh-steering variable (the `GIT_CONFIG_*` family, `GIT_SSL_CAINFO`, `GIT_SSH`, `GIT_SSH_COMMAND`, `SSH_AUTH_SOCK`, proxies, `XDG_CONFIG_HOME`, `CLAUDE_CODE_PLUGIN_PREFER_HTTPS`) leaks into a test process, and CI logs the git version it ran.
 
 ### Git process seam (SG-PRC)
 
@@ -98,10 +98,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SG-HRN-01 | Phase 1 | Pending |
-| SG-HRN-02 | Phase 1 | Pending |
-| SG-HRN-03 | Phase 1 | Pending |
-| SG-HRN-04 | Phase 1 | Pending |
+| SG-HRN-01 | Phase 1 | Complete |
+| SG-HRN-02 | Phase 1 | Complete |
+| SG-HRN-03 | Phase 1 | Complete |
+| SG-HRN-04 | Phase 1 | Complete |
 | SG-PRC-01 | Phase 2 | Pending |
 | SG-PRC-02 | Phase 2 | Pending |
 | SG-PRC-03 | Phase 2 | Pending |

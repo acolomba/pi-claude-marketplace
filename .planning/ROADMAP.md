@@ -100,7 +100,7 @@ as ARCHITECTURE.md suggests, or Q2 answered early.
 - **Records.** Each `D-SG-NN` decision lands in PROJECT.md in the phase that
   makes it. Phase 8 checks the set and writes the amended constraint text.
 
-- [ ] **Phase 1: Harness on System Git** - The test suites build fixtures and run git with the system binary under a hermetic environment, and the cucumber stand-ins serve system git over HTTPS and SSH
+- [x] **Phase 1: Harness on System Git** - The test suites build fixtures and run git with the system binary under a hermetic environment, and the cucumber stand-ins serve system git over HTTPS and SSH (completed 2026-11-23)
 - [ ] **Phase 2: Git Process Seam and Typed Failures** - Every git process starts from one hardened module that cannot prompt, hang, or run repository code, a git failure arrives as a typed error with a kind, and a missing git gets a clear message
 - [ ] **Phase 3: System Git Transport and Clone Shape** - Marketplaces and git-source plugins clone, fetch, and update with system git in Claude Code's shape, and clones made before the upgrade keep working
 - [ ] **Phase 4: SSH Sources and Transport Selection** - A user adds a marketplace or installs a plugin from an SSH URL, and `owner/repo` sources choose SSH or HTTPS as Claude Code does
@@ -202,7 +202,7 @@ as ARCHITECTURE.md suggests, or Q2 answered early.
   3. Inside the cucumber harness, a system `git` clone and a fetch by SHA from the HTTPS git-host stand-in succeed with only the harness's CA trust (`GIT_SSL_CAINFO` or `http.sslCAInfo`), and the stand-in's refusing arm makes the fetch by SHA fail, so a later phase can drive the fallback path (SG-HRN-02).
   4. Inside the cucumber harness, a system `git` clone from a `git@<host>:<path>` URL and an SSH probe launch both reach the SSH stand-in (a stub `ssh` on `PATH` or `GIT_SSH_COMMAND`) and get scripted answers, with no real network (SG-HRN-03).
   5. `test/architecture/hermetic-git-environment.test.ts` checks every variable SG-HRN-04 names (the `GIT_CONFIG_*` family, `GIT_SSL_CAINFO`, `GIT_SSH`, `GIT_SSH_COMMAND`, `SSH_AUTH_SOCK`, the proxy variables, `XDG_CONFIG_HOME`, and `CLAUDE_CODE_PLUGIN_PREFER_HTTPS`), and the CI log of every job that runs git shows the git version (SG-HRN-04).
-**Plans**: 8/8 plans executed in 4 waves
+**Plans**: 8/8 plans complete in 4 waves
 
 Plans:
 **Wave 1**
@@ -328,7 +328,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Harness on System Git | 8/8 | In Progress | - |
+| 1. Harness on System Git | 8/8 | Complete    | 2026-11-23 |
 | 2. Git Process Seam and Typed Failures | 0/TBD | Not started | - |
 | 3. System Git Transport and Clone Shape | 0/TBD | Not started | - |
 | 4. SSH Sources and Transport Selection | 0/TBD | Not started | - |

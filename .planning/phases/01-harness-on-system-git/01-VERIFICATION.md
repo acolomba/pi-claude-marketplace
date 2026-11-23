@@ -1,7 +1,7 @@
 ---
 phase: 01-harness-on-system-git
 verified: 2026-11-23T06:00:00Z
-status: human_needed
+status: passed
 score: 4/5 must-haves verified
 covered_files:
   - .github/workflows/ci.yml
@@ -197,3 +197,9 @@ No gaps. All four requirements have code and test evidence, and every plan `must
 
 _Verified: 2026-11-23_
 _Verifier: Claude (gsd-verifier)_
+
+## Human Verification Result (2026-11-23)
+
+The maintainer accepted the one human item (CI logs `git --version` in every
+test job) on the evidence that the workflow steps exist and parse; the log
+line is to be confirmed on the pull request's CI run. Status set to `passed`.
