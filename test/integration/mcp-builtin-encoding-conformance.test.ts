@@ -6,12 +6,13 @@
 // Claude Code's value. Each `env` and `headers` row of the shared expansion
 // table runs through `builtinServerConfig`, with the session environment as
 // `runtimeEnv` and the session's working directory as `projectDir` for both
-// scopes (P2-DC-03). A written secret value names no variable and is no shell
-// command, so Pi reads no environment and runs nothing (PI-1, PI-2). Pi's own
-// `validateMcpServerConfig` returns a stdio config, a remote config with
-// Claude Code's OAuth fields, and a direct-exposure config with the same JSON,
-// so a re-registration does not reconnect (P2-DC-08), and it refuses a url
-// that keeps an unset `${NAME}`. No table row reaches the validator.
+// scopes (P2-DC-03). A written `env` or `headers` value names no variable and
+// is no shell command, so Pi reads no environment and runs nothing (PI-1,
+// PI-2). Pi's own `validateMcpServerConfig` returns a stdio config, a remote
+// config with Claude Code's OAuth fields, and a direct-exposure config with
+// the same JSON, so a re-registration does not reconnect (P2-DC-08), and it
+// refuses a url that keeps an unset `${NAME}`. No table row reaches the
+// validator.
 // D-PG10-12: each `env` and `headers` option row runs through
 // `builtinServerConfig` with the option's default filled in, and comes out of
 // Pi as Claude Code's value, with no command run and no variable of Pi's
@@ -76,7 +77,7 @@ const SERVER_NAME = "plugin_demo_stub";
 const SERVER_URL = "https://mcp.example.test";
 
 /** The fields whose values Pi resolves when it connects. */
-type SecretField = Extract<ExpansionField, "env" | "env-builtin" | "headers">;
+type PiResolvedField = Extract<ExpansionField, "env" | "env-builtin" | "headers">;
 
 /** How one field sits in a Claude server object, and how to read it back from Pi's config. */
 interface FieldShape {
@@ -88,7 +89,7 @@ function member(value: unknown, key: string): unknown {
   return typeof value === "object" && value !== null ? Reflect.get(value, key) : undefined;
 }
 
-const FIELD_SHAPES: Readonly<Record<SecretField, FieldShape>> = {
+const FIELD_SHAPES: Readonly<Record<PiResolvedField, FieldShape>> = {
   env: {
     server: (value) => ({ command: "server", env: { VALUE: value } }),
     written: (config) => member(config.env, "VALUE"),
@@ -103,9 +104,9 @@ const FIELD_SHAPES: Readonly<Record<SecretField, FieldShape>> = {
   },
 };
 
-function isSecret<T extends { readonly field: ExpansionField }>(
+function isPiResolved<T extends { readonly field: ExpansionField }>(
   row: T,
-): row is T & { readonly field: SecretField } {
+): row is T & { readonly field: PiResolvedField } {
   return Object.hasOwn(FIELD_SHAPES, row.field);
 }
 
@@ -131,7 +132,7 @@ function sentinelEnvironment(raw: string): Environment {
   return environment;
 }
 
-/** Pi's value for one written secret: resolved under `env`, then under sentinels for `raw`'s names. */
+/** Pi's value for one written field value: resolved under `env`, then under sentinels for `raw`'s names. */
 function piResolved(written: string, raw: string, env: Environment): readonly string[] {
   return [
     piConfigValues.resolveConfigValueOrThrow(written, "conformance value", env),
@@ -143,7 +144,7 @@ function piResolved(written: string, raw: string, env: Environment): readonly st
   ];
 }
 
-for (const row of EXPANSION_CASES.filter(isSecret)) {
+for (const row of EXPANSION_CASES.filter(isPiResolved)) {
   test(`BLT-02: ${builtinRowInput(row)} comes out of Pi's resolver as Claude Code's value ${JSON.stringify(row.claudeOutput)}`, () => {
     // arrange
     const shape = FIELD_SHAPES[row.field];
@@ -270,7 +271,7 @@ function optionContext(value: string): McpSubstitutionContext {
 }
 
 function optionWritten(
-  row: (typeof OPTION_FIELD_CASES)[number] & { readonly field: SecretField },
+  row: (typeof OPTION_FIELD_CASES)[number] & { readonly field: PiResolvedField },
 ): unknown {
   const shape = FIELD_SHAPES[row.field];
   const config = builtinServerConfig(shape.server(row.raw), optionContext(row.value), undefined);
@@ -278,7 +279,7 @@ function optionWritten(
   return shape.written({ ...config });
 }
 
-for (const row of OPTION_FIELD_CASES.filter(isSecret)) {
+for (const row of OPTION_FIELD_CASES.filter(isPiResolved)) {
   test(`D-PG10-12: ${row.title} comes out of Pi's resolver as Claude Code's value`, () => {
     // arrange
     const environment = { HOME: "/leaked" };
