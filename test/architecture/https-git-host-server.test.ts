@@ -84,6 +84,31 @@ async function gitClient(t: TestContext, host: HttpsGitHost): Promise<GitClient>
   };
 }
 
+/** Clones the repository `directory` with `--depth 1` into the clone `directory` of `client`. */
+async function shallowClone(
+  client: GitClient,
+  host: HttpsGitHost,
+  directory: string,
+): Promise<void> {
+  const url = host.repositoryUrl(directory);
+  await runSystemGit(client.trusted, "clone", "-q", "--depth", "1", url, directory);
+}
+
+/**
+ * Fetches the commit `sha` with `--depth 1` into the clone `clone` of
+ * `client`, with the git options `options` first, and returns `FETCH_HEAD`.
+ */
+async function fetchBySha(
+  client: GitClient,
+  clone: string,
+  sha: string,
+  options: readonly string[] = [],
+): Promise<string> {
+  const call = client.inClone(clone);
+  await runSystemGit(call, ...options, "fetch", "-q", "--depth", "1", "origin", sha);
+  return runSystemGit(call, "rev-parse", "FETCH_HEAD");
+}
+
 /**
  * Returns `requests` with each run of equal requests kept once, so a check
  * states which requests a git command sent and in what order, but not how
@@ -345,16 +370,8 @@ describe("HttpsGitHost with system git", () => {
     const window = host.mark();
 
     // act
-    await runSystemGit(
-      client.trusted,
-      "clone",
-      "-q",
-      "--depth",
-      "1",
-      host.repositoryUrl("published"),
-      "clone",
-    );
-    const head = await runSystemGit(client.inClone("clone"), "rev-parse", "HEAD");
+    await shallowClone(client, host, "published");
+    const head = await runSystemGit(client.inClone("published"), "rev-parse", "HEAD");
 
     // assert
     assert.deepStrictEqual(
@@ -393,22 +410,11 @@ describe("HttpsGitHost with system git", () => {
       const host = await startHost(t);
       const { first } = await publish(t, host, "published");
       const client = await gitClient(t, host);
-      const url = host.repositoryUrl("published");
-      await runSystemGit(client.trusted, "clone", "-q", "--depth", "1", url, "clone");
+      await shallowClone(client, host, "published");
       const window = host.mark();
 
       // act
-      await runSystemGit(
-        client.inClone("clone"),
-        ...protocol,
-        "fetch",
-        "-q",
-        "--depth",
-        "1",
-        "origin",
-        first,
-      );
-      const fetched = await runSystemGit(client.inClone("clone"), "rev-parse", "FETCH_HEAD");
+      const fetched = await fetchBySha(client, "published", first, protocol);
 
       // assert
       assert.deepStrictEqual(
@@ -417,4 +423,105 @@ describe("HttpsGitHost with system git", () => {
       );
     });
   }
+
+  test("refuses a fetch by SHA from a repository armed to refuse SHA wants", async (t) => {
+    // arrange
+    const host = await startHost(t);
+    const { first } = await publish(t, host, "published");
+    const client = await gitClient(t, host);
+    await shallowClone(client, host, "published");
+    await host.arm("published", { kind: "refuse-sha-want" });
+    const window = host.mark();
+
+    // act & assert
+    await assert.rejects(fetchBySha(client, "published", first), (error: unknown) => {
+      assert.ok(error instanceof SystemGitError);
+      assert.match(error.stderr, /Server does not allow request for unadvertised object/);
+      return true;
+    });
+    assert.deepStrictEqual(
+      distinctRequests(host.requestsSince(window).requests),
+      servedUploadPack("published").slice(0, 1),
+    );
+  });
+
+  test("serves a full clone and an unshallow fetch under the refusing arm", async (t) => {
+    // arrange
+    const host = await startHost(t);
+    const { first, tip } = await publish(t, host, "published");
+    const client = await gitClient(t, host);
+    await host.arm("published", { kind: "refuse-sha-want" });
+
+    // act
+    await runSystemGit(client.trusted, "clone", "-q", host.repositoryUrl("published"), "full");
+    const head = await runSystemGit(client.inClone("full"), "rev-parse", "HEAD");
+    await shallowClone(client, host, "published");
+    await runSystemGit(client.inClone("published"), "fetch", "-q", "--unshallow", "origin");
+    const unshallowed = await runSystemGit(
+      client.inClone("published"),
+      "cat-file",
+      "-t",
+      `${first}^{commit}`,
+    );
+
+    // assert
+    assert.deepStrictEqual({ head, unshallowed }, { head: tip, unshallowed: "commit" });
+  });
+
+  test("keeps serving a fetch by SHA from a repository the arm does not name", async (t) => {
+    // arrange
+    const host = await startHost(t);
+    await publish(t, host, "published");
+    const { first } = await publish(t, host, "other");
+    const client = await gitClient(t, host);
+    await shallowClone(client, host, "other");
+    await host.arm("published", { kind: "refuse-sha-want" });
+
+    // act
+    const fetched = await fetchBySha(client, "other", first);
+
+    // assert
+    assert.strictEqual(fetched, first);
+  });
+
+  test("serves a fetch by SHA again once the refusing arm is disarmed", async (t) => {
+    // arrange
+    const host = await startHost(t);
+    const { first } = await publish(t, host, "published");
+    const client = await gitClient(t, host);
+    await shallowClone(client, host, "published");
+    await host.arm("published", { kind: "refuse-sha-want" });
+
+    // act
+    const disarmed = host.disarm("published");
+    const fetched = await fetchBySha(client, "published", first);
+
+    // assert
+    assert.deepStrictEqual({ disarmed, fetched }, { disarmed: true, fetched: first });
+  });
+
+  test("forgets the refusing arm on reset", async (t) => {
+    // arrange
+    const host = await startHost(t);
+    await publish(t, host, "published");
+    await host.arm("published", { kind: "refuse-sha-want" });
+
+    // act
+    await host.reset();
+    const { arms } = await host.snapshot();
+
+    // assert
+    assert.deepStrictEqual(arms, []);
+  });
+
+  test("names the directory that holds the repositories it serves by owner", async (t) => {
+    // arrange
+    const host = await startHost(t);
+
+    // act
+    const root = host.repositoriesRoot;
+
+    // assert
+    assert.strictEqual(root, path.dirname(path.dirname(host.repositoryPath("tools"))));
+  });
 });
