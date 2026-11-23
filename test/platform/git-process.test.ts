@@ -59,9 +59,8 @@ const FILL: GitRequest = {
   timeoutMs: 5_000,
 };
 
-// D-SG-05: the `-c` pairs of every command, in their order, with the
-// network lane's `bans` after the transport bans.
-function hardening(hooksPath: string, bans: readonly string[] = []): string[] {
+// D-SG-05: the `-c` pairs of every command, in their order.
+function hardening(hooksPath: string): string[] {
   const pairs = `core.fsmonitor=
 core.hooksPath=${hooksPath}
 core.askPass=
@@ -110,8 +109,7 @@ core.longpaths=true
 credential.interactive=false
 init.templateDir=
 safe.bareRepository=explicit`.split("\n");
-  const pins = pairs.indexOf("init.defaultRefFormat=files");
-  return [...pairs.slice(0, pins), ...bans, ...pairs.slice(pins)].flatMap((pair) => ["-c", pair]);
+  return pairs.flatMap((pair) => ["-c", pair]);
 }
 
 // The values every child gets on POSIX, besides PATH and the ceiling.
@@ -372,6 +370,11 @@ const PERMISSIVE_CONFIG = `[protocol "file"]
 [protocol "ext"]
 \tallow = always
 `;
+
+// A user config that allows each transport the module bans.
+const ALWAYS_BANNED_CONFIG = ["fd", "git", "ftp", "ftps"]
+  .map((name) => `[protocol "${name}"]\n\tallow = always\n`)
+  .join("");
 
 interface LaneFixture {
   readonly root: string;
@@ -2170,50 +2173,50 @@ describe("createGitProcess operands and lanes", () => {
     await assert.rejects(access(program.record), { code: "ENOENT" });
   });
 
-  for (const { label, variables, bans } of [
-    { label: "an unset GIT_ALLOW_PROTOCOL", variables: {}, bans: [] },
+  for (const { label, variables, allowed } of [
+    { label: "an unset GIT_ALLOW_PROTOCOL", variables: {}, allowed: {} },
     {
       label: "a GIT_ALLOW_PROTOCOL key whose value is undefined",
       variables: { GIT_ALLOW_PROTOCOL: undefined },
-      bans: [],
+      allowed: {},
     },
     {
       label: "GIT_ALLOW_PROTOCOL=https:ssh",
       variables: { GIT_ALLOW_PROTOCOL: "https:ssh" },
-      bans: ["protocol.http.allow=never", "protocol.file.allow=never"],
+      allowed: { GIT_ALLOW_PROTOCOL: "https:ssh" },
     },
     {
       label: "GIT_ALLOW_PROTOCOL=ext:https",
       variables: { GIT_ALLOW_PROTOCOL: "ext:https" },
-      bans: ["protocol.http.allow=never", "protocol.ssh.allow=never", "protocol.file.allow=never"],
+      allowed: { GIT_ALLOW_PROTOCOL: "https" },
+    },
+    {
+      label: "GIT_ALLOW_PROTOCOL=https:persistent-https:s3, which names remote helpers",
+      variables: { GIT_ALLOW_PROTOCOL: "https:persistent-https:s3" },
+      allowed: { GIT_ALLOW_PROTOCOL: "https:persistent-https:s3" },
+    },
+    {
+      label: "GIT_ALLOW_PROTOCOL=ext:fd:git:ftp:ftps, which names only banned transports",
+      variables: { GIT_ALLOW_PROTOCOL: "ext:fd:git:ftp:ftps" },
+      allowed: { GIT_ALLOW_PROTOCOL: "/" },
     },
     {
       label: "an empty GIT_ALLOW_PROTOCOL",
       variables: { GIT_ALLOW_PROTOCOL: "" },
-      bans: [
-        "protocol.https.allow=never",
-        "protocol.http.allow=never",
-        "protocol.ssh.allow=never",
-        "protocol.file.allow=never",
-      ],
+      allowed: { GIT_ALLOW_PROTOCOL: "/" },
     },
     {
-      label: "GIT_ALLOW_PROTOCOL=HTTPS, which no name matches exactly",
+      label: "GIT_ALLOW_PROTOCOL=HTTPS, which git matches exactly",
       variables: { GIT_ALLOW_PROTOCOL: "HTTPS" },
-      bans: [
-        "protocol.https.allow=never",
-        "protocol.http.allow=never",
-        "protocol.ssh.allow=never",
-        "protocol.file.allow=never",
-      ],
+      allowed: { GIT_ALLOW_PROTOCOL: "HTTPS" },
     },
     {
       label: "GIT_ALLOW_PROTOCOL=https::file, with an empty segment",
       variables: { GIT_ALLOW_PROTOCOL: "https::file" },
-      bans: ["protocol.http.allow=never", "protocol.ssh.allow=never"],
+      allowed: { GIT_ALLOW_PROTOCOL: "https:file" },
     },
   ]) {
-    test(`D-SG-05: turns ${label} into network-lane bans`, async () => {
+    test(`D-SG-05: passes ${label} to the network lane without the banned transports`, async () => {
       // arrange
       const { git, control, started } = createFakeGit({ PATH: "/usr/bin", ...variables });
 
@@ -2228,14 +2231,14 @@ describe("createGitProcess operands and lanes", () => {
       assert.deepStrictEqual(
         [launch?.[1], launch?.[2].env],
         [
-          [...hardening("/dev/null", bans), "credential", "fill"],
-          { ...POSIX_FORCED, PATH: "/usr/bin", GIT_CEILING_DIRECTORIES: "/" },
+          [...hardening("/dev/null"), "credential", "fill"],
+          { ...POSIX_FORCED, PATH: "/usr/bin", GIT_CEILING_DIRECTORIES: "/", ...allowed },
         ],
       );
     });
   }
 
-  test("D-SG-05: on Windows removes every spelling of GIT_ALLOW_PROTOCOL and bans what each omits", async () => {
+  test("D-SG-05: on Windows keeps only the transports every spelling of GIT_ALLOW_PROTOCOL names", async () => {
     // arrange
     const { git, control, started } = createFakeGit(
       {
@@ -2262,15 +2265,13 @@ describe("createGitProcess operands and lanes", () => {
     assert.deepStrictEqual(
       [launch?.[1], launch?.[2].env],
       [
-        [
-          ...hardening(String.raw`\\.\NUL`, [
-            "protocol.http.allow=never",
-            "protocol.file.allow=never",
-          ]),
-          "credential",
-          "fill",
-        ],
-        { ...POSIX_FORCED, Path: String.raw`C:\Git\cmd`, GIT_CEILING_DIRECTORIES: "C:\\" },
+        [...hardening(String.raw`\\.\NUL`), "credential", "fill"],
+        {
+          ...POSIX_FORCED,
+          Path: String.raw`C:\Git\cmd`,
+          GIT_CEILING_DIRECTORIES: "C:\\",
+          GIT_ALLOW_PROTOCOL: "https:ssh",
+        },
       ],
     );
   });
@@ -2312,10 +2313,13 @@ describe("createGitProcess operands and lanes", () => {
     { operand: "ftp://127.0.0.1:9/x" },
     { operand: "ftps://127.0.0.1:9/x" },
   ]) {
-    test(`SG-PRC-03: refuses ${operand} on the network lane under a user protocol list that names ext`, async (t) => {
+    test(`SG-PRC-03: refuses ${operand} on the network lane under a user list and config that allow it`, async (t) => {
       // arrange
       const fixture = await laneFixture(t);
-      const git = await fixture.gitWith({ GIT_ALLOW_PROTOCOL: "ext:https" });
+      const git = await fixture.gitWith(
+        { GIT_ALLOW_PROTOCOL: "ext:fd:git:ftp:ftps:https" },
+        ALWAYS_BANNED_CONFIG,
+      );
 
       // act
       const listed = git.run({
@@ -2329,6 +2333,26 @@ describe("createGitProcess operands and lanes", () => {
       await assert.rejects(listed, rejectsAs("protocol-refused", 128));
     });
   }
+
+  test("D-SG-05: refuses a remote helper that the user's protocol list leaves out and the config allows", async (t) => {
+    // arrange
+    const fixture = await laneFixture(t);
+    const git = await fixture.gitWith(
+      { GIT_ALLOW_PROTOCOL: "https:file" },
+      `[protocol "foo"]\n\tallow = always\n`,
+    );
+
+    // act
+    const listed = git.run({
+      subcommand: "ls-remote",
+      lane: "network",
+      operands: ["foo::bar"],
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    await assert.rejects(listed, rejectsAs("protocol-refused", 128));
+  });
 
   test("D-SG-05: keeps the user's protocol list from allowing a file:// URL it leaves out", async (t) => {
     // arrange
