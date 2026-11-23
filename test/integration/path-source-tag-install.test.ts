@@ -20,8 +20,6 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import * as git from "isomorphic-git";
-
 import {
   createHooksRouting,
   createHooksRuntime,
@@ -32,13 +30,13 @@ import { createInstallOperation } from "../../extensions/pi-claude-marketplace/o
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { initGitTestCheckout } from "../platform/git-test-repository.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import type { ExtensionContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
-
-const AUTHOR = { name: "test", email: "test@example.com" } as const;
+import type { GitTestCheckout } from "../platform/git-test-repository.ts";
 
 interface NotifyRecord {
   readonly message: string;
@@ -87,6 +85,44 @@ async function marketplaceGitSnapshot(marketplaceRoot: string): Promise<{
 }
 
 /**
+ * Makes `marketplaceRoot` a system-git repository (SG-HRN-01), commits
+ * `paths` as "release 1.0.0", and points each lightweight tag of `tags` at
+ * that commit, whose id it returns as `tagOid`.
+ */
+async function releaseAndTag(
+  marketplaceRoot: string,
+  paths: readonly string[],
+  tags: readonly string[],
+): Promise<{ readonly checkout: GitTestCheckout; readonly tagOid: string }> {
+  const checkout = await initGitTestCheckout(marketplaceRoot);
+  const tagOid = await checkout.commitPaths("release 1.0.0", paths);
+  for (const tag of tags) {
+    await checkout.run("tag", tag, tagOid);
+  }
+
+  return { checkout, tagOid };
+}
+
+/**
+ * Bumps `formatter` to `2.0.0`, rewrites its marker file, and commits both as
+ * "release 2.0.0", so the current checkout no longer matches the tag.
+ */
+async function releaseFormatterPastTag(
+  checkout: GitTestCheckout,
+  formatterDir: string,
+): Promise<void> {
+  await writeFile(
+    path.join(formatterDir, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "formatter", version: "2.0.0" }),
+  );
+  await writeFile(path.join(formatterDir, "MARKER.txt"), "current-checkout-content\n");
+  await checkout.commitPaths("release 2.0.0", [
+    "plugins/formatter/.claude-plugin/plugin.json",
+    "plugins/formatter/MARKER.txt",
+  ]);
+}
+
+/**
  * Builds a real git repository marketplace declaring `formatter` (a
  * path-source plugin, tagged `formatter--v1.0.0` at its first commit) and
  * `app` (a path-source plugin declaring `formatter@^1.0.0` in its OWN
@@ -129,33 +165,20 @@ async function buildTaggedMarketplace(cwd: string): Promise<{
     }),
   );
 
-  await git.init({ fs, dir: marketplaceRoot, defaultBranch: "main" });
-  await git.add({ fs, dir: marketplaceRoot, filepath: ".claude-plugin/marketplace.json" });
-  await git.add({
-    fs,
-    dir: marketplaceRoot,
-    filepath: "plugins/formatter/.claude-plugin/plugin.json",
-  });
-  await git.add({ fs, dir: marketplaceRoot, filepath: "plugins/formatter/MARKER.txt" });
-  await git.add({ fs, dir: marketplaceRoot, filepath: "plugins/app/.claude-plugin/plugin.json" });
-  await git.commit({ fs, dir: marketplaceRoot, message: "release 1.0.0", author: AUTHOR });
-  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
-  await git.tag({ fs, dir: marketplaceRoot, ref: "formatter--v1.0.0", object: tagOid });
+  const { checkout, tagOid } = await releaseAndTag(
+    marketplaceRoot,
+    [
+      ".claude-plugin/marketplace.json",
+      "plugins/formatter/.claude-plugin/plugin.json",
+      "plugins/formatter/MARKER.txt",
+      "plugins/app/.claude-plugin/plugin.json",
+    ],
+    ["formatter--v1.0.0"],
+  );
 
   // Advance the checkout PAST the tag: a materialization that reads the
   // current checkout instead of the tag is caught by every assertion below.
-  await writeFile(
-    path.join(formatterDir, ".claude-plugin", "plugin.json"),
-    JSON.stringify({ name: "formatter", version: "2.0.0" }),
-  );
-  await writeFile(path.join(formatterDir, "MARKER.txt"), "current-checkout-content\n");
-  await git.add({
-    fs,
-    dir: marketplaceRoot,
-    filepath: "plugins/formatter/.claude-plugin/plugin.json",
-  });
-  await git.add({ fs, dir: marketplaceRoot, filepath: "plugins/formatter/MARKER.txt" });
-  await git.commit({ fs, dir: marketplaceRoot, message: "release 2.0.0", author: AUTHOR });
+  await releaseFormatterPastTag(checkout, formatterDir);
 
   return { marketplaceRoot, tagOid };
 }
@@ -369,23 +392,16 @@ async function buildTwoTagMarketplace(cwd: string): Promise<{
     }),
   );
 
-  await git.init({ fs, dir: marketplaceRoot, defaultBranch: "main" });
-  await git.add({ fs, dir: marketplaceRoot, filepath: ".claude-plugin/marketplace.json" });
-  await git.add({
-    fs,
-    dir: marketplaceRoot,
-    filepath: "plugins/formatter/.claude-plugin/plugin.json",
-  });
-  await git.add({
-    fs,
-    dir: marketplaceRoot,
-    filepath: "plugins/linter/.claude-plugin/plugin.json",
-  });
-  await git.add({ fs, dir: marketplaceRoot, filepath: "plugins/app/.claude-plugin/plugin.json" });
-  await git.commit({ fs, dir: marketplaceRoot, message: "release 1.0.0", author: AUTHOR });
-  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
-  await git.tag({ fs, dir: marketplaceRoot, ref: "formatter--v1.0.0", object: tagOid });
-  await git.tag({ fs, dir: marketplaceRoot, ref: "linter--v1.0.0", object: tagOid });
+  const { tagOid } = await releaseAndTag(
+    marketplaceRoot,
+    [
+      ".claude-plugin/marketplace.json",
+      "plugins/formatter/.claude-plugin/plugin.json",
+      "plugins/linter/.claude-plugin/plugin.json",
+      "plugins/app/.claude-plugin/plugin.json",
+    ],
+    ["formatter--v1.0.0", "linter--v1.0.0"],
+  );
 
   return { marketplaceRoot, tagOid };
 }
@@ -490,33 +506,20 @@ async function buildNonSatisfyingTagMarketplace(cwd: string): Promise<{
     }),
   );
 
-  await git.init({ fs, dir: marketplaceRoot, defaultBranch: "main" });
-  await git.add({ fs, dir: marketplaceRoot, filepath: ".claude-plugin/marketplace.json" });
-  await git.add({
-    fs,
-    dir: marketplaceRoot,
-    filepath: "plugins/formatter/.claude-plugin/plugin.json",
-  });
-  await git.add({ fs, dir: marketplaceRoot, filepath: "plugins/formatter/MARKER.txt" });
-  await git.add({ fs, dir: marketplaceRoot, filepath: "plugins/app/.claude-plugin/plugin.json" });
-  await git.commit({ fs, dir: marketplaceRoot, message: "release 1.0.0", author: AUTHOR });
-  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
-  await git.tag({ fs, dir: marketplaceRoot, ref: "formatter--v1.0.0", object: tagOid });
+  const { checkout } = await releaseAndTag(
+    marketplaceRoot,
+    [
+      ".claude-plugin/marketplace.json",
+      "plugins/formatter/.claude-plugin/plugin.json",
+      "plugins/formatter/MARKER.txt",
+      "plugins/app/.claude-plugin/plugin.json",
+    ],
+    ["formatter--v1.0.0"],
+  );
 
   // Advance the checkout PAST the tag: a materialization that read the TAG
   // instead of the current checkout would be caught by every assertion below.
-  await writeFile(
-    path.join(formatterDir, ".claude-plugin", "plugin.json"),
-    JSON.stringify({ name: "formatter", version: "2.0.0" }),
-  );
-  await writeFile(path.join(formatterDir, "MARKER.txt"), "current-checkout-content\n");
-  await git.add({
-    fs,
-    dir: marketplaceRoot,
-    filepath: "plugins/formatter/.claude-plugin/plugin.json",
-  });
-  await git.add({ fs, dir: marketplaceRoot, filepath: "plugins/formatter/MARKER.txt" });
-  await git.commit({ fs, dir: marketplaceRoot, message: "release 2.0.0", author: AUTHOR });
+  await releaseFormatterPastTag(checkout, formatterDir);
 
   return { marketplaceRoot };
 }
