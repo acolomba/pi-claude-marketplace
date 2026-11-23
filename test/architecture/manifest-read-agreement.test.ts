@@ -571,6 +571,7 @@ function makeCtx(): { ctx: NotificationContext; run: NotificationRun; notificati
   const run = runWithNothingLoaded();
   const ctx: NotificationContext = {
     mode: "tui",
+    hasUI: true,
     ui: {
       notify: (message) => {
         notifications.push(message);

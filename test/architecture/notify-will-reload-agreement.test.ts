@@ -255,7 +255,7 @@ const MARKETPLACE_BOOKKEEPING_FIXTURES: readonly AgreementFixture[] = [
 
 function render(t: TestContext, fixture: AgreementFixture): string {
   const uiNotify = t.mock.fn<(message: string, severity?: string) => void>();
-  const ctx: NotificationContext = { mode: "tui", ui: { notify: uiNotify } };
+  const ctx: NotificationContext = { mode: "tui", hasUI: true, ui: { notify: uiNotify } };
   notify(ctx, fixture.run, fixture.message);
   assert.equal(
     uiNotify.mock.calls.length,

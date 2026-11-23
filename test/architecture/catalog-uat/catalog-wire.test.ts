@@ -314,7 +314,7 @@ function presentRawSamples(): PresentedSource[] {
     return {
       section: RAW_SECTION,
       state: surface.kind,
-      text: formatRawSurface(source)?.[0] ?? "",
+      text: formatRawSurface(source, "/reload")?.[0] ?? "",
       source,
       origin: RAW_ORIGINS[surface.kind],
     };
@@ -625,6 +625,7 @@ for (const mode of ["json", "rpc"] as const) {
     };
     const ctx: NotificationContext = {
       mode,
+      hasUI: mode === "rpc",
       get ui() {
         return capture.ui;
       },
@@ -651,6 +652,7 @@ for (const mode of ["json", "rpc"] as const) {
       const run = { ...openNotificationRun(pi, origin), entrySink: capture.entrySink };
       const ctx: NotificationContext = {
         mode,
+        hasUI: mode === "rpc",
         get ui() {
           return capture.ui;
         },
@@ -698,6 +700,7 @@ for (const mode of ["json", "rpc"] as const) {
     };
     const ctx: NotificationContext = {
       mode,
+      hasUI: mode === "rpc",
       get ui() {
         return capture.ui;
       },
@@ -725,6 +728,7 @@ for (const mode of ["json", "rpc"] as const) {
     const emitted: { key: string; payloads: unknown[] }[] = [];
     const ctx: NotificationContext = {
       mode,
+      hasUI: mode === "rpc",
       get ui() {
         return capture.ui;
       },
@@ -778,6 +782,7 @@ for (const mode of ["json", "rpc"] as const) {
       };
       const ctx: NotificationContext = {
         mode,
+        hasUI: mode === "rpc",
         get ui() {
           return capture.ui;
         },

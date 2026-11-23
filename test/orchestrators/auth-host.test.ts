@@ -170,7 +170,7 @@ describe("buildAuthForHost", () => {
       const ui = mock<NotificationContext["ui"]>({ exactParams: true, name: "UI" });
       const deviceFlowHttp = mock<DeviceFlowHttp>({ exactParams: true, name: "device HTTP" });
       const credentials = createCredentialOpsFake({ boundary: "memory" });
-      const ctx = { mode: initialMode, ui };
+      const ctx = { mode: initialMode, hasUI: initialMode === "tui" || initialMode === "rpc", ui };
       const authMemo = new Map<string, AuthAttemptResult>();
       const auth = expectDeviceFlow(
         buildAuthForHost({
@@ -212,7 +212,7 @@ describe("buildAuthForHost", () => {
       });
       const auth = buildAuthForHost({
         host,
-        ctx: { mode: "print", ui },
+        ctx: { mode: "print", hasUI: false, ui },
         run: runWithNothingLoaded(),
         credentialOps: credentials.credentialOps,
         deviceFlowHttp,
@@ -242,7 +242,7 @@ describe("buildAuthForHost", () => {
       const auth = expectDeviceFlow(
         buildAuthForHost({
           host: "github.com",
-          ctx: { mode: "print", ui },
+          ctx: { mode: "print", hasUI: false, ui },
           run: runWithNothingLoaded(),
           credentialOps: credentials.credentialOps,
           deviceFlowHttp,
@@ -274,6 +274,9 @@ describe("buildAuthForHost", () => {
         get mode() {
           reads.push(liveMode);
           return liveMode;
+        },
+        get hasUI(): boolean {
+          return liveMode === "tui" || liveMode === "rpc";
         },
         get ui() {
           return capture.ui;
@@ -402,6 +405,9 @@ describe("buildAuthForHost", () => {
         reads.push(mode);
         return mode;
       },
+      get hasUI(): boolean {
+        return mode === "tui" || mode === "rpc";
+      },
       get ui() {
         return capture.ui;
       },
@@ -510,6 +516,7 @@ describe("buildAuthForHost", () => {
       const capture = createJsonCapture();
       const ctx = {
         mode,
+        hasUI: mode === "tui" || mode === "rpc",
         get ui() {
           return capture.ui;
         },

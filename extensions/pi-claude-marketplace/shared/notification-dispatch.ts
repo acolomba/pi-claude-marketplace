@@ -57,6 +57,7 @@ import {
 } from "./notification-resolve.ts";
 import { COMMAND_DELIVERY, requireNotificationMode } from "./notification-run.ts";
 import { composeRetainedWorkflowsAdvisories } from "./notification-summary.ts";
+import { reloadCommandFor } from "./session-host.ts";
 
 import type { NotificationContext } from "../platform/pi-api.ts";
 import type { CommandErrorPresentation } from "./notification-command-error.ts";
@@ -88,6 +89,7 @@ import type {
   RetainedWorkflowStaging,
   UsageErrorMessage,
 } from "./notification-types.ts";
+import type { ReloadCommand } from "./session-host.ts";
 import type { Scope } from "./types.ts";
 
 function isCommandOutcome(
@@ -220,8 +222,13 @@ function appendCommand(
   state.hasOutcome ||= isOutcome;
 }
 
-function emitWithSummary(ctx: NotificationContext, envelope: ResolvedEnvelope, body: string): void {
-  deliver(ctx, formatEnvelopeArguments(envelope, body));
+function emitWithSummary(
+  ctx: NotificationContext,
+  envelope: ResolvedEnvelope,
+  body: string,
+  reload: ReloadCommand | undefined,
+): void {
+  deliver(ctx, formatEnvelopeArguments(envelope, body, reload));
 }
 
 /** D-14: the entry point for the hook-origin group of raw surfaces. */
@@ -613,19 +620,23 @@ function formatPresentationBody(presentation: NotificationPresentation): string 
   }
 }
 
-/** The text strategy for one presentation (MODE-01). */
+/**
+ * The text strategy for one presentation (MODE-01). `reload` is the command
+ * its reload instructions name, none in a one-shot run (RELOADCMD-D1).
+ */
 function emitText(
   ctx: NotificationContext,
   presentation: NotificationPresentation | ResolvedRawSurface,
+  reload: ReloadCommand | undefined,
 ): void {
   if ("envelope" in presentation) {
-    emitWithSummary(ctx, presentation.envelope, formatPresentationBody(presentation));
+    emitWithSummary(ctx, presentation.envelope, formatPresentationBody(presentation), reload);
     return;
   }
 
   // RELOADCMD-D1: reload-started renders no text; the other kinds that can render
   // none return before transport selection.
-  const args = formatRawSurface(presentation);
+  const args = formatRawSurface(presentation, reload);
   if (args !== undefined) {
     deliver(ctx, args);
   }
@@ -648,10 +659,11 @@ function emitPresentation(
     state.needsReload ||= presentation.envelope.needsReload;
   }
 
-  switch (requireNotificationMode(ctx.mode)) {
+  const mode = requireNotificationMode(ctx.mode);
+  switch (mode) {
     case "tui":
     case "print":
-      emitText(ctx, presentation);
+      emitText(ctx, presentation, reloadCommandFor(mode, ctx));
       return;
     case "json":
     case "rpc": {

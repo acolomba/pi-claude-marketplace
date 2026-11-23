@@ -16,6 +16,7 @@ import type {
   McpVariablesMissingNotice,
   RenderedMcpConfigNotice,
 } from "./notification-types.ts";
+import type { ReloadCommand } from "./session-host.ts";
 
 /**
  * shared/notification-mcp.ts -- the text of the MCP config notices and the
@@ -208,12 +209,27 @@ function sentenceBody(detail: string): string {
   return printable(detail).replace(/\.$/u, "");
 }
 
-function leftRowLine(row: McpMigrationLeftRow): string {
+/** RELOADCMD-D1: ` The next <reload> <does>.`, or nothing in a one-shot run. */
+function nextReload(reload: ReloadCommand | undefined, does: string): string {
+  return reload === undefined ? "" : ` The next ${reload} ${does}.`;
+}
+
+/** RELOADCMD-D1: `, then run <reload>.`, or a full stop in a one-shot run. */
+function thenRunReload(reload: ReloadCommand | undefined): string {
+  return reload === undefined ? "." : `, then run ${reload}.`;
+}
+
+/**
+ * A row left in `mcp.json`. A row that tells the user to reload names `reload`,
+ * the host's reload command, and drops that sentence in a one-shot run, whose
+ * next run tries again (RELOADCMD-D1).
+ */
+function leftRowLine(row: McpMigrationLeftRow, reload: ReloadCommand | undefined): string {
   switch (row.kind) {
     case "stopped":
-      return `  The ${row.scope}-scope move stopped: ${sentenceBody(row.detail)}. The next /reload tries again.`;
+      return `  The ${row.scope}-scope move stopped: ${sentenceBody(row.detail)}.${nextReload(reload, "tries again")}`;
     case "file-unreadable":
-      return `  The ${row.scope}-scope ${row.file} is not a valid MCP config, so nothing in this scope moved. Fix it, then run /reload.`;
+      return `  The ${row.scope}-scope ${row.file} is not a valid MCP config, so nothing in this scope moved. Fix it${thenRunReload(reload)}`;
     case "unowned":
       return `${ownerRowPrefix(row)} No plugin installed in the ${row.scope} scope owns it. Install ${printable(row.plugin)}@${printable(row.marketplace)} or remove it from mcp.json.`;
     case "not-listed":
@@ -225,9 +241,9 @@ function leftRowLine(row: McpMigrationLeftRow): string {
     case "marketplace-unreadable":
       return `${ownerRowPrefix(row)} The ${printable(row.marketplace)} marketplace copy cannot give the source of ${printable(row.plugin)}. Run /claude:plugin uninstall ${printable(row.plugin)}@${printable(row.marketplace)} to remove it, or /claude:plugin marketplace update ${printable(row.marketplace)} when the copy is out of date.`;
     case "collision":
-      return `${ownerRowPrefix(row)} ${printable(row.key)} is already defined in ${printable(row.source)}, so no server of ${printable(row.plugin)} moved. Remove or rename that server, then run /reload.`;
+      return `${ownerRowPrefix(row)} ${printable(row.key)} is already defined in ${printable(row.source)}, so no server of ${printable(row.plugin)} moved. Remove or rename that server${thenRunReload(reload)}`;
     case "unfinished":
-      return `${ownerRowPrefix(row)} The new entries are written, but ${row.file} could not be updated: ${sentenceBody(row.detail)}. The next /reload finishes the move.`;
+      return `${ownerRowPrefix(row)} The new entries are written, but ${row.file} could not be updated: ${sentenceBody(row.detail)}.${nextReload(reload, "finishes the move")}`;
   }
 }
 
@@ -268,18 +284,21 @@ function mcpMigrationSummary(moved: number, left: number): string {
  * when a row moved, and every notice line. `rows` arrive sorted moved, then
  * removed, then left, and `notices` in section order.
  * `test/architecture/mcp-migration-notice.test.ts` locks the bytes against
- * the catalog blocks in `docs/output-catalog.md`.
+ * the catalog blocks in `docs/output-catalog.md`. `reload` is the host's
+ * reload command, which the left rows name, and none in a one-shot run
+ * (RELOADCMD-D1).
  */
 export function composeMcpMigrationText(
   rows: readonly McpMigrationRow[],
   notices: readonly RenderedMcpConfigNotice[],
+  reload: ReloadCommand | undefined,
 ): string {
   const moved = rows.filter(isMovedRow);
   const left = rows.filter(isLeftRow);
   const lines = [
     ...titledSection("Moved to mcp-adapter.json:", moved, movedRowLine),
     ...titledSection("Removed from mcp.json:", rows.filter(isRemovedRow), removedRowLine),
-    ...titledSection("Left in mcp.json:", left, leftRowLine),
+    ...titledSection("Left in mcp.json:", left, (row) => leftRowLine(row, reload)),
     ...(moved.length > 0 ? [MCP_MIGRATION_COST_LINE] : []),
     ...notices.map((notice) => mcpConfigNoticeLine(notice)),
   ];

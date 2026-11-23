@@ -623,6 +623,7 @@ for (const mode of ["json", "rpc"]) {
       });
       const ctx = {
         mode,
+        hasUI: mode === "tui" || mode === "rpc",
         cwd,
         get ui() {
           return capture.ui;
@@ -706,6 +707,7 @@ for (const mode of ["json", "rpc"]) {
       });
       const ctx = {
         mode,
+        hasUI: mode === "tui" || mode === "rpc",
         cwd,
         get ui() {
           return capture.ui;
@@ -819,6 +821,7 @@ for (const mode of ["json", "rpc"]) {
     );
     const ctx = {
       mode,
+      hasUI: mode === "tui" || mode === "rpc",
       cwd,
       get ui() {
         return capture.ui;
@@ -918,6 +921,7 @@ for (const mode of ["json", "rpc"]) {
       });
       const ctx = {
         mode,
+        hasUI: mode === "tui" || mode === "rpc",
         cwd,
         get ui(): never {
           throw new Error("Unexpected UI");
@@ -999,6 +1003,7 @@ for (const mode of ["json", "rpc"]) {
       });
       const ctx = {
         mode,
+        hasUI: mode === "tui" || mode === "rpc",
         cwd,
         get ui(): never {
           throw new Error("Unexpected UI");
@@ -1123,6 +1128,7 @@ for (const mode of ["json", "rpc"]) {
       });
       const ctx = {
         mode,
+        hasUI: mode === "tui" || mode === "rpc",
         cwd,
         get ui() {
           return capture.ui;
@@ -1244,6 +1250,7 @@ for (const mode of ["json", "rpc"]) {
     });
     const ctx = {
       mode,
+      hasUI: mode === "tui" || mode === "rpc",
       cwd,
       get ui() {
         return capture.ui;
@@ -1284,6 +1291,7 @@ for (const mode of ["json", "rpc"]) {
     });
     const ctx = {
       mode,
+      hasUI: mode === "tui" || mode === "rpc",
       cwd,
       get ui() {
         return capture.ui;
@@ -1336,6 +1344,7 @@ for (const mode of ["json", "rpc"]) {
     });
     const ctx = {
       mode,
+      hasUI: mode === "tui" || mode === "rpc",
       cwd,
       get ui() {
         return capture.ui;
@@ -1405,6 +1414,7 @@ for (const mode of ["json", "rpc"]) {
       });
       const ctx = {
         mode,
+        hasUI: mode === "tui" || mode === "rpc",
         cwd,
         get ui() {
           return capture.ui;
@@ -1454,6 +1464,7 @@ for (const mode of ["json", "rpc"] as const) {
       });
       const ctx = {
         mode,
+        hasUI: mode === "rpc",
         get cwd(): string {
           throw new Error("Browse refusal must not load marketplace state");
         },
@@ -1520,6 +1531,7 @@ for (const mode of ["json", "rpc"] as const) {
       });
       const ctx = {
         mode,
+        hasUI: mode === "rpc",
         cwd,
         get ui() {
           return capture.ui;
@@ -1591,6 +1603,7 @@ for (const mode of ["json", "rpc"] as const) {
     );
     const ctx = {
       mode,
+      hasUI: mode === "rpc",
       cwd,
       get ui() {
         return capture.ui;
@@ -1663,6 +1676,7 @@ for (const mode of ["json", "rpc"] as const) {
     });
     const ctx = {
       mode,
+      hasUI: mode === "rpc",
       cwd,
       get ui() {
         return capture.ui;

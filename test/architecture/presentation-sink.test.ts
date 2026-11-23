@@ -187,7 +187,7 @@ async function assertSinkPlacement(): Promise<void> {
   // sink.
   assert.match(
     stripped,
-    /const args = formatRawSurface\(presentation\);\s+if \(args !== undefined\) \{\s+deliver\(ctx, args\);/,
+    /const args = formatRawSurface\(presentation, reload\);\s+if \(args !== undefined\) \{\s+deliver\(ctx, args\);/,
   );
 }
 

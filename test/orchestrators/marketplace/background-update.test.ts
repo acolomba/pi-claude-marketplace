@@ -52,6 +52,7 @@ function inputEvent(source: InputSource = "interactive"): InputEvent {
 function sessionContext(mode: string): BackgroundContext {
   return {
     mode,
+    hasUI: mode === "tui" || mode === "rpc",
     cwd: RECORDED_CTX_CWD,
     isProjectTrusted: () => true,
     get ui(): NotificationUi {
@@ -445,6 +446,9 @@ test("NFR-2: a stale context leaves the input handler quietly, with no timer", (
   const { backgroundUpdate, runs } = createSchedulerUnderTest();
   const ctx: BackgroundContext = {
     get mode(): string {
+      throw new Error("stale context");
+    },
+    get hasUI(): boolean {
       throw new Error("stale context");
     },
     cwd: RECORDED_CTX_CWD,

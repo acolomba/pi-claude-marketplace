@@ -1592,7 +1592,7 @@ function directSwapArgs(cwd: string): DirectThreePhaseArgs {
   return {
     ...cascadeSwapArgs(cwd),
     cascade: false,
-    ctx: { mode: "tui", ui: { notify: () => undefined } },
+    ctx: { mode: "tui", hasUI: true, ui: { notify: () => undefined } },
     run: runWithNothingLoaded(),
     cardinality: "single",
     notifyPhaseFailure: () => undefined,
@@ -2845,6 +2845,7 @@ async function prepareDirectUpdate(cwd: string) {
     cascade: false,
     ctx: {
       mode: "tui",
+      hasUI: true,
       ui: {
         notify: (message: string): void => {
           messages.push(message);
@@ -3113,7 +3114,7 @@ test("MGRT-01 / D-MB-03: a cascade swap stages the implementation its arguments 
     ...cascadeSwapArgs(cwd),
     mcpImplementation: "builtin",
     preflightNotification: {
-      ctx: { mode: "tui", ui: { notify: () => undefined } },
+      ctx: { mode: "tui", hasUI: true, ui: { notify: () => undefined } },
       run: runWithAllLoaded(),
     },
   }));
