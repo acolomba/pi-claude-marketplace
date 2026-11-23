@@ -10,10 +10,10 @@ last_activity_desc: Milestone integration-rescope completed and archived
 state_head: fa5cd1198f4804f8797259cbc372cd42ef59429e
 progress:
   total_phases: 9
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 26
   completed_plans: 26
-  percent: 89
+  percent: 100
 current_phase: 08
 current_phase_name: Integration Suite Rescope
 ---
@@ -22,12 +22,12 @@ current_phase_name: Integration Suite Rescope
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-11-21 after Phase 1)
+See: `.planning/PROJECT.md` (updated 2026-11-23 after the integration-rescope milestone)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 6.1 — Reload Keeps SessionStart Context (executing); then Phase 8
+**Current focus:** Planning the next milestone; the integration-rescope PR (CHANGELOG lines below, version bump offer) is the user's call
 
 ## Current Position
 
@@ -37,7 +37,26 @@ Status: Awaiting next milestone
 Last activity: 2026-11-23 — Milestone integration-rescope completed and archived
 
 
-### parity-gaps closeout: `override_closeout`
+### integration-rescope closeout: `override_closeout`
+
+Completed 2026-11-23 on `claude/stoic-shannon-la9q7o` (pushed, no PR or npm
+release; version stays 0.23.0). 9/9 phases (Phase 6.1 inserted), 26 plans,
+22/22 requirements. The audit reads `tech_debt` with no blockers (integration
+4/4, flows 3/3), and `npm run check` passed at `b9c0a04` (adapter 2285/2285,
+builtin 260/260, 376 direct-coverage records). The archive is
+`.planning/milestones/integration-rescope-*`, with phase records under
+`milestones/integration-rescope-phases/`.
+
+- Override: seven phase reports (01 to 06.1) read `stale` only because later
+  phases edited files they cover; the gate above ran after those edits.
+  Known verification overrides: 7 newly acknowledged (stale only), 18 carried
+  forward. The open-artifact audit was clear.
+- For the PR: the three Phase 6.1 CHANGELOG parent lines (Blockers/Concerns),
+  the version bump offer, and the accepted fallow `weakened-tests` finding on
+  `standalone-prune`.
+- Still open: DIRGITTAG-01, HOOKLATESS-01 (a parity question for the user),
+  HOOKASYNCRESUME-01, Nyquist validation for all nine phases, and the
+  `dispatch-exec.test.ts` large-environment fragility.
 
 Completed 2026-11-17 on `features/gaps` (not yet pushed, no PR or npm
 release; version stays 0.23.0). 11/11 phases, 102 plans, 42/42 requirements.
@@ -377,6 +396,7 @@ Items acknowledged and deferred at milestone close, most recent first.
 
 | Category       | Item                                                                                                                                                                                          | Status          | Deferred At          | Milestone |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------- | --------- |
+| verification_gaps | 01, 02, 03, 04, 05, 06, 06.1 VERIFICATION.md: `stale` digests only (later phases edited covered files); combined-tree gate passed at `b9c0a04` | acknowledged | 2026-11-23 | integration-rescope |
 | verification_gaps | 05/05-VERIFICATION.md: `human_needed`, A9 (start-failure notice not run on Node 24; closes with the PR's CI `behavioral` job) | acknowledged | 2026-11-17 | parity-gaps |
 | seeds | SEED-261107-kax: review the structure of skills, injected skills, and GSD capabilities | dormant -- pending upstream open-gsd/gsd-core#4649 | 2026-11-17 | parity-gaps |
 | verification_override | Phase 01 (foundation): verification `stale`; the flake fix `d04a5106` changed `features/lib/pi-process.ts` and `layout.md` after it; combined tree `npm run check` exit 0 | acknowledged | 2026-11-08 | behavioral-gaps |
