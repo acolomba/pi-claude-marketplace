@@ -1,10 +1,7 @@
 import assert from "node:assert/strict";
-import * as fs from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-
-import * as git from "isomorphic-git";
 
 import { pluginMirrorKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import {
@@ -12,10 +9,20 @@ import {
   type CandidateRow,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list-candidate-row.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { initGitTestCheckout } from "../../platform/git-test-repository.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { ManifestPluginEntry } from "../../../extensions/pi-claude-marketplace/domain/manifest-lookup.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+
+/**
+ * Makes `mirrorDirectory` a repository whose one commit, "initial", holds
+ * `filepath`, and returns that commit's id.
+ */
+async function commitWarmMirror(mirrorDirectory: string, filepath: string): Promise<string> {
+  const mirror = await initGitTestCheckout(mirrorDirectory);
+  return mirror.commitPaths("initial", [filepath]);
+}
 
 type ComposeCandidateListRow = (
   manifestEntry: ManifestPluginEntry,
@@ -328,15 +335,7 @@ test("resolves a warm git mirror into an available row", async (testContext) => 
     path.join(mirrorDirectory, ".claude-plugin", "plugin.json"),
     JSON.stringify({ name: "warm-plugin" }),
   );
-  await git.init({ fs, dir: mirrorDirectory, defaultBranch: "main" });
-  await git.add({ fs, dir: mirrorDirectory, filepath: ".claude-plugin/plugin.json" });
-  await git.commit({
-    fs,
-    dir: mirrorDirectory,
-    message: "initial",
-    author: { name: "test", email: "test@example.com" },
-  });
-  const head = await git.resolveRef({ fs, dir: mirrorDirectory, ref: "HEAD" });
+  const head = await commitWarmMirror(mirrorDirectory, ".claude-plugin/plugin.json");
   const entry: ManifestPluginEntry = { name: "warm-plugin", source: canonicalUrl };
 
   // act
@@ -370,14 +369,7 @@ test("VER-01: a warm git mirror shows the version its plugin.json declares over 
     path.join(mirrorDirectory, ".claude-plugin", "plugin.json"),
     JSON.stringify({ name: "warm-plugin", version: "2.0.0" }),
   );
-  await git.init({ fs, dir: mirrorDirectory, defaultBranch: "main" });
-  await git.add({ fs, dir: mirrorDirectory, filepath: ".claude-plugin/plugin.json" });
-  await git.commit({
-    fs,
-    dir: mirrorDirectory,
-    message: "initial",
-    author: { name: "test", email: "test@example.com" },
-  });
+  await commitWarmMirror(mirrorDirectory, ".claude-plugin/plugin.json");
   const entry: ManifestPluginEntry = {
     name: "warm-plugin",
     source: canonicalUrl,
@@ -411,14 +403,7 @@ test("VER-01: a warm git-subdir mirror that lacks the subdir keeps the entry ver
   const mirrorDirectory = await environment.locations.pluginCloneDir(pluginMirrorKey(canonicalUrl));
   await mkdir(mirrorDirectory, { recursive: true });
   await writeFile(path.join(mirrorDirectory, "README.md"), "no plugins here");
-  await git.init({ fs, dir: mirrorDirectory, defaultBranch: "main" });
-  await git.add({ fs, dir: mirrorDirectory, filepath: "README.md" });
-  await git.commit({
-    fs,
-    dir: mirrorDirectory,
-    message: "initial",
-    author: { name: "test", email: "test@example.com" },
-  });
+  await commitWarmMirror(mirrorDirectory, "README.md");
   const entry: ManifestPluginEntry = {
     name: "sub-plugin",
     source: { source: "git-subdir", url: canonicalUrl, path: "plugins/sub" },
