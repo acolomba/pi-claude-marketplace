@@ -387,13 +387,15 @@ No case pins an unlicensed divergence, so no case stays behind as a question for
 | A2 | The github clone key `1969ce50f054` depends only on the canonical `https://github.com/<owner>/tools` URL (3 identical runs) | Pitfall 1 | Low: if the harness changes the default owner, the literal changes in S1 only |
 | A3 | No CHANGELOG line is needed (test-only change), as in Phase 6 | Project Constraints | Low |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should a dir-source git checkout marketplace get a scenario too?**
    - What we know: the deleted test 1 used a dir source whose directory is a git work tree, and upstream supports it. The product path is the same; only the clone-key URL fallback (`marketplace-name:<name>` when there is no origin) differs, and unit tests cover the materializer.
    - What's unclear: whether reviewers count "dir-in-git" as a separate user-visible case.
    - Recommendation: not in this phase (ITMIG-07 names "a marketplace repository with a tag", which the github step satisfies). If the planner wants it, it needs a new publication kind in the shared `published-marketplace.ts`; record it as a BACKLOG parent line instead.
+   - RESOLVED: CONTEXT [Dir-source git checkout] — no scenario in this phase; the SUMMARY carries the BACKLOG parent line (DIRGITTAG-01).
 2. **Token name.** `{tools revision formatter--v1.0.0}` mirrors `{<repository> revision <n>}` with the tag in place of `<n>`. `{tools tag formatter--v1.0.0}` is the alternative. Planner's discretion; the validated patch uses the first.
+   - RESOLVED: CONTEXT [Token name] — `{<repository> revision <tag>}`, as in the validated patch.
 
 ## Environment Availability
 
