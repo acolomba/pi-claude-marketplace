@@ -6,7 +6,9 @@
  * A later change to the work tree reaches the host as a new pushed commit.
  * The url and github kinds both publish this way. Every published repository
  * also carries a `stable` branch at the commit of `main`, so a scenario can add
- * a git marketplace at a ref that is not its default branch (HOST-01).
+ * a git marketplace at a ref that is not its default branch (HOST-01). A
+ * release tag names the commit the work tree has checked out and reaches the
+ * host alone, so a later push moves `main` past it and the tag stays (TAGS-01).
  */
 
 import { mkdir } from "node:fs/promises";
@@ -67,4 +69,15 @@ export async function pushGitBranch(
   await runGit(workTree, home, "commit", "-q", "--allow-empty", "-m", "publish");
   await runGit(workTree, home, "push", "-q", "origin", branch);
   await runGit(workTree, home, "checkout", "-q", "main");
+}
+
+/**
+ * Tags the commit the published work tree `workTree` has checked out as
+ * `tag`, pushes the tag alone to its bare repository, and returns the tagged
+ * commit. Every git runs with the HOME `home`.
+ */
+export async function pushGitTag(workTree: string, home: string, tag: string): Promise<string> {
+  await runGit(workTree, home, "tag", tag);
+  await runGit(workTree, home, "push", "-q", "origin", `refs/tags/${tag}`);
+  return runGit(workTree, home, "rev-parse", "HEAD");
 }

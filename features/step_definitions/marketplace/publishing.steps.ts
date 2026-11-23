@@ -9,7 +9,9 @@
  * dependencies each declares, republishes it as the same kind, so a scenario
  * states the kind before the plugins, and the plugins before the marketplaces
  * they may depend on. A scenario can also state plugins that a url marketplace
- * offers from its own repository, as git-subdir sources at the url it names.
+ * offers from its own repository, as git-subdir sources at the url it names,
+ * and tag the current commit of a url or github marketplace as a plugin's
+ * release, `<plugin>--v<version>`, which a later publish moves past (TAGS-01).
  */
 
 import assert from "node:assert/strict";
@@ -23,6 +25,7 @@ import {
   recordEarlierVersionMarketplace,
   recordedMarketplace,
 } from "../../lib/earlier-version-state.ts";
+import { pushGitTag } from "../../lib/git-marketplace.ts";
 import {
   offerGitPlugins,
   ownRepositoryEntry,
@@ -325,5 +328,24 @@ Given(
         description: "Repaired marketplace",
       }),
     );
+  },
+);
+
+// TAGS-01: a release tag of a plugin the marketplace offers from a relative
+// path names the marketplace repository's own commit, `<plugin>--v<version>`.
+Given(
+  "the marketplace {string} tags its current commit {string}",
+  async function (this: ScenarioWorld, name: string, tag: string) {
+    const published = this.requirePublished(name);
+    if (published.kind !== "url" && published.kind !== "github") {
+      assert.fail(`the marketplace ${name} is published as a ${published.kind} source, not git`);
+    }
+
+    const commit = await pushGitTag(published.root, published.gitHome, tag);
+    assert.strictEqual(
+      await runGit(published.bareRepository, published.gitHome, "rev-parse", `${tag}^{commit}`),
+      commit,
+    );
+    this.recordMarketplaceTag(name, tag, commit);
   },
 );
