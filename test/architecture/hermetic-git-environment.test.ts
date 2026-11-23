@@ -7,7 +7,8 @@
  * delay only from the run (D-PL8-09). A profile Pi gets
  * the run's `TMPDIR`, inside the sandbox home, never the shell's (HAR-05),
  * and pi-subagents' background-child marker (D-BG-10) and its hook gate
- * (D-BG-12) only from its profile.
+ * (D-BG-12) only from its profile. Pi gets system git's CA file and its
+ * `PATH` only from the run, never the shell's `GIT_SSL_CAINFO` (SG-HRN-02).
  */
 
 import assert from "node:assert/strict";
@@ -29,6 +30,7 @@ const INHERITED_VARIABLES = {
   GIT_CONFIG_SYSTEM: "/shell/etc/gitconfig",
   GIT_CONFIG_GLOBAL: "/shell/home/.gitconfig",
   GIT_ASKPASS: "/shell/bin/askpass",
+  GIT_SSL_CAINFO: "/shell/ca-bundle.crt",
   PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: "https://operator.example/git",
   PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS: "5",
   DISABLE_UPDATES: "1",
@@ -88,13 +90,15 @@ describe("hermeticGitEnvironment", () => {
 });
 
 describe("rpcChildEnvironment", () => {
-  test("adds the three git keys and the run's GitHub base override, and no inherited variable", (t) => {
+  test("adds the four git keys, the run's PATH and GitHub base override, and no inherited variable", (t) => {
     // arrange
     inheritVariables(t);
     const git = {
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      GIT_SSL_CAINFO: "/run/cert.pem",
+      PATH: "/run/ssh-host/bin:/usr/bin",
       PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: "https://127.0.0.1:8443",
     } satisfies RpcGitEnvironment;
 
@@ -106,10 +110,11 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      PATH: process.env.PATH ?? "",
+      PATH: "/run/ssh-host/bin:/usr/bin",
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      GIT_SSL_CAINFO: "/run/cert.pem",
       PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: "https://127.0.0.1:8443",
     });
   });
@@ -121,6 +126,8 @@ describe("rpcChildEnvironment", () => {
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      GIT_SSL_CAINFO: "/run/cert.pem",
+      PATH: "/run/ssh-host/bin:/usr/bin",
       PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: "https://127.0.0.1:8443",
       PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS: "0",
     } satisfies RpcGitEnvironment;
@@ -133,10 +140,11 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      PATH: process.env.PATH ?? "",
+      PATH: "/run/ssh-host/bin:/usr/bin",
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      GIT_SSL_CAINFO: "/run/cert.pem",
       PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: "https://127.0.0.1:8443",
       PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS: "0",
     });
@@ -149,6 +157,8 @@ describe("rpcChildEnvironment", () => {
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      GIT_SSL_CAINFO: "/run/cert.pem",
+      PATH: "/run/ssh-host/bin:/usr/bin",
     } satisfies RpcGitEnvironment;
 
     // act
@@ -159,10 +169,11 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      PATH: process.env.PATH ?? "",
+      PATH: "/run/ssh-host/bin:/usr/bin",
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      GIT_SSL_CAINFO: "/run/cert.pem",
     });
   });
 
@@ -173,6 +184,8 @@ describe("rpcChildEnvironment", () => {
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      GIT_SSL_CAINFO: "/run/cert.pem",
+      PATH: "/run/ssh-host/bin:/usr/bin",
       PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: "https://127.0.0.1:8443",
     } satisfies RpcGitEnvironment;
     const profile = { TMPDIR: "/sandbox/home/tmp" } satisfies RpcProfileEnvironment;
@@ -185,10 +198,11 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      PATH: process.env.PATH ?? "",
+      PATH: "/run/ssh-host/bin:/usr/bin",
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      GIT_SSL_CAINFO: "/run/cert.pem",
       PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: "https://127.0.0.1:8443",
       TMPDIR: "/sandbox/home/tmp",
     });
@@ -201,6 +215,8 @@ describe("rpcChildEnvironment", () => {
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      GIT_SSL_CAINFO: "/run/cert.pem",
+      PATH: "/run/ssh-host/bin:/usr/bin",
       PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: "https://127.0.0.1:8443",
     } satisfies RpcGitEnvironment;
     const profile = {
@@ -216,10 +232,11 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      PATH: process.env.PATH ?? "",
+      PATH: "/run/ssh-host/bin:/usr/bin",
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      GIT_SSL_CAINFO: "/run/cert.pem",
       PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: "https://127.0.0.1:8443",
       TMPDIR: "/sandbox/home/tmp",
       PI_SUBAGENT_CHILD: "1",
@@ -233,6 +250,8 @@ describe("rpcChildEnvironment", () => {
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      GIT_SSL_CAINFO: "/run/cert.pem",
+      PATH: "/run/ssh-host/bin:/usr/bin",
       PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: "https://127.0.0.1:8443",
     } satisfies RpcGitEnvironment;
     const profile = {
@@ -248,17 +267,18 @@ describe("rpcChildEnvironment", () => {
       HOME: "/sandbox/home",
       PI_CODING_AGENT_DIR: "/sandbox/agent",
       PI_OFFLINE: "1",
-      PATH: process.env.PATH ?? "",
+      PATH: "/run/ssh-host/bin:/usr/bin",
       NODE_EXTRA_CA_CERTS: "/run/cert.pem",
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      GIT_SSL_CAINFO: "/run/cert.pem",
       PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: "https://127.0.0.1:8443",
       TMPDIR: "/sandbox/home/tmp",
       PI_CM_HOOK_GATE: "profile-gate",
     });
   });
 
-  test("returns only the allowlist without a git environment", (t) => {
+  test("returns only the allowlist, with the worker's PATH, without a git environment", (t) => {
     // arrange
     inheritVariables(t);
 

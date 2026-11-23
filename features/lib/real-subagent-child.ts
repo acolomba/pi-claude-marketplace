@@ -501,6 +501,9 @@ async function createFixture(
       NODE_EXTRA_CA_CERTS: certificates,
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: path.join(home, ".gitconfig"),
+      // No git host serves this fixture, so system git trusts no server.
+      GIT_SSL_CAINFO: certificates,
+      PATH: process.env.PATH ?? "",
     },
     temporaryDirectory,
     harness,

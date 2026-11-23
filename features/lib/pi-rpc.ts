@@ -11,7 +11,10 @@
 // not an extension command falls through to Pi's model path, and inherited
 // provider credentials would let it reach a real provider over the network.
 // The cucumber run adds a typed git and trust environment, plus the background
-// update delay for a scenario's own Pi, and nothing else. A scenario's profile
+// update delay for a scenario's own Pi, and nothing else. That environment
+// names the CA file for Node and for system git, and the `PATH` Pi runs with,
+// which replaces the worker's, so a stand-in can go first on it (SG-HRN-02).
+// A scenario's profile
 // Pi (D-CF1-15) also loads the scripted model and the companions after the
 // real extension, and gets a typed `TMPDIR` inside the sandbox home, so the
 // temporary files of Pi and its companions stay in the sandbox (HAR-05), and
@@ -41,15 +44,23 @@ export interface RpcSandbox {
 
 /**
  * The trust and git settings the cucumber run adds to Pi's allowlist: the CA
- * file of its loopback git host, and git config that skips the system file and
- * reads a global file under the sandbox HOME (DRV-03, HOST-01). The run also
- * points the GitHub base override at its git host, so GitHub sources clone
- * from it (GHB-01, D-MF-01).
+ * file of its loopback git host, for Node and for system git, git config that
+ * skips the system file and reads a global file under the sandbox HOME, and
+ * the `PATH` Pi runs with (DRV-03, HOST-01, SG-HRN-02). The run also points
+ * the GitHub base override at its git host, so GitHub sources clone from it
+ * (GHB-01, D-MF-01).
  */
 export interface RpcGitEnvironment {
   readonly NODE_EXTRA_CA_CERTS: string;
   readonly GIT_CONFIG_NOSYSTEM: "1";
   readonly GIT_CONFIG_GLOBAL: string;
+  /**
+   * The CA file system git trusts the git host through. System git ignores
+   * `NODE_EXTRA_CA_CERTS`, which stays for Node's own requests (SG-HRN-02).
+   */
+  readonly GIT_SSL_CAINFO: string;
+  /** Pi's `PATH`, which the run states, so a stand-in can go first on it. */
+  readonly PATH: string;
   /**
    * The GitHub base override, copied only when set. A scenario Pi that
    * reaches GitHub's real address through an in-process redirect starts
@@ -187,7 +198,8 @@ export async function resolveRpcSandbox(sandbox: RpcSandbox): Promise<RpcSandbox
 
 /**
  * Returns the allowlist environment of every Pi child, plus `git` and the
- * profile's `TMPDIR`, background-child marker, and hook gate when given.
+ * profile's `TMPDIR`, background-child marker, and hook gate when given. The
+ * `PATH` of a given `git` replaces the worker's.
  */
 export function rpcChildEnvironment(
   sandbox: RpcSandbox,
@@ -204,6 +216,8 @@ export function rpcChildEnvironment(
     environment.NODE_EXTRA_CA_CERTS = git.NODE_EXTRA_CA_CERTS;
     environment.GIT_CONFIG_NOSYSTEM = git.GIT_CONFIG_NOSYSTEM;
     environment.GIT_CONFIG_GLOBAL = git.GIT_CONFIG_GLOBAL;
+    environment.GIT_SSL_CAINFO = git.GIT_SSL_CAINFO;
+    environment.PATH = git.PATH;
     if (git.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL !== undefined) {
       environment.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL = git.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL;
     }
