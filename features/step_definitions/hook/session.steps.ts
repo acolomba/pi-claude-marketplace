@@ -468,8 +468,11 @@ Given(
     await this.restartPi("new-session");
     const started = await currentSessionFile(this);
     assert.deepStrictEqual(
-      { folder: started === undefined ? undefined : path.dirname(started), left: started === left },
-      { folder: sessionsFolder(this.tokens), left: false },
+      {
+        folder: started === undefined ? undefined : path.dirname(started),
+        stayedInLeftFile: started === left,
+      },
+      { folder: sessionsFolder(this.tokens), stayedInLeftFile: false },
     );
   },
 );

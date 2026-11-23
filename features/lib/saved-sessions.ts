@@ -117,10 +117,10 @@ export async function sessionFileWithPrompt(folder: string, prompt: string): Pro
   const holding = files.filter((_file, index) =>
     userPromptsOf(texts[index] ?? "").includes(prompt),
   );
-  assert.strictEqual(
-    holding.length,
-    1,
-    `saved sessions holding "${prompt}": ${holding.join(", ")}`,
-  );
-  return holding[0] ?? "";
+  const [only, ...others] = holding;
+  if (only === undefined || others.length > 0) {
+    assert.fail(`saved sessions holding "${prompt}": ${holding.join(", ")}`);
+  }
+
+  return only;
 }
