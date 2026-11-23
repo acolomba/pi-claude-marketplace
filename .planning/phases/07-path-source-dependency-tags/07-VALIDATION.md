@@ -18,17 +18,17 @@ created: "2026-11-21"
 
 | Property | Value |
 |----------|-------|
-| **Framework** | cucumber-js (behavioral); `node:test` for the trimmed integration files |
+| **Framework** | cucumber-js (behavioral); `node:test` for the trimmed integration file |
 | **Config file** | `cucumber.json` (profiles `adapter` and `builtin`) |
-| **Quick run command** | `flock -w 3600 "$S/phase06-heavy.lock" env npm_config_script_shell=$S/nondac-sh NODE_OPTIONS=--max-old-space-size=6144 npm run --silent test:cucumber:profile -- --profile <adapter\|builtin> --parallel 1 <the plan's feature files>`, `$S` being the shared scratchpad of the plans' execution rules |
-| **Full suite command** | `npm run check`; 06-01 also runs the full adapter suite twice (`npm run test:cucumber:profile -- --profile adapter`, with `fd` on `PATH`) for the harness race fixes |
-| **Estimated runtime** | 5 to 95 seconds per focused run at `--parallel 1` (measured by the planner), more while the lock is held; a full adapter run takes about 11 minutes; the full check is far longer (2,400-second limit) |
+| **Quick run command** | `flock -w 3600 "$S/phase07-heavy.lock" env npm_config_script_shell=$S/nondac-sh NODE_OPTIONS=--max-old-space-size=6144 npm run --silent test:cucumber:profile -- --profile <adapter\|builtin> --parallel 2 features/plugin/install-dependencies.feature`, `$S` being the shared scratchpad of the plan's execution rules |
+| **Full suite command** | `npm run check` (the wave's post-merge gate on the combined tree) |
+| **Estimated runtime** | 4 to 17 seconds per focused run at `--parallel 2` (measured by the planner: `install-dependencies.feature` 14 to 17 s under adapter and 4 s under builtin, the 27 tag-only scenarios 9 to 12 s), more while the lock is held; `check:static` about 3 minutes from a cold ESLint cache; the full check is far longer (2,400-second limit) |
 
 ---
 
 ## Sampling Rate
 
-- **After every task commit:** the plan's feature files under both profiles, plus `npm run check:static` by hand in a worktree
+- **After every task commit:** `features/plugin/install-dependencies.feature` under both profiles (Task 1 also the 27 tag-only scenarios), plus `npm run check:static` by hand in a worktree
 - **After every plan wave:** `npm run check` on the combined tree
 - **Before `/gsd-verify-work`:** full suite green
 - **Max feedback latency:** 120 seconds for a focused run without lock waits
@@ -37,11 +37,13 @@ created: "2026-11-21"
 
 ## Per-Task Verification Map
 
-Filled by the planner from `06-RESEARCH.md` "Phase Requirements → Test Map" and the two plans. Each plan's "Red-proof tables" section holds the break runs and the scenarios each must fail; `check-red.mjs` (`$S/plan-06/inputs/`) checks them. Counts are under the adapter profile unless the row says builtin; every new scenario is untagged, so the builtin profile selects none of them (DUAL-02).
+Filled by the planner from `07-RESEARCH.md` "Phase Requirements → Test Map" and plan 07-01. The plan's "Red-proof tables" section holds the break runs and the scenarios each must fail; `check-red.mjs` (`$S/plan-07/inputs/`) checks them. Counts are under the adapter profile unless the row says builtin; both new scenarios are untagged, so the builtin profile selects only the file's one existing `@mcp` scenario (DUAL-02).
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 7-01-* | 01 | 1 | ITMIG-07 | — | N/A | behavioral + integration | `features/plugin/install-dependencies.feature` under adapter; trimmed `path-source-tag-install` | ✅ | ⬜ pending |
+| 07-01-01 | 01 | 1 | ITMIG-07 | T-07-01, T-07-02, T-07-03, T-07-05 | The tag step runs hermetic git against the loopback git host; the break is restored and never committed | behavioral (tracer) | `install-dependencies.feature` 60 passed, builtin 1 passed; the 27 tag-only scenarios pass; B1-tracer fails S1 on a `Then` (`check-red.mjs ... tracer-`); `check:static` | ✅ | ⬜ pending |
+| 07-01-02 | 01 | 1 | ITMIG-07 | T-07-03 | Every copied file equals its frozen copy (`cmp`) | behavioral | `install-dependencies.feature` 61 passed, builtin 1 passed; `check:static` | ✅ | ⬜ pending |
+| 07-01-03 | 01 | 1 | ITMIG-07 | T-07-01, T-07-04, T-07-06, T-07-07 | CR-01 is kept; every break is restored; the trim follows `RED-PROOFS OK` | break + checker + integration | B1 to B5 under adapter (`RED-PROOFS OK`, B5 the survivor); trimmed `path-source-tag-install` 2 passed, and B5 on it fails the two-member case; `check:static`; `fallow audit` shows only `weakened-tests` | ✅ | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -49,7 +51,7 @@ Filled by the planner from `06-RESEARCH.md` "Phase Requirements → Test Map" an
 
 ## Wave 0 Requirements
 
-07-01 adds the marketplace-tag step in `marketplace/publishing.steps.ts` with a shared builder in `features/lib/git-marketplace.ts` and `features/lib/git-plugin.ts`. No separate wave.
+07-01's tracer task adds the marketplace-tag step in `marketplace/publishing.steps.ts` with a shared builder in `features/lib/git-marketplace.ts` that `features/lib/git-plugin.ts` also calls, and the tag tokens in `features/support/world.ts`. No separate wave.
 
 ---
 
@@ -65,7 +67,7 @@ All phase behaviors have automated verification. Each deliberate break is a reve
 - [x] Sampling continuity: no 3 consecutive tasks without automated verify
 - [x] Wave 0 covers all MISSING references
 - [x] No watch-mode flags
-- [ ] Feedback latency < 120s
+- [x] Feedback latency < 120s
 - [ ] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** pending
