@@ -22,6 +22,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/platform/git-process.ts";
 import { GitCommandError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { hermeticGitEnvironment } from "../../features/lib/hermetic-git.ts";
+import { HttpsGitHost } from "../../features/lib/https-git-host/server.ts";
 import { SshGitHost } from "../../features/lib/ssh-git-host/host.ts";
 
 import { captureDebugLog } from "./debug-log-capture.ts";
@@ -31,6 +32,7 @@ import {
   runSystemGit,
 } from "./git-test-repository.ts";
 import { createProcessFake } from "./process-fake.ts";
+import { livingGroupMembers } from "./process-group.ts";
 
 import type {
   GitProcess,
@@ -463,6 +465,66 @@ async function sshFixture(t: TestContext): Promise<SshFixture> {
     url: "git@stand-in.test:acme/tools.git",
     oid: served.initialOid,
     gitWith: (variables, config = "") => realGit({ root, env: { ...env, ...variables }, config }),
+  };
+}
+
+interface HttpsFixture {
+  /** The case directory, which is the module's neutral directory and HOME. */
+  readonly root: string;
+  readonly host: HttpsGitHost;
+  /** The URL of the served `acme/tools` repository. */
+  readonly url: string;
+  /** The base environment that trusts the host's certificate. */
+  readonly env: NodeJS.ProcessEnv;
+}
+
+// The https stand-in, serving `acme/tools`.
+async function httpsFixture(t: TestContext): Promise<HttpsFixture> {
+  const root = await caseDirectory(t);
+  const { host } = await startStandIn(t, (directory) => HttpsGitHost.start(directory));
+  const served = await createGitTestRepository(t, { boundary: "local" });
+  await served.cloneBare(host.repositoryPath("tools"));
+  return {
+    root,
+    host,
+    url: host.repositoryUrl("tools"),
+    env: hermeticGitEnvironment(root, { GIT_SSL_CAINFO: host.certificatePath }),
+  };
+}
+
+interface PidRecordingSpawn {
+  readonly spawn: ProcessSpawn;
+  /** The pid of the first git started with `subcommand` among its arguments. */
+  readonly pidOf: (subcommand: string) => number;
+}
+
+// Node's spawn, recording the pid of each git it starts.
+function pidRecordingSpawn(): PidRecordingSpawn {
+  const launched: Array<{ readonly args: readonly string[]; readonly pid: number | undefined }> =
+    [];
+  return {
+    spawn: (command, args, options) => {
+      const child = NODE_SPAWN(command, args, options);
+      launched.push({ args, pid: child.pid });
+      return child;
+    },
+    pidOf: (subcommand) => {
+      const pid = launched.find(({ args }) => args.includes(subcommand))?.pid;
+      if (pid === undefined) {
+        throw new Error(`no git ${subcommand} started`);
+      }
+
+      return pid;
+    },
+  };
+}
+
+// A real-git run that rejects at its timeout of `timeoutMs`.
+function rejectsWithTimeout(timeoutMs: number): (error: unknown) => boolean {
+  return (error) => {
+    assert.ok(error instanceof GitCommandError);
+    assert.deepStrictEqual(error.failure, { kind: "timeout", timeoutMs });
+    return true;
   };
 }
 
@@ -2880,6 +2942,173 @@ describe("createGitProcess ssh with real git", () => {
     await assert.rejects(fetched, rejectsAs("ssh-auth", 128));
     assert.strictEqual(await readFile(record, "utf8"), `${fixture.root}\n${fixture.root}\n`);
   });
+});
+
+// The process-group cases need `ps` and POSIX process groups.
+const PROCESS_GROUPS = {
+  skip: process.platform === "win32" && "Windows has no ps and no POSIX process groups",
+};
+
+// SG-PRC-02: a remote that asks for a password, a passphrase, or a host-key
+// answer fails without a prompt, and a timeout leaves no process behind.
+describe("createGitProcess without prompts or leftovers", () => {
+  test("SG-PRC-02, E10: rejects an https remote that asks for a password as https-auth without askpass", async (t) => {
+    // arrange
+    const fixture = await httpsFixture(t);
+    await fixture.host.arm("tools", { kind: "credential", user: "acme", password: "secret" });
+    const askpass = await recordingScript(fixture.root, "askpass", "echo wrong");
+    const call = {
+      cwd: fixture.root,
+      home: fixture.root,
+      variables: { GIT_SSL_CAINFO: fixture.host.certificatePath },
+    };
+    await assert.rejects(
+      runSystemGit(call, "-c", `core.askPass=${askpass.script}`, "ls-remote", fixture.url),
+    );
+    await access(askpass.record);
+    await rm(askpass.record);
+    const git = await realGit({
+      root: fixture.root,
+      env: fixture.env,
+      config: `[core]\n\taskPass = ${askpass.script}\n`,
+    });
+
+    // act
+    const listed = git.run({
+      subcommand: "ls-remote",
+      lane: "network",
+      operands: [fixture.url],
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    await assert.rejects(listed, rejectsAs("https-auth", 128));
+    await assert.rejects(access(askpass.record), { code: "ENOENT" });
+  });
+
+  test("SG-PRC-02, E16: runs the user's ssh without a terminal and with the batch options", async (t) => {
+    // arrange
+    const fixture = await laneFixture(t);
+    const record = path.join(fixture.root, "ssh-launches");
+    const program = path.join(fixture.root, "terminal-ssh");
+    await writeFile(
+      program,
+      `#!/bin/sh
+if (: < /dev/tty) 2>/dev/null; then echo tty >> '${record}'; else echo no-tty >> '${record}'; fi
+printf '%s\\n' "$@" >> '${record}'
+exit 255
+`,
+      { mode: 0o755 },
+    );
+    const git = await fixture.gitWith({ GIT_SSH_COMMAND: program });
+
+    // act
+    const listed = git.run({ ...SSH_LIST, timeoutMs: 10_000 });
+
+    // assert
+    await assert.rejects(listed, rejectsAs("ssh-auth", 128));
+    // git's `-G` check fails, so the transport launch runs as the simple variant.
+    assert.deepStrictEqual((await readFile(record, "utf8")).split("\n"), [
+      "no-tty",
+      ...STAND_IN_BATCH,
+      "-G",
+      "-o",
+      "SendEnv=GIT_PROTOCOL",
+      "git@h.test",
+      "no-tty",
+      ...STAND_IN_BATCH,
+      "git@h.test",
+      "git-upload-pack 'acme/tools.git'",
+      "",
+    ]);
+  });
+
+  test("SG-PRC-02, E16: rejects an ssh remote whose host key is unknown as ssh-host-key-unknown", async (t) => {
+    // arrange
+    const fixture = await laneFixture(t);
+    const program = await recordingScript(
+      fixture.root,
+      "host-key-ssh",
+      "echo 'Host key verification failed.' >&2\nexit 255",
+    );
+    const git = await fixture.gitWith({ GIT_SSH_COMMAND: program.script });
+
+    // act
+    const listed = git.run({ ...SSH_LIST, timeoutMs: 10_000 });
+
+    // assert
+    await assert.rejects(listed, rejectsAs("ssh-host-key-unknown", 128));
+  });
+
+  test(
+    "SG-PRC-02, E9: leaves no process of a timed-out https command",
+    PROCESS_GROUPS,
+    async (t) => {
+      // arrange
+      const fixture = await httpsFixture(t);
+      await fixture.host.arm("tools", { kind: "hold" });
+      const launcher = pidRecordingSpawn();
+      const git = await realGit({
+        root: fixture.root,
+        env: fixture.env,
+        config: "",
+        spawn: launcher.spawn,
+        killGraceMs: 500,
+      });
+      const window = fixture.host.mark();
+
+      // act
+      const listed = git.run({
+        subcommand: "ls-remote",
+        lane: "network",
+        operands: [fixture.url],
+        timeoutMs: 1_500,
+      });
+
+      // assert
+      await assert.rejects(listed, rejectsWithTimeout(1_500));
+      await fixture.host.waitForRequestsSettledAfter(window);
+      assert.deepStrictEqual(fixture.host.requestsSince(window).requests, [
+        {
+          method: "GET",
+          path: "/acme/tools.git/info/refs?service=git-upload-pack",
+          status: "dropped",
+        },
+      ]);
+      assert.deepStrictEqual(await livingGroupMembers(launcher.pidOf("ls-remote")), []);
+    },
+  );
+
+  test(
+    "SG-PRC-02, E8: leaves no process of a timed-out ssh command whose ssh never answers",
+    PROCESS_GROUPS,
+    async (t) => {
+      // arrange
+      const root = await caseDirectory(t);
+      const record = path.join(root, "ssh-pids");
+      const program = path.join(root, "sleeping-ssh");
+      await writeFile(program, `#!/bin/sh\nsleep 30 &\necho "$$ $!" >> '${record}'\nwait\n`, {
+        mode: 0o755,
+      });
+      const launcher = pidRecordingSpawn();
+      // The variant skips git's `-G` check, so the transport launch is the one that hangs.
+      const git = await realGit({
+        root,
+        env: { ...hermeticGitEnvironment(root), GIT_SSH_COMMAND: program, GIT_SSH_VARIANT: "ssh" },
+        config: "",
+        spawn: launcher.spawn,
+        killGraceMs: 500,
+      });
+
+      // act
+      const listed = git.run({ ...SSH_LIST, timeoutMs: 1_500 });
+
+      // assert
+      await assert.rejects(listed, rejectsWithTimeout(1_500));
+      assert.match(await readFile(record, "utf8"), /^\d+ \d+\n$/);
+      assert.deepStrictEqual(await livingGroupMembers(launcher.pidOf("ls-remote")), []);
+    },
+  );
 });
 
 describe("NODE_GIT_HOST", () => {
