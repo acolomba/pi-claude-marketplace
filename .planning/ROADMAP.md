@@ -329,10 +329,12 @@ Plans:
   3. `docs/hooks-compatibility.md` describes the new behavior, the change has unit tests with 100% direct coverage, and `npm run check` passes (HKRL-01).
   4. After a fork or a resume, a SessionStart context value the conversation already holds is not sent again; a changed value is added; scenarios show both, and a new session carries nothing from the old one (HKRL-02, user decision 2026-11-23 after review CR-01).
   5. After a compaction in the middle of a run and after an overflow compaction with a retry, the next model call carries the SessionStart(compact) context; after a manual `/compact` it lands after the summary; scenarios show each path (HKRL-03, user decision 2026-11-23).
-**Plans:** 1/1 plans executed
+**Plans:** 1/3 plans executed
 
 Plans:
 - [x] 06.1-01-PLAN.md -- Wave 1: the five flipped SessionStart scenarios of `hook/additional-context.feature`, ten unit cases, and HOOK-E2E-04 rewritten to the post-fix shape, all red on the current code, then the SessionStart send through one shared context message helper in `bridges/hooks/event-adapters.ts`, in one commit with the integration suite green; breaks B1 and B2 on the fix commit; then the SessionStart buffer removed from the hooks runtime and routing state with the integration file `hooks-additionalcontext-end-to-end` deleted; then the docs and the D-CF5-13 amendment, B1f and B2f on the final tree, the hook-wide set, and one full adapter run (HKRL-01)
+- [ ] 06.1-02-PLAN.md -- Wave 1: the HKRL-02 duplicate removal of a resumed or forked session's SessionStart context (one value per hook in the message's `details`, the older-message fallback, the saved-path normalization, nothing new sends nothing), five scenarios in `hook/additional-context.feature` with the fork and continue setup steps, the review info items IN-01 to IN-04, breaks Ba, Bb, Bc, Bh, and Bi on the fix commit, and one full adapter run (HKRL-02)
+- [ ] 06.1-03-PLAN.md -- Wave 2: the HKRL-03 steer of a compaction's SessionStart context into the next model call, first for the retry after an overflow (tracer, with the single-call model step), then for a compaction between two turns (the `turn_start` run phase, tool-row context tokens in the scripted model), four scenarios, the docs rows, the D-CF5-13 amendment, ARCHITECTURE.md, breaks Bd, Bf, Bg, and Bi on the final tree, and one full adapter run (HKRL-03)
 
 ### Phase 7: Path-Source Dependency Tags
 
