@@ -2,25 +2,23 @@
  * @fileoverview Steps that start a new Pi session or reload Pi, and check the
  * skills the session offers and the results it reports.
  *
- * A result can claim an install that never reached disk. These steps look
- * where the user looks: the `/skill:` commands of the next session. A new
- * session also reports its own payloads, such as its reconcile report. They
- * become the last results, so the row steps compare them and a scenario
- * fails when their rows go uncompared. A reload's payloads become the last
- * results the same way. Pi's own `/reload` runs only in the terminal, so an
- * RPC scenario reloads through `/claude:plugin reload`. A new session can also
- * be set up, so a
- * scenario shows that what it set up survives the session, and a setup
- * session can be one that warns. A session in
- * another project runs in a project directory of its own, so it shows what
- * the user scope alone offers. A plain message is sent in the current
- * session, and the results that follow it, such as a background update's
- * notice, become the last results the same way. A prompt to a profile Pi
- * runs a model turn, and every record and stand-in log line the turn
- * produced becomes the last model turn (HAR-03). A Pi in the terminal with
- * the scripted model can reload before its turn, which Pi offers only in the
- * terminal, and the stand-in log lines of that turn become the last model
- * turn the same way. A profile Pi also lists the slash commands it offers
+ * A result can claim an install that never reached disk. These steps look where
+ * the user looks: the `/skill:` commands of the next session. A new session
+ * also reports its own payloads, such as its reconcile report. They become the
+ * last results, so the row steps compare them and a scenario fails when their
+ * rows go uncompared. A reload's payloads become the last results the same way.
+ * Pi's own `/reload` runs only in the terminal, so an RPC scenario reloads
+ * through `/claude:plugin reload`. A new session can also be set up, so a
+ * scenario shows that what it set up survives the session, and a setup session
+ * can be one that warns. A session in another project runs in a project
+ * directory of its own, so it shows what the user scope alone offers. A plain
+ * message is sent in the current session, and the results that follow it, such
+ * as a background update's notice, become the last results the same way. A
+ * prompt to a profile Pi runs a model turn, and every record and stand-in log
+ * line the turn produced becomes the last model turn (HAR-03). A Pi in the
+ * terminal with the scripted model can reload before its turn, which Pi offers
+ * only in the terminal, and the stand-in log lines of that turn become the last
+ * model turn the same way. A profile Pi also lists the slash commands it offers
  * through its registry probe, and the listing stays on the world for the step
  * that compares it (HAR-04).
  */

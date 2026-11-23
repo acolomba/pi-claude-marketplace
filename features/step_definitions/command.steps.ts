@@ -1,7 +1,7 @@
 /**
  * @fileoverview Steps that run `/claude:plugin` commands in a headless Pi and
- * check the JSON results of the last `When` step:
- * a command, a new session, or a reload.
+ * check the JSON results of the last `When` step: a command, a new session, or
+ * a reload.
  * A command can also run in a one-shot Pi in json mode, whose results the
  * same steps read, in a one-shot Pi in print mode, whose exit code and output
  * two steps read, or in Pi in a real terminal, whose notice a step reads from
