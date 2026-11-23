@@ -1,6 +1,6 @@
 /**
- * @fileoverview Steps every workflow feature shares: the workflow commands a
- * new session offers, running a workflow command that starts no run, and the
+ * @fileoverview Steps every workflow feature shares: the workflow commands Pi
+ * offers after a reload, running a workflow command that starts no run, and the
  * notices the workflow engine shows for it.
  *
  * The workflow engine registers each bridged workflow as an extension command

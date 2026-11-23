@@ -52,7 +52,7 @@ Feature: Plugin model tools
     Given the marketplace "tools" offers these plugins from git repositories:
       | name | source kind | repository | pinned |
       | ghp  | github      | ghp        | false  |
-    Given the user has started a new pi session
+    Given the user has reloaded pi
 
   Scenario: The model reads the marketplaces the list tool returns
     Given the scripted model plays these steps:

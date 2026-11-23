@@ -261,7 +261,8 @@ export interface ModelTurn {
 
 export class ScenarioWorld extends World {
   results: readonly NotificationPayload[] | undefined = undefined;
-  // What produced `results`: a command or a new session.
+  // What produced `results`: a command, or a session source, which is a new
+  // session or a reload.
   resultsSource: "command" | "session" | undefined = undefined;
   // The non-empty row arrays of `results` that no step has compared yet, as
   // `<kind> <field>`. The steps that state a result's fields hide them, so a
@@ -707,10 +708,10 @@ export class ScenarioWorld extends World {
     return repository;
   }
 
-  /** Returns the skills of the last new session, which a `When` step must have started. */
+  /** Returns the skills after the last new session or reload, which a `When` step must have run. */
   sessionSkills(): readonly OfferedSkill[] {
     if (this.skills === undefined) {
-      throw new Error("no new session has started in this scenario");
+      throw new Error("no new session or reload has run in this scenario");
     }
 
     return this.skills;

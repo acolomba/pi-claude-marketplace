@@ -28,7 +28,7 @@ Feature: Workflow collisions
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
       | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
 
-  Scenario: A new session offers the workflow and no prompt template under a name both claim
+  Scenario: A reload offers the workflow and no prompt template under a name both claim
     Given pi runs with the scripted model and these companions:
       | companion            |
       | pi-dynamic-workflows |
@@ -43,14 +43,14 @@ Feature: Workflow collisions
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user", which skipped a command that a workflow of the plugin names
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user lists the slash commands pi offers
     Then pi offers these workflow commands:
       | command     | description |
       | /demo:hello | Says hello. |
     Then pi offers no slash commands from prompt templates
 
-  Scenario: Of two workflow scripts with one name, a new session offers the last one, as in Claude Code
+  Scenario: Of two workflow scripts with one name, a reload offers the last one, as in Claude Code
     Given pi runs with the scripted model and these companions:
       | companion            |
       | pi-dynamic-workflows |
@@ -72,13 +72,13 @@ Feature: Workflow collisions
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user lists the slash commands pi offers
     Then pi offers these workflow commands:
       | command    | description   |
       | /demo:scan | Scans second. |
 
-  Scenario: A new session offers both workflows when one name is the other with the plugin prefix
+  Scenario: A reload offers both workflows when one name is the other with the plugin prefix
     Given pi runs with the scripted model and these companions:
       | companion            |
       | pi-dynamic-workflows |
@@ -100,7 +100,7 @@ Feature: Workflow collisions
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user lists the slash commands pi offers
     Then pi offers these workflow commands:
       | command         | description               |

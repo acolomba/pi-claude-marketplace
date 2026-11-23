@@ -20,7 +20,7 @@ Feature: Agent frontmatter
       | quoted.md     | quoted     | Runs behind quoted words. | "true"     | Work behind quote. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                 | tool     | arguments                                  |
       |                       | subagent | {"action":"get","agent":"demo:plain"}      |
@@ -91,7 +91,7 @@ Feature: Agent frontmatter
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply               | tool     | arguments                               |
       |                     | subagent | {"action":"get","agent":"demo:doubled"} |
@@ -181,14 +181,12 @@ Feature: Agent frontmatter
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.1.0   |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
-      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status      | reasons | scope | from  | to    |
-      | fixtures         | user              | demo@fixtures | demo | will update |         | user  | 1.0.0 | 1.1.0 |
       | fixtures         | user              | demo@fixtures | demo | will update |         | user  | 1.0.0 | 1.1.0 |
     Then the agents folder of the user scope holds the file "pi-claude-marketplace-demo-plain.md" with this text:
       """
@@ -315,7 +313,7 @@ Feature: Agent frontmatter
 
       Answer the task.
       """
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports no results
     Then the agents folder of the user scope holds the file "pi-claude-marketplace-demo-plain.md" with this text:
       """
@@ -461,7 +459,7 @@ Feature: Agent frontmatter
       | numeric.md | numeric | Thinks at 32000. | 32000  | Answer the task. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                  | tool     | arguments                             |
       |                        | subagent | {"action":"list","capabilities":true} |
@@ -497,7 +495,7 @@ Feature: Agent frontmatter
       | unknown.md   | unknown   | Runs on gpt-5.           | gpt-5           | Answer the task. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user --map-model"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                  | tool     | arguments                             |
       |                        | subagent | {"action":"list","capabilities":true} |
@@ -526,7 +524,7 @@ Feature: Agent frontmatter
       | fable.md  | fable  | Runs on fable.  | fable  | Answer the task. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                  | tool     | arguments                             |
       |                        | subagent | {"action":"list","capabilities":true} |
@@ -553,7 +551,7 @@ Feature: Agent frontmatter
       | reviewer.md | reviewer | Reviews the files it is given. | sonnet | Review the files named in the task. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user --map-model"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                       | tool     | arguments                                                           |
       |                             | subagent | {"agent":"demo:reviewer","task":"Review the README.","async":false} |
@@ -584,7 +582,7 @@ Feature: Agent frontmatter
       | excluded.md  | excluded  | Uses the excluded tools.  |                       | Bash Edit       | Answer the task. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                  | tool     | arguments                             |
       |                        | subagent | {"action":"list","capabilities":true} |
@@ -612,7 +610,7 @@ Feature: Agent frontmatter
       | denied.md  | denied  | Has no skills.          |                     | Skill(helper)   | Answer the task. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                 | tool     | arguments                               |
       |                       | subagent | {"action":"get","agent":"demo:granted"} |
@@ -698,7 +696,7 @@ Feature: Agent frontmatter
       | mixed.md | mixed | Reviews: code and tests | "sonnet" | Answer the task. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user --map-model"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                  | tool     | arguments                             |
       |                        | subagent | {"action":"list","capabilities":true} |
@@ -726,7 +724,7 @@ Feature: Agent frontmatter
       | hidden.md | hidden | Hides a tool in a comment. | Read # Bash | Answer the task. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                  | tool     | arguments                             |
       |                        | subagent | {"action":"list","capabilities":true} |
@@ -784,7 +782,7 @@ Feature: Agent frontmatter
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                  | tool     | arguments                             |
       |                        | subagent | {"action":"list","capabilities":true} |
@@ -822,7 +820,7 @@ Feature: Agent frontmatter
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                  | tool     | arguments                             |
       |                        | subagent | {"action":"list","capabilities":true} |
@@ -937,7 +935,7 @@ Feature: Agent frontmatter
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                  | tool     | arguments                             |
       |                        | subagent | {"action":"list","capabilities":true} |
@@ -997,7 +995,7 @@ Feature: Agent frontmatter
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply               | tool     | arguments                             |
       |                     | subagent | {"action":"get","agent":"demo:block"} |
@@ -1077,14 +1075,12 @@ Feature: Agent frontmatter
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.1.0   |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
-      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status      | reasons | scope | from  | to    |
-      | fixtures         | user              | demo@fixtures | demo | will update |         | user  | 1.0.0 | 1.1.0 |
       | fixtures         | user              | demo@fixtures | demo | will update |         | user  | 1.0.0 | 1.1.0 |
     Then the agents directory of the user scope holds these file names:
       | file                              |
@@ -1195,7 +1191,7 @@ Feature: Agent frontmatter
     Given the published plugin "demo" of the marketplace "fixtures" has these agents:
       | file     | name | description             | body             |
       | named.md | "x"  | Names itself in quotes. | Answer the task. |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports no results
     Then the agents directory of the user scope holds these file names:
       | file                              |
@@ -1281,7 +1277,7 @@ Feature: Agent frontmatter
       | lead.md | lead | Delegates the tasks. | Read, <grant> | Answer the task. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply               | tool     | arguments                            |
       |                     | subagent | {"action":"get","agent":"demo:lead"} |
@@ -1316,7 +1312,7 @@ Feature: Agent frontmatter
       | task.md  | task  | Denies Agent. | Read, Task  | Agent           | Answer the task. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                 | tool     | arguments                             |
       |                       | subagent | {"action":"get","agent":"demo:agent"} |
@@ -1351,7 +1347,7 @@ Feature: Agent frontmatter
       | lead.md | lead | Delegates the tasks. | Read, Workflow, Workflow(demo:scan) | Answer the task. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply               | tool     | arguments                            |
       |                     | subagent | {"action":"get","agent":"demo:lead"} |
@@ -1379,7 +1375,7 @@ Feature: Agent frontmatter
       | task.md  | task  | Denies Task.  | Task(helper)    | Answer the task. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                 | tool     | arguments                             |
       |                       | subagent | {"action":"get","agent":"demo:agent"} |
@@ -1413,7 +1409,7 @@ Feature: Agent frontmatter
       | inherit.md | inherit | Runs on inherit. | inherit | Answer the task. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply              | tool     | arguments                                                  |
       |                    | subagent | {"agent":"demo:inherit","task":"Answer it.","async":false} |
@@ -1443,7 +1439,7 @@ Feature: Agent frontmatter
       | inherit.md | inherit | Runs on inherit. | inherit | Answer the task. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user --map-model"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply              | tool     | arguments                                                  |
       |                    | subagent | {"agent":"demo:inherit","task":"Answer it.","async":false} |

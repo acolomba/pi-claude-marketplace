@@ -239,7 +239,7 @@ Feature: Plugin options
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the user has run "/claude:plugin uninstall demo@fixtures --scope user"
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                   |
@@ -253,7 +253,7 @@ Feature: Plugin options
       | 2    | assistant   | tool call bash {"command":"printf %s \"$PI_CLAUDE_MARKETPLACE_OPTIONS\""} |
       | 2    | tool result | bash returned: (no output)                                                |
 
-  Scenario: Every new session warns about a plugin whose recorded options do not parse (D-PG10-25)
+  Scenario: Every reload warns about a plugin whose recorded options do not parse (D-PG10-25)
     Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
       """
       {
@@ -267,14 +267,12 @@ Feature: Plugin options
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the installation record of the plugin "demo@fixtures" in the project scope holds plugin options that do not parse
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
       | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
-      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status | reasons    | scope   | cause chain                                                                                                                                                       | cause truncated | leaks | rollback partial |
-      | fixtures         | project           | demo@fixtures | demo | failed | unreadable | project | The plugin options in the install record of demo@fixtures do not parse (userConfig is not an object). Run /claude:plugin reinstall demo@fixtures to restore them. | false           |       |                  |
       | fixtures         | project           | demo@fixtures | demo | failed | unreadable | project | The plugin options in the install record of demo@fixtures do not parse (userConfig is not an object). Run /claude:plugin reinstall demo@fixtures to restore them. | false           |       |                  |
 
   Scenario: The plugin list shows a plugin whose recorded options do not parse as unreadable (D-PG10-25)
@@ -342,5 +340,5 @@ Feature: Plugin options
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the installation record of the plugin "demo@fixtures" in the project scope holds plugin options that do not parse
     Given the user has run "/claude:plugin reinstall demo@fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports no results

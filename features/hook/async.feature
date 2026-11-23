@@ -19,7 +19,7 @@ Feature: Hook async
       | post-wake  | PostToolUse | Edit    | script |       | true         |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "document.txt" with the text "first\nmiddle\nsecond\n" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                                                                        |
@@ -68,7 +68,7 @@ Feature: Hook async
       | wake | UserPromptSubmit | *       | script | true         | true  | 2         | woke up | The hook woke the model. | wake finished  |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -94,7 +94,7 @@ Feature: Hook async
       | wake | UserPromptSubmit | *       | script | true         | true  | 2         | woke up | The hook woke the model. | wake finished  |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Done.  |
@@ -129,7 +129,7 @@ Feature: Hook async
       | wake | UserPromptSubmit | *       | script | true         | true  | 2         | woke up | The hook woke the model. | wake finished  |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Done.  |
@@ -158,7 +158,7 @@ Feature: Hook async
       | wake | UserPromptSubmit | *       | script | true         | true  | 2         | tests failed |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -185,7 +185,7 @@ Feature: Hook async
       | wake | UserPromptSubmit | *       | script | true         | true  | 1         | woke up | The hook woke the model. | wake finished  |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Done.  |
@@ -214,7 +214,7 @@ Feature: Hook async
       | wake | UserPromptSubmit | *       | script | true  | true  |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -240,7 +240,7 @@ Feature: Hook async
       | note | UserPromptSubmit | *       | script | true  | true  | 2         | {"systemMessage":"remember the tests","hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"the tests live in test"}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Done.  |
@@ -300,7 +300,7 @@ Feature: Hook async
       | slow | UserPromptSubmit | *       | script | true  | 1       | 3     | 3         |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -327,7 +327,7 @@ Feature: Hook async
       | keep | Stop  |         | script | true         | 2         | keep going | allow      |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -365,7 +365,7 @@ Feature: Hook async
       | slow | Stop  |         | script |              | true  |           |            |            |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -408,7 +408,7 @@ Feature: Hook async
       | wake | UserPromptSubmit | *       | script | true         | true  | 2         | woke up | The hook woke the model. | wake finished  |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -430,7 +430,7 @@ Feature: Hook async
       | wake | UserPromptSubmit | *       | script | ["\|\|", "true"] | true         | true  |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -509,7 +509,7 @@ Feature: Hook async
       | wake | UserPromptSubmit | *       | script | ["\|\|", "true"] | true         | true  | ignore  | 1       |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -536,7 +536,7 @@ Feature: Hook async
       | wake | UserPromptSubmit | *       | script | true         | true  | 2         | woke up | The hook woke the model. | wake finished  |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -577,7 +577,7 @@ Feature: Hook async
       | check | PreToolUse | Bash    | script | true         | true  |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -607,7 +607,7 @@ Feature: Hook async
       | wake | UserPromptSubmit | *       | script | true         | true  | 2         | woke up | The hook woke the model. |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments |
       |       | bash | {"command": "until [ -e {home}/hook-releases/tool ]; do sleep 0.1; done; echo released"} |
@@ -633,7 +633,7 @@ Feature: Hook async
       | stop | Stop             |         | script |              |       |           |         |                          |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments |
       |       | bash | {"command": "until [ -e {home}/hook-releases/tool ]; do sleep 0.1; done; echo released"} |

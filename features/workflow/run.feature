@@ -17,7 +17,7 @@ Feature: Workflow run
     Given the published plugin "demo" of the marketplace "fixtures" has the workflow "hello" described as "Says hello." that returns "Hello from demo."
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user runs the workflow command "/demo:hello"
     Then the workflow run ends with the status "completed" and the result "Hello from demo."
     Then the workflow engine shows these notices:
@@ -33,7 +33,7 @@ Feature: Workflow run
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user runs the workflow command "<typed command>"
     Then the workflow run ends with the status "completed" and the result '<returned text>'
     Then the workflow engine shows these notices:
@@ -56,7 +56,7 @@ Feature: Workflow run
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user runs the workflow command "/demo:nope"
     Then the workflow run ends with the status "failed" and the error "Nope."
     Then the workflow engine shows these notices:
@@ -72,7 +72,7 @@ Feature: Workflow run
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply        | tool     | arguments                                                   |
       |              | workflow | {"name":"demo:echo","args":{"who":"Ada","items":["a","b"]}} |
@@ -102,7 +102,7 @@ Feature: Workflow run
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user runs the workflow command "/demo:outer"
     Then the workflow run ends with the status "completed" and the result "outer: inner got hi"
     Then the workflow engine shows these notices:

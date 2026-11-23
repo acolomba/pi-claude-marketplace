@@ -27,7 +27,7 @@ Feature: Plugin enable
       | id            | enabled |
       | demo@fixtures | false   |
     Then the "claude-plugins.json" file of the project scope declares no plugins
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
 
   Scenario: Enabling without --local a plugin the local layer disables fails as disabled in local layer
@@ -49,7 +49,7 @@ Feature: Plugin enable
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id            |
       | demo@fixtures |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
 
   Scenario: Enabling a plugin fails as an invalid manifest and changes nothing while the local config cannot be read (LAYER-04, CFG-03)
@@ -130,7 +130,7 @@ Feature: Plugin enable
     Then the installation record of the project scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -163,7 +163,7 @@ Feature: Plugin enable
       | marketplace name | marketplace scope | id            | name | status  | reasons       | scope   |
       | fixtures         | project           | demo@fixtures | demo | skipped | not installed | project |
     Then the "claude-plugins.json" file of the project scope declares no plugins
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
 
   Scenario: Enabling in the user scope leaves the project scope unchanged
@@ -223,7 +223,7 @@ Feature: Plugin enable
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id            | enabled |
       | demo@fixtures | true    |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -257,7 +257,7 @@ Feature: Plugin enable
       | id        | enabled |
       | app@tools | true    |
       | lib@tools | true    |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command          | description           |
       | /skill:app-skill | A skill of app 1.0.0. |
@@ -400,7 +400,7 @@ Feature: Plugin enable
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id        | enabled |
       | app@tools | false   |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
 
   Scenario: Enabling a plugin whose dependency its marketplace no longer lists reads that dependency's own dependencies and enables it

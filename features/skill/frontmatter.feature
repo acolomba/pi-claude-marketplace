@@ -224,7 +224,7 @@ Feature: Skill frontmatter
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command            | description                   |
       | /skill:demo-greet  | Greets a person by name.      |
@@ -249,7 +249,7 @@ Feature: Skill frontmatter
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply             |
       | The check passed. |
@@ -275,7 +275,7 @@ Feature: Skill frontmatter
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description              |
       | /skill:demo-quiet | Works in the background. |
@@ -295,7 +295,7 @@ Feature: Skill frontmatter
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply             |
       | The work is done. |
@@ -316,7 +316,7 @@ Feature: Skill frontmatter
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command            | description            |
       | /skill:demo-review | Reviews a change.      |

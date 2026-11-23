@@ -109,7 +109,7 @@ Feature: Marketplace remove
     Then the "claude-plugins.json" file of the project scope declares no marketplaces
     Then the "claude-plugins.json" file of the project scope declares no plugins
 
-  Scenario: A new session offers none of the removed plugins' skills
+  Scenario: A reload offers none of the removed plugins' skills
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins:
       | name  | version |
@@ -121,10 +121,10 @@ Feature: Marketplace remove
     Given the user has run "/claude:plugin install amber@tools --scope project"
     Given the user has run "/claude:plugin install elm@tools --scope project"
     Given the user has run "/claude:plugin marketplace remove tools --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
 
-  Scenario: A new session lists none of the removed plugins
+  Scenario: A reload lists none of the removed plugins
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins:
       | name  | version |
@@ -136,7 +136,7 @@ Feature: Marketplace remove
     Given the user has run "/claude:plugin install amber@tools --scope project"
     Given the user has run "/claude:plugin install elm@tools --scope project"
     Given the user has run "/claude:plugin marketplace remove tools --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user runs "/claude:plugin list"
     Then the result has these fields:
       | kind         | cascade |
@@ -144,11 +144,11 @@ Feature: Marketplace remove
       | needs reload | false   |
     Then the result lists no marketplaces
 
-  Scenario: A removed base-layer marketplace stays absent in a new session
+  Scenario: A removed base-layer marketplace stays absent after a reload
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
     Given the user has run "/claude:plugin marketplace remove tools --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user runs "/claude:plugin marketplace list"
     Then the result has these fields:
       | kind         | cascade |
@@ -325,12 +325,12 @@ Feature: Marketplace remove
       | name | source                   |
       | base | {home}/marketplaces/base |
 
-  Scenario: A marketplace removed with --local stays removed in a new session
+  Scenario: A marketplace removed with --local stays removed after a reload
     Given the marketplace "tools" is published as a dir source
     Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the user has run "/claude:plugin marketplace remove tools --scope project --local"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user runs "/claude:plugin marketplace list"
     Then the result has these fields:
       | kind         | cascade |
@@ -391,12 +391,12 @@ Feature: Marketplace remove
       | name  | source                    |
       | tools | {home}/marketplaces/tools |
 
-  Scenario: A marketplace removed from one layer is still listed in a new session
+  Scenario: A marketplace removed from one layer is still listed after a reload
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
     Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
     Given the user has run "/claude:plugin marketplace remove tools --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user runs "/claude:plugin marketplace list"
     Then the result has these fields:
       | kind                | cascade          |
@@ -484,7 +484,7 @@ Feature: Marketplace remove
     Then the "claude-plugins.local.json" file of the project scope declares these plugins:
       | id         |
       | beta@tools |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:beta-skill | A skill of beta 1.0.0. |
@@ -533,7 +533,7 @@ Feature: Marketplace remove
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id          |
       | alpha@tools |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command            | description             |
       | /skill:alpha-skill | A skill of alpha 1.0.0. |
@@ -582,7 +582,7 @@ Feature: Marketplace remove
       | keeper-zebra@tools |
       | keeper-amber@tools |
     Then the files of the project scope are unchanged
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command                   | description                    |
       | /skill:amber-skill        | A skill of amber 1.0.0.        |
@@ -617,14 +617,12 @@ Feature: Marketplace remove
       | id          |
       | alpha@tools |
     Then the files of the project scope are unchanged
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
       | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
-      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id        | name | status | reasons          | scope   | leaks | rollback partial | cause chain                                                                    | cause truncated |
-      | tools            | project           | lib@tools | lib  | failed | invalid manifest | project |       |                  | cannot read the dependencies of lib@tools: its marketplace manifest is invalid | false           |
       | tools            | project           | lib@tools | lib  | failed | invalid manifest | project |       |                  | cannot read the dependencies of lib@tools: its marketplace manifest is invalid | false           |
     Then the session offers these skills:
       | command            | description             |
@@ -660,7 +658,7 @@ Feature: Marketplace remove
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id           |
       | app@upstream |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command          | description           |
       | /skill:app-skill | A skill of app 1.0.0. |

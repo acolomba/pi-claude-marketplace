@@ -118,11 +118,11 @@ Feature: Marketplace autoupdate
       | name                    | source                             | autoupdate |
       | claude-plugins-official | anthropics/claude-plugins-official | false      |
 
-  Scenario: An enabled autoupdate shows in the marketplace list of a new session
+  Scenario: An enabled autoupdate shows in the marketplace list after a reload
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
     Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user runs "/claude:plugin marketplace list"
     Then the result has these fields:
       | kind                | cascade          |
@@ -136,11 +136,11 @@ Feature: Marketplace autoupdate
       | name  | scope   | details autoupdate | details last updated at |
       | tools | project | true               | {scenario time}         |
 
-  Scenario: An enabled autoupdate shows in the marketplace info of a new session
+  Scenario: An enabled autoupdate shows in the marketplace info after a reload
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
     Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user runs "/claude:plugin marketplace info tools --scope project"
     Then the marketplace info result has these fields:
       | kind                    | marketplace-info          |

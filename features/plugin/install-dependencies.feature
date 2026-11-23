@@ -21,7 +21,7 @@ Feature: Plugin install dependencies
       | tools            | project           | app@tools | app       | installed |                         | project | 1.0.0   |
       | tools            | project           | lib@tools | lib@tools | installed | dependency current copy | project | 1.2.0   |
 
-  Scenario: A new session offers the skills of a plugin and its dependency that carries a version constraint
+  Scenario: A reload offers the skills of a plugin and its dependency that carries a version constraint
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
       | name | version | dependencies |
@@ -29,7 +29,7 @@ Feature: Plugin install dependencies
       | lib  | 1.2.0   |              |
     Given the marketplace "tools" is added to the project scope
     Given the user has run "/claude:plugin install app@tools --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command          | description           |
       | /skill:app-skill | A skill of app 1.0.0. |
@@ -233,7 +233,7 @@ Feature: Plugin install dependencies
       | id        |
       | app@tools |
 
-  Scenario: A new session offers the skills of every plugin of an installed dependency chain
+  Scenario: A reload offers the skills of every plugin of an installed dependency chain
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
       | name | version | dependencies |
@@ -242,7 +242,7 @@ Feature: Plugin install dependencies
       | base | 1.0.0   |              |
     Given the marketplace "tools" is added to the project scope
     Given the user has run "/claude:plugin install app@tools --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:app-skill  | A skill of app 1.0.0.  |
@@ -292,7 +292,7 @@ Feature: Plugin install dependencies
       | tools            | project           | app@tools | app  | available |         | 1.0.0   |
       | tools            | project           | lib@tools | lib  | available |         | 1.0.0   |
 
-  Scenario: A new session after a failed dependency chain offers no skills
+  Scenario: A reload after a failed dependency chain offers no skills
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
       | name | version | dependencies |
@@ -300,7 +300,7 @@ Feature: Plugin install dependencies
       | lib  | 1.0.0   | base         |
     Given the marketplace "tools" is added to the project scope
     Given the user has run "/claude:plugin install app@tools --scope project", which failed
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
 
   Scenario: A root ledger failure lists every resolved dependency that did not install
@@ -420,7 +420,7 @@ Feature: Plugin install dependencies
       | app@tools | 1.0.0   | true    |
       | lib@tools | 2.0.0   | true    |
 
-  Scenario: A new session offers the skills of a dependency that an install moved into its version constraint
+  Scenario: A reload offers the skills of a dependency that an install moved into its version constraint
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
       | name | version | dependencies |
@@ -432,7 +432,7 @@ Feature: Plugin install dependencies
       | app  | 1.0.0   | lib@^2.0.0   |
       | lib  | 2.0.0   |              |
     Given the user has run "/claude:plugin install app@tools --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command          | description           |
       | /skill:app-skill | A skill of app 1.0.0. |
@@ -547,7 +547,7 @@ Feature: Plugin install dependencies
       | tools            | project           | lib@tools | lib  | available |         | 1.2.0   |
       | tools            | project           | mid@tools | mid  | available |         | 1.0.0   |
 
-  Scenario: A new session after a dependency chain with conflicting versions failed offers no skills
+  Scenario: A reload after a dependency chain with conflicting versions failed offers no skills
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
       | name | version | dependencies    |
@@ -556,10 +556,10 @@ Feature: Plugin install dependencies
       | lib  | 1.2.0   |                 |
     Given the marketplace "tools" is added to the project scope
     Given the user has run "/claude:plugin install app@tools --scope project", which failed
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
 
-  Scenario: A new session after a version conflict with an installed dependency offers only the skills of the dependency
+  Scenario: A reload after a version conflict with an installed dependency offers only the skills of the dependency
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
       | name | version | dependencies |
@@ -568,7 +568,7 @@ Feature: Plugin install dependencies
     Given the marketplace "tools" is added to the project scope
     Given the user has run "/claude:plugin install lib@tools --scope project"
     Given the user has run "/claude:plugin install app@tools --scope project", which failed
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command          | description           |
       | /skill:lib-skill | A skill of lib 1.2.0. |

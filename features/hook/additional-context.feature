@@ -15,7 +15,7 @@ Feature: Hook additional context
       | ctx  | UserPromptSubmit |         | script | {"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"ctx-from-hook"}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments |
       | Done. |      |           |
@@ -36,7 +36,7 @@ Feature: Hook additional context
       | ctx  | UserPromptSubmit |         | script | plain context |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments |
       | Done. |      |           |
@@ -57,7 +57,7 @@ Feature: Hook additional context
       | ctx  | UserPromptSubmit |         | script | {"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"ctx-from-hook"}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                                 |
       |       | bash | {"command": "sleep 3 && echo from-model"} |
@@ -85,7 +85,7 @@ Feature: Hook additional context
       | ctx  | UserPromptSubmit |         | script | {"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":"ctx-from-hook"}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                                 |
       |       | bash | {"command": "sleep 3 && echo from-model"} |
@@ -128,7 +128,7 @@ Feature: Hook additional context
       | big  | UserPromptSubmit |         | script | {"hookSpecificOutput":{"hookEventName":"UserPromptSubmit","additionalContext":" | 12000        | "}}             |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments |
       | Done. |      |           |

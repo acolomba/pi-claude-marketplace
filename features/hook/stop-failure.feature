@@ -15,7 +15,7 @@ Feature: Hook stop failure
       | failure | StopFailure | *       |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | error                       |
       |       | Authentication failed (401) |
@@ -36,7 +36,7 @@ Feature: Hook stop failure
       | other | StopFailure | <other type> |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | error     |
       |       | <message> |
@@ -68,7 +68,7 @@ Feature: Hook stop failure
       | stop    | Stop        |         |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | error            |
       |       | Overloaded (529) |
@@ -89,7 +89,7 @@ Feature: Hook stop failure
       | stop    | Stop        |         |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Hi.   |
@@ -111,7 +111,7 @@ Feature: Hook stop failure
       | fails   | StopFailure | *       | script |                 |                                                                                                                                                | 1         | block      |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | error                       |
       |       | Authentication failed (401) |
@@ -140,7 +140,7 @@ Feature: Hook stop failure
       | stop    | Stop        |         | script |                 |                                                                                                                                                |           |            |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | error                       |
       |       | Authentication failed (401) |
@@ -169,7 +169,7 @@ Feature: Hook stop failure
       | other  | StopFailure | server_error\|unknown                 |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | error                    |
       |       | Rate limit reached (429) |
@@ -265,7 +265,7 @@ Feature: Hook stop failure
       | stop    | Stop        |         |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply            | stop reason |
       | The answer is cu | length      |
@@ -285,7 +285,7 @@ Feature: Hook stop failure
       | failure | StopFailure | *       |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the user has set the thinking level "high"
     Given the scripted model plays these steps:
       | reply | error                       |

@@ -1,12 +1,15 @@
 /**
- * @fileoverview Steps that start a new Pi session and check the skills it
- * offers and the results it reports.
+ * @fileoverview Steps that start a new Pi session or reload Pi, and check the
+ * skills the session offers and the results it reports.
  *
  * A result can claim an install that never reached disk. These steps look
  * where the user looks: the `/skill:` commands of the next session. A new
  * session also reports its own payloads, such as its reconcile report. They
  * become the last results, so the row steps compare them and a scenario
- * fails when their rows go uncompared. A new session can also be set up, so a
+ * fails when their rows go uncompared. A reload's payloads become the last
+ * results the same way. Pi's own `/reload` runs only in the terminal, so an
+ * RPC scenario reloads through `/claude:plugin reload`. A new session can also
+ * be set up, so a
  * scenario shows that what it set up survives the session, and a setup
  * session can be one that warns. A session in
  * another project runs in a project directory of its own, so it shows what
@@ -26,7 +29,7 @@ import assert from "node:assert/strict";
 
 import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
-import { sendMessage, startSession } from "../lib/pi-commands.ts";
+import { reloadSession, sendMessage, startSession } from "../lib/pi-commands.ts";
 import { DIALOG_METHODS } from "../lib/pi-process.ts";
 import { readRegistrySnapshot, REGISTRY_PROBE_COMMAND } from "../lib/pi-registry-probe/snapshot.ts";
 import { promptDisposition } from "../lib/pi-rpc.ts";
@@ -36,7 +39,7 @@ import { modelCallsOf } from "../lib/scripted-model/script.ts";
 import { lastScriptReply, sendTerminalTurn } from "../lib/scripted-model/terminal-turn.ts";
 import { readLogLengths, readLogLinesSince } from "../lib/turn-records.ts";
 
-import type { SessionReport } from "../lib/pi-commands.ts";
+import type { NotificationPayload, SessionReport } from "../lib/pi-commands.ts";
 import type { RpcRecord } from "../lib/pi-process.ts";
 import type { ScenarioWorld } from "../support/world.ts";
 
@@ -69,29 +72,55 @@ function keepSession(world: ScenarioWorld, report: SessionReport): void {
   world.skills = report.skills;
 }
 
-// startSession asserts that the session started; the setup keeps nothing on
-// the world, and like a setup command it must report nothing but info.
-Given("the user has started a new pi session", async function (this: ScenarioWorld) {
-  const { payloads } = await startSession(this.pi);
+// A setup load, like a setup command, must report nothing but info.
+function assertAllInfo(payloads: readonly NotificationPayload[]): void {
   assert.deepStrictEqual(
     payloads.filter((payload) => payload.severity !== "info"),
     [],
   );
-});
+}
 
-// A setup session whose every result warns, such as a legacy move that removed
-// a server pi-mcp-adapter cannot run (D-P3-16).
-Given("the user has started a new pi session, which warned", async function (this: ScenarioWorld) {
-  const { payloads } = await startSession(this.pi);
+// A setup load that warned must report at least one result, and only warnings.
+function assertAllWarnings(payloads: readonly NotificationPayload[]): void {
   assert.notDeepStrictEqual(payloads, []);
   assert.deepStrictEqual(
     payloads.filter((payload) => payload.severity !== "warning"),
     [],
   );
+}
+
+// startSession asserts that the session started; the setup keeps nothing on
+// the world.
+Given("the user has started a new pi session", async function (this: ScenarioWorld) {
+  assertAllInfo((await startSession(this.pi)).payloads);
 });
 
+// A setup session whose every result warns, such as a legacy move that removed
+// a server pi-mcp-adapter cannot run (D-P3-16).
+Given("the user has started a new pi session, which warned", async function (this: ScenarioWorld) {
+  assertAllWarnings((await startSession(this.pi)).payloads);
+});
+
+// The reload steps send `/claude:plugin reload`. The command appends one
+// `reload-started` payload first, and reloadSession checks it and drops it.
+// So these steps keep only the payloads of the reloaded runtime's load. A
+// `usage-error` refusal fails them.
+Given("the user has reloaded pi", async function (this: ScenarioWorld) {
+  assertAllInfo((await reloadSession(this.pi)).payloads);
+});
+
+// A new session is not a reload. It runs the SessionEnd hooks and then the
+// SessionStart hooks with the source `clear`, empties the conversation, and
+// gets a new session id. It creates a session runtime, for which Pi decides
+// project trust, loads with the reason `startup`, and binds the extension
+// twice over RPC. A scenario starts a new session only to test one of these,
+// and reloads Pi otherwise.
 When("the user starts a new pi session", async function (this: ScenarioWorld) {
   keepSession(this, await startSession(this.pi));
+});
+
+When("the user reloads pi", async function (this: ScenarioWorld) {
+  keepSession(this, await reloadSession(this.pi));
 });
 
 When("the user starts a new pi session in another project", async function (this: ScenarioWorld) {
@@ -217,8 +246,9 @@ Then(
   },
 );
 
-// D-02 for a new session: one row per payload, in session order. Pi reports a
-// lasting reconcile failure twice, and both rows are stated.
+// D-02 for a new session or a reload: one row per payload, in session order.
+// A new session reports a lasting reconcile failure twice, and both rows are
+// stated. A reload reports one load, so it reports such a failure once.
 Then("the session reports these results:", function (this: ScenarioWorld, table: DataTable) {
   const [stated = []] = table.raw();
   assert.deepStrictEqual(resultsTable(stated, this.resultsOf("session"), this.tokens), table.raw());
