@@ -16,7 +16,7 @@ Feature: Slash command invocation
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply       |
       | Hello, Ada. |
@@ -42,7 +42,7 @@ Feature: Slash command invocation
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Noted. |
@@ -76,7 +76,7 @@ Feature: Slash command invocation
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Noted. |
@@ -101,7 +101,7 @@ Feature: Slash command invocation
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Noted. |
@@ -126,7 +126,7 @@ Feature: Slash command invocation
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Noted. |
@@ -141,7 +141,7 @@ Feature: Slash command invocation
       """
       First: $1. All: $ARGUMENTS.
       """
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Noted. |
@@ -162,7 +162,7 @@ Feature: Slash command invocation
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Noted. |
@@ -183,7 +183,7 @@ Feature: Slash command invocation
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user runs "/demo:check"
     Then the result has these fields:
       | kind         | usage-error                                                           |
@@ -204,7 +204,7 @@ Feature: Slash command invocation
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Noted. |
@@ -225,7 +225,7 @@ Feature: Slash command invocation
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the user has run "/claude:plugin uninstall demo@fixtures --scope project"
     When the user runs "/demo:greet Ada"
     Then the result has these fields:
@@ -251,7 +251,7 @@ Feature: Slash command invocation
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Noted. |
@@ -277,7 +277,7 @@ Feature: Slash command invocation
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Noted. |
@@ -298,7 +298,7 @@ Feature: Slash command invocation
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user runs "/demo:oops"
     Then the result has these fields:
       | kind         | usage-error                                                                                          |
@@ -324,7 +324,7 @@ Feature: Slash command invocation
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Noted. |
@@ -353,7 +353,7 @@ Feature: Slash command invocation
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Noted. |
@@ -385,7 +385,7 @@ Feature: Slash command invocation
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Noted. |
@@ -414,7 +414,7 @@ Feature: Slash command invocation
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Noted. |

@@ -100,7 +100,7 @@ Feature: MCP server legacy move
 
       """
     Given the mcp.json file of the user scope holds the servers of the plugin "demo@fixtures" as release 0.19.2 wrote them, beside the user's own server "mine"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind          | severity | needs reload | notices | rows                                                                                                          |
       | mcp-migration | info     | true         |         | [{"kind":"moved","scope":"user","plugin":"demo","marketplace":"fixtures","from":"srv","to":"plugin_demo_srv_"}] |
@@ -1190,7 +1190,7 @@ Feature: MCP server legacy move
       """
       {"disabled": true}
       """
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind          | severity | needs reload | notices                                                                                                  | rows                                                                                                            |
       | mcp-migration | warning  | true         | [{"kind":"leftover-removed","scope":"project","file":"mcp-adapter.json","plugin":"demo","server":"srv"}] | [{"kind":"moved","scope":"user","plugin":"demo","marketplace":"fixtures","from":"srv","to":"plugin_demo_srv_"}] |

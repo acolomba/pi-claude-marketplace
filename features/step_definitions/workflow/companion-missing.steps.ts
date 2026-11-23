@@ -3,10 +3,9 @@
  * with workflows was installed without it (WDEP-02).
  *
  * The step adds the engine's package to Pi's user settings, the way
- * `pi install` records a package, so the next session loads it as `/reload`
- * would. Pi's RPC mode cannot run the `/reload` builtin, so a scenario starts
- * a new session instead, which re-reads Pi's settings and extensions the same
- * way.
+ * `pi install` records a package, so the next reload loads it. Pi's RPC mode
+ * cannot run the `/reload` builtin, so a scenario reloads through
+ * `/claude:plugin reload`, which re-reads Pi's settings and extensions.
  */
 
 import assert from "node:assert/strict";
@@ -37,7 +36,7 @@ async function readTextIfPresent(file: string): Promise<string | undefined> {
 // fails rather than replace packages it did not write. Every Pi of the
 // worker's sandbox reads this file, so the release puts back the text it
 // found: a stale entry would load the engine into the shared Pi at its next
-// new session.
+// reload or new session.
 Given(
   "the user has added the pi-dynamic-workflows package to pi's settings",
   async function (this: ScenarioWorld): Promise<void> {

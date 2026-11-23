@@ -497,7 +497,7 @@ Feature: MCP server options
     Then no stub mcp server receives a message
 
   @adapter-only
-  Scenario: A new session disables in mcp-adapter.json a server that names a plugin option of a record whose options do not parse (D-PG10-25)
+  Scenario: A reload disables in mcp-adapter.json a server that names a plugin option of a record whose options do not parse (D-PG10-25)
     Given the published plugin "demo" of the marketplace "fixtures" has the file ".claude-plugin/plugin.json" with this text:
       """
       {
@@ -515,14 +515,12 @@ Feature: MCP server options
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user", which did not fail
     Given the installation record of the plugin "demo@fixtures" in the user scope holds plugin options that do not parse
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
       | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
-      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status | reasons    | scope | cause chain                                                                                                                                                       | cause truncated | leaks | rollback partial |
-      | fixtures         | user              | demo@fixtures | demo | failed | unreadable | user  | The plugin options in the install record of demo@fixtures do not parse (userConfig is not an object). Run /claude:plugin reinstall demo@fixtures to restore them. | false           |       |                  |
       | fixtures         | user              | demo@fixtures | demo | failed | unreadable | user  | The plugin options in the install record of demo@fixtures do not parse (userConfig is not an object). Run /claude:plugin reinstall demo@fixtures to restore them. | false           |       |                  |
     Then the mcp configuration file "mcp-adapter.json" of the user scope holds this text:
       """
