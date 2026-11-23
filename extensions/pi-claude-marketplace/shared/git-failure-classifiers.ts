@@ -10,16 +10,21 @@
 // and `classifyGitSourceAccessFailure` and `hostHttpFailureFrame` (the
 // `marketplace add` rule) (D-PL7-11).
 //
-// Duck-typed on the isomorphic-git error shapes (D-13: no isomorphic-git
-// import outside the platform tier); the project's own
-// `CrossOriginChallengeError` and `StoredCredentialRejectedError` are narrowed
-// by `instanceof`.
+// The project's own errors are narrowed by `instanceof`: a `GitCommandError`
+// from the system git process by its closed `kind` (SG-PRC-05), and
+// `CrossOriginChallengeError` and `StoredCredentialRejectedError` by class.
+// The isomorphic-git rungs (`HttpError`, `UserCanceledError`, `NotFoundError`)
+// stay duck-typed on that library's error shapes (D-13: no isomorphic-git
+// import outside the platform tier) while `platform/git.ts` still clones with
+// it; they become `GitCommandError` kinds when the transport swaps.
 
 import {
   CrossOriginChallengeError,
+  GitCommandError,
   PinnedCommitMissingError,
   StoredCredentialRejectedError,
   withoutCleanupLeaks,
+  type GitFailure,
   type HostedManifestFetchError,
   type HttpStatusError,
 } from "./errors.ts";
@@ -132,6 +137,8 @@ function isRemoteNotFound(error: Error): boolean {
  * D-PL7-01: classify a git clone, fetch, or materialize throw into the closed
  * reason set. The ladder:
  *
+ *   - a `GitCommandError` -> the reason of its kind (`classifyGitCommandFailure`,
+ *     SG-PRC-05);
  *   - a pin that the fresh clone does not hold -> `source missing` (INR-03);
  *   - the transport ladder (`classifyGitTransportFailure`) ->
  *     `authentication required` or `network unreachable`;
@@ -169,13 +176,21 @@ export function classifyGitFailure(
 ):
   | {
       readonly reason:
-        "network unreachable" | "authentication required" | "source missing" | "network error";
+        | "network unreachable"
+        | "authentication required"
+        | "source missing"
+        | "network error"
+        | "git missing";
       readonly frame?: string;
     }
   | undefined {
   const error = withoutCleanupLeaks(thrown);
   if (!(error instanceof Error)) {
     return undefined;
+  }
+
+  if (error instanceof GitCommandError) {
+    return classifyGitCommandFailure(error.failure, rule, remoteUrl);
   }
 
   if (error instanceof PinnedCommitMissingError) {
@@ -190,7 +205,7 @@ export function classifyGitFailure(
   const status = httpStatus(error);
   if (status !== undefined) {
     return {
-      reason: SOURCE_MISSING_HTTP_STATUSES.has(status) ? rule.notFound : "network error",
+      reason: httpStatusReason(status, rule),
       ...(remoteUrl === undefined ? {} : { frame: `${status} on ${gitHubWireUrl(remoteUrl)}` }),
     };
   }
@@ -202,6 +217,123 @@ export function classifyGitFailure(
   const code = (error as NodeJS.ErrnoException).code;
   const filesystemErrno = code !== undefined && /^E[A-Z0-9_]+$/u.test(code);
   return !filesystemErrno && rule.unknown !== undefined ? { reason: rule.unknown } : undefined;
+}
+
+type GitFailureRule = Parameters<typeof classifyGitFailure>[1];
+
+type GitFailureClassification = ReturnType<typeof classifyGitFailure>;
+
+/**
+ * SG-PRC-05 / D-SG-07: how each `GitCommandError` kind without an HTTP status
+ * is classified, either a fixed reason or the answer the operation's rule
+ * gives. The `satisfies Record` makes a new kind a compile error, so git
+ * missing is never shown as an auth or network failure.
+ *
+ *   - `git-missing` -> `git missing` (D-SG-07);
+ *   - the HTTPS and SSH auth kinds and both host-key kinds ->
+ *     `authentication required`;
+ *   - `timeout` -> `network unreachable`;
+ *   - `remote-error` -> `network error`: the host answered and refused;
+ *   - `commit-missing` and `pin-mismatch` -> `source missing` (INR-03);
+ *   - `remote-ref-missing` -> `rule.missingRef`, and `local-ref-missing` stays
+ *     unclassified, as the remote and local `NotFoundError` reads do;
+ *   - every other kind -> `rule.unknown`, as for an unclassified error without
+ *     an errno code.
+ */
+const GIT_FAILURE_ANSWERS = {
+  "git-missing": "git missing",
+  timeout: "network unreachable",
+  "git-too-old": "unknown rule",
+  aborted: "unknown rule",
+  "https-auth": "authentication required",
+  "ssh-auth": "authentication required",
+  "ssh-host-key-unknown": "authentication required",
+  "ssh-host-key-changed": "authentication required",
+  "proxy-refused": "unknown rule",
+  "remote-ref-missing": "missing-ref rule",
+  "local-ref-missing": "unclassified",
+  "commit-missing": "source missing",
+  "pin-mismatch": "source missing",
+  "refused-input": "unknown rule",
+  "protocol-refused": "unknown rule",
+  "dubious-ownership": "unknown rule",
+  "not-a-repository": "unknown rule",
+  "remote-error": "network error",
+  "no-stderr": "unknown rule",
+  failed: "unknown rule",
+} as const satisfies Record<
+  Exclude<GitFailure["kind"], "network" | "repository-not-found">,
+  | NonNullable<GitFailureClassification>["reason"]
+  | "missing-ref rule"
+  | "unknown rule"
+  | "unclassified"
+>;
+
+/**
+ * SG-PRC-05: the `classifyGitFailure` rung of a `GitCommandError`. A
+ * `network` failure takes `rule.notFound` for HTTP 404 or 410, `network
+ * error` for another status, and `network unreachable` with no status; a
+ * `repository-not-found` failure takes `rule.notFound` (D-PL7-02). Every other
+ * kind takes its `GIT_FAILURE_ANSWERS` answer through a `switch` with no
+ * default.
+ */
+function classifyGitCommandFailure(
+  failure: GitFailure,
+  rule: GitFailureRule,
+  remoteUrl: string | undefined,
+): GitFailureClassification {
+  if (failure.kind === "network") {
+    return failure.httpStatus === undefined
+      ? { reason: "network unreachable" }
+      : statusClassification(
+          httpStatusReason(failure.httpStatus, rule),
+          failure.httpStatus,
+          remoteUrl,
+        );
+  }
+
+  if (failure.kind === "repository-not-found") {
+    return statusClassification(rule.notFound, failure.httpStatus, remoteUrl);
+  }
+
+  const answer = GIT_FAILURE_ANSWERS[failure.kind];
+  switch (answer) {
+    case "missing-ref rule":
+      return rule.missingRef === undefined ? undefined : { reason: rule.missingRef };
+    case "unknown rule":
+      return rule.unknown === undefined ? undefined : { reason: rule.unknown };
+    case "unclassified":
+      return undefined;
+    case "git missing":
+    case "authentication required":
+    case "network unreachable":
+    case "network error":
+    case "source missing":
+      return { reason: answer };
+  }
+}
+
+/** UPD-11 / D-PL7-02: an HTTP 404 or 410 takes the rule's answer; any other status is `network error`. */
+function httpStatusReason(
+  status: number,
+  rule: GitFailureRule,
+): "source missing" | "network error" {
+  return SOURCE_MISSING_HTTP_STATUSES.has(status) ? rule.notFound : "network error";
+}
+
+/**
+ * UPD-11 / ADD-10: a non-auth reason with the `{status} on {url}` frame, set
+ * when the failure carries an HTTP status and the caller passed the remote
+ * URL, as for an isomorphic-git `HttpError`.
+ */
+function statusClassification(
+  reason: "source missing" | "network error",
+  status: number | undefined,
+  remoteUrl: string | undefined,
+): NonNullable<GitFailureClassification> {
+  return status === undefined || remoteUrl === undefined
+    ? { reason }
+    : { reason, frame: `${status} on ${gitHubWireUrl(remoteUrl)}` };
 }
 
 /**
@@ -216,6 +348,7 @@ export function classifyGitHostFailure(
   | "authentication required"
   | "source missing"
   | "network error"
+  | "git missing"
   | undefined {
   return classifyGitFailure(error, { notFound: "source missing" })?.reason;
 }
@@ -232,6 +365,7 @@ export function classifyGitSourceAccessFailure(
   | "authentication required"
   | "source missing"
   | "network error"
+  | "git missing"
   | undefined {
   return classifyGitFailure(error, { notFound: "source missing", missingRef: "source missing" })
     ?.reason;
