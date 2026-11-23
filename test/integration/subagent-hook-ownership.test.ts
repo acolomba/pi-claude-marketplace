@@ -49,12 +49,10 @@ const SCRIPTED_MODEL_EXTENSION = fileURLToPath(
   new URL("../../features/lib/scripted-model/extension.ts", import.meta.url),
 );
 
-// One waiting hook per session: the parent's prompt, the sibling's bash
-// call, and the child's read each start one, and none matches another's
-// event, because a child runs no UserPromptSubmit hook (D-PG3-08).
+// One waiting hook per child: the sibling's bash call and the child's read
+// each start one, and neither matches the other's tool.
 const WAITING_HOOKS = [
   ["name", "event", "matcher", "form", "async rewake", "waits"],
-  ["parent-wait", "UserPromptSubmit", "*", "script", "true", "true"],
   ["sibling-wait", "PreToolUse", "Bash", "script", "true", "true"],
   ["child-wait", "PreToolUse", "Read", "script", "true", "true"],
 ] as const;
