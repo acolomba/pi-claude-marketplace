@@ -10,8 +10,10 @@
  * server, and serves a `git-upload-pack` command from the repositories root
  * with `git upload-pack` in the hermetic environment. It answers `ssh -G` and
  * a probe launch with no remote command as the host's arm scripts, with the
- * strings and exit codes Claude Code 2.1.330 reads, and a held probe answers
- * nothing until its caller kills it. Of its own environment it reads only
+ * strings and exit codes Claude Code 2.1.330 reads. A held probe answers
+ * nothing until its caller kills it, and it ends on its own when its caller
+ * dies or after a hard limit, so a killed caller leaves no stub running. Of
+ * its own environment it reads only
  * `GIT_PROTOCOL`, which git sends for protocol v2 (SG-HRN-03, DRV-03).
  */
 
@@ -45,9 +47,19 @@ const SSH_FAILURE = 255;
 // git's exit code for a fatal error, such as a path that names no repository.
 const GIT_FATAL = 128;
 
-// A held probe wakes this often only so that a timer keeps the stub alive
-// until a signal ends it.
-const HOLD_INTERVAL_MS = 60_000;
+// The stub's caller, read when the module loads, before the launch is
+// recorded. A caller that dies after the record is still the parent this
+// read saw, so a held probe sees the death.
+const CALLER_PID = process.ppid;
+
+// A held probe checks this often whether its caller still runs. Once the
+// caller dies, the stub's parent becomes another process.
+const HOLD_POLL_MS = 1_000;
+
+// A held probe ends on its own after this long. It is far longer than any
+// timeout a caller gives a probe, so only a stub whose caller kept no
+// timeout reaches it.
+const HOLD_LIMIT_MS = 5 * 60_000;
 
 /** Writes `message` as one stderr line and sets the stub's exit code. */
 function fail(message: string, exitCode: number): void {
@@ -111,11 +123,26 @@ function printConfig(launch: SshLaunch, destination: string, arm: SshHostArm): v
   process.exitCode = 0;
 }
 
-/** Answers a probe of `destination` as `arm` scripts, or holds it until a signal ends the stub. */
+/**
+ * Keeps the stub running with no answer until a signal ends it, until its
+ * caller dies, or until the hold limit passes, and then exits as ssh fails.
+ */
+function hold(): void {
+  setInterval(() => {
+    if (process.ppid !== CALLER_PID) {
+      process.exit(SSH_FAILURE);
+    }
+  }, HOLD_POLL_MS);
+  setTimeout(() => {
+    process.exit(SSH_FAILURE);
+  }, HOLD_LIMIT_MS);
+}
+
+/** Answers a probe of `destination` as `arm` scripts, or holds it with no answer. */
 function answerProbe(destination: string, arm: SshHostArm): void {
   const answered = probeAnswer(arm.probe, destination);
   if (answered === "hold") {
-    setInterval(() => undefined, HOLD_INTERVAL_MS);
+    hold();
     return;
   }
 

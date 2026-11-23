@@ -5,9 +5,9 @@
  * whole, a host the run did not register fails as an unreachable host, and a
  * reset leaves no host and no launch (SG-HRN-03, HOST-02). It also checks
  * that a probe and `ssh -G` get the answers Claude Code 2.1.330 reads, that
- * a held probe ends at its caller's timeout, that a path outside the
- * repositories root is never served, and that one repository clones the same
- * over HTTPS and over SSH.
+ * a held probe ends at its caller's timeout or once its caller dies, that a
+ * path outside the repositories root is never served, and that one
+ * repository clones the same over HTTPS and over SSH.
  */
 
 import assert from "node:assert/strict";
@@ -20,6 +20,7 @@ import { describe, test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 
 import { HttpsGitHost } from "../../features/lib/https-git-host/server.ts";
+import { waitUntilProcessesExit } from "../../features/lib/mcp-implementation.ts";
 import { SshGitHost } from "../../features/lib/ssh-git-host/host.ts";
 import { parseSshLaunch, servedRepository } from "../../features/lib/ssh-git-host/launch.ts";
 import { isRunning } from "../../features/lib/turn-records.ts";
@@ -490,6 +491,44 @@ describe("SshGitHost answers to Claude Code's probe", () => {
     child.kill("SIGTERM");
     await exited;
     assert.ok(!isRunning(launch.pid));
+  });
+
+  test("ends a held probe on its own once its caller dies", async (t) => {
+    const { host } = await startHost(t);
+    await host.register("hold.test", { probe: { kind: "hold" } });
+    const window = await host.mark();
+    // The shell is the stub's caller: it starts the probe in the background
+    // and waits, so a SIGKILL ends the shell and leaves the stub orphaned.
+    const caller = spawn(
+      "/bin/sh",
+      [
+        "-c",
+        '"$0" "$@" & wait',
+        path.join(host.binDirectory, "ssh"),
+        ...PROBE_OPTIONS,
+        "git@hold.test",
+      ],
+      { env: { PATH: host.searchPath() }, stdio: "ignore" },
+    );
+    const exited = once(caller, "exit");
+    t.after(async () => {
+      caller.kill("SIGKILL");
+      await exited;
+    });
+    const launch = await firstLaunchSince(host, window);
+
+    caller.kill("SIGKILL");
+    await exited;
+
+    try {
+      await waitUntilProcessesExit([launch.pid], LAUNCH_TIMEOUT_MS);
+    } finally {
+      // A stub that missed its caller's death would hold until its limit, and
+      // the case root's close() would fail on it before any later hook ran.
+      if (isRunning(launch.pid)) {
+        process.kill(launch.pid, "SIGKILL");
+      }
+    }
   });
 
   test("records two probes started at once as two whole launches", async (t) => {

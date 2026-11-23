@@ -8,8 +8,9 @@
  * every scenario (HOST-02). It serves the bare repositories of the git host's
  * repositories root read-only, so a repository a scenario publishes clones
  * over SSH and over HTTPS alike. The wrapper `exec`s Node on the stub module,
- * so a caller that kills the wrapper at a timeout kills the stub itself, and
- * no held stub outlives its scenario (SG-HRN-03).
+ * so a caller that kills the wrapper at a timeout kills the stub itself. A
+ * held stub whose caller dies ends on its own, so no held stub outlives its
+ * caller (SG-HRN-03).
  */
 
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
@@ -26,8 +27,9 @@ import type { SshHostArm, SshHostsFile, SshLaunchRecord } from "./launch.ts";
 const HOST_NAME = /^[A-Za-z0-9.-]+$/;
 
 // A stub exits within milliseconds of its git, which may die before it
-// reaps the stub; the margin covers a loaded CI runner. A held stub never
-// exits on its own, so a reset that finds one fails after this wait.
+// reaps the stub; the margin covers a loaded CI runner. A held stub whose
+// caller still runs does not exit on its own, so a reset that finds one
+// fails after this wait.
 const STUB_EXIT_GRACE_MS = 5_000;
 
 // The one extra line an arm may add to `ssh -G`, such as `proxycommand nc %h %p`.
