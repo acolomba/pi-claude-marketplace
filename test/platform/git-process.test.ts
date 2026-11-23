@@ -1315,6 +1315,47 @@ describe("createGitProcess", () => {
     });
   }
 
+  test("WR-04: resolves a run whose stdout fills the capture exactly", async () => {
+    // arrange
+    const { git, control, started } = createFakeGit();
+    const stdout = "x".repeat(8_388_608);
+
+    // act
+    const pending = git.run(FILL);
+    await started;
+    control.writeStdout(stdout);
+    control.close(0);
+    const run = await pending;
+
+    // assert
+    assert.deepStrictEqual(run, { exitCode: 0, stdout, stderr: "" });
+  });
+
+  test("WR-04: rejects a run whose stdout outgrows the capture as failed", async () => {
+    // arrange
+    const { git, control, started } = createFakeGit();
+
+    // act
+    const pending = git.run({ ...FILL, allowExit: [1] });
+    await started;
+    control.writeStdout("x".repeat(8_388_609));
+    control.close(1);
+
+    // assert
+    await assert.rejects(
+      pending,
+      gitFailure({
+        failure: { kind: "failed" },
+        operation: "credential fill",
+        exitCode: 1,
+        stderr: "",
+        cause: new RangeError(
+          "git wrote more than 8388608 characters to stdout, so its answer is incomplete",
+        ),
+      }),
+    );
+  });
+
   test("SG-PRC-05: rejects a run that closes without an exit code or stderr as no-stderr", async () => {
     // arrange
     const { git, control, started } = createFakeGit();

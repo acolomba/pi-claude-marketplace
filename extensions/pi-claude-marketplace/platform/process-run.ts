@@ -2,7 +2,8 @@
 //
 // SG-PRC-01, SG-PRC-02: the one process launcher that the package manager and
 // the git module share. A run starts one command with an argument array and no
-// shell, keeps a bounded part of each output stream, and stops the whole
+// shell, keeps a bounded part of each output stream, reports each stream it
+// cut (WR-04), and stops the whole
 // process tree at its timeout or when its signal aborts. Without input, stdin
 // is closed from the start; with input, the input goes through a stdin pipe,
 // which then ends. A run never rejects
@@ -127,12 +128,22 @@ export interface ProcessRequest {
   readonly windowsHide: boolean;
 }
 
+/** An output stream of a run. */
+type OutputStream = "stdout" | "stderr";
+
+const OUTPUT_STREAMS: readonly OutputStream[] = ["stdout", "stderr"];
+
 /** What happened to a run; `error` is set when the process could not start. */
 export interface ProcessRun {
   readonly code: number | null;
   readonly stdout: string;
   readonly stderr: string;
   readonly timedOut: boolean;
+  /**
+   * WR-04: the streams that wrote more than their capture keeps, in the order
+   * stdout, stderr. Absent when the run kept every character.
+   */
+  readonly truncated?: readonly ("stdout" | "stderr")[];
   readonly error?: Error;
 }
 
@@ -153,6 +164,7 @@ interface CapturedOutput {
   stdout: string;
   stderr: string;
   timedOut: boolean;
+  readonly truncated: Set<OutputStream>;
 }
 
 function appendCapped(captured: string, text: string, capture: OutputCapture): string {
@@ -162,14 +174,27 @@ function appendCapped(captured: string, text: string, capture: OutputCapture): s
     : joined.slice(Math.max(0, joined.length - capture.limit));
 }
 
-// Keep the bounded part during capture, then drop the half of a surrogate
-// pair that the cut separated from its other half: a high surrogate at the end
-// of a head, a low surrogate at the start of a tail.
-function finishOutput(captured: string, decoder: StringDecoder, capture: OutputCapture): string {
-  const finished = appendCapped(captured, decoder.end(), capture);
+// Keeps the bounded part of `stream` with `text` added, and records a cut.
+function append(
+  captured: CapturedOutput,
+  stream: OutputStream,
+  text: string,
+  capture: OutputCapture,
+): void {
+  if (captured[stream].length + text.length > capture.limit) {
+    captured.truncated.add(stream);
+  }
+
+  captured[stream] = appendCapped(captured[stream], text, capture);
+}
+
+// Drops the half of a surrogate pair that the cut separated from its other
+// half: a high surrogate at the end of a head, a low surrogate at the start of
+// a tail.
+function finishOutput(captured: string, capture: OutputCapture): string {
   return capture.keep === "head"
-    ? finished.replace(/[\uD800-\uDBFF]$/u, "")
-    : finished.replace(/^[\uDC00-\uDFFF]/u, "");
+    ? captured.replace(/[\uD800-\uDBFF]$/u, "")
+    : captured.replace(/^[\uDC00-\uDFFF]/u, "");
 }
 
 interface KillTimers {
@@ -230,15 +255,19 @@ function watchProcess(
   stop: (signal: KillSignal) => void,
 ): void {
   const { signal } = request;
-  const captured: CapturedOutput = { stdout: "", stderr: "", timedOut: false };
-  const stdoutDecoder = new StringDecoder("utf8");
-  const stderrDecoder = new StringDecoder("utf8");
-  child.stdout.on("data", (chunk: Buffer) => {
-    captured.stdout = appendCapped(captured.stdout, stdoutDecoder.write(chunk), request.stdout);
-  });
-  child.stderr.on("data", (chunk: Buffer) => {
-    captured.stderr = appendCapped(captured.stderr, stderrDecoder.write(chunk), request.stderr);
-  });
+  const captured: CapturedOutput = {
+    stdout: "",
+    stderr: "",
+    timedOut: false,
+    truncated: new Set(),
+  };
+  const decoders = { stdout: new StringDecoder("utf8"), stderr: new StringDecoder("utf8") };
+  for (const stream of OUTPUT_STREAMS) {
+    child[stream].on("data", (chunk: Buffer) => {
+      append(captured, stream, decoders[stream].write(chunk), request[stream]);
+    });
+  }
+
   // Node emits `close` after `error` for a process that cannot start. A close
   // after termination begins waits for the process-group escalation before it
   // settles.
@@ -262,12 +291,21 @@ function watchProcess(
     }
 
     settled = true;
-    captured.stdout = finishOutput(captured.stdout, stdoutDecoder, request.stdout);
-    captured.stderr = finishOutput(captured.stderr, stderrDecoder, request.stderr);
+    for (const stream of OUTPUT_STREAMS) {
+      append(captured, stream, decoders[stream].end(), request[stream]);
+    }
+
     killTimers.cancel();
     signal?.removeEventListener("abort", abort);
 
-    const run = { code, ...captured };
+    const truncated = OUTPUT_STREAMS.filter((stream) => captured.truncated.has(stream));
+    const run: ProcessRun = {
+      code,
+      stdout: finishOutput(captured.stdout, request.stdout),
+      stderr: finishOutput(captured.stderr, request.stderr),
+      timedOut: captured.timedOut,
+      ...(truncated.length > 0 && { truncated }),
+    };
     resolve(error === undefined ? run : { ...run, error });
   }
 

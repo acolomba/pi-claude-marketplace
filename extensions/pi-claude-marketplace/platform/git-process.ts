@@ -589,10 +589,13 @@ const DEFAULT_VARIABLES = {
   GIT_PROXY_COMMAND: "",
 } as const;
 
-// git writes far less to stdout than this; a failure reason is the last line
-// of stderr.
+// WR-04: a caller reads stdout as git's whole answer, such as a ref list, so a
+// run whose stdout outgrows this capture rejects rather than resolve with a
+// cut answer. A failure reason is the last line of stderr.
 const STDOUT_CAPTURE: OutputCapture = { limit: 8_388_608, keep: "head" };
 const STDERR_CAPTURE: OutputCapture = { limit: 65_536, keep: "tail" };
+
+const STDOUT_CUT = `git wrote more than ${STDOUT_CAPTURE.limit} characters to stdout, so its answer is incomplete`;
 
 const WINDOWS_LOOKUP_EXTENSIONS = [".exe", ".cmd", ".bat"] as const;
 
@@ -898,7 +901,13 @@ function settleRun(
 
   const { code } = run;
   if (code === 0 || (code !== null && request.allowExit?.includes(code) === true)) {
-    return { exitCode: code, stdout: run.stdout, stderr: run.stderr };
+    return run.truncated?.includes("stdout") === true
+      ? new GitCommandError(
+          { kind: "failed" },
+          { ...details, exitCode: code },
+          { cause: new RangeError(STDOUT_CUT) },
+        )
+      : { exitCode: code, stdout: run.stdout, stderr: run.stderr };
   }
 
   return new GitCommandError(

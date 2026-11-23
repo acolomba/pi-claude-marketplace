@@ -162,6 +162,7 @@ test("keeps the first 65536 characters of each stream of a package-manager run",
     stdout: "o".repeat(65_536),
     stderr: "e".repeat(65_536),
     timedOut: false,
+    truncated: ["stdout", "stderr"],
   });
 });
 

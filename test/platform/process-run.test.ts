@@ -390,6 +390,75 @@ describe("runProcess", () => {
       stdout: "01234567",
       stderr: "89abcdef",
       timedOut: false,
+      truncated: ["stdout", "stderr"],
+    });
+  });
+
+  test("WR-04: reports no cut for streams that fit their captures exactly", async () => {
+    // arrange
+    const control = createProcessFake();
+    const launcher = launcherFor(control);
+
+    // act
+    const pending = runProcess(launcher, {
+      ...request,
+      stdout: { limit: 4, keep: "head" },
+      stderr: { limit: 4, keep: "tail" },
+    });
+    control.writeStdout("ab");
+    control.writeStdout("cd");
+    control.writeStderr("wxyz");
+    control.close(0);
+    const run = await pending;
+
+    // assert
+    assert.deepStrictEqual(run, { code: 0, stdout: "abcd", stderr: "wxyz", timedOut: false });
+  });
+
+  test("WR-04: reports a cut of stdout alone when only stdout outgrows its capture", async () => {
+    // arrange
+    const control = createProcessFake();
+    const launcher = launcherFor(control);
+
+    // act
+    const pending = runProcess(launcher, {
+      ...request,
+      stdout: { limit: 4, keep: "head" },
+      stderr: { limit: 4, keep: "tail" },
+    });
+    control.writeStdout("abcde");
+    control.writeStderr("wxyz");
+    control.close(0);
+    const run = await pending;
+
+    // assert
+    assert.deepStrictEqual(run, {
+      code: 0,
+      stdout: "abcd",
+      stderr: "wxyz",
+      timedOut: false,
+      truncated: ["stdout"],
+    });
+  });
+
+  test("WR-04: counts the character the decoder completes at the end toward the capture", async () => {
+    // arrange
+    const control = createProcessFake();
+    const launcher = launcherFor(control);
+
+    // act
+    const pending = runProcess(launcher, { ...request, stdout: { limit: 2, keep: "head" } });
+    control.writeStdout(Buffer.concat([Buffer.from("ab"), Buffer.from("é").subarray(0, 1)]));
+    control.close(0);
+    const run = await pending;
+
+    // assert
+    assert.deepStrictEqual(run, {
+      code: 0,
+      stdout: "ab",
+      stderr: "",
+      timedOut: false,
+      truncated: ["stdout"],
     });
   });
 
@@ -429,7 +498,13 @@ describe("runProcess", () => {
     const run = await pending;
 
     // assert
-    assert.deepStrictEqual(run, { code: 0, stdout: "a", stderr: "bc", timedOut: false });
+    assert.deepStrictEqual(run, {
+      code: 0,
+      stdout: "a",
+      stderr: "bc",
+      timedOut: false,
+      truncated: ["stdout", "stderr"],
+    });
   });
 
   test("decodes split UTF-8 characters independently in both output streams", async () => {
@@ -497,6 +572,7 @@ describe("runProcess", () => {
         stdout: "x".repeat(prefixLength) + ending,
         stderr: "é".repeat(prefixLength) + ending,
         timedOut: false,
+        truncated: ["stdout", "stderr"],
       });
     });
   }
