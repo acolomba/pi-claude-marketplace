@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 20
+open_count: 21
 waived_count: 52
 fixed_count: 48
-total_count: 120
-last_updated: 2026-11-23T18:29:44.674Z
+total_count: 121
+last_updated: 2026-11-23T20:17:06.190Z
 ---
 
 # Broken Windows Ledger
@@ -135,6 +135,7 @@ last_updated: 2026-11-23T18:29:44.674Z
 | 118 | 02 | deviation | extensions/pi-claude-marketplace/platform/git-process.ts |  | [system-git] three unused-export markers on createGitProcess, NODE_GIT_HOST, NODE_GIT_SPAWN until a production module imports them | open |  | 2026-11-23T15:38:44.200Z |  |
 | 119 | 02 | deviation | .planning/codebase/CONVENTIONS.md |  | [system-git] fallow-ignore marker counts are now 54 total and 16 unused-export | open |  | 2026-11-23T15:38:44.330Z |  |
 | 120 | 2 | unrun-verify | extensions/pi-claude-marketplace/platform/git-process.ts |  | [system-git] the manual macOS and Windows check of the git process module (02-08 steps 1-10: no-git message, shim and lookup rules, no credential window, no console window, no process left after a hanging helper) is deferred to the pull request | open |  | 2026-11-23T18:29:44.674Z |  |
+| 121 | 2 | unrun-verify | extensions/pi-claude-marketplace/platform/git-neutral-directory.ts |  | [system-git] the Windows branches added by the code-review fixes (neutral directory without owner/mode checks, GIT_ALLOW_PROTOCOL spelling intersection, lookup with unreadable real paths) have fake-host unit cases only; the manual Windows check covers them | open |  | 2026-11-23T20:17:06.190Z |  |
 
 ````json
 [
@@ -1639,6 +1640,19 @@ last_updated: 2026-11-23T18:29:44.674Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-11-23T18:29:44.674Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 121,
+    "kind": "unrun-verify",
+    "phase": "2",
+    "file": "extensions/pi-claude-marketplace/platform/git-neutral-directory.ts",
+    "line": null,
+    "description": "[system-git] the Windows branches added by the code-review fixes (neutral directory without owner/mode checks, GIT_ALLOW_PROTOCOL spelling intersection, lookup with unreadable real paths) have fake-host unit cases only; the manual Windows check covers them",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-23T20:17:06.190Z",
     "resolved_at": null,
     "milestone": null
   }
