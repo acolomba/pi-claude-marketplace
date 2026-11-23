@@ -44,10 +44,15 @@
 //   - adaptObservationResultForEvent -> Pi `session_start` /
 //     `session_shutdown` / `session_compact` (SessionStart / SessionEnd /
 //     PostCompact) with per-event narrowing for the SessionStart `additionalContext` bridge. The
-//     SessionStart arms send `additionalContext` at once as a hidden
+//     SessionStart arms send every hook's value at once as a hidden
 //     message, as Claude Code writes it into the conversation as soon as the
 //     hooks finish; while Pi is idle it goes into the session, which a
-//     `/reload` keeps, before the first prompt (HKRL-01). All other
+//     `/reload` keeps, before the first prompt (HKRL-01). A startup or a new
+//     session sends every value. A resumed or forked session already holds
+//     the earlier conversation, so its SessionStart sends only the values
+//     that conversation does not hold, compared per value, as Claude Code's
+//     duplicate removal does; the message carries its values in `details`
+//     (HKRL-02). All other
 //     observation events keep the silent-drop semantics: there is no
 //     downstream Pi surface to thread their payloads through. `block` and
 //     `stop` debug-log the dropped reason and return `undefined`. NEVER
@@ -82,7 +87,7 @@ import { decodeHookToolInput } from "./tool-input.ts";
 import { renderFileToolOutput } from "./tool-output-files.ts";
 import { renderSearchShellToolOutput } from "./tool-output-search-shell.ts";
 
-import type { BucketAEvent } from "../../domain/components/hook-events.ts";
+import type { BucketAEvent, SessionStartSource } from "../../domain/components/hook-events.ts";
 import type {
   AgentMessage,
   ExtensionAPI,
@@ -96,6 +101,7 @@ import type {
 } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { HookExecResult } from "./exec-result.ts";
+import type { ClaudeSessionStartEvent } from "./payloads/session-start.ts";
 import type { PendingPromptContext, PromptContextEvent, RoutingEntry } from "./routing-state.ts";
 import type { HooksRuntime } from "./runtime.ts";
 
@@ -569,20 +575,39 @@ export function hookContextPart(
 }
 
 /**
- * D-CF5-13 / HKRL-01: send one hook context to the model as a hidden
- * message. `triggerTurn: false` never starts or steers a run: while Pi is
- * idle, Pi writes the message into the session at once, and while a run
- * streams, Pi holds it until the turn ends, so the model reads it on the
- * next model call. A blank context, or no Pi API, sends nothing; a send that
- * throws is debug-logged with `failureLog` and never thrown (NFR-2).
+ * HKRL-02: the values a SessionStart context message carries, one per hook,
+ * as Claude Code keeps one string per hook in its attachment. A resumed or
+ * forked session reads them back to tell which values it already holds.
+ */
+interface SessionStartContextDetails {
+  readonly event: "SessionStart";
+  readonly values: readonly string[];
+}
+
+/** What a hook context message carries besides its text. */
+interface HookContextSend {
+  readonly details?: SessionStartContextDetails;
+}
+
+/**
+ * D-CF5-13 / HKRL-01: send hook context values to the model as one hidden
+ * message, with `send.details` when given. `triggerTurn: false` never starts
+ * or steers a run: while Pi is idle, Pi writes the message into the session
+ * at once, and while a run streams, Pi holds it until the turn ends, so the
+ * model reads it on the next model call. No value with text, or no Pi API,
+ * sends nothing. Only a synchronous throw, such as Pi's stale-context error
+ * after a session replacement, is debug-logged with `failureLog` and never
+ * thrown (NFR-2); Pi reports a rejected asynchronous write itself, through
+ * its extension error channel.
  */
 function sendHookContextMessage(
   pi: ExtensionAPI | undefined,
   claudeEvent: "SessionStart" | PromptContextEvent,
-  text: string,
+  values: readonly string[],
   failureLog: string,
+  send: HookContextSend = {},
 ): void {
-  const part = hookContextPart(claudeEvent, [text]);
+  const part = hookContextPart(claudeEvent, values);
   if (pi === undefined || part === undefined) {
     return;
   }
@@ -593,6 +618,7 @@ function sendHookContextMessage(
         customType: HOOK_CONTEXT_MESSAGE_TYPE,
         content: [part],
         display: false,
+        ...(send.details === undefined ? {} : { details: send.details }),
       },
       { triggerTurn: false },
     );
@@ -619,7 +645,7 @@ function sendQueuedPromptContext(
   claudeEvent: PromptContextEvent,
   text: string,
 ): void {
-  sendHookContextMessage(pi, claudeEvent, text, "adaptInput: queued prompt context failed");
+  sendHookContextMessage(pi, claudeEvent, [text], "adaptInput: queued prompt context failed");
 }
 
 /** The parts of Pi's `turn_end` event that tell what the agent reads next. */
@@ -757,6 +783,125 @@ export function adaptInputResult(
 //                                   (per-event narrowing)
 // ──────────────────────────────────────────────────────────────────────────
 
+// The label of a SessionStart context part (`hookContextPart`).
+const SESSION_START_CONTEXT_LABEL = "SessionStart hook additional context: ";
+
+// The first line of the wrapper of a context saved to a file (`context-cap.ts`).
+const PERSISTED_OUTPUT_PREFIX = "<persisted-output>";
+
+// The value a held context is compared by. Claude Code 2.1.330's `gTt`
+// replaces the path a saved context names, because a saved file's path
+// differs per run.
+function contextKey(value: string): string {
+  return value.startsWith(PERSISTED_OUTPUT_PREFIX)
+    ? value.replace(/(saved to: ).*$/mu, "$1<persisted>")
+    : value;
+}
+
+// Whether `value`, read back from a session file, is the `details` of a
+// SessionStart context message.
+function isSessionStartContextDetails(value: unknown): value is SessionStartContextDetails {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "event" in value &&
+    "values" in value &&
+    value.event === "SessionStart" &&
+    Array.isArray(value.values) &&
+    value.values.every((item: unknown) => typeof item === "string")
+  );
+}
+
+// The keys of the SessionStart values that `message` holds: those of its
+// `details`, or, for a message written before details existed, the rest of
+// each part that carries the SessionStart label.
+function messageKeys(message: AgentMessage): readonly string[] {
+  if (message.role !== "custom" || message.customType !== HOOK_CONTEXT_MESSAGE_TYPE) {
+    return [];
+  }
+
+  if (message.details !== undefined) {
+    return isSessionStartContextDetails(message.details)
+      ? message.details.values.map((value) => contextKey(value))
+      : [];
+  }
+
+  if (typeof message.content === "string") {
+    return [];
+  }
+
+  return message.content.flatMap((part) =>
+    part.type === "text" && part.text.startsWith(SESSION_START_CONTEXT_LABEL)
+      ? [contextKey(part.text.slice(SESSION_START_CONTEXT_LABEL.length))]
+      : [],
+  );
+}
+
+// The keys of every SessionStart value the conversation the model sees
+// holds. The projection, never the branch: the branch keeps entries that a
+// compaction summarized away. A read that throws holds nothing, so every
+// value is sent (NFR-2).
+function heldContextKeys(ctx: ExtensionContext): ReadonlySet<string> {
+  try {
+    return new Set(ctx.sessionManager.buildSessionProjection().messages.flatMap(messageKeys));
+  } catch (error: unknown) {
+    hookDebugLog(`adaptObservation: session start context read failed: ${errorMessage(error)}`);
+    return new Set();
+  }
+}
+
+// HKRL-02: the values of a SessionStart that the session does not hold. A
+// startup, a clear, or a compaction sends every value; a resume or a fork
+// drops each value the conversation holds, and every value when an older
+// message holds their whole join.
+function novelSessionStartValues(
+  values: readonly string[],
+  source: SessionStartSource,
+  ctx: ExtensionContext,
+): readonly string[] {
+  if (source !== "resume" && source !== "fork") {
+    return values;
+  }
+
+  const held = heldContextKeys(ctx);
+  if (held.has(contextKey(values.join("\n")))) {
+    return [];
+  }
+
+  return values.filter((value) => !held.has(contextKey(value)));
+}
+
+// The debug line of a SessionStart context that fails to send, naming the
+// plugin the fold is attributed to.
+function sessionStartFailureLog(entry: RoutingEntry | undefined): string {
+  const plugin = entry === undefined ? "<unattributed>" : `${entry.pluginId}@${entry.marketplace}`;
+  return `adaptObservation: session start context failed for ${plugin}`;
+}
+
+// HKRL-01 / HKRL-02: send the SessionStart values with text that the
+// session does not hold, with those values in `details`. No value with text
+// reads nothing.
+function sendSessionStartContext(
+  start: { readonly event: ClaudeSessionStartEvent; readonly values: readonly string[] },
+  context: HookAdapterContext,
+): void {
+  const values = start.values.filter((value) => value.trim().length > 0);
+  if (values.length === 0) {
+    return;
+  }
+
+  const sent = novelSessionStartValues(values, start.event.source, context.ctx);
+  sendHookContextMessage(
+    context.pi,
+    "SessionStart",
+    sent,
+    sessionStartFailureLog(context.attributedTo),
+    {
+      details: { event: "SessionStart", values: sent },
+    },
+  );
+}
+
 /**
  * Observation-event adapter with per-event narrowing for the SessionStart
  * additionalContext bridge.
@@ -764,18 +909,21 @@ export function adaptInputResult(
  * HKRL-01: Claude Code writes a SessionStart hook's `additionalContext` into
  * the conversation as soon as the hooks finish, before the first prompt, and
  * its `/reload-plugins` leaves the conversation alone. `session_start`
- * returns void, so this adapter sends the folded context at once as a hidden
- * message (`sendHookContextMessage`). While Pi is idle, the message goes into
- * the session, which a Pi `/reload` keeps. A new, resumed, or forked session
- * is a new Pi session, so the message stays with the session that sent it.
+ * returns void, so this adapter sends the hooks' values at once as a hidden
+ * message (`sendSessionStartContext`). While Pi is idle, the message goes
+ * into the session, which a Pi `/reload` keeps. A startup or a new session
+ * sends every value at once. HKRL-02: a resumed or forked session already
+ * holds the earlier conversation, so its SessionStart sends only the values
+ * that conversation does not hold, compared per value, as Claude Code's
+ * duplicate removal does; the message carries its values in `details`.
  *
  * Per-event semantics:
  *
  *   - SessionStart:
- *       additionalContext on any arm -> one hidden message, sent at once.
- *       The fold joins every hook's context into its decisive arm, so one
- *       hook that blocks or stops does not take the context of the others
- *       away, as in Claude Code (D-CF5-09).
+ *       `sessionStart.values`, one per hook in routing order, on any arm ->
+ *       one hidden message, sent at once. Dispatch passes every hook's
+ *       value, so one hook that blocks or stops does not take the context
+ *       of the others away, as in Claude Code (D-CF5-09).
  *       block / stop -> also debug-logged; no Pi return slot exists
  *
  *   - SessionEnd / PostCompact:
@@ -794,18 +942,10 @@ export function adaptObservationResultForEvent(
   result: HookExecResult,
   claudeEvent: Extract<BucketAEvent, "SessionStart" | "SessionEnd" | "PostCompact">,
   context: HookAdapterContext,
+  sessionStart?: { readonly event: ClaudeSessionStartEvent; readonly values: readonly string[] },
 ): undefined {
-  if (
-    claudeEvent === "SessionStart" &&
-    result.additionalContext !== undefined &&
-    result.additionalContext !== ""
-  ) {
-    sendHookContextMessage(
-      context.pi,
-      "SessionStart",
-      result.additionalContext,
-      "adaptObservation: session start context failed",
-    );
+  if (claudeEvent === "SessionStart" && sessionStart !== undefined) {
+    sendSessionStartContext(sessionStart, context);
   }
 
   switch (result.kind) {

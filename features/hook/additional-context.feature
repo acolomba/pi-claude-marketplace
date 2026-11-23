@@ -251,3 +251,129 @@ Feature: Hook additional context
       | call | role | text                                         |
       | 1    | user | SessionStart hook additional context: ss-ctx |
       | 1    | user | hello there                                  |
+
+  Scenario: A fork at the first prompt keeps one copy of the session start hook's additional context
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event        | matcher | form   | output                                                                               |
+      | primer | SessionStart |         | script | {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"ss-ctx"}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Hello. |
+      | Done.  |
+    Given the user has prompted "hello"
+    Given the user has forked the session at its first prompt
+    When the user prompts "hello again"
+    Then the model receives these calls:
+      | call | role | text                                         |
+      | 2    | user | SessionStart hook additional context: ss-ctx |
+      | 2    | user | hello again                                  |
+
+  Scenario: A continued session keeps one copy of the session start hook's additional context
+    Given pi runs with the scripted model and saves its session
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event        | matcher | form   | output                                                                               |
+      | primer | SessionStart |         | script | {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"ss-ctx"}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Hello. |
+      | Done.  |
+    Given the user has prompted "first prompt"
+    Given the user has started pi again and continued the last session
+    When the user prompts "second prompt"
+    Then the model receives these calls:
+      | call | role      | text                                         |
+      | 2    | user      | SessionStart hook additional context: ss-ctx |
+      | 2    | user      | first prompt                                 |
+      | 2    | assistant | Hello.                                       |
+      | 2    | user      | second prompt                                |
+
+  Scenario: A continued session adds only the session start context that changed
+    Given pi runs with the scripted model and saves its session
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event        | matcher | form   | output                                                                                   |
+      | primer  | SessionStart |         | script | {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"ss-ctx"}}     |
+      | notes   | SessionStart |         | script | {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"notes-ctx"}}  |
+      | refresh | SessionStart | resume  | script | {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"resume-ctx"}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Hello. |
+      | Done.  |
+    Given the user has prompted "first prompt"
+    Given the user has started pi again and continued the last session
+    When the user prompts "second prompt"
+    Then the model receives these calls:
+      | call | role      | text                                                    |
+      | 2    | user      | SessionStart hook additional context: ss-ctx\nnotes-ctx |
+      | 2    | user      | first prompt                                            |
+      | 2    | assistant | Hello.                                                  |
+      | 2    | user      | SessionStart hook additional context: resume-ctx        |
+      | 2    | user      | second prompt                                           |
+
+  Scenario: A new session carries no session start context or history of the session before
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name   | event        | matcher | form   | output                                                                               |
+      | primer | SessionStart |         | script | {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"ss-ctx"}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Hello. |
+      | Done.  |
+    Given the user has prompted "first prompt"
+    Given the user has started a new pi session
+    When the user prompts "second prompt"
+    Then the model receives these calls:
+      | call | role | text                                         |
+      | 2    | user | SessionStart hook additional context: ss-ctx |
+      | 2    | user | second prompt                                |
+
+  Scenario: A continued session keeps one copy of a session start context saved to a file
+    Given pi runs with the scripted model and saves its session
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name | event        | matcher | form   | output                                                                      | output bytes | trailing output |
+      | big  | SessionStart |         | script | {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":" | 12000        | "}}             |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Hello. |
+      | Done.  |
+    Given the user has prompted "first prompt"
+    Given the user has started pi again and continued the last session
+    When the user prompts "second prompt"
+    Then the model receives these saved hook outputs:
+      | label                                | size   | path                                                                                               | preview characters | saved characters |
+      | SessionStart hook additional context | 11.7KB | {project dir}/.pi/pi-claude-marketplace/data/_shared/hook-output/hook-{uuid}-additionalContext.txt | 2000               | 12000            |

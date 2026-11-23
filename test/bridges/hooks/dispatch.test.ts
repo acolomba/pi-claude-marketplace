@@ -36,7 +36,10 @@ import type { ClaudeSessionStartEvent } from "../../../extensions/pi-claude-mark
 import type { UserPromptExpansionEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/user-prompt-expansion.ts";
 import type { RoutingEntry } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
-import type { BucketAEvent } from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
+import type {
+  BucketAEvent,
+  SessionStartSource,
+} from "../../../extensions/pi-claude-marketplace/domain/components/hook-events.ts";
 import type { McpToolIdentity } from "../../../extensions/pi-claude-marketplace/domain/components/hooks/builtin-mcp-tool-names.ts";
 import type {
   ExtensionAPI,
@@ -286,7 +289,7 @@ describe("compositeHandlerFor", () => {
     await handler({ source: "startup" }, context);
 
     // assert
-    assert.deepStrictEqual(sent, [sessionStartContextMessage("owned context")]);
+    assert.deepStrictEqual(sent, [sessionStartContextMessage(["owned context"])]);
     assert.deepStrictEqual(executorCalls, [
       {
         pluginId: "session-owner",
@@ -2889,8 +2892,49 @@ describe("composite per-event adapters", () => {
     await handler(event, context);
 
     // assert
-    assert.deepStrictEqual(sent, [sessionStartContextMessage("project guidance")]);
+    assert.deepStrictEqual(sent, [sessionStartContextMessage(["project guidance"])]);
     assert.deepStrictEqual(executorCalls, expectedCalls);
+  });
+
+  test("sends every hook's SessionStart context when one hook blocks (D-CF5-09, HKRL-02)", async () => {
+    // arrange
+    const results = {
+      guard: { kind: "block", reason: "denied", additionalContext: "guard context" },
+      notes: { kind: "mutate", additionalContext: "notes context" },
+    } satisfies Record<string, HookExecResult>;
+
+    // act
+    const sent = await sendSessionStartOf(
+      results,
+      "startup",
+      createExtensionContext("/workspace/session-start-block"),
+    );
+
+    // assert
+    assert.deepStrictEqual(sent, [sessionStartContextMessage(["guard context", "notes context"])]);
+  });
+
+  test("sends only the SessionStart values a resumed session does not hold (HKRL-02)", async () => {
+    // arrange
+    const cwd = "/workspace/session-start-resume";
+    const sessionManager = SessionManager.inMemory(cwd, { id: "dispatch-resumed-session" });
+    sessionManager.appendCustomMessageEntry(
+      "claude-hook-additional-context",
+      [{ type: "text", text: "SessionStart hook additional context: held context" }],
+      false,
+      { event: "SessionStart", values: ["held context"] },
+    );
+    const context = Object.assign(createExtensionContext(cwd), { sessionManager });
+    const results = {
+      held: { kind: "mutate", additionalContext: "held context" },
+      fresh: { kind: "mutate", additionalContext: "fresh context" },
+    } satisfies Record<string, HookExecResult>;
+
+    // act
+    const sent = await sendSessionStartOf(results, "resume", context);
+
+    // assert
+    assert.deepStrictEqual(sent, [sessionStartContextMessage(["fresh context"])]);
   });
 
   test("drops a SessionEnd block after observing it", async () => {
@@ -3672,7 +3716,7 @@ describe("parallel run and routing-order fold", () => {
     await pending;
 
     // assert
-    assert.deepStrictEqual(sent, [sessionStartContextMessage("a\nb")]);
+    assert.deepStrictEqual(sent, [sessionStartContextMessage(["a", "b"])]);
   });
 
   test("keeps every outcome with its system message in routing order", async () => {
@@ -5613,16 +5657,54 @@ function toolContextMessage(content: string): SentMessage {
   };
 }
 
-/** The hidden message that carries a SessionStart fold's context to the model (HKRL-01). */
-function sessionStartContextMessage(text: string): SentMessage {
+/**
+ * The hidden message that carries a SessionStart fold's values to the model,
+ * with the values in its details (HKRL-01, HKRL-02).
+ */
+function sessionStartContextMessage(values: readonly string[]): SentMessage {
   return {
     message: {
       customType: "claude-hook-additional-context",
-      content: [{ type: "text", text: `SessionStart hook additional context: ${text}` }],
+      content: [
+        { type: "text", text: `SessionStart hook additional context: ${values.join("\n")}` },
+      ],
       display: false,
+      details: { event: "SessionStart", values },
     },
     options: { triggerTurn: false },
   };
+}
+
+// Runs the SessionStart composite handler for `source` over one hook per key
+// of `results`, in that routing order, and returns the messages it sends.
+async function sendSessionStartOf(
+  results: Readonly<Record<string, HookExecResult>>,
+  source: SessionStartSource,
+  context: ExtensionContext,
+): Promise<SentMessage[]> {
+  const runtime = createHooksRuntime();
+  const generation = runtime.advanceGeneration();
+  runtime.setRoutingBucket(
+    "SessionStart",
+    Object.keys(results).map((pluginId, declarationIndex) =>
+      createRoutingEntry({
+        pluginId,
+        claudeEvent: "SessionStart",
+        rawMatcher: "",
+        declarationIndex,
+      }),
+    ),
+  );
+  const sent: SentMessage[] = [];
+  const handler = compositeHandlerFor(
+    runtime,
+    "SessionStart",
+    generation,
+    createMessagePi(sent),
+    createRecordingExecutor(results, []),
+  );
+  await handler({ source }, context);
+  return sent;
 }
 
 describe("tool hook context (HOOK-04 / D-CF5-13)", () => {

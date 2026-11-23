@@ -2964,12 +2964,15 @@ test(
     let deferDispatch = false;
     const executor: HookExecutor = () => {
       if (!deferDispatch) {
-        return Promise.resolve({ kind: "noop" });
+        return Promise.resolve({ kind: "mutate", additionalContext: "stale context" });
       }
 
       deferDispatch = false;
       dispatchStarted.resolve(undefined);
-      return releaseDispatch.promise.then(() => ({ kind: "noop" }));
+      return releaseDispatch.promise.then(() => ({
+        kind: "mutate",
+        additionalContext: "stale context",
+      }));
     };
 
     await hydration.registerHooksBridge(pi, { cwd: fixture.factoryRoot, executor });
@@ -4469,6 +4472,7 @@ test(
             },
           ],
           display: false,
+          details: { event: "SessionStart", values: ["alpha context", "beta context"] },
         },
         options: { triggerTurn: false },
       },
