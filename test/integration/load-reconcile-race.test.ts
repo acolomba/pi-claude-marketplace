@@ -460,8 +460,8 @@ test("Concurrent first-load race: two first applies against state with legacy au
     );
     const config = await readConfigRaw(env.cwd);
 
-    // Exactly one marketplace entry (no double-merge). One writer and two
-    // writers of the same config read the same here.
+    // Exactly one marketplace entry. The config is keyed by name, so a second
+    // identical merge writes the same key: this cannot tell one writer from two.
     assert.deepStrictEqual(
       Object.keys(config.marketplaces ?? {}),
       ["mp-legacy"],

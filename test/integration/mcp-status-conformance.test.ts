@@ -1,11 +1,13 @@
 // test/integration/mcp-status-conformance.test.ts
 //
 // Peer conformance (ITSCOPE-01) against pi-mcp-adapter's own status contract.
-// ASTAT-02: the adapter's empty shutdown snapshot, sent on its own channel
-// with its own snapshot version, leaves the MCP status tracker with no usable
-// snapshot. ASTAT-01: a drift guard pins the channel, the version and the
-// status union in the adapter's `dist/types.d.ts`, which info maps. Both cases
-// need the adapter's own code. What info shows from the adapter's reports is
+// ASTAT-02: the adapter's empty shutdown snapshot, sent on the adapter's own
+// channel with the adapter's own snapshot version, over Pi's real event bus
+// (`createEventBus`), leaves the MCP status tracker with no usable snapshot;
+// the unit test `test/platform/mcp-status.test.ts` covers the same tracker rule
+// with a fake bus, so this case adds the adapter's constants and Pi's bus.
+// ASTAT-01: a drift guard pins the channel, the version and the status union in
+// the adapter's `dist/types.d.ts`, which info maps. What info shows from the adapter's reports is
 // in the scenarios of `features/mcp-server/`: `companion-missing.feature` and
 // `project-scope.feature` show a server's status, and `project-scope.feature`
 // also shows a user row that reads `(overridden by project scope)`.
