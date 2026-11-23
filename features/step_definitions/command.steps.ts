@@ -1,6 +1,7 @@
 /**
  * @fileoverview Steps that run `/claude:plugin` commands in a headless Pi and
- * check the JSON results of the last `When` step, a command or a new session.
+ * check the JSON results of the last `When` step:
+ * a command, a new session, or a reload.
  * A command can also run in a one-shot Pi in json mode, whose results the
  * same steps read, in a one-shot Pi in print mode, whose exit code and output
  * two steps read, or in Pi in a real terminal, whose notice a step reads from
@@ -294,8 +295,8 @@ Then("the result lists no marketplaces", function (this: ScenarioWorld) {
 // deduplicated, or sorted: two identical results are two rows. A field one
 // result lacks is an empty cell. A multi-result command with no cascade, such
 // as `info <name>` over two scopes when one manifest is broken, has no row
-// arrays, so this table alone compares it whole. A new session's results have
-// a step of their own.
+// arrays, so this table alone compares it whole. The results of a new session
+// or a reload have a step of their own.
 Then("the command reports these results:", function (this: ScenarioWorld, table: DataTable) {
   const [stated = []] = table.raw();
   assert.deepStrictEqual(resultsTable(stated, this.resultsOf("command"), this.tokens), table.raw());

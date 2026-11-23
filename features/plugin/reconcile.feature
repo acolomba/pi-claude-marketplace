@@ -10,19 +10,17 @@ Feature: Plugin reconcile
       | demo  | 1.0.0   |
       | alpha | 1.0.0   |
 
-  Scenario: A new session after a hand edit of the config prints the pending block and changes nothing
+  Scenario: A reload after a hand edit of the config prints the pending block and changes nothing
     Given the marketplace "fixtures" is added to the project scope
     Given a config in scope project and layer base, with these plugins:
       | marketplace | plugin | enabled |
       | fixtures    | demo   |         |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
-      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status       | reasons | scope   |
-      | fixtures         | project           | demo@fixtures | demo | will install |         | project |
       | fixtures         | project           | demo@fixtures | demo | will install |         | project |
     Then the project scope has no installed plugins
     Then the session offers no skills

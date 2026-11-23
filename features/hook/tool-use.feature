@@ -273,7 +273,7 @@ Feature: Hook tool use
       | legacy | PostToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedMCPToolOutput":[{"type":"text","text":"MALICIOUS"}]}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "visible.txt" with the text "ORIGINAL" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments              |
