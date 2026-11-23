@@ -235,7 +235,7 @@ Plans:
   3. A repository whose checkout carries a hook or an fsmonitor command runs neither; a URL on the `ext`, `fd`, `git`, `ftp`, or `ftps` protocol is refused; `GIT_DIR` or another repository-pointer variable in the environment changes nothing; a clone directory with no `.git` under `<cwd>/.pi/` makes the command fail rather than act on the user's project repository; and a command on the local lane fails rather than reach the network (SG-PRC-03, SG-PRC-04).
   4. Each git failure reaches its caller as a typed error whose kind (not found, auth, network, ref missing, timeout, git missing, and the rest) is read from git's exit status and its stderr under `LC_MESSAGES=C`, and no caller narrows on an error name or a message substring (SG-PRC-05).
   5. With no usable `git` on `PATH`, a git-source `marketplace add` or plugin install tells the user that git is required (in the `xcode-select --install` form on macOS), or runs the fallback if discuss chose one (Q1, Q3), and path-source and hosted-manifest marketplaces still add and install; cucumber scenarios pin each case (SG-PRC-06).
-**Plans**: 7/8 plans executed in 6 waves
+**Plans**: 8/8 plans executed in 6 waves
 
 Plans:
 **Wave 1**
@@ -256,7 +256,7 @@ Plans:
 - [x] 02-07-PLAN.md — The user's ssh with BatchMode and StrictHostKeyChecking from a neutral directory, and real-git proofs of no prompts and no leftover processes (wave 5)
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 02-08-PLAN.md — Codebase map update, the manual macOS and Windows check (blocking, deferrable to the pull request), and the D-SG outcomes in PROJECT.md (wave 6)
+- [x] 02-08-PLAN.md — Codebase map update, the manual macOS and Windows check (blocking, deferrable to the pull request), and the D-SG outcomes in PROJECT.md (wave 6)
 
 ### Phase 3: System Git Transport and Clone Shape
 
@@ -350,7 +350,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
 | 1. Harness on System Git | 8/8 | Complete    | 2026-11-23 |
-| 2. Git Process Seam and Typed Failures | 7/8 | In Progress | - |
+| 2. Git Process Seam and Typed Failures | 8/8 | In Progress | - |
 | 3. System Git Transport and Clone Shape | 0/TBD | Not started | - |
 | 4. SSH Sources and Transport Selection | 0/TBD | Not started | - |
 | 5. Credential Surface | 0/TBD | Not started | - |
