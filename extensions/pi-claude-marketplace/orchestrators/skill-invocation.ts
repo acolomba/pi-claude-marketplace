@@ -54,6 +54,7 @@ import { appendMentionedFiles, NODE_MENTION_FILE_READER } from "./mention-attach
 
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 import type { PromptShellHost, PromptShellRunner } from "../platform/prompt-shell.ts";
+import type { ReloadCommand } from "../shared/session-host.ts";
 import type { MentionFileReader } from "./mention-attachments.ts";
 
 /** One typed invocation of `/skill:<generatedName>` or of an alias of it. */
@@ -71,6 +72,11 @@ export interface SkillInvocationRequest {
   readonly sessionId: string;
   /** Pi's session thinking level, which `${CLAUDE_EFFORT}` follows. */
   readonly thinkingLevel: string | undefined;
+  /**
+   * RELOADCMD-D1: the command the refusals name to reload, from
+   * `reloadCommandFor`; undefined in a one-shot run.
+   */
+  readonly reloadCommand: ReloadCommand | undefined;
 }
 
 /** What to do with the typed text. */
@@ -228,14 +234,25 @@ async function fillSkill(
   return { kind: "ok", text: skillBlock(skill, attached) };
 }
 
-/** The abort message for a project skill in a project Pi does not trust. */
+/**
+ * The abort message for a project skill in a project Pi does not trust. It
+ * names the host's reload command, and none in a one-shot run (RELOADCMD-D1).
+ */
 function untrustedProjectMessage(request: SkillInvocationRequest): string {
-  return `The skill ${request.typed} belongs to the project ${request.cwd}, which Pi does not trust. Trust the project folder, then run /reload to use it.`;
+  const reload = request.reloadCommand === undefined ? "" : `, then run ${request.reloadCommand}`;
+  return `The skill ${request.typed} belongs to the project ${request.cwd}, which Pi does not trust. Trust the project folder${reload} to use it.`;
 }
 
-/** The abort message for a staged skill file that cannot be read or parsed. */
-function unreadableSkillMessage(typed: string, error: unknown): string {
-  return `Cannot read the skill ${typed}: ${errorMessage(error)}. Run /reload to load the installed skills again.`;
+/**
+ * The abort message for a staged skill file that cannot be read or parsed. It
+ * names the host's reload command, and none in a one-shot run (RELOADCMD-D1).
+ */
+function unreadableSkillMessage(request: SkillInvocationRequest, error: unknown): string {
+  const reload =
+    request.reloadCommand === undefined
+      ? ""
+      : ` Run ${request.reloadCommand} to load the installed skills again.`;
+  return `Cannot read the skill ${request.typed}: ${errorMessage(error)}.${reload}`;
 }
 
 /**
@@ -257,19 +274,19 @@ export async function invokeBridgedSkill(
   // T-02-17: Claude Code loads no project-scope plugin before the workspace
   // is trusted, and resource discovery leaves an untrusted project's skills
   // out. A skill Pi still lists here was discovered while the project was
-  // trusted, so it aborts until the next `/reload` and runs nothing.
+  // trusted, so it aborts until the next reload and runs nothing.
   if (skill.projectScope && !request.projectTrusted) {
     return { kind: "abort", message: untrustedProjectMessage(request) };
   }
 
   // A file that changed after Pi loaded it, such as one an uninstall,
-  // disable, or update removed before `/reload`, aborts the invocation: Pi's
+  // disable, or update removed before the next reload, aborts the invocation: Pi's
   // own expansion would send the body with its `!` commands not run.
   let parsed: ParsedSkill;
   try {
     parsed = parseFrontmatter(await dependencies.readFile(skill.location));
   } catch (error) {
-    return { kind: "abort", message: unreadableSkillMessage(request.typed, error) };
+    return { kind: "abort", message: unreadableSkillMessage(request, error) };
   }
 
   try {

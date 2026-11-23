@@ -111,8 +111,8 @@ function listContext(times: number): ExtensionContext {
   return ctx;
 }
 
-/** A context a call reads its directory, trust, and session id from once. */
-function callContext(): ExtensionContext {
+/** A context a call reads its directory, trust, session id, and mode from once. */
+function callContext(mode: "tui" | "rpc" | "json" = "tui"): ExtensionContext {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "call context" });
   const sessionManager = mock<ExtensionContext["sessionManager"]>({
     exactParams: true,
@@ -130,6 +130,17 @@ function callContext(): ExtensionContext {
   when(() => sessionManager.getSessionId())
     .thenReturn("session-1")
     .times(1);
+  // RELOADCMD-D1: the request reads the mode once, and the host field only
+  // outside Pi's terminal.
+  when(() => ctx.mode)
+    .thenReturn(mode)
+    .times(1);
+  if (mode !== "tui") {
+    when(() => ctx.hasUI)
+      .thenReturn(mode === "rpc")
+      .times(1);
+  }
+
   return ctx;
 }
 
@@ -181,6 +192,7 @@ function callRequest(overrides: Partial<CommandInvocationRequest>): CommandInvoc
     projectTrusted: false,
     sessionId: "session-1",
     thinkingLevel: "low",
+    reloadCommand: "/reload",
     ...overrides,
   };
 }
@@ -325,6 +337,40 @@ for (const { params, name, expandedArgs } of [
     const outcome = await tool.execute(
       "call-1",
       params,
+      undefined,
+      undefined,
+      ctx as Parameters<ToolDefinition["execute"]>[4],
+    );
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      content: [{ type: "text", text: "Deploy now." }],
+      details: { command: "demo:deploy" },
+    });
+    verify(pi);
+    verify(ctx);
+    verify(expand);
+  });
+}
+
+for (const { mode, reloadCommand } of [
+  { mode: "rpc", reloadCommand: "/claude:plugin reload" },
+  { mode: "json", reloadCommand: undefined },
+] as const) {
+  test(`RELOADCMD-D1: a ${mode} call carries ${String(reloadCommand)} as its reload command`, async () => {
+    // arrange
+    const expand = mock<CommandToolPorts["expand"]>({ exactParams: true, name: "expand" });
+    when(() => expand(callRequest({ reloadCommand }), "run_plugin_command"))
+      .thenResolve({ kind: "send", text: "Deploy now." })
+      .times(1);
+    const { pi, tool } = await registeredTool(expand);
+    armCall(pi);
+    const ctx = callContext(mode);
+
+    // act
+    const outcome = await tool.execute(
+      "call-1",
+      { command: "demo:deploy" },
       undefined,
       undefined,
       ctx as Parameters<ToolDefinition["execute"]>[4],

@@ -127,6 +127,7 @@ function request(overrides: Partial<CommandInvocationRequest> = {}): CommandInvo
     projectTrusted: true,
     sessionId: "session-1",
     thinkingLevel: "medium",
+    reloadCommand: "/reload",
     ...overrides,
   };
 }
@@ -512,6 +513,55 @@ describe("invokeStagedCommand", () => {
         "Run /reload to load the installed commands again.",
     });
   });
+
+  for (const { reloadCommand, untrusted, unreadable } of [
+    {
+      reloadCommand: "/claude:plugin reload",
+      untrusted: "Trust the project folder, then run /claude:plugin reload to use it.",
+      unreadable: " Run /claude:plugin reload to load the installed commands again.",
+    },
+    { reloadCommand: undefined, untrusted: "Trust the project folder to use it.", unreadable: "" },
+  ] as const) {
+    test(`RELOADCMD-D1: an untrusted project command names ${String(reloadCommand)} to reload`, async () => {
+      // act
+      const outcome = await invokeStagedCommand(
+        request({ projectTrusted: false, reloadCommand }),
+        dependencies({}),
+      );
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        kind: "refuse",
+        message: `The command /demo:greet belongs to the project /work, which Pi does not trust. ${untrusted}`,
+      });
+    });
+
+    test(`RELOADCMD-D1: an unreadable command names ${String(reloadCommand)} to reload`, async () => {
+      // act
+      const outcome = await invokeStagedCommand(request({ reloadCommand }), dependencies({}));
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        kind: "refuse",
+        message: `Cannot read the command /demo:greet: unexpected read of ${PROJECT_COMMAND}.${unreadable}`,
+      });
+    });
+
+    test(`RELOADCMD-D1: run_plugin_command refuses an untrusted project command naming ${String(reloadCommand)}`, async () => {
+      // act
+      const outcome = await expandStagedCommand(
+        request({ projectTrusted: false, reloadCommand }),
+        "run_plugin_command",
+        dependencies({ [PROJECT_COMMAND]: commandFile("Greet.") }),
+      );
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        kind: "refuse",
+        message: `The command /demo:greet belongs to the project /work, which Pi does not trust. ${untrusted}`,
+      });
+    });
+  }
 
   test("lets a failure other than the cores' own propagate", async () => {
     // arrange

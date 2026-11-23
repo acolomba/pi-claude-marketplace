@@ -4,6 +4,7 @@ import { invokeStagedCommand } from "../orchestrators/command-invocation.ts";
 import { errorMessage } from "../shared/errors.ts";
 import { notifyUsageError } from "../shared/notification-dispatch.ts";
 import { openNotificationRun } from "../shared/notification-run.ts";
+import { reloadCommandFor } from "../shared/session-host.ts";
 
 import { finishedTransform } from "./input-transform.ts";
 
@@ -61,6 +62,7 @@ function commandRequest(
     thinkingLevel: pi.getThinkingLevel(),
     cwd: ctx.cwd,
     projectTrusted: ctx.isProjectTrusted(),
+    reloadCommand: reloadCommandFor(ctx.mode, ctx),
   };
 }
 
