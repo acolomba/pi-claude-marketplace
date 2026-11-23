@@ -139,6 +139,44 @@ Feature: Marketplace git source
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
 
+  Scenario: A url marketplace that needs a credential fails as authentication required without running the user's askpass program
+    Given the marketplace "tools" is published as a url source
+    Given the git host requires the user "alice" with the password "s3cret" for the marketplace "tools"
+    Given the user's git configuration names an askpass program that answers the user "alice" with the password "s3cret"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name                              | scope   | status | reasons                 |
+      | https://{git host}/acme/tools.git | project | failed | authentication required |
+    Then the "claude-plugins.json" file of the project scope does not exist
+    Then the askpass program has recorded no run
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+
+  Scenario: A url marketplace that needs a credential fails as authentication required without asking the project's credential helper
+    Given the marketplace "tools" is published as a url source
+    Given the git host requires the user "alice" with the password "s3cret" for the marketplace "tools"
+    Given the project is a git repository whose own configuration names a credential helper that answers the user "alice" with the password "s3cret"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name                              | scope   | status | reasons                 |
+      | https://{git host}/acme/tools.git | project | failed | authentication required |
+    Then the "claude-plugins.json" file of the project scope does not exist
+    Then the credential helper has recorded no run
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+
   Scenario Outline: Adding a github marketplace that needs a credential fails as authentication required without one
     Given the marketplace "tools" is published as a <source kind> source
     Given the git host requires the user "alice" with the password "s3cret" for the marketplace "tools"

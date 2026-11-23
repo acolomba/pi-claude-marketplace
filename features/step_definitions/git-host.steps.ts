@@ -36,9 +36,15 @@ import {
   readDeviceFlowRequests,
   readPollScript,
 } from "../lib/github-device-flow/server.ts";
+import { runGit } from "../lib/hermetic-git.ts";
 import { armedStatus } from "../lib/https-git-host/server.ts";
 import { expandTokens } from "../lib/run-tokens.ts";
 import { harnessDirectory } from "../lib/turn-records.ts";
+import {
+  readUserGitProgramRuns,
+  removeUserGitProgram,
+  writeUserGitProgram,
+} from "../lib/user-git-programs.ts";
 import { PROFILE_PI_START_TIMEOUT_MS } from "../support/world.ts";
 
 import type { DeviceFlowRequest } from "../lib/github-device-flow/server.ts";
@@ -85,6 +91,19 @@ async function useCredentialStore(world: ScenarioWorld): Promise<string> {
   await writeFile(config, CREDENTIAL_STORE_CONFIG, { flag: "wx" });
   world.onRelease(() => rm(config, { force: true }));
   return config;
+}
+
+/** Returns the text of `file`, or undefined when there is no such file. */
+async function readOptionalText(file: string): Promise<string | undefined> {
+  try {
+    return await readFile(file, "utf8");
+  } catch (error: unknown) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") {
+      return undefined;
+    }
+
+    throw error;
+  }
 }
 
 /**
@@ -225,6 +244,52 @@ Given(
   },
 );
 
+// SG-PRC-02: the askpass program and the config that names it lie in the
+// sandbox HOME, which Pi's git reads through its global config (DRV-03). The
+// config keeps what an earlier credential-store step wrote, and its release
+// puts it back as it was.
+Given(
+  "the user's git configuration names an askpass program that answers the user {string} with the password {string}",
+  async function (this: ScenarioWorld, user: string, password: string): Promise<void> {
+    const { home } = this.tokens;
+    const program = await writeUserGitProgram(home, "askpass", { user, password });
+    this.onRelease(() => removeUserGitProgram(home, "askpass"));
+    const config = path.join(home, ".gitconfig");
+    const previous = await readOptionalText(config);
+    const text = `${previous ?? ""}[core]\n\taskPass = ${program}\n`;
+    this.onRelease(() =>
+      previous === undefined ? rm(config, { force: true }) : writeFile(config, previous),
+    );
+    await writeFile(config, text);
+    assert.deepStrictEqual(
+      [await readFile(config, "utf8"), await readUserGitProgramRuns(home, "askpass")],
+      [text, []],
+    );
+  },
+);
+
+// SG-PRC-03: a credential lookup never reads the configuration of the
+// repository Pi runs in. The suite's hermetic git makes that repository, so the
+// developer's own configuration never reaches it, and the release removes it.
+Given(
+  "the project is a git repository whose own configuration names a credential helper that answers the user {string} with the password {string}",
+  async function (this: ScenarioWorld, user: string, password: string): Promise<void> {
+    const { home, projectDir } = this.tokens;
+    const program = await writeUserGitProgram(home, "credential-helper", { user, password });
+    this.onRelease(() => removeUserGitProgram(home, "credential-helper"));
+    await runGit(projectDir, home, "init", "-q");
+    this.onRelease(() => rm(path.join(projectDir, ".git"), { recursive: true, force: true }));
+    await runGit(projectDir, home, "config", "credential.helper", program);
+    assert.deepStrictEqual(
+      [
+        await runGit(projectDir, home, "config", "--local", "--get-all", "credential.helper"),
+        await readUserGitProgramRuns(home, "credential-helper"),
+      ],
+      [program, []],
+    );
+  },
+);
+
 // The credential store lies in the sandbox HOME, so the token the product
 // stores after a sign-in never reaches the user's own store.
 Given(
@@ -331,3 +396,19 @@ Then(
 Then("the git host receives no request", function (this: ScenarioWorld) {
   assert.deepStrictEqual(this.requestsOfLastCommand(), { requests: [], connections: 0 });
 });
+
+// SG-PRC-02: the product never runs the user's askpass program.
+Then(
+  "the askpass program has recorded no run",
+  async function (this: ScenarioWorld): Promise<void> {
+    assert.deepStrictEqual(await readUserGitProgramRuns(this.tokens.home, "askpass"), []);
+  },
+);
+
+// SG-PRC-03: the product never asks the project repository's credential helper.
+Then(
+  "the credential helper has recorded no run",
+  async function (this: ScenarioWorld): Promise<void> {
+    assert.deepStrictEqual(await readUserGitProgramRuns(this.tokens.home, "credential-helper"), []);
+  },
+);
