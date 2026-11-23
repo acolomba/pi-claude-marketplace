@@ -235,12 +235,12 @@ Plans:
   3. A repository whose checkout carries a hook or an fsmonitor command runs neither; a URL on the `ext`, `fd`, `git`, `ftp`, or `ftps` protocol is refused; `GIT_DIR` or another repository-pointer variable in the environment changes nothing; a clone directory with no `.git` under `<cwd>/.pi/` makes the command fail rather than act on the user's project repository; and a command on the local lane fails rather than reach the network (SG-PRC-03, SG-PRC-04).
   4. Each git failure reaches its caller as a typed error whose kind (not found, auth, network, ref missing, timeout, git missing, and the rest) is read from git's exit status and its stderr under `LC_MESSAGES=C`, and no caller narrows on an error name or a message substring (SG-PRC-05).
   5. With no usable `git` on `PATH`, a git-source `marketplace add` or plugin install tells the user that git is required (in the `xcode-select --install` form on macOS), or runs the fallback if discuss chose one (Q1, Q3), and path-source and hosted-manifest marketplaces still add and install; cucumber scenarios pin each case (SG-PRC-06).
-**Plans**: 8 plans in 6 waves
+**Plans**: 2/8 plans executed in 6 waves
 
 Plans:
 **Wave 1**
-- [ ] 02-01-PLAN.md — Shared launcher `platform/process-run.ts` moved out of the package manager unchanged, then given stdin input, a tail capture, a hidden console, and a parameterized Windows lookup (wave 1)
-- [ ] 02-02-PLAN.md — `{git missing}` reason (D-SG-07), `GitCommandError` with its closed kind union, every kind mapped to a reason, and the requirement text on a git-missing row (wave 1)
+- [x] 02-01-PLAN.md — Shared launcher `platform/process-run.ts` moved out of the package manager unchanged, then given stdin input, a tail capture, a hidden console, and a parameterized Windows lookup (wave 1)
+- [x] 02-02-PLAN.md — `{git missing}` reason (D-SG-07), `GitCommandError` with its closed kind union, every kind mapped to a reason, and the requirement text on a git-missing row (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 02-03-PLAN.md — `platform/git-process.ts` with the absolute git lookup and the D-SG-05 hardening, `git credential` as its first consumer, and the chokepoint, gate tests, and ESLint zone changed in the same commit (wave 2)
@@ -350,7 +350,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
 | 1. Harness on System Git | 8/8 | Complete    | 2026-11-23 |
-| 2. Git Process Seam and Typed Failures | 0/TBD | Not started | - |
+| 2. Git Process Seam and Typed Failures | 2/8 | In Progress | - |
 | 3. System Git Transport and Clone Shape | 0/TBD | Not started | - |
 | 4. SSH Sources and Transport Selection | 0/TBD | Not started | - |
 | 5. Credential Surface | 0/TBD | Not started | - |
