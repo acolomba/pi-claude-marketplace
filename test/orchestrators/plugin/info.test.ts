@@ -36,7 +36,6 @@ import { devNull } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import * as git from "isomorphic-git";
 import lockfile from "proper-lockfile";
 import { mock, verify, when } from "strong-mock";
 
@@ -78,6 +77,7 @@ import {
 } from "../../edge/handlers/marketplace-seed.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
+import { gitTestCheckout, initGitTestCheckout } from "../../platform/git-test-repository.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { noStatusReaders, statusReaders, statusSnapshot } from "../../platform/mcp-status-seed.ts";
 import {
@@ -558,14 +558,8 @@ async function seedWarmMirror(opts: {
     await writeFile(abs, "", "utf8");
   }
 
-  await git.init({ fs, dir: mirrorDir, defaultBranch: "main" });
-  await git.add({ fs, dir: mirrorDir, filepath: ".claude-plugin/plugin.json" });
-  await git.commit({
-    fs,
-    dir: mirrorDir,
-    message: "initial",
-    author: { name: "test", email: "test@example.com" },
-  });
+  const checkout = await initGitTestCheckout(mirrorDir);
+  await checkout.commitPaths("initial", [".claude-plugin/plugin.json"]);
 }
 
 /**
@@ -604,14 +598,8 @@ async function seedWarmSubdirMirror(opts: {
     await writeFile(abs, "", "utf8");
   }
 
-  await git.init({ fs, dir: mirrorDir, defaultBranch: "main" });
-  await git.add({ fs, dir: mirrorDir, filepath: "." });
-  await git.commit({
-    fs,
-    dir: mirrorDir,
-    message: "initial",
-    author: { name: "test", email: "test@example.com" },
-  });
+  const checkout = await initGitTestCheckout(mirrorDir);
+  await checkout.commitAll("initial");
 }
 
 // ---------------------------------------------------------------------------
@@ -10552,7 +10540,7 @@ test("D-77-01: a WARM git clone whose entry declares no version shows the clone'
       componentDirs: ["skills/warm-skill"],
     });
     const mirrorDir = await locationsFor("user", cwd).pluginCloneDir(pluginMirrorKey(cloneUrl));
-    const head = await git.resolveRef({ fs, dir: mirrorDir, ref: "HEAD" });
+    const head = await gitTestCheckout(mirrorDir).run("rev-parse", "HEAD");
     const { ctx, run, notifications } = makeCtx();
 
     // act

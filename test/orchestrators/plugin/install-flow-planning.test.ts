@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import { chmod, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
 
-import git from "isomorphic-git";
 import lockfile from "proper-lockfile";
 
 import {
@@ -33,6 +31,7 @@ import {
 import { withExistingScopeLock } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
+import { initGitTestCheckout } from "../../platform/git-test-repository.ts";
 
 import {
   INSTALL_DEVICE_CODE,
@@ -331,38 +330,20 @@ test("removes a ruled-out clone after resolver backtracking", async (t) => {
     });
     await installed(owner, cwd, "fff");
     await installed(owner, cwd, "yyy");
-    await git.init({ fs, dir: marketplaceRoot, defaultBranch: "main" });
-    await git.add({ fs, dir: marketplaceRoot, filepath: "." });
-    await git.commit({
-      fs,
-      dir: marketplaceRoot,
-      message: "seed catalog",
-      author: { name: "test", email: "test@example.com" },
-    });
+    const checkout = await initGitTestCheckout(marketplaceRoot);
+    await checkout.commitAll("seed catalog");
     await publishCatalog(marketplaceRoot, {
       fff: { version: "2.0.0" },
       yyy: { version: "2.0.0", dependencies: ["fff@^2.0.0"] },
     });
-    await git.add({ fs, dir: marketplaceRoot, filepath: "." });
-    const landedOid = await git.commit({
-      fs,
-      dir: marketplaceRoot,
-      message: "publish yyy 2",
-      author: { name: "test", email: "test@example.com" },
-    });
-    await git.tag({ fs, dir: marketplaceRoot, ref: "yyy--v2.0.0", object: landedOid });
+    const landedOid = await checkout.commitAll("publish yyy 2");
+    await checkout.run("tag", "yyy--v2.0.0", landedOid);
     await publishCatalog(marketplaceRoot, {
       fff: { version: "2.0.0" },
       yyy: { version: "2.1.0", dependencies: ["fff@^3.0.0"] },
     });
-    await git.add({ fs, dir: marketplaceRoot, filepath: "." });
-    const ruledOutOid = await git.commit({
-      fs,
-      dir: marketplaceRoot,
-      message: "publish yyy 2.1",
-      author: { name: "test", email: "test@example.com" },
-    });
-    await git.tag({ fs, dir: marketplaceRoot, ref: "yyy--v2.1.0", object: ruledOutOid });
+    const ruledOutOid = await checkout.commitAll("publish yyy 2.1");
+    await checkout.run("tag", "yyy--v2.1.0", ruledOutOid);
     await publishCatalog(marketplaceRoot, {
       app: { version: "1.0.0", dependencies: ["yyy@^2.0.0", "fff@^2.0.0"] },
       fff: { version: "2.0.0" },
