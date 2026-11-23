@@ -5,9 +5,9 @@
  * whole, a host the run did not register fails as an unreachable host, and a
  * reset leaves no host and no launch (SG-HRN-03, HOST-02). It also checks
  * that a probe and `ssh -G` get the answers Claude Code 2.1.330 reads, that
- * a held probe ends at its caller's timeout or once its caller dies, that a
- * path outside the repositories root is never served, and that one
- * repository clones the same over HTTPS and over SSH.
+ * a held probe ends when its caller kills it or dies, that a path outside
+ * the repositories root is never served, and that one repository clones the
+ * same over HTTPS and over SSH.
  */
 
 import assert from "node:assert/strict";
@@ -33,7 +33,7 @@ import {
 
 import type { SshLaunchRecord } from "../../features/lib/ssh-git-host/launch.ts";
 import type { SystemGitCall } from "../platform/git-test-repository.ts";
-import type { ExecFileException } from "node:child_process";
+import type { ChildProcess, ExecFileException } from "node:child_process";
 import type { TestContext } from "node:test";
 
 const HOST = "stand-in.test";
@@ -54,6 +54,10 @@ const UPSTREAM_SSH_COMMAND = "core.sshCommand=ssh -o BatchMode=yes -o StrictHost
 
 // A stub records its launch within milliseconds; the margin covers a loaded CI runner.
 const LAUNCH_TIMEOUT_MS = 10_000;
+
+// A stub that answers a probe does so within milliseconds of recording its
+// launch, so one that still runs after this wait holds the probe.
+const ANSWER_WAIT_MS = 300;
 
 /** A fresh root for one case, and a way to close a host in it before the root goes. */
 interface CaseRoot {
@@ -131,8 +135,6 @@ async function sshClient(t: TestContext, host: SshGitHost): Promise<SshClient> {
 /** How one launch of the stub `ssh` ended, and what it wrote. */
 interface SshRun {
   readonly exitCode: number | undefined;
-  readonly signal: NodeJS.Signals | undefined;
-  readonly killed: boolean;
   readonly stdout: string;
   readonly stderr: string;
 }
@@ -145,28 +147,52 @@ function exitCodeOf(error: ExecFileException | null): number | undefined {
   return typeof error.code === "number" ? error.code : undefined;
 }
 
-/** Runs the stub `ssh` of `host` with `argv`, as Claude Code runs its probe, killed after `timeout`. */
-function runSsh(
-  host: SshGitHost,
-  argv: readonly string[],
-  timeout = LAUNCH_TIMEOUT_MS,
-): Promise<SshRun> {
+/** Runs the stub `ssh` of `host` with `argv`, as Claude Code runs its probe. */
+function runSsh(host: SshGitHost, argv: readonly string[]): Promise<SshRun> {
   return new Promise((resolve) => {
     execFile(
       path.join(host.binDirectory, "ssh"),
       [...argv],
-      { env: { PATH: host.searchPath() }, timeout },
+      { env: { PATH: host.searchPath() }, timeout: LAUNCH_TIMEOUT_MS },
       (error, stdout, stderr) => {
         resolve({
           exitCode: exitCodeOf(error),
-          signal: error?.signal ?? undefined,
-          killed: error?.killed ?? false,
           stdout,
           stderr,
         });
       },
     );
   });
+}
+
+/** How a child process ended: its exit code, or the signal that ended it. */
+interface ProcessExit {
+  readonly exitCode: number | null;
+  readonly signal: NodeJS.Signals | null;
+}
+
+/** A probe of `hold.test` started on the stub `ssh`, and its exit. */
+interface HeldProbe {
+  readonly child: ChildProcess;
+  readonly exited: Promise<ProcessExit>;
+}
+
+/** Starts a probe of `hold.test` as Claude Code runs it, killed after the case if it still runs. */
+function startHeldProbe(t: TestContext, host: SshGitHost): HeldProbe {
+  const child = spawn(path.join(host.binDirectory, "ssh"), [...PROBE_OPTIONS, "git@hold.test"], {
+    env: { PATH: host.searchPath() },
+    stdio: "ignore",
+  });
+  const exited = new Promise<ProcessExit>((resolve) => {
+    child.once("exit", (exitCode, signal) => {
+      resolve({ exitCode, signal });
+    });
+  });
+  t.after(async () => {
+    child.kill("SIGKILL");
+    await exited;
+  });
+  return { child, exited };
 }
 
 /** Waits until the stand-in has recorded a launch since `window`, and returns the first. */
@@ -456,16 +482,20 @@ describe("SshGitHost answers to Claude Code's probe", () => {
     assert.ok(run.stderr.includes("git@denied.test: Permission denied (publickey)."), run.stderr);
   });
 
-  test("holds a probe until its caller kills it at its timeout, leaving no stub", async (t) => {
+  test("holds a probe until its caller kills it, leaving no stub", async (t) => {
     const { host } = await startHost(t);
     await host.register("hold.test", { probe: { kind: "hold" } });
     const window = await host.mark();
+    const { child, exited } = startHeldProbe(t, host);
+    const launch = await firstLaunchSince(host, window);
+    await delay(ANSWER_WAIT_MS);
 
-    const run = await runSsh(host, [...PROBE_OPTIONS, "git@hold.test"], 300);
+    child.kill("SIGTERM");
+    const exit = await exited;
 
-    assert.ok(run.killed || run.signal !== undefined, JSON.stringify(run));
-    const [launch] = await host.launchesSince(window);
-    assert.ok(launch !== undefined && !isRunning(launch.pid));
+    assert.deepStrictEqual(exit, { exitCode: null, signal: "SIGTERM" });
+    assert.strictEqual(launch.pid, child.pid);
+    assert.ok(!isRunning(launch.pid));
     await host.reset();
   });
 
@@ -473,15 +503,7 @@ describe("SshGitHost answers to Claude Code's probe", () => {
     const { host } = await startHost(t);
     await host.register("hold.test", { probe: { kind: "hold" } });
     const window = await host.mark();
-    const child = spawn(path.join(host.binDirectory, "ssh"), [...PROBE_OPTIONS, "git@hold.test"], {
-      env: { PATH: host.searchPath() },
-      stdio: "ignore",
-    });
-    const exited = once(child, "exit");
-    t.after(async () => {
-      child.kill("SIGKILL");
-      await exited;
-    });
+    const { child, exited } = startHeldProbe(t, host);
     const launch = await firstLaunchSince(host, window);
 
     await assert.rejects(
