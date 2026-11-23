@@ -51,6 +51,23 @@
 // The network lane removes the user's GIT_ALLOW_PROTOCOL, which could
 // re-allow `ext`, and keeps its narrowing as `-c` bans (D-SG-05).
 //
+// D-SG-05, SG-PRC-02, Q14 `nn`: a network-lane clone, fetch, or ls-remote
+// runs the user's own ssh in batch mode. The module first reads
+// `core.sshCommand` and `ssh.variant` with one local-lane `git config` in the
+// neutral directory. The user's command is a non-empty GIT_SSH_COMMAND, else
+// that `core.sshCommand`, else GIT_SSH quoted for `sh`, else `ssh`. The
+// variant is GIT_SSH_VARIANT, else `ssh.variant`, else the base name of the
+// command's first word. Pi appends `-o BatchMode=yes -o
+// StrictHostKeyChecking=yes`, or `-batch` for plink and putty, and nothing
+// for tortoiseplink. The result is GIT_SSH_COMMAND, which git reads before
+// any config scope, so a repository's own `core.sshCommand` never runs.
+// GIT_SSH goes, and an `ssh.variant` becomes GIT_SSH_VARIANT unless the user
+// set one. The command starts with `CDPATH= cd -- <neutral directory>`, so
+// ssh never runs in the repository. git then sees `CDPATH=` as the program,
+// so without a variant it checks the variant with one `<command> -G` launch
+// first. D-SG-03: no option controls host-key updates; ssh's own default
+// applies.
+//
 // SG-PRC-05: a run that exits with a code its request does not allow rejects
 // with the kind platform/git-failure-kind.ts reads from the exit code and the
 // C-locale stderr. D-SG-06: after a `git-too-old` failure, and only then, the
@@ -267,17 +284,23 @@ const NO_OPERANDS_RULE: OperandRule = {
   words: (options) => options,
 };
 
-const OPERAND_RULES: Readonly<Record<GitSubcommand, OperandRule>> = {
-  clone: MARKER_RULE,
-  fetch: MARKER_RULE,
-  "ls-remote": MARKER_RULE,
-  config: MARKER_RULE,
-  tag: MARKER_RULE,
-  "update-ref": MARKER_RULE,
-  "rev-parse": VERIFY_MARKER_RULE,
-  checkout: DASH_REFUSED_RULE,
-  credential: NO_OPERANDS_RULE,
-  version: NO_OPERANDS_RULE,
+// A subcommand's operand rule, and whether it can reach a remote over ssh.
+interface SubcommandRule {
+  readonly operands: OperandRule;
+  readonly ssh: boolean;
+}
+
+const SUBCOMMAND_RULES: Readonly<Record<GitSubcommand, SubcommandRule>> = {
+  clone: { operands: MARKER_RULE, ssh: true },
+  fetch: { operands: MARKER_RULE, ssh: true },
+  "ls-remote": { operands: MARKER_RULE, ssh: true },
+  config: { operands: MARKER_RULE, ssh: false },
+  tag: { operands: MARKER_RULE, ssh: false },
+  "update-ref": { operands: MARKER_RULE, ssh: false },
+  "rev-parse": { operands: VERIFY_MARKER_RULE, ssh: false },
+  checkout: { operands: DASH_REFUSED_RULE, ssh: false },
+  credential: { operands: NO_OPERANDS_RULE, ssh: false },
+  version: { operands: NO_OPERANDS_RULE, ssh: false },
 };
 
 // D-SG-02: the `-c` pairs of upstream's network-free lane, after the D-SG-05
@@ -295,12 +318,18 @@ const LOCAL_LANE_PAIRS = [
   "protocol.file.allow=never",
 ] as const;
 
-// What a lane does to every command on it.
-interface LaneRules {
+// Variables a command's environment loses and gains.
+interface EnvironmentChange {
   /** Removed in every spelling. */
   readonly removed: readonly string[];
   /** Set over the user's values, every spelling replaced. */
   readonly variables: Readonly<Record<string, string>>;
+}
+
+const NO_CHANGE: EnvironmentChange = { removed: [], variables: {} };
+
+// What a lane does to every command on it.
+interface LaneRules extends EnvironmentChange {
   /** The `-c` bans between the transport bans and PIN_PAIRS. */
   readonly bans: (base: NodeJS.ProcessEnv, rules: PlatformRules) => readonly string[];
   /** The `-c` pairs after the D-SG-05 pairs. */
@@ -347,6 +376,126 @@ const LANES: Readonly<Record<GitLane, LaneRules>> = {
     pairs: [],
   },
 };
+
+// D-SG-05, Q14 `nn`: the one read of the user's ssh choice. It runs on the
+// local lane without a working directory, so it runs in the neutral
+// directory, and a repository's own config never answers it. Exit 1 means
+// that neither key is set.
+const SSH_CONFIG_READ = {
+  subcommand: "config",
+  lane: "local",
+  options: ["--get-regexp"],
+  operands: [String.raw`^(core\.sshcommand|ssh\.variant)$`],
+  allowExit: [1],
+} as const satisfies Omit<GitRequest, "timeoutMs">;
+
+// Q14 `nn`: the options after the user's ssh command, by variant. git adds
+// `-batch` to a tortoiseplink command itself. Any other variant runs as
+// OpenSSH. D-SG-03: no option controls host-key updates, so ssh's own
+// default applies.
+const SSH_VARIANT_OPTIONS: ReadonlyMap<string, readonly string[]> = new Map([
+  ["plink", ["-batch"]],
+  ["putty", ["-batch"]],
+  ["tortoiseplink", []],
+]);
+
+const OPENSSH_OPTIONS = ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes"] as const;
+
+// A single quote inside a single-quoted `sh` word: close, escape, reopen.
+const QUOTED_QUOTE = String.raw`'\''`;
+
+function shellQuoted(text: string): string {
+  return `'${text.replaceAll("'", QUOTED_QUOTE)}'`;
+}
+
+// The first word of `command`, unquoted as git's `split_cmdline` reads it.
+// Outside quotes, whitespace ends the word and a quote opens a span; the
+// same quote closes it. A backslash outside single quotes escapes the next
+// character.
+function firstWord(command: string): string {
+  let word = "";
+  let quote = "";
+  let index = 0;
+  while (index < command.length && (quote !== "" || !/\s/.test(command.charAt(index)))) {
+    const character = command.charAt(index);
+    const escape = character === "\\" && quote !== "'";
+    if (escape) {
+      word += command.charAt(index + 1);
+    } else if (quote === "" && (character === "'" || character === '"')) {
+      quote = character;
+    } else if (character === quote) {
+      quote = "";
+    } else {
+      word += character;
+    }
+
+    index += escape ? 2 : 1;
+  }
+
+  return word;
+}
+
+// Code-unit order, which Node uses to pick one Windows spelling.
+function codeUnitOrder(left: string, right: string): number {
+  return Number(left > right) - Number(left < right);
+}
+
+// The user's value of `name`. On Windows Node passes the first spelling in
+// sorted order. An empty value counts as unset.
+function userValue(env: NodeJS.ProcessEnv, name: string, rules: PlatformRules): string | undefined {
+  const [key] = spellingsOf(env, name, rules).sort(codeUnitOrder);
+  const value = key === undefined ? undefined : env[key];
+  return value === "" ? undefined : value;
+}
+
+// The values of `git config --get-regexp`, one `<key> <value>` per line. The
+// last line of a key wins, and an empty value counts as unset.
+function configValues(stdout: string): ReadonlyMap<string, string> {
+  const values = new Map<string, string>();
+  for (const line of stdout.split(/\r?\n/)) {
+    const key = line.replace(/ [\s\S]*/, "");
+    const value = line.slice(key.length + 1);
+    if (value === "") {
+      values.delete(key);
+    } else {
+      values.set(key, value);
+    }
+  }
+
+  return values;
+}
+
+// D-SG-05, Q14 `nn`: the user's ssh command with the variant's options, run
+// from the neutral directory. GIT_SSH_COMMAND outranks every config scope,
+// so a repository's own `core.sshCommand` never runs, and GIT_SSH goes. A
+// GIT_SSH_VARIANT from the user's `ssh.variant` likewise keeps a
+// repository's own `ssh.variant` from choosing the options git adds.
+function sshEnvironment(
+  base: NodeJS.ProcessEnv,
+  rules: PlatformRules,
+  config: ReadonlyMap<string, string>,
+  neutral: string,
+): EnvironmentChange {
+  const program = userValue(base, "GIT_SSH", rules);
+  const command =
+    userValue(base, "GIT_SSH_COMMAND", rules) ??
+    config.get("core.sshcommand") ??
+    (program === undefined ? "ssh" : shellQuoted(program));
+  const userVariant = userValue(base, "GIT_SSH_VARIANT", rules);
+  const configVariant = config.get("ssh.variant");
+  const variant =
+    userVariant ?? configVariant ?? rules.paths.basename(firstWord(command)).replace(/\.exe$/i, "");
+  const options = SSH_VARIANT_OPTIONS.get(variant.toLowerCase()) ?? OPENSSH_OPTIONS;
+  const wrapped = `CDPATH= cd -- ${shellQuoted(neutral)} 2>/dev/null || cd / || exit 1; ${[command, ...options].join(" ")}`;
+  return {
+    removed: ["GIT_SSH"],
+    variables: {
+      GIT_SSH_COMMAND: wrapped,
+      ...(userVariant === undefined &&
+        configVariant !== undefined && { GIT_SSH_VARIANT: configVariant }),
+    },
+  };
+}
 
 // The variables that point git at another repository, and GIT_TEMPLATE_DIR,
 // which beats `-c init.templateDir=`.
@@ -471,15 +620,16 @@ function searchPath(env: NodeJS.ProcessEnv, rules: PlatformRules): SearchPath {
 }
 
 // D-SG-05: a pure function of the base environment, the platform, the lane,
-// and the real working directory; the base stays unchanged.
+// the ssh change, and the real working directory; the base stays unchanged.
 function gitEnvironment(
   base: NodeJS.ProcessEnv,
   rules: PlatformRules,
   lane: GitLane,
+  ssh: EnvironmentChange,
   cwd: string,
 ): NodeJS.ProcessEnv {
   const env = { ...base };
-  for (const name of [...REMOVED_VARIABLES, ...LANES[lane].removed]) {
+  for (const name of [...REMOVED_VARIABLES, ...LANES[lane].removed, ...ssh.removed]) {
     removeVariable(env, name, rules);
   }
 
@@ -493,7 +643,7 @@ function gitEnvironment(
     }
   }
 
-  for (const [name, value] of Object.entries(LANES[lane].variables)) {
+  for (const [name, value] of Object.entries({ ...LANES[lane].variables, ...ssh.variables })) {
     setVariable(env, name, value, rules);
   }
 
@@ -516,7 +666,7 @@ function gitEnvironment(
 // SG-PRC-01: the words after the subcommand, or undefined when its operand
 // rule refuses the request's operands.
 function subcommandWords(request: GitRequest): readonly string[] | undefined {
-  const rule = OPERAND_RULES[request.subcommand];
+  const rule = SUBCOMMAND_RULES[request.subcommand].operands;
   const options = request.options ?? [];
   const operands = request.operands ?? [];
   return rule.accepts(options, operands) ? rule.words(options, operands) : undefined;
@@ -762,13 +912,14 @@ export function createGitProcess(options: GitProcessOptions): GitProcess {
       throw new GitCommandError({ kind: "refused-input" }, { operation });
     }
 
+    const ssh = await sshChange(request, rules);
     const processRun = await runProcess(
       { spawn: options.spawn, host },
       {
         command: git,
         args: gitArguments(request, options.env, rules, words),
         cwd,
-        env: gitEnvironment(options.env, rules, request.lane, cwd),
+        env: gitEnvironment(options.env, rules, request.lane, ssh, cwd),
         timeoutMs: request.timeoutMs,
         killGraceMs: options.killGraceMs,
         signal: request.signal,
@@ -784,6 +935,24 @@ export function createGitProcess(options: GitProcessOptions): GitProcess {
     }
 
     return settled;
+  }
+
+  // D-SG-05: a network-lane command that can use ssh first reads the user's
+  // ssh choice, under the request's timeout and cancellation. No debug log
+  // names the command or the read, because a user's ssh arguments can name
+  // key files.
+  async function sshChange(request: GitRequest, rules: PlatformRules): Promise<EnvironmentChange> {
+    if (request.lane === "local" || !SUBCOMMAND_RULES[request.subcommand].ssh) {
+      return NO_CHANGE;
+    }
+
+    const read = await execute({
+      ...SSH_CONFIG_READ,
+      timeoutMs: request.timeoutMs,
+      ...(request.signal !== undefined && { signal: request.signal }),
+    });
+    const neutral = await host.realpath(host.tmpdir());
+    return sshEnvironment(options.env, rules, configValues(read.stdout), neutral);
   }
 
   // D-SG-06: the version read runs through `execute`, so it never reads the
