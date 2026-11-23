@@ -35,6 +35,20 @@
 // real path of the host's temporary directory, so the repository Pi runs in
 // never steers the command.
 //
+// SG-PRC-01, E7: a request carries Pi's own flags as options and the data a
+// marketplace controls as operands. Each subcommand's operand rule puts the
+// operands after the options, behind `--end-of-options` where git accepts
+// it, so git never reads an operand as an option. A request whose operands
+// break its rule starts no process.
+//
+// D-SG-02, SG-PRC-04: a request runs on one of two lanes. The local lane is
+// upstream's network-free lane: GIT_ALLOW_PROTOCOL=/ names no transport, and
+// no user config can re-allow one, while a user's `protocol.<name>.allow=
+// always` does beat `-c protocol.allow=never`. GIT_SSH_COMMAND=false, the
+// remote-helper aliases, and the lane's `-c` pairs close the rest. Unlike
+// upstream's lane, it keeps the user's git configuration. No production
+// caller uses the local lane until the clone transport moves to system git.
+//
 // SG-PRC-05: a run that exits with a code its request does not allow rejects
 // with the kind platform/git-failure-kind.ts reads from the exit code and the
 // C-locale stderr. D-SG-06: after a `git-too-old` failure, and only then, the
@@ -62,18 +76,40 @@ import { findOnWindowsPath, NODE_PROCESS_HOST, runProcess } from "./process-run.
 import type { GitFailure } from "../shared/errors.ts";
 import type { OutputCapture, ProcessHost, ProcessRun, ProcessSpawn } from "./process-run.ts";
 
-/** D-SG-02: the lane a command runs on. */
-export type GitLane = "network";
+/**
+ * D-SG-02: the lane a command runs on. `local` is upstream's network-free
+ * lane, from which git reaches no transport; `network` may reach one.
+ */
+export type GitLane = "local" | "network";
 
-/** The git subcommands the extension runs. */
-export type GitSubcommand = "credential" | "version";
+/**
+ * The git subcommands the extension runs. Each has an operand rule (E7); a
+ * subcommand joins this set only with evidence for its own rule.
+ */
+export type GitSubcommand =
+  | "clone"
+  | "fetch"
+  | "ls-remote"
+  | "checkout"
+  | "rev-parse"
+  | "config"
+  | "tag"
+  | "update-ref"
+  | "credential"
+  | "version";
 
 /** One git command to run. */
 export interface GitRequest {
   readonly subcommand: GitSubcommand;
   readonly lane: GitLane;
-  /** Pi-owned words after the subcommand, in the order given. */
+  /** Pi-owned flags after the subcommand, in the order given. */
   readonly options?: readonly string[];
+  /**
+   * SG-PRC-01: marketplace-controlled data, such as a URL, a ref, or a path.
+   * The subcommand's operand rule places it after the options, where git
+   * cannot read it as an option.
+   */
+  readonly operands?: readonly string[];
   /** The directory git runs in. Omitted, the command runs in the neutral directory. */
   readonly cwd?: string;
   /** Written to stdin, which then closes. Without input, stdin is closed from the start. */
@@ -181,6 +217,96 @@ function configPairs(hooksPath: string): readonly string[] {
     "init.templateDir=",
   ];
 }
+
+// SG-PRC-01, E7: how a subcommand takes operands, from git 2.43's answers.
+// `clone`, `fetch`, `ls-remote`, `config`, `tag`, and `update-ref` accept
+// `--end-of-options` before the operands. `rev-parse` accepts it only with
+// `--verify` and otherwise prints it back, so its operands need `--verify`.
+// `checkout` reads the marker as a pathspec, so an operand that starts with
+// `-` is refused and `--` ends the argv, which keeps every operand a ref.
+// `credential` and `version` take no operands. The marker is added once, and
+// only when operands are present.
+interface OperandRule {
+  /** Whether the request's operands may reach git. */
+  readonly accepts: (options: readonly string[], operands: readonly string[]) => boolean;
+  /** The words after the subcommand. */
+  readonly words: (options: readonly string[], operands: readonly string[]) => readonly string[];
+}
+
+function optionsThenMarker(options: readonly string[], operands: readonly string[]): string[] {
+  return operands.length === 0 ? [...options] : [...options, "--end-of-options", ...operands];
+}
+
+const MARKER_RULE: OperandRule = { accepts: () => true, words: optionsThenMarker };
+
+const VERIFY_MARKER_RULE: OperandRule = {
+  accepts: (options, operands) => operands.length === 0 || options.includes("--verify"),
+  words: optionsThenMarker,
+};
+
+const DASH_REFUSED_RULE: OperandRule = {
+  accepts: (_options, operands) => !operands.some((operand) => operand.startsWith("-")),
+  words: (options, operands) =>
+    operands.length === 0 ? [...options] : [...options, ...operands, "--"],
+};
+
+const NO_OPERANDS_RULE: OperandRule = {
+  accepts: (_options, operands) => operands.length === 0,
+  words: (options) => options,
+};
+
+const OPERAND_RULES: Readonly<Record<GitSubcommand, OperandRule>> = {
+  clone: MARKER_RULE,
+  fetch: MARKER_RULE,
+  "ls-remote": MARKER_RULE,
+  config: MARKER_RULE,
+  tag: MARKER_RULE,
+  "update-ref": MARKER_RULE,
+  "rev-parse": VERIFY_MARKER_RULE,
+  checkout: DASH_REFUSED_RULE,
+  credential: NO_OPERANDS_RULE,
+  version: NO_OPERANDS_RULE,
+};
+
+// D-SG-02: the `-c` pairs of upstream's network-free lane, after the D-SG-05
+// pairs. Upstream passes the first five through GIT_CONFIG_PARAMETERS, which
+// Pi keeps for the user, so they ride `-c` here. The aliases point a remote
+// helper at `git version`; they are defense in depth only, because git runs
+// a helper it finds on disk before an alias of that name (E4).
+const LOCAL_LANE_PAIRS = [
+  "alias.remote-none=version",
+  "alias.remote-none.command=version",
+  "alias.remote-/.command=version",
+  "fetch.bundleURI=",
+  "help.autocorrect=0",
+  "safe.bareRepository=explicit",
+  "protocol.file.allow=never",
+] as const;
+
+// What a lane adds to every command on it.
+interface LaneRules {
+  /** Set over the user's values, every spelling replaced. */
+  readonly variables: Readonly<Record<string, string>>;
+  /** The `-c` pairs after the D-SG-05 pairs. */
+  readonly pairs: readonly string[];
+}
+
+// D-SG-02: a user's `protocol.<name>.allow=always` beats
+// `-c protocol.allow=never`, but no config re-allows a transport that
+// GIT_ALLOW_PROTOCOL leaves out, so the local lane names none. It keeps the
+// user's config, unlike upstream's lane, which strips it.
+const LANES: Readonly<Record<GitLane, LaneRules>> = {
+  local: {
+    variables: {
+      GIT_ALLOW_PROTOCOL: "/",
+      GIT_SSH_COMMAND: "false",
+      GIT_NO_LAZY_FETCH: "1",
+      GIT_LFS_SKIP_SMUDGE: "1",
+    },
+    pairs: LOCAL_LANE_PAIRS,
+  },
+  network: { variables: {}, pairs: [] },
+};
 
 // The variables that point git at another repository, and GIT_TEMPLATE_DIR,
 // which beats `-c init.templateDir=`.
@@ -304,11 +430,12 @@ function searchPath(env: NodeJS.ProcessEnv, rules: PlatformRules): SearchPath {
   return { value, directories: absoluteEntries(value, rules) };
 }
 
-// D-SG-05: a pure function of the base environment, the platform, and the
-// real working directory; the base stays unchanged.
+// D-SG-05: a pure function of the base environment, the platform, the lane,
+// and the real working directory; the base stays unchanged.
 function gitEnvironment(
   base: NodeJS.ProcessEnv,
   rules: PlatformRules,
+  lane: GitLane,
   cwd: string,
 ): NodeJS.ProcessEnv {
   const env = { ...base };
@@ -324,6 +451,10 @@ function gitEnvironment(
     if (spellingsOf(env, name, rules).length === 0) {
       env[name] = value;
     }
+  }
+
+  for (const [name, value] of Object.entries(LANES[lane].variables)) {
+    setVariable(env, name, value, rules);
   }
 
   // LC_ALL beats LC_MESSAGES, so its value moves to LC_CTYPE.
@@ -342,11 +473,24 @@ function gitEnvironment(
   return env;
 }
 
-function gitArguments(request: GitRequest, rules: PlatformRules): string[] {
+// SG-PRC-01: the words after the subcommand, or undefined when its operand
+// rule refuses the request's operands.
+function subcommandWords(request: GitRequest): readonly string[] | undefined {
+  const rule = OPERAND_RULES[request.subcommand];
+  const options = request.options ?? [];
+  const operands = request.operands ?? [];
+  return rule.accepts(options, operands) ? rule.words(options, operands) : undefined;
+}
+
+function gitArguments(
+  request: GitRequest,
+  rules: PlatformRules,
+  words: readonly string[],
+): string[] {
   return [
-    ...rules.config.flatMap((pair) => ["-c", pair]),
+    ...[...rules.config, ...LANES[request.lane].pairs].flatMap((pair) => ["-c", pair]),
     request.subcommand,
-    ...(request.options ?? []),
+    ...words,
   ];
 }
 
@@ -564,6 +708,12 @@ export function createGitProcess(options: GitProcessOptions): GitProcess {
       );
     }
 
+    // A refused request starts nothing, and its error names no operand.
+    const words = subcommandWords(request);
+    if (words === undefined) {
+      throw new GitCommandError({ kind: "refused-input" }, { operation });
+    }
+
     const { git, key } = await lookup();
     const rules = rulesFor(host.platform);
     const cwd = await host.realpath(request.cwd ?? host.tmpdir());
@@ -576,9 +726,9 @@ export function createGitProcess(options: GitProcessOptions): GitProcess {
       { spawn: options.spawn, host },
       {
         command: git,
-        args: gitArguments(request, rules),
+        args: gitArguments(request, rules, words),
         cwd,
-        env: gitEnvironment(options.env, rules, cwd),
+        env: gitEnvironment(options.env, rules, request.lane, cwd),
         timeoutMs: request.timeoutMs,
         killGraceMs: options.killGraceMs,
         signal: request.signal,
