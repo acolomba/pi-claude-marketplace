@@ -120,7 +120,7 @@ them at the merge.
 - [x] **Phase 5: MCP Install, Legacy Move, and Overrides** - Scenarios prove the MCP install refusals and warnings, the legacy `mcp.json` move, and the pi-mcp-adapter override cases (completed 2026-11-22)
 - [x] **Phase 6: Hooks and Auth** - Scenarios prove hooks in both scopes after `apply`, a reload that clears buffered context, no `.pi` directory from a hook dispatch, and the print-mode and credential-eviction sign-in cases (completed 2026-11-22)
 - [ ] **Phase 06.1: Reload Keeps SessionStart Context** (INSERTED) - A `/reload` before the first prompt keeps the startup SessionStart context, as Claude Code's `/reload-plugins` does
-- [ ] **Phase 7: Path-Source Dependency Tags** - A step publishes a marketplace repository with a tag, and scenarios prove that a constrained path-source dependency installs from that tag, with the TAGS-02 fallback
+- [x] **Phase 7: Path-Source Dependency Tags** - A step publishes a marketplace repository with a tag, and scenarios prove that a constrained path-source dependency installs from that tag, with the TAGS-02 fallback (completed 2026-11-23)
 - [ ] **Phase 8: Integration Suite Rescope** - Every case left in `test/integration/` is conformance, a race, or internal, each file says what it guards, the charter is written down, and `npm run check` passes on the combined tree
 
 <details>
@@ -342,7 +342,7 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. A plugin whose path-source dependency carries a version constraint installs that dependency from the marketplace tag that the constraint selects, such as `formatter--v1.0.0`, while the marketplace HEAD has moved past the tag; the installed dependency shows the tag's version and content (TAGS-01, TAGS-03). The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `path-source-tag-install` (ITMIG-07).
   2. When no marketplace tag satisfies the constraint, both plugins still install, from the current checkout (TAGS-02). The scenario passes under both profiles, fails under a deliberate break, and the case it replaces is gone from `path-source-tag-install` (ITMIG-07).
-**Plans**: 1/1 plans executed
+**Plans**: 1/1 plans complete
 
 Plans:
 - [x] 07-01-PLAN.md -- Wave 1: the shared release-tag builder `pushGitTag` with the marketplace tag step and its run tokens, the tag scenario and the TAGS-02 fallback scenario in `plugin/install-dependencies.feature`, breaks B1 to B5, then trim `path-source-tag-install` to CR-01 and the two-member git-state case (ITMIG-07)
@@ -371,7 +371,7 @@ Plans:
 | 4. Prune | 2/2 | Complete    | 2026-11-22 |
 | 5. MCP Install, Legacy Move, and Overrides | 3/3 | Complete    | 2026-11-22 |
 | 6. Hooks and Auth | 2/2 | Complete    | 2026-11-22 |
-| 7. Path-Source Dependency Tags | 1/1 | In Progress | - |
+| 7. Path-Source Dependency Tags | 1/1 | Complete    | 2026-11-23 |
 | 8. Integration Suite Rescope | 0/TBD | Not started | - |
 
 ## Carried Forward

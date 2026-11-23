@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: integration-rescope
 milestone_name: Integration Test Rescope
-current_phase: 07
-current_phase_name: Path-Source Dependency Tags
+current_phase: "06.1"
+current_phase_name: Reload Keeps SessionStart Context
 status: executing
-stopped_at: Phase 06 complete, ready to verify Phase 7
-last_updated: "2026-11-23T01:09:02.484Z"
+stopped_at: Phase 07 complete, ready to execute Phase 06.1
+last_updated: "2026-11-23T02:44:15.477Z"
 last_activity: 2026-11-23
-last_activity_desc: Phase 07 execution started
-state_head: 26f6fec91fa7e91692b574678825b163b5d32f28
+last_activity_desc: Phase 07 complete, transitioned to Phase 06.1
+state_head: 31c9c6fffbcf2bf7b979bcfa78ded730370b5dd5
 progress:
   total_phases: 9
-  completed_phases: 6
-  total_plans: 18
-  completed_plans: 17
-  percent: 67
+  completed_phases: 7
+  total_plans: 19
+  completed_plans: 18
+  percent: 78
 ---
 
 # Project State
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-11-21 after Phase 1)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 07 — Path-Source Dependency Tags
+**Current focus:** Phase 6.1 — Reload Keeps SessionStart Context (executing); then Phase 8
 
 ## Current Position
 
-Phase: 07 (Path-Source Dependency Tags) — EXECUTING
+Phase: 6.1 of 8 (Reload Keeps SessionStart Context, inserted)
 Plan: 1 of 1
-Status: Executing Phase 07
-Last activity: 2026-11-23 — Phase 07 execution started
+Status: Executing (Phase 7 complete: verified 9/9, threats 0 open)
+Last activity: 2026-11-23 — Phase 07 complete, transitioned to Phase 06.1
 
-Progress: [███████░░░] 67%
+Progress: [████████░░] 78%
 
 
 ### parity-gaps closeout: `override_closeout`
@@ -1307,7 +1307,7 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 ## Session Continuity
 
 Last session: 2026-11-22T15:00:00.000Z
-Stopped at: Phase 6 complete (verified 9/9, threats 0 open; HOOK-E2E-04 case kept pending upstream research), ready to plan Phase 7
+Stopped at: Phase 07 complete, ready to execute Phase 06.1
 Resume file: None
 
 ### Phase 2 completion-helper notes
