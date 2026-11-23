@@ -13,6 +13,7 @@ import {
 import { gitHubWireUrl } from "../shared/github-base-url.ts";
 
 import { buildAuthCallbacks } from "./git-auth-callbacks.ts";
+import { NODE_GIT_PROCESS } from "./git-process.ts";
 
 import type { BuildAuthCallbacksOpts } from "./git-auth-callbacks.ts";
 import type { GitHttpRequest, GitHttpResponse, HttpClient } from "isomorphic-git/http/node";
@@ -20,8 +21,14 @@ import type { GitHttpRequest, GitHttpResponse, HttpClient } from "isomorphic-git
 /**
  * platform/git.ts -- isomorphic-git wrapper (D-18, D-19, D-20).
  *
- * Uses pure-JS `isomorphic-git`, so there is no `git not found on PATH`
- * failure mode (D-21, MA-7).
+ * D-SG-01 (reverses D-21): the network verbs `clone`, `fetch`,
+ * `resolveRemoteRef`, and `listRemoteTags` need system git. Each first asks
+ * `platform/git-process.ts` for it, so with no usable git on PATH they reject
+ * with that module's `git-missing` GitCommandError before isomorphic-git runs
+ * or a request goes out (SG-PRC-06). The system-git transport will raise the
+ * same error from the same place. The local verbs still run in-process with
+ * pure-JS `isomorphic-git` and need no git, so a path-source marketplace still
+ * reads its own release tags without one (TAGS-01).
  *
  * Pins `fs` (Node's built-in) and `http` so the marketplace orchestrators
  * don't thread them through every call. `http` is the module-private client
@@ -564,6 +571,7 @@ async function listServerRefsAt(
 }
 
 export async function clone(opts: CloneOptions): Promise<void> {
+  await NODE_GIT_PROCESS.locate();
   // When opts.auth is provided, build the isomorphic-git callbacks
   // up-front and conditionally spread them. When omitted, the public-only
   // path stays byte-identical.
@@ -610,6 +618,7 @@ export async function clone(opts: CloneOptions): Promise<void> {
  * name, so the tracking refs update and `.git/config` keeps the canonical url.
  */
 export async function fetch(opts: FetchOptions): Promise<void> {
+  await NODE_GIT_PROCESS.locate();
   const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
   const remote = opts.remote ?? "origin";
   const recordedUrl: unknown = await git.getConfig({
@@ -685,6 +694,7 @@ export async function resolveRef(opts: ResolveRefOptions): Promise<string> {
  * Promise<ServerRef[]>, where each ServerRef is { ref, oid, target?, peeled? }.
  */
 export async function resolveRemoteRef(opts: ResolveRemoteRefOptions): Promise<string> {
+  await NODE_GIT_PROCESS.locate();
   const { wireUrl, refs } = await listServerRefsAt(opts, { symrefs: true });
 
   if (opts.ref === undefined) {
@@ -756,6 +766,7 @@ const PEELED_REF_SUFFIX = "^{}";
  * Promise<ServerRef[]>, where each ServerRef is { ref, oid, target?, peeled? }.
  */
 export async function listRemoteTags(opts: ListRemoteTagsOptions): Promise<RemoteTag[]> {
+  await NODE_GIT_PROCESS.locate();
   const { refs } = await listServerRefsAt(opts, { prefix: TAG_REF_PREFIX });
 
   const tags: RemoteTag[] = [];

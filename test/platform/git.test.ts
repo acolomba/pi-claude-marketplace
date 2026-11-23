@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import * as fs from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import nodeHttp from "node:http";
 import https from "node:https";
 import * as path from "node:path";
@@ -30,6 +30,7 @@ import {
   CrossOriginChallengeError,
   DeviceFlowUnavailableError,
   FetchedUrlCause,
+  GitCommandError,
   TooManyRedirectsError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
@@ -401,6 +402,40 @@ async function createProductionGitOps(t: TestContext): Promise<GitOpsContractPar
       }
     },
   };
+}
+
+/**
+ * SG-PRC-06: the lookup's own failure, unwrapped, so a missing git gets no
+ * fetched-URL cause even when the GitHub base override rewrote the URL.
+ */
+function isGitMissingWithoutCause(error: unknown): boolean {
+  assert.ok(error instanceof GitCommandError);
+  assert.deepStrictEqual(error.failure, { kind: "git-missing", detail: "not-found" });
+  assert.strictEqual(error.message, "Git is required to install marketplaces.");
+  assert.strictEqual(error.cause, undefined);
+  return true;
+}
+
+/**
+ * Points PATH at an empty directory for one test, so this process finds no
+ * git. Build every fixture first: the fixtures run system git through PATH.
+ * The restore is registered before PATH changes; the returned function
+ * restores it early, and the registered restore then writes the same value.
+ */
+async function withoutGitOnPath(t: TestContext): Promise<() => void> {
+  const directory = await createGitTestDirectory(t, { boundary: "local" });
+  const previous = process.env.PATH;
+  const restore = (): void => {
+    if (previous === undefined) {
+      delete process.env.PATH;
+    } else {
+      process.env.PATH = previous;
+    }
+  };
+
+  t.after(restore);
+  process.env.PATH = directory;
+  return restore;
 }
 
 function isExpectedDiscoveryError(
@@ -864,6 +899,96 @@ describe("local Git operations", () => {
       await resolveRef({ dir: repository.dir, ref: "HEAD" }),
       repository.initialOid,
     );
+  });
+});
+
+describe("SG-PRC-06: the git-required gate", () => {
+  interface GateDirectories {
+    /** A repository whose origin is the GitHub remote. */
+    readonly repository: string;
+    /** An empty directory a clone would write into. */
+    readonly target: string;
+  }
+
+  const networkVerbs: readonly {
+    readonly name: string;
+    readonly call: (directories: GateDirectories) => Promise<unknown>;
+  }[] = [
+    { name: "clone", call: ({ target }) => clone({ dir: target, url: GITHUB_REMOTE_URL }) },
+    { name: "fetch", call: ({ repository }) => fetch({ dir: repository }) },
+    { name: "resolveRemoteRef", call: () => resolveRemoteRef({ url: GITHUB_REMOTE_URL }) },
+    { name: "listRemoteTags", call: () => listRemoteTags({ url: GITHUB_REMOTE_URL }) },
+  ];
+
+  for (const verb of networkVerbs) {
+    test(`D-SG-01: ${verb.name} fails as git missing and sends no request`, async (t) => {
+      // arrange
+      const requests = installRemoteTransport(t, FULL_ADVERTISEMENT);
+      const repository = await createGitTestRepository(t, { boundary: "local" });
+      await repository.run("remote", "add", "origin", GITHUB_REMOTE_URL);
+      const target = await createGitTestDirectory(t, { boundary: "local" });
+      setGitHubBaseUrl(t, `https://${HOST}`);
+      await withoutGitOnPath(t);
+
+      // act
+      const calling = verb.call({ repository: repository.dir, target });
+
+      // assert
+      await assert.rejects(calling, isGitMissingWithoutCause);
+      assert.deepStrictEqual(requests, []);
+      assert.deepStrictEqual(await readdir(target), []);
+    });
+  }
+
+  test("TAGS-01: the local verbs read and write a clone with no git on the path", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    await repository.run("remote", "add", "origin", REMOTE_URL);
+    await repository.run("tag", "v1.0.0", repository.initialOid);
+    const nextOid = await repository.commit([{ filepath: "next.txt", contents: "next\n" }], "next");
+    await withoutGitOnPath(t);
+    const { dir } = repository;
+
+    // act
+    await forceUpdateRef({ dir, ref: "refs/heads/feature", value: repository.initialOid });
+    await checkout({ dir, ref: "feature" });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        branch: await currentBranch({ dir }),
+        head: await resolveRef({ dir, ref: "HEAD" }),
+        main: await resolveRef({ dir, ref: "refs/heads/main" }),
+        tags: await listTags({ dir }),
+        tag: await resolveTagOid({ dir, name: "v1.0.0", cache: {} }),
+        remotes: await listRemotes({ dir }),
+      },
+      {
+        branch: "feature",
+        head: repository.initialOid,
+        main: nextOid,
+        tags: ["v1.0.0"],
+        tag: repository.initialOid,
+        remotes: { kind: "origin", url: REMOTE_URL },
+      },
+    );
+  });
+
+  test("D-SG-04: a clone succeeds once git is back on the path", async (t) => {
+    // arrange
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    const refused = await createGitTestDirectory(t, { boundary: "local" });
+    const dir = await createGitTestDirectory(t, { boundary: "local" });
+    await installRepositoryTransport(t, repository);
+    const restorePath = await withoutGitOnPath(t);
+    await assert.rejects(clone({ dir: refused, url: REMOTE_URL }), isGitMissingWithoutCause);
+    restorePath();
+
+    // act
+    await clone({ dir, url: REMOTE_URL });
+
+    // assert
+    assert.strictEqual(await resolveRef({ dir, ref: "HEAD" }), repository.initialOid);
   });
 });
 
