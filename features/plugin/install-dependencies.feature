@@ -745,6 +745,39 @@ Feature: Plugin install dependencies
       | formatter-skill/         |      |
       | formatter-skill/SKILL.md | ---\nname: formatter-skill\ndescription: A skill of formatter 2.0.0.\npi-claude-marketplace: {"names":["formatter:formatter-skill","formatter-skill"],"pluginRoot":"{project dir}/.pi/pi-claude-marketplace/sources/tools/plugins/formatter","pluginData":"{project dir}/.pi/pi-claude-marketplace/data/tools/formatter"}\n---\n\nVersion 2.0.0.\n |
 
+  Scenario: Installing a plugin installs its path-source dependency from a release tag of a marketplace added from a local git folder (TAGS-01, TAGS-03)
+    Given the marketplace "tools" is published as a git-folder source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name      | version | dependencies     |
+      | app       | 1.0.0   | formatter@^1.0.0 |
+      | formatter | 1.0.0   |                  |
+    Given the marketplace "tools" tags its current commit "formatter--v1.0.0"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name      | version | dependencies     |
+      | app       | 1.1.0   | formatter@^1.0.0 |
+      | formatter | 2.0.0   |                  |
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id              | name            | status    | reasons | scope   | version                                  |
+      | tools            | project           | app@tools       | app             | installed |         | project | 1.1.0                                    |
+      | tools            | project           | formatter@tools | formatter@tools | installed |         | project | 1.0.0-{tools revision formatter--v1.0.0} |
+    Then the installation record of the project scope holds these plugins:
+      | id              | version                                  | enabled |
+      | app@tools       | 1.1.0                                    | true    |
+      | formatter@tools | 1.0.0-{tools revision formatter--v1.0.0} | true    |
+    Then the staged skills directory of the project scope holds these files:
+      | file                     | text |
+      | app-skill/               |      |
+      | app-skill/SKILL.md       | ---\nname: app-skill\ndescription: A skill of app 1.1.0.\npi-claude-marketplace: {"names":["app:app-skill","app-skill"],"pluginRoot":"{home}/marketplaces/tools/plugins/app","pluginData":"{project dir}/.pi/pi-claude-marketplace/data/tools/app"}\n---\n\nVersion 1.1.0.\n |
+      | formatter-skill/         |      |
+      | formatter-skill/SKILL.md | ---\nname: formatter-skill\ndescription: A skill of formatter 1.0.0.\npi-claude-marketplace: {"names":["formatter:formatter-skill","formatter-skill"],"pluginRoot":"{project dir}/.pi/pi-claude-marketplace/plugin-clones/d1e3927ef215-{tools revision formatter--v1.0.0}/plugins/formatter","pluginData":"{project dir}/.pi/pi-claude-marketplace/data/tools/formatter"}\n---\n\nVersion 1.0.0.\n |
+    Then the git host receives no request
+
   Scenario: Installing a second plugin that asks for a dependency's range leaves the dependency recorded at its release tag in place
     Given the git repository "lib" holds these plugins:
       | name | version | path |
