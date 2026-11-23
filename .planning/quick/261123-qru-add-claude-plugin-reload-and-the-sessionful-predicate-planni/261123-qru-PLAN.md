@@ -85,6 +85,7 @@ files_modified:
   - features/plugin/help.feature
   - features/step_definitions/command.steps.ts
   - features/lib/plugin-completions.ts
+  - features/lib/pi-commands.ts
   - features/skill/lifecycle.feature
   - features/slash-command/invocation.feature
   - docs/json-output.md
@@ -101,14 +102,15 @@ autonomous: true
 must_haves:
   truths:
     - "In Pi's terminal, `/claude:plugin reload` runs Pi's own reload, so the terminal shows Pi's row `Reloaded keybindings, extensions, skills, prompts, themes, and context files` (scenario `features/plugin/reload.feature:7`)."
-    - "Over RPC, `/claude:plugin reload` appends one `reload-started` payload (severity `info`, `needsReload` false), then Pi reloads, and the load of the reloaded runtime reports the config's pending install once; Pi answers the prompt with the disposition `handled` after the reload (scenario `features/plugin/reload.feature:14`)."
-    - "In a one-shot run (print or json mode), `/claude:plugin reload` refuses with `Reload is unavailable: this Pi run does not accept later commands, so the next run loads the changes.` and an empty usage (scenario `features/plugin/reload.feature:33`); there help leaves `reload` out of the usage, and completions leave it out after a session start whose host takes no later commands (router, help, provider, and register rows)."
+    - "Over RPC, `/claude:plugin reload` appends one `reload-started` payload (severity `info`, `needsReload` false), then Pi reloads, and the load of the reloaded runtime reports the config's pending install once, all before Pi answers the prompt with the disposition `handled`. The When's driver requires `handled` and keeps only the entries that arrive before the answer, so the load's row in the Then proves the answer came after the reload (scenario `features/plugin/reload.feature:14`; break B6, which stops awaiting the reload, fails that Then)."
+    - "In a one-shot run (print or json mode), `/claude:plugin reload` refuses with `Reload is unavailable: this Pi run does not accept later commands, so the next run loads the changes.` and an empty usage (scenario `features/plugin/reload.feature:33`); there help leaves `reload` out of the usage (guard scenario `features/plugin/help.feature:41`, which passes on today's tree and so has no natural red, and which break B2 fails), and completions leave it out after a session start whose host takes no later commands (router, help, provider, and register rows)."
     - "While the run of a prompt is active, `/claude:plugin reload` refuses with Claude Code's busy words `The session is busy, so plugins were not reloaded. Ask again once it is idle.`, starts no reload, and the prompt's run goes on to its end (scenario `features/plugin/reload.feature:42`)."
     - "`acceptsLaterCommands(host)` in `shared/session-host.ts` returns `host.hasUI` and is the only reader of Pi's `hasUI` in the extension; the reason is its doc comment. `reloadCommandFor(mode, host)` in the same file is the one place that picks the reload command: `/reload` where the host has Pi's own `/reload` (the module-private `hasNativeReload`, true only for `tui`), `/claude:plugin reload` in another host that takes later commands, and none in a one-shot run (grep gates and session-host rows)."
     - "Pi makes the command's context stale once it reloads, so `edge/register.ts` calls `ctx.reload()` only after the command settled and the foreground runner returned, and nothing reads the context after it; a reload that fails reaches Pi, which reports it (register rows)."
     - "The reload-hint trailer, the background update notice, and the MCP move rows name the command that `reloadCommandFor` picks, and a one-shot run's text has none of them; the JSON and RPC payloads keep `needsReload` in every mode, and every terminal byte form in `docs/output-catalog.md` stays as it is (grammar, mcp, dispatch, and catalog rows)."
     - "The skill and command refusals, typed and through `run_plugin_command`, name `/reload` in the terminal and `/claude:plugin reload` over RPC (scenarios `features/skill/lifecycle.feature:50` and `features/slash-command/invocation.feature:216`), and leave the reload out in a one-shot run (orchestrator rows)."
-    - "Red proofs: R0 and R1 fail on the code without each change in a When or a Then, logged before the change is committed; breaks B1 to B5 on the bound commit fail the scenarios they name; `check-red.mjs` prints `RED-PROOFS OK` for the `r0-`, `r1-`, and `fix-` tables, and `extensions/` ends clean."
+    - "Red proofs: R0 and R1 fail on the code without each change in a When or a Then, logged before the change is committed; the json help guard is a survivor of R0; breaks B1 to B6 on the bound commit fail the scenarios they name; `check-red.mjs` prints `RED-PROOFS OK` for the `r0-`, `r1-`, and `fix-` tables, and `extensions/` ends clean."
+    - "Execution is checkpointed: every finished step appends one row (step, commit, logs, gates) to `$D/progress.tsv`, and a resumed executor continues after the last row without redoing a finished step (Resume protocol; each task's ledger gate)."
     - "`check:static` passes, every changed source pair has 100% direct coverage, `test:unpaired` and `test:integration` pass, and the affected feature files pass under the adapter and the builtin profiles."
     - "The output catalog, the JSON guide, the README command list and its Spanish copy, the hooks, skills and commands, and MCP compatibility pages, the messaging guide, and the Key Decisions row RELOADCMD-D1 state the command, the two predicates, the hint rule, the wording rule, and the Pi gaps."
   artifacts:
@@ -127,6 +129,9 @@ must_haves:
     - path: features/plugin/reload.feature
       provides: "the terminal, RPC, one-shot, and busy scenarios at lines 7, 14, 33, and 42"
       contains: "Feature: Plugin reload"
+    - path: features/plugin/help.feature
+      provides: "the sessionful usage in the three rpc help scenarios and the json-mode guard at line 41"
+      contains: "Scenario: Help in a one-shot run in json mode leaves the reload subcommand out"
     - path: .planning/PROJECT.md
       provides: "the Key Decisions row RELOADCMD-D1"
       contains: "RELOADCMD-D1"
