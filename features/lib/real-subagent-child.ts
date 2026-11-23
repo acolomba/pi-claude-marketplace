@@ -176,6 +176,11 @@ export interface RealChildAgent {
 /** What every run installs and how it configures pi-subagents. */
 export interface RealChildFixtureOptions {
   readonly mcpProfile: McpProfile;
+  /**
+   * The PATH every Pi of the run starts with, the SSH stand-in's directory
+   * first, so no Pi of the fixture reaches a real ssh (SG-HRN-03).
+   */
+  readonly piPath: string;
   /** pi-subagents' `asyncByDefault`, written to its configuration when set. */
   readonly asyncByDefault?: boolean;
   /** A directory that holds the compile cache of every Pi of the run. */
@@ -503,7 +508,7 @@ async function createFixture(
       GIT_CONFIG_GLOBAL: path.join(home, ".gitconfig"),
       // No git host serves this fixture, so system git trusts no server.
       GIT_SSL_CAINFO: certificates,
-      PATH: process.env.PATH ?? "",
+      PATH: options.piPath,
     },
     temporaryDirectory,
     harness,
