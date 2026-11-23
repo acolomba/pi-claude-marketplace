@@ -1,13 +1,15 @@
 ---
 phase: 07-path-source-dependency-tags
-fixed_at: 2026-11-23T02:10:00Z
+fixed_at: 2026-11-23T02:21:07Z
 review_path: .planning/phases/07-path-source-dependency-tags/07-REVIEW.md
-iteration: 1
-findings_in_scope: 5
-fixed: 5
+iteration: 2
+findings_in_scope: 2
+fixed: 2
 skipped: 0
 status: all_fixed
 ---
+
+The frontmatter counts iteration 2 (WR-01 and IN-01 of the iteration-2 review). Iteration 1 fixed 5 of 5 and is kept below as written.
 
 # Phase 07: Code Review Fix Report
 
@@ -79,8 +81,68 @@ All runs were in the main checkout. Cucumber and static runs held the shared hea
 - `npm run check:static`: all seven checks pass (typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, check:features).
 - `git status --porcelain -- extensions/` is empty after every break.
 
----
-
 _Fixed: 2026-11-23T02:10:00Z_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 1_
+
+---
+
+# Iteration 2
+
+**Fixed at:** 2026-11-23T02:21:07Z
+**Source review:** .planning/phases/07-path-source-dependency-tags/07-REVIEW.md (iteration 2)
+**Iteration:** 2
+
+**Summary:**
+- Findings in scope: 2 (WR-01, plus IN-01 by the orchestrator's scope; IN-02 stays open)
+- Fixed: 2
+- Skipped: 0
+
+All work, the green runs, and the red proofs ran in the main checkout on `claude/stoic-shannon-la9q7o` (no worktree, by the orchestrator's instruction), so the results reproduce from that tree. Logs are in `<scratchpad>/fix-07b/`.
+
+## Fixed Issues
+
+### WR-01: S1's current copy never satisfies the constraint, so it does not prove TAGS-03's "the tag, not the current copy"
+
+**Files modified:** `features/plugin/install-dependencies.feature`
+**Commit:** 9e8c30d
+**Applied fix:** The last `offers these plugins with dependencies` table of S1 now offers `formatter` at `1.9.0`: untagged, it satisfies `^1.0.0`, and it is higher than every tag. The expected rows stay `1.1.0-{tools revision formatter--v1.1.0}` in the result and the record, and `Version 1.1.0.` from `plugin-clones/` in the staged skill. S2 keeps `2.0.0` against `^9.0.0` for TAGS-02. The integration file keeps its HEAD at `2.0.0`; it was not in this finding's fix.
+
+**Red proof (break WR1C, "a satisfying current copy wins"):** in `orchestrators/plugin/install-cascade.ts` `probeMemberPin`, before the `marketplaceTagProbe` call on the path branch, the break reads the current copy's `plugins/<name>/.claude-plugin/plugin.json` version and, when it satisfies the range, resolves the member with no pin and no probe.
+- On S1 before the fix (log `WR1C-prefix-adapter.log`): `1 scenario (1 passed)`, `exit=0`, `restored=clean`. This is the gap the review names.
+- On S1 after the fix (log `WR1C-adapter.log`, on the WR-01 commit and again on the final tree): fails on `Then the result lists these plugins:` with `1.9.0` in place of `1.1.0-{tools revision formatter--v1.1.0}`. `exit=1`, `restored=clean`.
+
+**Iteration-1 breaks on the final tree (adapter, S1 at `install-dependencies.feature:672`, each `exit=1`, `restored=clean`, each failing on `Then the result lists these plugins:`):**
+- C1 (tag checkout in place that keeps HEAD): the `app` version is `1.0.0`, expected `1.1.0`.
+- W2L (lowest satisfying tag): got `1.0.0-{tools revision formatter--v1.0.0}`.
+- W2P (ignores the `<name>--v` prefix): got `1.1.0-{tools revision linter--v1.2.0}`.
+- W2F (first satisfying tag in the listing): got `1.0.0-{tools revision formatter--v1.0.0}`.
+- C1 on the integration file (`break-int.sh`, log `C1-integration.log`): the D-07-04 case fails, the CR-01 leak case passes. `exit=1`, `restored=clean`.
+
+`check-red.mjs` on the WR1C, C1, W2L, W2P, and W2F logs against base `9d5767a` (tables in `fix-07b/red-tables.md`) prints `RED-PROOFS OK`, with every failure in a `Then`. `git status --porcelain -- extensions/` is empty after every break.
+
+### IN-01: The token-collision refusal checks only one order, and the rules text says more than it checks
+
+**Files modified:** `features/support/world.ts`, `.agents/skills/cucumber/rules/features.md`
+**Commit:** 95a261d
+**Applied fix:** I chose the refusal. `recordGitRepository` now asserts that no recorded marketplace tag of the same name is `<n>` for any of the repository's revisions, with the message `{<name> revision <n>} already stands for another commit`, which is the message of the other order. Its doc comment says so. The token rule in `features.md` now says that publishing the revision after the tag is refused the same way.
+**Check:** a temporary probe (a step file and a feature, deleted after the run, log `fix-07b/in01-probe.log`) recorded a tag token and then a repository directly through the world methods. A tag `2` beside a two-revision repository `tools` was refused with the message above. A different repository name, a tag `3` past two revisions, and a release tag `formatter--v1.0.0` were all recorded. A probe through the publishing steps could not reach the check: the git host already refuses a git repository whose name a git marketplace of the scenario holds (`the git host already serves ...`), so both refusals are a second line behind the host.
+
+## Open Issues
+
+- IN-02 (the tag step does not check that it tagged the commit the host serves on `main`) stays open, by the orchestrator's scope.
+
+## Verification
+
+All runs were in the main checkout, on the final tree. Cucumber and static runs held the shared heavy-run lock (`flock -w 3600`).
+- `features/plugin/install-dependencies.feature`: adapter `61 scenarios (61 passed)`, builtin `1 scenario (1 passed)`.
+- The 27 tag-only scenarios on the shared builder (`update-dependencies.feature`, `git-source-update.feature:154`, `git-source.feature:342`, `list.feature:356`, `pending.feature:130`, all under `features/plugin/`): adapter `27 scenarios (27 passed)`.
+- `test/integration/path-source-tag-install.test.ts`: 2/2 pass.
+- `npm run check:static`: all seven checks pass (typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, check:features).
+- The commit hook ran on both commits and passed; on the IN-01 commit it ran `npm run check:commit`.
+
+---
+
+_Fixed: 2026-11-23T02:21:07Z_
+_Fixer: Claude (gsd-code-fixer)_
+_Iteration: 2_
