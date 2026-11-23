@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
 
+import { createNeutralDirectory } from "../../extensions/pi-claude-marketplace/platform/git-neutral-directory.ts";
 import {
   createGitProcess,
   NODE_GIT_HOST,
@@ -31,6 +32,7 @@ import {
   createGitTestRepository,
   runSystemGit,
 } from "./git-test-repository.ts";
+import { createHermeticEnvironment } from "./hermetic-environment.ts";
 import { createProcessFake } from "./process-fake.ts";
 import { livingGroupMembers } from "./process-group.ts";
 
@@ -106,7 +108,8 @@ protocol.ftps.allow=never
 init.defaultRefFormat=files
 core.longpaths=true
 credential.interactive=false
-init.templateDir=`.split("\n");
+init.templateDir=
+safe.bareRepository=explicit`.split("\n");
   const pins = pairs.indexOf("init.defaultRefFormat=files");
   return [...pairs.slice(0, pins), ...bans, ...pairs.slice(pins)].flatMap((pair) => ["-c", pair]);
 }
@@ -130,7 +133,10 @@ interface HostSetup {
   readonly files?: readonly string[];
   readonly realpaths?: Readonly<Record<string, string>>;
   readonly cwd?: string;
-  readonly tmpdir?: string;
+  /** The real path of the neutral directory. */
+  readonly neutral?: string;
+  /** Why the neutral directory cannot be made. */
+  readonly neutralFailure?: Error;
   /** The paths whose real path cannot be read. */
   readonly unresolvable?: readonly string[];
 }
@@ -169,7 +175,10 @@ function createHost(setup: HostSetup = {}): RecordingHost {
           ? Promise.reject(Object.assign(new Error(`ENOENT: ${file}`), { code: "ENOENT" }))
           : Promise.resolve(setup.realpaths?.[file] ?? file),
       cwd: () => recording.cwd,
-      tmpdir: () => setup.tmpdir ?? "/tmp",
+      neutralDirectory: () =>
+        setup.neutralFailure === undefined
+          ? Promise.resolve(setup.neutral ?? "/tmp")
+          : Promise.reject(setup.neutralFailure),
     },
   };
   return recording;
@@ -324,7 +333,6 @@ const LOCAL_LANE = [
   "alias.remote-/.command=version",
   "fetch.bundleURI=",
   "help.autocorrect=0",
-  "safe.bareRepository=explicit",
   "protocol.file.allow=never",
 ].flatMap((pair) => ["-c", pair]);
 
@@ -394,7 +402,7 @@ async function realGit(options: RealGitOptions): Promise<GitProcess> {
   await writeFile(configPath, options.config);
   return createGitProcess({
     spawn: options.spawn ?? NODE_SPAWN,
-    host: { ...NODE_GIT_HOST, tmpdir: () => options.root },
+    host: { ...NODE_GIT_HOST, neutralDirectory: () => Promise.resolve(options.root) },
     env: { ...options.env, GIT_CONFIG_GLOBAL: configPath },
     killGraceMs: options.killGraceMs ?? KILL_GRACE_MS,
   });
@@ -614,7 +622,7 @@ async function projectFixture(t: TestContext): Promise<ProjectFixture> {
   await symlink(nested, link);
   const git = createGitProcess({
     spawn: NODE_SPAWN,
-    host: { ...NODE_GIT_HOST, tmpdir: () => home },
+    host: { ...NODE_GIT_HOST, neutralDirectory: () => Promise.resolve(home) },
     env: hermeticGitEnvironment(home),
     killGraceMs: KILL_GRACE_MS,
   });
@@ -626,7 +634,7 @@ describe("createGitProcess", () => {
     // arrange
     const { git, control, started, host } = createFakeGit(
       { PATH: "relative::/opt/tools:/usr/bin" },
-      { realpaths: { "/tmp": "/private/tmp" } },
+      { neutral: "/private/tmp" },
     );
 
     // act
@@ -701,7 +709,7 @@ describe("createGitProcess", () => {
     };
     const unchangedBase = structuredClone(base);
     const { git, control, started } = createFakeGit(base, {
-      realpaths: { "/tmp": "/private/tmp" },
+      neutral: "/private/tmp",
     });
 
     // act
@@ -786,7 +794,7 @@ describe("createGitProcess", () => {
         platform: "win32",
         files: [String.raw`C:\Git\cmd\git.exe`],
         cwd: String.raw`C:\work\project`,
-        tmpdir: String.raw`C:\Users\user\AppData\Local\Temp`,
+        neutral: String.raw`C:\Users\user\AppData\Local\Temp`,
       },
     );
 
@@ -1293,7 +1301,7 @@ describe("createGitProcess", () => {
   test("D-SG-06: logs the git version once after a git-too-old failure", async (t) => {
     // arrange
     const logged = captureDebugLog(t);
-    const { git, launches } = createSequencedGit({ realpaths: { "/tmp": "/private/tmp" } });
+    const { git, launches } = createSequencedGit({ neutral: "/private/tmp" });
 
     // act
     const pending = git.run(FILL);
@@ -1480,7 +1488,7 @@ describe("createGitProcess", () => {
 
   test("SG-PRC-03: refuses a working directory whose parent holds the PATH delimiter", async () => {
     // arrange
-    const { git, control } = createFakeGit({ PATH: "/usr/bin" }, { tmpdir: "/srv/a:b/tmp" });
+    const { git, control } = createFakeGit({ PATH: "/usr/bin" }, { neutral: "/srv/a:b/tmp" });
 
     // act & assert
     await assert.rejects(
@@ -1490,6 +1498,27 @@ describe("createGitProcess", () => {
         operation: "credential fill",
         exitCode: null,
         stderr: "",
+      }),
+    );
+    assert.deepStrictEqual(control.launches(), []);
+  });
+
+  test("SG-PRC-03: rejects as failed with the cause when the neutral directory cannot be made", async () => {
+    // arrange
+    const refused = new Error(
+      "/agent/pi-claude-marketplace/git-neutral is not a private, empty directory",
+    );
+    const { git, control } = createFakeGit({ PATH: "/usr/bin" }, { neutralFailure: refused });
+
+    // act & assert
+    await assert.rejects(
+      git.run(FILL),
+      gitFailure({
+        failure: { kind: "failed" },
+        operation: "credential fill",
+        exitCode: null,
+        stderr: "",
+        cause: refused,
       }),
     );
     assert.deepStrictEqual(control.launches(), []);
@@ -1553,7 +1582,7 @@ describe("createGitProcess", () => {
       await writeFile(configPath, config);
       const git = createGitProcess({
         spawn: NODE_SPAWN,
-        host: { ...NODE_GIT_HOST, tmpdir: () => root },
+        host: { ...NODE_GIT_HOST, neutralDirectory: () => Promise.resolve(root) },
         env: { ...hermeticGitEnvironment(root), GIT_CONFIG_GLOBAL: configPath, ...variables },
         killGraceMs: KILL_GRACE_MS,
       });
@@ -1585,7 +1614,7 @@ describe("createGitProcess", () => {
     await mkdir(neutral);
     const git = createGitProcess({
       spawn: NODE_SPAWN,
-      host: { ...NODE_GIT_HOST, tmpdir: () => neutral },
+      host: { ...NODE_GIT_HOST, neutralDirectory: () => Promise.resolve(neutral) },
       env: hermeticGitEnvironment(root),
       killGraceMs: KILL_GRACE_MS,
     });
@@ -1599,6 +1628,73 @@ describe("createGitProcess", () => {
       assert.deepStrictEqual([error.kind, error.exitCode], ["https-auth", 128]);
       return true;
     });
+    await assert.rejects(access(helper.record), { code: "ENOENT" });
+  });
+
+  for (const { layout, init } of [
+    { layout: "a repository", init: ["init", "--quiet"] },
+    { layout: "a bare repository layout", init: ["init", "--quiet", "--bare"] },
+  ]) {
+    test(`SG-PRC-03: runs neither the credential helper nor the ssh command of ${layout} planted in the neutral directory's parent`, async (t) => {
+      // arrange
+      const root = await caseDirectory(t);
+      const shared = path.join(root, "shared");
+      const bin = path.join(root, "bin");
+      await mkdir(bin);
+      const userSsh = await recordingScript(bin, "ssh", "exit 255");
+      const helper = await recordingScript(root, "helper", "echo username=u\necho password=p");
+      const plantedSsh = await recordingScript(root, "planted-ssh", "exit 255");
+      const call = { cwd: root, home: root, variables: {} };
+      await runSystemGit(call, ...init, shared);
+      await runSystemGit(call, "-C", shared, "config", "credential.helper", `!${helper.script}`);
+      await runSystemGit(call, "-C", shared, "config", "core.sshCommand", plantedSsh.script);
+      const planted = await runSystemGit({ ...call, cwd: shared }, "config", "core.sshCommand");
+      const git = createGitProcess({
+        spawn: NODE_SPAWN,
+        host: {
+          ...NODE_GIT_HOST,
+          neutralDirectory: createNeutralDirectory({ parent: () => shared, uid: process.getuid }),
+        },
+        env: hermeticGitEnvironment(root, {
+          PATH: `${bin}${path.delimiter}${process.env.PATH ?? ""}`,
+        }),
+        killGraceMs: KILL_GRACE_MS,
+      });
+
+      // act
+      const filled = git.run({ ...FILL, input: "protocol=https\nhost=example.test\n\n" });
+      const listed = git.run({ ...SSH_LIST, timeoutMs: 10_000 });
+
+      // assert
+      assert.strictEqual(planted, plantedSsh.script);
+      await assert.rejects(filled, rejectsAs("https-auth", 128));
+      await assert.rejects(listed, rejectsAs("ssh-auth", 128));
+      await access(userSsh.record);
+      await assert.rejects(access(helper.record), { code: "ENOENT" });
+      await assert.rejects(access(plantedSsh.record), { code: "ENOENT" });
+    });
+  }
+
+  test("SG-PRC-03: takes no bare repository layout for the working directory of a network-lane command", async (t) => {
+    // arrange
+    const root = await caseDirectory(t);
+    const bare = path.join(root, "bare");
+    const helper = await recordingScript(root, "helper", "echo username=u\necho password=p");
+    const call = { cwd: root, home: root, variables: {} };
+    await runSystemGit(call, "init", "--quiet", "--bare", bare);
+    await runSystemGit(call, "-C", bare, "config", "credential.helper", `!${helper.script}`);
+    const git = createGitProcess({
+      spawn: NODE_SPAWN,
+      host: { ...NODE_GIT_HOST, neutralDirectory: () => Promise.resolve(root) },
+      env: hermeticGitEnvironment(root),
+      killGraceMs: KILL_GRACE_MS,
+    });
+
+    // act
+    const filled = git.run({ ...FILL, cwd: bare, input: "protocol=https\nhost=example.test\n\n" });
+
+    // assert
+    await assert.rejects(filled, rejectsAs("https-auth", 128));
     await assert.rejects(access(helper.record), { code: "ENOENT" });
   });
 });
@@ -2150,7 +2246,7 @@ describe("createGitProcess operands and lanes", () => {
         platform: "win32",
         files: [String.raw`C:\Git\cmd\git.exe`],
         cwd: String.raw`C:\work\project`,
-        tmpdir: String.raw`C:\Temp`,
+        neutral: String.raw`C:\Temp`,
       },
     );
 
@@ -2374,7 +2470,7 @@ describe("createGitProcess discovery", () => {
     );
     const git = createGitProcess({
       spawn: NODE_SPAWN,
-      host: { ...NODE_GIT_HOST, tmpdir: () => home },
+      host: { ...NODE_GIT_HOST, neutralDirectory: () => Promise.resolve(home) },
       env: { ...hermeticGitEnvironment(home), GIT_DIR: other.gitdir, GIT_WORK_TREE: other.dir },
       killGraceMs: KILL_GRACE_MS,
     });
@@ -2695,7 +2791,7 @@ describe("createGitProcess ssh", () => {
       platform: "win32",
       files: [String.raw`C:\Git\cmd\git.exe`],
       cwd: String.raw`C:\work\project`,
-      tmpdir: String.raw`C:\Temp`,
+      neutral: String.raw`C:\Temp`,
     });
 
     // assert
@@ -3159,15 +3255,18 @@ describe("NODE_GIT_HOST", () => {
     assert.strictEqual(resolved, path.join(root, "target"));
   });
 
-  test("reads Pi's working directory and the temporary directory", () => {
+  test("SG-PRC-03, NFR-10: reads Pi's working directory and keeps the neutral directory in Pi's agent directory", async (t) => {
     // arrange
-    const expected = [process.cwd(), tmpdir()];
+    const environment = await createHermeticEnvironment(t, "pi-cm-git-host-");
 
     // act
-    const directories = [NODE_GIT_HOST.cwd(), NODE_GIT_HOST.tmpdir()];
+    const directories = [NODE_GIT_HOST.cwd(), await NODE_GIT_HOST.neutralDirectory()];
 
     // assert
-    assert.deepStrictEqual(directories, expected);
+    assert.deepStrictEqual(directories, [
+      process.cwd(),
+      path.join(environment.agentDir, "pi-claude-marketplace", "git-neutral"),
+    ]);
   });
 });
 

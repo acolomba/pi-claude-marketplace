@@ -31,9 +31,13 @@
 // files, GIT_CONFIG_COUNT and its keys, GIT_CONFIG_PARAMETERS, credential
 // helpers, and proxies.
 //
-// A request without a working directory runs in the neutral directory, the
-// real path of the host's temporary directory, so the repository Pi runs in
-// never steers the command.
+// SG-PRC-03: a request without a working directory runs in the neutral
+// directory, a private, empty directory that platform/git-neutral-directory.ts
+// makes and checks before each use. The ceiling at its parent keeps git out of
+// every other directory, so neither the repository Pi runs in nor a
+// repository planted in a shared directory steers the command. Every command
+// also carries `safe.bareRepository=explicit`, so git never takes the
+// directory it runs in for a bare repository it was not pointed at.
 //
 // SG-PRC-01, E7: a request carries Pi's own flags as options and the data a
 // marketplace controls as operands. Each subcommand's operand rule puts the
@@ -83,13 +87,14 @@
 import { spawn } from "node:child_process";
 import { constants } from "node:fs";
 import { access, realpath, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { GitCommandError } from "../shared/errors.ts";
 
 import { classifyGitExit } from "./git-failure-kind.ts";
+import { createNeutralDirectory } from "./git-neutral-directory.ts";
+import { getAgentDir } from "./pi-api.ts";
 import { findOnWindowsPath, NODE_PROCESS_HOST, runProcess } from "./process-run.ts";
 
 import type { GitFailure } from "../shared/errors.ts";
@@ -155,8 +160,11 @@ export interface GitProcessHost extends ProcessHost {
   readonly realpath: (file: string) => Promise<string>;
   /** Pi's working directory. */
   readonly cwd: () => string;
-  /** The host's temporary directory, whose real path is the neutral directory. */
-  readonly tmpdir: () => string;
+  /**
+   * Resolves with the real path of the neutral directory, and rejects when it
+   * cannot be made or fails its checks.
+   */
+  readonly neutralDirectory: () => Promise<string>;
 }
 
 export interface GitProcessOptions {
@@ -236,11 +244,15 @@ function configPairs(hooksPath: string): readonly string[] {
 
 // D-SG-05: the end of Claude Code's `pinArgs`, plus `credential.interactive`
 // and an empty `init.templateDir`, so a template directory copies no hook.
+// SG-PRC-03: `safe.bareRepository=explicit` stops git from taking the
+// directory it runs in for a bare repository. git reads the key only from
+// protected config, the command line included, so a repository cannot undo it.
 const PIN_PAIRS = [
   "init.defaultRefFormat=files",
   "core.longpaths=true",
   "credential.interactive=false",
   "init.templateDir=",
+  "safe.bareRepository=explicit",
 ] as const;
 
 // D-SG-05: the transports the network lane bans when the user's
@@ -304,8 +316,9 @@ const SUBCOMMAND_RULES: Readonly<Record<GitSubcommand, SubcommandRule>> = {
 };
 
 // D-SG-02: the `-c` pairs of upstream's network-free lane, after the D-SG-05
-// pairs. Upstream passes the first five through GIT_CONFIG_PARAMETERS, which
-// Pi keeps for the user, so they ride `-c` here. The aliases point a remote
+// pairs. Upstream passes them, and `safe.bareRepository=explicit`, which
+// PIN_PAIRS gives every lane, through GIT_CONFIG_PARAMETERS. Pi keeps that
+// variable for the user, so they ride `-c` here. The aliases point a remote
 // helper at `git version`; they are defense in depth only, because git runs
 // a helper it finds on disk before an alias of that name (E4).
 const LOCAL_LANE_PAIRS = [
@@ -314,7 +327,6 @@ const LOCAL_LANE_PAIRS = [
   "alias.remote-/.command=version",
   "fetch.bundleURI=",
   "help.autocorrect=0",
-  "safe.bareRepository=explicit",
   "protocol.file.allow=never",
 ] as const;
 
@@ -906,7 +918,10 @@ export function createGitProcess(options: GitProcessOptions): GitProcess {
 
     const { git, key } = await lookup();
     const rules = rulesFor(host.platform);
-    const cwd = await host.realpath(request.cwd ?? host.tmpdir());
+    const cwd =
+      request.cwd === undefined
+        ? await neutralDirectory(operation)
+        : await host.realpath(request.cwd);
     // git cannot hold a ceiling whose path contains the PATH delimiter.
     if (rules.paths.dirname(cwd).includes(rules.paths.delimiter)) {
       throw new GitCommandError({ kind: "refused-input" }, { operation });
@@ -951,8 +966,15 @@ export function createGitProcess(options: GitProcessOptions): GitProcess {
       timeoutMs: request.timeoutMs,
       ...(request.signal !== undefined && { signal: request.signal }),
     });
-    const neutral = await host.realpath(host.tmpdir());
+    const neutral = await neutralDirectory(operationOf(request));
     return sshEnvironment(options.env, rules, configValues(read.stdout), neutral);
+  }
+
+  // SG-PRC-03: a neutral directory that cannot be made fails the command.
+  async function neutralDirectory(operation: string): Promise<string> {
+    return host.neutralDirectory().catch((error: unknown) => {
+      throw new GitCommandError({ kind: "failed" }, { operation }, { cause: error });
+    });
   }
 
   // D-SG-06: the version read runs through `execute`, so it never reads the
@@ -990,14 +1012,19 @@ async function isExecutableFile(file: string): Promise<boolean> {
   }
 }
 
-/** The shared process host, plus an execute probe, `realpath`, Pi's cwd, and the temp directory. */
+/** The shared process host, plus an execute probe, `realpath`, Pi's cwd, and the neutral directory. */
 // fallow-ignore-next-line unused-export -- NODE_GIT_PROCESS below binds it in production, and the real-git cases of the module test run through it.
 export const NODE_GIT_HOST: GitProcessHost = Object.freeze({
   ...NODE_PROCESS_HOST,
   isExecutable: isExecutableFile,
   realpath: (file: string) => realpath(file),
   cwd: () => process.cwd(),
-  tmpdir: () => tmpdir(),
+  // NFR-10: under the user scope's extension root; `getAgentDir` reads its
+  // variable on every call.
+  neutralDirectory: createNeutralDirectory({
+    parent: () => path.join(getAgentDir(), "pi-claude-marketplace"),
+    uid: process.getuid,
+  }),
 });
 
 /**
