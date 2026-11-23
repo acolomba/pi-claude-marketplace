@@ -40,6 +40,8 @@ import { fileURLToPath } from "node:url";
 
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
+import { ipcChildEnvironment } from "./ipc-child-environment.ts";
+
 interface ChildResult {
   readonly ok: boolean;
   readonly message?: string;
@@ -140,7 +142,7 @@ async function seedStateRaw(cwd: string, raw: unknown): Promise<void> {
 function forkReconcileChild(env: RaceEnv): ReturnType<typeof fork> {
   return fork(CHILD_PATH, [], {
     cwd: env.cwd,
-    env: { ...process.env, HOME: env.home, PI_CODING_AGENT_DIR: path.join(env.home, ".pi-agent") },
+    env: ipcChildEnvironment({ home: env.home, agentDir: path.join(env.home, ".pi-agent") }),
     stdio: ["ignore", "ignore", "ignore", "ipc"],
   });
 }
@@ -518,11 +520,7 @@ test("D-13 gate (single-process): state with legacy autoupdate + ENOENT claude-p
     // exercise the same code path the integration scenarios exercise.
     const child = fork(CHILD_PATH, [], {
       cwd: env.cwd,
-      env: {
-        ...process.env,
-        HOME: env.home,
-        PI_CODING_AGENT_DIR: path.join(env.home, ".pi-agent"),
-      },
+      env: ipcChildEnvironment({ home: env.home, agentDir: path.join(env.home, ".pi-agent") }),
       stdio: ["ignore", "ignore", "ignore", "ipc"],
     });
 

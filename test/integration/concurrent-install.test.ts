@@ -13,6 +13,8 @@ import {
   type ExtensionState,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
+import { ipcChildEnvironment } from "./ipc-child-environment.ts";
+
 interface ChildResult {
   readonly ok: boolean;
   readonly message: string;
@@ -123,12 +125,12 @@ async function runRace(
 ): Promise<RaceOutcome> {
   const first = fork(CHILD_PATH, [], {
     cwd: env.cwd,
-    env: { ...process.env, HOME: env.home },
+    env: ipcChildEnvironment({ home: env.home }),
     stdio: ["ignore", "ignore", "ignore", "ipc"],
   });
   const second = fork(CHILD_PATH, [], {
     cwd: env.cwd,
-    env: { ...process.env, HOME: env.home },
+    env: ipcChildEnvironment({ home: env.home }),
     stdio: ["ignore", "ignore", "ignore", "ipc"],
   });
 
