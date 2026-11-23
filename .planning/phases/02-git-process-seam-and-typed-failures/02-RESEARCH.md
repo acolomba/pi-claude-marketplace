@@ -561,16 +561,24 @@ if (error instanceof GitCommandError) {
 | A7 | Exact wording of the non-macOS git-missing message (proposal: `Git is required to install marketplaces. Install git, then run the command again.`, from upstream's `Git is required to install marketplaces.` with the restart hint adapted per NFR-2) and of the Windows unsafe-location case (`Command 'git' not found or is in an unsafe location (current directory)`) | Pattern 3, Pattern 7 | Phase 6 rewords anyway; scenarios pin it, so a change later edits those rows |
 | A8 | OpenSSH stderr texts in E16 match real ssh (the stub copies them) | Corpus | A row misses on real ssh; Phase 4 re-checks with the probe |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **New reason token for git missing.** The D-PL7-01 reason set is closed and append-only (`notify-reasons.ts:18-25`); no existing token fits. Proposal: `git missing` (FailureReason group), following `network unreachable`'s two-word form; `requires git` collides with the soft-dependency marker meaning of `requires pi-subagents`. Touches `notification-types.ts`, `notification-wire.ts`, `notify-reasons.ts`, `test/architecture/notify-closed-set-locks.test.ts`, `compat-01-no-expansion.test.ts`, the catalog fixtures, `docs/json-output.md:950`, `docs/output-catalog.md:63`. Needs a decision ID (for example D-SG-07). Recommendation: decide in planning; it is a user-visible token.
+   RESOLVED: `git missing` reason token, recorded as D-SG-07 (02-02).
 2. **Two kinds outside the locked list.** A closed union needs a total fallback (`failed`) and the local `not-a-repository` (`fatal: not a git repository`, which SC3 produces). Recommendation: add both and record them with the decision; they do not change user-visible behavior.
+   RESOLVED: both kinds added, `failed` and `not-a-repository` (02-02).
 3. **Neutral cwd for `git credential`.** `os.tmpdir()` (recommended), the agent dir, or a filesystem root. Changing it is user-visible only for a user with a repo-local credential helper in the project they run Pi from.
+   RESOLVED: the realpath of `os.tmpdir()` (02-03).
 4. **Does the npm runner adopt the Windows cwd-skip rule?** D-SG-04 names git. Applying it to npm is a hardening of D-PL9-18. Recommendation: keep npm's behavior (parameter off) unless the user approves; one parameter either way.
+   RESOLVED: npm keeps its behavior; the cwd-skip rule is a git-only parameter (02-01).
 5. **"Defaults to `process.env`" vs the unit-test skill.** The skill says "Do not default a parameter to a live boundary". Recommendation: `createGitProcess({ env, spawn, host, … })` with `env` required, and one production binding that passes `process.env` (the `DEFAULT_PACKAGE_INSTALL_OPS` precedent, `package-install.ts:164-179`). That keeps the locked intent (injected env, tests pass `hermeticGitEnvironment` bases). The CONVENTIONS precedent (`tools: HookToolView = createHookToolView(pi)`) allows a defaulted last parameter if the planner prefers the literal wording.
+   RESOLVED: `env` is required; one production binding passes `process.env` (02-03).
 6. **Filter relative entries out of the child's `PATH`?** Upstream does this only on its `ms()` lane. It closes git's own `ssh`/helper planting (E12 analogue) with no user-visible change; it is not in D-SG-05's list. Recommendation: ask, or record it as part of D-SG-05.
+   RESOLVED: relative PATH entries are dropped, as part of D-SG-05 (02-03).
 7. **How to "log the git version in the debug output" without a probe (D-SG-06).** `hookDebugLog` has no "enabled" query (`shared/debug-log.ts:22-27`). Recommendation: on a `git-too-old` failure only, run `git --version` (short timeout) and debug-log it; no spawn on the success path.
+   RESOLVED: `git --version` runs and is debug-logged only after a `git-too-old` failure (02-04).
 8. **Kind → reason mapping scope.** Full exhaustive mapping now (so Phase 3's swap keeps every scenario's reason) or only `git-missing` now. Recommendation: full mapping, because the switch with `assertNever` makes a missing kind a compile error and Phase 3 needs it the day the transport swaps.
+   RESOLVED: full kind-to-reason mapping now (02-02).
 
 ## Environment Availability
 
