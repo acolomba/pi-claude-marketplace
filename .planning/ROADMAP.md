@@ -330,7 +330,7 @@ Plans:
 **Plans:** 1 plan
 
 Plans:
-- [ ] 06.1-01-PLAN.md -- Wave 1: the five flipped SessionStart scenarios of `hook/additional-context.feature` and ten unit cases red on the current code, then the SessionStart send through one shared context message helper in `bridges/hooks/event-adapters.ts`, in one commit; breaks B1 and B2 on the fix commit; then the SessionStart buffer removed from the hooks runtime and routing state with the integration file `hooks-additionalcontext-end-to-end` deleted; then the docs and the D-CF5-13 amendment, B1f and B2f on the final tree, the hook-wide set, and one full adapter run (HKRL-01)
+- [ ] 06.1-01-PLAN.md -- Wave 1: the five flipped SessionStart scenarios of `hook/additional-context.feature`, ten unit cases, and HOOK-E2E-04 rewritten to the post-fix shape, all red on the current code, then the SessionStart send through one shared context message helper in `bridges/hooks/event-adapters.ts`, in one commit with the integration suite green; breaks B1 and B2 on the fix commit; then the SessionStart buffer removed from the hooks runtime and routing state with the integration file `hooks-additionalcontext-end-to-end` deleted; then the docs and the D-CF5-13 amendment, B1f and B2f on the final tree, the hook-wide set, and one full adapter run (HKRL-01)
 
 ### Phase 7: Path-Source Dependency Tags
 
