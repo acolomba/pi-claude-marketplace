@@ -121,38 +121,6 @@ export interface CacheEntry {
 }
 
 /**
- * SessionStart additionalContext capture buffer.
- *
- * Pi splits the upstream Claude Code SessionStart-hook protocol across two
- * surfaces: `session_start` returns void (no slot to thread context
- * through), and `before_agent_start` can add a message to the next turn.
- * The hooks bridge captures a SessionStart hook's `additionalContext`
- * payload into this buffer at the `event-adapters.ts` mutate arm, then
- * drains it on the next `before_agent_start` event into a persisted message
- * after that turn's prompt, so the first turn and every later one see it
- * (D-CF5-13).
- *
- * Concat semantics: multiple SessionStart-bearing plugins fold into the
- * buffer in routing order. The drain joins the values with `"\n"` into one
- * `SessionStart hook additional context: <values>` text part and clears the
- * buffer (one-shot drain). The buffer also resets on every
- * `registerHooksBridge` entry so `/reload` cannot leak stale context from
- * the prior session.
- *
- * Typed accumulator (not a string bag): each entry carries provenance
- * (scope/marketplace/pluginId) so OBS-01 debug telemetry can attribute
- * leaks back to the contributing plugin without re-deriving from a flat
- * string. Provenance is dropped at drain time -- only the joined text
- * reaches the message.
- */
-export interface PendingSessionStartContext {
-  readonly context: string;
-  readonly pluginId: string;
-  readonly marketplace: string;
-  readonly scope: Scope;
-}
-
-/**
  * D-PG6-20: the events whose hooks buffer a prompt's context, in the order
  * their parts reach the model.
  */
@@ -168,7 +136,7 @@ export type PromptContextEvent = (typeof PROMPT_CONTEXT_EVENTS)[number];
  * `input` adapter and drained by the `before_agent_start` handler of the
  * same prompt's turn into a message after the prompt. The prompt itself
  * reaches the model unchanged. Provenance is the entry the fold attributes
- * the context to, as for `PendingSessionStartContext`. `event` is the hook's
+ * the context to; only the text reaches the message. `event` is the hook's
  * event, which labels the context's text (D-PG6-20).
  */
 export interface PendingPromptContext {
@@ -199,8 +167,6 @@ export interface PendingFollowUpContext extends PendingPromptContext {
  */
 export interface RoutingStateOperations extends Pick<
   HooksRuntime,
-  | "appendPendingSessionStartContext"
-  | "pendingSessionStartContextEntries"
   | "setParsedConfig"
   | "deleteParsedConfig"
   | "parsedConfigEntries"
@@ -213,7 +179,6 @@ export interface RoutingStateOperations extends Pick<
 > {
   readonly currentEpoch: HooksRuntime["currentGeneration"];
   readonly bumpEpoch: HooksRuntime["advanceGeneration"];
-  readonly clearPendingSessionStartContext: HooksRuntime["preparePendingContextForRegistration"];
 }
 
 /** Binds routing behavior to an explicitly supplied runtime lifetime. */
@@ -221,9 +186,6 @@ export function createRoutingStateOperations(runtime: HooksRuntime): RoutingStat
   return {
     currentEpoch: runtime.currentGeneration,
     bumpEpoch: runtime.advanceGeneration,
-    appendPendingSessionStartContext: runtime.appendPendingSessionStartContext,
-    pendingSessionStartContextEntries: runtime.pendingSessionStartContextEntries,
-    clearPendingSessionStartContext: runtime.preparePendingContextForRegistration,
     setParsedConfig: runtime.setParsedConfig,
     deleteParsedConfig: runtime.deleteParsedConfig,
     parsedConfigEntries: runtime.parsedConfigEntries,

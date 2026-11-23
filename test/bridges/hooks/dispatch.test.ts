@@ -273,11 +273,12 @@ describe("compositeHandlerFor", () => {
       { "session-owner": { kind: "mutate", additionalContext: "owned context" } },
       executorCalls,
     );
+    const sent: SentMessage[] = [];
     const handler = compositeHandlerFor(
       owningRuntime,
       "SessionStart",
       capturedGeneration,
-      undefined,
+      createMessagePi(sent),
       executor,
     );
 
@@ -285,15 +286,7 @@ describe("compositeHandlerFor", () => {
     await handler({ source: "startup" }, context);
 
     // assert
-    assert.deepStrictEqual(owningRuntime.pendingSessionStartContextEntries(), [
-      {
-        context: "owned context",
-        scope: "project",
-        marketplace: "owner-marketplace",
-        pluginId: "session-owner",
-      },
-    ]);
-    assert.deepStrictEqual(peerRuntime.pendingSessionStartContextEntries(), []);
+    assert.deepStrictEqual(sent, [sessionStartContextMessage("owned context")]);
     assert.deepStrictEqual(executorCalls, [
       {
         pluginId: "session-owner",
@@ -1086,11 +1079,12 @@ describe("composite dispatch closure partitions", () => {
       new Promise((resolve) => {
         finishExecution = resolve;
       });
+    const sent: SentMessage[] = [];
     const handler = compositeHandlerFor(
       runtime,
       "SessionStart",
       runtime.currentGeneration(),
-      undefined,
+      createMessagePi(sent),
       executor,
     );
     const pending = handler({ source: "startup" }, context);
@@ -1104,7 +1098,7 @@ describe("composite dispatch closure partitions", () => {
     await pending;
 
     // assert
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+    assert.deepStrictEqual(sent, []);
   });
 
   test("returns undefined from a live composite closure with an empty bucket", async () => {
@@ -1586,13 +1580,11 @@ describe("composite dispatch closure partitions", () => {
       { pluginId: "session-star", event: { source: "resume" } },
       { pluginId: "session-exact", event: { source: "resume" } },
     ];
-    const expectedPendingContext: readonly [] = [];
 
     // act
     await handler(event, context);
 
     // assert
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), expectedPendingContext);
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
@@ -2858,7 +2850,7 @@ describe("composite per-event adapters", () => {
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
-  test("captures SessionStart context with the producing entry provenance", async () => {
+  test("sends SessionStart context to the model once its hooks finish", async () => {
     // arrange
     const runtime = createHooksRuntime();
     runtime.advanceGeneration();
@@ -2878,21 +2870,14 @@ describe("composite per-event adapters", () => {
       executorCalls,
     );
     runtime.setRoutingBucket("SessionStart", [entry]);
+    const sent: SentMessage[] = [];
     const handler = compositeHandlerFor(
       runtime,
       "SessionStart",
       runtime.currentGeneration(),
-      undefined,
+      createMessagePi(sent),
       executor,
     );
-    const expectedPendingContext = [
-      {
-        context: "project guidance",
-        scope: "project",
-        marketplace: "project-hooks",
-        pluginId: "session-context",
-      },
-    ];
     const expectedCalls: RecordedCall[] = [
       {
         pluginId: "session-context",
@@ -2904,7 +2889,7 @@ describe("composite per-event adapters", () => {
     await handler(event, context);
 
     // assert
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), expectedPendingContext);
+    assert.deepStrictEqual(sent, [sessionStartContextMessage("project guidance")]);
     assert.deepStrictEqual(executorCalls, expectedCalls);
   });
 
@@ -3669,11 +3654,12 @@ describe("parallel run and routing-order fold", () => {
     );
     runtime.setRoutingBucket("SessionStart", entries);
     const held = createHeldExecutor([]);
+    const sent: SentMessage[] = [];
     const handler = compositeHandlerFor(
       runtime,
       "SessionStart",
       generation,
-      undefined,
+      createMessagePi(sent),
       held.executor,
     );
 
@@ -3686,9 +3672,7 @@ describe("parallel run and routing-order fold", () => {
     await pending;
 
     // assert
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [
-      { context: "a\nb", scope: "project", marketplace: "dispatch-catalog", pluginId: "late" },
-    ]);
+    assert.deepStrictEqual(sent, [sessionStartContextMessage("a\nb")]);
   });
 
   test("keeps every outcome with its system message in routing order", async () => {
@@ -4171,13 +4155,13 @@ describe("routing-order fold of mutations", () => {
       const entries = ["asker", "second-asker", "later"].map((pluginId, declarationIndex) =>
         createRoutingEntry({
           pluginId,
-          claudeEvent: "SessionStart",
+          claudeEvent: "UserPromptSubmit",
           rawMatcher: "",
           declarationIndex,
           scope: "project",
         }),
       );
-      runtime.setRoutingBucket("SessionStart", entries);
+      runtime.setRoutingBucket("UserPromptSubmit", entries);
       const executor = createRecordingExecutor(
         {
           asker: { ...ask, additionalContext: "a" },
@@ -4190,14 +4174,29 @@ describe("routing-order fold of mutations", () => {
         },
         [],
       );
-      const handler = compositeHandlerFor(runtime, "SessionStart", generation, undefined, executor);
+      const handler = compositeHandlerFor(
+        runtime,
+        "UserPromptSubmit",
+        generation,
+        undefined,
+        executor,
+      );
 
       // act
-      await handler({ source: "startup" }, createExtensionContext("/workspace/ask-attribution"));
+      await handler(
+        { type: "input", text: "ask attribution", source: "interactive" },
+        createExtensionContext("/workspace/ask-attribution"),
+      );
 
       // assert
-      assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [
-        { context: "a\nb", scope: "project", marketplace: "dispatch-catalog", pluginId: "asker" },
+      assert.deepStrictEqual(runtime.pendingPromptContextEntries(), [
+        {
+          context: "a\nb",
+          scope: "project",
+          marketplace: "dispatch-catalog",
+          pluginId: "asker",
+          event: "UserPromptSubmit",
+        },
       ]);
     });
   }
@@ -4396,6 +4395,7 @@ function createNoticeHost(cwd: string): {
   const pi = {
     getAllTools: () => [],
     appendEntry: capture.entrySink.appendEntry,
+    sendMessage: () => undefined,
   } as unknown as ExtensionAPI;
   return { context, pi, capture };
 }
@@ -5609,6 +5609,18 @@ function createMessagePi(sent: SentMessage[], failure?: Error): ExtensionAPI {
 function toolContextMessage(content: string): SentMessage {
   return {
     message: { customType: "claude-hook-tool-context", content, display: false },
+    options: { triggerTurn: false },
+  };
+}
+
+/** The hidden message that carries a SessionStart fold's context to the model (HKRL-01). */
+function sessionStartContextMessage(text: string): SentMessage {
+  return {
+    message: {
+      customType: "claude-hook-additional-context",
+      content: [{ type: "text", text: `SessionStart hook additional context: ${text}` }],
+      display: false,
+    },
     options: { triggerTurn: false },
   };
 }

@@ -1442,7 +1442,7 @@ async function runEditResultPairs(
  * adapter. The PreCompact adapter reads every hook's own result instead
  * (D-CF5-18), because the fold lets a stop hide a block. Observation events
  * have no Pi-side return slot -- their adapter
- * is invoked for the SessionStart context buffer and the block/stop
+ * is invoked for the SessionStart context message and the block/stop
  * debug-log side effect and always returns undefined.
  */
 async function adaptForEvent(

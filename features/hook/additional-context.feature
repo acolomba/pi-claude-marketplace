@@ -155,8 +155,8 @@ Feature: Hook additional context
     When the user prompts "hello there"
     Then the model receives these calls:
       | call | role | text                                         |
-      | 1    | user | hello there                                  |
       | 1    | user | SessionStart hook additional context: ss-ctx |
+      | 1    | user | hello there                                  |
 
   Scenario: A session start hook's additional context reaches the model when another session start hook exits 2
     Given pi runs with the scripted model
@@ -177,10 +177,10 @@ Feature: Hook additional context
     When the user prompts "hello there"
     Then the model receives these calls:
       | call | role | text                                         |
-      | 1    | user | hello there                                  |
       | 1    | user | SessionStart hook additional context: ss-ctx |
+      | 1    | user | hello there                                  |
 
-  Scenario: Session start and prompt hook contexts reach the model in one message, session start first
+  Scenario: Session start context reaches the model before the prompt, and prompt hook context after it
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -198,9 +198,10 @@ Feature: Hook additional context
       | Done. |      |           |
     When the user prompts "hello there"
     Then the model receives these calls:
-      | call | role | text                                                                                                  |
-      | 1    | user | hello there                                                                                           |
-      | 1    | user | SessionStart hook additional context: ss-ctx\nUserPromptSubmit hook additional context: ctx-from-hook |
+      | call | role | text                                                    |
+      | 1    | user | SessionStart hook additional context: ss-ctx            |
+      | 1    | user | hello there                                             |
+      | 1    | user | UserPromptSubmit hook additional context: ctx-from-hook |
 
   Scenario: A session start hook's additional context stays in the history of the next turn
     Given pi runs with the scripted model
@@ -222,12 +223,12 @@ Feature: Hook additional context
     When the user prompts "second prompt"
     Then the model receives these calls:
       | call | role      | text                                         |
-      | 2    | user      | first prompt                                 |
       | 2    | user      | SessionStart hook additional context: ss-ctx |
+      | 2    | user      | first prompt                                 |
       | 2    | assistant | First.                                       |
       | 2    | user      | second prompt                                |
 
-  Scenario: Reloading pi before the first prompt drops the session start hook's additional context, as docs/hooks-compatibility.md describes
+  Scenario: Reloading pi before the first prompt keeps the session start hook's additional context for the first prompt
     Given pi runs with the scripted model
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -247,5 +248,6 @@ Feature: Hook additional context
       | SessionStart | first   | startup | faux-1 | {project dir} |                 | primer    | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {project dir}/.pi/pi-claude-marketplace/data/fixtures/demo | {project dir}/.pi/pi-claude-marketplace/data/_shared/claude-env-first.env | first                  | first             | 1          |
     When the user reloads pi in the terminal and then prompts "hello there"
     Then the model receives these calls:
-      | call | role | text        |
-      | 1    | user | hello there |
+      | call | role | text                                         |
+      | 1    | user | SessionStart hook additional context: ss-ctx |
+      | 1    | user | hello there                                  |

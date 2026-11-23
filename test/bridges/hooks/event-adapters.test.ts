@@ -105,6 +105,18 @@ function createMessagePi(sent: SentMessage[], failure?: Error): ExtensionAPI {
   } as ExtensionAPI;
 }
 
+/** The hidden message that carries a SessionStart hook's context to the model (HKRL-01). */
+function sessionStartContextMessage(text: string): SentMessage {
+  return {
+    message: {
+      customType: "claude-hook-additional-context",
+      content: [{ type: "text", text: `SessionStart hook additional context: ${text}` }],
+      display: false,
+    },
+    options: { triggerTurn: false },
+  };
+}
+
 describe("adaptToolCallResult", () => {
   for (const mode of ["tui", "print", "json", "rpc"] as const) {
     test(`sends one private ignored-rewrite notice through ${mode}`, async () => {
@@ -1459,7 +1471,31 @@ describe("adaptInputResult", () => {
         event: "UserPromptSubmit",
       },
     ]);
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+  });
+
+  test("buffers a prompt context that no entry is attributed to under an empty provenance (D-CF5-13)", () => {
+    // arrange
+    const runtime = createHooksRuntime();
+
+    // act
+    const adaptation = adaptInputResult(
+      { kind: "mutate", additionalContext: "orphan context" },
+      { type: "input", text: "original prompt", source: "interactive" },
+      { ...adapterContext(undefined), runtime },
+      "UserPromptSubmit",
+    );
+
+    // assert
+    assert.strictEqual(adaptation, undefined);
+    assert.deepStrictEqual(runtime.pendingPromptContextEntries(), [
+      {
+        context: "orphan context",
+        scope: "user",
+        marketplace: "",
+        pluginId: "",
+        event: "UserPromptSubmit",
+      },
+    ]);
   });
 
   test("sends the context of a queued steer to the model instead of buffering it (D-CF5-13)", () => {
@@ -1850,134 +1886,100 @@ describe("sendDueFollowUpContext", () => {
 });
 
 describe("adaptObservationResultForEvent", () => {
-  test("captures ordered SessionStart context with exact plugin provenance", () => {
+  test("sends each SessionStart context to the model at once in a hidden message (HKRL-01)", () => {
     // arrange
-    const runtime = createHooksRuntime();
-    const firstProvenance = {
-      scope: "user",
-      marketplace: "user-marketplace",
-      pluginId: "first-plugin",
-    } as const;
-    const secondProvenance = {
-      scope: "project",
-      marketplace: "project-marketplace",
-      pluginId: "second-plugin",
-    } as const;
+    const sent: SentMessage[] = [];
+    const pi = createMessagePi(sent);
 
     // act
     adaptObservationResultForEvent(
       { kind: "mutate", additionalContext: "first context" },
       "SessionStart",
-      provenanceContext(runtime, firstProvenance),
+      { ...adapterContext(guardEntry()), pi },
     );
     adaptObservationResultForEvent(
       { kind: "mutate", additionalContext: "second context" },
       "SessionStart",
-      provenanceContext(runtime, secondProvenance),
+      { ...adapterContext(guardEntry()), pi },
     );
 
     // assert
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [
-      {
-        context: "first context",
-        scope: "user",
-        marketplace: "user-marketplace",
-        pluginId: "first-plugin",
-      },
-      {
-        context: "second context",
-        scope: "project",
-        marketplace: "project-marketplace",
-        pluginId: "second-plugin",
-      },
+    assert.deepStrictEqual(sent, [
+      sessionStartContextMessage("first context"),
+      sessionStartContextMessage("second context"),
     ]);
   });
 
-  test("does not capture SessionStart context when it is truly absent", () => {
+  test("sends no SessionStart context when it is truly absent", () => {
     // arrange
-    const runtime = createHooksRuntime();
-    const provenance = {
-      scope: "user",
-      marketplace: "owner-marketplace",
-      pluginId: "owner-plugin",
-    } as const;
+    const sent: SentMessage[] = [];
     const hookOutcome = {
       kind: "mutate",
       updatedInput: { ignored: true },
     } satisfies HookExecResult;
 
     // act
-    adaptObservationResultForEvent(
-      hookOutcome,
-      "SessionStart",
-      provenanceContext(runtime, provenance),
-    );
+    adaptObservationResultForEvent(hookOutcome, "SessionStart", {
+      ...adapterContext(guardEntry()),
+      pi: createMessagePi(sent),
+    });
 
     // assert
     assert.strictEqual(Object.hasOwn(hookOutcome, "additionalContext"), false);
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+    assert.deepStrictEqual(sent, []);
   });
 
-  test("does not capture an empty SessionStart context", () => {
-    // arrange
-    const runtime = createHooksRuntime();
-    const provenance = {
-      scope: "project",
-      marketplace: "owner-marketplace",
-      pluginId: "owner-plugin",
-    } as const;
-
-    // act
-    adaptObservationResultForEvent(
-      { kind: "mutate", additionalContext: "" },
-      "SessionStart",
-      provenanceContext(runtime, provenance),
-    );
-
-    // assert
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
-  });
-
-  for (const { eventName, context, scope } of [
-    { eventName: "SessionEnd", context: "discarded SessionEnd context", scope: "user" },
-    { eventName: "PostCompact", context: "discarded PostCompact context", scope: "user" },
-  ] as const) {
-    test(`drops ${eventName} additional context`, () => {
+  for (const { name, additionalContext } of [
+    { name: "empty", additionalContext: "" },
+    { name: "white-space-only", additionalContext: " \n\t" },
+  ]) {
+    test(`sends no ${name} SessionStart context (HKRL-01)`, () => {
       // arrange
-      const runtime = createHooksRuntime();
-      const provenance = {
-        scope,
-        marketplace: `${eventName}-marketplace`,
-        pluginId: `${eventName}-plugin`,
-      } as const;
+      const sent: SentMessage[] = [];
 
       // act
-      adaptObservationResultForEvent(
-        { kind: "mutate", additionalContext: context },
-        eventName,
-        provenanceContext(runtime, provenance),
-      );
+      adaptObservationResultForEvent({ kind: "mutate", additionalContext }, "SessionStart", {
+        ...adapterContext(guardEntry()),
+        pi: createMessagePi(sent),
+      });
 
       // assert
-      assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+      assert.deepStrictEqual(sent, []);
     });
   }
 
-  test("captures SessionStart context that no entry is attributed to under an empty provenance", () => {
+  for (const { eventName, context } of [
+    { eventName: "SessionEnd", context: "discarded SessionEnd context" },
+    { eventName: "PostCompact", context: "discarded PostCompact context" },
+  ] as const) {
+    test(`drops ${eventName} additional context`, () => {
+      // arrange
+      const sent: SentMessage[] = [];
+
+      // act
+      adaptObservationResultForEvent({ kind: "mutate", additionalContext: context }, eventName, {
+        ...adapterContext(guardEntry()),
+        pi: createMessagePi(sent),
+      });
+
+      // assert
+      assert.deepStrictEqual(sent, []);
+    });
+  }
+
+  test("sends the SessionStart context of a fold that no entry is attributed to (HKRL-01)", () => {
     // arrange
-    const runtime = createHooksRuntime();
+    const sent: SentMessage[] = [];
 
     // act
     adaptObservationResultForEvent(
       { kind: "mutate", additionalContext: "orphan context" },
       "SessionStart",
-      { ...adapterContext(undefined), runtime },
+      { ...adapterContext(undefined), pi: createMessagePi(sent) },
     );
 
     // assert
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [
-      { context: "orphan context", scope: "user", marketplace: "", pluginId: "" },
-    ]);
+    assert.deepStrictEqual(sent, [sessionStartContextMessage("orphan context")]);
   });
 
   for (const { arm, hookOutcome } of [
@@ -1991,72 +1993,79 @@ describe("adaptObservationResultForEvent", () => {
     },
     { arm: "is a noop", hookOutcome: { kind: "noop", additionalContext: "kept context" } as const },
   ]) {
-    test(`captures the SessionStart context of a fold that ${arm} (D-CF5-09)`, () => {
+    test(`sends the SessionStart context of a fold that ${arm} (D-CF5-09, HKRL-01)`, () => {
       // arrange
-      const runtime = createHooksRuntime();
-      const provenance = {
-        scope: "project",
-        marketplace: "owner-marketplace",
-        pluginId: "owner-plugin",
-      } as const;
+      const sent: SentMessage[] = [];
 
       // act
-      adaptObservationResultForEvent(
-        hookOutcome,
-        "SessionStart",
-        provenanceContext(runtime, provenance),
-      );
+      adaptObservationResultForEvent(hookOutcome, "SessionStart", {
+        ...adapterContext(guardEntry()),
+        pi: createMessagePi(sent),
+      });
 
       // assert
-      assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [
-        {
-          context: "kept context",
-          scope: "project",
-          marketplace: "owner-marketplace",
-          pluginId: "owner-plugin",
-        },
-      ]);
+      assert.deepStrictEqual(sent, [sessionStartContextMessage("kept context")]);
     });
   }
 
   test("drops the PostCompact context of a fold that blocks", () => {
     // arrange
-    const runtime = createHooksRuntime();
-    const provenance = {
-      scope: "project",
-      marketplace: "owner-marketplace",
-      pluginId: "owner-plugin",
-    } as const;
+    const sent: SentMessage[] = [];
 
     // act
     adaptObservationResultForEvent(
       { kind: "block", reason: "denied", additionalContext: "dropped context" },
       "PostCompact",
-      provenanceContext(runtime, provenance),
+      { ...adapterContext(guardEntry()), pi: createMessagePi(sent) },
     );
 
     // assert
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+    assert.deepStrictEqual(sent, []);
   });
 
-  test("returns from noop without changing pending state", () => {
+  test("sends nothing for a SessionStart noop", () => {
     // arrange
-    const runtime = createHooksRuntime();
-    const provenance = {
-      scope: "user",
-      marketplace: "noop-marketplace",
-      pluginId: "noop-plugin",
-    } as const;
+    const sent: SentMessage[] = [];
+
+    // act
+    adaptObservationResultForEvent({ kind: "noop" }, "SessionStart", {
+      ...adapterContext(guardEntry()),
+      pi: createMessagePi(sent),
+    });
+
+    // assert
+    assert.deepStrictEqual(sent, []);
+  });
+
+  test("sends nothing and logs nothing for SessionStart context without a Pi API (HKRL-01)", (t) => {
+    // arrange
+    const lines = captureDebugLog(t);
 
     // act
     adaptObservationResultForEvent(
-      { kind: "noop" },
+      { kind: "mutate", additionalContext: "ctx" },
       "SessionStart",
-      provenanceContext(runtime, provenance),
+      adapterContext(guardEntry()),
     );
 
     // assert
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+    assert.deepStrictEqual(lines, []);
+  });
+
+  test("debug-logs a SessionStart context that fails to send (NFR-2, HKRL-01)", (t) => {
+    // arrange
+    const lines = captureDebugLog(t);
+
+    // act
+    adaptObservationResultForEvent({ kind: "mutate", additionalContext: "ctx" }, "SessionStart", {
+      ...adapterContext(guardEntry()),
+      pi: createMessagePi([], new Error("closed")),
+    });
+
+    // assert
+    assert.deepStrictEqual(lines, [
+      "[hooks] adaptObservation: session start context failed: closed",
+    ]);
   });
 
   for (const { name, eventName, hookOutcome, diagnostic } of [
@@ -2118,7 +2127,6 @@ describe("adaptObservationResultForEvent", () => {
       );
 
       // assert
-      assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
       assert.deepStrictEqual(
         consoleErrorSpy.mock.calls.map(({ arguments: consoleArguments }) => consoleArguments),
         [[diagnostic]],

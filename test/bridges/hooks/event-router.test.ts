@@ -365,11 +365,12 @@ test(
       ({ event }) => event === "agent_settled",
     )?.handler;
     registrations.length = 0;
-    runtime.appendPendingSessionStartContext({
+    runtime.appendPendingPromptContext({
       context: "stale context",
       scope: "user",
       marketplace: "user-catalog",
       pluginId: "user-plugin",
+      event: "UserPromptSubmit",
     });
     const previousEnding = {
       type: "agent_end",
@@ -411,7 +412,7 @@ test(
       kill(signal?: NodeJS.Signals | number): boolean {
         assert.strictEqual(runtime.currentGeneration(), previousEpoch + 1);
         operationLog.push("epoch:bumped");
-        assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
+        assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
         operationLog.push("pending:reset");
         const settleResult =
           typeof staleAgentSettledHandler === "function"
@@ -572,7 +573,7 @@ test(
       resolvedSource: entry.resolvedSource,
     }));
     const epochAfterReload = runtime.currentGeneration();
-    const pendingAfterReload = [...runtime.pendingSessionStartContextEntries()];
+    const pendingAfterReload = [...runtime.pendingPromptContextEntries()];
     const orphanTableExistsAfterReload = fs.existsSync(pidTablePath(projectLocations));
     const sharedDirectoriesAfterReload = {
       user: fs.existsSync(path.join(userLocations.dataRoot, "_shared")),
@@ -1003,6 +1004,7 @@ for (const mode of ["tui", "print", "json", "rpc"]) {
         scope: "user",
         marketplace: "catalog",
         pluginId: "alpha",
+        event: "UserPromptSubmit",
       } as const;
       const handler = registeredHandler(registrations, "before_agent_start");
       const event = {
@@ -1011,12 +1013,12 @@ for (const mode of ["tui", "print", "json", "rpc"]) {
         prompt: "hello",
         systemPromptOptions: {},
       };
-      runtime.appendPendingSessionStartContext(pending);
+      runtime.appendPendingPromptContext(pending);
 
       // act
       const supportedOutput = await handler(event, context);
-      const supportedPending = runtime.pendingSessionStartContextEntries();
-      runtime.appendPendingSessionStartContext(pending);
+      const supportedPending = runtime.pendingPromptContextEntries();
+      runtime.appendPendingPromptContext(pending);
       readMode = rejectMode;
       const rejectedOutput = await handler(event, context);
 
@@ -1024,13 +1026,13 @@ for (const mode of ["tui", "print", "json", "rpc"]) {
       assert.deepStrictEqual(supportedOutput, {
         message: {
           customType: "claude-hook-additional-context",
-          content: [{ type: "text", text: "SessionStart hook additional context: pending" }],
+          content: [{ type: "text", text: "UserPromptSubmit hook additional context: pending" }],
           display: false,
         },
       });
       assert.deepStrictEqual(supportedPending, []);
       assert.strictEqual(rejectedOutput, undefined);
-      assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [pending]);
+      assert.deepStrictEqual(runtime.pendingPromptContextEntries(), [pending]);
     });
 
     test(`preserves assistant cache when agent_end changes from ${mode} to ${failure}`, async (t) => {
@@ -1413,52 +1415,6 @@ test("readAndCachePluginHooks leaves the cache unchanged after a parse failure",
   assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
 });
 
-test("registered before_agent_start drains ordered context once and leaves an empty turn unchanged", async (t) => {
-  // arrange
-  const runtime = createHooksRuntime();
-  const { root } = await createHermeticEnvironment(t, "hooks-router-before-agent-");
-  const { pi, registrations } = makeRecordingPi();
-  const context = makeContext(root, root);
-  const hydration = createHooksHydration(runtime, EMPTY_STATE_READER);
-  await hydration.registerHooksBridge(pi, { cwd: root });
-  const handler = registeredHandler(registrations, "before_agent_start");
-  runtime.appendPendingSessionStartContext({
-    context: "alpha context",
-    scope: "project",
-    marketplace: "catalog",
-    pluginId: "alpha",
-  });
-  runtime.appendPendingSessionStartContext({
-    context: "beta context",
-    scope: "user",
-    marketplace: "catalog",
-    pluginId: "beta",
-  });
-  const event = {
-    type: "before_agent_start",
-    prompt: "prompt",
-    systemPrompt: "base prompt",
-    systemPromptOptions: {},
-  } as BeforeAgentStartEvent;
-
-  // act
-  const firstTurn = await handler(event, context);
-  const secondTurn = await handler(event, context);
-
-  // assert
-  assert.deepStrictEqual(firstTurn, {
-    message: {
-      customType: "claude-hook-additional-context",
-      content: [
-        { type: "text", text: "SessionStart hook additional context: alpha context\nbeta context" },
-      ],
-      display: false,
-    },
-  });
-  assert.strictEqual(secondTurn, undefined);
-  assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
-});
-
 // The registered `before_agent_start` handler of a fresh bridge, its runtime,
 // and a Pi context to call it with.
 async function beforeAgentStartFixture(t: TestContext): Promise<{
@@ -1651,11 +1607,12 @@ test(
     t.mock.method(sessionManager, "getHeader", () => {
       throw new Error("header unreadable");
     });
-    runtime.appendPendingSessionStartContext({
+    runtime.appendPendingPromptContext({
       context: "start context",
       scope: "user",
       marketplace: "catalog",
       pluginId: "demo",
+      event: "UserPromptSubmit",
     });
     enterChild(t, "main-session");
     const readDiagnostics = observeRouterDebug(t);
@@ -1667,7 +1624,9 @@ test(
     assert.deepStrictEqual(message, {
       message: {
         customType: "claude-hook-additional-context",
-        content: [{ type: "text", text: "SessionStart hook additional context: start context" }],
+        content: [
+          { type: "text", text: "UserPromptSubmit hook additional context: start context" },
+        ],
         display: false,
       },
     });
@@ -1713,8 +1672,9 @@ test(
       scope: "user",
       marketplace: "catalog",
       pluginId: "demo",
+      event: "UserPromptSubmit",
     } as const;
-    runtime.appendPendingSessionStartContext(pending);
+    runtime.appendPendingPromptContext(pending);
     enterChild(t, "main-session");
 
     // act
@@ -1725,7 +1685,7 @@ test(
     // assert
     assert.strictEqual(message, undefined);
     assert.strictEqual(runtime.childRootResolved("router-child"), false);
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [pending]);
+    assert.deepStrictEqual(runtime.pendingPromptContextEntries(), [pending]);
   },
 );
 
@@ -1742,11 +1702,12 @@ test(
       }
     });
     const { runtime, handler, context } = await beforeAgentStartFixture(t);
-    runtime.appendPendingSessionStartContext({
+    runtime.appendPendingPromptContext({
       context: "start context",
       scope: "user",
       marketplace: "catalog",
       pluginId: "demo",
+      event: "UserPromptSubmit",
     });
     process.env.PI_SUBAGENT_CHILD = "1";
     const event = {
@@ -1759,7 +1720,9 @@ test(
     assert.deepStrictEqual(result, {
       message: {
         customType: "claude-hook-additional-context",
-        content: [{ type: "text", text: "SessionStart hook additional context: start context" }],
+        content: [
+          { type: "text", text: "UserPromptSubmit hook additional context: start context" },
+        ],
         display: false,
       },
     });
@@ -2036,40 +1999,6 @@ test("before_agent_start adds no message for prompt context that is only whitesp
   assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
 });
 
-test("before_agent_start sends session start context first and prompt context second in one message (D-CF5-13)", async (t) => {
-  // arrange
-  const { runtime, handler, context } = await beforeAgentStartFixture(t);
-  runtime.appendPendingPromptContext({
-    context: "ups-ctx",
-    scope: "user",
-    marketplace: "catalog",
-    pluginId: "beta",
-    event: "UserPromptSubmit",
-  });
-  runtime.appendPendingSessionStartContext({
-    context: "ss-ctx",
-    scope: "project",
-    marketplace: "catalog",
-    pluginId: "alpha",
-  });
-
-  // act
-  const turn = await handler(PROMPT_TURN, context);
-
-  // assert
-  assert.deepStrictEqual(turn, {
-    message: {
-      customType: "claude-hook-additional-context",
-      content: [
-        { type: "text", text: "SessionStart hook additional context: ss-ctx" },
-        { type: "text", text: "UserPromptSubmit hook additional context: ups-ctx" },
-      ],
-      display: false,
-    },
-  });
-  assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
-});
-
 test("before_agent_start of a reloaded bridge sends no context buffered before the reload (D-CF5-13)", async (t) => {
   // arrange
   const runtime = createHooksRuntime();
@@ -2084,7 +2013,6 @@ test("before_agent_start of a reloaded bridge sends no context buffered before t
     pluginId: "alpha",
     event: "UserPromptSubmit",
   } as const;
-  runtime.appendPendingSessionStartContext(entry);
   runtime.appendPendingPromptContext(entry);
   await hydration.registerHooksBridge(pi, { cwd: root });
   const liveHandler = registeredHandler(registrations, "before_agent_start", 1);
@@ -2106,11 +2034,12 @@ test("registered before_agent_start rejects a stale epoch without draining live 
   await hydration.registerHooksBridge(pi, { cwd: root });
   const handler = registeredHandler(registrations, "before_agent_start");
   await hydration.registerHooksBridge(pi, { cwd: root });
-  runtime.appendPendingSessionStartContext({
+  runtime.appendPendingPromptContext({
     context: "live context",
     scope: "project",
     marketplace: "catalog",
     pluginId: "live",
+    event: "UserPromptSubmit",
   });
   const event = {
     type: "before_agent_start",
@@ -2124,12 +2053,13 @@ test("registered before_agent_start rejects a stale epoch without draining live 
 
   // assert
   assert.strictEqual(promptUpdate, undefined);
-  assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), [
+  assert.deepStrictEqual(runtime.pendingPromptContextEntries(), [
     {
       context: "live context",
       scope: "project",
       marketplace: "catalog",
       pluginId: "live",
+      event: "UserPromptSubmit",
     },
   ]);
 });
@@ -3057,7 +2987,6 @@ test(
     await staleAtDispatch;
 
     // assert
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
     assert.deepStrictEqual(messages, []);
   },
 );
@@ -4440,7 +4369,7 @@ test("SessionStart runs a repeat whose first event was skipped for its mode", as
 });
 
 test(
-  "session_start lazily hydrates project routes and drains their context on the next agent turn",
+  "session_start lazily hydrates project routes and sends their context when the hooks finish",
   { concurrency: false },
   async (t) => {
     // arrange
@@ -4529,18 +4458,22 @@ test(
       { pluginId: "alpha", event: "SessionStart" },
       { pluginId: "beta", event: "SessionStart" },
     ]);
-    assert.deepStrictEqual(firstTurn, {
-      message: {
-        customType: "claude-hook-additional-context",
-        content: [
-          {
-            type: "text",
-            text: "SessionStart hook additional context: alpha context\nbeta context",
-          },
-        ],
-        display: false,
+    assert.deepStrictEqual(messages, [
+      {
+        message: {
+          customType: "claude-hook-additional-context",
+          content: [
+            {
+              type: "text",
+              text: "SessionStart hook additional context: alpha context\nbeta context",
+            },
+          ],
+          display: false,
+        },
+        options: { triggerTurn: false },
       },
-    });
+    ]);
+    assert.strictEqual(firstTurn, undefined);
     assert.strictEqual(secondTurn, undefined);
     assert.deepStrictEqual(routes, [
       { scope: "project", pluginId: "alpha", command: "alpha-0" },
@@ -4551,8 +4484,6 @@ test(
       { scope: "project", marketplace: "catalog", pluginId: "alpha" },
     ]);
     assert.strictEqual(projectSharedStat.isDirectory(), true);
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
-    assert.deepStrictEqual(messages, []);
   },
 );
 
