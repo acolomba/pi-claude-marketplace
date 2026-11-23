@@ -405,7 +405,6 @@ test("same-runtime reload makes every retained registration inert before argumen
     generation: runtime.currentGeneration(),
     cache: Array.from(runtime.parsedConfigEntries()),
     routes: Array.from(runtime.routingTableEntries()),
-    pending: runtime.pendingSessionStartContextEntries(),
     promptPending: runtime.pendingPromptContextEntries(),
   });
   const readsBefore = [...readRoots];
@@ -433,7 +432,6 @@ test("same-runtime reload makes every retained registration inert before argumen
     generation: runtime.currentGeneration(),
     cache: Array.from(runtime.parsedConfigEntries()),
     routes: Array.from(runtime.routingTableEntries()),
-    pending: runtime.pendingSessionStartContextEntries(),
     promptPending: runtime.pendingPromptContextEntries(),
   });
   const liveSessionStart = liveRegistrations[0]?.handler;

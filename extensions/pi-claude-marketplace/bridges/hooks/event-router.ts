@@ -28,11 +28,12 @@
 //     pluginId); within-plugin entries preserve declaration order via the
 //     monotonic `declarationIndex` carried on RoutingEntry (DISP-04).
 //
-//   - the pending context buffers: each SessionStart and UserPromptSubmit
-//     hook's `additionalContext` waits there until the `before_agent_start`
-//     closure drains both into one message after the prompt (D-CF5-13).
-//     Cleared at every factory entry so a `/reload` cannot leak the prior
-//     session's context.
+//   - the pending prompt context buffers: each prompt hook's
+//     `additionalContext` waits there until the `before_agent_start` closure
+//     drains it into one message after the prompt (D-CF5-13). Cleared at
+//     every factory entry so a `/reload` cannot leak the prior session's
+//     context. A SessionStart context waits in no buffer: the adapter sends
+//     it into the session at once, so it is already there (HKRL-01).
 //
 // DISP-01 / DISP-02 / DISP-03 / DISP-04 / OBS-01 anchor the contracts this
 // module enforces; D-59-01 / D-59-02 / D-59-03 anchor the decisions.
@@ -295,14 +296,13 @@ async function readAndCachePluginHooksWith(
  * captured generation and live mode before invoking this closure. A stale
  * registration or rejected mode leaves the live context buffers intact.
  *
- * D-CF5-13: the handler drains both context buffers into one custom message
- * with a text part per event, `SessionStart hook additional context: <values>`
- * first, then one part for each event of `PROMPT_CONTEXT_EVENTS` that
+ * D-CF5-13: the handler drains the prompt context buffer into one custom
+ * message with one text part for each event of `PROMPT_CONTEXT_EVENTS` that
  * buffered a context, labeled with that event (D-PG6-20). Pi places the
- * message after the prompt, persists
- * it in the session, and sends it to the model as a user message, so the
- * SessionStart context stays in the history of every later turn, as Claude
- * Code's does. The prompt and the system prompt are not changed.
+ * message after the prompt, persists it in the session, and sends it to the
+ * model as a user message. The SessionStart context is already in the
+ * session, before the prompt (HKRL-01). The prompt and the system prompt are
+ * not changed.
  * `display: false` keeps the message out of the transcript the user reads.
  *
  * With nothing to send, the handler returns undefined. Pi's runner emits
@@ -379,7 +379,7 @@ function promptContextParts(
   );
 }
 
-// Records how the run started and drains both context buffers into one message.
+// Records how the run started and drains the prompt context buffer into one message.
 function startRun(
   runtime: HooksRuntime,
   event: BeforeAgentStartEvent,
@@ -387,11 +387,9 @@ function startRun(
   runtime.recordRunStart(
     event.messageType === "custom" && event.message.customType === REWAKE_CUSTOM_TYPE,
   );
-  const sessionStart = runtime.drainPendingSessionStartContext().map((entry) => entry.context);
-  const content = [
-    hookContextPart("SessionStart", sessionStart),
-    ...promptContextParts(runtime.drainPendingPromptContext()),
-  ].filter((part) => part !== undefined);
+  const content = promptContextParts(runtime.drainPendingPromptContext()).filter(
+    (part) => part !== undefined,
+  );
   if (content.length === 0) {
     return undefined;
   }
@@ -1323,7 +1321,7 @@ function sessionCompactCallback(
  *      saved hook output older than 30 days (D-PG5-15).
  *   6. Register exactly 14 pi.on call sites -- 7 Bucket-A dispatch surfaces
  *      (DISP-01) plus `before_agent_start` (the drain point for the
- *      SessionStart `additionalContext` capture buffer) plus `turn_end` (sends
+ *      prompt `additionalContext` buffer) plus `turn_end` (sends
  *      the context of a queued follow-up, D-CF5-13) plus the three
  *      turn-boundary surfaces `agent_end` (caches the run's last-assistant
  *      message), `agent_before_settle` (runs the Stop bucket on a `stop`
@@ -1391,8 +1389,9 @@ async function registerHooksBridgeWith(
   // /reload re-enters this factory and must not leak a stale
   // additionalContext entry from the prior session into the new buffers.
   // Clearing here makes the invariant explicit: each bridge load starts
-  // with both pending buffers empty, which only the SessionStart and
-  // UserPromptSubmit adapters can subsequently populate (D-CF5-13).
+  // with the pending prompt buffers empty, which only the prompt adapters
+  // can subsequently populate (D-CF5-13). A SessionStart context is already
+  // in the session, so a `/reload` keeps it (HKRL-01).
   runtime.preparePendingContextForRegistration();
   runtime.resetChildIdentity();
 

@@ -96,12 +96,7 @@ import type {
 } from "../../platform/pi-api.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { HookExecResult } from "./exec-result.ts";
-import type {
-  PendingPromptContext,
-  PendingSessionStartContext,
-  PromptContextEvent,
-  RoutingEntry,
-} from "./routing-state.ts";
+import type { PendingPromptContext, PromptContextEvent, RoutingEntry } from "./routing-state.ts";
 import type { HooksRuntime } from "./runtime.ts";
 
 /**
@@ -126,24 +121,21 @@ const UNATTRIBUTED = { scope: "user", marketplace: "", pluginId: "" } as const s
   readonly pluginId: string;
 };
 
-// A context to buffer, with the provenance of the entry the fold attributes
-// it to. A prompt's context adds its event (`bufferedPromptContext`).
-function bufferedContext(text: string, context: HookAdapterContext): PendingSessionStartContext {
+// A prompt context to buffer, with its event and the provenance of the
+// entry the fold attributes it to.
+function bufferedPromptContext(
+  text: string,
+  claudeEvent: PromptContextEvent,
+  context: HookAdapterContext,
+): PendingPromptContext {
   const provenance = context.attributedTo ?? UNATTRIBUTED;
   return {
     context: text,
     scope: provenance.scope,
     marketplace: provenance.marketplace,
     pluginId: provenance.pluginId,
+    event: claudeEvent,
   };
-}
-
-function bufferedPromptContext(
-  text: string,
-  claudeEvent: PromptContextEvent,
-  context: HookAdapterContext,
-): PendingPromptContext {
-  return { ...bufferedContext(text, context), event: claudeEvent };
 }
 
 // The declared command of the entry a folded result is attributed to.
