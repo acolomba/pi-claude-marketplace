@@ -4,8 +4,6 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import * as git from "isomorphic-git";
-
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 import { cascadeUnstagePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
@@ -31,6 +29,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { runPhases } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
+import { gitTestCheckout, initGitTestCheckout } from "../../platform/git-test-repository.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
@@ -164,22 +163,11 @@ async function seedMarketplace(
   // marketplace clone's own local tags, so the fixture marketplace is a real
   // (initially tag-less) git repository, matching what a marketplace root
   // actually is in production.
-  await git.init({ fs, dir: marketplaceRoot, defaultBranch: "main" });
-  await git.add({ fs, dir: marketplaceRoot, filepath: ".claude-plugin/marketplace.json" });
-  for (const name of pluginNames) {
-    await git.add({
-      fs,
-      dir: marketplaceRoot,
-      filepath: `plugins/${name}/.claude-plugin/plugin.json`,
-    });
-  }
-
-  await git.commit({
-    fs,
-    dir: marketplaceRoot,
-    message: "seed marketplace",
-    author: { name: "test", email: "test@example.com" },
-  });
+  const checkout = await initGitTestCheckout(marketplaceRoot);
+  await checkout.commitPaths("seed marketplace", [
+    ".claude-plugin/marketplace.json",
+    ...pluginNames.map((name) => `plugins/${name}/.claude-plugin/plugin.json`),
+  ]);
 
   const locations = locationsFor("project", cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
@@ -1971,9 +1959,10 @@ test("D-09-05 / T-06-10: contradictory root ranges fail the cascade as a range c
 async function tagMarketplaceRoot(state: ExtensionState, ...tagNames: string[]): Promise<string> {
   const marketplaceRoot = state.marketplaces[MARKETPLACE]?.marketplaceRoot;
   assert.ok(marketplaceRoot !== undefined, "the fixture records the marketplace it seeds");
-  const oid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
+  const checkout = gitTestCheckout(marketplaceRoot);
+  const oid = await checkout.run("rev-parse", "HEAD");
   for (const tagName of tagNames) {
-    await git.tag({ fs, dir: marketplaceRoot, ref: tagName, object: oid });
+    await checkout.run("tag", tagName, oid);
   }
 
   return oid;
