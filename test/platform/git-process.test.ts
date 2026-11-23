@@ -14,6 +14,7 @@ import {
 import { GitCommandError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { hermeticGitEnvironment } from "../../features/lib/hermetic-git.ts";
 
+import { captureDebugLog } from "./debug-log-capture.ts";
 import { createGitTestRepository } from "./git-test-repository.ts";
 import { createProcessFake } from "./process-fake.ts";
 
@@ -24,7 +25,7 @@ import type {
 } from "../../extensions/pi-claude-marketplace/platform/git-process.ts";
 import type { ProcessSpawn } from "../../extensions/pi-claude-marketplace/platform/process-run.ts";
 import type { GitFailure } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
-import type { ProcessControl } from "./process-fake.ts";
+import type { ProcessControl, ProcessLaunch } from "./process-fake.ts";
 import type { TestContext } from "node:test";
 
 const NODE_SPAWN = spawn as ProcessSpawn;
@@ -193,6 +194,56 @@ function createFakeGit(
     killGraceMs: KILL_GRACE_MS,
   });
   return { git, control, started: launcher.started, host };
+}
+
+interface LaunchSequence {
+  readonly spawn: ProcessSpawn;
+  /** Settles at the launch with this index, once the run watches its process. */
+  readonly at: (index: number) => Promise<ProcessControl>;
+  readonly all: () => readonly ProcessLaunch[];
+}
+
+// Gives every launch its own fake process, so one run can start several.
+function launchSequence(): LaunchSequence {
+  const controls: ProcessControl[] = [];
+  const waiting = new Map<number, (control: ProcessControl) => void>();
+  const launched: ProcessLaunch[] = [];
+  return {
+    spawn: (command, args, options) => {
+      const control = createProcessFake(4242 + controls.length);
+      const process = control.spawn(command, args, options);
+      launched.push([command, args, options]);
+      waiting.get(controls.length)?.(control);
+      controls.push(control);
+      return process;
+    },
+    at: (index) =>
+      new Promise((resolve) => {
+        const control = controls[index];
+        if (control === undefined) {
+          waiting.set(index, resolve);
+        } else {
+          resolve(control);
+        }
+      }),
+    all: () => [...launched],
+  };
+}
+
+function createSequencedGit(setup: HostSetup = {}): {
+  readonly git: GitProcess;
+  readonly launches: LaunchSequence;
+  readonly host: RecordingHost;
+} {
+  const launches = launchSequence();
+  const host = createHost(setup);
+  const git = createGitProcess({
+    spawn: launches.spawn,
+    host: host.host,
+    env: { PATH: "/usr/bin" },
+    killGraceMs: KILL_GRACE_MS,
+  });
+  return { git, launches, host };
 }
 
 interface ExpectedFailure {
@@ -628,7 +679,9 @@ describe("createGitProcess", () => {
       // act
       const pending = git.run({ ...FILL, ...(allowExit !== undefined && { allowExit }) });
       await started;
-      control.writeStderr("fatal: unable to access 'https://user:secret@example.test/x.git/'\n");
+      control.writeStderr(
+        "fatal: unexpected answer from 'https://user:secret@example.test/x.git/'\n",
+      );
       control.close(code);
 
       // assert
@@ -638,13 +691,13 @@ describe("createGitProcess", () => {
           failure: { kind: "failed" },
           operation: "credential fill",
           exitCode: code,
-          stderr: "fatal: unable to access 'https://***@example.test/x.git/'\n",
+          stderr: "fatal: unexpected answer from 'https://***@example.test/x.git/'\n",
         }),
       );
     });
   }
 
-  test("SG-PRC-05: rejects a run that closes without an exit code as failed", async () => {
+  test("SG-PRC-05: rejects a run that closes without an exit code or stderr as no-stderr", async () => {
     // arrange
     const { git, control, started } = createFakeGit();
 
@@ -657,12 +710,95 @@ describe("createGitProcess", () => {
     await assert.rejects(
       pending,
       gitFailure({
-        failure: { kind: "failed" },
+        failure: { kind: "no-stderr" },
         operation: "credential fill",
         exitCode: null,
         stderr: "",
       }),
     );
+  });
+
+  test("SG-PRC-05: rejects a disallowed exit with the kind its C-locale stderr names", async () => {
+    // arrange
+    const { git, control, started } = createFakeGit();
+
+    // act
+    const pending = git.run(FILL);
+    await started;
+    control.writeStderr("fatal: transport 'ext' not allowed\n");
+    control.close(128);
+
+    // assert
+    await assert.rejects(
+      pending,
+      gitFailure({
+        failure: { kind: "protocol-refused" },
+        operation: "credential fill",
+        exitCode: 128,
+        stderr: "fatal: transport 'ext' not allowed\n",
+      }),
+    );
+  });
+
+  test("D-SG-06: logs the git version once after a git-too-old failure", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const { git, launches } = createSequencedGit({ realpaths: { "/tmp": "/private/tmp" } });
+
+    // act
+    const pending = git.run(FILL);
+    const fill = await launches.at(0);
+    fill.writeStderr("error: unknown option `no-such-flag'\n");
+    fill.close(129);
+    const version = await launches.at(1);
+    version.writeStdout("git version 2.17.1\nextra\n");
+    version.close(0);
+
+    // assert
+    await assert.rejects(
+      pending,
+      gitFailure({
+        failure: { kind: "git-too-old" },
+        operation: "credential fill",
+        exitCode: 129,
+        stderr: "error: unknown option `no-such-flag'\n",
+      }),
+    );
+    assert.deepStrictEqual(logged, ["[git] git version: git version 2.17.1"]);
+    assert.deepStrictEqual(
+      launches.all().map(([command, args, options]) => [command, args, options.cwd]),
+      [
+        ["/usr/bin/git", [...hardening("/dev/null"), "credential", "fill"], "/private/tmp"],
+        ["/usr/bin/git", [...hardening("/dev/null"), "version"], "/private/tmp"],
+      ],
+    );
+  });
+
+  test("D-SG-06: logs an unreadable version and keeps the git-too-old failure when the version read fails", async (t) => {
+    // arrange
+    const logged = captureDebugLog(t);
+    const { git, launches } = createSequencedGit();
+
+    // act
+    const pending = git.run(FILL);
+    const fill = await launches.at(0);
+    fill.close(129);
+    const version = await launches.at(1);
+    version.writeStderr("error: unknown option `version'\n");
+    version.close(129);
+
+    // assert
+    await assert.rejects(
+      pending,
+      gitFailure({
+        failure: { kind: "git-too-old" },
+        operation: "credential fill",
+        exitCode: 129,
+        stderr: "",
+      }),
+    );
+    assert.deepStrictEqual(logged, ["[git] git version: unreadable"]);
+    assert.strictEqual(launches.all().length, 2);
   });
 
   test("SG-PRC-01: rejects a run past its timeout with the limit after stopping its process tree", async (t) => {
@@ -878,7 +1014,7 @@ describe("createGitProcess", () => {
       // assert
       await assert.rejects(filled, (error: unknown) => {
         assert.ok(error instanceof GitCommandError);
-        assert.deepStrictEqual([error.kind, error.exitCode], ["failed", 128]);
+        assert.deepStrictEqual([error.kind, error.exitCode], ["https-auth", 128]);
         return true;
       });
       await assert.rejects(access(askpass.record), { code: "ENOENT" });
@@ -910,7 +1046,7 @@ describe("createGitProcess", () => {
     // assert
     await assert.rejects(filled, (error: unknown) => {
       assert.ok(error instanceof GitCommandError);
-      assert.deepStrictEqual([error.kind, error.exitCode], ["failed", 128]);
+      assert.deepStrictEqual([error.kind, error.exitCode], ["https-auth", 128]);
       return true;
     });
     await assert.rejects(access(helper.record), { code: "ENOENT" });

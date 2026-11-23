@@ -30,6 +30,11 @@
 // real path of the host's temporary directory, so the repository Pi runs in
 // never steers the command.
 //
+// SG-PRC-05: a run that exits with a code its request does not allow rejects
+// with the kind platform/git-failure-kind.ts reads from the exit code and the
+// C-locale stderr. D-SG-06: after a `git-too-old` failure, and only then, the
+// module reads `git version` once and writes it to the debug log.
+//
 // D-SG-01, D-PL9-11: this module is the extension's sanctioned git spawn site,
 // and the ssh one once the SSH probe lands. It may import Node's child-process
 // module, for its own spawn binding; the rule pack's child-process-chokepoint
@@ -43,8 +48,10 @@ import { access, realpath, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
+import { hookDebugLog } from "../shared/debug-log.ts";
 import { GitCommandError } from "../shared/errors.ts";
 
+import { classifyGitExit } from "./git-failure-kind.ts";
 import { findOnWindowsPath, NODE_PROCESS_HOST, runProcess } from "./process-run.ts";
 
 import type { GitFailure } from "../shared/errors.ts";
@@ -54,7 +61,7 @@ import type { OutputCapture, ProcessHost, ProcessRun, ProcessSpawn } from "./pro
 export type GitLane = "network";
 
 /** The git subcommands the extension runs. */
-export type GitSubcommand = "credential";
+export type GitSubcommand = "credential" | "version";
 
 /** One git command to run. */
 export interface GitRequest {
@@ -211,6 +218,9 @@ const STDOUT_CAPTURE: OutputCapture = { limit: 8_388_608, keep: "head" };
 const STDERR_CAPTURE: OutputCapture = { limit: 65_536, keep: "tail" };
 
 const WINDOWS_LOOKUP_EXTENSIONS = [".exe", ".cmd", ".bat"] as const;
+
+// D-SG-06: the one version read after a `git-too-old` failure.
+const VERSION_REQUEST: GitRequest = { subcommand: "version", lane: "network", timeoutMs: 5_000 };
 
 // How one platform spells paths and variable names.
 interface PlatformRules {
@@ -405,9 +415,14 @@ function settleRun(run: ProcessRun, request: GitRequest, operation: string): Git
   }
 
   throw new GitCommandError(
-    { kind: "failed" },
+    classifyGitExit(code, run.stderr),
     code === null ? details : { ...details, exitCode: code },
   );
+}
+
+// The first line of a `git version` answer.
+function firstLine(text: string): string {
+  return text.replace(/\r?\n[\s\S]*/, "");
 }
 
 /**
@@ -436,7 +451,7 @@ export function createGitProcess(options: GitProcessOptions): GitProcess {
     return git;
   }
 
-  async function run(request: GitRequest): Promise<GitResult> {
+  async function execute(request: GitRequest): Promise<GitResult> {
     const operation = operationOf(request);
     if (request.signal?.aborted === true) {
       throw new GitCommandError(
@@ -471,6 +486,28 @@ export function createGitProcess(options: GitProcessOptions): GitProcess {
       },
     );
     return settleRun(processRun, request, operation);
+  }
+
+  // D-SG-06: the version read runs through `execute`, so it never reads the
+  // version again.
+  async function logGitVersion(): Promise<void> {
+    const versionLine = await execute(VERSION_REQUEST).then(
+      (version) => firstLine(version.stdout),
+      () => "unreadable",
+    );
+    hookDebugLog(`git version: ${versionLine}`, "git");
+  }
+
+  async function run(request: GitRequest): Promise<GitResult> {
+    try {
+      return await execute(request);
+    } catch (error: unknown) {
+      if (error instanceof GitCommandError && error.kind === "git-too-old") {
+        await logGitVersion();
+      }
+
+      throw error;
+    }
   }
 
   return { locate, run };

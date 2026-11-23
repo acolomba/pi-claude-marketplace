@@ -88,6 +88,7 @@ const [
   MARKETPLACE_UPDATE_FILE,
   GIT_AUTH_CALLBACKS_FILE,
   HOSTED_MANIFEST_FETCH_FILE,
+  GIT_PROCESS_FILE,
 ] = CREDENTIAL_LEAK_TARGETS;
 
 /**
@@ -107,6 +108,7 @@ const DECLARED_MODULE_ORDER: ReadonlyArray<string> = [
   "orchestrators/marketplace/update.ts",
   "platform/git-auth-callbacks.ts",
   "platform/hosted-manifest-fetch.ts",
+  "platform/git-process.ts",
 ];
 
 const STATE_WRITE_FILES: ReadonlyArray<string> = [
@@ -401,6 +403,36 @@ test("AUTH-09: platform/git-credential.ts never interpolates a password in an Er
   );
 
   assertNoCredentialInLiterals(GIT_CREDENTIAL_FILE, stripped, ERROR_LITERAL_CALL_SITE);
+});
+
+test("AUTH-09: platform/git-process.ts never puts a credential, a run's input, or its stdout in a message or a debug line", async () => {
+  const absPath = path.join(REPO_ROOT, GIT_PROCESS_FILE);
+  const exists = await access(absPath).then(
+    () => true,
+    () => false,
+  );
+  assert.ok(
+    exists,
+    `D-07-03: ${GIT_PROCESS_FILE} is declared in CREDENTIAL_LEAK_TARGETS but does not resolve, so the scan below would report success having opened nothing.`,
+  );
+
+  // A `git credential` request goes to stdin as the run's `input`, and the
+  // `fill` answer, password included, comes back on stdout.
+  const stripped = stripComments(await readFile(absPath, "utf8"));
+  const messageCallSite = /(?:new\s+(?:GitCommand)?Error|hookDebugLog)\s*\(\s*(`(?:[^`\\]|\\.)*`)/g;
+  const literals = fullTemplateLiteralsAfter(stripped, messageCallSite);
+  assert.ok(
+    literals.length > 0,
+    `D-07-03: no message or debug-log template literal exists in ${GIT_PROCESS_FILE}, so the scan below passes over nothing. Re-aim the gate at the module that now builds them.`,
+  );
+
+  assertNoCredentialInLiterals(GIT_PROCESS_FILE, stripped, messageCallSite);
+  const runOutput = literals.filter((lit) => /\$\{[^}]*\b(?:input|stdout)\b/.test(lit));
+  assert.deepStrictEqual(
+    runOutput,
+    [],
+    `AUTH-09 violation: a message or debug-log template literal in ${GIT_PROCESS_FILE} interpolates a run's input or stdout: ${runOutput.join(", ")}`,
+  );
 });
 
 test("AUTH-09: domain/github-auth.ts never interpolates a token in an Error message and passes only the prompt values to onDeviceCode", async () => {
