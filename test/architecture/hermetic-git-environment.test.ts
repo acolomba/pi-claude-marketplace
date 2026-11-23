@@ -1,7 +1,18 @@
 /**
- * @fileoverview Checks that every git environment the suite builds is made from
- * scratch, so no inherited `GIT_*` variable reaches Pi, the git host, or a
- * fixture (DRV-03). Pi gets the run's GitHub base override, never the
+ * @fileoverview Checks that every environment the suites build for a process
+ * they start is made from scratch, so no git- or ssh-steering variable of the
+ * test runner reaches Pi, the git host, the SSH stand-in, a fixture, or a
+ * forked integration child (DRV-03, SG-HRN-04). Each case plants the
+ * `GIT_CONFIG_*` family, the git repository, trace, and helper variables,
+ * `GIT_SSL_CAINFO`, the ssh variables (`GIT_SSH`, `GIT_SSH_COMMAND`,
+ * `GIT_SSH_VARIANT`, `SSH_AUTH_SOCK`, `SSH_ASKPASS`), the proxy variables in
+ * both cases, `XDG_CONFIG_HOME`, `GCM_*`, the locale, and
+ * `CLAUDE_CODE_PLUGIN_PREFER_HTTPS`, then asserts the exact key set of
+ * `hermeticGitEnvironment` in each form the suites use, `cgiEnvironment`
+ * under both SHA-want policies, `uploadPackEnvironment`, `rpcChildEnvironment`,
+ * and `ipcChildEnvironment`, so a key a builder inherits fails one case.
+ *
+ * Pi gets the run's GitHub base override, never the
  * shell's (GHB-01), and none when the run's environment has none (D-BG-01).
  * The background update variables also stay in the shell: Pi gets the update
  * delay only from the run (D-PL8-09). A profile Pi gets
@@ -24,15 +35,20 @@ import path from "node:path";
 import { describe, test } from "node:test";
 
 import { hermeticGitEnvironment } from "../../features/lib/hermetic-git.ts";
+import { cgiEnvironment } from "../../features/lib/https-git-host/cgi.ts";
 import { HttpsGitHost } from "../../features/lib/https-git-host/server.ts";
 import { rpcChildEnvironment } from "../../features/lib/pi-rpc.ts";
 import { SshGitHost } from "../../features/lib/ssh-git-host/host.ts";
+import { uploadPackEnvironment } from "../../features/lib/ssh-git-host/launch.ts";
+import { ipcChildEnvironment } from "../integration/ipc-child-environment.ts";
 import {
   createGitTestRepository,
   initGitTestCheckout,
   runSystemGit,
 } from "../platform/git-test-repository.ts";
 
+import type { HermeticGitVariables } from "../../features/lib/hermetic-git.ts";
+import type { CgiRequest, ShaWantPolicy } from "../../features/lib/https-git-host/cgi.ts";
 import type {
   RpcGitEnvironment,
   RpcProfileEnvironment,
@@ -47,6 +63,41 @@ const INHERITED_VARIABLES = {
   GIT_CONFIG_GLOBAL: "/shell/home/.gitconfig",
   GIT_ASKPASS: "/shell/bin/askpass",
   GIT_SSL_CAINFO: "/shell/ca-bundle.crt",
+  GIT_CONFIG_COUNT: "1",
+  GIT_CONFIG_KEY_0: "url.https://shell.example/.insteadOf",
+  GIT_CONFIG_VALUE_0: "https://127.0.0.1:8443/",
+  GIT_CONFIG_PARAMETERS: "'url.https://shell.example/.insteadof'='https://127.0.0.1:8443/'",
+  GIT_SSH: "/shell/bin/ssh",
+  GIT_SSH_COMMAND: "ssh -i /shell/key",
+  GIT_SSH_VARIANT: "ssh",
+  SSH_AUTH_SOCK: "/shell/agent.sock",
+  SSH_ASKPASS: "/shell/bin/ssh-askpass",
+  HTTP_PROXY: "http://shell-proxy.example:1",
+  http_proxy: "http://shell-proxy.example:1",
+  HTTPS_PROXY: "http://shell-proxy.example:1",
+  https_proxy: "http://shell-proxy.example:1",
+  ALL_PROXY: "socks5://shell-proxy.example:1",
+  all_proxy: "socks5://shell-proxy.example:1",
+  NO_PROXY: "*",
+  no_proxy: "*",
+  XDG_CONFIG_HOME: "/shell/xdg",
+  GIT_TRACE: "1",
+  GIT_TRACE_PACKET: "1",
+  GIT_TRACE2: "1",
+  GIT_TRACE_CURL: "1",
+  GCM_INTERACTIVE: "always",
+  GCM_CREDENTIAL_STORE: "plaintext",
+  CLAUDE_CODE_PLUGIN_PREFER_HTTPS: "1",
+  GIT_WORK_TREE: "/shell/repo",
+  GIT_OBJECT_DIRECTORY: "/shell/repo/.git/objects",
+  GIT_EXEC_PATH: "/shell/libexec/git-core",
+  GIT_TEMPLATE_DIR: "/shell/share/git-core/templates",
+  GIT_ALLOW_PROTOCOL: "ext",
+  GIT_CEILING_DIRECTORIES: "/shell",
+  GIT_TERMINAL_PROMPT: "1",
+  GIT_EDITOR: "/shell/bin/editor",
+  LC_ALL: "fr_FR.UTF-8",
+  LANG: "de_DE.UTF-8",
   PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: "https://operator.example/git",
   PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS: "5",
   DISABLE_UPDATES: "1",
@@ -131,24 +182,197 @@ const sandbox = {
   cwd: "/sandbox/project",
 } satisfies RpcSandbox;
 
+/** The eight keys of every suite git whose HOME is `home`, with the runner's PATH. */
+function suiteGitKeys(home: string): NodeJS.ProcessEnv {
+  return {
+    PATH: process.env.PATH ?? "",
+    HOME: home,
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_AUTHOR_NAME: "features",
+    GIT_AUTHOR_EMAIL: "features@example.test",
+    GIT_COMMITTER_NAME: "features",
+    GIT_COMMITTER_EMAIL: "features@example.test",
+  };
+}
+
 describe("hermeticGitEnvironment", () => {
-  test("returns its eight keys and no inherited git variable", (t) => {
+  for (const { title, variables, expectedEnvironment } of [
+    {
+      title: "returns its eight keys and no inherited variable",
+      variables: {},
+      expectedEnvironment: suiteGitKeys("/scratch/home"),
+    },
+    {
+      title: "adds both named dates, for ten keys and no inherited variable",
+      variables: { GIT_AUTHOR_DATE: "1700000001 +0000", GIT_COMMITTER_DATE: "1700000001 +0000" },
+      expectedEnvironment: {
+        ...suiteGitKeys("/scratch/home"),
+        GIT_AUTHOR_DATE: "1700000001 +0000",
+        GIT_COMMITTER_DATE: "1700000001 +0000",
+      },
+    },
+    {
+      title: "adds the named CA file, for nine keys and not the runner's",
+      variables: { GIT_SSL_CAINFO: "/run/cert.pem" },
+      expectedEnvironment: { ...suiteGitKeys("/scratch/home"), GIT_SSL_CAINFO: "/run/cert.pem" },
+    },
+    {
+      title: "replaces the runner's PATH with the named one, keeping eight keys",
+      variables: { PATH: "/run/ssh-host/bin:/usr/bin" },
+      expectedEnvironment: { ...suiteGitKeys("/scratch/home"), PATH: "/run/ssh-host/bin:/usr/bin" },
+    },
+  ] satisfies ReadonlyArray<{
+    title: string;
+    variables: HermeticGitVariables;
+    expectedEnvironment: NodeJS.ProcessEnv;
+  }>) {
+    test(title, (t) => {
+      // arrange
+      inheritVariables(t);
+
+      // act
+      const environment = hermeticGitEnvironment("/scratch/home", variables);
+
+      // assert
+      assert.deepStrictEqual(environment, expectedEnvironment);
+    });
+  }
+});
+
+describe("cgiEnvironment", () => {
+  for (const { title, policy, expectedProtocol } of [
+    {
+      title: "passes the request's Git-Protocol and no inherited variable under allow-reachable",
+      policy: "allow-reachable",
+      expectedProtocol: { GIT_PROTOCOL: "version=2" },
+    },
+    {
+      title: "passes neither the Git-Protocol nor an inherited variable under refuse",
+      policy: "refuse",
+      expectedProtocol: {},
+    },
+  ] satisfies ReadonlyArray<{
+    title: string;
+    policy: ShaWantPolicy;
+    expectedProtocol: NodeJS.ProcessEnv;
+  }>) {
+    test(title, (t) => {
+      // arrange
+      inheritVariables(t);
+      const request = {
+        method: "GET",
+        url: new URL("https://127.0.0.1:4443/acme/tools.git/info/refs?service=git-upload-pack"),
+        headers: { "git-protocol": "version=2" },
+        body: Buffer.alloc(0),
+      } satisfies CgiRequest;
+
+      // act
+      const environment = cgiEnvironment(request, "/run/repositories", "/run/cgi-home", policy);
+
+      // assert
+      assert.deepStrictEqual(environment, {
+        ...suiteGitKeys("/run/cgi-home"),
+        GIT_PROJECT_ROOT: "/run/repositories",
+        GIT_HTTP_EXPORT_ALL: "1",
+        PATH_INFO: "/acme/tools.git/info/refs",
+        QUERY_STRING: "service=git-upload-pack",
+        REQUEST_METHOD: "GET",
+        CONTENT_TYPE: "",
+        CONTENT_LENGTH: "0",
+        ...expectedProtocol,
+      });
+    });
+  }
+});
+
+describe("uploadPackEnvironment", () => {
+  for (const { title, gitProtocol, expectedProtocol } of [
+    {
+      title: "adds git's GIT_PROTOCOL, for nine keys and no inherited variable",
+      gitProtocol: "version=2",
+      expectedProtocol: { GIT_PROTOCOL: "version=2" },
+    },
+    {
+      title: "returns the eight suite git keys and no inherited variable without a protocol",
+      gitProtocol: undefined,
+      expectedProtocol: {},
+    },
+  ] satisfies ReadonlyArray<{
+    title: string;
+    gitProtocol: string | undefined;
+    expectedProtocol: NodeJS.ProcessEnv;
+  }>) {
+    test(title, (t) => {
+      // arrange
+      inheritVariables(t);
+
+      // act
+      const environment = uploadPackEnvironment("/run/ssh-host/home", gitProtocol);
+
+      // assert
+      assert.deepStrictEqual(environment, {
+        ...suiteGitKeys("/run/ssh-host/home"),
+        ...expectedProtocol,
+      });
+    });
+  }
+});
+
+describe("ipcChildEnvironment", () => {
+  // The runner's own values, which the child must keep: the preload's test
+  // home always, and the coverage directory only when the runner collects.
+  const testHome = process.env.PI_CM_TEST_HOME;
+  const coverage = process.env.NODE_V8_COVERAGE;
+  const runnerKeys = {
+    PATH: process.env.PATH ?? "",
+    PI_CM_TEST_HOME: testHome,
+    ...(coverage === undefined ? {} : { NODE_V8_COVERAGE: coverage }),
+  };
+
+  for (const { title, options, expectedEnvironment } of [
+    {
+      title: "returns PATH, HOME, the runner's test home and coverage, and no inherited variable",
+      options: { home: "/run/child-home" },
+      expectedEnvironment: { ...runnerKeys, HOME: "/run/child-home" },
+    },
+    {
+      title: "adds the named agent directory and no inherited variable",
+      options: { home: "/run/child-home", agentDir: "/run/child-agent" },
+      expectedEnvironment: {
+        ...runnerKeys,
+        HOME: "/run/child-home",
+        PI_CODING_AGENT_DIR: "/run/child-agent",
+      },
+    },
+  ] satisfies ReadonlyArray<{
+    title: string;
+    options: Parameters<typeof ipcChildEnvironment>[0];
+    expectedEnvironment: NodeJS.ProcessEnv;
+  }>) {
+    test(title, (t) => {
+      // arrange
+      inheritVariables(t);
+
+      // act
+      const environment = ipcChildEnvironment(options);
+
+      // assert
+      assert.deepStrictEqual(environment, expectedEnvironment);
+    });
+  }
+
+  test("throws when the runner has no test home, so a forked child cannot move its HOME", (t) => {
     // arrange
     inheritVariables(t);
+    plantVariables(t, { PI_CM_TEST_HOME: undefined });
 
-    // act
-    const environment = hermeticGitEnvironment("/scratch/home");
-
-    // assert
-    assert.deepStrictEqual(environment, {
-      PATH: process.env.PATH ?? "",
-      HOME: "/scratch/home",
-      GIT_CONFIG_NOSYSTEM: "1",
-      GIT_CONFIG_GLOBAL: "/dev/null",
-      GIT_AUTHOR_NAME: "features",
-      GIT_AUTHOR_EMAIL: "features@example.test",
-      GIT_COMMITTER_NAME: "features",
-      GIT_COMMITTER_EMAIL: "features@example.test",
+    // act & assert
+    assert.throws(() => ipcChildEnvironment({ home: "/run/child-home" }), {
+      name: "Error",
+      message:
+        "PI_CM_TEST_HOME is not set: run the integration suite through " +
+        "`node --import scripts/isolated-pi-home.mjs`, or a forked child moves its HOME",
     });
   });
 });
