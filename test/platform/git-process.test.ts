@@ -15,7 +15,11 @@ import { GitCommandError } from "../../extensions/pi-claude-marketplace/shared/e
 import { hermeticGitEnvironment } from "../../features/lib/hermetic-git.ts";
 
 import { captureDebugLog } from "./debug-log-capture.ts";
-import { createGitTestRepository, runSystemGit } from "./git-test-repository.ts";
+import {
+  createGitTestDirectory,
+  createGitTestRepository,
+  runSystemGit,
+} from "./git-test-repository.ts";
 import { createProcessFake } from "./process-fake.ts";
 
 import type {
@@ -383,6 +387,37 @@ async function laneFixture(t: TestContext): Promise<LaneFixture> {
   };
 
   return { root, repository, bare, git: await gitWith({}), gitWith };
+}
+
+interface ProjectFixture {
+  readonly home: string;
+  /** The user's own project repository. */
+  readonly project: GitTestRepository;
+  /** A clone directory without `.git` inside the project. */
+  readonly nested: string;
+  /** A directory outside the project. */
+  readonly outside: string;
+  /** A symlink in `outside` that points at `nested`. */
+  readonly link: string;
+  /** The module, with the case's HOME and an empty user config. */
+  readonly git: GitProcess;
+}
+
+async function projectFixture(t: TestContext): Promise<ProjectFixture> {
+  const home = await caseDirectory(t);
+  const project = await createGitTestRepository(t, { boundary: "local" });
+  const nested = path.join(project.dir, ".pi/pi-claude-marketplace/clones/tools");
+  await mkdir(nested, { recursive: true });
+  const outside = await createGitTestDirectory(t, { boundary: "local" });
+  const link = path.join(outside, "tools");
+  await symlink(nested, link);
+  const git = createGitProcess({
+    spawn: NODE_SPAWN,
+    host: { ...NODE_GIT_HOST, tmpdir: () => home },
+    env: hermeticGitEnvironment(home),
+    killGraceMs: KILL_GRACE_MS,
+  });
+  return { home, project, nested, outside, link, git };
 }
 
 describe("createGitProcess", () => {
@@ -2118,6 +2153,89 @@ describe("createGitProcess operands and lanes", () => {
     await assert.rejects(access(path.join(clone, ".git", "hooks", "post-checkout")), {
       code: "ENOENT",
     });
+  });
+});
+
+// SG-PRC-03, E1, E2, E2b: git acts only on the repository a request names.
+describe("createGitProcess discovery", () => {
+  test("SG-PRC-03: answers the requested repository while GIT_DIR and GIT_WORK_TREE name another", async (t) => {
+    // arrange
+    const home = await caseDirectory(t);
+    const requested = await createGitTestRepository(t, { boundary: "local" });
+    const other = await createGitTestRepository(t, { boundary: "local" });
+    const otherOid = await other.commit([{ filepath: "other.txt", contents: "other\n" }], "other");
+    const pointed = await runSystemGit(
+      { cwd: requested.dir, home },
+      "--git-dir",
+      other.gitdir,
+      "--work-tree",
+      other.dir,
+      "rev-parse",
+      "HEAD",
+    );
+    const git = createGitProcess({
+      spawn: NODE_SPAWN,
+      host: { ...NODE_GIT_HOST, tmpdir: () => home },
+      env: { ...hermeticGitEnvironment(home), GIT_DIR: other.gitdir, GIT_WORK_TREE: other.dir },
+      killGraceMs: KILL_GRACE_MS,
+    });
+
+    // act
+    const read = await git.run({ ...LOCAL_READ, cwd: requested.dir });
+
+    // assert
+    assert.deepStrictEqual([read.stdout, pointed], [`${requested.initialOid}\n`, otherOid]);
+  });
+
+  for (const { label, workingDirectory } of [
+    {
+      label: "a clone directory without .git inside the user's project",
+      workingDirectory: (fixture: ProjectFixture) => fixture.nested,
+    },
+    {
+      label: "a symlink, made outside the project, to that directory",
+      workingDirectory: (fixture: ProjectFixture) => fixture.link,
+    },
+  ]) {
+    test(`SG-PRC-03, E1, E2: finds no repository from ${label}`, async (t) => {
+      // arrange
+      const fixture = await projectFixture(t);
+      const cwd = workingDirectory(fixture);
+      const discovered = await runSystemGit({ cwd, home: fixture.home }, "rev-parse", "HEAD");
+
+      // act
+      const read = fixture.git.run({ ...LOCAL_READ, cwd });
+
+      // assert
+      await assert.rejects(read, rejectsAs("not-a-repository", 128));
+      assert.strictEqual(discovered, fixture.project.initialOid);
+    });
+  }
+
+  test("SG-PRC-03, E2b: ignores the project's url.insteadOf rewrite from a clone directory inside it", async (t) => {
+    // arrange
+    const fixture = await projectFixture(t);
+    const missing = `file://${path.join(fixture.outside, "missing")}`;
+    await fixture.project.run("config", `url.file://${fixture.project.dir}.insteadOf`, missing);
+    const rewritten = await runSystemGit(
+      { cwd: fixture.nested, home: fixture.home },
+      "ls-remote",
+      missing,
+    );
+
+    // act
+    const listed = fixture.git.run({
+      subcommand: "ls-remote",
+      lane: "network",
+      operands: [missing],
+      cwd: fixture.nested,
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    await assert.rejects(listed, rejectsAs("repository-not-found", 128));
+    const oid = fixture.project.initialOid;
+    assert.strictEqual(rewritten, `${oid}\tHEAD\n${oid}\trefs/heads/main`);
   });
 });
 
