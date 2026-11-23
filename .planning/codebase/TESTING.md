@@ -185,7 +185,16 @@ npm run test:coverage:direct:all   # direct.lcov only, the gated report
 - `test/architecture/` — a distinct category from unit tests: source-tree grep/AST scans (`test/architecture/source-scan.ts`'s `assertNoForbiddenSurface`, `stripComments`) that assert structural invariants hold across the whole codebase, e.g. `test/architecture/reconcile-planner-purity.test.ts` (DIFF-01: the reconcile planner's comment-stripped source names no `node:fs`, `platform/git`, `gitOps`, `notify`, save, or lock surface) and `test/architecture/no-shell-out.test.ts` (D-21 / MA-7: only the whitelisted files may import `node:child_process`). The D-v1.0-01-11 ledger-import and NFR-5 network-free rules are not tests: they are ESLint rules (BLOCK C and BLOCK F in `eslint.config.js`) that `npm run lint` reports at the offending line.
 
 **Integration Tests:**
-- `test/integration/` (16 files, `npm run test:integration`) — exercise multiple layers together (e.g. full install/uninstall ledgers against real temp-directory scope roots) without a live network dependency
+- `test/integration/` (`npm run test:integration`) holds the cases that neither a cucumber scenario nor a unit test can observe. Put each test case where it can observe the behavior it checks:
+  - A behavior that a user can see is a cucumber scenario under `features/`.
+  - A behavior of one source module is a unit test in the test module that pairs with that source module under `test/`.
+  - A case goes in `test/integration/` only when neither a scenario nor a unit test can observe what it checks. It must be one of these:
+    - Peer conformance: it runs a peer's own code (Pi, pi-mcp-adapter, pi-subagents, or the workflow engine) on what this extension writes.
+    - Multi-process: two or more processes race, or one process acts on what another process left behind.
+    - Internal: it reads a stored record field that no command shows or state that only an earlier release wrote, injects a fault, or checks a call or a write that must not happen.
+    - Known bug: it guards a bug that has an entry in `.planning/BACKLOG.md`, until the fix lands.
+  - The first comment of each integration file names its class and the behavior that cucumber does not cover. A file that guards a known bug also names the BACKLOG ID.
+  - A case that fits none of these classes moves to the unit test of its source pair. If a scenario or a unit test already covers the case, delete it: first break the behavior on purpose, see that scenario or test fail, and undo the break.
 
 **E2E Tests:**
 - `test/e2e/` (6 files, `npm run test:e2e`) — exercise the extension against a real upstream ref, selected via `PI_CM_E2E_REF` (`pinned` or `main`); run with `--experimental-test-coverage` under `test:coverage:e2e`
