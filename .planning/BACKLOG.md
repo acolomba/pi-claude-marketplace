@@ -5511,7 +5511,9 @@ Noted 2026-11-15 (parity-gaps, Phase 11, research Open Question 2). Unverified: 
 
 Noted 2026-11-16 (parity-gaps, Phase 11, D-PG11-06, deferred by the maintainer review 2026-11-16). A typed command or skill whose body mentions a directory, such as `@src/`, attaches nothing: the mention stays as text, and the invocation goes on with no notice. Claude Code 2.1.323 attaches a directory as the output of `ls`. The requirement named regular text files only, so the directory case was left out. `docs/skills-commands-compatibility.md` lists it as deferred. The work: attach the listing, as Claude Code does, with a scenario that fails without the change.
 
-## DIRGITTAG-01: no scenario installs a dependency from a tag of a local git marketplace
+## ~~DIRGITTAG-01: no scenario installs a dependency from a tag of a local git marketplace~~ -- CLOSED
+
+Closed 2026-11-23 by quick task 261123-gth (`87446bd`, `c09b30c`): the harness publishes a `git-folder` marketplace (the dir fixture in a git work tree with no `origin`), and `features/plugin/install-dependencies.feature` installs a constrained relative-path dependency from its `<plugin>--v<version>` tag, keyed `marketplace-name:tools`. Breaks B-D1 and B-D2 each failed the scenario in a Then. The original note follows.
 
 Noted 2026-11-23 (integration-rescope, Phase 7, ITMIG-07). Claude Code also resolves a
 relative-path dependency against the `<plugin>--v<version>` tags of a marketplace added from a

@@ -54,7 +54,7 @@ builtin 260/260, 376 direct-coverage records). The archive is
 - For the PR: the three Phase 6.1 CHANGELOG parent lines (Blockers/Concerns),
   the version bump offer, and the accepted fallow `weakened-tests` finding on
   `standalone-prune`.
-- Still open: DIRGITTAG-01, HOOKLATESS-01 (a parity question for the user),
+- Still open: HOOKLATESS-01 (a parity question for the user),
   HOOKASYNCRESUME-01, Nyquist validation for all nine phases, and the
   `dispatch-exec.test.ts` large-environment fragility.
 
