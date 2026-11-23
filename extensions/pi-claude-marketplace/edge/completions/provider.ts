@@ -8,7 +8,8 @@
 //
 //   1. TC-1 -- tokens.length === 0 -> top-level keywords
 //      (install / uninstall / update / reinstall / list / ls / marketplace /
-//       bootstrap / import).
+//       bootstrap / import), with `reload` only where the host takes later
+//      commands (RELOADCMD-D1).
 //   2. TC-4 -- prevToken === "--scope" -> user / project.
 //   2b. TC-3 -- current.startsWith("-") -> flag names (--scope
 //      always; --installed / --available / --unavailable when head ===
@@ -69,8 +70,10 @@ const MARKETPLACE_VERBS_WITH_NAME_ARG = new Set([
   "noautoupdate",
 ]);
 
-function topLevelCompletions(current: string): AutocompleteItem[] {
-  return TOP_LEVEL_SUBCOMMANDS.filter((s) => s.startsWith(current)).map((label) => ({
+function topLevelCompletions(current: string, laterCommands: boolean): AutocompleteItem[] {
+  return TOP_LEVEL_SUBCOMMANDS.filter(
+    (s) => s.startsWith(current) && (laterCommands || s !== "reload"),
+  ).map((label) => ({
     label,
     value: label + " ",
   }));
@@ -101,13 +104,15 @@ function catalogVerbForPositionals(positionals: readonly string[]): CatalogVerb 
 
 /**
  * Verbs that accept no flag at all, not even the global `--scope`. `bootstrap`,
- * `browse` and `marketplace help` reject every argument; `help` takes one
- * topic name and rejects every flag. Suggesting `--scope` for
- * any of them would offer a token its handler answers with a usage error.
+ * `browse`, `reload` (RELOADCMD-D1), and `marketplace help` reject every
+ * argument; `help` takes one topic name and rejects every flag. Suggesting
+ * `--scope` for any of them would offer a token its handler answers with a
+ * usage error.
  */
 const NO_FLAG_VERBS: ReadonlySet<CatalogVerb> = new Set([
   "bootstrap",
   "browse",
+  "reload",
   "help",
   "marketplace help",
 ]);
@@ -295,17 +300,23 @@ function pluginRefBranchConfig(
   }
 }
 
+/**
+ * The completions for `prefix`. `laterCommands` is RELOADCMD-D1: whether the
+ * host takes later commands, from the last `session_start`; `reload` is offered
+ * only then.
+ */
 export async function getArgumentCompletions(
   prefix: string,
   resolver: LocationsResolver,
   completionCache: CompletionCache,
+  laterCommands: boolean,
 ): Promise<AutocompleteItem[] | null> {
   const { tokens, current, argumentTextPrefix } = readCompletionInput(prefix);
   const headPrefix = argumentTextPrefix === "" ? "" : argumentTextPrefix + " ";
 
   // Branch 1 (TC-1): top-level subcommand keyword.
   if (tokens.length === 0) {
-    return topLevelCompletions(current);
+    return topLevelCompletions(current, laterCommands);
   }
 
   // Resolve the complete command before stripping its accepted boolean flags.

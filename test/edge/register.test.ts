@@ -155,7 +155,31 @@ type PiRegistrar = Omit<ExtensionAPI, "registerTool"> & {
   readonly registerTool: (tool: ToolRegistration) => void;
 };
 
-const EXPECTED_TOP_LEVEL_USAGE =
+// RELOADCMD-D1: the usage of a host that takes later commands lists reload.
+const EXPECTED_SESSIONFUL_USAGE =
+  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|apply|autoapply|enable|disable|import|browse|reload|marketplace|market|help> ...\n" +
+  "  bootstrap                                          add anthropics/claude-plugins-official to user scope\n" +
+  "  install <plugin>@<marketplace> [--scope user|project]\n" +
+  "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]\n" +
+  "  prune [--scope user|project] [--dry-run]\n" +
+  "  update [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
+  "  fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
+  "  reinstall [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]\n" +
+  "  list [<marketplace>] [--scope user|project]   (alias: ls)\n" +
+  "  info <plugin>@<marketplace> [--scope user|project]\n" +
+  "  pending [--scope user|project]\n" +
+  "  apply [--scope user|project]\n" +
+  "  autoapply [on|off] [--scope user|project] [--local]\n" +
+  "  enable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
+  "  disable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
+  "  import [--scope user|project]\n" +
+  "  browse\n" +
+  "  reload                                             activate pending plugin changes in the current session\n" +
+  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...   (alias: market)\n" +
+  "  help [marketplace]";
+
+// RELOADCMD-D1: the usage of a host that takes no later commands.
+const EXPECTED_ONE_SHOT_USAGE =
   "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|apply|autoapply|enable|disable|import|browse|marketplace|market|help> ...\n" +
   "  bootstrap                                          add anthropics/claude-plugins-official to user scope\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
@@ -1154,7 +1178,10 @@ for (const mode of ["json", "rpc"]) {
     {
       args: "help",
       commandId: "plugin help",
-      payload: { kind: "usage-info", usage: EXPECTED_TOP_LEVEL_USAGE },
+      payload: {
+        kind: "usage-info",
+        usage: mode === "rpc" ? EXPECTED_SESSIONFUL_USAGE : EXPECTED_ONE_SHOT_USAGE,
+      },
     },
   ]) {
     test(`registered ${args} accepts its empty or help outcome in ${mode}`, async (t) => {
@@ -1164,6 +1191,7 @@ for (const mode of ["json", "rpc"]) {
       const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1, capture });
       const ctx = {
         mode,
+        hasUI: mode === "rpc",
         cwd,
         get ui() {
           return capture.ui;
@@ -1748,9 +1776,15 @@ test("runs the routed command inside the supplied foreground runner", async (t) 
   });
   const ctx = {
     mode: "json",
+    hasUI: false,
     cwd,
     get ui() {
       return capture.ui;
+    },
+    // RELOADCMD-D1: only a reload that asked for one runs Pi's reload.
+    reload: (): Promise<void> => {
+      log.push("reload");
+      return Promise.resolve();
     },
   };
 
@@ -1768,7 +1802,7 @@ test("runs the routed command inside the supplied foreground runner", async (t) 
         severity: "info",
         needsReload: false,
         origin: { kind: "command", commandId: "plugin help", invocationId: "help-run" },
-        usage: EXPECTED_TOP_LEVEL_USAGE,
+        usage: EXPECTED_ONE_SHOT_USAGE,
       },
     },
   ]);
@@ -1799,6 +1833,162 @@ test("refuses an unsupported mode before it enters the foreground runner", async
     },
   );
   assert.deepStrictEqual(log, []);
+  verifyRegistrar();
+});
+
+/**
+ * RELOADCMD-D1: a plain rpc command context whose `reload` logs and then makes
+ * every getter and method throw, as Pi makes the context stale once it reloads.
+ */
+function reloadingContext(
+  cwd: string,
+  capture: { readonly ui: unknown },
+  idle: boolean,
+  log: string[],
+): object {
+  let stale = false;
+  const live = <T>(value: T): T => {
+    if (stale) {
+      throw new Error("context is stale");
+    }
+
+    return value;
+  };
+
+  return {
+    get mode() {
+      return live("rpc");
+    },
+    get hasUI() {
+      return live(true);
+    },
+    get cwd() {
+      return live(cwd);
+    },
+    get ui() {
+      live(undefined);
+      return capture.ui;
+    },
+    isIdle: (): boolean => live(idle),
+    reload: (): Promise<void> => {
+      live(undefined);
+      log.push("reload");
+      stale = true;
+      return Promise.resolve();
+    },
+  };
+}
+
+test("RELOADCMD-D1: a registered reload runs Pi's reload after the foreground runner returned", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "reload-rpc");
+  const capture = createJsonCapture();
+  const log: string[] = [];
+  const { registration, verifyRegistrar } = registerCommandUnderTest({
+    runs: 1,
+    capture: {
+      entrySink: {
+        appendEntry: (customType, payload) => {
+          log.push("append");
+          capture.entrySink.appendEntry(customType, payload);
+        },
+      },
+    },
+    createInvocationId: () => "reload-run",
+    runForeground: async (command) => {
+      log.push("enter");
+      await command();
+      log.push("exit");
+    },
+  });
+  const ctx = reloadingContext(cwd, capture, true, log);
+
+  // act
+  await Reflect.apply(registration.handler, undefined, ["reload", ctx]);
+
+  // assert
+  assert.deepStrictEqual(log, ["enter", "append", "exit", "reload"]);
+  assert.deepStrictEqual(capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        kind: "reload-started",
+        severity: "info",
+        needsReload: false,
+        origin: { kind: "command", commandId: "plugin reload", invocationId: "reload-run" },
+      },
+    },
+  ]);
+  capture.assertValid();
+  verifyRegistrar();
+});
+
+test("RELOADCMD-D1: a registered reload in a busy session refuses and never runs Pi's reload", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "reload-busy");
+  const capture = createJsonCapture();
+  const log: string[] = [];
+  const { registration, verifyRegistrar } = registerCommandUnderTest({
+    runs: 1,
+    capture,
+    createInvocationId: () => "reload-run",
+  });
+  const ctx = reloadingContext(cwd, capture, false, log);
+
+  // act
+  await Reflect.apply(registration.handler, undefined, ["reload", ctx]);
+
+  // assert
+  assert.deepStrictEqual(log, []);
+  assert.deepStrictEqual(capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        kind: "usage-error",
+        severity: "error",
+        needsReload: false,
+        origin: { kind: "command", commandId: "plugin reload", invocationId: "reload-run" },
+        message: "The session is busy, so plugins were not reloaded. Ask again once it is idle.",
+        usage: "",
+      },
+    },
+  ]);
+  capture.assertValid();
+  verifyRegistrar();
+});
+
+/** RELOADCMD-D1: a plain session context whose host has a UI or none. */
+function sessionContext(hasUI: boolean): object {
+  return {
+    mode: hasUI ? "rpc" : "json",
+    hasUI,
+    ui: {
+      addAutocompleteProvider: (): void => {},
+    },
+  };
+}
+
+test("RELOADCMD-D1: completions offer reload only after a session start whose host takes later commands", async (t) => {
+  // arrange
+  await createHermeticScope(t, "reload-completions");
+  // MSEL-01: each lookup takes one inventory snapshot.
+  const { registration, sessionStart, verifyRegistrar } = registerCommandUnderTest({ runs: 3 });
+  const reinstall = { label: "reinstall", value: "reinstall " };
+  const reload = { label: "reload", value: "reload " };
+
+  // act
+  const beforeStart = await registration.getArgumentCompletions?.("re");
+  Reflect.apply(sessionStart, undefined, [SESSION_START, sessionContext(false)]);
+  const oneShot = await registration.getArgumentCompletions?.("re");
+  Reflect.apply(sessionStart, undefined, [SESSION_START, sessionContext(true)]);
+  const sessionful = await registration.getArgumentCompletions?.("re");
+
+  // assert
+  assert.deepStrictEqual(beforeStart, [reinstall]);
+  assert.deepStrictEqual(oneShot, [reinstall]);
+  assert.deepStrictEqual(sessionful, [reinstall, reload]);
   verifyRegistrar();
 });
 
@@ -1869,6 +2059,9 @@ function installAutocompleteWrapper(): WrapperUnderTest {
   when(() => ctx.mode)
     .thenReturn("tui")
     .times(1);
+  when(() => ctx.hasUI)
+    .thenReturn(true)
+    .times(1);
   sessionStart(SESSION_START, ctx);
 
   const wrap = providerFactory.value;
@@ -1904,11 +2097,15 @@ describe("registerClaudePluginCommand", () => {
     // arrange
     await createHermeticScope(t, "command-handler");
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 3);
+    // RELOADCMD-D1: the unknown-subcommand usage reads the host once.
+    when(() => ctx.hasUI)
+      .thenReturn(true)
+      .times(1);
     // One run per invocation, usage errors included; the usage error probes nothing.
     const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
     const expectedNotifications: readonly Notification[] = [
       {
-        message: `Unknown subcommand: "frobnicate".\n\n${EXPECTED_TOP_LEVEL_USAGE}`,
+        message: `Unknown subcommand: "frobnicate".\n\n${EXPECTED_SESSIONFUL_USAGE}`,
         severity: "error",
       },
     ];
@@ -3538,7 +3735,7 @@ describe("registerClaudeMarketplaceTools", () => {
  * Verbs that reject `--scope` itself, so the empty-scope rejection below has no
  * valid spelling to exercise on them.
  */
-const SCOPELESS_VERBS = new Set(["bootstrap", "browse", "help", "marketplace help"]);
+const SCOPELESS_VERBS = new Set(["bootstrap", "browse", "reload", "help", "marketplace help"]);
 
 /** Complete public spellings with independently stated argument and error contracts. */
 const COMMAND_ARGUMENT_CASES = [
@@ -3632,6 +3829,14 @@ const COMMAND_ARGUMENT_CASES = [
     surplus: "browse takes no arguments.",
   },
   {
+    // RELOADCMD-D1: reload reads the host once, before its arguments.
+    verb: "reload",
+    operand: "",
+    usage: "reload",
+    surplus: "reload takes no arguments.",
+    hostReads: 1,
+  },
+  {
     // `help` takes one topic, so a token after a valid topic is surplus.
     verb: "help",
     operand: "marketplace",
@@ -3701,7 +3906,15 @@ test("argument rejection cases cover every routed command and alias", () => {
   assert.deepStrictEqual(exercised.sort(), routed.sort());
 });
 
-for (const { verb, aliases = [], operand, usage, surplus, unknown } of COMMAND_ARGUMENT_CASES) {
+for (const {
+  verb,
+  aliases = [],
+  operand,
+  usage,
+  surplus,
+  unknown,
+  hostReads = 0,
+} of COMMAND_ARGUMENT_CASES) {
   for (const spelling of [verb, ...aliases]) {
     for (const { kind, invalid, diagnostic } of [
       {
@@ -3729,6 +3942,12 @@ for (const { verb, aliases = [], operand, usage, surplus, unknown } of COMMAND_A
         // arrange
         const { cwd } = await createHermeticScope(t, "reject-arguments");
         const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, undefined, 3);
+        if (hostReads > 0) {
+          when(() => ctx.hasUI)
+            .thenReturn(true)
+            .times(hostReads);
+        }
+
         // One run per invocation, usage errors included; the usage error probes nothing.
         const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
 

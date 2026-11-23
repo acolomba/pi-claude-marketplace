@@ -66,6 +66,7 @@ export type CatalogVerb =
   | "import"
   | "bootstrap"
   | "browse"
+  | "reload"
   | "help"
   | "marketplace help"
   | "marketplace add"
@@ -217,10 +218,12 @@ const CATALOG: Record<CatalogVerb, readonly FlagEntry[]> = {
   bootstrap: [],
   // The three documentation/navigation verbs take no flags at all, not even
   // the global `--scope`: `browse` and `marketplace help` reject any argument,
-  // and `help` reads whatever follows as a topic name. They are catalog
-  // members so the drift guard sees them; `NO_FLAG_VERBS` in
-  // completions/provider.ts is what keeps `--scope` off their suggestions.
+  // and `help` reads whatever follows as a topic name. `reload` rejects every
+  // argument too (RELOADCMD-D1). They are catalog members so the drift guard
+  // sees them; `NO_FLAG_VERBS` in completions/provider.ts is what keeps
+  // `--scope` off their suggestions.
   browse: [],
+  reload: [],
   help: [],
   "marketplace help": [],
   "marketplace add": [WRITE_TARGET_FLAG_ENTRY],

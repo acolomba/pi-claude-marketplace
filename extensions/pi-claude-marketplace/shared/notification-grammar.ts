@@ -9,6 +9,7 @@ import type {
   ResolvedEnvelope,
   ResolvedFailure,
   ResolvedMarketplace,
+  ResolvedMcpMigration,
   ResolvedRawSurface,
   ResolvedRow,
   ResolvedTally,
@@ -1326,6 +1327,12 @@ function composeBackgroundUpdateText(plugins: readonly BackgroundUpdatePlugin[])
   return `${names.length === 1 ? "Plugin" : "Plugins"} updated: ${subject} · Run /reload to apply`;
 }
 
+/** AMIG-03: the migration notice, whose reload hint is its last line. */
+function mcpMigrationArguments(surface: ResolvedMcpMigration): NotifyArguments {
+  const text = composeMcpMigrationText(surface.rows, surface.notices);
+  return [surface.needsReload ? `${text}\n${RELOAD_HINT_TRAILER}` : text, surface.severity];
+}
+
 /**
  * D-15: formats one resolved raw surface as its notify arguments. Every raw kind
  * passes its severity explicitly, read from `RAW_SURFACE_SEVERITY` (PMOD-01) or,
@@ -1334,7 +1341,8 @@ function composeBackgroundUpdateText(plugins: readonly BackgroundUpdatePlugin[])
  * `undefined` means nothing is emitted. The diagnostic arm reads the line count
  * and the async-rewake arm reads the summary length, so only a zero-length line
  * list or summary is a no-op (D-05, D-08); the hook-notice arm reads its text
- * length the same way (D-CF5-14). Producer strings pass through verbatim.
+ * length the same way (D-CF5-14). `reload-started` emits nothing too
+ * (RELOADCMD-D1). Producer strings pass through verbatim.
  */
 export function formatRawSurface(surface: ResolvedRawSurface): NotifyArguments | undefined {
   switch (surface.kind) {
@@ -1380,12 +1388,8 @@ export function formatRawSurface(surface: ResolvedRawSurface): NotifyArguments |
         composeMcpConfigNoticesText(surface.section, surface.notices),
         RAW_SURFACE_SEVERITY[surface.kind],
       ];
-    case "mcp-migration": {
-      // AMIG-03: the reload hint is the notice's last line.
-      const text = composeMcpMigrationText(surface.rows, surface.notices);
-      return [surface.needsReload ? `${text}\n${RELOAD_HINT_TRAILER}` : text, surface.severity];
-    }
-
+    case "mcp-migration":
+      return mcpMigrationArguments(surface);
     case "background-update":
       return [composeBackgroundUpdateText(surface.plugins), RAW_SURFACE_SEVERITY[surface.kind]];
     case "hook-notice":
@@ -1394,5 +1398,9 @@ export function formatRawSurface(surface: ResolvedRawSurface): NotifyArguments |
       return surface.text.length === 0
         ? undefined
         : [surface.text, RAW_SURFACE_SEVERITY[surface.kind]];
+    case "reload-started":
+      // RELOADCMD-D1: Pi's terminal shows its own reload, and it rebuilds the chat
+      // during the reload, so the text strategy adds nothing.
+      return undefined;
   }
 }

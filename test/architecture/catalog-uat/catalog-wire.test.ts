@@ -42,6 +42,7 @@ import {
   notifyMcpMigration,
   notifyPluginPathSkipped,
   notifyReconcileAborted,
+  notifyReloadStarted,
   notifyStopHookOverrideCap,
   notifyUsageError,
   notifyUsageInfo,
@@ -182,6 +183,11 @@ const RAW_ORIGINS: Readonly<Record<RawSurface["kind"], NotificationOrigin>> = {
   "mcp-migration": { kind: "load" },
   "background-update": { kind: "load" },
   "hook-notice": { kind: "hook" },
+  "reload-started": {
+    kind: "command",
+    commandId: "plugin reload",
+    invocationId: "raw-reload-started",
+  },
 };
 
 /**
@@ -269,6 +275,7 @@ const RAW_SAMPLES: { readonly [K in RawSurface["kind"]]: Extract<RawSurface, { k
     ],
   },
   "hook-notice": { kind: "hook-notice", text: "UserPromptSubmit says: remember the tests" },
+  "reload-started": { kind: "reload-started" },
 };
 
 /** The message the byte contract notifies for `fixture`, with the list label it injects. */
@@ -355,6 +362,9 @@ function emitRawSample(ctx: NotificationContext, run: NotificationRun, surface: 
       return;
     case "hook-notice":
       notifyHookNotice(ctx, run, surface.text);
+      return;
+    case "reload-started":
+      notifyReloadStarted(ctx, run);
       return;
   }
 }
@@ -535,11 +545,12 @@ test("WIRE-02: the retained inventory and separate command error cover all 24 ki
     "reconcile-aborted",
     "reconcile-applied-cascade",
     "reconcile-pending-empty",
+    "reload-started",
     "stop-override-cap",
     "usage-error",
     "usage-info",
   ]);
-  assert.strictEqual(PRESENTED.length, 342);
+  assert.strictEqual(PRESENTED.length, 343);
 
   for (const payload of payloads) {
     assert.ok(PAYLOAD_VALIDATOR.Check(payload));

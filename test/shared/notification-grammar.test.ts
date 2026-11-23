@@ -1964,10 +1964,11 @@ for (const { name, envelope, body, expectedArguments } of [
 /**
  * D-15: every raw kind passes its severity explicitly, so each formats to two
  * arguments. The mapped type requires one row per resolved kind, so a kind
- * without a row fails typecheck.
+ * without a row fails typecheck. RELOADCMD-D1: `reload-started` renders no
+ * text, so its row is in the table below.
  */
 const RAW_SURFACE_ROWS: {
-  readonly [K in ResolvedRawSurface["kind"]]: {
+  readonly [K in Exclude<ResolvedRawSurface["kind"], "reload-started">]: {
     readonly surface: Extract<ResolvedRawSurface, { kind: K }>;
     readonly expectedArguments: NotifyArguments;
   };
@@ -2301,6 +2302,11 @@ for (const { title, surface, expectedArguments } of [
       "Plugin MCP servers in mcp.json need attention.\n\nLeft in mcp.json:\n  The user-scope move stopped: state.json is locked. The next /reload tries again.",
       "warning",
     ],
+  },
+  {
+    title: "emits nothing for reload-started, because Pi shows its own reload (RELOADCMD-D1)",
+    surface: { kind: "reload-started" },
+    expectedArguments: undefined,
   },
   {
     title: "passes a backtick in the stop-override plugin id through unescaped",

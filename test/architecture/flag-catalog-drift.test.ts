@@ -34,8 +34,10 @@
 //       catalog side is sorted, so reordering a literal row also fails the
 //       equality.
 //
-//   (d) Help-text consistency: `TOP_LEVEL_USAGE` (edge/router.ts) is the block
-//       printed for a bare `/claude:plugin` and for an unrecognized subcommand.
+//   (d) Help-text consistency: `topLevelUsage` (edge/router.ts) builds the block
+//       printed for `help` and for an unrecognized subcommand. The guard reads
+//       the form of a host that takes later commands, which lists every verb,
+//       `reload` included (RELOADCMD-D1).
 //       It documents per-verb extra flags, so it is a flag-documenting surface
 //       and can drift from the catalog -- nothing in (a)-(c) reads it. Each
 //       verb's complete=true names are partitioned here into the ones its usage
@@ -62,7 +64,7 @@ import {
   MARKETPLACE_SUBCOMMANDS,
   MARKETPLACE_USAGE,
   TOP_LEVEL_SUBCOMMANDS,
-  TOP_LEVEL_USAGE,
+  topLevelUsage,
 } from "../../extensions/pi-claude-marketplace/edge/router.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
@@ -107,6 +109,7 @@ const EXPECTED_CATALOG_VERBS = [
   "import",
   "bootstrap",
   "browse",
+  "reload",
   "help",
   "marketplace help",
   "marketplace add",
@@ -147,7 +150,7 @@ for (const { head, verb } of COMPLETION_HEADS) {
     const expectedLabels = sorted(completionFlagEntries(verb).map((entry) => entry.name));
 
     // act
-    const items = await getArgumentCompletions(`${head} -`, EMPTY_RESOLVER, completionCache);
+    const items = await getArgumentCompletions(`${head} -`, EMPTY_RESOLVER, completionCache, true);
 
     // assert
     assert.ok(items !== null, `expected flag completions for "${head} -"`);
@@ -193,8 +196,10 @@ const HANDLER_ACCEPTED_PARSE_SETS: Record<CatalogVerb, readonly string[]> = {
   import: [],
   bootstrap: [],
   // The documentation/navigation verbs parse no flag of their own, and
-  // completions/provider.ts keeps the global `--scope` off them too.
+  // completions/provider.ts keeps the global `--scope` off them too. `reload`
+  // takes no argument either (RELOADCMD-D1).
   browse: [],
+  reload: [],
   help: [],
   "marketplace help": [],
   "marketplace add": ["--local"],
@@ -277,6 +282,7 @@ const TOP_LEVEL_USAGE_FLAGS: Record<
   import: { documented: [], omitted: [] },
   bootstrap: { documented: [], omitted: [] },
   browse: { documented: [], omitted: [] },
+  reload: { documented: [], omitted: [] },
   help: { documented: [], omitted: [] },
   "marketplace help": { documented: [], omitted: [] },
   "marketplace add": { documented: ["--local"], omitted: [] },
@@ -290,9 +296,9 @@ const TOP_LEVEL_USAGE_FLAGS: Record<
 
 /**
  * The one usage line that describes `verb` -- the indented entry whose first
- * token is the verb itself. A top-level verb reads `TOP_LEVEL_USAGE`; a
+ * token is the verb itself. A top-level verb reads `topLevelUsage`; a
  * `marketplace <sub>` verb reads `MARKETPLACE_USAGE` by its sub-verb, except
- * `marketplace help`, which that block does not list and which `TOP_LEVEL_USAGE`
+ * `marketplace help`, which that block does not list and which `topLevelUsage`
  * documents on its `help [marketplace]` line. The header lines describe no
  * catalog verb, so none can match.
  */
@@ -300,7 +306,7 @@ function usageLineFor(verb: CatalogVerb): string {
   const [block, head] =
     verb.startsWith("marketplace ") && verb !== "marketplace help"
       ? [MARKETPLACE_USAGE, verb.slice("marketplace ".length)]
-      : [TOP_LEVEL_USAGE, verb === "marketplace help" ? "help" : verb];
+      : [topLevelUsage({ hasUI: true }), verb === "marketplace help" ? "help" : verb];
   const lines = block
     .split("\n")
     .filter((line) => line === `  ${head}` || line.startsWith(`  ${head} `));
@@ -326,14 +332,14 @@ for (const verb of EXPECTED_CATALOG_VERBS) {
     for (const flag of documented) {
       assert.ok(
         usageLine.includes(`[${flag}]`),
-        `TOP_LEVEL_USAGE's "${verb}" line must document ${flag}: ${usageLine}`,
+        `The top-level usage's "${verb}" line must document ${flag}: ${usageLine}`,
       );
     }
 
     for (const flag of omitted) {
       assert.ok(
         !usageLine.includes(flag),
-        `TOP_LEVEL_USAGE's "${verb}" line documents ${flag}, which this pin calls omitted: ${usageLine}`,
+        `The top-level usage's "${verb}" line documents ${flag}, which this pin calls omitted: ${usageLine}`,
       );
     }
   });

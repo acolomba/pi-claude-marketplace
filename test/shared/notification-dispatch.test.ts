@@ -22,6 +22,7 @@ import {
   notifyMcpMigration,
   notifyPluginPathSkipped,
   notifyReconcileAborted,
+  notifyReloadStarted,
   notifyStopHookOverrideCap,
   notifyUsageError,
   notifyAutoapplyStatus,
@@ -7498,6 +7499,53 @@ test("AAP-04: autoapply status dispatch renders the effective value at info seve
     "Autoapply: off (default)\n\nclaude-plugins.json [user]: not set",
     "info",
   ]);
+});
+
+test("RELOADCMD-D1: reload-started delivers nothing to Pi's terminal", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyReloadStarted(ctx, runWithNothingLoaded());
+
+  // assert
+  assert.strictEqual(ctx.ui.notify.mock.callCount(), 0);
+});
+
+test("RELOADCMD-D1: reload-started appends the command's outcome over rpc", () => {
+  // arrange
+  const capture = createJsonCapture();
+  const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+  const ctx = {
+    mode: "rpc",
+    get ui(): never {
+      throw new Error("Unexpected UI access");
+    },
+  };
+
+  // act
+  notifyReloadStarted(ctx, run);
+
+  // assert
+  assert.deepStrictEqual(capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+        kind: "reload-started",
+        severity: "info",
+        needsReload: false,
+      },
+    },
+  ]);
+  capture.assertValid();
+  assert.deepStrictEqual(run.commandState, {
+    hasOutcome: true,
+    needsReload: false,
+    settled: false,
+    delivery: "open",
+  });
 });
 
 test("notifyBackgroundUpdate names the updated plugins at info severity", (t) => {

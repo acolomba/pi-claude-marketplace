@@ -119,6 +119,7 @@ function isRawOutcome(presentation: ResolvedRawSurface | CommandErrorPresentatio
     case "usage-error":
     case "usage-info":
     case "autoapply-status":
+    case "reload-started":
     case "internal-error":
       return true;
     case "diagnostic":
@@ -325,6 +326,15 @@ export function notifyAutoapplyStatus(
   surface: AutoapplyStatusSurface,
 ): void {
   emitPresentation(ctx, run, resolveRawSurface(surface));
+}
+
+/**
+ * RELOADCMD-D1: sends the outcome of `/claude:plugin reload` right before Pi
+ * reloads. Pi's terminal shows its own reload, so the text strategy emits
+ * nothing; json and rpc append the payload.
+ */
+export function notifyReloadStarted(ctx: NotificationContext, run: NotificationRun): void {
+  emitPresentation(ctx, run, resolveRawSurface({ kind: "reload-started" }));
 }
 
 /**
@@ -603,6 +613,24 @@ function formatPresentationBody(presentation: NotificationPresentation): string 
   }
 }
 
+/** The text strategy for one presentation (MODE-01). */
+function emitText(
+  ctx: NotificationContext,
+  presentation: NotificationPresentation | ResolvedRawSurface,
+): void {
+  if ("envelope" in presentation) {
+    emitWithSummary(ctx, presentation.envelope, formatPresentationBody(presentation));
+    return;
+  }
+
+  // RELOADCMD-D1: reload-started renders no text; the other kinds that can render
+  // none return before transport selection.
+  const args = formatRawSurface(presentation);
+  if (args !== undefined) {
+    deliver(ctx, args);
+  }
+}
+
 /**
  * MODE-01: selects transport from the live context for each presentation.
  */
@@ -623,15 +651,7 @@ function emitPresentation(
   switch (requireNotificationMode(ctx.mode)) {
     case "tui":
     case "print":
-      if ("envelope" in presentation) {
-        emitWithSummary(ctx, presentation.envelope, formatPresentationBody(presentation));
-      } else {
-        // Usage, load warnings, device prompts, and nonempty diagnostics produce a tuple.
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- empty diagnostics return before transport selection
-        const args = formatRawSurface(presentation)!;
-        deliver(ctx, args);
-      }
-
+      emitText(ctx, presentation);
       return;
     case "json":
     case "rpc": {

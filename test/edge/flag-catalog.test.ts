@@ -69,6 +69,7 @@ const EXPECTED_CATALOG_VERBS = [
   "import",
   "bootstrap",
   "browse",
+  "reload",
   "help",
   "marketplace help",
   "marketplace add",

@@ -1818,6 +1818,15 @@ export interface DeviceFlowPromptSurface extends DeviceFlowPrompt {
 }
 
 /**
+ * RELOADCMD-D1: what `/claude:plugin reload` reports right before Pi reloads.
+ * Pi makes the command's context stale once it reloads, so the command cannot
+ * report after the reload. It carries no field.
+ */
+export interface ReloadStartedSurface {
+  readonly kind: "reload-started";
+}
+
+/**
  * D-01 / D-04: every raw output surface. It is deliberately not a
  * `NotificationMessage` member, so `notify()`'s run never reaches a raw call
  * site.
@@ -1826,6 +1835,7 @@ export type RawSurface =
   | UsageErrorSurface
   | UsageInfoSurface
   | AutoapplyStatusSurface
+  | ReloadStartedSurface
   | DiagnosticSurface
   | DeviceFlowPromptSurface
   | McpConfigNoticesSurface
