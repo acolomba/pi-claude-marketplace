@@ -558,7 +558,7 @@ const SSH_LIST: GitRequest = {
 
 // What the stub ssh receives for `acme/tools` on `stand-in.test`: git puts
 // Pi's options first, then its own protocol option and the destination.
-// git 2.43 checks the variant with a `-G` launch before the transport launch.
+// D-SG-08: the stub's base name is `ssh`, so git runs no `-G` check.
 const STAND_IN_BATCH = ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes"];
 const STAND_IN_PROTOCOL = ["-o", "SendEnv=GIT_PROTOCOL", "git@stand-in.test"];
 const STAND_IN_UPLOAD = "git-upload-pack 'acme/tools.git'";
@@ -1979,6 +1979,7 @@ describe("createGitProcess operands and lanes", () => {
           ...POSIX_FORCED,
           PATH: "/usr/bin",
           GIT_SSH_COMMAND: fromNeutral(`ssh -i /home/user/key ${BATCH_OPTIONS}`),
+          GIT_SSH_VARIANT: "ssh",
           GIT_CEILING_DIRECTORIES: "/",
         },
       ],
@@ -2570,6 +2571,7 @@ describe("createGitProcess ssh", () => {
             ...POSIX_FORCED,
             PATH: "/usr/bin",
             GIT_CEILING_DIRECTORIES: "/real",
+            GIT_SSH_VARIANT: "ssh",
             GIT_SSH_COMMAND: fromNeutral(`ssh ${BATCH_OPTIONS}`),
           },
         ],
@@ -2609,7 +2611,7 @@ describe("createGitProcess ssh", () => {
       env: { GIT_SSH_COMMAND: "ssh -i /home/user/key", GIT_SSH: "/usr/bin/other-ssh" },
       answer: sshConfigLines("core.sshcommand config-ssh\n"),
       command: `ssh -i /home/user/key ${BATCH_OPTIONS}`,
-      variables: {},
+      variables: { GIT_SSH_VARIANT: "ssh" },
     },
     {
       label: "core.sshCommand under an empty GIT_SSH_COMMAND, before GIT_SSH",
@@ -2630,7 +2632,7 @@ describe("createGitProcess ssh", () => {
       env: {},
       answer: NO_SSH_CONFIG,
       command: `ssh ${BATCH_OPTIONS}`,
-      variables: {},
+      variables: { GIT_SSH_VARIANT: "ssh" },
     },
     {
       label: "the last value of a repeated core.sshCommand",
@@ -2651,14 +2653,14 @@ describe("createGitProcess ssh", () => {
       env: {},
       answer: sshConfigLines("core.sshcommand first-ssh\ncore.sshcommand \n"),
       command: `ssh ${BATCH_OPTIONS}`,
-      variables: {},
+      variables: { GIT_SSH_VARIANT: "ssh" },
     },
     {
       label: "a valueless last ssh.variant as unset",
       env: { GIT_SSH_COMMAND: "plink" },
       answer: sshConfigLines("ssh.variant ssh\nssh.variant\n"),
       command: "plink -batch",
-      variables: {},
+      variables: { GIT_SSH_VARIANT: "plink" },
     },
     {
       label: "GIT_SSH_VARIANT=plink",
@@ -2686,35 +2688,35 @@ describe("createGitProcess ssh", () => {
       env: { GIT_SSH_COMMAND: "plink -P 2222" },
       answer: NO_SSH_CONFIG,
       command: "plink -P 2222 -batch",
-      variables: {},
+      variables: { GIT_SSH_VARIANT: "plink" },
     },
     {
       label: "the base name PLINK.EXE",
       env: { GIT_SSH_COMMAND: "C:/PuTTY/PLINK.EXE" },
       answer: NO_SSH_CONFIG,
       command: "C:/PuTTY/PLINK.EXE -batch",
-      variables: {},
+      variables: { GIT_SSH_VARIANT: "plink" },
     },
     {
       label: "the base name tortoiseplink",
       env: { GIT_SSH_COMMAND: "tortoiseplink" },
       answer: NO_SSH_CONFIG,
       command: "tortoiseplink",
-      variables: {},
+      variables: { GIT_SSH_VARIANT: "tortoiseplink" },
     },
     {
       label: "the base name TortoisePlink.exe",
       env: { GIT_SSH_COMMAND: "/opt/TortoisePlink.exe -v" },
       answer: NO_SSH_CONFIG,
       command: "/opt/TortoisePlink.exe -v",
-      variables: {},
+      variables: { GIT_SSH_VARIANT: "tortoiseplink" },
     },
     {
       label: "the base name ssh",
       env: { GIT_SSH_COMMAND: "/usr/bin/ssh" },
       answer: NO_SSH_CONFIG,
       command: `/usr/bin/ssh ${BATCH_OPTIONS}`,
-      variables: {},
+      variables: { GIT_SSH_VARIANT: "ssh" },
     },
     {
       label: "the base name my-ssh",
@@ -2728,28 +2730,42 @@ describe("createGitProcess ssh", () => {
       env: { GIT_SSH_COMMAND: "'/opt/My Tools/plink' -v" },
       answer: NO_SSH_CONFIG,
       command: "'/opt/My Tools/plink' -v -batch",
-      variables: {},
+      variables: { GIT_SSH_VARIANT: "plink" },
     },
     {
       label: "a double-quoted first word with an escape",
       env: { GIT_SSH_COMMAND: String.raw`"/opt/My \"Tools\"/plink.exe" -v` },
       answer: NO_SSH_CONFIG,
       command: String.raw`"/opt/My \"Tools\"/plink.exe" -v -batch`,
-      variables: {},
+      variables: { GIT_SSH_VARIANT: "plink" },
     },
     {
       label: "a first word with an escaped space",
       env: { GIT_SSH_COMMAND: String.raw`/opt/My\ Tools/plink -v` },
       answer: NO_SSH_CONFIG,
       command: String.raw`/opt/My\ Tools/plink -v -batch`,
-      variables: {},
+      variables: { GIT_SSH_VARIANT: "plink" },
     },
     {
       label: "a GIT_SSH named plink.exe",
       env: { GIT_SSH: "/opt/putty/plink.exe" },
       answer: NO_SSH_CONFIG,
       command: "'/opt/putty/plink.exe' -batch",
-      variables: {},
+      variables: { GIT_SSH_VARIANT: "plink" },
+    },
+    {
+      label: "the base name ssh.exe",
+      env: { GIT_SSH_COMMAND: "C:/OpenSSH/ssh.exe" },
+      answer: NO_SSH_CONFIG,
+      command: `C:/OpenSSH/ssh.exe ${BATCH_OPTIONS}`,
+      variables: { GIT_SSH_VARIANT: "ssh" },
+    },
+    {
+      label: "the base name putty",
+      env: { GIT_SSH_COMMAND: "putty" },
+      answer: NO_SSH_CONFIG,
+      command: "putty -batch",
+      variables: { GIT_SSH_VARIANT: "putty" },
     },
   ] satisfies ReadonlyArray<{
     label: string;
@@ -2758,7 +2774,7 @@ describe("createGitProcess ssh", () => {
     command: string;
     variables: NodeJS.ProcessEnv;
   }>) {
-    test(`D-SG-05, D-SG-03: composes the ssh command from ${label}`, async () => {
+    test(`D-SG-05, D-SG-03, D-SG-08: composes the ssh command and variant from ${label}`, async () => {
       // arrange
       const base = { PATH: "/usr/bin", ...env };
 
@@ -2946,10 +2962,7 @@ describe("createGitProcess ssh with real git", () => {
       [listed.stdout, launches.map((launch) => launch.argv)],
       [
         `${fixture.oid}\tHEAD\n${fixture.oid}\trefs/heads/main\n`,
-        [
-          [...STAND_IN_BATCH, "-G", ...STAND_IN_PROTOCOL],
-          [...STAND_IN_BATCH, ...STAND_IN_PROTOCOL, STAND_IN_UPLOAD],
-        ],
+        [[...STAND_IN_BATCH, ...STAND_IN_PROTOCOL, STAND_IN_UPLOAD]],
       ],
     );
   });
@@ -2974,12 +2987,56 @@ describe("createGitProcess ssh with real git", () => {
     const launches = await fixture.host.launchesSince(window);
     assert.deepStrictEqual(
       launches.map((launch) => launch.argv),
-      [
-        ["-i", key, ...STAND_IN_BATCH, "-G", ...STAND_IN_PROTOCOL],
-        ["-i", key, ...STAND_IN_BATCH, ...STAND_IN_PROTOCOL, STAND_IN_UPLOAD],
-      ],
+      [["-i", key, ...STAND_IN_BATCH, ...STAND_IN_PROTOCOL, STAND_IN_UPLOAD]],
     );
   });
+
+  for (const { program } of [{ program: "plink" }, { program: "tortoiseplink" }]) {
+    test(`D-SG-08: lists an ssh:// remote with a port through a ${program} that refuses -G`, async (t) => {
+      // arrange
+      const fixture = await sshFixture(t);
+      const record = path.join(fixture.root, `${program}-arguments`);
+      const script = path.join(fixture.root, program);
+      const stub = path.join(fixture.host.binDirectory, "ssh");
+      // Records its arguments, refuses -G as plink does, and hands the
+      // OpenSSH form of the rest to the stub ssh.
+      await writeFile(
+        script,
+        `#!/bin/sh
+printf '%s\\n' "$*" >> '${record}'
+for arg do
+  shift
+  case $arg in
+    -G) exit 1 ;;
+    -batch) ;;
+    -P) set -- "$@" -p ;;
+    *) set -- "$@" "$arg" ;;
+  esac
+done
+exec '${stub}' "$@"
+`,
+        { mode: 0o755 },
+      );
+      const git = await fixture.gitWith({ GIT_SSH: script });
+
+      // act
+      const listed = await git.run({
+        subcommand: "ls-remote",
+        lane: "network",
+        operands: ["ssh://git@stand-in.test:2222/acme/tools.git"],
+        timeoutMs: 10_000,
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        [listed.stdout, await readFile(record, "utf8")],
+        [
+          `${fixture.oid}\tHEAD\n${fixture.oid}\trefs/heads/main\n`,
+          "-batch -P 2222 git@stand-in.test git-upload-pack '/acme/tools.git'\n",
+        ],
+      );
+    });
+  }
 
   test("CONTEXT [Hardening]: never runs the core.sshCommand of the repository it fetches in", async (t) => {
     // arrange

@@ -65,12 +65,16 @@
 // StrictHostKeyChecking=yes`, or `-batch` for plink and putty, and nothing
 // for tortoiseplink. The result is GIT_SSH_COMMAND, which git reads before
 // any config scope, so a repository's own `core.sshCommand` never runs.
-// GIT_SSH goes, and an `ssh.variant` becomes GIT_SSH_VARIANT unless the user
-// set one. The command starts with `CDPATH= cd -- <neutral directory>`, so
-// ssh never runs in the repository. git then sees `CDPATH=` as the program,
-// so without a variant it checks the variant with one `<command> -G` launch
-// first. D-SG-03: no option controls host-key updates; ssh's own default
-// applies.
+// GIT_SSH goes. The command starts with `CDPATH= cd -- <neutral directory>`,
+// so ssh never runs in the repository, and git then reads `CDPATH=` as the
+// program's name. D-SG-08: so unless the user set GIT_SSH_VARIANT, the
+// module exports the variant it resolved as GIT_SSH_VARIANT: the user's
+// `ssh.variant`, else the base name when it names one of git's variants
+// (ssh, plink, putty, tortoiseplink). Without it, git would check the
+// variant with a `<command> -G` launch, which plink and tortoiseplink fail,
+// and then run them as `simple`, which takes no port and gives tortoiseplink
+// no `-batch`. Any other base name keeps git's own check. D-SG-03: no option
+// controls host-key updates; ssh's own default applies.
 //
 // SG-PRC-05: a run that exits with a code its request does not allow rejects
 // with the kind platform/git-failure-kind.ts reads from the exit code and the
@@ -413,6 +417,9 @@ const SSH_VARIANT_OPTIONS: ReadonlyMap<string, readonly string[]> = new Map([
 
 const OPENSSH_OPTIONS = ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes"] as const;
 
+// D-SG-08: the base names that name one of git's ssh variants.
+const NAMED_VARIANTS: ReadonlySet<string> = new Set(["ssh", "plink", "putty", "tortoiseplink"]);
+
 // A single quote inside a single-quoted `sh` word: close, escape, reopen.
 const QUOTED_QUOTE = String.raw`'\''`;
 
@@ -477,11 +484,25 @@ function configValues(stdout: string): ReadonlyMap<string, string> {
   return values;
 }
 
+// D-SG-08: the variant git must be told, because the wrapper hides the
+// program's name. The user's GIT_SSH_VARIANT reaches git unchanged. A
+// GIT_SSH_VARIANT from the user's `ssh.variant` also keeps a repository's
+// own `ssh.variant` from choosing the options git adds.
+function exportedVariant(
+  userVariant: string | undefined,
+  configVariant: string | undefined,
+  nameVariant: string,
+): string | undefined {
+  if (userVariant !== undefined) {
+    return undefined;
+  }
+
+  return configVariant ?? (NAMED_VARIANTS.has(nameVariant) ? nameVariant : undefined);
+}
+
 // D-SG-05, Q14 `nn`: the user's ssh command with the variant's options, run
 // from the neutral directory. GIT_SSH_COMMAND outranks every config scope,
-// so a repository's own `core.sshCommand` never runs, and GIT_SSH goes. A
-// GIT_SSH_VARIANT from the user's `ssh.variant` likewise keeps a
-// repository's own `ssh.variant` from choosing the options git adds.
+// so a repository's own `core.sshCommand` never runs, and GIT_SSH goes.
 function sshEnvironment(
   base: NodeJS.ProcessEnv,
   rules: PlatformRules,
@@ -495,16 +516,19 @@ function sshEnvironment(
     (program === undefined ? "ssh" : shellQuoted(program));
   const userVariant = userValue(base, "GIT_SSH_VARIANT", rules);
   const configVariant = config.get("ssh.variant");
-  const variant =
-    userVariant ?? configVariant ?? rules.paths.basename(firstWord(command)).replace(/\.exe$/i, "");
+  const nameVariant = rules.paths
+    .basename(firstWord(command))
+    .replace(/\.exe$/i, "")
+    .toLowerCase();
+  const variant = userVariant ?? configVariant ?? nameVariant;
   const options = SSH_VARIANT_OPTIONS.get(variant.toLowerCase()) ?? OPENSSH_OPTIONS;
   const wrapped = `CDPATH= cd -- ${shellQuoted(neutral)} 2>/dev/null || cd / || exit 1; ${[command, ...options].join(" ")}`;
+  const exported = exportedVariant(userVariant, configVariant, nameVariant);
   return {
     removed: ["GIT_SSH"],
     variables: {
       GIT_SSH_COMMAND: wrapped,
-      ...(userVariant === undefined &&
-        configVariant !== undefined && { GIT_SSH_VARIANT: configVariant }),
+      ...(exported !== undefined && { GIT_SSH_VARIANT: exported }),
     },
   };
 }
