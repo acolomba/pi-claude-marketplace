@@ -8,8 +8,10 @@
 // `runtimeEnv` and the session's working directory as `projectDir` for both
 // scopes (P2-DC-03). A written secret value names no variable and is no shell
 // command, so Pi reads no environment and runs nothing (PI-1, PI-2). Pi's own
-// `validateMcpServerConfig` accepts each config the table builds and returns
-// it with the same JSON, so a re-registration does not reconnect (P2-DC-08).
+// `validateMcpServerConfig` returns a stdio config, a remote config with
+// Claude Code's OAuth fields, and a direct-exposure config with the same JSON,
+// so a re-registration does not reconnect (P2-DC-08), and it refuses a url
+// that keeps an unset `${NAME}`. No table row reaches the validator.
 // D-PG10-12: each `env` and `headers` option row runs through
 // `builtinServerConfig` with the option's default filled in, and comes out of
 // Pi as Claude Code's value, with no command run and no variable of Pi's
@@ -17,7 +19,7 @@
 // `bridges/mcp/builtin-entry.ts` checks that the other rows are written as
 // Claude's value. A few env and option values are also in the scenarios of
 // `features/mcp-server/`; the table, the PI-1 and PI-2 cases, and the
-// validator check need Pi's own functions.
+// validator cases need Pi's own functions.
 //
 // Pi publishes neither module in its `exports` map, so the test imports both
 // by absolute file URL from the repository's devDependency. It changes no
