@@ -1245,14 +1245,11 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 - [integration-rescope] Container facts measured 2026-11-21 (Phase 1 gate):
   (1) Pi's `find` tool needs `fd` on `PATH`; without it the Glob scenarios of
   `hook/tool-use.feature` fail ("fd is not available and could not be
-  downloaded"). Fix per container: `apt-get install -y fd-find`. (2) The
-  container's environment is about 10.6 KB as JSON, so
-  `test/bridges/hooks/dispatch-exec.test.ts` "executes a blocking hook
-  through the portable process boundary" fails: its child echoes
-  `process.env` into `additionalContext`, which passes the 10,000-character
-  cap of `bridges/hooks/context-cap.ts`, so the product (correctly) returns
-  `<persisted-output>`. Run direct coverage with `env -i HOME=$HOME
-  PATH=$PATH ...` until the test is fixed (follow-up outside this milestone).
+  downloaded"). Fix per container: `apt-get install -y fd-find`. (2) Fixed by quick task 261123-gtg
+  (c8df983): the case "executes a blocking hook through the portable process
+  boundary" compares the hook child's environment through a capture file, so
+  it passes at any environment size, and direct coverage runs without
+  `env -i`.
 - [integration-rescope] Phase 1 planning: the decision-coverage gate returned
   `could-not-parse` (smart-discuss decisions carry no `D-NN` IDs; cited IDs such
   as `D-PG3-01` trip the parser). Proceeded by override: the plan checker
