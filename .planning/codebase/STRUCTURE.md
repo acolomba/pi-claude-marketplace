@@ -81,7 +81,7 @@ pi-claude-marketplace/
 
 **`extensions/pi-claude-marketplace/platform/`:**
 - Purpose: thin typed wrappers over the Pi extension API and git
-- Contains: `pi-api.ts` (sole Pi-peer import site), `git.ts` (sole `isomorphic-git` import site), `git-credential.ts`, `git-auth-callbacks.ts`, `os.ts`, `workflow-home.ts`, `mcp-builtin-status.ts` (status of the servers registered with Pi's built-in MCP), `subagent-child.ts` (the pi-subagents background child check)
+- Contains: `pi-api.ts` (sole Pi-peer import site), `git.ts` (sole `isomorphic-git` import site), `git-credential.ts`, `git-auth-callbacks.ts`, `process-run.ts` (the shared process launcher), `git-process.ts` (the one git process module), `git-failure-kind.ts` (a failed git command's kind), `os.ts`, `workflow-home.ts`, `mcp-builtin-status.ts` (status of the servers registered with Pi's built-in MCP), `subagent-child.ts` (the pi-subagents background child check)
 
 **`extensions/pi-claude-marketplace/shared/`:**
 - Purpose: cross-cutting leaf utilities, no upward dependencies
