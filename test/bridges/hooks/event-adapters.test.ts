@@ -198,8 +198,9 @@ function heldDetails(values: readonly string[]): SessionAppend {
 
 // A held SessionStart context message with `values` in its details whose
 // text a context edit replaced with `text`, as a context-trimming extension
-// writes one at a turn end. Pi's projection keeps the details.
-function heldEdited(values: readonly string[], text: string): SessionAppend {
+// writes one at a turn end, in one text part or, with `asTextContent`, as
+// text content. Pi's projection keeps the details.
+function heldEdited(values: readonly string[], text: string, asTextContent = false): SessionAppend {
   return (sessionManager) => {
     const id = sessionManager.appendCustomMessageEntry(
       "claude-hook-additional-context",
@@ -207,7 +208,9 @@ function heldEdited(values: readonly string[], text: string): SessionAppend {
       false,
       { event: "SessionStart", values },
     );
-    sessionManager.appendContextEdit(id, { content: [{ type: "text", text }] });
+    sessionManager.appendContextEdit(id, {
+      content: asTextContent ? text : [{ type: "text", text }],
+    });
   };
 }
 
@@ -2331,6 +2334,47 @@ describe("adaptObservationResultForEvent", () => {
       sends: [["old context"]],
     },
     {
+      title: "drops a value that a message with text content holds (HKRL-02)",
+      source: "resume",
+      held: heldMessage("SessionStart hook additional context: held context"),
+      values: ["held context", "fresh context"],
+      sends: [["fresh context"]],
+    },
+    {
+      title:
+        "sends a value again when a context edit to text content removed it from the text (HKRL-02)",
+      source: "resume",
+      held: heldEdited(
+        ["held context", "kept context"],
+        "SessionStart hook additional context: kept context",
+        true,
+      ),
+      values: ["held context", "kept context"],
+      sends: [["held context"]],
+    },
+    {
+      title: "drops a value that a context edit wrote into text content (HKRL-02)",
+      source: "fork",
+      held: heldEdited(
+        ["old context"],
+        "SessionStart hook additional context: edited context",
+        true,
+      ),
+      values: ["old context", "edited context"],
+      sends: [["old context"]],
+    },
+    {
+      title: "sends a value again when text content has no SessionStart label (HKRL-02)",
+      source: "resume",
+      held: heldEdited(
+        ["old context"],
+        "UserPromptSubmit hook additional context: old context",
+        true,
+      ),
+      values: ["old context"],
+      sends: [["old context"]],
+    },
+    {
       title: "sends a value again that a compaction summarized away (HKRL-02)",
       source: "resume",
       held: heldBeforeCompaction(["held context"], false),
@@ -2391,10 +2435,6 @@ describe("adaptObservationResultForEvent", () => {
           timestamp: 0,
         });
       },
-    },
-    {
-      kind: "text content without details",
-      held: heldMessage("SessionStart hook additional context: held context"),
     },
     {
       kind: "a part with another event's label",

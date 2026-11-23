@@ -818,8 +818,9 @@ function isSessionStartContextDetails(value: unknown): value is SessionStartCont
 
 // The keys of the SessionStart values that `message` holds, read from the
 // text the model sees: the rest of each part that carries the SessionStart
-// label. `details` only splits that rest into its values, when they join to
-// it; a context edit replaces the text and keeps the details, and a message
+// label. Text content is one such part, as a context edit may write it.
+// `details` only splits that rest into its values, when they join to it; a
+// context edit replaces the text and keeps the details, and a message
 // written before details existed, or by a release whose details this one
 // does not read, keys its whole rest.
 function messageKeys(message: AgentMessage): readonly string[] {
@@ -827,12 +828,9 @@ function messageKeys(message: AgentMessage): readonly string[] {
     return [];
   }
 
-  if (typeof message.content === "string") {
-    return [];
-  }
-
-  const { details } = message;
-  return message.content.flatMap((part) => {
+  const { content, details } = message;
+  const parts = typeof content === "string" ? [{ type: "text" as const, text: content }] : content;
+  return parts.flatMap((part) => {
     if (part.type !== "text" || !part.text.startsWith(SESSION_START_CONTEXT_LABEL)) {
       return [];
     }
