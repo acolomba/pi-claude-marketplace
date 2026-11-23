@@ -49,7 +49,7 @@ must_haves:
       provides: "the json-mode scenario at line 584"
       contains: "Scenario: A plugin that autoapply installs as pi starts in json mode runs its session start hooks without running the others twice"
     - path: docs/hooks-compatibility.md
-      provides: "the late SessionStart rules, the cases with no late run, and the one difference"
+      provides: "the late SessionStart rules, the cases with no late run, and the Pi gap"
       contains: "### Plugins that a load activates"
     - path: .planning/PROJECT.md
       provides: "the Key Decisions row HOOKLATESS-D1"
