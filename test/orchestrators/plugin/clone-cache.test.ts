@@ -5,8 +5,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
-import * as git from "isomorphic-git";
-
 import {
   pluginCloneKey,
   pluginMirrorKey,
@@ -33,6 +31,7 @@ import { saveState } from "../../../extensions/pi-claude-marketplace/persistence
 import { PinnedCommitMissingError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
+import { gitTestCheckout, initGitTestCheckout } from "../../platform/git-test-repository.ts";
 
 import type {
   GitBackedSource,
@@ -1664,20 +1663,27 @@ async function buildMarketplaceCheckout(
     path.join(marketplaceRoot, "plugins", "foo", ".claude-plugin", "plugin.json"),
     JSON.stringify({ name: "foo" }),
   );
-  await git.init({ fs, dir: marketplaceRoot, defaultBranch: "main" });
-  if (options.originUrl !== undefined) {
-    await git.addRemote({ fs, dir: marketplaceRoot, remote: "origin", url: options.originUrl });
-  }
-
-  await git.add({ fs, dir: marketplaceRoot, filepath: ".claude-plugin/marketplace.json" });
-  await git.add({ fs, dir: marketplaceRoot, filepath: "plugins/foo/.claude-plugin/plugin.json" });
-  await git.commit({
-    fs,
-    dir: marketplaceRoot,
-    message: "initial marketplace",
-    author: { email: "test@example.com", name: "test" },
-  });
+  const checkout = await initGitTestCheckout(
+    marketplaceRoot,
+    options.originUrl === undefined ? {} : { origin: options.originUrl },
+  );
+  await checkout.commitPaths("initial marketplace", [
+    ".claude-plugin/marketplace.json",
+    "plugins/foo/.claude-plugin/plugin.json",
+  ]);
   return marketplaceRoot;
+}
+
+/**
+ * Tags the checkout's `HEAD` with the lightweight tag `name` and returns the
+ * tagged commit id. `rev-parse` and `tag` write neither `.git/HEAD` nor
+ * `.git/index`, so a `gitStateSnapshot` taken before the tag stays comparable.
+ */
+async function tagMarketplaceHead(marketplaceRoot: string, name: string): Promise<string> {
+  const checkout = gitTestCheckout(marketplaceRoot);
+  const tagOid = await checkout.run("rev-parse", "HEAD");
+  await checkout.run("tag", name, tagOid);
+  return tagOid;
 }
 
 async function saveMarketplace(
@@ -1740,12 +1746,9 @@ void test("SEED-01/03: same-repository git source kinds seed once in manifest or
   await seedSameRepoPluginMirrors({ locations, marketplaceName: "marketplace" });
   const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(GITHUB_REPO_URL));
   const otherRoot = await locations.pluginCloneDir(pluginMirrorKey(OTHER_REPO_URL));
-  const mirrorHead = await git.resolveRef({ fs, dir: mirrorRoot, ref: "HEAD" });
-  const originUrl: unknown = await git.getConfig({
-    fs,
-    dir: mirrorRoot,
-    path: "remote.origin.url",
-  });
+  const mirror = gitTestCheckout(mirrorRoot);
+  const mirrorHead = await mirror.run("rev-parse", "HEAD");
+  const originUrl: unknown = await mirror.run("config", "--get", "remote.origin.url");
 
   // assert
   assert.match(mirrorHead, /^[0-9a-f]{40}$/);
@@ -2119,8 +2122,7 @@ void test("materializeMarketplaceTagClone: materializes the tag's tree without m
     plugins: [],
   });
   const before = await gitStateSnapshot(marketplaceRoot);
-  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
-  await git.tag({ fs, dir: marketplaceRoot, ref: "foo--v1.0.0", object: tagOid });
+  const tagOid = await tagMarketplaceHead(marketplaceRoot, "foo--v1.0.0");
   const created: string[] = [];
 
   // act
@@ -2156,8 +2158,7 @@ void test("materializeMarketplaceTagClone: a warm-cache key skips re-copy and re
     originUrl: GITHUB_REPO_URL,
     plugins: [],
   });
-  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
-  await git.tag({ fs, dir: marketplaceRoot, ref: "foo--v1.0.0", object: tagOid });
+  const tagOid = await tagMarketplaceHead(marketplaceRoot, "foo--v1.0.0");
   const key = pluginCloneKey(GITHUB_REPO_URL, tagOid);
   const dest = await locations.pluginCloneDir(key);
   await mkdir(dest, { recursive: true });
@@ -2196,8 +2197,7 @@ void test("materializeMarketplaceTagClone: a failed checkout cleans staging and 
     originUrl: GITHUB_REPO_URL,
     plugins: [],
   });
-  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
-  await git.tag({ fs, dir: marketplaceRoot, ref: "foo--v1.0.0", object: tagOid });
+  const tagOid = await tagMarketplaceHead(marketplaceRoot, "foo--v1.0.0");
   const checkoutError = new Error("checkout failed");
   const gitOps: GitOps = {
     ...DEFAULT_GIT_OPS,
@@ -2229,8 +2229,7 @@ void test("materializeMarketplaceTagClone: an unreadable marketplace gitdir clea
     originUrl: GITHUB_REPO_URL,
     plugins: [],
   });
-  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
-  await git.tag({ fs, dir: marketplaceRoot, ref: "foo--v1.0.0", object: tagOid });
+  const tagOid = await tagMarketplaceHead(marketplaceRoot, "foo--v1.0.0");
   await rm(path.join(marketplaceRoot, ".git"), { recursive: true, force: true });
 
   // act & assert
@@ -2255,8 +2254,7 @@ void test("materializeMarketplaceTagClone: a checkout failure that also fails to
     originUrl: GITHUB_REPO_URL,
     plugins: [],
   });
-  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
-  await git.tag({ fs, dir: marketplaceRoot, ref: "foo--v1.0.0", object: tagOid });
+  const tagOid = await tagMarketplaceHead(marketplaceRoot, "foo--v1.0.0");
   const checkoutError = new Error("checkout failed");
   let stagingParent = "";
   const gitOps: GitOps = {
@@ -2305,8 +2303,7 @@ void test("materializeMarketplaceTagClone: no directory at the path source's rel
     originUrl: GITHUB_REPO_URL,
     plugins: [],
   });
-  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
-  await git.tag({ fs, dir: marketplaceRoot, ref: "foo--v1.0.0", object: tagOid });
+  const tagOid = await tagMarketplaceHead(marketplaceRoot, "foo--v1.0.0");
 
   // act
   const tagClone = await materializeMarketplaceTagClone({
@@ -2331,8 +2328,7 @@ void test("materializeMarketplaceTagClone: a marketplace checkout with no discov
   // arrange: no `originUrl`, so `deriveMarketplaceUrl` finds no origin remote.
   const locations = await freshLocations(t);
   const marketplaceRoot = await buildMarketplaceCheckout(t, { plugins: [] });
-  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
-  await git.tag({ fs, dir: marketplaceRoot, ref: "foo--v1.0.0", object: tagOid });
+  const tagOid = await tagMarketplaceHead(marketplaceRoot, "foo--v1.0.0");
 
   // act
   const tagClone = await materializeMarketplaceTagClone({
@@ -2452,15 +2448,8 @@ void test("GIT-01: a real per-commit copy holds the commit's tree with relative 
   await mkdir(path.join(mirrorRoot, "skills"), { recursive: true });
   await writeFile(path.join(mirrorRoot, "shared", "tool.txt"), "first");
   await fs.promises.symlink("../shared", path.join(mirrorRoot, "skills", "link"));
-  await git.init({ fs, dir: mirrorRoot, defaultBranch: "main" });
-  await git.add({ fs, dir: mirrorRoot, filepath: "shared/tool.txt" });
-  await git.add({ fs, dir: mirrorRoot, filepath: "skills/link" });
-  const sha = await git.commit({
-    fs,
-    dir: mirrorRoot,
-    message: "first",
-    author: { name: "test", email: "test@example.com" },
-  });
+  const mirror = await initGitTestCheckout(mirrorRoot);
+  const sha = await mirror.commitPaths("first", ["shared/tool.txt", "skills/link"]);
   await writeFile(path.join(mirrorRoot, "shared", "tool.txt"), "edited in the mirror");
   await writeFile(path.join(mirrorRoot, "untracked.txt"), "untracked");
 
@@ -2610,13 +2599,9 @@ void test("GIT-04: a tag clone checks out a directory that holds only a symlink"
     "../.claude-plugin",
     path.join(marketplaceRoot, "plugins", "foo", "linked", "manifest"),
   );
-  await git.add({ fs, dir: marketplaceRoot, filepath: "plugins/foo/linked/manifest" });
-  const tagOid = await git.commit({
-    fs,
-    dir: marketplaceRoot,
-    message: "symlink-only directory",
-    author: { name: "test", email: "test@example.com" },
-  });
+  const tagOid = await gitTestCheckout(marketplaceRoot).commitPaths("symlink-only directory", [
+    "plugins/foo/linked/manifest",
+  ]);
 
   // act
   const tagClone = await materializeMarketplaceTagClone({

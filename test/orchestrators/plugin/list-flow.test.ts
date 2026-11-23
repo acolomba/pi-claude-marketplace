@@ -31,7 +31,6 @@ import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import * as git from "isomorphic-git";
 import { mock, verify, when } from "strong-mock";
 
 import { pluginMirrorKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
@@ -52,6 +51,7 @@ import {
   mergeMarketplaceIntoState,
   seedAutoupdateConfig,
 } from "../../edge/handlers/marketplace-seed.ts";
+import { initGitTestCheckout } from "../../platform/git-test-repository.ts";
 import {
   createHermeticEnvironment,
   withHermeticEnvironment,
@@ -629,14 +629,8 @@ async function stageWarmMirror(
     path.join(mirrorDir, ".claude-plugin", "plugin.json"),
     JSON.stringify(pluginJson),
   );
-  await git.init({ fs, dir: mirrorDir, defaultBranch: "main" });
-  await git.add({ fs, dir: mirrorDir, filepath: ".claude-plugin/plugin.json" });
-  await git.commit({
-    fs,
-    dir: mirrorDir,
-    message: "initial",
-    author: { name: "test", email: "test@example.com" },
-  });
+  const mirror = await initGitTestCheckout(mirrorDir);
+  await mirror.commitPaths("initial", [".claude-plugin/plugin.json"]);
 }
 
 test("RSTA-01 / D-80-03: a not-installed git source with no clone renders bare `◌ <name> (remote)`", async () => {

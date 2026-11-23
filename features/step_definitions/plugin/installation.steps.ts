@@ -601,12 +601,16 @@ Then(
 Then(
   "the {word} scope holds these git clones:",
   async function (this: ScenarioWorld, scope: string, table: DataTable) {
-    const clones = (await readGitClones(extensionRoot(this, scope))).map((clone) => ({
-      clone: clone.clone,
-      origin: projectTokens("origin", clone.origin, this.tokens),
-      revision:
-        clone.revision === undefined ? "" : projectTokens("revision", clone.revision, this.tokens),
-    }));
+    const clones = (await readGitClones(extensionRoot(this, scope), this.gitHost.gitHome)).map(
+      (clone) => ({
+        clone: clone.clone,
+        origin: projectTokens("origin", clone.origin, this.tokens),
+        revision:
+          clone.revision === undefined
+            ? ""
+            : projectTokens("revision", clone.revision, this.tokens),
+      }),
+    );
     const rows = clones
       .sort(
         (left, right) =>
@@ -620,5 +624,5 @@ Then(
 );
 
 Then("the {word} scope holds no git clones", async function (this: ScenarioWorld, scope: string) {
-  assert.deepStrictEqual(await readGitClones(extensionRoot(this, scope)), []);
+  assert.deepStrictEqual(await readGitClones(extensionRoot(this, scope), this.gitHost.gitHome), []);
 });
