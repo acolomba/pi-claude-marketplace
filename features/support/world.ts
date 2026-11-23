@@ -307,6 +307,8 @@ export class ScenarioWorld extends World {
   harnessLogWindow: ReadonlyMap<string, number> | undefined = undefined;
   private readonly published = new Map<string, PublishedMarketplace>();
   private readonly gitRepositories = new Map<string, GitPluginRepository>();
+  private readonly marketplaceTags: Array<{ marketplace: string; tag: string; commit: string }> =
+    [];
   private readonly errorMessages = new Map<string, string>();
   private readonly releases: Array<() => Promise<void> | void> = [];
   // A Pi this scenario started with an environment of its own; while set it
@@ -436,17 +438,27 @@ export class ScenarioWorld extends World {
     this.errorMessages.set(token, message);
   }
 
-  // One `{<repository> <noun> <n>}` token per published revision, standing
-  // for `value` of that revision's commit.
+  /** Records that the marketplace `marketplace` tagged its commit `commit` as `tag`. */
+  recordMarketplaceTag(marketplace: string, tag: string, commit: string): void {
+    this.marketplaceTags.push({ marketplace, tag, commit });
+  }
+
+  // One `{<repository> <noun> <n>}` token per published revision, and one
+  // `{<marketplace> <noun> <tag>}` token per marketplace tag, standing for
+  // `value` of that commit.
   private revisionTokens(noun: string, value: (sha: string) => string): Map<string, string> {
-    return new Map(
-      [...this.gitRepositories.values()].flatMap((repository) =>
+    return new Map([
+      ...[...this.gitRepositories.values()].flatMap((repository) =>
         repository.revisions.map((sha, index): [string, string] => [
           `{${repository.name} ${noun} ${index + 1}}`,
           value(sha),
         ]),
       ),
-    );
+      ...this.marketplaceTags.map(({ marketplace, tag, commit }): [string, string] => [
+        `{${marketplace} ${noun} ${tag}}`,
+        value(commit),
+      ]),
+    ]);
   }
 
   /**

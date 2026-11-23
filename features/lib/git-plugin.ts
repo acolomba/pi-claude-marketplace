@@ -19,7 +19,7 @@ import assert from "node:assert/strict";
 import { readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { publishGitRepository, pushGitRepository } from "./git-marketplace.ts";
+import { publishGitRepository, pushGitRepository, pushGitTag } from "./git-marketplace.ts";
 import { runGit } from "./hermetic-git.ts";
 import { readDependencyCell, requireColumns, writePluginFiles } from "./path-marketplace.ts";
 
@@ -214,9 +214,7 @@ export async function pushTagOnlyRevision(
   await replaceRepositoryPlugins(workTree, plugins);
   await runGit(workTree, gitHome, "add", "-A");
   await runGit(workTree, gitHome, "commit", "-q", "-m", `publish ${tag}`);
-  await runGit(workTree, gitHome, "tag", tag);
-  const revision = await runGit(workTree, gitHome, "rev-parse", "HEAD");
-  await runGit(workTree, gitHome, "push", "-q", "origin", `refs/tags/${tag}`);
+  const revision = await pushGitTag(workTree, gitHome, tag);
   await runGit(workTree, gitHome, "checkout", "-q", "main");
   await runGit(workTree, gitHome, "branch", "-q", "-D", branch);
   return { ...repository, revisions: [...repository.revisions, revision] };
