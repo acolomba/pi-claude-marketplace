@@ -205,13 +205,20 @@ as ARCHITECTURE.md suggests, or Q2 answered early.
 **Plans**: 8 plans in 4 waves
 
 Plans:
+**Wave 1**
 - [ ] 01-01-PLAN.md — Suite-wide git builder with named variables, the system-git runner and checkout handle, and the unit fixture builder, git contract fixtures, and warm mirror seed on system git (wave 1)
 - [ ] 01-02-PLAN.md — `git --version` in every CI test job and the e2e suite's own `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 01-03-PLAN.md — Clone-cache and list fixtures on system git, and cucumber clone inspection with system git (wave 2)
 - [ ] 01-04-PLAN.md — Install, info, and update fixtures on system git (wave 2)
 - [ ] 01-05-PLAN.md — Integration fixtures on system git and from-scratch environments for forked integration children (wave 2)
 - [ ] 01-06-PLAN.md — HTTPS git host trusted through `GIT_SSL_CAINFO`, fetch by SHA and the refusing arm, and Pi's `GIT_SSL_CAINFO` and `PATH` members (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 01-07-PLAN.md — SSH stand-in (stub `ssh` first on every cucumber Pi's PATH) with upstream's probe answers (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 01-08-PLAN.md — Hermetic test over every builder and every SG-HRN-04 variable, planted-leak real clones, and the Phase 3 re-baseline record (wave 4)
 
 ### Phase 2: Git Process Seam and Typed Failures
