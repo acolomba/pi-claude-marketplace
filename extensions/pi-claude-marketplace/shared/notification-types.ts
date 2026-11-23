@@ -301,7 +301,14 @@ export type Reason =
   // installs the plugin with that option unset. A typed kind, not a note, as
   // `unsupported mcp` is: the token rides the row, and the option keys ride
   // the resolver note and the info advisory line.
-  | "options not set";
+  | "options not set"
+  // D-SG-07 / SG-PRC-06: a git-source operation found no usable git on PATH:
+  // git is absent, the macOS xcrun shim stands in for it, or only a batch
+  // launcher is found (D-SG-04). A token cannot interpolate, so the
+  // requirement text rides the row's cause line. Two words, as `network
+  // unreachable` is, because `requires git` would read as a soft-dependency
+  // marker.
+  | "git missing";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<

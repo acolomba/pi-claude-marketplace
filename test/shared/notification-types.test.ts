@@ -174,6 +174,7 @@ const EXPECTED_REASONS = [
   "requires mcp",
   "requires builtin mcp",
   "options not set",
+  "git missing",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

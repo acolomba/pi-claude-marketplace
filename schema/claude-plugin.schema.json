@@ -183,7 +183,8 @@
                           "already added",
                           "requires mcp",
                           "requires builtin mcp",
-                          "options not set"
+                          "options not set",
+                          "git missing"
                         ]
                       }
                     },
@@ -344,7 +345,8 @@
                     "already added",
                     "requires mcp",
                     "requires builtin mcp",
-                    "options not set"
+                    "options not set",
+                    "git missing"
                   ]
                 }
               }
@@ -546,7 +548,8 @@
                           "already added",
                           "requires mcp",
                           "requires builtin mcp",
-                          "options not set"
+                          "options not set",
+                          "git missing"
                         ]
                       }
                     },
@@ -707,7 +710,8 @@
                     "already added",
                     "requires mcp",
                     "requires builtin mcp",
-                    "options not set"
+                    "options not set",
+                    "git missing"
                   ]
                 }
               }
@@ -973,7 +977,8 @@
                       "already added",
                       "requires mcp",
                       "requires builtin mcp",
-                      "options not set"
+                      "options not set",
+                      "git missing"
                     ]
                   }
                 },
@@ -1175,7 +1180,8 @@
                       "already added",
                       "requires mcp",
                       "requires builtin mcp",
-                      "options not set"
+                      "options not set",
+                      "git missing"
                     ]
                   }
                 },
@@ -1452,7 +1458,8 @@
                             "already added",
                             "requires mcp",
                             "requires builtin mcp",
-                            "options not set"
+                            "options not set",
+                            "git missing"
                           ]
                         }
                       },
@@ -1660,7 +1667,8 @@
                             "already added",
                             "requires mcp",
                             "requires builtin mcp",
-                            "options not set"
+                            "options not set",
+                            "git missing"
                           ]
                         }
                       },
@@ -1804,7 +1812,8 @@
               "already added",
               "requires mcp",
               "requires builtin mcp",
-              "options not set"
+              "options not set",
+              "git missing"
             ]
           }
         }
