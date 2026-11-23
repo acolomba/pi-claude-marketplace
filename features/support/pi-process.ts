@@ -148,10 +148,14 @@ BeforeAll({ timeout: RUN_START_TIMEOUT_MS }, async (): Promise<void> => {
     );
     gitHost = await HttpsGitHost.start(path.join(root, "git-host"));
     // The global git config is absent until a scenario writes it (DRV-03).
+    // System git trusts the git host through the same certificate that Node
+    // trusts through NODE_EXTRA_CA_CERTS (SG-HRN-02).
     const piEnvironment = {
       NODE_EXTRA_CA_CERTS: gitHost.certificatePath,
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: path.join(sandbox.home, ".gitconfig"),
+      GIT_SSL_CAINFO: gitHost.certificatePath,
+      PATH: process.env.PATH ?? "",
       PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: `https://${gitHost.address}`,
     } satisfies RpcGitEnvironment;
     let piProfile: RpcProfile | undefined = undefined;

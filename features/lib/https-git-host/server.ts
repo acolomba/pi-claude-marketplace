@@ -10,8 +10,8 @@
  * every request in arrival order with the status it answered, and counts
  * connections, so a scenario can state the exact traffic of a command
  * (HOST-04). A scenario can arm one repository to answer an error status, to
- * drop the connection, or to require one credential, and the other
- * repositories keep serving (HOST-03). An arm lasts until it is disarmed or
+ * drop the connection, to require one credential, or to refuse a fetch by
+ * SHA, and the other repositories keep serving (HOST-03, SG-HRN-02). An arm lasts until it is disarmed or
  * the host is reset. The host also serves the catalog files of hosted
  * marketplaces, such as `/acme/tools/marketplace.json`, from memory, and an arm
  * of `owner/directory` applies to the files under `/owner/directory/` too.
@@ -26,9 +26,9 @@ import { createServer } from "node:https";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { cgiEnvironment, parseCgiResponse, runHttpBackend } from "./cgi.ts";
+import { cgiEnvironment, httpBackendArguments, parseCgiResponse, runHttpBackend } from "./cgi.ts";
 
-import type { CgiResponse } from "./cgi.ts";
+import type { CgiResponse, ShaWantPolicy } from "./cgi.ts";
 import type { ChildProcess } from "node:child_process";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Server } from "node:https";
@@ -67,7 +67,10 @@ export type ArmedStatus = (typeof ARMED_STATUSES)[number];
  * How an armed repository fails until it is disarmed or the host is reset
  * (HOST-03): it answers an error status, drops the connection on every
  * request, answers 401 to every request that does not carry one user and
- * password, answers 302 to a location, or holds the response open.
+ * password, answers 302 to a location, or holds the response open. A
+ * `refuse-sha-want` arm serves the repository with protocol v0 and no SHA
+ * wants, so a fetch of a commit by its SHA fails and a caller can drive its
+ * fallback, while a clone and a fetch of a ref still serve (SG-HRN-02).
  */
 export type GitHostArm =
   | { readonly kind: "status"; readonly status: ArmedStatus }
@@ -76,7 +79,8 @@ export type GitHostArm =
   | { readonly kind: "hold-git-body" }
   | { readonly kind: "credential"; readonly user: string; readonly password: string }
   | { readonly kind: "invalid-response" }
-  | { readonly kind: "redirect"; readonly location: string };
+  | { readonly kind: "redirect"; readonly location: string }
+  | { readonly kind: "refuse-sha-want" };
 
 /** Returns `status` as an armed status, throwing on a status the host cannot be armed with. */
 export function armedStatus(status: number): ArmedStatus {
@@ -225,7 +229,8 @@ function basicAuthorization(user: string, password: string): string {
  * it compares the header in memory, and the log keeps only the status
  * (HOST-04). A `redirect` arm answers 302 to its location, and lets the
  * request for the location's own path through, so a redirect inside the arm's
- * directory ends.
+ * directory ends. A `refuse-sha-want` arm lets every request through, and the
+ * CGI serves it under the refuse policy.
  */
 function failArmed(
   arm: GitHostArm,
@@ -283,7 +288,14 @@ function failArmed(
       res.writeHead(302, { location: arm.location });
       res.end();
       return true;
+    case "refuse-sha-want":
+      return false;
   }
+}
+
+/** Returns the SHA-want policy the CGI serves a request of a repository armed with `arm` under. */
+function shaWantPolicy(arm: GitHostArm | undefined): ShaWantPolicy {
+  return arm?.kind === "refuse-sha-want" ? "refuse" : "allow-reachable";
 }
 
 function writeResponse(res: ServerResponse, response: CgiResponse): void {
@@ -344,7 +356,11 @@ export class HttpsGitHost {
   readonly gitHome: string;
   /** The owner a repository is served under when a caller names none. */
   readonly defaultOwner = DEFAULT_OWNER;
-  private readonly repositories: string;
+  /**
+   * The directory that holds the served bare repositories as
+   * `<owner>/<directory>.git`, so the SSH stand-in can serve the same ones.
+   */
+  readonly repositoriesRoot: string;
   private readonly server: Server;
   private readonly log: LoggedRequest[] = [];
   private readonly children = new Set<ChildProcess>();
@@ -359,7 +375,7 @@ export class HttpsGitHost {
     this.certificatePath = path.join(root, "cert.pem");
     this.keyPath = path.join(root, "key.pem");
     this.gitHome = path.join(root, "home");
-    this.repositories = path.join(root, "repositories");
+    this.repositoriesRoot = path.join(root, "repositories");
     this.server = server;
     server.on("connection", () => {
       this.connections += 1;
@@ -388,7 +404,7 @@ export class HttpsGitHost {
 
   /** Returns the bare repository the host serves as `<owner>/<directory>.git`. */
   repositoryPath(directory: string, owner = DEFAULT_OWNER): string {
-    return path.join(this.repositories, owner, `${directory}.git`);
+    return path.join(this.repositoriesRoot, owner, `${directory}.git`);
   }
 
   /** Returns the URL a user types to clone the repository `directory` of `owner`. */
@@ -518,7 +534,7 @@ export class HttpsGitHost {
   /** Returns the repositories, files, arms, requests, connections, and CGI children the host holds. */
   async snapshot(): Promise<GitHostSnapshot> {
     return {
-      repositories: await listRepositories(this.repositories),
+      repositories: await listRepositories(this.repositoriesRoot),
       files: [...this.files.keys()].sort(),
       arms: [...this.arms.keys()],
       requests: this.log.map((request) => copyRequest(request)),
@@ -539,10 +555,10 @@ export class HttpsGitHost {
     this.files.clear();
     this.log.splice(0);
     this.connections = 0;
-    const entries = await readdir(this.repositories);
+    const entries = await readdir(this.repositoriesRoot);
     await Promise.all(
       entries.map((entry) =>
-        rm(path.join(this.repositories, entry), { recursive: true, force: true }),
+        rm(path.join(this.repositoriesRoot, entry), { recursive: true, force: true }),
       ),
     );
     this.server.closeIdleConnections();
@@ -627,7 +643,7 @@ export class HttpsGitHost {
       chunks.push(chunk);
     });
     req.on("end", () => {
-      void this.answer(logged, req.headers, Buffer.concat(chunks), res);
+      void this.answer(logged, req.headers, Buffer.concat(chunks), res, arm);
     });
   }
 
@@ -636,6 +652,7 @@ export class HttpsGitHost {
     headers: IncomingMessage["headers"],
     body: Buffer,
     res: ServerResponse,
+    arm: GitHostArm | undefined,
   ): Promise<void> {
     // The request answers 500, and the log says so, when the CGI fails or is
     // killed, or when the CGI prints a status or a header Node cannot send.
@@ -647,9 +664,11 @@ export class HttpsGitHost {
         headers,
         body,
       };
-      const env = cgiEnvironment(request, this.repositories, this.gitHome);
+      const policy = shaWantPolicy(arm);
+      const env = cgiEnvironment(request, this.repositoriesRoot, this.gitHome, policy);
+      const args = httpBackendArguments(policy);
       const response = parseCgiResponse(
-        await runHttpBackend(env, body, (child) => {
+        await runHttpBackend(args, env, body, (child) => {
           this.track(child);
         }),
       );

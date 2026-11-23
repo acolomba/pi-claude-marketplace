@@ -1,12 +1,17 @@
 /**
  * @fileoverview Checks the CGI bridge of the https git host: the parser of the
- * `git http-backend` output and the CGI environment it runs with (HOST-01).
+ * `git http-backend` output, the CGI environment it runs with (HOST-01), and
+ * the arguments that carry each SHA-want policy (SG-HRN-02).
  */
 
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
-import { cgiEnvironment, parseCgiResponse } from "../../features/lib/https-git-host/cgi.ts";
+import {
+  cgiEnvironment,
+  httpBackendArguments,
+  parseCgiResponse,
+} from "../../features/lib/https-git-host/cgi.ts";
 
 import type { CgiRequest, CgiResponse } from "../../features/lib/https-git-host/cgi.ts";
 
@@ -162,6 +167,31 @@ function serverEnvironment(): NodeJS.ProcessEnv {
   };
 }
 
+/** A protocol v2 upload-pack POST with a 146-byte buffered body. */
+function protocolV2Post(): CgiRequest {
+  return {
+    method: "POST",
+    url: new URL("https://127.0.0.1:4443/acme/tools.git/git-upload-pack"),
+    headers: {
+      "content-type": "application/x-git-upload-pack-request",
+      "git-protocol": "version=2",
+    },
+    body: Buffer.alloc(146),
+  };
+}
+
+/** The CGI environment of `protocolV2Post()` without its `GIT_PROTOCOL`. */
+function protocolV2PostEnvironment(): NodeJS.ProcessEnv {
+  return {
+    ...serverEnvironment(),
+    PATH_INFO: "/acme/tools.git/git-upload-pack",
+    QUERY_STRING: "",
+    REQUEST_METHOD: "POST",
+    CONTENT_TYPE: "application/x-git-upload-pack-request",
+    CONTENT_LENGTH: "146",
+  };
+}
+
 describe("cgiEnvironment", () => {
   test("builds the environment from scratch, without an inherited git variable", (t) => {
     // arrange
@@ -206,30 +236,44 @@ describe("cgiEnvironment", () => {
 
   test("passes the Git-Protocol header and the length of the buffered body", () => {
     // arrange
-    const request = {
-      method: "POST",
-      url: new URL("https://127.0.0.1:4443/acme/tools.git/git-upload-pack"),
-      headers: {
-        "content-type": "application/x-git-upload-pack-request",
-        "git-protocol": "version=2",
-      },
-      body: Buffer.alloc(146),
-    } satisfies CgiRequest;
+    const request = protocolV2Post();
 
     // act
     const environment = cgiEnvironment(request, "/run/repositories", "/run/cgi-home");
 
     // assert
     assert.deepStrictEqual(environment, {
-      ...serverEnvironment(),
-      PATH_INFO: "/acme/tools.git/git-upload-pack",
-      QUERY_STRING: "",
-      REQUEST_METHOD: "POST",
-      CONTENT_TYPE: "application/x-git-upload-pack-request",
-      CONTENT_LENGTH: "146",
+      ...protocolV2PostEnvironment(),
       GIT_PROTOCOL: "version=2",
     });
   });
+
+  for (const { title, policy, expectedProtocol } of [
+    {
+      title: "passes the Git-Protocol header under the allow-reachable policy",
+      policy: "allow-reachable",
+      expectedProtocol: { GIT_PROTOCOL: "version=2" },
+    },
+    {
+      title: "drops the Git-Protocol header under the refuse policy, so the backend answers v0",
+      policy: "refuse",
+      expectedProtocol: {},
+    },
+  ] as const) {
+    test(title, () => {
+      // arrange
+      const request = protocolV2Post();
+
+      // act
+      const environment = cgiEnvironment(request, "/run/repositories", "/run/cgi-home", policy);
+
+      // assert
+      assert.deepStrictEqual(environment, {
+        ...protocolV2PostEnvironment(),
+        ...expectedProtocol,
+      });
+    });
+  }
 
   test("passes the Content-Encoding header of a compressed request", () => {
     // arrange
@@ -257,4 +301,33 @@ describe("cgiEnvironment", () => {
       HTTP_CONTENT_ENCODING: "gzip",
     });
   });
+});
+
+describe("httpBackendArguments", () => {
+  for (const { title, policy, expectedArguments } of [
+    {
+      title: "allows a want of a reachable commit under the allow-reachable policy",
+      policy: "allow-reachable",
+      expectedArguments: ["-c", "uploadpack.allowReachableSHA1InWant=true", "http-backend"],
+    },
+    {
+      title: "turns off both SHA-want allow keys under the refuse policy",
+      policy: "refuse",
+      expectedArguments: [
+        "-c",
+        "uploadpack.allowReachableSHA1InWant=false",
+        "-c",
+        "uploadpack.allowAnySHA1InWant=false",
+        "http-backend",
+      ],
+    },
+  ] as const) {
+    test(title, () => {
+      // act
+      const args = httpBackendArguments(policy);
+
+      // assert
+      assert.deepStrictEqual(args, expectedArguments);
+    });
+  }
 });

@@ -137,6 +137,8 @@ async function installedSession(
       NODE_EXTRA_CA_CERTS: certificates,
       GIT_CONFIG_NOSYSTEM: "1",
       GIT_CONFIG_GLOBAL: path.join(home, ".gitconfig"),
+      GIT_SSL_CAINFO: certificates,
+      PATH: process.env.PATH ?? "",
     },
     temporaryDirectory,
     extensions: [SCRIPTED_MODEL_EXTENSION],
