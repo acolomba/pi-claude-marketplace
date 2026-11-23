@@ -142,7 +142,7 @@ must_haves:
       pattern: "\\[\"reload\", \\{ commandId: \"plugin reload\", handler: \"reload\" \\}\\]"
     - from: extensions/pi-claude-marketplace/edge/handlers/plugin/reload.ts
       to: extensions/pi-claude-marketplace/edge/register.ts
-      via: "the handler calls its `requestReload(ctx)` port after `notifyReloadStarted`; the registration adds the context to its `WeakSet` and, after `runForeground` resolves, `reloadWhenRequested` deletes it and awaits `ctx.reload()`"
+      via: "the handler calls its `requestReload(ctx)` port after `notifyReloadStarted`; the registration adds the context to its `WeakSet` and, after `runForeground` resolves, `reloadWhenRequested` deletes it and awaits `ctx.reload()`, so the command's promise, and with it Pi's RPC answer, settles after the reload (break B6)"
       pattern: "\\.then\\(\\(\\) => reloadWhenRequested\\(reloadRequests, ctx\\)\\)"
     - from: extensions/pi-claude-marketplace/shared/notification-dispatch.ts
       to: extensions/pi-claude-marketplace/shared/session-host.ts
@@ -174,15 +174,18 @@ choices of 2026-11-23, under the new decision ID RELOADCMD-D1:
 
 Test first: the four new scenarios and the three changed help scenarios fail on today's code (R0,
 logged before the code commit), and the two changed refusal scenarios fail on the code of Task 1
-(R1). Five deliberate breaks on the bound commit fail them again and are reverted clean.
+(R1). A new json-mode help scenario guards the one-shot usage: it passes on today's code, so it has
+no red proof of its own, and break B2 fails it. Six deliberate breaks on the bound commit fail the
+scenarios again and are reverted clean. A progress ledger records every finished step, so an
+executor whose context resets continues after the last finished step and redoes nothing.
 
 Purpose: the AGENTS.md rules that a user-visible change ships with a scenario that fails without
 it and that Claude Code's behavior is the default, and the sibling item 261123-qrv, which reloads
 RPC scenarios with this command.
 
 Output: six commits (a refactor, the command, the hint wording, the refusal wording, the docs, and
-the decision row) and `261123-qru-SUMMARY.md` with the red proofs, the checks, the decisions, the
-RPC reload contract for 261123-qrv, and the lines for the orchestrator.
+the decision row) and `261123-qru-SUMMARY.md` with the red proofs, the checks, the progress
+ledger, the decisions, the RPC reload contract for 261123-qrv, and the lines for the orchestrator.
 </objective>
 
 <execution_context>
@@ -203,8 +206,8 @@ RPC reload contract for 261123-qrv, and the lines for the orchestrator.
 @.agents/skills/committing/SKILL.md
 @.agents/skills/readme/SKILL.md
 
-All line numbers below were read at 98ada0c. HEAD 84e1299 changed only `.planning/`, so they apply
-to this tree. Where this plan and the research note differ, this plan wins; decisions 5 and 6 of
+All line numbers below were read at 98ada0c. The later commits change only `.planning/` (Task 1's
+precondition checks it), so they apply to this tree. Where this plan and the research note differ, this plan wins; decisions 5 and 6 of
 the note are not part of this item (5 is sibling 261123-qrv, 6 is out of scope).
 
 ## Pi 1.5.1 facts this plan rests on (read in `node_modules/@earendil-works/pi-coding-agent`)
@@ -604,7 +607,7 @@ Feature: Plugin reload
       Reloaded keybindings, extensions, skills, prompts, themes, and context files
       """
 
-  Scenario: Reloading over rpc reports that the reload started, and the load it runs reports the pending install once
+  Scenario: Reloading over rpc reports that the reload started, and pi answers only after the reload's load reported the pending install once
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -646,6 +649,13 @@ Feature: Plugin reload
       | message      | The session is busy, so plugins were not reloaded. Ask again once it is idle. |
       | usage        |                                                                               |
 ```
+
+How `:14` asserts that Pi answers after the reload: its When is the plain RPC command step, whose
+driver `runCommandPayloads` (`features/lib/pi-commands.ts:133-145`) requires Pi's answer
+`{ disposition: "handled" }` and returns only the payloads appended before that answer
+(`collect()` in `features/lib/pi-process.ts` ends the exchange at the matching response). The
+`cascade` row of the Then comes only from the reloaded runtime's load, so the Then holds it only
+when Pi answered after the reload. Break B6, which stops awaiting the reload, fails that Then.
 
 The step for the last scenario, added to `features/step_definitions/command.steps.ts` right after
 the `the user runs {string} in pi's terminal` When (`:175-183`), with `promptDisposition` imported
@@ -694,9 +704,29 @@ When(
 );
 ```
 
-`features/plugin/help.feature` (Task 1): the `usage` cell of the scenarios at lines 7, 15, and 32
-becomes this text (the sessionful usage, `\n` for a line break and `\|` for a pipe, as the file
-writes it), and the other cells of each table are padded to the new width:
+`features/plugin/help.feature` (Task 1). The description stays three lines, so no scenario moves:
+
+```gherkin
+  Help shows every plugin subcommand and how to call it, and leaves reload out of a Pi run that
+  accepts no later commands (RELOADCMD-D1). An unknown help topic or subcommand is rejected.
+  The scenarios run the real extension in a headless Pi and read its JSON results.
+```
+
+A guard scenario follows the last one, after one blank line, so it starts at line 41. Its four
+table rows are lines 10 to 13 of the file at 98ada0c, byte for byte (`git show
+98ada0c:features/plugin/help.feature`): today's usage, which a one-shot run keeps. It passes on
+today's code, so it has no red proof of its own (the `r0-survivors` row); break B2 fails it.
+
+```gherkin
+  Scenario: Help in a one-shot run in json mode leaves the reload subcommand out
+    When the user runs "/claude:plugin help" in pi's json mode
+    Then the result has these fields:
+      <lines 10 to 13 of help.feature at 98ada0c>
+```
+
+The `usage` cell of the scenarios at lines 7, 15, and 32 becomes this text (the sessionful usage,
+`\n` for a line break and `\|` for a pipe, as the file writes it), and the other cells of each
+table are padded to the new width:
 
 ```text
 Usage: /claude:plugin <bootstrap\|install\|uninstall\|prune\|update\|fetch\|reinstall\|list\|ls\|info\|pending\|apply\|autoapply\|enable\|disable\|import\|browse\|reload\|marketplace\|market\|help> ...\n  bootstrap                                          add anthropics/claude-plugins-official to user scope\n  install <plugin>@<marketplace> [--scope user\|project]\n  uninstall <plugin>@<marketplace> [--scope user\|project] [--keep-data] [--local] [--prune]\n  prune [--scope user\|project] [--dry-run]\n  update [<plugin>@<marketplace> \| @<marketplace>] [--scope user\|project]\n  fetch [<plugin>@<marketplace> \| @<marketplace>] [--scope user\|project]\n  reinstall [<plugin>@<marketplace> \| @<marketplace>] [--scope user\|project]\n  list [<marketplace>] [--scope user\|project]   (alias: ls)\n  info <plugin>@<marketplace> [--scope user\|project]\n  pending [--scope user\|project]\n  apply [--scope user\|project]\n  autoapply [on\|off] [--scope user\|project] [--local]\n  enable <plugin>@<marketplace> [--scope user\|project] [--local]\n  disable <plugin>@<marketplace> [--scope user\|project] [--local]\n  import [--scope user\|project]\n  browse\n  reload                                             activate pending plugin changes in the current session\n  marketplace <add\|remove\|rm\|list\|ls\|info\|update\|autoupdate\|noautoupdate> ...   (alias: market)\n  help [marketplace]
@@ -813,21 +843,29 @@ HOOKLATESS-D1 row (`:2543`) and before the blank line above `## Evolution`:
 
 ## The break files
 
-Each is a JSON array of `[file, old, new]` triples, `file` relative to
-`extensions/pi-claude-marketplace/`, written by Task 1, step 1. Each old text occurs once in its
-file at the bound commit.
+Each is a JSON array of `[file, old, new]` triples, on one line, `file` relative to
+`extensions/pi-claude-marketplace/`, written by step T1.1. Each old text occurs once in its file at
+the bound commit. After the colon, what the break's run shows:
 
-- `R0.json`, `R1.json`: `[]` (the natural red runs on the code without the change).
-- `B1.json`: `[["edge/register.ts", "await ctx.reload();", "await Promise.resolve();"]]` (the
-  command never reloads).
-- `B2.json`: `[["shared/session-host.ts", "return host.hasUI;", "return true;"]]` (every host takes
-  later commands).
-- `B3.json`: `[["edge/handlers/plugin/reload.ts", "if (!ctx.isIdle()) {", "if (false) {"]]` (no
-  busy check).
-- `B4.json`: `[["shared/session-host.ts", "return host.hasUI;", "return false;"]]` (no host takes
-  later commands).
-- `B5.json`: `[["shared/session-host.ts", "return mode === \"tui\";", "return true;"]]` (every
-  host has Pi's own `/reload`).
+- `R0.json`, `R1.json`: `[]`: the natural red runs on the code without the change.
+- `B1.json`: `[["edge/register.ts", "await ctx.reload();", "await Promise.resolve();"]]`: the
+  command never reloads, so the terminal shows no reload status row and the RPC exchange holds
+  only `reload-started`.
+- `B2.json`: `[["shared/session-host.ts", "return host.hasUI;", "return true;"]]`: every host takes
+  later commands, so the json run starts a reload instead of refusing, and json help lists
+  `reload`.
+- `B3.json`: `[["edge/handlers/plugin/reload.ts", "if (!ctx.isIdle()) {", "if (false) {"]]`: no
+  busy check, so the busy run calls `ctx.reload()`, Pi rejects it, and the When sees Pi's
+  `extension_error`.
+- `B4.json`: `[["shared/session-host.ts", "return host.hasUI;", "return false;"]]`: no host takes
+  later commands, so RPC help leaves `reload` out and the RPC reload refuses.
+- `B5.json`: `[["shared/session-host.ts", "return mode === \"tui\";", "return true;"]]`: every host
+  has Pi's own `/reload`, so the RPC refusals name `/reload`, which RPC lacks.
+- `B6.json`: `[["edge/register.ts", "() => reloadWhenRequested(reloadRequests, ctx)", "() => { void reloadWhenRequested(reloadRequests, ctx); }"]]`:
+  the registration stops awaiting the reload, so Pi answers the RPC prompt before the reloaded
+  runtime's load reports, and the exchange holds only `reload-started`. If `:14` passes under B6,
+  Pi's answer does not wait for the reload: stop and report, because 261123-qrv relies on that
+  order.
 </context>
 
 ## Scope note
@@ -877,7 +915,8 @@ build-input docs, and then the decision row.
 - Stage by explicit path only; never `git add -A`, `git add .`, or `git commit -a`. Before each
   commit no untracked file under `features/`, `extensions/`, or `test/` may be present that the
   commit does not stage, because the hook dry-runs every scenario and stashes only tracked edits.
-  Commit with `flock -w 3600 "$S/phase07-heavy.lock" env npm_config_script_shell=$S/nondac-sh
+  Commit through `gate.sh` as `bash "$D/gate.sh" <step>-commit flock -w 3600
+  "$S/phase07-heavy.lock" env npm_config_script_shell=$S/nondac-sh
   NODE_OPTIONS=--max-old-space-size=6144 PATH="$S/gate-bin:$PATH" git commit -F <message file>`
   and let the whole hook run. Do not run the pre-commit tool by hand with a skip list, never set
   or change `SKIP` (the session's exported `SKIP=trufflehog` stays as it is), and never use
@@ -888,8 +927,9 @@ build-input docs, and then the decision row.
 - Commit messages follow `.agents/skills/committing/SKILL.md`: the exact titles of the tasks, no
   quick id, decision id, milestone, phase, plan, wave, or task in the title or scope, body lines
   of at most 80 characters, and the attribution lines of your session's instructions at the end.
-  Right after each commit, write `git rev-parse HEAD` to its file under `$D`: `c0-commit`,
-  `fix-commit`, `hint-commit`, `bound-commit`, `docs-commit`, `decision-commit`.
+  Right after each commit, record it with `mark.sh`, which writes `git rev-parse HEAD` to the
+  commit's file under `$D`: `c0-commit`, `fix-commit`, `hint-commit`, `bound-commit`,
+  `docs-commit`, `decision-commit`.
 - `break.sh` refuses to run while `extensions/` is dirty; every red or break run happens on a tree
   whose `extensions/` is clean.
 - Edit only the files in `files_modified`, plus any other test double that the type check or a
@@ -906,29 +946,122 @@ build-input docs, and then the decision row.
 - Rule 4. If a scenario or a unit case outside this plan's own fails on a tree of this plan and
   this plan's change does not explain it, stop and report it with the log.
 
+## Progress ledger and resume protocol
+
+The plan runs in one executor context and is checkpointed in `$D`: each finished step leaves one
+row with the commit it made, the logs it wrote, and the gates that passed, so an executor whose
+context resets continues at the next step and redoes no finished work. Step T1.1 writes these two
+helpers into `$D`, exactly as given:
+
+```bash
+#!/usr/bin/env bash
+# gate.sh <name> <command> [args...]: runs one gate of this plan from the
+# checkout root and keeps its output in $D/log/<name>.log, after the commit it
+# ran on and the Node version, then appends exit=<status> and exits with it.
+set -u
+D=$(cd "$(dirname "$0")" && pwd)
+name=$1
+shift
+mkdir -p "$D/log"
+log="$D/log/$name.log"
+{ echo "head=$(git rev-parse HEAD)"; echo "node=$(node --version)"; } > "$log"
+"$@" >> "$log" 2>&1
+status=$?
+echo "exit=$status" >> "$log"
+exit "$status"
+```
+
+```bash
+#!/usr/bin/env bash
+# mark.sh <step> <commit file|-> <logs|-> <gates>: records one finished step as
+# a row of $D/progress.tsv: step, commit, logs, gates, and the UTC time, tab
+# separated. A commit step first writes HEAD to $D/<commit file>. A step that
+# the ledger already holds is refused.
+set -eu
+D=$(cd "$(dirname "$0")" && pwd)
+step=$1
+file=$2
+logs=$3
+gates=$4
+if [ -f "$D/progress.tsv" ] && awk -F'\t' -v s="$step" '$1 == s { found = 1 } END { exit !found }' "$D/progress.tsv"; then
+  echo "mark.sh: $step is already in the ledger" >&2
+  exit 1
+fi
+sha=-
+if [ "$file" != - ]; then
+  sha=$(git rev-parse HEAD)
+  echo "$sha" > "$D/$file"
+fi
+printf '%s\t%s\t%s\t%s\t%s\n' "$step" "$sha" "$logs" "$gates" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$D/progress.tsv"
+```
+
+- Run every gate of a step through `gate.sh`, named `<step>-<gate>` (`T1.7-cov-reload`,
+  `T1.7-check-static`, `T1.9-commit`), with the command that the step or the execution rules
+  give. The red unit captures keep their own names (`$D/red-unit-*.log`), and `break.sh` writes
+  `$D/<id>-<profile>.log` itself.
+- A step is finished when every gate it names passed, and only then. Its last command is `bash
+  "$D/mark.sh" <step> <commit file or -> <logs or -> <gates>`: `<logs>` lists the logs the step
+  wrote, relative to `$D`, and `<gates>` the gates that passed, each list comma-separated with no
+  space.
+- The steps, in order: T1.1 to T1.5, T1.6a, T1.6b, T1.7 to T1.9; T2.1 to T2.6, T2.7-B1 to
+  T2.7-B6, T2.7; T3.1 to T3.4. The commit steps are T1.2, T1.9, T2.3, T2.6, T3.2, and T3.3.
+
+Resume. When `$D/progress.tsv` does not exist, start at T1.1, which may run again over a partial
+`$D`. When it exists, do this before anything else:
+
+1. Wait until no run started before the reset is still going: `pgrep -f '[q]uick-261123-qru/'`
+   prints nothing, because every gate, break, and commit runs through a script in `$D`. Wait in
+   the background, never with a foreground `sleep`.
+2. Read the ledger (`cat "$D/progress.tsv"`). Its last row is the last finished step, and its last
+   row with a commit is the last finished commit (`$D/plan-base` when no row has one). Check the
+   record: every recorded commit is an ancestor of HEAD and equals its commit file, and HEAD is
+   the last finished commit, or one commit after it whose subject is the title of the next commit
+   step. Anything else: stop and report.
+3. The next step is the one after the last row. When it is a commit step and HEAD's subject is its
+   title, the commit landed after its gates passed, but its row did not: run `mark.sh` for it with
+   the logs its gates wrote and the gates the step names, write "row written on resume" in the
+   SUMMARY's progress section, and go on to the step after it.
+4. Otherwise do the next step from its start, on the working tree as it is: never discard, stash,
+   or check out a file to redo it. Skip a red unit capture whose log already exists with failing
+   cases, because the code it precedes may already be in the tree. Run every gate of the step
+   again, because a gate without a row has not passed.
+5. When the next step is a break (T2.7-B1 to T2.7-B6) and `extensions/` is dirty, a killed
+   `break.sh` left its edit behind: check that `git diff -- extensions/` shows only that break's
+   new text, restore with `git checkout -- extensions/`, as `break.sh` does, and run the break.
+6. Read only what the next step needs: the execution rules, this section, the step, the
+   `<behavior>` of its task, and the context sections the step names. The ledger and the logs in
+   `$D` hold what the SUMMARY needs from the finished steps.
+
 ## Red proofs
 
 `check-red.mjs` reads these tables, one set per prefix. `r0-` is the natural red on today's code
 (Task 1), `r1-` the natural red of the refusal wording on the code of Task 1 (Task 2), and `fix-`
-the breaks on the bound commit (Task 2).
+the breaks on the bound commit (Task 2). The json help guard is the one survivor: R0 runs it, and
+it passes there, as its count line shows (8 scenarios, 1 passed).
 
 <!-- r0-break-runs:begin -->
 | break | profile | scenarios | files |
 | --- | --- | --- | --- |
-| R0 | adapter | 7 | features/plugin/reload.feature features/plugin/help.feature:7 features/plugin/help.feature:15 features/plugin/help.feature:32 |
+| R0 | adapter | 8 | features/plugin/reload.feature features/plugin/help.feature:7 features/plugin/help.feature:15 features/plugin/help.feature:32 features/plugin/help.feature:41 |
 <!-- r0-break-runs:end -->
 
 <!-- r0-must-fail:begin -->
 | break | profile | file | title | row |
 | --- | --- | --- | --- | --- |
 | R0 | adapter | features/plugin/reload.feature | Reloading in pi's terminal runs pi's own reload | |
-| R0 | adapter | features/plugin/reload.feature | Reloading over rpc reports that the reload started, and the load it runs reports the pending install once | |
+| R0 | adapter | features/plugin/reload.feature | Reloading over rpc reports that the reload started, and pi answers only after the reload's load reported the pending install once | |
 | R0 | adapter | features/plugin/reload.feature | Reloading in a one-shot run in json mode is refused, because the next run loads the changes | |
 | R0 | adapter | features/plugin/reload.feature | Reloading while the tool of a prompt runs is refused with Claude Code's busy message | |
 | R0 | adapter | features/plugin/help.feature | Help shows the plugin usage | |
 | R0 | adapter | features/plugin/help.feature | Help for the help topic shows the plugin usage | |
 | R0 | adapter | features/plugin/help.feature | An unknown plugin subcommand shows the plugin usage with a reason | |
 <!-- r0-must-fail:end -->
+
+<!-- r0-survivors:begin -->
+| break | profile | file | title | reason |
+| --- | --- | --- | --- | --- |
+| R0 | adapter | features/plugin/help.feature | Help in a one-shot run in json mode leaves the reload subcommand out | a guard with no red proof: a one-shot run keeps today's usage, so it passes on today's code; B2 fails it |
+<!-- r0-survivors:end -->
 
 <!-- r1-break-runs:begin -->
 | break | profile | scenarios | files |
@@ -947,42 +1080,39 @@ the breaks on the bound commit (Task 2).
 | break | profile | scenarios | files |
 | --- | --- | --- | --- |
 | B1 | adapter | 2 | features/plugin/reload.feature:7 features/plugin/reload.feature:14 |
-| B2 | adapter | 1 | features/plugin/reload.feature:33 |
+| B2 | adapter | 2 | features/plugin/reload.feature:33 features/plugin/help.feature:41 |
 | B3 | adapter | 1 | features/plugin/reload.feature:42 |
 | B4 | adapter | 4 | features/plugin/help.feature:7 features/plugin/help.feature:15 features/plugin/help.feature:32 features/plugin/reload.feature:14 |
 | B5 | adapter | 2 | features/skill/lifecycle.feature:50 features/slash-command/invocation.feature:216 |
+| B6 | adapter | 1 | features/plugin/reload.feature:14 |
 <!-- fix-break-runs:end -->
 
 <!-- fix-must-fail:begin -->
 | break | profile | file | title | row |
 | --- | --- | --- | --- | --- |
 | B1 | adapter | features/plugin/reload.feature | Reloading in pi's terminal runs pi's own reload | |
-| B1 | adapter | features/plugin/reload.feature | Reloading over rpc reports that the reload started, and the load it runs reports the pending install once | |
+| B1 | adapter | features/plugin/reload.feature | Reloading over rpc reports that the reload started, and pi answers only after the reload's load reported the pending install once | |
 | B2 | adapter | features/plugin/reload.feature | Reloading in a one-shot run in json mode is refused, because the next run loads the changes | |
+| B2 | adapter | features/plugin/help.feature | Help in a one-shot run in json mode leaves the reload subcommand out | |
 | B3 | adapter | features/plugin/reload.feature | Reloading while the tool of a prompt runs is refused with Claude Code's busy message | |
 | B4 | adapter | features/plugin/help.feature | Help shows the plugin usage | |
 | B4 | adapter | features/plugin/help.feature | Help for the help topic shows the plugin usage | |
 | B4 | adapter | features/plugin/help.feature | An unknown plugin subcommand shows the plugin usage with a reason | |
-| B4 | adapter | features/plugin/reload.feature | Reloading over rpc reports that the reload started, and the load it runs reports the pending install once | |
+| B4 | adapter | features/plugin/reload.feature | Reloading over rpc reports that the reload started, and pi answers only after the reload's load reported the pending install once | |
 | B5 | adapter | features/skill/lifecycle.feature | Invoking a skill that an uninstall removed before a reload reports the missing file | |
 | B5 | adapter | features/slash-command/invocation.feature | Invoking a command that an uninstall removed before a reload reports the missing file | |
+| B6 | adapter | features/plugin/reload.feature | Reloading over rpc reports that the reload started, and pi answers only after the reload's load reported the pending install once | |
 <!-- fix-must-fail:end -->
-
-What each break proves: B1, the terminal shows no reload status and the RPC run reports only
-`reload-started`, because Pi never reloads; B2, the json run starts a reload instead of refusing;
-B3, the busy run calls `ctx.reload()`, which Pi rejects, so the When sees Pi's `extension_error`;
-B4, RPC help leaves `reload` out and the RPC reload refuses; B5, RPC refusals name Pi's own
-`/reload`, which RPC lacks.
 
 <tasks>
 
 <task type="tracer" tdd="true">
   <name>Task 1: Add /claude:plugin reload end to end, test first: the refactor commit, then the command commit</name>
-  <precondition>$S/nondac-sh is executable, $S/gate-bin/fd exists, `flock` is on PATH, $S/fix-07b/break.sh and $S/fix-07b/check-red.mjs exist, node_modules/.package-lock.json exists, `jq` is on PATH (json-output-docs.test.ts runs it), and `git diff --quiet 98ada0c HEAD -- extensions/ features/ test/ docs/ schema/ README.md README.es.md` exits 0, so the line numbers and break sites of this plan apply.</precondition>
+  <precondition>$S/nondac-sh is executable, $S/gate-bin/fd exists, `flock` and `pgrep` are on PATH, $S/fix-07b/break.sh and $S/fix-07b/check-red.mjs exist, node_modules/.package-lock.json exists, `jq` is on PATH (json-output-docs.test.ts runs it), and, on a fresh start (no `$D/progress.tsv`), `git diff --quiet 98ada0c HEAD -- extensions/ features/ test/ docs/ schema/ README.md README.es.md` exits 0, so the line numbers and break sites of this plan apply; on a resume, the checks of the resume protocol pass instead.</precondition>
   <reversibility rating="costly">The `reload-started` kind enters the published payload schema (schemaVersion 1 stays, as a new kind allows); a revert removes a kind that RPC clients may have started to read.</reversibility>
-  <files>extensions/pi-claude-marketplace/edge/handlers/plugin/shared.ts, test/edge/handlers/plugin/shared.test.ts, extensions/pi-claude-marketplace/edge/handlers/plugin/browse.ts, features/plugin/reload.feature, features/plugin/help.feature, features/step_definitions/command.steps.ts, features/lib/plugin-completions.ts, extensions/pi-claude-marketplace/shared/session-host.ts, test/shared/session-host.test.ts, extensions/pi-claude-marketplace/edge/handlers/plugin/reload.ts, test/edge/handlers/plugin/reload.test.ts, extensions/pi-claude-marketplace/edge/handlers/plugin/help.ts, test/edge/handlers/plugin/help.test.ts, extensions/pi-claude-marketplace/edge/router.ts, test/edge/router.test.ts, extensions/pi-claude-marketplace/edge/register.ts, test/edge/register.test.ts, extensions/pi-claude-marketplace/edge/completions/provider.ts, test/edge/completions/provider.test.ts, extensions/pi-claude-marketplace/edge/flag-catalog.ts, test/architecture/flag-catalog-drift.test.ts, extensions/pi-claude-marketplace/shared/notification-types.ts, test/shared/notification-types.test.ts, extensions/pi-claude-marketplace/shared/notification-resolve.ts, test/shared/notification-resolve.test.ts, extensions/pi-claude-marketplace/shared/notification-grammar.ts, test/shared/notification-grammar.test.ts, extensions/pi-claude-marketplace/shared/notification-json.ts, test/shared/notification-json.test.ts, extensions/pi-claude-marketplace/shared/notification-wire.ts, test/shared/notification-wire.test.ts, extensions/pi-claude-marketplace/shared/notification-dispatch.ts, test/shared/notification-dispatch.test.ts, schema/claude-plugin.schema.json, docs/json-output.md, test/architecture/json-output-docs.test.ts, test/architecture/wire-schema.test.ts, test/architecture/catalog-uat/catalog-wire.test.ts</files>
+  <files>extensions/pi-claude-marketplace/edge/handlers/plugin/shared.ts, test/edge/handlers/plugin/shared.test.ts, extensions/pi-claude-marketplace/edge/handlers/plugin/browse.ts, features/plugin/reload.feature, features/plugin/help.feature, features/step_definitions/command.steps.ts, features/lib/plugin-completions.ts, features/lib/pi-commands.ts (only if step T1.8 adjusts the RPC step design), extensions/pi-claude-marketplace/shared/session-host.ts, test/shared/session-host.test.ts, extensions/pi-claude-marketplace/edge/handlers/plugin/reload.ts, test/edge/handlers/plugin/reload.test.ts, extensions/pi-claude-marketplace/edge/handlers/plugin/help.ts, test/edge/handlers/plugin/help.test.ts, extensions/pi-claude-marketplace/edge/router.ts, test/edge/router.test.ts, extensions/pi-claude-marketplace/edge/register.ts, test/edge/register.test.ts, extensions/pi-claude-marketplace/edge/completions/provider.ts, test/edge/completions/provider.test.ts, extensions/pi-claude-marketplace/edge/flag-catalog.ts, test/architecture/flag-catalog-drift.test.ts, extensions/pi-claude-marketplace/shared/notification-types.ts, test/shared/notification-types.test.ts, extensions/pi-claude-marketplace/shared/notification-resolve.ts, test/shared/notification-resolve.test.ts, extensions/pi-claude-marketplace/shared/notification-grammar.ts, test/shared/notification-grammar.test.ts, extensions/pi-claude-marketplace/shared/notification-json.ts, test/shared/notification-json.test.ts, extensions/pi-claude-marketplace/shared/notification-wire.ts, test/shared/notification-wire.test.ts, extensions/pi-claude-marketplace/shared/notification-dispatch.ts, test/shared/notification-dispatch.test.ts, schema/claude-plugin.schema.json, docs/json-output.md, test/architecture/json-output-docs.test.ts, test/architecture/wire-schema.test.ts, test/architecture/catalog-uat/catalog-wire.test.ts</files>
   <behavior>
-    - Scenarios `features/plugin/reload.feature:7`, `:14`, `:33`, `:42` and the three help scenarios fail on today's code (R0) and pass after the commit.
+    - Scenarios `features/plugin/reload.feature:7`, `:14`, `:33`, `:42` and the three help scenarios fail on today's code (R0) and pass after the commit; the json help guard `features/plugin/help.feature:41` passes on both (the R0 survivor).
     - `rejectArguments` (shared, 3 cases): passes an empty argument text through and emits nothing; names the first flag of `surplus --bogus` as `Unknown flag: "--bogus".` with the usage; refuses `extra` with the verb's surplus message and the usage.
     - `acceptsLaterCommands` (session-host, 2 cases): true for a host with a UI; false for a host without one.
     - `makeReloadHandler` (reload, 6 cases, titles end `(RELOADCMD-D1)`): a host without a UI gets the one-shot refusal with an empty usage, and `isIdle` and the port are never called; an unknown flag gets `Unknown flag:` with the reload usage; a surplus argument gets `reload takes no arguments.`; a busy session gets Claude Code's busy refusal with an empty usage and no request; an idle rpc session appends one `reload-started` outcome and then requests one reload of its own context; an idle terminal session emits no notify call and requests one reload.
@@ -994,36 +1124,38 @@ B4, RPC help leaves `reload` out and the RPC reload refuses; B5, RPC refusals na
     - Drift rows: `reload` is a catalog verb with no flag, no completion beyond nothing, and one usage line in the sessionful usage.
   </behavior>
   <action>
-    Follow "Design, file by file", "Prescribed text", and the execution rules. Order matters: R0
-    runs while `extensions/` holds today's behavior, and no untracked feature file may exist while
-    C0 commits.
+    Follow "Design, file by file", "Prescribed text", the execution rules, and the progress
+    ledger: each step ends with its `mark.sh` row, and a resumed executor starts at the step after
+    the last row. Order matters: R0 runs while `extensions/` holds today's behavior, and no
+    untracked feature file may exist while C0 commits.
 
-    1. Create `$D` and `$D/brk`; write `git rev-parse HEAD` to `$D/plan-base`; copy
-       `$S/fix-07b/break.sh` and `$S/fix-07b/check-red.mjs` into `$D` unchanged; write the seven
-       break files of "The break files" into `$D/brk`.
+    T1.1. Create `$D` and `$D/brk`; write `git rev-parse HEAD` to `$D/plan-base`; copy
+       `$S/fix-07b/break.sh` and `$S/fix-07b/check-red.mjs` into `$D` unchanged; write `gate.sh`
+       and `mark.sh` as the ledger section gives them, and the eight break files of "The break
+       files" into `$D/brk`. Row: step `T1.1`, gate `setup`.
 
-    2. C0, test first. Add the three `rejectArguments` cases to
+    T1.2. C0, test first. Add the three `rejectArguments` cases to
        `test/edge/handlers/plugin/shared.test.ts` with the strict boundary
        (`createNotificationBoundary`); run that file before the helper exists and keep the failing
        log as `$D/red-unit-shared.log`. Add `rejectArguments` to `shared.ts` and use it in
-       `browse.ts`. Run `shared.test.ts` and `browse.test.ts`, the direct coverage of both pairs,
-       and `check:static`. Commit those three files with the title `refactor(plugin): share the
-       no-argument check of browse` and record `c0-commit`.
+       `browse.ts`. Gates: `shared.test.ts` and `browse.test.ts`, the direct coverage of both
+       pairs, `check:static`, and the commit of those three files with the title
+       `refactor(plugin): share the no-argument check of browse`. Row with `c0-commit`.
 
-    3. Write `features/plugin/reload.feature` as prescribed, the three help usage cells, and the
-       step in `command.steps.ts`. Run `PATH="$S/gate-bin:$PATH" node scripts/check-features.mjs`
-       (exit 0; it reports no undefined or unused step).
+    T1.3. Write `features/plugin/reload.feature`, the help description, the three help usage cells,
+       and the json help guard as prescribed, and the step in `command.steps.ts`. Gate:
+       `PATH="$S/gate-bin:$PATH" node scripts/check-features.mjs` (exit 0; it reports no undefined
+       or unused step).
 
-    4. R0, with `extensions/` at C0: `PATH="$S/gate-bin:$PATH" bash "$D/break.sh" R0 adapter
-       "$D/brk/R0.json" features/plugin/reload.feature features/plugin/help.feature:7
-       features/plugin/help.feature:15 features/plugin/help.feature:32`, then `node
-       "$D/check-red.mjs" <this plan> "$D" <checkout root> "$(cat "$D/plan-base")" r0-`, which
-       must print `RED-PROOFS OK`. In `$D/R0-adapter.log`, the terminal scenario fails in its
-       Then after waiting for the status row, and the other six fail in their Then on a different
-       kind, message, or usage. A failure in a Given, or anywhere else, means the scenario is
-       wrong: fix it, rerun R0, and record the change.
+    T1.4. R0, with `extensions/` at C0: run `break.sh` for the `r0-break-runs` row (id, profile,
+       break file, and the row's files, with `$S/gate-bin` first on `PATH`), then the R0 command of
+       this task's first `<verify>`: `check-red.mjs` with the prefix `r0-` prints `RED-PROOFS OK`,
+       and the count line shows the guard passed. In `$D/R0-adapter.log`, the terminal scenario
+       fails in its Then after waiting for the status row, and the other six fail in their Then on
+       a different kind, message, usage, or row count. A failure in a Given, or anywhere else, means
+       the scenario is wrong: fix it, rerun R0, and record the change. Row with `R0-adapter.log`.
 
-    5. Unit tests first. Write `test/shared/session-host.test.ts` (2 cases) and
+    T1.5. Unit tests first. Write `test/shared/session-host.test.ts` (2 cases) and
        `test/edge/handlers/plugin/reload.test.ts` (6 cases), and add the kind, router, help,
        provider, register, and drift rows of the behavior list to their files. Run the two new
        files before their modules exist and keep `$D/red-unit-session-host.log` and
@@ -1038,36 +1170,49 @@ B4, RPC help leaves `reload` out and the RPC reload refuses; B5, RPC refusals na
        (`:3544-3750`), and the autocomplete wrapper's session start (`:1855-1885`). Replace the
        `EXPECTED_TOP_LEVEL_USAGE` constants of `router.test.ts` and `register.test.ts` by the two
        byte forms, sessionful and one-shot, and read `topLevelUsage({ hasUI: true })` in the drift
-       guard's `usageLineFor`.
+       guard's `usageLineFor`. Row with the two red logs.
 
-    6. Make the kind (notification types, resolve, grammar, json, wire, dispatch), regenerate the
-       schema, and edit `docs/json-output.md` as prescribed. Then make `session-host.ts`
-       (`SessionHost` and `acceptsLaterCommands` only), `reload.ts`, the router, help, flag
-       catalog, provider, and register changes, and pass `true` as the fourth argument in
-       `features/lib/plugin-completions.ts`, with the comment that Pi asks for argument
-       completions only in its terminal, which takes later commands (RELOADCMD-D1).
+    T1.6a. The kind: make it (notification types, resolve, grammar, json, wire, dispatch),
+       regenerate the schema, and edit `docs/json-output.md` as prescribed. Gate: the kind's test
+       files pass (the six notification files, `wire-schema.test.ts`, `json-output-docs.test.ts`,
+       and `catalog-wire.test.ts`). Row.
 
-    7. Run every touched test file, then the direct coverage of each of the 13 changed source
-       pairs (session-host, reload, help, router, register, provider, flag-catalog,
-       notification-types, notification-resolve, notification-grammar, notification-json,
-       notification-wire, notification-dispatch), `npm run test:unpaired`, and `check:static`.
-       Each must pass with no change to the gates.
+    T1.6b. The command: make `session-host.ts` (`SessionHost` and `acceptsLaterCommands` only),
+       `reload.ts`, the router, help, flag catalog, provider, and register changes, and pass `true`
+       as the fourth argument in `features/lib/plugin-completions.ts`, with the comment that Pi
+       asks for argument completions only in its terminal, which takes later commands
+       (RELOADCMD-D1). Gate: every test file this task touched passes. Row.
 
-    8. Cucumber, adapter then builtin, each one run: `features/plugin/reload.feature
-       features/plugin/help.feature features/plugin/browse.feature
-       features/marketplace/market-alias.feature features/plugin/list.feature
-       features/mcp-server/verdict-list.feature`. If the terminal scenario fails only because Pi's
-       status row reads differently (for example with `; saved project trust` after it), set the
-       doc string to the row Pi printed and record it; any other failure is a defect to fix.
+    T1.7. Gates, one each: the direct coverage of each of the 13 changed source pairs
+       (session-host, reload, help, router, register, provider, flag-catalog, notification-types,
+       notification-resolve, notification-grammar, notification-json, notification-wire,
+       notification-dispatch), `npm run test:unpaired`, and `check:static`. Each must pass with no
+       change to the gates. Row.
 
-    9. Stage the files of this task except the three C0 files and commit with the title
-       `feat(plugin): add /claude:plugin reload`; record `fix-commit`. The body says what the
+    T1.8. Cucumber: the cucumber command of this task's `<verify>` (adapter), then the same files
+       with `--profile builtin`. If the terminal scenario fails only because Pi's status row reads
+       differently (for example with `; saved project trust` after it), set the doc string to the
+       row Pi printed and record it; any other failure is a defect to fix. This run is the first
+       test of the RPC scenario's step design (`reload.feature:14`): its driver waits for Pi's
+       answer to the prompt and keeps the payloads that both runtimes append before it, across
+       Pi's runtime swap. If that design does not hold (no answer comes, or the exchange holds an
+       extension error or a dialog from the swap), find the cause first. A defect of this change
+       is fixed in the extension. A driver assumption that the swap breaks is fixed in
+       `command.steps.ts` or `features/lib/pi-commands.ts`, and the Then of `:14` stays as
+       prescribed, because R0's log places that failing Then by its text and R0 cannot run again
+       once `extensions/` holds the change. Record each adjustment, with the order Pi showed, in
+       the SUMMARY's red-proof section and in "The RPC reload contract", because 261123-qrv builds
+       on it. If Pi answers before the load's payload arrives, truth 2 does not hold: stop and
+       report with the log. Row.
+
+    T1.9. Stage the files of this task except the three C0 files and commit with the title
+       `feat(plugin): add /claude:plugin reload`; row with `fix-commit`. The body says what the
        command does in each host, why it reports `reload-started` before Pi reloads, and that the
        registration reloads after the command settled.
   </action>
   <verify>
-    <automated>S=/tmp/claude-0/-home-user-pi-claude-marketplace/36571f01-5770-4f51-bd77-b22d58691339/scratchpad; D=$S/quick-261123-qru; R=$(git rev-parse --show-toplevel) && B=$(cat "$D/plan-base") && node "$D/check-red.mjs" .planning/quick/261123-qru-add-claude-plugin-reload-and-the-sessionful-predicate-planni/261123-qru-PLAN.md "$D" "$R" "$B" r0- # [HEAD=absent EXPECT==present @98ada0c]</automated>
-    <fails_when>non-zero exit: R0's log is missing, dirty, timed out, or a must-fail scenario passed or failed outside a When or a Then</fails_when>
+    <automated>S=/tmp/claude-0/-home-user-pi-claude-marketplace/36571f01-5770-4f51-bd77-b22d58691339/scratchpad; D=$S/quick-261123-qru; R=$(git rev-parse --show-toplevel) && B=$(cat "$D/plan-base") && node "$D/check-red.mjs" .planning/quick/261123-qru-add-claude-plugin-reload-and-the-sessionful-predicate-planni/261123-qru-PLAN.md "$D" "$R" "$B" r0- && grep -qE '^8 scenarios \((1 passed, 7 failed|7 failed, 1 passed)\)' "$D/R0-adapter.log" # [HEAD=absent EXPECT==present @98ada0c]</automated>
+    <fails_when>non-zero exit: R0's log is missing, dirty, timed out, a must-fail scenario passed or failed outside a When or a Then, or the count line does not show the one passing scenario, so the json help guard failed on today's code</fails_when>
     <automated>S=/tmp/claude-0/-home-user-pi-claude-marketplace/36571f01-5770-4f51-bd77-b22d58691339/scratchpad; flock -w 3600 "$S/phase07-heavy.lock" env PATH="$S/gate-bin:$PATH" npm_config_script_shell=$S/nondac-sh NODE_OPTIONS=--max-old-space-size=6144 npm run test:cucumber:profile -- --profile adapter --parallel 2 features/plugin/reload.feature features/plugin/help.feature features/plugin/browse.feature features/marketplace/market-alias.feature features/plugin/list.feature features/mcp-server/verdict-list.feature</automated>
     <fails_when>non-zero exit: a reload, help, browse, or completion scenario fails under the adapter profile</fails_when>
     <automated>S=/tmp/claude-0/-home-user-pi-claude-marketplace/36571f01-5770-4f51-bd77-b22d58691339/scratchpad; flock -w 3600 "$S/phase07-heavy.lock" env PATH="$S/gate-bin:$PATH" npm_config_script_shell=$S/nondac-sh NODE_OPTIONS=--max-old-space-size=6144 npm run check:static</automated>
@@ -1076,13 +1221,15 @@ B4, RPC help leaves `reload` out and the RPC reload refuses; B5, RPC refusals na
     <fails_when>non-zero exit: a prescribed line is missing, or a file other than shared/session-host.ts reads Pi's host field in code (the six presence checks fail at 98ada0c, where session-host.ts does not exist)</fails_when>
     <automated>S=/tmp/claude-0/-home-user-pi-claude-marketplace/36571f01-5770-4f51-bd77-b22d58691339/scratchpad; D=$S/quick-261123-qru; C=$(cat "$D/c0-commit") && t=$(git show -s --format=%s "$C") && test "$t" = "refactor(plugin): share the no-argument check of browse" && g=$(git show --name-only --format= "$C") && test "$(printf '%s\n' "$g" | LC_ALL=C sort | tr '\n' ' ')" = "extensions/pi-claude-marketplace/edge/handlers/plugin/browse.ts extensions/pi-claude-marketplace/edge/handlers/plugin/shared.ts test/edge/handlers/plugin/shared.test.ts " && F=$(cat "$D/fix-commit") && tf=$(git show -s --format=%s "$F") && test "$tf" = "feat(plugin): add /claude:plugin reload" && p=$(git rev-parse "$F~1") && test "$p" = "$C" && gf=$(git show --name-only --format= "$F") && printf '%s\n' "$gf" | grep -qx features/plugin/reload.feature && st=$(git status --porcelain -- extensions/ features/ test/ schema/ docs/) && test -z "$st" # [HEAD=absent EXPECT==present @98ada0c]</automated>
     <fails_when>non-zero exit: a commit file is missing, a title differs, C0 holds another file, the command commit does not follow C0 or lacks the feature file, a git call fails, or a tracked change is left uncommitted</fails_when>
+    <automated>S=/tmp/claude-0/-home-user-pi-claude-marketplace/36571f01-5770-4f51-bd77-b22d58691339/scratchpad; D=$S/quick-261123-qru; L=$D/progress.tsv; s=$(awk -F'\t' 'NF != 5 { bad = 1 } $1 ~ /^T1\./ { printf "%s ", $1 } END { exit bad }' "$L") && test "$s" = "T1.1 T1.2 T1.3 T1.4 T1.5 T1.6a T1.6b T1.7 T1.8 T1.9 " && c=$(awk -F'\t' '$1 == "T1.2" { print $2 }' "$L") && test "$c" = "$(cat "$D/c0-commit")" && f=$(awk -F'\t' '$1 == "T1.9" { print $2 }' "$L") && test "$f" = "$(cat "$D/fix-commit")" # [HEAD=absent EXPECT==present @98ada0c]</automated>
+    <fails_when>non-zero exit: the ledger is missing, a row lacks one of its five fields, a step of this task is missing, repeated, or out of order, or a commit row differs from its commit file</fails_when>
   </verify>
-  <done>`/claude:plugin reload` reloads Pi in the terminal and over RPC, reports `reload-started` over RPC before Pi reloads, refuses in a one-shot run and while a run is active, and is left out of one-shot help and completions; R0 is logged and passes `check-red.mjs`; the seven scenarios pass; `check:static` and the pairs' coverage pass; C0 and the command commit are recorded.</done>
+  <done>`/claude:plugin reload` reloads Pi in the terminal and over RPC, reports `reload-started` over RPC before Pi reloads, refuses in a one-shot run and while a run is active, and is left out of one-shot help and completions; R0 is logged and passes `check-red.mjs`, and the json help guard passed in it; the reload and help scenarios pass; `check:static` and the pairs' coverage pass; C0 and the command commit are recorded; the ledger holds T1.1 to T1.9.</done>
 </task>
 
 <task type="auto" tdd="true">
-  <name>Task 2: Word every reload instruction through one place, test first, then prove the scenarios with five breaks</name>
-  <precondition>`$D/fix-commit` names HEAD, and `extensions/` is clean.</precondition>
+  <name>Task 2: Word every reload instruction through one place, test first, then prove the scenarios with six breaks</name>
+  <precondition>The ledger's last row is T1.9, `$D/fix-commit` names HEAD, and `extensions/` is clean; on a resume inside this task, the checks of the resume protocol pass instead.</precondition>
   <reversibility rating="reversible">The change only rewords text and adds one context field the extension reads; no stored format changes.</reversibility>
   <files>features/skill/lifecycle.feature, features/slash-command/invocation.feature, extensions/pi-claude-marketplace/shared/session-host.ts, test/shared/session-host.test.ts, extensions/pi-claude-marketplace/platform/pi-api.ts, extensions/pi-claude-marketplace/orchestrators/marketplace/background-pass.ts, test/orchestrators/marketplace/background-pass.test.ts, extensions/pi-claude-marketplace/shared/notification-dispatch.ts, test/shared/notification-dispatch.test.ts, extensions/pi-claude-marketplace/shared/notification-grammar.ts, test/shared/notification-grammar.test.ts, extensions/pi-claude-marketplace/shared/notification-mcp.ts, test/shared/notification-mcp.test.ts, extensions/pi-claude-marketplace/orchestrators/skill-invocation.ts, test/orchestrators/skill-invocation.test.ts, extensions/pi-claude-marketplace/orchestrators/command-invocation.ts, test/orchestrators/command-invocation.test.ts, extensions/pi-claude-marketplace/edge/skill-aliases.ts, test/edge/skill-aliases.test.ts, extensions/pi-claude-marketplace/edge/command-invocation.ts, test/edge/command-invocation.test.ts, extensions/pi-claude-marketplace/edge/command-tool.ts, test/edge/command-tool.test.ts, and the test doubles that the type check or a suite names (the test files of files_modified are the expected set)</files>
   <behavior>
@@ -1095,14 +1242,16 @@ B4, RPC help leaves `reload` out and the RPC reload refuses; B5, RPC refusals na
     - Edge rows: the skill, command, and command-tool requests carry `reloadCommand` from their context: `/reload` for a terminal context, `/claude:plugin reload` for an rpc context, and undefined for a json context.
   </behavior>
   <action>
-    1. In `features/skill/lifecycle.feature:59` and `features/slash-command/invocation.feature:235`,
-       write the prescribed message cells. R1, with `extensions/` at the command commit:
-       `PATH="$S/gate-bin:$PATH" bash "$D/break.sh" R1 adapter "$D/brk/R1.json"
-       features/skill/lifecycle.feature:50 features/slash-command/invocation.feature:216`, then
-       `check-red.mjs` with the prefix `r1-` (`RED-PROOFS OK`). Both fail in their Then on the
-       message cell; any other failure means a wrong cell: fix it and rerun.
+    Each step ends with its `mark.sh` row, as in Task 1.
 
-    2. C2, test first: add the session-host, grammar, mcp, and dispatch rows; run them before the
+    T2.1. In `features/skill/lifecycle.feature:59` and `features/slash-command/invocation.feature:235`,
+       write the prescribed message cells. R1, with `extensions/` at the command commit: run
+       `break.sh` for the `r1-break-runs` row with its files, with `$S/gate-bin` first on `PATH`,
+       then `check-red.mjs` with the prefix `r1-` (`RED-PROOFS OK`). Both fail in their Then on the
+       message cell; any other failure means a wrong cell: fix it and rerun. Row with
+       `R1-adapter.log`.
+
+    T2.2. C2, test first: add the session-host, grammar, mcp, and dispatch rows; run them before the
        code and keep `$D/red-unit-hint.log`. Then make the C2 part of "The wording":
        `session-host.ts` (`hasNativeReload`, `ReloadCommand`, `reloadCommandFor`), the `hasUI`
        field of `NotificationContext` and of `SILENT_CONTEXT`, the grammar, the mcp text, and the
@@ -1116,35 +1265,38 @@ B4, RPC help leaves `reload` out and the RPC reload refuses; B5, RPC refusals na
        and its double states `hasUI: false`; a strict double (`strong-mock`) whose print-mode
        text emission now makes the one host read states it, returning false. A terminal emission
        reads no host field, so a terminal double needs no change. Any other failure is a defect of
-       this change: fix the code, not the expectation. Record every test file this step touched.
+       this change: fix the code, not the expectation. The SUMMARY lists every test file this step
+       touched; until T2.3 commits them, `git status` shows them, and after it the hint commit's
+       file list does. Row with `red-unit-hint.log` and the gate logs.
 
-    3. Run the direct coverage of `session-host`, `notification-grammar`, `notification-mcp`,
-       `notification-dispatch`, `platform/pi-api`, and `orchestrators/marketplace/background-pass`,
-       and of each other pair whose test changed in step 2, and `check:static`. Stage the C2
-       files and the doubles (not the two feature files) and commit with the title
-       `fix(notify): word reload hints for the host that shows them`; record `hint-commit`.
+    T2.3. Gates: the direct coverage of `session-host`, `notification-grammar`,
+       `notification-mcp`, `notification-dispatch`, `platform/pi-api`, and
+       `orchestrators/marketplace/background-pass`, and of each other pair whose test changed in
+       T2.2, then `check:static`, then the commit of the C2 files and the doubles (not the two
+       feature files) with the title `fix(notify): word reload hints for the host that shows
+       them`. Row with `hint-commit`.
 
-    4. C3, test first: add the orchestrator and edge rows (the request builders of the four test
+    T2.4. C3, test first: add the orchestrator and edge rows (the request builders of the four test
        files default `reloadCommand` to `/reload`); run them before the code and keep
        `$D/red-unit-refusals.log`. Make the C3 part of "The wording": the two request fields and
-       refusal helpers and the three edge request lines. Run the five test files, their pairs'
-       direct coverage, and `check:static`.
+       refusal helpers and the three edge request lines. Gates: the five test files, their pairs'
+       direct coverage, and `check:static`. Row.
 
-    5. Cucumber, adapter then builtin, each one run: `features/skill/lifecycle.feature
-       features/slash-command/invocation.feature features/plugin/reload.feature
-       features/marketplace/background-update.feature features/plugin/browse.feature
-       features/skill/project-trust.feature features/slash-command/lifecycle.feature`.
+    T2.5. Cucumber: the cucumber command of this task's `<verify>` (adapter), then the same files
+       with `--profile builtin`. Row.
 
-    6. Stage the C3 files and the two feature files and commit with the title `fix(plugin): name
-       a reload command the host offers in refusals`; record `bound-commit`.
+    T2.6. Stage the C3 files and the two feature files and commit with the title `fix(plugin): name
+       a reload command the host offers in refusals`; row with `bound-commit`.
 
-    7. The breaks, on the bound commit with `extensions/` clean, one at a time: `bash
-       "$D/break.sh" <id> adapter "$D/brk/<id>.json" <files>` for B1 to B5 with the files of the
-       `fix-break-runs` table, each with `$S/gate-bin` first on `PATH`. Then `check-red.mjs` with
-       the prefix `fix-` (`RED-PROOFS OK`), and `git status --porcelain -- extensions/` prints
-       nothing. If a break's old text no longer occurs once, the code differs from this plan:
-       rewrite only that break file to the same effect, say "rewrote a break" in the SUMMARY with
-       the reason, and run it.
+    T2.7-B1 to T2.7-B6. The breaks, on the bound commit with `extensions/` clean, one at a time in
+       table order: for each `fix-break-runs` row, run `break.sh` with the row's id, profile, break
+       file, and files, with `$S/gate-bin` first on `PATH`; row `T2.7-<id>` with the log
+       `<id>-adapter.log` and the gate `restored=clean`. If a break's old text no longer occurs
+       once, the code differs from this plan: rewrite only that break file to the same effect, say
+       "rewrote a break" in the SUMMARY with the reason, and run it.
+
+    T2.7. `check-red.mjs` with the prefix `fix-` prints `RED-PROOFS OK`, and `git status
+       --porcelain -- extensions/` prints nothing. Row.
   </action>
   <verify>
     <automated>S=/tmp/claude-0/-home-user-pi-claude-marketplace/36571f01-5770-4f51-bd77-b22d58691339/scratchpad; D=$S/quick-261123-qru; P=.planning/quick/261123-qru-add-claude-plugin-reload-and-the-sessionful-predicate-planni/261123-qru-PLAN.md; R=$(git rev-parse --show-toplevel) && B=$(cat "$D/plan-base") && node "$D/check-red.mjs" "$P" "$D" "$R" "$B" r1- && node "$D/check-red.mjs" "$P" "$D" "$R" "$B" fix- && st=$(git status --porcelain -- extensions/) && test -z "$st" # [HEAD=absent EXPECT==present @98ada0c]</automated>
@@ -1159,31 +1311,35 @@ B4, RPC help leaves `reload` out and the RPC reload refuses; B5, RPC refusals na
     <fails_when>non-zero exit: a refusal, reload, background update, browse, trust, or lifecycle scenario fails under the adapter profile on the bound commit</fails_when>
     <automated>S=/tmp/claude-0/-home-user-pi-claude-marketplace/36571f01-5770-4f51-bd77-b22d58691339/scratchpad; D=$S/quick-261123-qru; F=$(cat "$D/fix-commit") && H=$(cat "$D/hint-commit") && th=$(git show -s --format=%s "$H") && test "$th" = "fix(notify): word reload hints for the host that shows them" && ph=$(git rev-parse "$H~1") && test "$ph" = "$F" && B=$(cat "$D/bound-commit") && tb=$(git show -s --format=%s "$B") && test "$tb" = "fix(plugin): name a reload command the host offers in refusals" && pb=$(git rev-parse "$B~1") && test "$pb" = "$H" && gb=$(git show --name-only --format= "$B") && printf '%s\n' "$gb" | grep -qx features/skill/lifecycle.feature && printf '%s\n' "$gb" | grep -qx features/slash-command/invocation.feature && hd=$(git rev-parse HEAD) && test "$hd" = "$B" # [HEAD=absent EXPECT==present @98ada0c]</automated>
     <fails_when>non-zero exit: a commit file is missing, a title differs, the order is wrong, the feature files are not in the bound commit, or a commit follows it</fails_when>
+    <automated>S=/tmp/claude-0/-home-user-pi-claude-marketplace/36571f01-5770-4f51-bd77-b22d58691339/scratchpad; D=$S/quick-261123-qru; L=$D/progress.tsv; s=$(awk -F'\t' 'NF != 5 { bad = 1 } $1 ~ /^T2\./ { printf "%s ", $1 } END { exit bad }' "$L") && test "$s" = "T2.1 T2.2 T2.3 T2.4 T2.5 T2.6 T2.7-B1 T2.7-B2 T2.7-B3 T2.7-B4 T2.7-B5 T2.7-B6 T2.7 " && h=$(awk -F'\t' '$1 == "T2.3" { print $2 }' "$L") && test "$h" = "$(cat "$D/hint-commit")" && b=$(awk -F'\t' '$1 == "T2.6" { print $2 }' "$L") && test "$b" = "$(cat "$D/bound-commit")" # [HEAD=absent EXPECT==present @98ada0c]</automated>
+    <fails_when>non-zero exit: the ledger is missing, a row lacks one of its five fields, a step or break of this task is missing, repeated, or out of order, or a commit row differs from its commit file</fails_when>
   </verify>
-  <done>Every listed reload instruction takes its command from `reloadCommandFor`: `/reload` in the terminal, `/claude:plugin reload` in RPC, and none in a one-shot run; the payloads keep `needsReload`; R1 and the five breaks pass `check-red.mjs`; the suites, the pairs' coverage, `check:static`, and the affected scenarios pass; `extensions/` is clean.</done>
+  <done>Every listed reload instruction takes its command from `reloadCommandFor`: `/reload` in the terminal, `/claude:plugin reload` in RPC, and none in a one-shot run; the payloads keep `needsReload`; R1 and the six breaks pass `check-red.mjs`; the suites, the pairs' coverage, `check:static`, and the affected scenarios pass; `extensions/` is clean; the ledger holds T2.1 to T2.7.</done>
 </task>
 
 <task type="auto">
   <name>Task 3: Document the command and its wording rule, record RELOADCMD-D1, and write the SUMMARY</name>
-  <precondition>`$D/bound-commit` names HEAD, and `extensions/` is clean.</precondition>
+  <precondition>The ledger's last row is T2.7, `$D/bound-commit` names HEAD, and `extensions/` is clean; on a resume inside this task, the checks of the resume protocol pass instead.</precondition>
   <reversibility rating="reversible">Docs and one decision row.</reversibility>
   <files>README.md, README.es.md, docs/output-catalog.md, docs/json-output.md, docs/hooks-compatibility.md, docs/skills-commands-compatibility.md, docs/mcp-compatibility.md, docs/messaging-style-guide.md, .planning/PROJECT.md, .planning/quick/261123-qru-add-claude-plugin-reload-and-the-sessionful-predicate-planni/261123-qru-SUMMARY.md</files>
   <action>
-    1. Make the doc edits of "Prescribed text" in the eight files. Apply the `simple-english` skill
-       in Plain mode and the `humanizer` skill to each added passage, keep the prescribed facts,
-       commands, and code text as they are, and keep `README.es.md` a faithful translation of
-       `README.md`, line for line. Re-pad every table a cell edit widened. Run
-       `npm run test:unpaired` (the catalog and JSON guide tests read two of these files) and
-       `check:static`.
+    Each step ends with its `mark.sh` row, as in Task 1.
 
-    2. Commit the eight files with the title `docs: document /claude:plugin reload and its
-       wording`; record `docs-commit`.
+    T3.1. Make the doc edits of "Prescribed text" in the eight files. Apply the `simple-english`
+       skill in Plain mode and the `humanizer` skill to each added passage, keep the prescribed
+       facts, commands, and code text as they are, and keep `README.es.md` a faithful translation
+       of `README.md`, line for line. Re-pad every table a cell edit widened. Gates: `npm run
+       test:unpaired` (the catalog and JSON guide tests read two of these files) and
+       `check:static`. Row.
 
-    3. Insert the decision row as line 2544 of `.planning/PROJECT.md`, as prescribed, and commit
-       that one file with the title `docs(planning): record the reload command decision`; record
+    T3.2. Commit the eight files with the title `docs: document /claude:plugin reload and its
+       wording`; row with `docs-commit`.
+
+    T3.3. Insert the decision row as line 2544 of `.planning/PROJECT.md`, as prescribed, and commit
+       that one file with the title `docs(planning): record the reload command decision`; row with
        `decision-commit`.
 
-    4. Write the SUMMARY as `<output>` says.
+    T3.4. Write the SUMMARY as `<output>` says. Row.
   </action>
   <verify>
     <automated>r=$(grep -cF '/claude:plugin reload' README.md); e=$(grep -cF '/claude:plugin reload' README.es.md); test "$r" -ge 3 && test "$e" -ge 3 && grep -q '^#### reload-started$' docs/json-output.md && grep -q '^### Reload started (RELOADCMD-D1)$' docs/output-catalog.md && grep -qF 'appends `<reload> to pick up changes`' docs/output-catalog.md && grep -qF 'Reload is unavailable: this Pi run does not accept later commands, so the next run loads the changes.' docs/output-catalog.md && grep -qF 'need a reload: `/reload` in Pi' docs/json-output.md && grep -qF '`/reload`, `/claude:plugin reload`' docs/hooks-compatibility.md && grep -qF 'A file removed before a reload' docs/skills-commands-compatibility.md && grep -qF '(RELOADCMD-D1)' docs/mcp-compatibility.md && grep -qF 'appends `<reload> to pick up changes`' docs/messaging-style-guide.md # [HEAD=absent EXPECT==present @98ada0c]</automated>
@@ -1192,8 +1348,10 @@ B4, RPC help leaves `reload` out and the RPC reload refuses; B5, RPC refusals na
     <fails_when>non-zero exit: an architecture test, the catalog contract, or the JSON guide test fails on the docs commit</fails_when>
     <automated>S=/tmp/claude-0/-home-user-pi-claude-marketplace/36571f01-5770-4f51-bd77-b22d58691339/scratchpad; D=$S/quick-261123-qru; n=$(grep -n '^| \*\*RELOADCMD-D1 (quick task 261123-qru' .planning/PROJECT.md) && test "${n%%:*}" = 2544 && test "$(printf '%s\n' "$n" | wc -l)" -eq 1 && K=$(cat "$D/bound-commit") && C=$(cat "$D/docs-commit") && tc=$(git show -s --format=%s "$C") && test "$tc" = "docs: document /claude:plugin reload and its wording" && gc=$(git show --name-only --format= "$C") && test "$(printf '%s\n' "$gc" | LC_ALL=C sort | tr '\n' ' ')" = "README.es.md README.md docs/hooks-compatibility.md docs/json-output.md docs/mcp-compatibility.md docs/messaging-style-guide.md docs/output-catalog.md docs/skills-commands-compatibility.md " && pc=$(git rev-parse "$C~1") && test "$pc" = "$K" && A=$(cat "$D/decision-commit") && ta=$(git show -s --format=%s "$A") && test "$ta" = "docs(planning): record the reload command decision" && ga=$(git show --name-only --format= "$A") && test "$ga" = ".planning/PROJECT.md" && pa=$(git rev-parse "$A~1") && test "$pa" = "$C" && ns=$(git diff --numstat "$A~1" "$A" -- .planning/PROJECT.md) && test "$(printf '%s\n' "$ns" | cut -f1)" -eq 1 && test "$(printf '%s\n' "$ns" | cut -f2)" -eq 0 # [HEAD=absent EXPECT==present @98ada0c]</automated>
     <fails_when>non-zero exit: the row is missing, repeated, or not line 2544, a commit file is missing, a title differs, the docs commit holds another file set, the decision commit changed more than one added line, a git call fails, or the order is wrong</fails_when>
+    <automated>S=/tmp/claude-0/-home-user-pi-claude-marketplace/36571f01-5770-4f51-bd77-b22d58691339/scratchpad; D=$S/quick-261123-qru; L=$D/progress.tsv; s=$(awk -F'\t' 'NF != 5 { bad = 1 } { printf "%s ", $1 } END { exit bad }' "$L") && test "$s" = "T1.1 T1.2 T1.3 T1.4 T1.5 T1.6a T1.6b T1.7 T1.8 T1.9 T2.1 T2.2 T2.3 T2.4 T2.5 T2.6 T2.7-B1 T2.7-B2 T2.7-B3 T2.7-B4 T2.7-B5 T2.7-B6 T2.7 T3.1 T3.2 T3.3 T3.4 " && k=$(awk -F'\t' '$1 == "T3.2" { print $2 }' "$L") && test "$k" = "$(cat "$D/docs-commit")" && a=$(awk -F'\t' '$1 == "T3.3" { print $2 }' "$L") && test "$a" = "$(cat "$D/decision-commit")" && test -s .planning/quick/261123-qru-add-claude-plugin-reload-and-the-sessionful-predicate-planni/261123-qru-SUMMARY.md # [HEAD=absent EXPECT==present @98ada0c]</automated>
+    <fails_when>non-zero exit: the ledger is missing, a row lacks one of its five fields, a step is missing, repeated, or out of order, a commit row of this task differs from its commit file, or the SUMMARY is missing or empty</fails_when>
   </verify>
-  <done>The docs and both READMEs describe the command, the predicates, the hint and wording rule, and the Pi gaps; RELOADCMD-D1 is one new row of PROJECT.md; the two commits follow the bound commit; the SUMMARY exists.</done>
+  <done>The docs and both READMEs describe the command, the predicates, the hint and wording rule, and the Pi gaps; RELOADCMD-D1 is one new row of PROJECT.md; the two commits follow the bound commit; the SUMMARY exists; the ledger holds every step from T1.1 to T3.4 once, in order.</done>
 </task>
 
 </tasks>
@@ -1219,34 +1377,21 @@ B4, RPC help leaves `reload` out and the RPC reload refuses; B5, RPC refusals na
 </threat_model>
 
 <verification>
-- Task 1: R0 (`RED-PROOFS OK` for `r0-`), the three unit red logs, the touched unit files, direct
-  coverage of the changed pairs, `test:unpaired`, `check:static`, the seven scenarios and the
-  browse and completion features under the adapter profile, the same files under the builtin
-  profile, the grep gates, and the C0 and command commits.
-- Task 2: R1 and the breaks (`RED-PROOFS OK` for `r1-` and `fix-`), the two unit red logs,
-  `test:modules`, `test:unpaired`, `test:integration`, direct coverage of the changed pairs,
-  `check:static`, the affected features under both profiles, the wording gates, and the hint and
-  bound commits.
-- Task 3: the doc gates, `test:unpaired` on the docs commit, the decision row gate, and both
-  commits' file sets, titles, and order.
+- The `<verify>` commands of each task, on the commit the task ends at. Together they cover the
+  red proofs (`r0-`, `r1-`, `fix-`), the json help guard, direct coverage and `check:static` (as
+  the ledger's gate logs show), `test:unpaired`, `test:integration`, the affected features under
+  the adapter profile (the builtin runs are steps T1.8 and T2.5), the grep and wording gates, the
+  commits' file sets, titles, and order, and the progress ledger.
 - For the orchestrator, not the executor: `npm run check` in the main checkout after the merge
   (AGENTS.md, Build verification), the CHANGELOG parent line, and the STATE update.
 </verification>
 
 <success_criteria>
-- `/claude:plugin reload` runs Pi's reload in the terminal and over RPC, reports `reload-started`
-  over RPC before the reload, refuses in a one-shot run with the one-shot text, and refuses while
-  a run is active with Claude Code's busy words; help and completions leave it out in a one-shot
-  run.
-- `acceptsLaterCommands` is the only reader of Pi's `hasUI`; `reloadCommandFor` is the one place
-  that picks the reload command, with Pi's own `/reload` only in the terminal.
-- The trailer, the background update notice, the MCP move rows, and the skill and command refusals
-  name the picked command, and a one-shot run has none of them; `needsReload` stays in every
-  payload.
-- R0, R1, and B1 to B5 pass `check-red.mjs`; `extensions/` ends clean.
-- `check:static`, the changed pairs' direct coverage, `test:unpaired`, `test:integration`, and the
-  affected feature files pass.
-- The docs, both READMEs, and RELOADCMD-D1 state the rules and the Pi gaps.
+- Every truth of `must_haves` holds, shown by the scenario, unit rows, break, or gate it names.
+- `check-red.mjs` prints `RED-PROOFS OK` for `r0-`, `r1-`, and `fix-`; `extensions/` ends clean.
+- `$D/progress.tsv` holds every step from T1.1 to T3.4 once, in order, and each `log/` file that a
+  row lists ends with `exit=0`.
+- The docs, both READMEs, RELOADCMD-D1, and the SUMMARY exist as `<output>` and Task 3 describe.
 </success_criteria>
 
 ## Source audit
@@ -1262,7 +1407,7 @@ B4, RPC help leaves `reload` out and the RPC reload refuses; B5, RPC refusals na
 | CONTEXT | orchestrator | match upstream `/reload-plugins`: what it prints after a reload and what it refuses mid-run | context, Tasks 1, 3 | COVERED | no counts line and the mid-run refusal, each with its Pi gap; Claude Code's busy words; D1, D2 |
 | CONTEXT | orchestrator | the skill and command refusal texts keep upstream parity | context, Task 2 | COVERED | only the reload command changes; the rest of each text stays |
 | CONTEXT | orchestrator | decide and test what the subcommand shows when `ctx.reload()` would throw mid-run | Tasks 1, 2 | COVERED | `isIdle()` check, busy refusal; scenario `:42`, B3, reload rows |
-| CONTEXT | orchestrator | cucumber scenarios for TUI, RPC, and one-shot that fail without the change | Tasks 1, 2 | COVERED | R0, R1; B1 to B5 |
+| CONTEXT | orchestrator | cucumber scenarios for TUI, RPC, and one-shot that fail without the change | Tasks 1, 2 | COVERED | R0, R1; B1 to B6; the json help guard is a survivor that B2 fails |
 | CONTEXT | orchestrator | unit tests at 100% direct coverage | Tasks 1, 2 | COVERED | pairs listed per task |
 | CONTEXT | orchestrator | docs: output catalog, README command list, compatibility pages | Task 3 | COVERED | eight files; the JSON guide's kind section lands with the kind in Task 1 |
 | CONTEXT | orchestrator | a decision ID in PROJECT.md; a CHANGELOG parent line in the SUMMARY; never edit STATE, ROADMAP, BACKLOG, CHANGELOG | Task 3, output | COVERED | RELOADCMD-D1; "For the orchestrator" |
@@ -1276,12 +1421,17 @@ B4, RPC help leaves `reload` out and the RPC reload refuses; B5, RPC refusals na
 Create `.planning/quick/261123-qru-add-claude-plugin-reload-and-the-sessionful-predicate-planni/261123-qru-SUMMARY.md`
 with `status: complete` in its frontmatter and these sections:
 
-- "Red proofs": the R0, R1, and B1 to B5 logs under `$D`, each one's count line and failing step,
-  the three `check-red.mjs` outputs (`RED-PROOFS OK`), the unit red logs (shared, session-host,
-  reload, hint, refusals), any scenario cell or doc string a step corrected, and any break file
-  rewritten, with the words "rewrote a break" and the reason.
+- "Red proofs": the R0, R1, and B1 to B6 logs under `$D`, each one's count line and failing step,
+  the json help guard passing in R0 (its survivor row and the R0 count line), the three
+  `check-red.mjs` outputs (`RED-PROOFS OK`), the unit red logs (shared, session-host, reload,
+  hint, refusals), any scenario cell or doc string a step corrected, any adjustment T1.8 made to
+  the RPC step design, and any break file rewritten, with the words "rewrote a break" and the
+  reason.
 - "Checks": each command of the verify blocks with its exit status, the commit it ran on, the Node
-  version, and the counts it printed (unit cases, coverage lines, scenario counts).
+  version, and the counts it printed (unit cases, coverage lines, scenario counts); the gate logs
+  under `$D/log` hold the commit and the Node version of each run.
+- "Progress": the ledger rows up to T3.3 as a table, and each "row written on resume" with its
+  reason, or "no resume".
 - "Decisions": RELOADCMD-D1 and D1 to D9 of the context, each marked for the maintainer's review,
   and the test files Task 2 touched for `hasUI`.
 - "The RPC reload contract" (for sibling 261123-qrv): the command text `/claude:plugin reload`;
@@ -1290,7 +1440,11 @@ with `status: complete` in its frontmatter and these sections:
   "plugin reload", invocationId }, severity: "info", needsReload: false }` first, then the
   reloaded runtime's load payloads in session order (none when it has nothing to report); no
   extension error and no dialog on success; the busy refusal while a run is active; a reload that
-  fails after it started reported by Pi as an `extension_error`.
+  fails after it started reported by Pi as an `extension_error`. Also how `reload.feature:14`
+  proves the order: the When's driver requires `handled` and keeps only the payloads appended
+  before Pi's answer, the Then's `cascade` row comes from the reloaded runtime's load, and B6,
+  which stops awaiting the reload, fails that Then. Add every adjustment T1.8 made to the step
+  design and the order Pi showed, so 261123-qrv builds on what was run.
 - "For the orchestrator" (the executor edits none of these files):
   - CHANGELOG parent line: "`/claude:plugin reload` now reloads Pi, also over RPC, where Pi has no
     `/reload`. Reload hints and refusals name the command your host offers, and a one-shot run
