@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 17
+open_count: 19
 waived_count: 52
 fixed_count: 48
-total_count: 117
-last_updated: 2026-11-23T02:48:28.712Z
+total_count: 119
+last_updated: 2026-11-23T15:38:44.330Z
 ---
 
 # Broken Windows Ledger
@@ -132,6 +132,8 @@ last_updated: 2026-11-23T02:48:28.712Z
 | 115 | 03 | deviation | docs/hooks-compatibility.md | 27 | [parity-gaps] 03-08-02 verify 'npx --no prettier --check' on the two compatibility pages cannot pass: prettier and mdformat disagree on two pre-existing lines of hooks-compatibility.md (27, 144; also failing at 1a8aa893); mdformat/markdownlint pass and mcp-compatibility.md passes prettier | open |  | 2026-11-13T23:19:58.582Z |  |
 | 116 | 4 | deviation | .fallowrc.json |  | [parity-gaps] ignoreExports exempts isMarketplaceRootSource (domain/component-paths.ts) from unused-export until orchestrators/plugin/info.ts imports it; remove the entry then | fixed |  | 2026-11-14T03:05:14.930Z | 2026-11-14T04:26:15.162Z |
 | 117 | 1 | unrun-verify | .github/workflows/ci.yml |  | [system-git] zizmor's online audits (ref-confusion) could not run on the new git version steps in the sandbox (401 from github.com, also on unchanged lint.yml); offline audits passed; the pull request's Lint workflow runs them | open |  | 2026-11-23T02:48:28.712Z |  |
+| 118 | 02 | deviation | extensions/pi-claude-marketplace/platform/git-process.ts |  | [system-git] three unused-export markers on createGitProcess, NODE_GIT_HOST, NODE_GIT_SPAWN until a production module imports them | open |  | 2026-11-23T15:38:44.200Z |  |
+| 119 | 02 | deviation | .planning/codebase/CONVENTIONS.md |  | [system-git] fallow-ignore marker counts are now 54 total and 16 unused-export | open |  | 2026-11-23T15:38:44.330Z |  |
 
 ````json
 [
@@ -1597,6 +1599,32 @@ last_updated: 2026-11-23T02:48:28.712Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-11-23T02:48:28.712Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 118,
+    "kind": "deviation",
+    "phase": "02",
+    "file": "extensions/pi-claude-marketplace/platform/git-process.ts",
+    "line": null,
+    "description": "[system-git] three unused-export markers on createGitProcess, NODE_GIT_HOST, NODE_GIT_SPAWN until a production module imports them",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-23T15:38:44.200Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 119,
+    "kind": "deviation",
+    "phase": "02",
+    "file": ".planning/codebase/CONVENTIONS.md",
+    "line": null,
+    "description": "[system-git] fallow-ignore marker counts are now 54 total and 16 unused-export",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-23T15:38:44.330Z",
     "resolved_at": null,
     "milestone": null
   }
