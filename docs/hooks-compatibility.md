@@ -142,6 +142,25 @@ Pi reports reason `startup` for every launch, so the bridge reads the session at
 
 `SessionStart` `clear`, `compact`, and `fork` groups install with no `--partial`. A plugin that you installed before this change dropped those groups at install. Run `/claude:plugin reinstall <plugin>` to restore them (D-CF5-08).
 
+### Plugins that a load activates
+
+A load with `autoapply` on can install or enable a plugin after the session's `SessionStart` hooks ran, because Pi runs the load after `session_start` (AAP-01). In print, JSON, and RPC mode, the bridge then runs `SessionStart` for those plugins, as Claude Code 2.1.330 does in its headless mode for a plugin that its settings install adds at launch (HOOKLATESS-D1). This late run follows these rules:
+
+- It runs the hooks of each plugin that has a `SessionStart` hook after the load and had none when the session's `SessionStart` ran. A plugin is its name and its marketplace, in either scope. No other plugin's hooks run again.
+- It sends the `source` of the session's own `SessionStart` run, `startup`, `resume`, or `fork`, and each matcher selects on that value. Its context and its notices take the path of every `SessionStart` run.
+- It runs at most once in a session, after the first load. A later load runs none.
+- It has no `initialUserMessage` and no `sessionTitle`. Claude Code ignores both fields from such a plugin, and the bridge supports neither.
+
+The bridge runs no late `SessionStart` in these cases:
+
+- In the terminal (`tui` mode), because Claude Code runs the late hooks only in its headless mode.
+- On a `/reload`, as Claude Code's `/reload-plugins` runs none (D-CF5-03).
+- After a command such as `/claude:plugin install` or `/claude:plugin enable`, which makes the plugin's hooks run at once. Claude Code's SDK `reload_plugins` request, which can add plugins, runs no `SessionStart` either.
+- After a new session (`/new`, RPC `new_session`), whose `SessionStart` sends `clear`. Claude Code keeps the start source of its launch across `/clear` and runs the late hooks once, before its first command.
+- In a pi-subagents child, which runs no `SessionStart` (see [Hooks in pi-subagents children](#hooks-in-pi-subagents-children)).
+
+The bridge waits at most 10 seconds for the late hooks before Pi takes your first prompt, as Claude Code does. When the hooks take longer, they go on while Pi works on that prompt. When they end, their context waits for your next prompt, as Claude Code holds it until your next turn, and their notices show at once, as every hook notice does (D-CF5-14). Pi keeps a context that waits for the next prompt in memory only, so the context is lost when Pi ends before that prompt. Claude Code saves it with the session, so a resumed session still gets it (a Pi gap).
+
 ### Compaction
 
 Each compaction runs three events in order, as upstream does (D-CF5-04, D-CF5-05):
