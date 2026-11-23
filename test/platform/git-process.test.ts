@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { access, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  realpath,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test } from "node:test";
@@ -13,6 +22,8 @@ import {
 } from "../../extensions/pi-claude-marketplace/platform/git-process.ts";
 import { GitCommandError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { hermeticGitEnvironment } from "../../features/lib/hermetic-git.ts";
+import { HttpsGitHost } from "../../features/lib/https-git-host/server.ts";
+import { SshGitHost } from "../../features/lib/ssh-git-host/host.ts";
 
 import { captureDebugLog } from "./debug-log-capture.ts";
 import {
@@ -21,6 +32,7 @@ import {
   runSystemGit,
 } from "./git-test-repository.ts";
 import { createProcessFake } from "./process-fake.ts";
+import { livingGroupMembers } from "./process-group.ts";
 
 import type {
   GitProcess,
@@ -243,7 +255,10 @@ function launchSequence(): LaunchSequence {
   };
 }
 
-function createSequencedGit(setup: HostSetup = {}): {
+function createSequencedGit(
+  setup: HostSetup = {},
+  env: NodeJS.ProcessEnv = { PATH: "/usr/bin" },
+): {
   readonly git: GitProcess;
   readonly launches: LaunchSequence;
   readonly host: RecordingHost;
@@ -253,7 +268,7 @@ function createSequencedGit(setup: HostSetup = {}): {
   const git = createGitProcess({
     spawn: launches.spawn,
     host: host.host,
-    env: { PATH: "/usr/bin" },
+    env,
     killGraceMs: KILL_GRACE_MS,
   });
   return { git, launches, host };
@@ -363,6 +378,28 @@ interface LaneFixture {
 
 // A committed repository with an `origin`, a `v1.0.0` tag, and a `feature`
 // branch, and a module whose user config allows every transport.
+interface RealGitOptions {
+  /** The neutral directory, which also holds the user config file. */
+  readonly root: string;
+  readonly env: NodeJS.ProcessEnv;
+  /** The text of the user config file that GIT_CONFIG_GLOBAL names. */
+  readonly config: string;
+  readonly spawn?: ProcessSpawn;
+  readonly killGraceMs?: number;
+}
+
+// The module over real git, with its own user config file.
+async function realGit(options: RealGitOptions): Promise<GitProcess> {
+  const configPath = path.join(await mkdtemp(path.join(options.root, "gitconfig-")), "config");
+  await writeFile(configPath, options.config);
+  return createGitProcess({
+    spawn: options.spawn ?? NODE_SPAWN,
+    host: { ...NODE_GIT_HOST, tmpdir: () => options.root },
+    env: { ...options.env, GIT_CONFIG_GLOBAL: configPath },
+    killGraceMs: options.killGraceMs ?? KILL_GRACE_MS,
+  });
+}
+
 async function laneFixture(t: TestContext): Promise<LaneFixture> {
   const root = await caseDirectory(t);
   const repository = await createGitTestRepository(t, { boundary: "local" });
@@ -371,22 +408,186 @@ async function laneFixture(t: TestContext): Promise<LaneFixture> {
   await repository.run("remote", "add", "origin", bare);
   await repository.run("tag", "v1.0.0");
   await repository.run("branch", "feature");
-  const gitWith = async (variables: NodeJS.ProcessEnv, config = ""): Promise<GitProcess> => {
-    const configPath = path.join(await mkdtemp(path.join(root, "gitconfig-")), "config");
-    await writeFile(configPath, `${PERMISSIVE_CONFIG}${config}`);
-    return createGitProcess({
-      spawn: NODE_SPAWN,
-      host: { ...NODE_GIT_HOST, tmpdir: () => root },
-      env: {
-        ...hermeticGitEnvironment(root),
-        GIT_CONFIG_GLOBAL: configPath,
-        ...variables,
-      },
-      killGraceMs: KILL_GRACE_MS,
+  const gitWith = (variables: NodeJS.ProcessEnv, config = ""): Promise<GitProcess> =>
+    realGit({
+      root,
+      env: { ...hermeticGitEnvironment(root), ...variables },
+      config: `${PERMISSIVE_CONFIG}${config}`,
     });
-  };
 
   return { root, repository, bare, git: await gitWith({}), gitWith };
+}
+
+// A stand-in started in its own directory, closed before that directory goes.
+async function startStandIn<Host extends { close(): Promise<void> }>(
+  t: TestContext,
+  start: (root: string) => Promise<Host>,
+): Promise<{ readonly root: string; readonly host: Host }> {
+  const root = await realpath(await mkdtemp(path.join(tmpdir(), "pi-cm-stand-in-")));
+  const host = await start(root);
+  t.after(async () => {
+    try {
+      await host.close();
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+  return { root, host };
+}
+
+interface SshFixture {
+  /** The case directory, which is the module's neutral directory. */
+  readonly root: string;
+  readonly host: SshGitHost;
+  /** The scp-form URL of the served `acme/tools` repository. */
+  readonly url: string;
+  /** The commit that `main` of the served repository names. */
+  readonly oid: string;
+  /** The module with the stub `ssh` first on PATH and `config` as the user config. */
+  readonly gitWith: (variables: NodeJS.ProcessEnv, config?: string) => Promise<GitProcess>;
+}
+
+// The ssh stand-in with `stand-in.test` registered and `acme/tools` served.
+async function sshFixture(t: TestContext): Promise<SshFixture> {
+  const root = await caseDirectory(t);
+  const standIn = await startStandIn(t, (directory) =>
+    SshGitHost.start(path.join(directory, "ssh"), {
+      repositoriesRoot: path.join(directory, "repositories"),
+    }),
+  );
+  await standIn.host.register("stand-in.test", { probe: { kind: "authenticated", user: "acme" } });
+  const served = await createGitTestRepository(t, { boundary: "local" });
+  await served.cloneBare(path.join(standIn.root, "repositories", "acme", "tools.git"));
+  const env = hermeticGitEnvironment(root, { PATH: standIn.host.searchPath() });
+  return {
+    root,
+    host: standIn.host,
+    url: "git@stand-in.test:acme/tools.git",
+    oid: served.initialOid,
+    gitWith: (variables, config = "") => realGit({ root, env: { ...env, ...variables }, config }),
+  };
+}
+
+interface HttpsFixture {
+  /** The case directory, which is the module's neutral directory and HOME. */
+  readonly root: string;
+  readonly host: HttpsGitHost;
+  /** The URL of the served `acme/tools` repository. */
+  readonly url: string;
+  /** The base environment that trusts the host's certificate. */
+  readonly env: NodeJS.ProcessEnv;
+}
+
+// The https stand-in, serving `acme/tools`.
+async function httpsFixture(t: TestContext): Promise<HttpsFixture> {
+  const root = await caseDirectory(t);
+  const { host } = await startStandIn(t, (directory) => HttpsGitHost.start(directory));
+  const served = await createGitTestRepository(t, { boundary: "local" });
+  await served.cloneBare(host.repositoryPath("tools"));
+  return {
+    root,
+    host,
+    url: host.repositoryUrl("tools"),
+    env: hermeticGitEnvironment(root, { GIT_SSL_CAINFO: host.certificatePath }),
+  };
+}
+
+interface PidRecordingSpawn {
+  readonly spawn: ProcessSpawn;
+  /** The pid of the first git started with `subcommand` among its arguments. */
+  readonly pidOf: (subcommand: string) => number;
+}
+
+// Node's spawn, recording the pid of each git it starts.
+function pidRecordingSpawn(): PidRecordingSpawn {
+  const launched: Array<{ readonly args: readonly string[]; readonly pid: number | undefined }> =
+    [];
+  return {
+    spawn: (command, args, options) => {
+      const child = NODE_SPAWN(command, args, options);
+      launched.push({ args, pid: child.pid });
+      return child;
+    },
+    pidOf: (subcommand) => {
+      const pid = launched.find(({ args }) => args.includes(subcommand))?.pid;
+      if (pid === undefined) {
+        throw new Error(`no git ${subcommand} started`);
+      }
+
+      return pid;
+    },
+  };
+}
+
+// A real-git run that rejects at its timeout of `timeoutMs`.
+function rejectsWithTimeout(timeoutMs: number): (error: unknown) => boolean {
+  return (error) => {
+    assert.ok(error instanceof GitCommandError);
+    assert.deepStrictEqual(error.failure, { kind: "timeout", timeoutMs });
+    return true;
+  };
+}
+
+// Q14 `nn`: the read of the user's ssh settings, on the local lane.
+const SSH_READ = [
+  ...hardening("/dev/null"),
+  ...LOCAL_LANE,
+  "config",
+  "--get-regexp",
+  "--end-of-options",
+  String.raw`^(core\.sshcommand|ssh\.variant)$`,
+];
+
+// D-SG-05: the options Pi appends to an OpenSSH command.
+const BATCH_OPTIONS = "-o BatchMode=yes -o StrictHostKeyChecking=yes";
+
+const SSH_LIST: GitRequest = {
+  subcommand: "ls-remote",
+  lane: "network",
+  operands: ["git@h.test:acme/tools.git"],
+  timeoutMs: 5_000,
+};
+
+// What the stub ssh receives for `acme/tools` on `stand-in.test`: git puts
+// Pi's options first, then its own protocol option and the destination.
+// git 2.43 checks the variant with a `-G` launch before the transport launch.
+const STAND_IN_BATCH = ["-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=yes"];
+const STAND_IN_PROTOCOL = ["-o", "SendEnv=GIT_PROTOCOL", "git@stand-in.test"];
+const STAND_IN_UPLOAD = "git-upload-pack 'acme/tools.git'";
+
+// The GIT_SSH_COMMAND that runs `command` from the neutral directory.
+function fromNeutral(command: string, neutral = "/tmp"): string {
+  return `CDPATH= cd -- '${neutral}' 2>/dev/null || cd / || exit 1; ${command}`;
+}
+
+interface ConfigAnswer {
+  readonly code: number;
+  readonly stdout: string;
+}
+
+// `git config --get-regexp` exits 1 when no key matches.
+const NO_SSH_CONFIG: ConfigAnswer = { code: 1, stdout: "" };
+
+function sshConfigLines(stdout: string): ConfigAnswer {
+  return { code: 0, stdout };
+}
+
+// Runs `request` over `env`, answers the config read with `answer`, and
+// closes the command with 0.
+async function runAfterSshRead(
+  env: NodeJS.ProcessEnv,
+  answer: ConfigAnswer,
+  request: GitRequest = SSH_LIST,
+  setup: HostSetup = {},
+): Promise<readonly ProcessLaunch[]> {
+  const { git, launches } = createSequencedGit(setup, env);
+  const pending = git.run(request);
+  const read = await launches.at(0);
+  read.writeStdout(answer.stdout);
+  read.close(answer.code);
+  (await launches.at(1)).close(0);
+  await pending;
+  return launches.all();
 }
 
 interface ProjectFixture {
@@ -1502,13 +1703,17 @@ describe("createGitProcess operands and lanes", () => {
       const { git, control, started } = createFakeGit();
 
       // act
-      const pending = git.run({ ...request, lane: "network", timeoutMs: 5_000 });
+      const pending = git.run({ ...request, lane: "local", timeoutMs: 5_000 });
       await started;
       control.close(0);
       await pending;
 
       // assert
-      assert.deepStrictEqual(control.launches()[0]?.[1], [...hardening("/dev/null"), ...words]);
+      assert.deepStrictEqual(control.launches()[0]?.[1], [
+        ...hardening("/dev/null"),
+        ...LOCAL_LANE,
+        ...words,
+      ]);
     });
   }
 
@@ -1658,24 +1863,18 @@ describe("createGitProcess operands and lanes", () => {
 
   test("D-SG-02: gives a network-lane request none of the local lane's values or pairs", async () => {
     // arrange
-    const { git, control, started } = createFakeGit({
-      PATH: "/usr/bin",
-      GIT_SSH_COMMAND: "ssh -i /home/user/key",
-    });
+    const env = { PATH: "/usr/bin", GIT_SSH_COMMAND: "ssh -i /home/user/key" };
 
     // act
-    const pending = git.run({
+    const launches = await runAfterSshRead(env, NO_SSH_CONFIG, {
       subcommand: "ls-remote",
       lane: "network",
       operands: ["https://example.test/x.git"],
       timeoutMs: 5_000,
     });
-    await started;
-    control.close(0);
-    await pending;
 
     // assert
-    const [launch] = control.launches();
+    const launch = launches[1];
     assert.deepStrictEqual(
       [launch?.[1], launch?.[2].env],
       [
@@ -1683,7 +1882,7 @@ describe("createGitProcess operands and lanes", () => {
         {
           ...POSIX_FORCED,
           PATH: "/usr/bin",
-          GIT_SSH_COMMAND: "ssh -i /home/user/key",
+          GIT_SSH_COMMAND: fromNeutral(`ssh -i /home/user/key ${BATCH_OPTIONS}`),
           GIT_CEILING_DIRECTORIES: "/",
         },
       ],
@@ -2237,6 +2436,679 @@ describe("createGitProcess discovery", () => {
     const oid = fixture.project.initialOid;
     assert.strictEqual(rewritten, `${oid}\tHEAD\n${oid}\trefs/heads/main`);
   });
+});
+
+// D-SG-05, Q14 `nn`: a network command that can use ssh runs the user's own
+// ssh with the batch options, from the neutral directory.
+describe("createGitProcess ssh", () => {
+  test("D-SG-05: reads the user's ssh settings on the local lane in the neutral directory first", async () => {
+    // arrange
+    const request: GitRequest = { ...SSH_LIST, cwd: "/work/clone" };
+
+    // act
+    const launches = await runAfterSshRead({ PATH: "/usr/bin" }, NO_SSH_CONFIG, request, {
+      realpaths: { "/work/clone": "/real/clone" },
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      launches.map(([command, args, options]) => [command, args, options.cwd, options.env]),
+      [
+        [
+          "/usr/bin/git",
+          SSH_READ,
+          "/tmp",
+          {
+            ...POSIX_FORCED,
+            PATH: "/usr/bin",
+            GIT_CEILING_DIRECTORIES: "/",
+            GIT_ALLOW_PROTOCOL: "/",
+            GIT_SSH_COMMAND: "false",
+          },
+        ],
+        [
+          "/usr/bin/git",
+          [...hardening("/dev/null"), "ls-remote", "--end-of-options", "git@h.test:acme/tools.git"],
+          "/real/clone",
+          {
+            ...POSIX_FORCED,
+            PATH: "/usr/bin",
+            GIT_CEILING_DIRECTORIES: "/real",
+            GIT_SSH_COMMAND: fromNeutral(`ssh ${BATCH_OPTIONS}`),
+          },
+        ],
+      ],
+    );
+  });
+
+  for (const { subcommand, operands } of [
+    { subcommand: "clone", operands: ["git@h.test:acme/tools.git", "/work/clone"] },
+    { subcommand: "fetch", operands: ["origin"] },
+    { subcommand: "ls-remote", operands: ["git@h.test:acme/tools.git"] },
+  ] satisfies ReadonlyArray<Pick<GitRequest, "subcommand" | "operands">>) {
+    test(`D-SG-05: runs a network-lane ${subcommand} with the user's ssh in batch mode`, async () => {
+      // arrange
+      const request: GitRequest = { subcommand, operands, lane: "network", timeoutMs: 5_000 };
+
+      // act
+      const launches = await runAfterSshRead({ PATH: "/usr/bin" }, NO_SSH_CONFIG, request);
+
+      // assert
+      assert.deepStrictEqual(
+        launches.map(([, args, options]) => [args, options.env.GIT_SSH_COMMAND]),
+        [
+          [SSH_READ, "false"],
+          [
+            [...hardening("/dev/null"), subcommand, "--end-of-options", ...operands],
+            fromNeutral(`ssh ${BATCH_OPTIONS}`),
+          ],
+        ],
+      );
+    });
+  }
+
+  for (const { label, env, answer, command, variables } of [
+    {
+      label: "a non-empty GIT_SSH_COMMAND before core.sshCommand and GIT_SSH",
+      env: { GIT_SSH_COMMAND: "ssh -i /home/user/key", GIT_SSH: "/usr/bin/other-ssh" },
+      answer: sshConfigLines("core.sshcommand config-ssh\n"),
+      command: `ssh -i /home/user/key ${BATCH_OPTIONS}`,
+      variables: {},
+    },
+    {
+      label: "core.sshCommand under an empty GIT_SSH_COMMAND, before GIT_SSH",
+      env: { GIT_SSH_COMMAND: "", GIT_SSH: "/usr/bin/other-ssh" },
+      answer: sshConfigLines("core.sshcommand config-ssh -F /home/user/ssh-config\n"),
+      command: `config-ssh -F /home/user/ssh-config ${BATCH_OPTIONS}`,
+      variables: {},
+    },
+    {
+      label: "GIT_SSH with a space and a quote, quoted for sh",
+      env: { GIT_SSH: "/opt/my tools/it's-ssh" },
+      answer: NO_SSH_CONFIG,
+      command: String.raw`'/opt/my tools/it'\''s-ssh' ${BATCH_OPTIONS}`,
+      variables: {},
+    },
+    {
+      label: "ssh when nothing names a program",
+      env: {},
+      answer: NO_SSH_CONFIG,
+      command: `ssh ${BATCH_OPTIONS}`,
+      variables: {},
+    },
+    {
+      label: "the last value of a repeated core.sshCommand",
+      env: {},
+      answer: sshConfigLines("core.sshcommand first-ssh\ncore.sshcommand second-ssh\n"),
+      command: `second-ssh ${BATCH_OPTIONS}`,
+      variables: {},
+    },
+    {
+      label: "config lines that end in CRLF",
+      env: {},
+      answer: sshConfigLines("core.sshcommand my-ssh\r\nssh.variant plink\r\n"),
+      command: "my-ssh -batch",
+      variables: { GIT_SSH_VARIANT: "plink" },
+    },
+    {
+      label: "an empty last core.sshCommand as unset",
+      env: {},
+      answer: sshConfigLines("core.sshcommand first-ssh\ncore.sshcommand \n"),
+      command: `ssh ${BATCH_OPTIONS}`,
+      variables: {},
+    },
+    {
+      label: "a valueless last ssh.variant as unset",
+      env: { GIT_SSH_COMMAND: "plink" },
+      answer: sshConfigLines("ssh.variant ssh\nssh.variant\n"),
+      command: "plink -batch",
+      variables: {},
+    },
+    {
+      label: "GIT_SSH_VARIANT=plink",
+      env: { GIT_SSH_VARIANT: "plink" },
+      answer: NO_SSH_CONFIG,
+      command: "ssh -batch",
+      variables: { GIT_SSH_VARIANT: "plink" },
+    },
+    {
+      label: "ssh.variant=putty",
+      env: {},
+      answer: sshConfigLines("ssh.variant putty\n"),
+      command: "ssh -batch",
+      variables: { GIT_SSH_VARIANT: "putty" },
+    },
+    {
+      label: "the user's GIT_SSH_VARIANT before ssh.variant",
+      env: { GIT_SSH_COMMAND: "plink", GIT_SSH_VARIANT: "ssh" },
+      answer: sshConfigLines("ssh.variant plink\n"),
+      command: `plink ${BATCH_OPTIONS}`,
+      variables: { GIT_SSH_VARIANT: "ssh" },
+    },
+    {
+      label: "the base name plink",
+      env: { GIT_SSH_COMMAND: "plink -P 2222" },
+      answer: NO_SSH_CONFIG,
+      command: "plink -P 2222 -batch",
+      variables: {},
+    },
+    {
+      label: "the base name PLINK.EXE",
+      env: { GIT_SSH_COMMAND: "C:/PuTTY/PLINK.EXE" },
+      answer: NO_SSH_CONFIG,
+      command: "C:/PuTTY/PLINK.EXE -batch",
+      variables: {},
+    },
+    {
+      label: "the base name tortoiseplink",
+      env: { GIT_SSH_COMMAND: "tortoiseplink" },
+      answer: NO_SSH_CONFIG,
+      command: "tortoiseplink",
+      variables: {},
+    },
+    {
+      label: "the base name TortoisePlink.exe",
+      env: { GIT_SSH_COMMAND: "/opt/TortoisePlink.exe -v" },
+      answer: NO_SSH_CONFIG,
+      command: "/opt/TortoisePlink.exe -v",
+      variables: {},
+    },
+    {
+      label: "the base name ssh",
+      env: { GIT_SSH_COMMAND: "/usr/bin/ssh" },
+      answer: NO_SSH_CONFIG,
+      command: `/usr/bin/ssh ${BATCH_OPTIONS}`,
+      variables: {},
+    },
+    {
+      label: "the base name my-ssh",
+      env: { GIT_SSH_COMMAND: "my-ssh" },
+      answer: NO_SSH_CONFIG,
+      command: `my-ssh ${BATCH_OPTIONS}`,
+      variables: {},
+    },
+    {
+      label: "a single-quoted first word",
+      env: { GIT_SSH_COMMAND: "'/opt/My Tools/plink' -v" },
+      answer: NO_SSH_CONFIG,
+      command: "'/opt/My Tools/plink' -v -batch",
+      variables: {},
+    },
+    {
+      label: "a double-quoted first word with an escape",
+      env: { GIT_SSH_COMMAND: String.raw`"/opt/My \"Tools\"/plink.exe" -v` },
+      answer: NO_SSH_CONFIG,
+      command: String.raw`"/opt/My \"Tools\"/plink.exe" -v -batch`,
+      variables: {},
+    },
+    {
+      label: "a first word with an escaped space",
+      env: { GIT_SSH_COMMAND: String.raw`/opt/My\ Tools/plink -v` },
+      answer: NO_SSH_CONFIG,
+      command: String.raw`/opt/My\ Tools/plink -v -batch`,
+      variables: {},
+    },
+    {
+      label: "a GIT_SSH named plink.exe",
+      env: { GIT_SSH: "/opt/putty/plink.exe" },
+      answer: NO_SSH_CONFIG,
+      command: "'/opt/putty/plink.exe' -batch",
+      variables: {},
+    },
+  ] satisfies ReadonlyArray<{
+    label: string;
+    env: NodeJS.ProcessEnv;
+    answer: ConfigAnswer;
+    command: string;
+    variables: NodeJS.ProcessEnv;
+  }>) {
+    test(`D-SG-05, D-SG-03: composes the ssh command from ${label}`, async () => {
+      // arrange
+      const base = { PATH: "/usr/bin", ...env };
+
+      // act
+      const launches = await runAfterSshRead(base, answer);
+
+      // assert
+      assert.deepStrictEqual(launches[1]?.[2].env, {
+        ...POSIX_FORCED,
+        PATH: "/usr/bin",
+        GIT_CEILING_DIRECTORIES: "/",
+        ...variables,
+        GIT_SSH_COMMAND: fromNeutral(command),
+      });
+    });
+  }
+
+  test("D-SG-05: on Windows reads the spelling Node passes and replaces every spelling of the ssh variables", async () => {
+    // arrange
+    const base = {
+      Path: String.raw`C:\Git\cmd`,
+      Git_Ssh: String.raw`C:\Other\ssh.exe`,
+      GIT_SSH: String.raw`C:\PuTTY\plink.exe`,
+      git_ssh_command: "",
+      Git_Ssh_Variant: "plink",
+    };
+
+    // act
+    const launches = await runAfterSshRead(base, sshConfigLines("ssh.variant ssh\n"), SSH_LIST, {
+      platform: "win32",
+      files: [String.raw`C:\Git\cmd\git.exe`],
+      cwd: String.raw`C:\work\project`,
+      tmpdir: String.raw`C:\Temp`,
+    });
+
+    // assert
+    assert.deepStrictEqual(launches[1]?.[2].env, {
+      ...POSIX_FORCED,
+      Path: String.raw`C:\Git\cmd`,
+      GIT_CEILING_DIRECTORIES: "C:\\",
+      Git_Ssh_Variant: "plink",
+      GIT_SSH_COMMAND: fromNeutral(String.raw`'C:\PuTTY\plink.exe' -batch`, String.raw`C:\Temp`),
+    });
+  });
+
+  for (const { label, request, sshCommand } of [
+    { label: "a network-lane credential", request: FILL, sshCommand: "ssh -i /home/user/key" },
+    {
+      label: "a network-lane version",
+      request: { subcommand: "version", lane: "network", timeoutMs: 5_000 },
+      sshCommand: "ssh -i /home/user/key",
+    },
+    {
+      label: "a local-lane fetch",
+      request: { subcommand: "fetch", lane: "local", operands: ["origin"], timeoutMs: 5_000 },
+      sshCommand: "false",
+    },
+  ] satisfies ReadonlyArray<{ label: string; request: GitRequest; sshCommand: string }>) {
+    test(`D-SG-05: starts no ssh read and composes no ssh command for ${label}`, async () => {
+      // arrange
+      const { git, launches } = createSequencedGit(
+        {},
+        { PATH: "/usr/bin", GIT_SSH_COMMAND: "ssh -i /home/user/key", GIT_SSH: "/usr/bin/ssh" },
+      );
+
+      // act
+      const pending = git.run(request);
+      (await launches.at(0)).close(0);
+      await pending;
+
+      // assert
+      assert.deepStrictEqual(
+        launches.all().map(([, , options]) => [options.env.GIT_SSH_COMMAND, options.env.GIT_SSH]),
+        [[sshCommand, "/usr/bin/ssh"]],
+      );
+    });
+  }
+
+  test("D-SG-05: rejects the command with the error of a failed ssh read", async () => {
+    // arrange
+    const { git, launches } = createSequencedGit();
+
+    // act
+    const pending = git.run(SSH_LIST);
+    const read = await launches.at(0);
+    read.writeStderr("fatal: bad config line 1 in file /home/user/.gitconfig\n");
+    read.close(128);
+
+    // assert
+    await assert.rejects(
+      pending,
+      gitFailure({
+        failure: { kind: "failed" },
+        operation: "config --get-regexp",
+        exitCode: 128,
+        stderr: "fatal: bad config line 1 in file /home/user/.gitconfig\n",
+      }),
+    );
+    assert.strictEqual(launches.all().length, 1);
+  });
+
+  test("D-SG-05: stops at the ssh read when the request is cancelled during it", async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const reason = new Error("cancelled");
+    const controller = new AbortController();
+    const { git, launches, host } = createSequencedGit();
+
+    // act
+    const pending = git.run({ ...SSH_LIST, signal: controller.signal });
+    await launches.at(0);
+    controller.abort(reason);
+    t.mock.timers.tick(KILL_GRACE_MS);
+    t.mock.timers.tick(KILL_GRACE_MS);
+
+    // assert
+    await assert.rejects(
+      pending,
+      gitFailure({
+        failure: { kind: "aborted" },
+        operation: "config --get-regexp",
+        exitCode: null,
+        stderr: "",
+        cause: reason,
+      }),
+    );
+    assert.deepStrictEqual(
+      [launches.all().length, host.groupSignals],
+      [
+        1,
+        [
+          [4242, "SIGTERM"],
+          [4242, "SIGKILL"],
+        ],
+      ],
+    );
+  });
+
+  test("D-SG-05: gives the ssh read the request's timeout", async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const { git, launches } = createSequencedGit();
+
+    // act
+    const pending = git.run({ ...SSH_LIST, timeoutMs: 50 });
+    await launches.at(0);
+    t.mock.timers.tick(50);
+    t.mock.timers.tick(KILL_GRACE_MS);
+    t.mock.timers.tick(KILL_GRACE_MS);
+
+    // assert
+    await assert.rejects(
+      pending,
+      gitFailure({
+        failure: { kind: "timeout", timeoutMs: 50 },
+        operation: "config --get-regexp",
+        exitCode: null,
+        stderr: "",
+      }),
+    );
+    assert.strictEqual(launches.all().length, 1);
+  });
+});
+
+// D-SG-05, CONTEXT [Hardening]: real git runs the user's ssh, never a
+// repository's, and never in the repository.
+describe("createGitProcess ssh with real git", () => {
+  test("D-SG-05: lists an ssh remote through the stub ssh with the batch options", async (t) => {
+    // arrange
+    const fixture = await sshFixture(t);
+    const git = await fixture.gitWith({});
+    const window = await fixture.host.mark();
+
+    // act
+    const listed = await git.run({
+      subcommand: "ls-remote",
+      lane: "network",
+      operands: [fixture.url],
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    const launches = await fixture.host.launchesSince(window);
+    assert.deepStrictEqual(
+      [listed.stdout, launches.map((launch) => launch.argv)],
+      [
+        `${fixture.oid}\tHEAD\n${fixture.oid}\trefs/heads/main\n`,
+        [
+          [...STAND_IN_BATCH, "-G", ...STAND_IN_PROTOCOL],
+          [...STAND_IN_BATCH, ...STAND_IN_PROTOCOL, STAND_IN_UPLOAD],
+        ],
+      ],
+    );
+  });
+
+  test("D-SG-05: keeps the arguments of the user's core.sshCommand before the batch options", async (t) => {
+    // arrange
+    const fixture = await sshFixture(t);
+    const key = path.join(fixture.root, "id_case");
+    const stub = path.join(fixture.host.binDirectory, "ssh");
+    const git = await fixture.gitWith({}, `[core]\n\tsshCommand = ${stub} -i ${key}\n`);
+    const window = await fixture.host.mark();
+
+    // act
+    await git.run({
+      subcommand: "ls-remote",
+      lane: "network",
+      operands: [fixture.url],
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    const launches = await fixture.host.launchesSince(window);
+    assert.deepStrictEqual(
+      launches.map((launch) => launch.argv),
+      [
+        ["-i", key, ...STAND_IN_BATCH, "-G", ...STAND_IN_PROTOCOL],
+        ["-i", key, ...STAND_IN_BATCH, ...STAND_IN_PROTOCOL, STAND_IN_UPLOAD],
+      ],
+    );
+  });
+
+  test("CONTEXT [Hardening]: never runs the core.sshCommand of the repository it fetches in", async (t) => {
+    // arrange
+    const fixture = await sshFixture(t);
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    const own = await recordingScript(fixture.root, "repository-ssh", "exit 255");
+    await repository.run("remote", "add", "origin", fixture.url);
+    await repository.run("config", "core.sshCommand", own.script);
+    const call = {
+      cwd: repository.dir,
+      home: fixture.root,
+      variables: { PATH: fixture.host.searchPath() },
+    };
+    await assert.rejects(runSystemGit(call, "fetch", "origin"));
+    await access(own.record);
+    await rm(own.record);
+    const git = await fixture.gitWith({});
+
+    // act
+    const fetched = await git.run({
+      subcommand: "fetch",
+      lane: "network",
+      options: ["--quiet"],
+      operands: ["origin"],
+      cwd: repository.dir,
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      [fetched, await runSystemGit(call, "rev-parse", "FETCH_HEAD")],
+      [{ exitCode: 0, stdout: "", stderr: "" }, fixture.oid],
+    );
+    await assert.rejects(access(own.record), { code: "ENOENT" });
+  });
+
+  test("D-SG-05: runs the user's ssh in the neutral directory for a fetch in a repository", async (t) => {
+    // arrange
+    const fixture = await laneFixture(t);
+    const record = path.join(fixture.root, "ssh-directories");
+    const program = path.join(fixture.root, "directory-ssh");
+    await writeFile(program, `#!/bin/sh\npwd -P >> '${record}'\nexit 255\n`, { mode: 0o755 });
+    await fixture.repository.run("remote", "set-url", "origin", "git@h.test:acme/tools.git");
+    const git = await fixture.gitWith({ GIT_SSH_COMMAND: program });
+
+    // act
+    const fetched = git.run({
+      subcommand: "fetch",
+      lane: "network",
+      operands: ["origin"],
+      cwd: fixture.repository.dir,
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    await assert.rejects(fetched, rejectsAs("ssh-auth", 128));
+    assert.strictEqual(await readFile(record, "utf8"), `${fixture.root}\n${fixture.root}\n`);
+  });
+});
+
+// The process-group cases need `ps` and POSIX process groups.
+const PROCESS_GROUPS = {
+  skip: process.platform === "win32" && "Windows has no ps and no POSIX process groups",
+};
+
+// SG-PRC-02: a remote that asks for a password, a passphrase, or a host-key
+// answer fails without a prompt, and a timeout leaves no process behind.
+describe("createGitProcess without prompts or leftovers", () => {
+  test("SG-PRC-02, E10: rejects an https remote that asks for a password as https-auth without askpass", async (t) => {
+    // arrange
+    const fixture = await httpsFixture(t);
+    await fixture.host.arm("tools", { kind: "credential", user: "acme", password: "secret" });
+    const askpass = await recordingScript(fixture.root, "askpass", "echo wrong");
+    const call = {
+      cwd: fixture.root,
+      home: fixture.root,
+      variables: { GIT_SSL_CAINFO: fixture.host.certificatePath },
+    };
+    await assert.rejects(
+      runSystemGit(call, "-c", `core.askPass=${askpass.script}`, "ls-remote", fixture.url),
+    );
+    await access(askpass.record);
+    await rm(askpass.record);
+    const git = await realGit({
+      root: fixture.root,
+      env: fixture.env,
+      config: `[core]\n\taskPass = ${askpass.script}\n`,
+    });
+
+    // act
+    const listed = git.run({
+      subcommand: "ls-remote",
+      lane: "network",
+      operands: [fixture.url],
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    await assert.rejects(listed, rejectsAs("https-auth", 128));
+    await assert.rejects(access(askpass.record), { code: "ENOENT" });
+  });
+
+  test("SG-PRC-02, E16: runs the user's ssh without a terminal and with the batch options", async (t) => {
+    // arrange
+    const fixture = await laneFixture(t);
+    const record = path.join(fixture.root, "ssh-launches");
+    const program = path.join(fixture.root, "terminal-ssh");
+    await writeFile(
+      program,
+      `#!/bin/sh
+if (: < /dev/tty) 2>/dev/null; then echo tty >> '${record}'; else echo no-tty >> '${record}'; fi
+printf '%s\\n' "$@" >> '${record}'
+exit 255
+`,
+      { mode: 0o755 },
+    );
+    const git = await fixture.gitWith({ GIT_SSH_COMMAND: program });
+
+    // act
+    const listed = git.run({ ...SSH_LIST, timeoutMs: 10_000 });
+
+    // assert
+    await assert.rejects(listed, rejectsAs("ssh-auth", 128));
+    // git's `-G` check fails, so the transport launch runs as the simple variant.
+    assert.deepStrictEqual((await readFile(record, "utf8")).split("\n"), [
+      "no-tty",
+      ...STAND_IN_BATCH,
+      "-G",
+      "-o",
+      "SendEnv=GIT_PROTOCOL",
+      "git@h.test",
+      "no-tty",
+      ...STAND_IN_BATCH,
+      "git@h.test",
+      "git-upload-pack 'acme/tools.git'",
+      "",
+    ]);
+  });
+
+  test("SG-PRC-02, E16: rejects an ssh remote whose host key is unknown as ssh-host-key-unknown", async (t) => {
+    // arrange
+    const fixture = await laneFixture(t);
+    const program = await recordingScript(
+      fixture.root,
+      "host-key-ssh",
+      "echo 'Host key verification failed.' >&2\nexit 255",
+    );
+    const git = await fixture.gitWith({ GIT_SSH_COMMAND: program.script });
+
+    // act
+    const listed = git.run({ ...SSH_LIST, timeoutMs: 10_000 });
+
+    // assert
+    await assert.rejects(listed, rejectsAs("ssh-host-key-unknown", 128));
+  });
+
+  test(
+    "SG-PRC-02, E9: leaves no process of a timed-out https command",
+    PROCESS_GROUPS,
+    async (t) => {
+      // arrange
+      const fixture = await httpsFixture(t);
+      await fixture.host.arm("tools", { kind: "hold" });
+      const launcher = pidRecordingSpawn();
+      const git = await realGit({
+        root: fixture.root,
+        env: fixture.env,
+        config: "",
+        spawn: launcher.spawn,
+        killGraceMs: 500,
+      });
+      const window = fixture.host.mark();
+
+      // act
+      const listed = git.run({
+        subcommand: "ls-remote",
+        lane: "network",
+        operands: [fixture.url],
+        timeoutMs: 1_500,
+      });
+
+      // assert
+      await assert.rejects(listed, rejectsWithTimeout(1_500));
+      await fixture.host.waitForRequestsSettledAfter(window);
+      assert.deepStrictEqual(fixture.host.requestsSince(window).requests, [
+        {
+          method: "GET",
+          path: "/acme/tools.git/info/refs?service=git-upload-pack",
+          status: "dropped",
+        },
+      ]);
+      assert.deepStrictEqual(await livingGroupMembers(launcher.pidOf("ls-remote")), []);
+    },
+  );
+
+  test(
+    "SG-PRC-02, E8: leaves no process of a timed-out ssh command whose ssh never answers",
+    PROCESS_GROUPS,
+    async (t) => {
+      // arrange
+      const root = await caseDirectory(t);
+      const record = path.join(root, "ssh-pids");
+      const program = path.join(root, "sleeping-ssh");
+      await writeFile(program, `#!/bin/sh\nsleep 30 &\necho "$$ $!" >> '${record}'\nwait\n`, {
+        mode: 0o755,
+      });
+      const launcher = pidRecordingSpawn();
+      // The variant skips git's `-G` check, so the transport launch is the one that hangs.
+      const git = await realGit({
+        root,
+        env: { ...hermeticGitEnvironment(root), GIT_SSH_COMMAND: program, GIT_SSH_VARIANT: "ssh" },
+        config: "",
+        spawn: launcher.spawn,
+        killGraceMs: 500,
+      });
+
+      // act
+      const listed = git.run({ ...SSH_LIST, timeoutMs: 1_500 });
+
+      // assert
+      await assert.rejects(listed, rejectsWithTimeout(1_500));
+      assert.match(await readFile(record, "utf8"), /^\d+ \d+\n$/);
+      assert.deepStrictEqual(await livingGroupMembers(launcher.pidOf("ls-remote")), []);
+    },
+  );
 });
 
 describe("NODE_GIT_HOST", () => {
