@@ -23,6 +23,7 @@ import {
   InvalidGitHubBaseUrlError,
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { initGitTestCheckout } from "../../platform/git-test-repository.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { ActiveMcpImplementation } from "../../../extensions/pi-claude-marketplace/domain/mcp-implementation.ts";
@@ -1942,17 +1943,13 @@ test("UPDT-01: without an injected pathPinProbe, a path-source pin uses the real
   const seed = await seedUpdate({ installed: pluginRecord("1.0.0"), version: "1.2.0" });
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
   const marketplaceRoot = path.join(seed.cwd, "marketplace");
-  await git.init({ fs, dir: marketplaceRoot, defaultBranch: "main" });
-  await git.add({ fs, dir: marketplaceRoot, filepath: ".claude-plugin/marketplace.json" });
-  await git.add({ fs, dir: marketplaceRoot, filepath: "plugins/hello/.claude-plugin/plugin.json" });
-  await git.add({ fs, dir: marketplaceRoot, filepath: "plugins/hello/skills/tool/SKILL.md" });
-  const oid = await git.commit({
-    fs,
-    dir: marketplaceRoot,
-    message: "seed marketplace",
-    author: { name: "test", email: "test@example.com" },
-  });
-  await git.tag({ fs, dir: marketplaceRoot, ref: "hello--v1.2.0", object: oid });
+  const checkout = await initGitTestCheckout(marketplaceRoot);
+  const oid = await checkout.commitPaths("seed marketplace", [
+    ".claude-plugin/marketplace.json",
+    "plugins/hello/.claude-plugin/plugin.json",
+    "plugins/hello/skills/tool/SKILL.md",
+  ]);
+  await checkout.run("tag", "hello--v1.2.0", oid);
   const constraintGate: PreparePluginUpdateOptions["constraintGate"] = () =>
     Promise.resolve({
       kind: "admits",
