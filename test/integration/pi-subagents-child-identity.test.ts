@@ -46,6 +46,9 @@ import type {
   RealChildAgent,
 } from "../../features/lib/real-subagent-child.ts";
 
+// No SSH stand-in serves these runs, so their Pis keep the test runner's PATH.
+const PI_PATH = process.env.PATH ?? "";
+
 // The Pis of every case compile the same extensions, so they share one jiti
 // cache, which the first Pi fills.
 let compileCache = "";
@@ -150,6 +153,7 @@ for (const mcpProfile of ["adapter", "builtin"] as const satisfies readonly McpP
         agents: [BACKGROUND_AGENT, MCP_AGENT],
         asyncByDefault: false,
         compileCache,
+        piPath: PI_PATH,
         register: (release) => releases.push(release),
       });
       t.diagnostic(
@@ -232,6 +236,7 @@ for (const mcpProfile of ["adapter", "builtin"] as const satisfies readonly McpP
         mcpProfile,
         agents: [ORDINARY_AGENT],
         compileCache,
+        piPath: PI_PATH,
         register: (release) => releases.push(release),
       });
       t.diagnostic(
@@ -300,6 +305,7 @@ test(
       agents: [ORDINARY_AGENT],
       asyncByDefault: false,
       compileCache,
+      piPath: PI_PATH,
       register: (release) => releases.push(release),
     });
     t.diagnostic(
@@ -378,6 +384,7 @@ test(
       generations: [GENERATION, GENERATION],
       rounds: 2,
       compileCache,
+      piPath: PI_PATH,
       register: (release) => releases.push(release),
     });
     t.diagnostic(

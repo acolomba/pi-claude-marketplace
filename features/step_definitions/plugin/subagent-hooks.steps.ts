@@ -230,11 +230,13 @@ async function promptInStartupSession(world: ScenarioWorld, text: string): Promi
 }
 
 // What every run of real children shares: the profile's MCP implementation,
-// the worker's compile cache, and the world's release.
+// the run's PATH with the SSH stand-in first, the worker's compile cache, and
+// the world's release.
 async function realChildFixture(world: ScenarioWorld): Promise<RealChildFixtureOptions> {
-  const { environment } = await world.oneShotPiLaunch();
+  const { git, environment } = await world.oneShotPiLaunch();
   return {
     mcpProfile: world.mcpProfile,
+    piPath: git.PATH,
     compileCache: await realpath(path.join(environment.TMPDIR, "jiti")),
     register: (release) => {
       world.onRelease(release);
