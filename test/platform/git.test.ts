@@ -36,7 +36,11 @@ import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
 
 import { createCredentialOpsFake } from "./credential-ops-fake.ts";
 import { registerGitOpsContract } from "./git-ops-contract.ts";
-import { createGitTestDirectory, createGitTestRepository } from "./git-test-repository.ts";
+import {
+  createGitTestDirectory,
+  createGitTestRepository,
+  gitTestCheckout,
+} from "./git-test-repository.ts";
 
 import type { GitOps } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { OnAuthRequiredFn } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
@@ -371,22 +375,10 @@ async function createProductionGitOps(t: TestContext): Promise<GitOpsContractPar
     "updated",
   );
   assert.strictEqual(localUpdatedOid, updatedOid);
-  await git.writeRef({
-    fs,
-    dir: worktree.dir,
-    ref: "refs/heads/main",
-    value: worktree.initialOid,
-    force: true,
-  });
-  await git.writeRef({
-    fs,
-    dir: worktree.dir,
-    ref: "refs/heads/feature",
-    value: updatedOid,
-    force: true,
-  });
-  await git.checkout({ fs, dir: worktree.dir, ref: "main", force: true });
-  await git.addRemote({ fs, dir: worktree.dir, remote: "origin", url: REMOTE_URL });
+  await worktree.run("update-ref", "refs/heads/main", worktree.initialOid);
+  await worktree.run("update-ref", "refs/heads/feature", updatedOid);
+  await worktree.run("checkout", "-q", "-f", "main");
+  await worktree.run("remote", "add", "origin", REMOTE_URL);
   const cloneDir = await createGitTestDirectory(t, { boundary: "local" });
   await installRepositoryTransport(t, remote);
 
@@ -1071,7 +1063,7 @@ describe("fetch", () => {
     // arrange
     const requests = installFailedDiscoveryTransport(t, { challengeOnce: true });
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    await git.addRemote({ fs, dir: repository.dir, remote: "origin", url: REMOTE_URL });
+    await repository.run("remote", "add", "origin", REMOTE_URL);
     const credentials = createCredentialOpsFake({ boundary: "memory" });
     const refusal = new DeviceFlowUnavailableError();
 
@@ -1099,7 +1091,7 @@ describe("fetch", () => {
     // arrange
     const requests = installFailedDiscoveryTransport(t);
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    await git.addRemote({ fs, dir: repository.dir, remote: "origin", url: REMOTE_URL });
+    await repository.run("remote", "add", "origin", REMOTE_URL);
 
     // act
     const fetching = fetch({ dir: repository.dir });
@@ -1115,7 +1107,7 @@ describe("fetch", () => {
     // arrange
     const requests = installFailedDiscoveryTransport(t, { challengeOnce: true });
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    await git.addRemote({ fs, dir: repository.dir, remote: "upstream", url: REMOTE_URL });
+    await repository.run("remote", "add", "upstream", REMOTE_URL);
     const credentials = createCredentialOpsFake({
       boundary: "memory",
       credentials: [[HOST, { username: "user", password: "secret" }]],
@@ -1155,7 +1147,7 @@ describe("fetch", () => {
     // arrange
     const requests = installWireTransport(t, crossOriginServer(OTHER_PORT_INFO_URL));
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    await git.addRemote({ fs, dir: repository.dir, remote: "origin", url: REMOTE_URL });
+    await repository.run("remote", "add", "origin", REMOTE_URL);
     const credentials = storedCredentials();
 
     // act
@@ -1178,7 +1170,7 @@ describe("fetch", () => {
       "updated",
     );
     const worktree = await createGitTestRepository(t, { boundary: "local" });
-    await git.addRemote({ fs, dir: worktree.dir, remote: "origin", url: GITHUB_REMOTE_URL });
+    await worktree.run("remote", "add", "origin", GITHUB_REMOTE_URL);
     await installRepositoryTransport(t, remote);
     setGitHubBaseUrl(t, `https://${HOST}`);
 
@@ -1204,7 +1196,7 @@ describe("fetch", () => {
       "tagged",
     );
     const worktree = await createGitTestRepository(t, { boundary: "local" });
-    await git.addRemote({ fs, dir: worktree.dir, remote: "origin", url: GITHUB_REMOTE_URL });
+    await worktree.run("remote", "add", "origin", GITHUB_REMOTE_URL);
     await installRepositoryTransport(t, remote, "v1.0.0");
     setGitHubBaseUrl(t, `https://${HOST}`);
 
@@ -1219,7 +1211,7 @@ describe("fetch", () => {
     // arrange
     const requests = installFailedDiscoveryTransport(t);
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    await git.addRemote({ fs, dir: repository.dir, remote: "origin", url: GITHUB_REMOTE_URL });
+    await repository.run("remote", "add", "origin", GITHUB_REMOTE_URL);
     setGitHubBaseUrl(t, `https://${HOST}`);
 
     // act
@@ -1264,7 +1256,7 @@ describe("fetch", () => {
     // arrange
     const requests = installFailedDiscoveryTransport(t);
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    await git.addRemote({ fs, dir: repository.dir, remote: "origin", url: REMOTE_URL });
+    await repository.run("remote", "add", "origin", REMOTE_URL);
     setGitHubBaseUrl(t, undefined);
 
     // act
@@ -1984,7 +1976,7 @@ describe("listRemotes", () => {
   test("reports the origin remote url of a real repository", async (t) => {
     // arrange
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    await git.addRemote({ fs, dir: repository.dir, remote: "origin", url: REMOTE_URL });
+    await repository.run("remote", "add", "origin", REMOTE_URL);
 
     // act
     const remotes = await listRemotes({ dir: repository.dir });
@@ -2314,12 +2306,12 @@ describe("listTags", () => {
   test("lists tag names against a real local repository with no network call", async (t) => {
     // arrange
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    await git.tag({ fs, dir: repository.dir, ref: "v1.0.0", object: repository.initialOid });
+    await repository.run("tag", "v1.0.0", repository.initialOid);
     const secondOid = await repository.commit(
       [{ filepath: "second.txt", contents: "second\n" }],
       "second",
     );
-    await git.tag({ fs, dir: repository.dir, ref: "v2.0.0", object: secondOid });
+    await repository.run("tag", "v2.0.0", secondOid);
 
     // act
     const tags = await listTags({ dir: repository.dir });
@@ -2344,7 +2336,7 @@ describe("resolveTagOid", () => {
   test("a lightweight tag resolves to the commit it points at", async (t) => {
     // arrange
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    await git.tag({ fs, dir: repository.dir, ref: "v1.0.0", object: repository.initialOid });
+    await repository.run("tag", "v1.0.0", repository.initialOid);
 
     // act
     const oid = await resolveTagOid({ dir: repository.dir, name: "v1.0.0", cache: {} });
@@ -2356,18 +2348,8 @@ describe("resolveTagOid", () => {
   test("WR-01: a lightweight tag pointing at a blob resolves to undefined so the caller can drop it", async (t) => {
     // arrange
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    const blobOid = await git.writeBlob({
-      fs,
-      dir: repository.dir,
-      blob: new Uint8Array(Buffer.from("hello")),
-    });
-    await git.writeRef({
-      fs,
-      dir: repository.dir,
-      ref: "refs/tags/blob-tag",
-      value: blobOid,
-      force: true,
-    });
+    const blobOid = await repository.hashObject("hello");
+    await repository.run("update-ref", "refs/tags/blob-tag", blobOid);
 
     // act
     const oid = await resolveTagOid({ dir: repository.dir, name: "blob-tag", cache: {} });
@@ -2381,20 +2363,8 @@ describe("resolveTagOid", () => {
   test("an annotated tag resolves to the commit it points at, not the tag object's own oid", async (t) => {
     // arrange
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    await git.annotatedTag({
-      fs,
-      dir: repository.dir,
-      ref: "v2.0.0",
-      message: "release 2.0.0",
-      object: repository.initialOid,
-      tagger: {
-        name: "Git contract",
-        email: "git-contract@example.invalid",
-        timestamp: 1_700_000_100,
-        timezoneOffset: 0,
-      },
-    });
-    const tagObjectOid = await git.resolveRef({ fs, dir: repository.dir, ref: "refs/tags/v2.0.0" });
+    await repository.run("tag", "-a", "-m", "release 2.0.0", "v2.0.0", repository.initialOid);
+    const tagObjectOid = await repository.run("rev-parse", "refs/tags/v2.0.0");
     assert.notStrictEqual(tagObjectOid, repository.initialOid);
 
     // act
@@ -2407,24 +2377,8 @@ describe("resolveTagOid", () => {
   test("WR-06: a tag pointing at neither a commit nor another tag resolves to undefined so the caller can drop it", async (t) => {
     // arrange
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    const blobOid = await git.writeBlob({
-      fs,
-      dir: repository.dir,
-      blob: new Uint8Array(Buffer.from("hello")),
-    });
-    await git.annotatedTag({
-      fs,
-      dir: repository.dir,
-      ref: "blob-tag",
-      message: "blob-tag",
-      object: blobOid,
-      tagger: {
-        name: "Git contract",
-        email: "git-contract@example.invalid",
-        timestamp: 1_700_000_200,
-        timezoneOffset: 0,
-      },
-    });
+    const blobOid = await repository.hashObject("hello");
+    await repository.run("tag", "-a", "-m", "blob-tag", "blob-tag", blobOid);
 
     // act
     const oid = await resolveTagOid({ dir: repository.dir, name: "blob-tag", cache: {} });
@@ -2446,20 +2400,8 @@ describe("resolveTagOid", () => {
       const name = `chain-${hop.toString()}`;
       // Sequential by necessity: each tag must point at the previous one's
       // resolved oid.
-      await git.annotatedTag({
-        fs,
-        dir: repository.dir,
-        ref: name,
-        message: name,
-        object: pointsAt,
-        tagger: {
-          name: "Git contract",
-          email: "git-contract@example.invalid",
-          timestamp: 1_700_000_300 + hop,
-          timezoneOffset: 0,
-        },
-      });
-      pointsAt = await git.resolveRef({ fs, dir: repository.dir, ref: `refs/tags/${name}` });
+      await repository.run("tag", "-a", "-m", name, name, pointsAt);
+      pointsAt = await repository.run("rev-parse", `refs/tags/${name}`);
       outermostName = name;
     }
 
@@ -2635,9 +2577,15 @@ function installStalledPackWireTransport(t: TestContext): {
 async function remoteBranchesAndHead(
   dir: string,
 ): Promise<{ readonly head: string; readonly remoteBranches: string[] }> {
+  const checkout = gitTestCheckout(dir);
+  const remoteRefs = await checkout.run(
+    "for-each-ref",
+    "--format=%(refname:lstrip=3)",
+    "refs/remotes/origin",
+  );
   return {
-    head: await git.resolveRef({ fs, dir, ref: "HEAD" }),
-    remoteBranches: await git.listBranches({ fs, dir, remote: "origin" }),
+    head: await checkout.run("rev-parse", "HEAD"),
+    remoteBranches: remoteRefs === "" ? [] : remoteRefs.split("\n"),
   };
 }
 
@@ -2666,7 +2614,7 @@ describe("runWithGitAbortSignal", () => {
     // arrange
     const transport = installHeldTransport(t);
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    await git.addRemote({ fs, dir: repository.dir, remote: "origin", url: REMOTE_URL });
+    await repository.run("remote", "add", "origin", REMOTE_URL);
     const refsBefore = await remoteBranchesAndHead(repository.dir);
     const controller = new AbortController();
     const reason = new Error("background step stopped");
@@ -2686,7 +2634,7 @@ describe("runWithGitAbortSignal", () => {
     // arrange
     const transport = installStalledPackWireTransport(t);
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    await git.addRemote({ fs, dir: repository.dir, remote: "origin", url: REMOTE_URL });
+    await repository.run("remote", "add", "origin", REMOTE_URL);
     const controller = new AbortController();
     const reason = new Error("background step stopped");
     const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir: repository.dir }));

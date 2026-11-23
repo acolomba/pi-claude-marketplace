@@ -1,11 +1,12 @@
 /**
- * @fileoverview The environment of every git the suite runs besides Pi's.
+ * @fileoverview The environment of every git the suites run besides Pi's.
  *
- * The git host's CGI and the fixture commands run git with a scratch HOME, no
- * system config, and an empty global config, and inherit nothing else. So the
- * credential files a scenario writes for Pi never change how the server or a
- * fixture behaves, and a git variable of the shell that runs the suite never
- * points a fixture at this repository (DRV-03).
+ * The git host's CGI, the cucumber fixture commands, and the unit and
+ * integration fixture code all run git with a scratch HOME, no system config,
+ * and an empty global config, and inherit nothing else. So the credential
+ * files a scenario writes for Pi never change how the server or a fixture
+ * behaves, and a git variable of the shell that runs the suites never points a
+ * fixture at this repository (DRV-03, SG-HRN-01).
  */
 
 import { execFile } from "node:child_process";
@@ -13,8 +14,27 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-/** Returns the environment of a suite git whose HOME is `home`. */
-export function hermeticGitEnvironment(home: string): NodeJS.ProcessEnv {
+/**
+ * The only variables a suite git gets beyond the base keys. A call names each
+ * one it needs, so the key set of every suite git stays visible here (DRV-03,
+ * SG-HRN-01).
+ */
+export interface HermeticGitVariables {
+  readonly GIT_AUTHOR_DATE?: string;
+  readonly GIT_COMMITTER_DATE?: string;
+  readonly GIT_SSL_CAINFO?: string;
+  readonly GIT_PROTOCOL?: string;
+  readonly PATH?: string;
+}
+
+/**
+ * Returns the environment of a suite git whose HOME is `home`, with the named
+ * `variables` added. A named `PATH` replaces the base one.
+ */
+export function hermeticGitEnvironment(
+  home: string,
+  variables: HermeticGitVariables = {},
+): NodeJS.ProcessEnv {
   return {
     PATH: process.env.PATH ?? "",
     HOME: home,
@@ -24,6 +44,7 @@ export function hermeticGitEnvironment(home: string): NodeJS.ProcessEnv {
     GIT_AUTHOR_EMAIL: "features@example.test",
     GIT_COMMITTER_NAME: "features",
     GIT_COMMITTER_EMAIL: "features@example.test",
+    ...variables,
   };
 }
 

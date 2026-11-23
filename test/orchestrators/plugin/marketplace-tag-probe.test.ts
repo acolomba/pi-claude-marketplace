@@ -1,8 +1,5 @@
 import assert from "node:assert/strict";
-import * as fs from "node:fs";
 import { describe, test } from "node:test";
-
-import * as git from "isomorphic-git";
 
 import { probeMarketplaceTags } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
 import { createGitTestRepository } from "../../platform/git-test-repository.ts";
@@ -287,12 +284,7 @@ describe("probeMarketplaceTags", () => {
   test("with no seam supplied, falls through to the real listTags/resolveTagOid pair against a real local repository", async (t) => {
     // arrange
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    await git.tag({
-      fs,
-      dir: repository.dir,
-      ref: "formatter--v1.0.0",
-      object: repository.initialOid,
-    });
+    await repository.run("tag", "formatter--v1.0.0", repository.initialOid);
 
     // act
     const result = await probeMarketplaceTags(
