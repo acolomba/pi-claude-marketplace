@@ -3,11 +3,13 @@
 // Six internal cases (ITSCOPE-01) of the mirror seeding that follows
 // `marketplace add` (D-SEED-01). The real `addMarketplace` runs through the
 // git double, and each case reads `plugin-clones/` and the recorded git and
-// credential calls: a same-repository plugin gets its mirror from the one
-// marketplace clone, a path marketplace seeds with no git call, a plugin from
-// another repository stays unseeded, a reachable pin seeds and an unreachable
-// one does not, the mirror keeps the real remote url, and clone garbage
-// collection removes a mirror that nothing uses. No command lists
+// credential calls. The git double records every git operation it serves
+// except `listRemotes`. A same-repository plugin gets its mirror from the one
+// marketplace clone, a path marketplace seeds with none of the git calls the
+// double records, a plugin from another repository stays unseeded, a
+// reachable pin seeds and an unreachable one does not, the mirror keeps the
+// real remote url, and clone garbage collection removes a mirror that nothing
+// uses. No command lists
 // `plugin-clones/`. What a user sees is in
 // `features/marketplace/url-source.feature`: the plugin is available right
 // after the add, and its install makes no git request.
