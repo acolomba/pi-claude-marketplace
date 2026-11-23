@@ -183,7 +183,12 @@ async function assertSinkPlacement(): Promise<void> {
     /function emitHookSurface\([^}]+emitPresentation\(ctx, run, resolveRawSurface\(surface\)\);\s+\}/,
     `D-16: hook raw surfaces must reach the shared presentation transport.`,
   );
-  assert.match(stripped, /const args = formatRawSurface\(presentation\)!;\s+deliver\(ctx, args\);/);
+  // RELOADCMD-D1: a raw surface that renders no text, reload-started, reaches no
+  // sink.
+  assert.match(
+    stripped,
+    /const args = formatRawSurface\(presentation, reload\);\s+if \(args !== undefined\) \{\s+deliver\(ctx, args\);/,
+  );
 }
 
 /** Every part of the gate: the pattern scan, placement, then literals. */

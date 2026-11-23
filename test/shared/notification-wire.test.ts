@@ -480,6 +480,47 @@ test("D-CF5-14: rejects a hook-notice payload that carries summary in place of t
   assert.strictEqual(valid, false);
 });
 
+const RELOAD_STARTED_MEMBER = NOTIFICATION_PAYLOAD_SCHEMA.anyOf[23];
+
+function reloadStartedPayload(): Record<string, unknown> {
+  return {
+    schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin reload", invocationId: "reload-run" },
+    kind: "reload-started",
+    severity: "info",
+    needsReload: false,
+  };
+}
+
+test("RELOADCMD-D1: accepts a command-origin reload-started payload", () => {
+  // arrange
+  const payload = reloadStartedPayload();
+
+  // act
+  const errors = leafErrors(RELOAD_STARTED_MEMBER, payload);
+  const valid = Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(payload);
+
+  // assert
+  assert.deepStrictEqual(errors, []);
+  assert.strictEqual(valid, true);
+});
+
+test("RELOADCMD-D1: rejects a reload-started payload that carries a field beyond the envelope", () => {
+  // arrange
+  const payload = { ...reloadStartedPayload(), plugins: 1 };
+
+  // act
+  const errors = leafErrors(RELOAD_STARTED_MEMBER, payload);
+  const valid = Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(payload);
+
+  // assert
+  assert.deepStrictEqual(errors, [
+    { keyword: "boolean", instancePath: "/plugins" },
+    { keyword: "additionalProperties", instancePath: "" },
+  ]);
+  assert.strictEqual(valid, false);
+});
+
 function mcpConfigNoticesPayload(notices: readonly unknown[]): Record<string, unknown> {
   return {
     schemaVersion: 1,

@@ -36,6 +36,9 @@ export async function pluginCompletions(
       prefix,
       makeLocationsResolver(cwd, mcpImplementation),
       createCompletionCache(),
+      // RELOADCMD-D1: Pi asks for argument completions only in its terminal,
+      // which takes later commands.
+      true,
     )) ?? []
   );
 }

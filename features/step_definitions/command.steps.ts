@@ -4,7 +4,8 @@
  * A command can also run in a one-shot Pi in json mode, whose results the
  * same steps read, in a one-shot Pi in print mode, whose exit code and output
  * two steps read, or in Pi in a real terminal, whose notice a step reads from
- * the terminal's current screen (D-BG-09).
+ * the terminal's current screen (D-BG-09). A command can also run while the
+ * tool of a prompt that a profile Pi runs is working (RELOADCMD-D1).
  *
  * A `Given` command is setup and must succeed, unless its text says it
  * failed, warned, or did not fail.
@@ -29,6 +30,7 @@ import { namesLike, recordTable } from "../lib/field-rows.ts";
 import { runCommandPayloads } from "../lib/pi-commands.ts";
 import { runJsonModeCommand } from "../lib/pi-json-mode.ts";
 import { runOneShotPi } from "../lib/pi-one-shot.ts";
+import { promptDisposition } from "../lib/pi-rpc.ts";
 import {
   envelopeFields,
   marketplaceRowRecords,
@@ -178,6 +180,46 @@ When(
     const tui = await this.startTuiSession();
     tui.sendLine(expandTokens(command, this.tokens));
     await tui.waitForQuiet(TERMINAL_QUIET_MS, TERMINAL_COMMAND_MS);
+  },
+);
+
+// A scripted turn starts its tool within a second, and the tool's `sleep 3`
+// keeps the run active past the command. The deadline stays below the
+// 30-second step timeout, so a run that never starts its tool or never
+// settles fails here.
+const COMMAND_DURING_RUN_MS = 20_000;
+
+// RELOADCMD-D1: Pi runs an extension command at once, even while a run is
+// active, so the command meets the running prompt. The step starts the prompt
+// on the profile Pi, waits for its tool to start, runs the command and keeps
+// its results, then waits for the run to settle, so every step of the model
+// script is used.
+When(
+  "the user runs {string} while the tool of the prompt {string} runs",
+  async function (this: ScenarioWorld, command: string, prompt: string): Promise<void> {
+    this.profileHarness();
+    const deadline = Date.now() + COMMAND_DURING_RUN_MS;
+    const from = this.pi.recordCount();
+    const { response } = await this.pi.request({
+      type: "prompt",
+      message: expandTokens(prompt, this.tokens),
+    });
+    assert.strictEqual(promptDisposition(response), "started", JSON.stringify(response));
+    await this.pi.waitForRecord(
+      from,
+      (record) => record.type === "tool_execution_start",
+      deadline - Date.now(),
+    );
+    this.recordResults(
+      await runCommandPayloads(this.pi, expandTokens(command, this.tokens)),
+      "command",
+    );
+    const settled = await this.pi.waitForRecord(
+      from,
+      (record) => record.type === "agent_settled",
+      deadline - Date.now(),
+    );
+    assert.strictEqual(settled.aborted, false, JSON.stringify(settled));
   },
 );
 

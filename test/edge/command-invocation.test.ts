@@ -64,8 +64,8 @@ function register(
   };
 }
 
-/** A context that an invocation reads its directory, trust, and session id from once. */
-function invocationContext(): ExtensionContext {
+/** A context that an invocation reads its directory, trust, session id, and mode from once. */
+function invocationContext(mode: "tui" | "rpc" | "json" = "tui"): ExtensionContext {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "context" });
   const sessionManager = mock<ExtensionContext["sessionManager"]>({
     exactParams: true,
@@ -83,6 +83,17 @@ function invocationContext(): ExtensionContext {
   when(() => sessionManager.getSessionId())
     .thenReturn("session-1")
     .times(1);
+  // RELOADCMD-D1: the request reads the mode once, and the host field only
+  // outside Pi's terminal.
+  when(() => ctx.mode)
+    .thenReturn(mode)
+    .times(1);
+  if (mode !== "tui") {
+    when(() => ctx.hasUI)
+      .thenReturn(mode === "rpc")
+      .times(1);
+  }
+
   return ctx;
 }
 
@@ -96,7 +107,10 @@ function expectInvocationReads(pi: ExtensionAPI, listReads = 1): void {
     .times(1);
 }
 
-function greetRequest(args: string): CommandInvocationRequest {
+function greetRequest(
+  args: string,
+  reloadCommand: CommandInvocationRequest["reloadCommand"] = "/reload",
+): CommandInvocationRequest {
   return {
     commands: [GREET_PROMPT],
     name: "demo:greet",
@@ -106,6 +120,7 @@ function greetRequest(args: string): CommandInvocationRequest {
     projectTrusted: true,
     sessionId: "session-1",
     thinkingLevel: "low",
+    reloadCommand,
   };
 }
 
@@ -172,6 +187,31 @@ test("D-CF1-03: passes a token that pi lists only as another kind of command thr
   verify(ctx);
   verify(invoke);
 });
+
+for (const { mode, reloadCommand } of [
+  { mode: "rpc", reloadCommand: "/claude:plugin reload" },
+  { mode: "json", reloadCommand: undefined },
+] as const) {
+  test(`RELOADCMD-D1: a ${mode} command request carries ${String(reloadCommand)} as its reload command`, async () => {
+    // arrange
+    const invoke = mock<CommandInvoker>({ exactParams: true, name: "command invocation" });
+    when(() => invoke({ ...greetRequest("Ada"), reloadCommand }))
+      .thenResolve({ kind: "not-staged" })
+      .times(1);
+    const ctx = invocationContext(mode);
+    const { pi, input } = register(invoke);
+    expectInvocationReads(pi);
+
+    // act
+    const outcome = await input({ type: "input", text: "/demo:greet Ada", source: "rpc" }, ctx);
+
+    // assert
+    assert.deepStrictEqual(outcome, { action: "continue" });
+    verify(pi);
+    verify(ctx);
+    verify(invoke);
+  });
+}
 
 test("D-CF1-03: passes a prompt command the invocation finds not staged through", async () => {
   // arrange
@@ -292,10 +332,10 @@ test("T-01-24: reports a refused command as a usage error entry over RPC and han
   // arrange
   const message = 'Shell command failed for pattern "!`exit 3`": partial';
   const invoke = mock<CommandInvoker>({ exactParams: true, name: "command invocation" });
-  when(() => invoke(greetRequest("Ada")))
+  when(() => invoke(greetRequest("Ada", "/claude:plugin reload")))
     .thenResolve({ kind: "refuse", message })
     .times(1);
-  const ctx = invocationContext();
+  const ctx = invocationContext("rpc");
   when(() => ctx.mode)
     .thenReturn("rpc")
     .times(1);

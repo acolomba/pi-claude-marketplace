@@ -196,6 +196,8 @@ export interface NotificationUi {
 /** Consumer-owned view of a Pi context used only to emit notifications. */
 export interface NotificationContext {
   readonly mode: string;
+  /** Pi's `hasUI`, which `acceptsLaterCommands` reads for the reload rules (RELOADCMD-D1). */
+  readonly hasUI: boolean;
   readonly ui: NotificationUi;
 }
 

@@ -102,10 +102,14 @@ function registerWithInvoker(
 }
 
 /**
- * A context whose session id an invocation reads once, and its directory and
- * project trust `cwdReads` times.
+ * A context whose session id and mode an invocation reads once, and its
+ * directory and project trust `cwdReads` times.
  */
-function invocationContext(cwdReads = 1, projectTrusted = true): ExtensionContext {
+function invocationContext(
+  cwdReads = 1,
+  projectTrusted = true,
+  mode: "tui" | "rpc" | "json" = "tui",
+): ExtensionContext {
   const ctx = mock<ExtensionContext>({ exactParams: true, name: "context" });
   const sessionManager = mock<ExtensionContext["sessionManager"]>({
     exactParams: true,
@@ -123,10 +127,24 @@ function invocationContext(cwdReads = 1, projectTrusted = true): ExtensionContex
   when(() => sessionManager.getSessionId())
     .thenReturn("session-1")
     .times(1);
+  // RELOADCMD-D1: the request reads the mode once, and the host field only
+  // outside Pi's terminal.
+  when(() => ctx.mode)
+    .thenReturn(mode)
+    .times(1);
+  if (mode !== "tui") {
+    when(() => ctx.hasUI)
+      .thenReturn(mode === "rpc")
+      .times(1);
+  }
+
   return ctx;
 }
 
-function greetRequest(args: string): SkillInvocationRequest {
+function greetRequest(
+  args: string,
+  reloadCommand: SkillInvocationRequest["reloadCommand"] = "/reload",
+): SkillInvocationRequest {
   return {
     commands: [GREET_SKILL],
     generatedName: "demo-greet",
@@ -136,6 +154,7 @@ function greetRequest(args: string): SkillInvocationRequest {
     projectTrusted: true,
     sessionId: "session-1",
     thinkingLevel: "low",
+    reloadCommand,
   };
 }
 
@@ -159,6 +178,42 @@ test("D-CF2-05: passes extension input through without invoking a skill", () => 
   verify(ctx);
   verify(invokeSkill);
 });
+
+for (const { mode, reloadCommand } of [
+  { mode: "rpc", reloadCommand: "/claude:plugin reload" },
+  { mode: "json", reloadCommand: undefined },
+] as const) {
+  test(`RELOADCMD-D1: a ${mode} skill request carries ${String(reloadCommand)} as its reload command`, async () => {
+    // arrange
+    const invokeSkill = mock<SkillInvoker>({ exactParams: true, name: "skill invocation" });
+    when(() => invokeSkill({ ...greetRequest("Ada"), reloadCommand }))
+      .thenResolve({ kind: "ok", text: GREET_BLOCK })
+      .times(1);
+    const ctx = invocationContext(1, true, mode);
+    const { pi, input } = registerWithInvoker(invokeSkill);
+    when(() => pi.getCommands())
+      .thenReturn([GREET_SKILL])
+      .times(1);
+    when(() => pi.getThinkingLevel())
+      .thenReturn("low")
+      .times(1);
+    const images: NonNullable<InputEvent["images"]> = [
+      { type: "image", data: "a", mimeType: "image/png" },
+    ];
+
+    // act
+    const sent = await input.value?.(
+      { type: "input", text: "/skill:demo-greet Ada", source: "rpc", images },
+      ctx,
+    );
+
+    // assert
+    assert.deepStrictEqual(sent, { action: "transform", text: GREET_BLOCK, images });
+    verify(pi);
+    verify(ctx);
+    verify(invokeSkill);
+  });
+}
 
 for (const source of ["interactive", "rpc"] as const) {
   test(`D-CF2-05 / D-CF2-06: sends a typed bridged skill from ${source} input through the invocation`, async () => {
@@ -515,10 +570,10 @@ test("T-01-24: reports an aborted skill as a usage error entry over RPC and hand
   // arrange
   const message = 'Shell command failed for pattern "!`exit 3`": partial';
   const invokeSkill = mock<SkillInvoker>({ exactParams: true, name: "skill invocation" });
-  when(() => invokeSkill(greetRequest("Ada")))
+  when(() => invokeSkill(greetRequest("Ada", "/claude:plugin reload")))
     .thenResolve({ kind: "abort", message })
     .times(1);
-  const ctx = invocationContext();
+  const ctx = invocationContext(1, true, "rpc");
   when(() => ctx.mode)
     .thenReturn("rpc")
     .times(1);

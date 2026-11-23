@@ -229,11 +229,11 @@ Feature: Slash command invocation
     Given the user has run "/claude:plugin uninstall demo@fixtures --scope project"
     When the user runs "/demo:greet Ada"
     Then the result has these fields:
-      | kind         | usage-error                                                                                                                                                                                               |
-      | severity     | error                                                                                                                                                                                                     |
-      | needs reload | false                                                                                                                                                                                                     |
-      | message      | Cannot read the command /demo:greet: ENOENT: no such file or directory, open '{project dir}/.pi/pi-claude-marketplace/resources/prompts/demo:greet.md'. Run /reload to load the installed commands again. |
-      | usage        |                                                                                                                                                                                                           |
+      | kind         | usage-error                                                                                                                                                                                                             |
+      | severity     | error                                                                                                                                                                                                                   |
+      | needs reload | false                                                                                                                                                                                                                   |
+      | message      | Cannot read the command /demo:greet: ENOENT: no such file or directory, open '{project dir}/.pi/pi-claude-marketplace/resources/prompts/demo:greet.md'. Run /claude:plugin reload to load the installed commands again. |
+      | usage        |                                                                                                                                                                                                                         |
 
   Scenario: A command whose body starts with another command sends that line to the model as it is
     Given pi runs with the scripted model

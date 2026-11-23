@@ -70,10 +70,12 @@ The soft-dep markers `requires pi-subagents`, the three MCP markers `requires mc
 
 ### Reload-hint trailer
 
-`notify()` appends `/reload to pick up changes` (with one blank line above the trailer) iff (SNM-33 / D-22-01):
+`notify()` appends `<reload> to pick up changes` (with one blank line above the trailer) iff (SNM-33 / D-22-01):
 
 - A plugin status is in `{installed, updated, reinstalled, uninstalled}`, or
 - a plugin status is `disabled` AND the cascade is dispatched with the `disable-cascade` kind -- the `/claude:plugin disable` command's realized-transition cascade (v1.12 milestone UAT-03 decision, 2026-06-11).
+
+`<reload>` is the reload command that the host offers (RELOADCMD-D1): `/reload` in Pi's terminal, which has Pi's own `/reload`, and `/claude:plugin reload` in another host that takes later commands. A one-shot run (print or json mode) gets no trailer, because its next run loads the change. The background update notice and the MCP move rows follow the same rule and leave the reload out in a one-shot run. The JSON strategy carries `needsReload` in every mode. The blocks in this catalog show the terminal form.
 
 The principle: marketplace records are bookkeeping, not Pi-visible resources; only plugin rows (skill / agent / command / MCP entry) are. A marketplace status alone (`added`, `removed`, `updated`, `autoupdate enabled`, `autoupdate disabled`) never warrants a `/reload` -- the trailer fires only when a plugin row carries a state-change token. A `failed` marketplace does NOT trigger the trailer (rolled-back state has nothing to reload). A failed-only cascade (no successful or state-changing rows) also suppresses the trailer.
 
@@ -5218,7 +5220,17 @@ Too many arguments.
 Usage: /claude:plugin help [marketplace]
 ```
 
-The shared argument parser applies these messages to `list`/`ls`, `pending`, `import`, `bootstrap`, `browse`, and `help`. The renderer emits the message and usage blocks with one blank line between them.
+`/claude:plugin reload` refuses with an empty usage block in two cases (RELOADCMD-D1). A one-shot run (print or json mode) gets the first block. A reload while a prompt runs or Pi compacts gets the second, Claude Code's words for its busy refusal.
+
+```text
+Reload is unavailable: this Pi run does not accept later commands, so the next run loads the changes.
+```
+
+```text
+The session is busy, so plugins were not reloaded. Ask again once it is idle.
+```
+
+The shared argument parser applies these messages to `list`/`ls`, `pending`, `import`, `bootstrap`, `browse`, `reload`, and `help`. The renderer emits the message and usage blocks with one blank line between them.
 
 ## State lock failures
 
@@ -5282,6 +5294,10 @@ claude-plugins.json [user]: on
 ```
 
 An invalid config fails the command closed (D-03): it emits the failed `{invalid manifest}` block the load and `pending` print for that config (see `/claude:plugin pending`), shows no value, and a set then writes nothing, whichever config is invalid. A set that cannot take the scope's state lock, or cannot write the file, emits one failed row named by the file, such as `{lock held}`. The byte forms are locked by `test/shared/notification-grammar.test.ts` and `test/orchestrators/reconcile/autoapply-setting.test.ts`.
+
+### Reload started (RELOADCMD-D1)
+
+`/claude:plugin reload` emits the `reload-started` kind right before Pi reloads, because Pi makes the command's context stale once it reloads, so the command cannot report after the reload. The text strategy shows nothing: Pi's terminal shows its own reload progress and then `Reloaded keybindings, extensions, skills, prompts, themes, and context files`. Over RPC the payload arrives first, and Pi answers the prompt once the reload is done. Severity `info`; no reload-hint. See [`docs/json-output.md`](json-output.md).
 
 ### Stop hook override cap reached (STOP-07 / D-88-01)
 

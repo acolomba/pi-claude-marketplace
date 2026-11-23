@@ -37,6 +37,7 @@ import {
   parsePluginRef,
   parsePluginTarget,
   parseRequiredPluginMarketplaceRef,
+  rejectArguments,
   rejectUnknownFlag,
   withParsedArgs,
   withScopeOnlyArgs,
@@ -60,6 +61,8 @@ const UNINSTALL_USAGE =
 const FETCH_USAGE =
   "Usage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]";
 const APPLY_USAGE = "Usage: /claude:plugin apply [--scope user|project]";
+const BROWSE_USAGE = "Usage: /claude:plugin browse";
+const BROWSE_SURPLUS = "browse takes no arguments.";
 
 test("rejectUnknownFlag passes tokens with no long flag and stays silent", () => {
   // arrange
@@ -94,6 +97,65 @@ test("rejectUnknownFlag names the first long flag with the caller's usage", () =
     { message: `Unknown flag: "--bogus".\n\n${UNINSTALL_USAGE}`, severity: "error" },
   ]);
   verifyBoundary();
+});
+
+describe("rejectArguments", () => {
+  test("passes an empty argument text through and stays silent", () => {
+    // arrange
+    const { ctx, verifyBoundary } = createNotificationBoundary(0);
+
+    // act
+    const rejected = rejectArguments("", {
+      ctx,
+      run: runWithNothingLoaded(),
+      usage: BROWSE_USAGE,
+      surplus: BROWSE_SURPLUS,
+    });
+
+    // assert
+    assert.strictEqual(rejected, false);
+    verifyBoundary();
+  });
+
+  test("names the first long flag before any surplus token with the caller's usage", () => {
+    // arrange
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+    // act
+    const rejected = rejectArguments("surplus --bogus", {
+      ctx,
+      run: runWithNothingLoaded(),
+      usage: BROWSE_USAGE,
+      surplus: BROWSE_SURPLUS,
+    });
+
+    // assert
+    assert.strictEqual(rejected, true);
+    assert.deepStrictEqual(notifications, [
+      { message: `Unknown flag: "--bogus".\n\n${BROWSE_USAGE}`, severity: "error" },
+    ]);
+    verifyBoundary();
+  });
+
+  test("refuses a surplus token with the verb's surplus message and usage", () => {
+    // arrange
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+    // act
+    const rejected = rejectArguments("extra", {
+      ctx,
+      run: runWithNothingLoaded(),
+      usage: BROWSE_USAGE,
+      surplus: BROWSE_SURPLUS,
+    });
+
+    // assert
+    assert.strictEqual(rejected, true);
+    assert.deepStrictEqual(notifications, [
+      { message: `${BROWSE_SURPLUS}\n\n${BROWSE_USAGE}`, severity: "error" },
+    ]);
+    verifyBoundary();
+  });
 });
 
 describe("parseMapModelArgs", () => {

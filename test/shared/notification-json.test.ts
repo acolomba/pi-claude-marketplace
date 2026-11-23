@@ -2716,6 +2716,17 @@ const RAW_CASES: {
       text: "PreToolUse:Bash says: checked",
     },
   },
+  // RELOADCMD-D1: the reload outcome carries the envelope only.
+  "reload-started": {
+    surface: { kind: "reload-started" },
+    expected: {
+      schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+      kind: "reload-started",
+      severity: "info",
+      needsReload: false,
+    },
+  },
 };
 
 for (const [kind, { surface, expected }] of Object.entries(RAW_CASES)) {

@@ -76,7 +76,7 @@ function loadRun(): NotificationRun {
 
 function emit(t: TestContext, plugins: readonly BackgroundUpdatePlugin[]): NotifyArguments[] {
   const notify = t.mock.fn<(...args: NotifyArguments) => void>();
-  const ctx: NotificationContext = { mode: "tui", ui: { notify } };
+  const ctx: NotificationContext = { mode: "tui", hasUI: true, ui: { notify } };
   notifyBackgroundUpdate(ctx, loadRun(), plugins);
   return notify.mock.calls.map((call) => call.arguments);
 }

@@ -22,6 +22,7 @@ import {
   notifyMcpMigration,
   notifyPluginPathSkipped,
   notifyReconcileAborted,
+  notifyReloadStarted,
   notifyStopHookOverrideCap,
   notifyUsageError,
   notifyAutoapplyStatus,
@@ -55,6 +56,7 @@ import type {
 
 interface NotificationContext {
   mode: string;
+  hasUI: boolean;
   readonly ui: {
     readonly notify: Mock<(message: string, severity?: "info" | "warning" | "error") => void>;
   };
@@ -63,6 +65,7 @@ interface NotificationContext {
 function createContext(t: TestContext): NotificationContext {
   return {
     mode: "tui",
+    hasUI: true,
     ui: { notify: t.mock.fn((_message: string, _severity?: "info" | "warning" | "error") => {}) },
   };
 }
@@ -116,6 +119,7 @@ test("marks recovery before a sink callback can reenter delivery", () => {
   const states: unknown[] = [];
   const ctx = {
     mode: "json",
+    hasUI: false,
     get ui(): never {
       throw new Error("Unexpected UI access");
     },
@@ -177,6 +181,7 @@ for (const { debug, loggerThrows } of [
     const run = { ...runWithNothingLoaded(), entrySink: sink };
     const ctx = {
       mode: "json",
+      hasUI: false,
       get ui(): never {
         throw new Error("Unexpected UI access");
       },
@@ -205,6 +210,7 @@ test("preserves direct dispatch for a command carrier without completion state",
   const run = { origin: seed.origin, softDeps: seed.softDeps, entrySink: capture.entrySink };
   const ctx = {
     mode: "json",
+    hasUI: false,
     get ui() {
       return capture.ui;
     },
@@ -270,6 +276,7 @@ for (const { name, failures, expected, delivery, hasOutcome } of [
     const run = { ...runWithNothingLoaded(), entrySink: sink };
     const ctx = {
       mode: "json",
+      hasUI: false,
       get ui(): never {
         throw new Error("Unexpected UI access");
       },
@@ -308,6 +315,7 @@ for (const { failures, delivery, hasOutcome } of [
     const run = { ...runWithNothingLoaded(), entrySink: sink };
     const ctx = {
       mode: "json",
+      hasUI: false,
       get ui(): never {
         throw new Error("Unexpected UI access");
       },
@@ -337,6 +345,7 @@ test("preserves reload truth from a failed attempted outcome", () => {
   const run = { ...runWithNothingLoaded(), entrySink: sink };
   const ctx = {
     mode: "json",
+    hasUI: false,
     get ui(): never {
       throw new Error("Unexpected UI access");
     },
@@ -377,6 +386,7 @@ for (const kind of ["load", "hook"] as const) {
     const run = { ...runWithNothingLoaded(), entrySink: sink, origin: { kind } };
     const ctx = {
       mode: "json",
+      hasUI: false,
       get ui(): never {
         throw new Error("Unexpected UI access");
       },
@@ -484,6 +494,7 @@ for (const { message, outcome, reload } of [
     const capture = createJsonCapture();
     const ctx = {
       mode: "json",
+      hasUI: false,
       get ui() {
         return capture.ui;
       },
@@ -626,6 +637,7 @@ for (const { kind, outcome, emit } of [
     const capture = createJsonCapture();
     const ctx = {
       mode: "json",
+      hasUI: false,
       get ui() {
         return capture.ui;
       },
@@ -666,6 +678,9 @@ for (const state of [
       get mode(): string {
         throw new Error("Unexpected mode access");
       },
+      get hasUI(): boolean {
+        throw new Error("Unexpected mode access");
+      },
       get ui(): never {
         throw new Error("Unexpected UI access");
       },
@@ -688,6 +703,7 @@ for (const kind of ["load", "hook"] as const) {
     const run = { ...runWithNothingLoaded(), origin: { kind }, entrySink: capture.entrySink };
     const ctx = {
       mode: "json",
+      hasUI: false,
       get ui() {
         return capture.ui;
       },
@@ -726,6 +742,7 @@ for (const mode of ["json", "rpc"]) {
     const capture = createJsonCapture();
     const ctx = {
       mode,
+      hasUI: mode === "tui" || mode === "rpc",
       get ui() {
         return capture.ui;
       },
@@ -772,6 +789,7 @@ for (const mode of ["tui", "print"]) {
     const capture = createJsonCapture();
     const ctx = {
       mode,
+      hasUI: mode === "tui" || mode === "rpc",
       get ui() {
         return capture.ui;
       },
@@ -796,6 +814,7 @@ test("delivers an unexpected error after an earlier explicit outcome", () => {
   const capture = createJsonCapture();
   const ctx = {
     mode: "json",
+    hasUI: false,
     get ui() {
       return capture.ui;
     },
@@ -842,6 +861,7 @@ for (const mode of ["json", "rpc"]) {
     const capture = createJsonCapture();
     const ctx = {
       mode,
+      hasUI: mode === "tui" || mode === "rpc",
       get ui() {
         return capture.ui;
       },
@@ -913,6 +933,9 @@ test("keeps mixed entries and duplicates ordered while reading live mode on the 
       reads.push(mode);
       return mode;
     },
+    get hasUI(): boolean {
+      return mode === "tui" || mode === "rpc";
+    },
     get ui() {
       return capture.ui;
     },
@@ -975,6 +998,7 @@ test("rejects an unsupported mode before structured or raw delivery", () => {
   const capture = createJsonCapture();
   const ctx = {
     mode: "invalid",
+    hasUI: false,
     get ui() {
       return capture.ui;
     },
@@ -1089,6 +1113,8 @@ test("notify renders installed plugin with agents dep + probe unloaded (soft-dep
   // arrange
   const ctx = createContext(t);
   ctx.mode = "print";
+  // RELOADCMD-D1: a one-shot run gets no reload hint.
+  ctx.hasUI = false;
   const run = runWithSoftDeps({
     piSubagentsLoaded: false,
     mcpImplementation: "adapter",
@@ -1120,7 +1146,7 @@ test("notify renders installed plugin with agents dep + probe unloaded (soft-dep
   // assert
   assert.equal(ctx.ui.notify.mock.calls.length, 1);
   assert.deepEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    `● demo [user] (added)\n  ● commit-commands v1.0.0 (installed) {requires pi-subagents}\n\n/reload to pick up changes`,
+    `● demo [user] (added)\n  ● commit-commands v1.0.0 (installed) {requires pi-subagents}`,
   ]);
 });
 
@@ -2244,6 +2270,94 @@ test("RLD-02: cascade-shaped message with an installed transition row (needsRelo
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     "● official [user]\n  ● alpha v1.0.0 (installed)\n\n/reload to pick up changes",
   ]);
+});
+
+/** RELOADCMD-D1: a cascade with one installed row, which needs a reload. */
+function reloadingCascade(): NotificationMessage {
+  return {
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "installed",
+            severity: "info",
+            needsReload: true,
+            name: "alpha",
+            version: "1.0.0",
+            dependencies: [],
+          },
+        ],
+      },
+    ],
+  };
+}
+
+for (const { mode, hasUI, expectedText } of [
+  {
+    mode: "print",
+    hasUI: false,
+    expectedText: "● official [user]\n  ● alpha v1.0.0 (installed)",
+  },
+  {
+    mode: "tui",
+    hasUI: undefined,
+    expectedText: "● official [user]\n  ● alpha v1.0.0 (installed)\n\n/reload to pick up changes",
+  },
+] as const) {
+  test(`RELOADCMD-D1: a ${mode} emission of a cascade that needs a reload words its trailer for the host`, () => {
+    // arrange
+    const ctx = mock<HostNotificationContext>({ exactParams: true, name: "notification context" });
+    const notified: unknown[][] = [];
+    when(() => ctx.mode)
+      .thenReturn(mode)
+      .times(1);
+    if (hasUI !== undefined) {
+      when(() => ctx.hasUI)
+        .thenReturn(hasUI)
+        .times(1);
+    }
+
+    when(() => ctx.ui)
+      .thenReturn({
+        notify: (...args: unknown[]): void => {
+          notified.push(args);
+        },
+      })
+      .times(1);
+
+    // act
+    notify(ctx, runWithAllLoaded(), reloadingCascade());
+
+    // assert
+    assert.deepStrictEqual(notified, [[expectedText]]);
+    verify(ctx);
+  });
+}
+
+test("RELOADCMD-D1: a json emission of a cascade that needs a reload keeps needsReload", () => {
+  // arrange
+  const capture = createJsonCapture();
+  const run = { ...runWithAllLoaded(), entrySink: capture.entrySink };
+  const ctx = {
+    mode: "json",
+    hasUI: false,
+    get ui(): never {
+      throw new Error("Unexpected UI access");
+    },
+  };
+
+  // act
+  notify(ctx, run, reloadingCascade());
+
+  // assert
+  assert.strictEqual(capture.entries.length, 1);
+  assert.strictEqual(
+    (capture.entries[0]?.payload as { readonly needsReload?: unknown }).needsReload,
+    true,
+  );
+  capture.assertValid();
 });
 
 test("PL-4: installed inventory row with description emits a 4-space-indented second line", (t) => {
@@ -6707,6 +6821,7 @@ for (const mode of ["json", "rpc"]) {
     const capture = createJsonCapture();
     const ctx = {
       mode,
+      hasUI: mode === "tui" || mode === "rpc",
       get ui() {
         return capture.ui;
       },
@@ -6801,6 +6916,7 @@ for (const mode of ["json", "rpc"]) {
       const capture = createJsonCapture();
       const ctx = {
         mode,
+        hasUI: mode === "tui" || mode === "rpc",
         get ui() {
           return capture.ui;
         },
@@ -6822,6 +6938,9 @@ test("empty diagnostics do not read a stale mode getter", () => {
   const capture = createJsonCapture();
   const ctx = {
     get mode(): string {
+      throw new Error("stale mode");
+    },
+    get hasUI(): boolean {
       throw new Error("stale mode");
     },
     get ui() {
@@ -6879,6 +6998,7 @@ for (const mode of ["json", "rpc"]) {
     const capture = createJsonCapture();
     const ctx = {
       mode,
+      hasUI: mode === "tui" || mode === "rpc",
       get ui() {
         return capture.ui;
       },
@@ -6912,6 +7032,9 @@ test("empty rewake does not read mode or sink", () => {
   const capture = createJsonCapture();
   const ctx = {
     get mode(): string {
+      throw new Error("stale mode");
+    },
+    get hasUI(): boolean {
       throw new Error("stale mode");
     },
     get ui() {
@@ -6953,6 +7076,7 @@ for (const mode of ["json", "rpc"]) {
     const capture = createJsonCapture();
     const ctx = {
       mode,
+      hasUI: mode === "tui" || mode === "rpc",
       get ui() {
         return capture.ui;
       },
@@ -7015,6 +7139,7 @@ test("hook notice dispatch appends the stripped text in json", () => {
   const capture = createJsonCapture();
   const ctx = {
     mode: "json",
+    hasUI: false,
     get ui() {
       return capture.ui;
     },
@@ -7046,6 +7171,9 @@ test("an empty hook notice does not read mode or sink", () => {
   const capture = createJsonCapture();
   const ctx = {
     get mode(): string {
+      throw new Error("stale mode");
+    },
+    get hasUI(): boolean {
       throw new Error("stale mode");
     },
     get ui() {
@@ -7082,6 +7210,7 @@ for (const mode of ["json", "rpc"]) {
     const capture = createJsonCapture();
     const ctx = {
       mode,
+      hasUI: mode === "tui" || mode === "rpc",
       get ui() {
         return capture.ui;
       },
@@ -7212,6 +7341,7 @@ for (const mode of ["json", "rpc"]) {
     const capture = createJsonCapture();
     const ctx = {
       mode,
+      hasUI: mode === "tui" || mode === "rpc",
       get ui() {
         return capture.ui;
       },
@@ -7339,6 +7469,7 @@ for (const mode of ["json", "rpc"]) {
     const capture = createJsonCapture();
     const ctx = {
       mode,
+      hasUI: mode === "tui" || mode === "rpc",
       get ui() {
         return capture.ui;
       },
@@ -7404,6 +7535,7 @@ test("PMOD-04: a credential in a server name and a migration detail is redacted 
   const capture = createJsonCapture();
   const jsonContext = {
     mode: "json",
+    hasUI: false,
     get ui() {
       return capture.ui;
     },
@@ -7500,6 +7632,54 @@ test("AAP-04: autoapply status dispatch renders the effective value at info seve
   ]);
 });
 
+test("RELOADCMD-D1: reload-started delivers nothing to Pi's terminal", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyReloadStarted(ctx, runWithNothingLoaded());
+
+  // assert
+  assert.strictEqual(ctx.ui.notify.mock.callCount(), 0);
+});
+
+test("RELOADCMD-D1: reload-started appends the command's outcome over rpc", () => {
+  // arrange
+  const capture = createJsonCapture();
+  const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+  const ctx = {
+    mode: "rpc",
+    hasUI: true,
+    get ui(): never {
+      throw new Error("Unexpected UI access");
+    },
+  };
+
+  // act
+  notifyReloadStarted(ctx, run);
+
+  // assert
+  assert.deepStrictEqual(capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+        kind: "reload-started",
+        severity: "info",
+        needsReload: false,
+      },
+    },
+  ]);
+  capture.assertValid();
+  assert.deepStrictEqual(run.commandState, {
+    hasOutcome: true,
+    needsReload: false,
+    settled: false,
+    delivery: "open",
+  });
+});
+
 test("notifyBackgroundUpdate names the updated plugins at info severity", (t) => {
   // arrange
   const ctx = createContext(t);
@@ -7528,6 +7708,9 @@ test("notifyBackgroundUpdate emits nothing for an empty plugin list", () => {
   const capture = createJsonCapture();
   const ctx = {
     get mode(): string {
+      throw new Error("stale mode");
+    },
+    get hasUI(): boolean {
       throw new Error("stale mode");
     },
     get ui() {
@@ -7565,6 +7748,7 @@ for (const mode of ["json", "rpc"]) {
     const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
     const ctx = {
       mode,
+      hasUI: mode === "tui" || mode === "rpc",
       get ui() {
         return capture.ui;
       },
@@ -7628,6 +7812,7 @@ test("retains a caught invalid device prompt append for final validation", () =>
   const capture = createJsonCapture();
   const ctx = {
     mode: "rpc",
+    hasUI: true,
     get ui() {
       return capture.ui;
     },

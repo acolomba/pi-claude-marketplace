@@ -91,6 +91,7 @@ async function createPrintAdd(t: TestContext) {
   const options: AddMarketplaceOptions = {
     ctx: {
       mode: "print",
+      hasUI: false,
       ui: {
         notify: (message) => {
           notifications.push(message);

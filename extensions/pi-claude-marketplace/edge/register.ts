@@ -12,9 +12,15 @@
 //         The handler runs each command through the optional
 //         `runForeground` gate, so a command waits for the background
 //         autoupdate step in flight (D-PL8-04).
-//       * pi.on("session_start", ...) -- installs the TC-7 autocomplete
-//         wrapper that scopes normalizeCompletionWhitespace to lines
-//         matching isClaudePluginCommandLine.
+//       * RELOADCMD-D1: `reload` asks for Pi's reload through a request
+//         set; the handler runs `ctx.reload()` after the command settled and
+//         the foreground runner returned, because Pi makes the context stale
+//         once it reloads.
+//       * pi.on("session_start", ...) -- records whether the host takes later
+//         commands, which completions read because Pi gives the completion
+//         callback no context (RELOADCMD-D1), and installs the TC-7
+//         autocomplete wrapper that scopes normalizeCompletionWhitespace to
+//         lines matching isClaudePluginCommandLine.
 //
 //   - registerClaudeMarketplaceTools(pi):
 //       * delegates to registerListMarketplacesTool + registerListPluginsTool.
@@ -50,6 +56,7 @@ import {
   openNotificationSnapshot,
   requireNotificationMode,
 } from "../shared/notification-run.ts";
+import { acceptsLaterCommands } from "../shared/session-host.ts";
 
 import { runCommand } from "./command-run.ts";
 import {
@@ -77,6 +84,7 @@ import { makeListHandler } from "./handlers/plugin/list.ts";
 import { makePendingHandler } from "./handlers/plugin/pending.ts";
 import { makePruneHandler } from "./handlers/plugin/prune.ts";
 import { makeReinstallHandler } from "./handlers/plugin/reinstall.ts";
+import { makeReloadHandler } from "./handlers/plugin/reload.ts";
 import { makeUninstallHandler } from "./handlers/plugin/uninstall.ts";
 import { makeUpdateHandler } from "./handlers/plugin/update.ts";
 import { registerListMarketplacesTool, registerListPluginsTool } from "./handlers/tools.ts";
@@ -84,13 +92,29 @@ import { routeClaudePlugin, selectClaudePluginRoute } from "./router.ts";
 
 import type { InstallHooksRouting } from "../orchestrators/plugin/install-disable-cascade.ts";
 import type { UpdatePluginsFn } from "../orchestrators/plugin/update-flow.ts";
-import type { ExtensionAPI } from "../platform/pi-api.ts";
+import type { ExtensionAPI, ExtensionCommandContext } from "../platform/pi-api.ts";
 import type { SubcommandHandlers } from "./router.ts";
 import type { EdgeDeps } from "./types.ts";
 
 const COMMAND_DESCRIPTION =
   "Manage Claude plugin marketplaces and plugins. Bootstrap, install, " +
   "uninstall, prune, list, import, update, and reinstall plugins from configured marketplaces.";
+
+/**
+ * RELOADCMD-D1: runs Pi's reload for a command that asked for one, as the last
+ * thing the command does. Pi makes the command's context stale once it
+ * reloads (`docs/extensions.md`, ctx.reload()), so this runs after the command
+ * settled and the foreground runner returned, and nothing reads the context
+ * after it. A reload that fails reaches Pi, which reports it.
+ */
+async function reloadWhenRequested(
+  requests: WeakSet<ExtensionCommandContext>,
+  ctx: ExtensionCommandContext,
+): Promise<void> {
+  if (requests.delete(ctx)) {
+    await ctx.reload();
+  }
+}
 
 /**
  * Wires the `/claude:plugin` slash command + the TC-7 autocomplete
@@ -128,6 +152,13 @@ export function registerClaudePluginCommand(
   const disable = makeEnableDisableHandler(false, hooksRouting);
   const list = makeListHandler();
   const browse = makeBrowseHandler({ install, uninstall, pluginInfo, enable, disable });
+  // RELOADCMD-D1: Pi makes a fresh command context for each invocation
+  // (`core/agent-session.js:1791`), so a context names one invocation, and the
+  // set holds the invocations that asked for a reload. `laterCommands` is the
+  // last session start's answer, which completions read because Pi gives the
+  // completion callback no context; it is false until a session starts.
+  const reloadRequests = new WeakSet<ExtensionCommandContext>();
+  let laterCommands = false;
 
   const handlers: SubcommandHandlers = {
     bootstrap: makeBootstrapHandler(deps),
@@ -158,6 +189,9 @@ export function registerClaudePluginCommand(
     marketplaceAutoupdate: makeAutoupdateHandler(true),
     marketplaceNoautoupdate: makeAutoupdateHandler(false),
     browse,
+    reload: makeReloadHandler((ctx) => {
+      reloadRequests.add(ctx);
+    }),
     help: makeHelpHandler(),
   };
 
@@ -168,7 +202,7 @@ export function registerClaudePluginCommand(
     // A usage error opens its run too.
     handler: (args, ctx) => {
       requireNotificationMode(ctx.mode);
-      const route = selectClaudePluginRoute(args, handlers);
+      const route = selectClaudePluginRoute(args, handlers, ctx);
       return runForeground(() =>
         runCommand(
           pi,
@@ -177,7 +211,7 @@ export function registerClaudePluginCommand(
           (run) => routeClaudePlugin(route, handlers, ctx, run),
           { createInvocationId, createRecoveryId, openRun: openNotificationRun },
         ),
-      );
+      ).then(() => reloadWhenRequested(reloadRequests, ctx));
     },
     // This `process.cwd()` is the single sanctioned site.
     // The arrow body runs per completion lookup and reads
@@ -197,6 +231,7 @@ export function registerClaudePluginCommand(
           openNotificationSnapshot(pi).softDeps.mcpImplementation,
         ),
         deps.completionCache,
+        laterCommands,
       ),
   });
 
@@ -208,6 +243,7 @@ export function registerClaudePluginCommand(
   pi.on("session_start", (_event, ctx) => {
     try {
       requireNotificationMode(ctx.mode);
+      laterCommands = acceptsLaterCommands(ctx);
       ctx.ui.addAutocompleteProvider((current) => ({
         getSuggestions: (lines, line, col, options) =>
           current.getSuggestions(lines, line, col, options),

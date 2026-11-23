@@ -79,7 +79,7 @@ function createGitOps(options: { readonly fixtureSourceDir: string }) {
   });
 }
 
-const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
+const ctx = { mode: "tui", hasUI: true, ui: { notify: (): void => undefined } };
 
 /** Loads a config file and narrows it to the valid arm. */
 async function loadValidConfig(filePath: string): Promise<ScopeConfig> {
