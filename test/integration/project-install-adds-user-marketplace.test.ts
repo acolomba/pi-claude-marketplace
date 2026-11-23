@@ -7,12 +7,9 @@
 // add body and settle with the double passed in.
 
 import assert from "node:assert/strict";
-import * as fs from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
-
-import * as git from "isomorphic-git";
 
 import {
   createHooksRouting,
@@ -38,6 +35,7 @@ import { pathExists } from "../../extensions/pi-claude-marketplace/shared/fs-uti
 import { createNotificationBoundary } from "../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
+import { gitTestCheckout, initGitTestCheckout } from "../platform/git-test-repository.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { noStatusReaders } from "../platform/mcp-status-seed.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
@@ -118,8 +116,7 @@ async function checkout(
   plugins: readonly FixturePlugin[],
 ): Promise<string> {
   await writeMarketplace(dir, name, plugins);
-  await git.init({ fs, dir, defaultBranch: "main" });
-  await git.addRemote({ fs, dir, remote: "origin", url });
+  await initGitTestCheckout(dir, { origin: url });
   return dir;
 }
 
@@ -290,7 +287,7 @@ test("LAYER-07: a project keeps the marketplace its install added after a user-s
   assert.deepStrictEqual(
     [
       await pathExists(path.join(projectClone, ".git", "pi-claude-marketplace.json")),
-      await git.getConfig({ fs, dir: projectClone, path: "remote.origin.url" }),
+      await gitTestCheckout(projectClone).run("config", "--get", "remote.origin.url"),
     ],
     [true, REPO_URL],
   );

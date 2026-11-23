@@ -1,11 +1,9 @@
 import assert from "node:assert/strict";
-import * as fs from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import * as git from "isomorphic-git";
 import { mock, verify, when } from "strong-mock";
 
 import {
@@ -25,6 +23,7 @@ import { createCompletionCache } from "../../extensions/pi-claude-marketplace/sh
 import { pathExists } from "../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
+import { gitTestCheckout, initGitTestCheckout } from "../platform/git-test-repository.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import type { ScopedLocations } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -112,19 +111,14 @@ async function buildCheckout(
     path.join(root, "plugins", "foo", ".claude-plugin", "plugin.json"),
     JSON.stringify({ name: "foo" }),
   );
-  await git.init({ fs, dir: root, defaultBranch: "main" });
-  if (options.originUrl !== undefined) {
-    await git.addRemote({ fs, dir: root, remote: "origin", url: options.originUrl });
-  }
-
-  await git.add({ fs, dir: root, filepath: ".claude-plugin/marketplace.json" });
-  await git.add({ fs, dir: root, filepath: "plugins/foo/.claude-plugin/plugin.json" });
-  await git.commit({
-    fs,
-    dir: root,
-    message: "init",
-    author: { name: "test author", email: "test@example.com" },
-  });
+  const checkout = await initGitTestCheckout(
+    root,
+    options.originUrl === undefined ? {} : { origin: options.originUrl },
+  );
+  await checkout.commitPaths("init", [
+    ".claude-plugin/marketplace.json",
+    "plugins/foo/.claude-plugin/plugin.json",
+  ]);
   return root;
 }
 
@@ -380,7 +374,7 @@ test("preserves the real remote URL on the seeded mirror", async () => {
     // assert
     const mirror = await locations.pluginCloneDir(pluginMirrorKey(REPO_URL));
     assert.strictEqual(
-      await git.getConfig({ fs, dir: mirror, path: "remote.origin.url" }),
+      await gitTestCheckout(mirror).run("config", "--get", "remote.origin.url"),
       REPO_URL,
     );
     assert.deepStrictEqual(
