@@ -580,6 +580,19 @@ export function hookContextPart(
 interface HookContextSend {
   readonly details?: SessionStartContextDetails;
   readonly steer?: boolean;
+  readonly nextTurn?: boolean;
+}
+
+// How Pi delivers a hook context message: steered into the running agent,
+// held for the next prompt, or written at once without starting a turn.
+function contextDelivery(
+  send: HookContextSend,
+): { readonly deliverAs: "steer" | "nextTurn" } | { readonly triggerTurn: false } {
+  if (send.steer === true) {
+    return { deliverAs: "steer" };
+  }
+
+  return send.nextTurn === true ? { deliverAs: "nextTurn" } : { triggerTurn: false };
 }
 
 /**
@@ -590,7 +603,10 @@ interface HookContextSend {
  * model reads it on the next model call. HKRL-03: with `send.steer`, a
  * compaction's context whose next model call follows in the same run is
  * steered in (`deliverAs: "steer"`), which Pi's loop reads on that call;
- * while idle, Pi appends a steer at once. No value with text, or no Pi API,
+ * while idle, Pi appends a steer at once. HOOKLATESS-D1: with
+ * `send.nextTurn`, a late SessionStart context whose run passed the wait is
+ * held for the next prompt (`deliverAs: "nextTurn"`), as Claude Code flushes
+ * held late rows before the next turn's input. No value with text, or no Pi API,
  * sends nothing. Only a synchronous throw, such as Pi's stale-context error
  * after a session replacement, is debug-logged with `failureLog` and never
  * thrown (NFR-2); Pi reports a rejected asynchronous write itself, through
@@ -616,7 +632,7 @@ function sendHookContextMessage(
         display: false,
         ...(send.details === undefined ? {} : { details: send.details }),
       },
-      send.steer === true ? { deliverAs: "steer" } : { triggerTurn: false },
+      contextDelivery(send),
     );
   } catch (error: unknown) {
     hookDebugLog(`${failureLog}: ${errorMessage(error)}`);
@@ -862,6 +878,7 @@ function sendSessionStartContext(
     {
       details: { event: "SessionStart", values: sent },
       steer: start.event.nextCallReadsSteer?.() === true,
+      nextTurn: start.event.heldForNextPrompt?.() === true,
     },
   );
 }

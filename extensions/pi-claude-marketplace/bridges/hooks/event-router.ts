@@ -143,7 +143,7 @@ import type {
   HookExecutor,
 } from "./dispatch.ts";
 import type { FollowUpTurnEnd } from "./event-adapters.ts";
-import type { SessionLaunchFacts } from "./payloads/session-start.ts";
+import type { ClaudeSessionStartEvent, SessionLaunchFacts } from "./payloads/session-start.ts";
 import type { HooksRuntime } from "./runtime.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -205,6 +205,10 @@ const NO_LAUNCH_FACTS: SessionLaunchFacts = { holdsMessages: false, forkedByThis
 // HOOKLATESS-D1: the modes of Claude Code's headless runner, the only one
 // that runs a late SessionStart.
 const LATE_SESSION_START_MODES: ReadonlySet<ExtensionMode> = new Set(["print", "json", "rpc"]);
+
+// HOOKLATESS-D1: how long Claude Code waits for the late hooks before its turn
+// goes ahead (`S5()`).
+const LATE_SESSION_START_WAIT_MS = 10_000;
 
 // D-PG6-13..15: read from Pi's session manager only, never from a file or
 // the command line. A new session already holds setting entries, so only a
@@ -845,7 +849,9 @@ export interface HooksHydration {
  * `runLateSessionStart` runs SessionStart once for the plugins that gained a
  * SessionStart route since the session's own SessionStart, with that run's
  * source, as Claude Code's headless runner does for a plugin that loads after
- * the session started. It never throws (NFR-2).
+ * the session started. The load waits at most 10 seconds for that run; a run
+ * that takes longer goes on, and its context waits for the next prompt. It
+ * never throws (NFR-2).
  */
 export interface HooksBridge {
   readonly runLateSessionStart: (
@@ -1334,6 +1340,21 @@ async function prepareSessionStartDataDirs(
   return true;
 }
 
+// Whether `promise` settles within `ms`. The timer never outlives the race.
+async function settlesWithin(promise: Promise<unknown>, ms: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const elapsed = new Promise<boolean>((resolve) => {
+    timer = setTimeout(() => {
+      resolve(false);
+    }, ms);
+  });
+  try {
+    return await Promise.race([promise.then(() => true), elapsed]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /**
  * HOOKLATESS-D1: the late SessionStart run of one bridge generation. It takes
  * the ledger first, so the first load takes it whatever follows. It runs only
@@ -1343,8 +1364,11 @@ async function prepareSessionStartDataDirs(
  * read last, so a load with nothing owed reads nothing of `ctx`. The shared
  * data directories are prepared as for every SessionStart dispatch, and the
  * dispatch runs only the hooks of the owed plugins, with the source of the
- * session's own SessionStart. A failure is debug-logged and the load goes on
- * (NFR-2).
+ * session's own SessionStart. The load waits at most 10 seconds for the
+ * hooks, as Claude Code races them before its first turn. A run that takes
+ * longer goes on, and its context waits for the next prompt. A failure before
+ * the hooks start, and a failure of the hooks, are debug-logged, and the load
+ * goes on (NFR-2).
  */
 function lateSessionStartRun(
   ledger: LateSessionStartLedger,
@@ -1365,7 +1389,16 @@ function lateSessionStartRun(
 
       // The handler checks the generation itself.
       await prepareSessionStartDataDirs(routingState, ctx, generationIsCurrent);
-      await sessionStartHandler({ source: late.source, newPluginsOnly: late.plugins }, ctx);
+      let wentAhead = false;
+      const event: ClaudeSessionStartEvent = {
+        source: late.source,
+        newPluginsOnly: late.plugins,
+        heldForNextPrompt: () => wentAhead,
+      };
+      const run = sessionStartHandler(event, ctx).catch((err: unknown) => {
+        hookDebugLog(`late SessionStart failed: ${errorMessage(err)}`);
+      });
+      wentAhead = !(await settlesWithin(run, LATE_SESSION_START_WAIT_MS));
     } catch (err: unknown) {
       hookDebugLog(`late SessionStart skipped: ${errorMessage(err)}`);
     }

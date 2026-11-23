@@ -4045,9 +4045,13 @@ function withSessionManager(
   });
 }
 
+// The executor's answer to one dispatch.
+type DispatchAnswer = (entry: RoutingEntry) => Promise<HookExecResult>;
+
 // Registers the bridge with `processStartedAt` and returns its runtime, the
 // bridge, its session_start handler, and the scope and event of each
-// SessionStart dispatch.
+// SessionStart dispatch. Each dispatch is answered with `noop` until
+// `answerWith` names another answer.
 async function launchRouter(
   t: TestContext,
   processStartedAt: number,
@@ -4058,10 +4062,12 @@ async function launchRouter(
   readonly bridge: HooksBridge;
   readonly sessionStart: (...args: unknown[]) => unknown;
   readonly dispatched: readonly { readonly scope: string; readonly event: unknown }[];
+  readonly answerWith: (next: DispatchAnswer) => void;
 }> {
   const { root, projectRoot } = await makeSessionStartFixture(t);
   const { pi, registrations } = makeRecordingPi();
   const dispatched: { readonly scope: string; readonly event: unknown }[] = [];
+  let answer: DispatchAnswer = () => Promise.resolve({ kind: "noop" });
   const runtime = createHooksRuntime();
   const bridge = await createHooksHydration(runtime, {
     loadState,
@@ -4072,7 +4078,7 @@ async function launchRouter(
     processStartedAt,
     executor: (entry, event) => {
       dispatched.push({ scope: entry.scope, event });
-      return Promise.resolve({ kind: "noop" });
+      return answer(entry);
     },
   });
   return {
@@ -4082,6 +4088,9 @@ async function launchRouter(
     bridge,
     sessionStart: registeredHandler(registrations, "session_start"),
     dispatched,
+    answerWith: (next) => {
+      answer = next;
+    },
   };
 }
 
@@ -4120,13 +4129,15 @@ async function sessionWithAddedPlugin(
   readonly projectRoot: string;
   readonly context: ExtensionContext;
   readonly dispatched: readonly { readonly scope: string; readonly event: unknown }[];
+  readonly answerWith: (next: DispatchAnswer) => void;
 }> {
-  const { root, projectRoot, runtime, bridge, sessionStart, dispatched } = await launchRouter(t, 0);
+  const { root, projectRoot, runtime, bridge, sessionStart, dispatched, answerWith } =
+    await launchRouter(t, 0);
   const modeContext = withMode(makeContext(projectRoot, root), options.mode);
   const context = options.prepare?.(modeContext, root) ?? modeContext;
   await sessionStart({ type: "session_start", reason: options.reason }, context);
   addSessionStartRoute(runtime, "added", projectRoot);
-  return { bridge, runtime, root, projectRoot, context, dispatched };
+  return { bridge, runtime, root, projectRoot, context, dispatched, answerWith };
 }
 
 // What one dispatch received: its scope, its source, and the plugins a late
@@ -4345,6 +4356,97 @@ test("a load whose mode is not a notification mode debug-logs and runs no late S
       debugLines: ["[hooks] late SessionStart skipped: Unsupported notification mode: web"],
     },
   );
+});
+
+// The delivery hint of the last dispatch, the late run's.
+function lateHint(
+  dispatched: readonly { readonly scope: string; readonly event: unknown }[],
+): boolean | undefined {
+  return (dispatched.at(-1)?.event as ClaudeSessionStartEvent | undefined)?.heldForNextPrompt?.();
+}
+
+test("a late SessionStart that ends within 10 seconds holds the load until it ends and sends its context at once (HOOKLATESS-D1)", async (t) => {
+  // arrange
+  const { bridge, context, dispatched } = await sessionWithAddedPlugin(t, {
+    mode: "print",
+    reason: "startup",
+  });
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+
+  // act
+  await bridge.runLateSessionStart("startup", context);
+
+  // assert
+  assert.deepStrictEqual(
+    { dispatched: dispatched.map(dispatchSummary), heldForNextPrompt: lateHint(dispatched) },
+    {
+      dispatched: [
+        ...sessionRuns("startup"),
+        { scope: "project", source: "startup", plugins: ["added@catalog"] },
+      ],
+      heldForNextPrompt: false,
+    },
+  );
+});
+
+test("a late SessionStart that passes 10 seconds lets the load end while its hook runs and holds its context for the next prompt (HOOKLATESS-D1)", async (t) => {
+  // arrange
+  const { bridge, context, dispatched, answerWith } = await sessionWithAddedPlugin(t, {
+    mode: "json",
+    reason: "startup",
+  });
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const hookStarted = createDeferred<undefined>();
+  const hookEnded = createDeferred<HookExecResult>();
+  let ended = false;
+  void hookEnded.promise.then(() => {
+    ended = true;
+  });
+  answerWith(() => {
+    hookStarted.resolve(undefined);
+    return hookEnded.promise;
+  });
+
+  // act
+  const load = bridge.runLateSessionStart("startup", context);
+  await hookStarted.promise;
+  t.mock.timers.tick(10_000);
+  await load;
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      ended,
+      dispatched: dispatched.map(dispatchSummary),
+      heldForNextPrompt: lateHint(dispatched),
+    },
+    {
+      ended: false,
+      dispatched: [
+        ...sessionRuns("startup"),
+        { scope: "project", source: "startup", plugins: ["added@catalog"] },
+      ],
+      heldForNextPrompt: true,
+    },
+  );
+  hookEnded.resolve({ kind: "noop" });
+});
+
+test("a late SessionStart whose hooks fail debug-logs the failure and the load ends (HOOKLATESS-D1, NFR-2)", async (t) => {
+  // arrange
+  const debugLines = observeRouterDebug(t);
+  const { bridge, context, answerWith } = await sessionWithAddedPlugin(t, {
+    mode: "rpc",
+    reason: "startup",
+  });
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  answerWith(() => Promise.reject(new Error("hook runner lost")));
+
+  // act
+  await bridge.runLateSessionStart("startup", context);
+
+  // assert
+  assert.deepStrictEqual(debugLines(), ["[hooks] late SessionStart failed: hook runner lost"]);
 });
 
 for (const read of ["getHeader", "getEntries"] as const) {
