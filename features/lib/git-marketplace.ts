@@ -74,7 +74,8 @@ export async function pushGitBranch(
 /**
  * Tags the commit the published work tree `workTree` has checked out as
  * `tag`, pushes the tag alone to its bare repository, and returns the tagged
- * commit. Every git runs with the HOME `home`.
+ * commit. Every git runs with the HOME `home`. The tag is lightweight and
+ * never forced: an existing tag, local or remote, makes it fail.
  */
 export async function pushGitTag(workTree: string, home: string, tag: string): Promise<string> {
   await runGit(workTree, home, "tag", tag);
