@@ -21,9 +21,11 @@ Use these terms in code, messages, docs, and planning (user decisions 2026-10-17
 - **Declaration:** an entry in a layer. **Installation:** the plugin's artifacts and record in a scope.
 - **Effective configuration:** a scope's two layers merged field by field, local winning on conflicts. The same intent may be declared in both layers.
 
-## Current Milestone: integration-rescope -- Integration Test Rescope
+## Current Milestone: none
 
-Branch `claude/stoic-shannon-la9q7o`, started 2026-11-20.
+No milestone is active. Start the next one with the `new-gsd-milestone` skill.
+
+## Previous Milestone: integration-rescope -- Integration Test Rescope (branch: claude/stoic-shannon-la9q7o, started 2026-11-20, completed 2026-11-23, no PR or npm release yet)
 
 **Goal:** Every file in `test/integration/` either guards something that the
 cucumber suite and the unit tests cannot reach, or is deleted. Its
@@ -57,6 +59,20 @@ tests add nothing to the Sonar coverage gate, which reads only
   and internal record, released-build state, and fault-injection cases;
   purely internal single-module cases move to unit tests, and the suite's
   charter is written down.
+
+**Delivered 2026-11-23 (9 phases, 22 of 22 requirements):** the two duplicate
+integration files are gone, and the user-visible cases of the others now live
+in cucumber scenarios. Each scenario was shown to fail under a deliberate
+break. `test/integration/` keeps 28 files and 236 cases. Each one is peer
+conformance, a multi-process race, or an internal case, and its header says
+so. The charter is the same in the `typescript-unit-tests` and `cucumber`
+skills and in `.planning/codebase/TESTING.md`. Inserted Phase 6.1 fixed one
+parity gap that the reload scenario found, with upstream evidence (HKRL-01..03,
+D-CF5-13 amended): a SessionStart context goes into the session as soon as its
+hooks finish, so a `/reload` before the first prompt keeps it. A resume or a
+fork sends only the values the conversation does not already hold. A
+compaction's context reaches the next model call. `npm run check` passes on
+the combined tree (adapter 2285/2285, builtin 260/260, 100% direct coverage).
 
 ## Previous Milestone: parity-gaps -- Claude Code Parity Gaps and Defects (branch: features/gaps, started 2026-11-11, completed 2026-11-17, not yet pushed, no PR or npm release yet)
 
@@ -1179,8 +1195,10 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ### Active
 
-Milestone integration-rescope is active; its requirements are in
-[REQUIREMENTS.md](REQUIREMENTS.md). The 42 parity-gaps requirements are validated and
+No milestone is active. The 22 integration-rescope requirements are validated and
+archived in
+[milestones/integration-rescope-REQUIREMENTS.md](milestones/integration-rescope-REQUIREMENTS.md).
+The 42 parity-gaps requirements are validated and
 archived in
 [milestones/parity-gaps-REQUIREMENTS.md](milestones/parity-gaps-REQUIREMENTS.md).
 The 34 behavioral-gaps requirements are validated and
@@ -1203,6 +1221,13 @@ the 36 json-output requirements in
 
 ### Validated
 
+- ✓ Every case left in `test/integration/` guards what cucumber and the unit
+  tests cannot reach (peer conformance, races, internal cases), its
+  user-visible cases are cucumber scenarios proven red under a break, the
+  charter is written in three places, and a `/reload`, resume, fork, or
+  compaction keeps a SessionStart context as Claude Code does --
+  integration-rescope Phases 1-8 and 6.1 (ITDUP-01..02, ITMIG-01..13,
+  HKRL-01..03, ITSCOPE-01..04)
 - ✓ Every P0 and P1 gap that `docs/prd/parity-gaps-prd.md` lists between
   Claude Code 2.1.322 and this project is closed or recorded as a divergence
   with a decision ID or a Pi capability gap: companion floors, MCP timeouts
@@ -2836,3 +2861,5 @@ _Last updated: 2026-11-19 after the maintainer decision D-PG1-15: the `--map-mod
 _Last updated: 2026-11-20 after the integration-rescope milestone started._
 
 _Last updated: 2026-11-21 after integration-rescope Phase 1: both duplicate integration files are deleted after deliberate breaks failed their replacement scenarios; the user chose to keep the `fallow-audit` gate unchanged and accept its `weakened-tests` warn at PR review._
+
+_Last updated: 2026-11-23 after the integration-rescope milestone completed: 22 of 22 requirements, nine phases including the inserted Phase 6.1 (HKRL-01..03, D-CF5-13 amended), and a green `npm run check` on the combined tree._

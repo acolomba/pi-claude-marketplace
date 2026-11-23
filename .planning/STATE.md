@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: integration-rescope
 milestone_name: Integration Test Rescope
-current_phase: 08
-current_phase_name: Integration Suite Rescope
-status: completed
+status: Awaiting next milestone
 stopped_at: Phase 08 complete — all phases complete
-last_updated: "2026-11-23T09:37:19.769Z"
+last_updated: "2026-11-23T09:41:46.770Z"
 last_activity: 2026-11-23
-last_activity_desc: Phase 08 complete
-state_head: 5ed9a1b3fc955a520bbf52484df7fa25bc1a5f09
+last_activity_desc: Milestone integration-rescope completed and archived
+state_head: fa5cd1198f4804f8797259cbc372cd42ef59429e
 progress:
   total_phases: 9
   completed_phases: 8
   total_plans: 26
   completed_plans: 26
   percent: 89
+current_phase: 08
+current_phase_name: Integration Suite Rescope
 ---
 
 # Project State
@@ -31,12 +31,10 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 08 of 8 (Integration Suite Rescope)
-Plan: Not started
-Status: All phases complete
-Last activity: 2026-11-23 — Phase 08 complete
-
-Progress: [█████████░] 89%
+Phase: Milestone integration-rescope complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-11-23 — Milestone integration-rescope completed and archived
 
 
 ### parity-gaps closeout: `override_closeout`
@@ -561,8 +559,8 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Plan integration-rescope Phase 1 with /gsd-discuss-phase 1 (or /gsd-plan-phase 1); Phases 2 to 6 can start beside it, Phase 7 after Phase 3, Phase 8 last
-- Before Phase 8's discuss step: decide the user-visible integration cases that no requirement names (ROADMAP.md, Milestone rules)
+
+- Start the next milestone with /gsd-new-milestone
 
 
 ## Performance Metrics

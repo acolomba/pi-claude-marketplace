@@ -11,7 +11,15 @@ gaps:
   requirements: []
   integration: []
   flows: []
-stale_verifications: []
+stale_verifications:
+  - "01: docs/hooks-compatibility.md, docs/mcp-compatibility.md (Phase 8 doc claims)"
+  - "02: features/support/world.ts (Phases 3, 6, 7 harness), test/integration/plugin-layer-verbs.test.ts (Phase 8 header)"
+  - "03: features/lib/git-plugin.ts, features/step_definitions/marketplace/publishing.steps.ts, features/support/world.ts (Phase 7), test/integration/marketplace-layer-remove.test.ts (Phase 8 header)"
+  - "04: test/integration/standalone-prune.test.ts (Phase 8 header and whole-object assertion)"
+  - "05: features/step_definitions/session.steps.ts (Phase 6), test/integration/mcp-verdict-migration.test.ts (Phase 8 header)"
+  - "06: features/hook/additional-context.feature, features/step_definitions/hook/session.steps.ts, features/support/world.ts (Phase 6.1)"
+  - "06.1: docs/hooks-compatibility.md (Phase 8 plan 08-05 doc claim)"
+
 pending_human:
   - id: "CHANGELOG-PARENT"
     phase: "06.1-reload-keeps-sessionstart-context"
@@ -65,7 +73,7 @@ tech_debt:
 
 # Milestone integration-rescope — Audit
 
-**Status:** tech_debt. All 22 requirements are satisfied, all 9 phases passed verification, and the cross-phase wiring is complete. Only deferred and informational items remain.
+**Status:** tech_debt; close as `override_closeout`. Seven phase reports (01 to 06.1) read `stale` only because later phases edited files they cover (see `stale_verifications`); the full gate on the combined tree after all those edits passed, so no verifier was re-run, as in earlier closes. All 22 requirements are satisfied, all 9 phases passed verification, and the cross-phase wiring is complete. Only deferred and informational items remain.
 
 ## Requirements (3-source cross-reference)
 
