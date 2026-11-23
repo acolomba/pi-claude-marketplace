@@ -816,29 +816,32 @@ function isSessionStartContextDetails(value: unknown): value is SessionStartCont
   );
 }
 
-// The keys of the SessionStart values that `message` holds: those of its
-// `details`, or, for a message written before details existed, the rest of
-// each part that carries the SessionStart label.
+// The keys of the SessionStart values that `message` holds, read from the
+// text the model sees: the rest of each part that carries the SessionStart
+// label. `details` only splits that rest into its values, when they join to
+// it; a context edit replaces the text and keeps the details, and a message
+// written before details existed, or by a release whose details this one
+// does not read, keys its whole rest.
 function messageKeys(message: AgentMessage): readonly string[] {
   if (message.role !== "custom" || message.customType !== HOOK_CONTEXT_MESSAGE_TYPE) {
     return [];
-  }
-
-  if (message.details !== undefined) {
-    return isSessionStartContextDetails(message.details)
-      ? message.details.values.map((value) => contextKey(value))
-      : [];
   }
 
   if (typeof message.content === "string") {
     return [];
   }
 
-  return message.content.flatMap((part) =>
-    part.type === "text" && part.text.startsWith(SESSION_START_CONTEXT_LABEL)
-      ? [contextKey(part.text.slice(SESSION_START_CONTEXT_LABEL.length))]
-      : [],
-  );
+  const { details } = message;
+  return message.content.flatMap((part) => {
+    if (part.type !== "text" || !part.text.startsWith(SESSION_START_CONTEXT_LABEL)) {
+      return [];
+    }
+
+    const text = part.text.slice(SESSION_START_CONTEXT_LABEL.length);
+    return isSessionStartContextDetails(details) && details.values.join("\n") === text
+      ? details.values.map((value) => contextKey(value))
+      : [contextKey(text)];
+  });
 }
 
 // The keys of every SessionStart value the conversation the model sees

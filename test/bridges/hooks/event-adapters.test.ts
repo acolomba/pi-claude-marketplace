@@ -196,6 +196,21 @@ function heldDetails(values: readonly string[]): SessionAppend {
   return heldMessage([sessionStartPart(values)], { event: "SessionStart", values });
 }
 
+// A held SessionStart context message with `values` in its details whose
+// text a context edit replaced with `text`, as a context-trimming extension
+// writes one at a turn end. Pi's projection keeps the details.
+function heldEdited(values: readonly string[], text: string): SessionAppend {
+  return (sessionManager) => {
+    const id = sessionManager.appendCustomMessageEntry(
+      "claude-hook-additional-context",
+      [sessionStartPart(values)],
+      false,
+      { event: "SessionStart", values },
+    );
+    sessionManager.appendContextEdit(id, { content: [{ type: "text", text }] });
+  };
+}
+
 // The wrapper `context-cap.ts` gives a context saved to the file `path`.
 function savedOutput(path: string): string {
   return [
@@ -2283,6 +2298,23 @@ describe("adaptObservationResultForEvent", () => {
       sends: [],
     },
     {
+      title: "sends a value again when a context edit removed it from the text (HKRL-02)",
+      source: "resume",
+      held: heldEdited(
+        ["held context", "kept context"],
+        "SessionStart hook additional context: kept context",
+      ),
+      values: ["held context", "kept context"],
+      sends: [["held context"]],
+    },
+    {
+      title: "drops a value that a context edit wrote into the text (HKRL-02)",
+      source: "fork",
+      held: heldEdited(["old context"], "SessionStart hook additional context: edited context"),
+      values: ["old context", "edited context"],
+      sends: [["old context"]],
+    },
+    {
       title: "drops a saved context whose file path differs (HKRL-02)",
       source: "resume",
       held: heldDetails([savedOutput("/saved/one.txt")]),
@@ -2331,32 +2363,6 @@ describe("adaptObservationResultForEvent", () => {
       },
     },
     {
-      kind: "details of another event",
-      held: heldMessage([sessionStartPart(["held context"])], {
-        event: "UserPromptSubmit",
-        values: ["held context"],
-      }),
-    },
-    {
-      kind: "details whose values are not a list",
-      held: heldMessage([sessionStartPart(["held context"])], {
-        event: "SessionStart",
-        values: "held context",
-      }),
-    },
-    {
-      kind: "details with a value that is not text",
-      held: heldMessage([sessionStartPart(["held context"])], {
-        event: "SessionStart",
-        values: ["held context", 1],
-      }),
-    },
-    {
-      kind: "details that are text",
-      held: heldMessage([sessionStartPart(["held context"])], "held context"),
-    },
-    { kind: "null details", held: heldMessage([sessionStartPart(["held context"])], null) },
-    {
       kind: "text content without details",
       held: heldMessage("SessionStart hook additional context: held context"),
     },
@@ -2382,6 +2388,52 @@ describe("adaptObservationResultForEvent", () => {
       assert.deepStrictEqual(sent, [sessionStartContextMessage(["held context"])]);
     });
   }
+
+  for (const { kind, details } of [
+    { kind: "details of another event", details: { event: "UserPromptSubmit", values: ["a"] } },
+    {
+      kind: "details whose values are not a list",
+      details: { event: "SessionStart", values: "a" },
+    },
+    {
+      kind: "details with a value that is not text",
+      details: { event: "SessionStart", values: ["a", 1] },
+    },
+    { kind: "details that are text", details: "a" },
+    { kind: "null details", details: null },
+    {
+      kind: "details of a shape this release does not know",
+      details: { event: "SessionStart", version: 2, entries: [{ text: "a" }] },
+    },
+  ]) {
+    test(`reads the text the model sees for a held message with ${kind} (HKRL-02)`, () => {
+      // arrange
+      const start = sessionStartDispatch("resume", ["first context", "second context"]);
+
+      // act
+      const sent = sendOverHeldSession(
+        heldMessage([sessionStartPart(["first context"])], details),
+        start,
+      );
+
+      // assert
+      assert.deepStrictEqual(sent, [sessionStartContextMessage(["second context"])]);
+    });
+  }
+
+  test("sends nothing when a held message with unknown details holds the whole joined context (HKRL-02)", () => {
+    // arrange
+    const start = sessionStartDispatch("resume", ["first context", "second context"]);
+
+    // act
+    const sent = sendOverHeldSession(
+      heldMessage([sessionStartPart(["first context", "second context"])], { version: 2 }),
+      start,
+    );
+
+    // assert
+    assert.deepStrictEqual(sent, []);
+  });
 
   test("sends every value and debug-logs a session it cannot read (NFR-2, HKRL-02)", (t) => {
     // arrange
