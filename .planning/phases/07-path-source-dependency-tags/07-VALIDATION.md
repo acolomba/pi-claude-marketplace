@@ -1,0 +1,71 @@
+---
+phase: "7"
+slug: "path-source-dependency-tags"
+# status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
+status: draft
+nyquist_compliant: false
+wave_0_complete: false
+created: "2026-11-21"
+---
+
+# Phase 7 — Validation Strategy
+
+> Per-phase validation contract for feedback sampling during execution.
+
+---
+
+## Test Infrastructure
+
+| Property | Value |
+|----------|-------|
+| **Framework** | cucumber-js (behavioral); `node:test` for the trimmed integration files |
+| **Config file** | `cucumber.json` (profiles `adapter` and `builtin`) |
+| **Quick run command** | `flock -w 3600 "$S/phase06-heavy.lock" env npm_config_script_shell=$S/nondac-sh NODE_OPTIONS=--max-old-space-size=6144 npm run --silent test:cucumber:profile -- --profile <adapter\|builtin> --parallel 1 <the plan's feature files>`, `$S` being the shared scratchpad of the plans' execution rules |
+| **Full suite command** | `npm run check`; 06-01 also runs the full adapter suite twice (`npm run test:cucumber:profile -- --profile adapter`, with `fd` on `PATH`) for the harness race fixes |
+| **Estimated runtime** | 5 to 95 seconds per focused run at `--parallel 1` (measured by the planner), more while the lock is held; a full adapter run takes about 11 minutes; the full check is far longer (2,400-second limit) |
+
+---
+
+## Sampling Rate
+
+- **After every task commit:** the plan's feature files under both profiles, plus `npm run check:static` by hand in a worktree
+- **After every plan wave:** `npm run check` on the combined tree
+- **Before `/gsd-verify-work`:** full suite green
+- **Max feedback latency:** 120 seconds for a focused run without lock waits
+
+---
+
+## Per-Task Verification Map
+
+Filled by the planner from `06-RESEARCH.md` "Phase Requirements → Test Map" and the two plans. Each plan's "Red-proof tables" section holds the break runs and the scenarios each must fail; `check-red.mjs` (`$S/plan-06/inputs/`) checks them. Counts are under the adapter profile unless the row says builtin; every new scenario is untagged, so the builtin profile selects none of them (DUAL-02).
+
+| Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
+|---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
+| 7-01-* | 01 | 1 | ITMIG-07 | — | N/A | behavioral + integration | `features/plugin/install-dependencies.feature` under adapter; trimmed `path-source-tag-install` | ✅ | ⬜ pending |
+
+*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+
+---
+
+## Wave 0 Requirements
+
+07-01 adds the marketplace-tag step in `marketplace/publishing.steps.ts` with a shared builder in `features/lib/git-marketplace.ts` and `features/lib/git-plugin.ts`. No separate wave.
+
+---
+
+## Manual-Only Verifications
+
+All phase behaviors have automated verification. Each deliberate break is a reverted experiment whose command and failing scenario the plan's SUMMARY.md records.
+
+---
+
+## Validation Sign-Off
+
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references
+- [x] No watch-mode flags
+- [ ] Feedback latency < 120s
+- [ ] `nyquist_compliant: true` set in frontmatter
+
+**Approval:** pending

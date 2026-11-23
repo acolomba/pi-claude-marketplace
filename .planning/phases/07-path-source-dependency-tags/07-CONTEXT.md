@@ -34,6 +34,11 @@ Feature files this phase may edit: the dependency feature that owns constrained 
 - [Deletion] Q: "What happens to path-source-tag-install?" → Selected: "It keeps only its internal cases (the `.git/index`/`.git/HEAD` check, and CR-01 if it stays internal) with a header saying why; helpers no remaining case uses go" — git history keeps the rest.
 - [Bugs] Q: "What if a scenario exposes a product bug?" → Selected: "Rule 4: fix it when small, with a unit test beside its source pair and a CHANGELOG parent line; otherwise a BACKLOG.md entry and the guarding integration case stays" — milestone rule.
 
+- [CR-01, after research] Q: "Is the untracked-file case user-visible?" → Selected: "No: the planted files never reach a component a user sees in the harness (the marketplace root is the extension's own clean clone), so CR-01 stays as the internal guard in `path-source-tag-install` for Phase 8, which may move it to a unit test beside `clone-cache.ts`" — research measured.
+- [Dir-source git checkout] Q: "Does a dir-source marketplace that is a git work tree get its own scenario?" → Selected: "No: ITMIG-07 names a marketplace repository with a tag, which the github step satisfies, and the code path is the same; the SUMMARY carries a BACKLOG parent line for a dir-in-git publication kind" — research Open Question 1.
+- [Token name] Q: "Which run token names a marketplace tag?" → Selected: "`{<repository> revision <tag>}` as in the validated patch" — planner's discretion, validated.
+- [Assumption delta] Q: "The detector fired on 'fallback' (pluralization)?" → Selected: "False positive; decision `no-change`" — no identity-model change.
+
 ### Claude's Discretion
 - Scenario titles, step wording, tables; break edits; plan count (one plan is likely).
 
