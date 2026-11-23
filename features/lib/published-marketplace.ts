@@ -11,6 +11,9 @@
  * The hosted kind writes the same files in a work tree there and has the git
  * host serve its manifest as one catalog file at an https URL; every later
  * change to it serves the manifest's new bytes again (D-PL5-06).
+ * The git-folder kind writes the dir fixture in a folder that is a git work
+ * tree with no remote, which the user adds by its path; every later change is
+ * a new local commit there, and its release tags stay in the folder (TAGS-01).
  */
 
 import assert from "node:assert/strict";
@@ -27,7 +30,16 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 
-import { publishGitRepository, pushGitBranch, pushGitRepository } from "./git-marketplace.ts";
+import {
+  commitGitWorkTree,
+  initGitWorkTree,
+  publishGitRepository,
+  pushGitBranch,
+  pushGitRepository,
+  pushGitTag,
+  tagGitCommit,
+} from "./git-marketplace.ts";
+import { runGit } from "./hermetic-git.ts";
 import {
   writeDependencyAllowance,
   writeInvalidManifest,
@@ -41,9 +53,16 @@ import { cutQuotedPaths } from "./run-tokens.ts";
 import type { OfferedPlugin } from "./path-marketplace.ts";
 
 /** A kind of source a marketplace is published as. */
-export type SourceKind = "dir" | "file" | "url" | "github" | "hosted";
+export type SourceKind = "dir" | "file" | "url" | "github" | "hosted" | "git-folder";
 
-const SOURCE_KINDS: readonly SourceKind[] = ["dir", "file", "url", "github", "hosted"];
+const SOURCE_KINDS: readonly SourceKind[] = [
+  "dir",
+  "file",
+  "url",
+  "github",
+  "hosted",
+  "git-folder",
+];
 
 // The file a hosted marketplace's manifest is served as, unless a scenario names another.
 const HOSTED_MANIFEST = "marketplace.json";
@@ -134,8 +153,22 @@ export interface HostedPublication {
   readonly host: Pick<GitRepositoryHost, "serveFile">;
 }
 
+/**
+ * A marketplace published as a local folder that is a git work tree with no
+ * remote: `root` is the folder the user adds by its path, which is also its
+ * `source`. `gitHome` is the HOME of the git that commits and tags it.
+ */
+export interface LocalGitPublication {
+  readonly kind: "git-folder";
+  readonly root: string;
+  readonly source: string;
+  readonly manifestPath: string;
+  readonly gitHome: string;
+}
+
 /** A published marketplace of any source kind. */
-export type PublishedMarketplace = PathPublication | GitPublication | HostedPublication;
+export type PublishedMarketplace =
+  PathPublication | GitPublication | HostedPublication | LocalGitPublication;
 
 /** Has the git host serve the manifest of `published` as it is in the work tree now. */
 async function serveHostedManifest(published: HostedPublication): Promise<void> {
@@ -156,8 +189,10 @@ export function parseSourceKind(text: string): SourceKind {
 /**
  * Runs `write`, which changes the files of `published`. For a git
  * publication, it then commits the change and pushes it to the bare
- * repository the git host serves. For a hosted publication, it serves the
- * manifest's new bytes.
+ * repository the git host serves. For a git-folder publication, it commits
+ * the change in the folder and pushes nothing, so the folder's HEAD moves past
+ * any release tag. For a hosted publication, it serves the manifest's new
+ * bytes.
  */
 async function changePublication(
   published: PublishedMarketplace,
@@ -172,6 +207,10 @@ async function changePublication(
     case "github":
       await write();
       await pushGitRepository(published.root, published.gitHome);
+      return;
+    case "git-folder":
+      await write();
+      await commitGitWorkTree(published.root, published.gitHome);
       return;
     case "hosted":
       await write();
@@ -193,7 +232,8 @@ async function requireAbsent(location: string, directory: string): Promise<void>
  * lives in, failing when a marketplace is published there already. A git
  * marketplace lives in a work tree under the marketplaces root and is served
  * as a commit in a bare repository on the git host, so neither may exist. A
- * hosted marketplace lives in a work tree under the marketplaces root.
+ * hosted or git-folder marketplace lives in a work tree under the marketplaces
+ * root.
  */
 export async function requireFreeRoot(
   sites: PublicationSites,
@@ -205,6 +245,7 @@ export async function requireFreeRoot(
     case "dir":
     case "file":
     case "hosted":
+    case "git-folder":
       await requireAbsent(root, directory);
       return root;
     case "url":
@@ -275,6 +316,12 @@ export async function publishMarketplaceIn(
 
     case "hosted":
       return publishHosted(sites, directory, name, plugins, HOSTED_MANIFEST);
+    case "git-folder": {
+      const { gitHome } = sites.gitHost;
+      await writeMarketplace(root, name, plugins, manifestPath);
+      await initGitWorkTree(root, gitHome);
+      return { kind, root, source: root, manifestPath, gitHome };
+    }
   }
 }
 
@@ -420,11 +467,13 @@ function ownedTarget(published: PublishedMarketplace, target: string): string {
 /**
  * Removes only the directory, exact manifest, or bare repository recorded for
  * this publication. Once a git publication's bare repository is gone, the git
- * host answers a clone or fetch of it with 404. A hosted publication refuses.
+ * host answers a clone or fetch of it with 404. A git-folder publication loses
+ * its folder, its `.git` included. A hosted publication refuses.
  */
 export async function removePublishedSource(published: PublishedMarketplace): Promise<void> {
   switch (published.kind) {
     case "dir":
+    case "git-folder":
       await rm(ownedTarget(published, published.root), { recursive: true });
       return;
     case "file":
@@ -474,6 +523,11 @@ export async function invalidateManifest(
   await changePublication(published, () => MANIFEST_WRITERS[problem](published.manifestPath, name));
 }
 
+// Whether git commits the files of `published`: a url, github, or git-folder publication.
+function isGitRepository(published: PublishedMarketplace): boolean {
+  return published.kind === "url" || published.kind === "github" || published.kind === "git-folder";
+}
+
 /**
  * Takes away every permission on the manifest of a local publication, so
  * reading it fails with EACCES. Git stores no file mode that denies reading,
@@ -481,7 +535,7 @@ export async function invalidateManifest(
  * git host serves from memory.
  */
 export async function makeManifestUnreadable(published: PublishedMarketplace): Promise<void> {
-  if (published.kind === "url" || published.kind === "github") {
+  if (isGitRepository(published)) {
     throw new Error("a git repository cannot hold a file nobody may read");
   }
 
@@ -519,7 +573,7 @@ export async function publishUnreadableCommandFile(
   published: PublishedMarketplace,
   plugin: string,
 ): Promise<string> {
-  if (published.kind === "url" || published.kind === "github") {
+  if (isGitRepository(published)) {
     throw new Error("a git repository cannot hold a file nobody may read");
   }
 
@@ -591,6 +645,7 @@ function unreadableSkillFile(published: PublishedMarketplace, plugin: string): s
       );
     case "url":
     case "github":
+    case "git-folder":
       throw new Error("a git repository cannot hold a file nobody may read");
     case "hosted":
       throw new Error("a served catalog cannot hold a file nobody may read");
@@ -670,6 +725,7 @@ function readOnlySkillDirectory(published: PublishedMarketplace, plugin: string)
       );
     case "url":
     case "github":
+    case "git-folder":
       throw new Error("a git repository cannot hold a read-only directory");
     case "hosted":
       throw new Error("a served catalog cannot hold a read-only directory");
@@ -875,8 +931,9 @@ export async function describeMarketplace(
 
 /**
  * Sets the description of the manifest on the branch `branch` of the git
- * marketplace `published` records, leaving `main` as it is (D-02). A local or
- * hosted publication has no branch.
+ * marketplace `published` records, leaving `main` as it is (D-02). A local,
+ * hosted, or git-folder publication has no branch: a folder added by its path
+ * has no branch to add.
  */
 export async function describeMarketplaceBranch(
   published: PublishedMarketplace,
@@ -887,6 +944,7 @@ export async function describeMarketplaceBranch(
     case "dir":
     case "file":
     case "hosted":
+    case "git-folder":
       throw new Error(`a ${published.kind} publication has no branch`);
     case "url":
     case "github":
@@ -895,4 +953,49 @@ export async function describeMarketplaceBranch(
       );
       return;
   }
+}
+
+/**
+ * Tags the current commit of the marketplace `published` records as `tag` and
+ * returns that commit. A url or github publication pushes the tag alone to its
+ * bare repository; a git-folder publication keeps it in its folder, which Pi
+ * reads the tags of (TAGS-01). A dir, file, or hosted publication has no
+ * commit to tag.
+ */
+export async function tagPublishedCommit(
+  published: PublishedMarketplace,
+  tag: string,
+): Promise<string> {
+  switch (published.kind) {
+    case "url":
+    case "github":
+      return confirmTag(
+        published.bareRepository,
+        published.gitHome,
+        tag,
+        await pushGitTag(published.root, published.gitHome, tag),
+      );
+    case "git-folder":
+      return confirmTag(
+        published.root,
+        published.gitHome,
+        tag,
+        await tagGitCommit(published.root, published.gitHome, tag),
+      );
+    case "dir":
+    case "file":
+    case "hosted":
+      throw new Error(`a ${published.kind} publication has no commit to tag`);
+  }
+}
+
+// Asserts that `tag` names `commit` in `repository`, and returns `commit`.
+async function confirmTag(
+  repository: string,
+  home: string,
+  tag: string,
+  commit: string,
+): Promise<string> {
+  assert.strictEqual(await runGit(repository, home, "rev-parse", `${tag}^{commit}`), commit);
+  return commit;
 }
