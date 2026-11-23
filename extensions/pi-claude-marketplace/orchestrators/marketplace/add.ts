@@ -70,6 +70,7 @@ import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   FetchedUrlCause,
+  GitCommandError,
   HostedManifestFetchError,
   InvalidMarketplaceManifestError,
   MarketplaceDuplicateNameError,
@@ -308,7 +309,9 @@ export interface AddMarketplaceOptions {
  * GHB-01: a clone failure whose cause is a `FetchedUrlCause` is the failure
  * itself, so it is not unwrapped; its code stays readable to the classifier.
  * A `HostedManifestFetchError` carries the connection error as its cause, so
- * it is returned as it is too (D-PL5-10).
+ * it is returned as it is too (D-PL5-10). A `GitCommandError` is the failure
+ * itself, and its cause (a spawn error, an abort reason) must not replace it
+ * (SG-PRC-05).
  */
 function unwrapAddError(err: unknown): unknown {
   if (
@@ -318,7 +321,8 @@ function unwrapAddError(err: unknown): unknown {
     err instanceof InvalidMarketplaceManifestError ||
     err instanceof UnsupportedSourceError ||
     err instanceof ManifestReadDeniedError ||
-    err instanceof HostedManifestFetchError
+    err instanceof HostedManifestFetchError ||
+    err instanceof GitCommandError
   ) {
     return err;
   }
@@ -1283,6 +1287,9 @@ function removalAdvisories(err: unknown): readonly string[] | undefined {
  * refused redirect, and a URL with a user name or password, so the cause line
  * says which. The presentation layer masks the user name and password in the
  * subject and the cause (PMOD-04).
+ *
+ * D-SG-07 / SG-PRC-06: a `git-missing` failure takes it too, so the cause line
+ * names the requirement (`showsAddCause`).
  */
 function failedAddRow(
   subject: string,
@@ -1293,12 +1300,7 @@ function failedAddRow(
 ): MarketplaceRows<PluginFailedMessage> {
   const cause = hostFrame === undefined ? error : new Error(hostFrame, { cause: error });
   const unwrapped = unwrapAddError(error);
-  if (
-    hostFrame === undefined &&
-    !hasFetchedUrlCause(error) &&
-    !(unwrapped instanceof ReservedMarketplaceNameError) &&
-    !(unwrapped instanceof HostedManifestFetchError)
-  ) {
+  if (hostFrame === undefined && !hasFetchedUrlCause(error) && !showsAddCause(unwrapped)) {
     // D-03: a failed marketplace add -> error.
     return {
       name: subject,
@@ -1321,6 +1323,21 @@ function failedAddRow(
     needsReload: false,
   };
   return { name: subject, scope, status: "failed", severity: "error", plugins: [fetchedRow] };
+}
+
+/**
+ * Whether the unwrapped failure of an add is one whose cause line the user
+ * must read: Claude Code's reserved-name refusal (MKT-01), a hosted download
+ * that failed without an HTTP status (D-PL5-10), or a `git-missing` failure,
+ * whose cause names the git requirement (D-SG-07, SG-PRC-06). The wording of
+ * every other git failure kind is decided later, so those keep the bare row.
+ */
+function showsAddCause(unwrapped: unknown): boolean {
+  return (
+    unwrapped instanceof ReservedMarketplaceNameError ||
+    unwrapped instanceof HostedManifestFetchError ||
+    (unwrapped instanceof GitCommandError && unwrapped.kind === "git-missing")
+  );
 }
 
 /**
