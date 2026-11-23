@@ -4440,7 +4440,7 @@ test("SessionStart runs a repeat whose first event was skipped for its mode", as
 });
 
 test(
-  "session_start lazily hydrates project routes and drains their context on the next agent turn",
+  "session_start lazily hydrates project routes and sends their context when the hooks finish",
   { concurrency: false },
   async (t) => {
     // arrange
@@ -4529,18 +4529,22 @@ test(
       { pluginId: "alpha", event: "SessionStart" },
       { pluginId: "beta", event: "SessionStart" },
     ]);
-    assert.deepStrictEqual(firstTurn, {
-      message: {
-        customType: "claude-hook-additional-context",
-        content: [
-          {
-            type: "text",
-            text: "SessionStart hook additional context: alpha context\nbeta context",
-          },
-        ],
-        display: false,
+    assert.deepStrictEqual(messages, [
+      {
+        message: {
+          customType: "claude-hook-additional-context",
+          content: [
+            {
+              type: "text",
+              text: "SessionStart hook additional context: alpha context\nbeta context",
+            },
+          ],
+          display: false,
+        },
+        options: { triggerTurn: false },
       },
-    });
+    ]);
+    assert.strictEqual(firstTurn, undefined);
     assert.strictEqual(secondTurn, undefined);
     assert.deepStrictEqual(routes, [
       { scope: "project", pluginId: "alpha", command: "alpha-0" },
@@ -4551,8 +4555,6 @@ test(
       { scope: "project", marketplace: "catalog", pluginId: "alpha" },
     ]);
     assert.strictEqual(projectSharedStat.isDirectory(), true);
-    assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
-    assert.deepStrictEqual(messages, []);
   },
 );
 

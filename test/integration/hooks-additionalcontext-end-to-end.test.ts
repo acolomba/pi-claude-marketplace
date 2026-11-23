@@ -1,13 +1,12 @@
 // test/integration/hooks-additionalcontext-end-to-end.test.ts
 //
-// Kept for the open upstream-parity question on HOOK-E2E-04: today a
-// /reload before the first prompt drops the SessionStart additionalContext
-// buffered at startup (docs/hooks-compatibility.md), but no decision ID
-// licenses that drop and Claude Code's /reload-plugins may keep it
-// (D-CF5-03, D-CF5-13). The milestone's parity rule keeps this case until
-// the user answers; `features/hook/additional-context.feature` pins the same
-// behavior for users. HOOK-E2E-03, the drain into the first turn, is covered
-// by that feature and left this file.
+// HOOK-E2E-04 at the bridge boundary (HKRL-01): a startup SessionStart
+// hook's additionalContext goes out at once as one hidden session message, as
+// Claude Code writes it into the conversation, so the hooks runtime buffers
+// nothing and the registration of a /reload finds no context to drain. Pi
+// keeps the session across a /reload, so the message reaches the first
+// prompt; `features/hook/additional-context.feature` shows that to users.
+// HOOK-E2E-03 is covered by that feature.
 
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -39,14 +38,27 @@ interface CapturedRegistration {
   readonly handler: (event: unknown, ctx: ExtensionContext) => unknown;
 }
 
-function makeMockPi(): { pi: ExtensionAPI; registrations: CapturedRegistration[] } {
+interface SentMessage {
+  readonly message: unknown;
+  readonly options: unknown;
+}
+
+function makeMockPi(): {
+  pi: ExtensionAPI;
+  registrations: CapturedRegistration[];
+  messages: SentMessage[];
+} {
   const registrations: CapturedRegistration[] = [];
+  const messages: SentMessage[] = [];
   const pi = {
     on: (event: string, handler: CapturedRegistration["handler"]): void => {
       registrations.push({ event, handler });
     },
+    sendMessage: (message: unknown, options: unknown): void => {
+      messages.push({ message, options });
+    },
   } as unknown as ExtensionAPI;
-  return { pi, registrations };
+  return { pi, registrations, messages };
 }
 
 async function withHermeticPiHome<T>(
@@ -183,7 +195,7 @@ function findHandler(
   return registration.handler;
 }
 
-test("HOOK-E2E-04: registerHooksBridge clears the pending buffer on /reload (re-entry)", async () => {
+test("HOOK-E2E-04: the startup SessionStart context goes out as one session message and a reload's registration has none to drain (HKRL-01)", async () => {
   // arrange
   const runtime = createHooksRuntime();
   const hooksHydration = createHooksHydration(runtime, {
@@ -199,35 +211,39 @@ test("HOOK-E2E-04: registerHooksBridge clears the pending buffer on /reload (re-
       "FIRST-LOAD-MARK",
       "hooks-addctx-reload-e2e-session",
     );
-    // First load: fire session_start to populate the buffer, but do not drain
-    // it. This is the case where the user reloads before submitting a prompt.
+    // First load: the user starts Pi and reloads before the first prompt.
     const firstLoad = makeMockPi();
     await hooksHydration.registerHooksBridge(firstLoad.pi, { cwd: env.extensionRoot });
     await findHandler(firstLoad.registrations, "session_start")(sessionStartEvent, placeholderCtx);
-    const pendingAfterFirstLoad = runtime
-      .pendingSessionStartContextEntries()
-      .map((entry) => entry.context);
+    const pendingAfterFirstLoad = runtime.pendingSessionStartContextEntries();
 
     // act
     const secondLoad = makeMockPi();
     await hooksHydration.registerHooksBridge(secondLoad.pi, { cwd: env.extensionRoot });
-    const pendingAfterSecondLoad = runtime.pendingSessionStartContextEntries();
+    await findHandler(secondLoad.registrations, "session_start")(
+      { type: "session_start", reason: "reload" },
+      placeholderCtx,
+    );
     const drainResult = await findHandler(secondLoad.registrations, "before_agent_start")(
       makeBeforeAgentStartEvent("BASE"),
       placeholderCtx,
     );
 
     // assert
-    assert.deepStrictEqual(pendingAfterFirstLoad, ["FIRST-LOAD-MARK"]);
-    assert.deepStrictEqual(
-      pendingAfterSecondLoad,
-      [],
-      "registerHooksBridge re-entry must clear the pending buffer (no stale-context leak across /reload)",
-    );
-    assert.strictEqual(
-      drainResult,
-      undefined,
-      "empty buffer after /reload must drain to undefined",
-    );
+    assert.deepStrictEqual(firstLoad.messages, [
+      {
+        message: {
+          customType: "claude-hook-additional-context",
+          content: [
+            { type: "text", text: "SessionStart hook additional context: FIRST-LOAD-MARK" },
+          ],
+          display: false,
+        },
+        options: { triggerTurn: false },
+      },
+    ]);
+    assert.deepStrictEqual(pendingAfterFirstLoad, []);
+    assert.deepStrictEqual(secondLoad.messages, []);
+    assert.strictEqual(drainResult, undefined);
   });
 });

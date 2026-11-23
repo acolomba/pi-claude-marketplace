@@ -44,9 +44,10 @@
 //   - adaptObservationResultForEvent -> Pi `session_start` /
 //     `session_shutdown` / `session_compact` (SessionStart / SessionEnd /
 //     PostCompact) with per-event narrowing for the SessionStart `additionalContext` bridge. The
-//     SessionStart mutate arm captures `additionalContext` into the
-//     routing-state.ts pending buffer (drained by the bridge's
-//     `before_agent_start` handler on the next agent turn). All other
+//     SessionStart arms send `additionalContext` at once as a hidden
+//     message, as Claude Code writes it into the conversation as soon as the
+//     hooks finish; while Pi is idle it goes into the session, which a
+//     `/reload` keeps, before the first prompt (HKRL-01). All other
 //     observation events keep the silent-drop semantics: there is no
 //     downstream Pi surface to thread their payloads through. `block` and
 //     `stop` debug-log the dropped reason and return `undefined`. NEVER
@@ -576,23 +577,18 @@ export function hookContextPart(
 }
 
 /**
- * D-CF5-13: send the context of a prompt that Pi queued into the running
- * agent as a hidden message. No `before_agent_start` fires for a queued
- * prompt, so a buffered context would wait for a later prompt's turn.
- * `triggerTurn: false` holds the message until the running turn ends, so the
- * model reads it on the next model call. A steer is read on that call, so
- * its context goes out at once; a follow-up's waits for the turn before Pi
- * reads it (`sendDueFollowUpContext`). Pi queues the prompt itself only after
- * its `input` handlers return, so the context comes just before the prompt
- * (Pi gap: no carrier puts a message after a queued prompt). Pi's
- * `deliverAs` cannot carry it: Pi reads one queued message per model call by
- * default, so the context would get a model call of its own. A blank
- * context, or no Pi API, sends nothing; a send that throws is debug-logged.
+ * D-CF5-13 / HKRL-01: send one hook context to the model as a hidden
+ * message. `triggerTurn: false` never starts or steers a run: while Pi is
+ * idle, Pi writes the message into the session at once, and while a run
+ * streams, Pi holds it until the turn ends, so the model reads it on the
+ * next model call. A blank context, or no Pi API, sends nothing; a send that
+ * throws is debug-logged with `failureLog` and never thrown (NFR-2).
  */
-function sendQueuedPromptContext(
+function sendHookContextMessage(
   pi: ExtensionAPI | undefined,
-  claudeEvent: PromptContextEvent,
+  claudeEvent: "SessionStart" | PromptContextEvent,
   text: string,
+  failureLog: string,
 ): void {
   const part = hookContextPart(claudeEvent, [text]);
   if (pi === undefined || part === undefined) {
@@ -609,8 +605,29 @@ function sendQueuedPromptContext(
       { triggerTurn: false },
     );
   } catch (error: unknown) {
-    hookDebugLog(`adaptInput: queued prompt context failed: ${errorMessage(error)}`);
+    hookDebugLog(`${failureLog}: ${errorMessage(error)}`);
   }
+}
+
+/**
+ * D-CF5-13: send the context of a prompt that Pi queued into the running
+ * agent as a hidden message. No `before_agent_start` fires for a queued
+ * prompt, so a buffered context would wait for a later prompt's turn.
+ * `triggerTurn: false` holds the message until the running turn ends, so the
+ * model reads it on the next model call. A steer is read on that call, so
+ * its context goes out at once; a follow-up's waits for the turn before Pi
+ * reads it (`sendDueFollowUpContext`). Pi queues the prompt itself only after
+ * its `input` handlers return, so the context comes just before the prompt
+ * (Pi gap: no carrier puts a message after a queued prompt). Pi's
+ * `deliverAs` cannot carry it: Pi reads one queued message per model call by
+ * default, so the context would get a model call of its own.
+ */
+function sendQueuedPromptContext(
+  pi: ExtensionAPI | undefined,
+  claudeEvent: PromptContextEvent,
+  text: string,
+): void {
+  sendHookContextMessage(pi, claudeEvent, text, "adaptInput: queued prompt context failed");
 }
 
 /** The parts of Pi's `turn_end` event that tell what the agent reads next. */
@@ -752,18 +769,18 @@ export function adaptInputResult(
  * Observation-event adapter with per-event narrowing for the SessionStart
  * additionalContext bridge.
  *
- * Pi's lifecycle splits the upstream Claude Code SessionStart-hook contract
- * across two surfaces: `session_start` returns void, and
- * `before_agent_start` can add a message to the next agent turn. This
- * adapter captures the folded `additionalContext` of a SessionStart event
- * into the runtime's pending buffer; the `before_agent_start` handler in
- * `event-router.ts` drains the buffer on the next turn into a persisted
- * message after the prompt (D-CF5-13).
+ * HKRL-01: Claude Code writes a SessionStart hook's `additionalContext` into
+ * the conversation as soon as the hooks finish, before the first prompt, and
+ * its `/reload-plugins` leaves the conversation alone. `session_start`
+ * returns void, so this adapter sends the folded context at once as a hidden
+ * message (`sendHookContextMessage`). While Pi is idle, the message goes into
+ * the session, which a Pi `/reload` keeps. A new, resumed, or forked session
+ * is a new Pi session, so the message stays with the session that sent it.
  *
  * Per-event semantics:
  *
  *   - SessionStart:
- *       additionalContext on any arm -> appendPendingSessionStartContext().
+ *       additionalContext on any arm -> one hidden message, sent at once.
  *       The fold joins every hook's context into its decisive arm, so one
  *       hook that blocks or stops does not take the context of the others
  *       away, as in Claude Code (D-CF5-09).
@@ -778,9 +795,6 @@ export function adaptInputResult(
  *       observability. PreCompact has an adapter of its own
  *       (`adaptPreCompactResult`).
  *
- * The buffered context carries the provenance of the entry the fold
- * attributes it to (the last mutating hook).
- *
  * The adapter NEVER notifies and NEVER throws. A new `HookExecResult` arm
  * is a compile-time failure at this switch (NFR-7).
  */
@@ -794,12 +808,11 @@ export function adaptObservationResultForEvent(
     result.additionalContext !== undefined &&
     result.additionalContext !== ""
   ) {
-    // Capture for drain at the next before_agent_start. The buffer is
-    // drained one-shot by beforeAgentStartHandlerFor and cleared on
-    // registerHooksBridge entry (so /reload does not leak stale context
-    // across sessions).
-    context.runtime.appendPendingSessionStartContext(
-      bufferedContext(result.additionalContext, context),
+    sendHookContextMessage(
+      context.pi,
+      "SessionStart",
+      result.additionalContext,
+      "adaptObservation: session start context failed",
     );
   }
 
