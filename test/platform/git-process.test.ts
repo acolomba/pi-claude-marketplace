@@ -12,6 +12,7 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 import { describe, test } from "node:test";
 
 import { createNeutralDirectory } from "../../extensions/pi-claude-marketplace/platform/git-neutral-directory.ts";
@@ -145,6 +146,8 @@ interface RecordingHost {
   readonly probes: string[];
   readonly groupSignals: Array<readonly [number, string]>;
   cwd: string;
+  /** What the host's clock reads, in milliseconds. */
+  now: number;
 }
 
 function createHost(setup: HostSetup = {}): RecordingHost {
@@ -161,6 +164,7 @@ function createHost(setup: HostSetup = {}): RecordingHost {
     probes,
     groupSignals,
     cwd: setup.cwd ?? "/work/project",
+    now: 0,
     host: {
       platform: setup.platform ?? "linux",
       isFile: probe,
@@ -173,6 +177,7 @@ function createHost(setup: HostSetup = {}): RecordingHost {
           ? Promise.reject(Object.assign(new Error(`ENOENT: ${file}`), { code: "ENOENT" }))
           : Promise.resolve(setup.realpaths?.[file] ?? file),
       cwd: () => recording.cwd,
+      now: () => recording.now,
       neutralDirectory: () =>
         setup.neutralFailure === undefined
           ? Promise.resolve(setup.neutral ?? "/tmp")
@@ -1458,6 +1463,47 @@ describe("createGitProcess", () => {
     );
     assert.deepStrictEqual(logged, ["[git] git version: unreadable"]);
     assert.strictEqual(launches.all().length, 2);
+  });
+
+  test("WR-06, D-SG-06: stops the version read when the failed request is cancelled", async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const logged = captureDebugLog(t);
+    const controller = new AbortController();
+    const { git, launches, host } = createSequencedGit();
+
+    // act
+    const pending = git.run({ ...FILL, signal: controller.signal });
+    (await launches.at(0)).close(129);
+    await launches.at(1);
+    controller.abort(new Error("cancelled"));
+    t.mock.timers.tick(KILL_GRACE_MS);
+    t.mock.timers.tick(KILL_GRACE_MS);
+    const signalsAfterCancel = [...host.groupSignals];
+    t.mock.timers.tick(5_000);
+    t.mock.timers.tick(KILL_GRACE_MS);
+    t.mock.timers.tick(KILL_GRACE_MS);
+
+    // assert
+    await assert.rejects(
+      pending,
+      gitFailure({
+        failure: { kind: "git-too-old" },
+        operation: "credential fill",
+        exitCode: 129,
+        stderr: "",
+      }),
+    );
+    assert.deepStrictEqual(
+      [logged, signalsAfterCancel],
+      [
+        ["[git] git version: unreadable"],
+        [
+          [4243, "SIGTERM"],
+          [4243, "SIGKILL"],
+        ],
+      ],
+    );
   });
 
   test("SG-PRC-01: rejects a run past its timeout with the limit after stopping its process tree", async (t) => {
@@ -3065,6 +3111,71 @@ describe("createGitProcess ssh", () => {
     );
     assert.strictEqual(launches.all().length, 1);
   });
+
+  test("WR-06: gives the command only the time the ssh read left", async (t) => {
+    // arrange
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    const { git, launches, host } = createSequencedGit();
+
+    // act
+    const pending = git.run({ ...SSH_LIST, timeoutMs: 100 });
+    const read = await launches.at(0);
+    host.now = 30;
+    read.close(1);
+    await launches.at(1);
+    t.mock.timers.tick(69);
+    const signalsBeforeDeadline = [...host.groupSignals];
+    t.mock.timers.tick(1);
+    const signalsAtDeadline = [...host.groupSignals];
+    t.mock.timers.tick(30);
+    t.mock.timers.tick(KILL_GRACE_MS);
+    t.mock.timers.tick(KILL_GRACE_MS);
+
+    // assert
+    await assert.rejects(
+      pending,
+      gitFailure({
+        failure: { kind: "timeout", timeoutMs: 100 },
+        operation: "ls-remote",
+        exitCode: null,
+        stderr: "",
+      }),
+    );
+    assert.deepStrictEqual(
+      [signalsBeforeDeadline, signalsAtDeadline, host.groupSignals],
+      [
+        [],
+        [[4243, "SIGTERM"]],
+        [
+          [4243, "SIGTERM"],
+          [4243, "SIGKILL"],
+        ],
+      ],
+    );
+  });
+
+  test("WR-06: starts no command when the ssh read used up the request's time", async () => {
+    // arrange
+    const { git, launches, host } = createSequencedGit();
+
+    // act
+    const pending = git.run({ ...SSH_LIST, timeoutMs: 100 });
+    const read = await launches.at(0);
+    host.now = 100;
+    read.close(1);
+
+    // assert
+    await assert.rejects(
+      pending,
+      gitFailure({
+        failure: { kind: "timeout", timeoutMs: 100 },
+        operation: "ls-remote",
+        exitCode: null,
+        stderr: "",
+      }),
+    );
+    assert.strictEqual(launches.all().length, 1);
+  });
 });
 
 // D-SG-05, CONTEXT [Hardening]: real git runs the user's ssh, never a
@@ -3452,6 +3563,19 @@ describe("NODE_GIT_HOST", () => {
       process.cwd(),
       path.join(environment.agentDir, "pi-claude-marketplace", "git-neutral"),
     ]);
+  });
+
+  test("WR-06: reads a clock that never goes back", () => {
+    // arrange
+    const before = performance.now();
+
+    // act
+    const readings = [NODE_GIT_HOST.now(), NODE_GIT_HOST.now()];
+
+    // assert
+    const after = performance.now();
+    const [first = Number.NaN, second = Number.NaN] = readings;
+    assert.deepStrictEqual([before <= first, first <= second, second <= after], [true, true, true]);
   });
 });
 

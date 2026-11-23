@@ -78,10 +78,15 @@
 // no `-batch`. Any other base name keeps git's own check. D-SG-03: no option
 // controls host-key updates; ssh's own default applies.
 //
+// SG-PRC-01, WR-06: a request's timeout bounds the whole command. The ssh
+// read and the run share one deadline, so each launch gets only the time left,
+// and a command with no time left starts nothing.
+//
 // SG-PRC-05: a run that exits with a code its request does not allow rejects
 // with the kind platform/git-failure-kind.ts reads from the exit code and the
 // C-locale stderr. D-SG-06: after a `git-too-old` failure, and only then, the
-// module reads `git version` once and writes it to the debug log.
+// module reads `git version` once and writes it to the debug log. The read
+// stops when the request's signal aborts.
 //
 // D-SG-01, D-PL9-11: this module is the extension's sanctioned git spawn site,
 // and the ssh one once the SSH probe lands. It may import Node's child-process
@@ -94,6 +99,7 @@ import { spawn } from "node:child_process";
 import { constants } from "node:fs";
 import { access, realpath, stat } from "node:fs/promises";
 import path from "node:path";
+import { performance } from "node:perf_hooks";
 
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { GitCommandError } from "../shared/errors.ts";
@@ -166,6 +172,8 @@ export interface GitProcessHost extends ProcessHost {
   readonly realpath: (file: string) => Promise<string>;
   /** Pi's working directory. */
   readonly cwd: () => string;
+  /** Milliseconds on a clock that never goes back. */
+  readonly now: () => number;
   /**
    * Resolves with the real path of the neutral directory, and rejects when it
    * cannot be made or fails its checks.
@@ -979,7 +987,18 @@ export function createGitProcess(options: GitProcessOptions): GitProcess {
     return reported;
   }
 
-  async function execute(request: GitRequest): Promise<GitResult> {
+  // WR-06: the milliseconds left before `deadline`. A command with none left
+  // rejects with its request's limit and starts nothing.
+  function timeLeft(request: GitRequest, deadline: number, operation: string): number {
+    const remaining = deadline - host.now();
+    if (remaining <= 0) {
+      throw new GitCommandError({ kind: "timeout", timeoutMs: request.timeoutMs }, { operation });
+    }
+
+    return remaining;
+  }
+
+  async function execute(request: GitRequest, deadline: number): Promise<GitResult> {
     const operation = operationOf(request);
     if (request.signal?.aborted === true) {
       throw new GitCommandError(
@@ -1003,7 +1022,8 @@ export function createGitProcess(options: GitProcessOptions): GitProcess {
       throw new GitCommandError({ kind: "refused-input" }, { operation });
     }
 
-    const ssh = await sshChange(request, rules);
+    const ssh = await sshChange(request, rules, deadline);
+    const timeoutMs = timeLeft(request, deadline, operation);
     const processRun = await runProcess(
       { spawn: options.spawn, host },
       {
@@ -1011,7 +1031,7 @@ export function createGitProcess(options: GitProcessOptions): GitProcess {
         args: gitArguments(request, rules, words),
         cwd,
         env: gitEnvironment(options.env, rules, request.lane, ssh, cwd),
-        timeoutMs: request.timeoutMs,
+        timeoutMs,
         killGraceMs: options.killGraceMs,
         signal: request.signal,
         ...(request.input !== undefined && { input: request.input }),
@@ -1029,19 +1049,26 @@ export function createGitProcess(options: GitProcessOptions): GitProcess {
   }
 
   // D-SG-05: a network-lane command that can use ssh first reads the user's
-  // ssh choice, under the request's timeout and cancellation. No debug log
+  // ssh choice, under the request's deadline and cancellation. No debug log
   // names the command or the read, because a user's ssh arguments can name
   // key files.
-  async function sshChange(request: GitRequest, rules: PlatformRules): Promise<EnvironmentChange> {
+  async function sshChange(
+    request: GitRequest,
+    rules: PlatformRules,
+    deadline: number,
+  ): Promise<EnvironmentChange> {
     if (request.lane === "local" || !SUBCOMMAND_RULES[request.subcommand].ssh) {
       return NO_CHANGE;
     }
 
-    const read = await execute({
-      ...SSH_CONFIG_READ,
-      timeoutMs: request.timeoutMs,
-      ...(request.signal !== undefined && { signal: request.signal }),
-    });
+    const read = await execute(
+      {
+        ...SSH_CONFIG_READ,
+        timeoutMs: request.timeoutMs,
+        ...(request.signal !== undefined && { signal: request.signal }),
+      },
+      deadline,
+    );
     const neutral = await neutralDirectory(operationOf(request));
     return sshEnvironment(options.env, rules, configValues(read.stdout), neutral);
   }
@@ -1061,9 +1088,10 @@ export function createGitProcess(options: GitProcessOptions): GitProcess {
   }
 
   // D-SG-06: the version read runs through `execute`, so it never reads the
-  // version again.
-  async function logGitVersion(): Promise<void> {
-    const versionLine = await execute(VERSION_REQUEST).then(
+  // version again. WR-06: it stops when the failed request's signal aborts.
+  async function logGitVersion(signal: AbortSignal | undefined): Promise<void> {
+    const request: GitRequest = { ...VERSION_REQUEST, ...(signal !== undefined && { signal }) };
+    const versionLine = await execute(request, host.now() + request.timeoutMs).then(
       (version) => firstLine(version.stdout),
       () => "unreadable",
     );
@@ -1072,10 +1100,10 @@ export function createGitProcess(options: GitProcessOptions): GitProcess {
 
   async function run(request: GitRequest): Promise<GitResult> {
     try {
-      return await execute(request);
+      return await execute(request, host.now() + request.timeoutMs);
     } catch (error: unknown) {
       if (error instanceof GitCommandError && error.kind === "git-too-old") {
-        await logGitVersion();
+        await logGitVersion(request.signal);
       }
 
       throw error;
@@ -1095,13 +1123,17 @@ async function isExecutableFile(file: string): Promise<boolean> {
   }
 }
 
-/** The shared process host, plus an execute probe, `realpath`, Pi's cwd, and the neutral directory. */
+/**
+ * The shared process host, plus an execute probe, `realpath`, Pi's cwd, a
+ * monotonic clock, and the neutral directory.
+ */
 // fallow-ignore-next-line unused-export -- NODE_GIT_PROCESS below binds it in production, and the real-git cases of the module test run through it.
 export const NODE_GIT_HOST: GitProcessHost = Object.freeze({
   ...NODE_PROCESS_HOST,
   isExecutable: isExecutableFile,
   realpath: (file: string) => realpath(file),
   cwd: () => process.cwd(),
+  now: () => performance.now(),
   // NFR-10: under the user scope's extension root; `getAgentDir` reads its
   // variable on every call.
   neutralDirectory: createNeutralDirectory({
