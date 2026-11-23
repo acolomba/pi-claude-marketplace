@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
 milestone: integration-rescope
-milestone_name: Integration Test Rescope
 status: Awaiting next milestone
 stopped_at: Phase 08 complete — all phases complete
-last_updated: "2026-11-23T09:41:46.770Z"
+last_updated: "2026-11-23T15:58:47.743Z"
 last_activity: 2026-11-23
 last_activity_desc: Milestone integration-rescope completed and archived
-state_head: fa5cd1198f4804f8797259cbc372cd42ef59429e
+state_head: 4df8c22948e869a61d0d7eec5706d5f49eec7f5d
 progress:
   total_phases: 9
   completed_phases: 9
   total_plans: 26
   completed_plans: 26
   percent: 100
+milestone_name: Integration Test Rescope
 current_phase: 08
 current_phase_name: Integration Suite Rescope
 ---
@@ -34,7 +34,7 @@ component as a working Pi artifact.
 Phase: Milestone integration-rescope complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-11-23 — Milestone integration-rescope completed and archived
+Last activity: 2026-11-23 - Completed quick task 261123-jdc: HOOKLATESS-01 late SessionStart
 
 
 ### integration-rescope closeout: `override_closeout`
@@ -501,6 +501,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261123-gtg | Make the dispatch-exec portable boundary test independent of environment size | 2026-11-23 | c8df983 | — | .planning/quick/261123-gtg-fix-the-dispatch-exec-portable-boundary-unit-test-test-bridg |
 | 261123-gth | DIRGITTAG-01: install a dependency from a tag of a local git marketplace | 2026-11-23 | 87446bd | — | .planning/quick/261123-gth-dirgittag-01-planning-backlog-md-add-a-publication-kind-for |
 | 261123-gti | HOOKASYNCRESUME-01: stop repeating an unchanged async SessionStart answer on resume or fork | 2026-11-23 | c099652 | — | .planning/quick/261123-gti-hookasyncresume-01-planning-backlog-md-an-async-sessionstart |
+| 261123-jdc | HOOKLATESS-01: run SessionStart for plugins that autoapply adds in headless modes | 2026-11-23 | 4df8c22 | passed | [261123-jdc-hooklatess-01-late-sessionstart-for-plug](./quick/261123-jdc-hooklatess-01-late-sessionstart-for-plug/) |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
