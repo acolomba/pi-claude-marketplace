@@ -123,7 +123,9 @@ All line numbers below were read at 85c323b.
    synchronous check alone, as upstream's `gTt` belongs to `R2n` alone. The leaf takes only the
    label, the details type and guard, the value reader, and the two custom types.
 3. The hook's identity has the marketplace too, because upstream's `pluginId` is
-   `<plugin>@<marketplace>`, and the bridge's `pluginId` is the bare plugin name.
+   `<plugin>@<marketplace>` (its `is` @311505842 reads the marketplace as the text after the last
+   `@` of a plugin id, and `CFi` classifies the answer's plugin with it), and the bridge's
+   `pluginId` is the bare plugin name.
 4. The scenario has a second, resume-only hook `fresh`, so an implementation that drops every
    async SessionStart answer fails it (break B3). No separate guard scenario: the identity rule
    (another hook's answer is skipped) is pinned by unit rows, and a guard scenario could not pin
@@ -165,9 +167,9 @@ file is:
   written and run that test's red form yourself.
 - `break.sh` and `check-red.mjs` are the reference tools in `$S/fix-07b/`; Task 1 copies them.
 
-**The defect** (research section 2). `sendAsyncAnswer` (`bridges/hooks/async-rewake/registry.ts:703-750`)
+**The defect** (research section 2). `sendAsyncAnswer` (`bridges/hooks/async-rewake/registry.ts:704-750`)
 caps each text of the answer and sends it with `details: { pluginId: entry.pluginId, dispatchId:
-entry.dispatchId }` (`:744`). The custom type is the module-private constant at `:142-146`.
+entry.dispatchId }` (`:742`). The custom type is the module-private constant at `:142-146`.
 Nothing reads these messages back, and HKRL-02's reader (`event-adapters.ts:828-845`) accepts only
 `claude-hook-additional-context`. Pi persists a `nextTurn` message with its details once a prompt
 sends it, and the projection of a resumed session returns it with the details.
@@ -185,7 +187,7 @@ sends it, and the projection of a resumed session returns it with the details.
    - `ASYNC_RESPONSE_CUSTOM_TYPE`, with the value `"claude-hook-async-response"` and its D-BG-205
      JSDoc, moved from `registry.ts:142-146`.
    - `interface SessionStartContextDetails` (`event`, `values`), moved from
-     `event-adapters.ts:576-585` with its HKRL-02 JSDoc and now exported.
+     `event-adapters.ts:577-585` with its HKRL-02 JSDoc and now exported.
    - `interface AsyncAnswerHook`: readonly `pluginId: string`, `marketplace: string`, and
      `command: string | undefined`. Its JSDoc says this is the hook of an async SessionStart
      answer as Claude Code 2.1.295 names it, the plugin and the command the hook declares
@@ -213,10 +215,11 @@ sends it, and the projection of a resumed session returns it with the details.
    identity fields. `asyncAnswerHeld` returns false for no texts; otherwise it maps the messages
    through `heldContextOf`, keeps each defined context that names no hook or the same hook, and
    takes `.at(-1)` as `nearest` (the target is ES2022, so `findLast` and `toReversed` are not in
-   the lib). Three lines are prescribed word for word, because breaks B1 and B2 replace them:
-   the first line of `heldContextOf` and the last line of `asyncAnswerHeld` (block below).
+   the lib). Two of the three lines that the block below prescribes word for word are in the
+   leaf, because breaks B2 and B1 replace them: the first line of `heldContextOf` and the last
+   line of `asyncAnswerHeld`.
 
-2. `bridges/hooks/event-adapters.ts`: remove the five items that move (the constant and its JSDoc,
+2. `bridges/hooks/event-adapters.ts`: remove the four items that move (the constant and its JSDoc,
    the details interface and its JSDoc, the label and its comment, and the guard). Import
    `HOOK_CONTEXT_MESSAGE_TYPE`, `sessionStartValues`, and `type SessionStartContextDetails` from
    `./session-start-context.ts` in one import placed after `./hook-labels.ts` and before
@@ -229,7 +232,7 @@ sends it, and the projection of a resumed session returns it with the details.
 
 3. `bridges/hooks/event-router.ts`: drop `HOOK_CONTEXT_MESSAGE_TYPE` from the `./event-adapters.ts`
    import (`:87-93`), and add `import { HOOK_CONTEXT_MESSAGE_TYPE } from "./session-start-context.ts";`
-   after the `./routing-state.ts` import (`:103-111`) and before `./settle.ts` (`:112`).
+   after the `./routing-state.ts` import (`:104-112`) and before `./settle.ts` (`:113`).
 
 4. `bridges/hooks/async-rewake/registry.ts`:
    - Remove the custom-type constant and its JSDoc (`:142-146`). Import `ASYNC_RESPONSE_CUSTOM_TYPE`,
@@ -251,7 +254,7 @@ sends it, and the projection of a resumed session returns it with the details.
      the debug line `` `async-hook: answer not added, the conversation holds its text (${entry.pluginId}/${entry.claudeEvent})` ``
      and returns, before `capHookContext`, so a held answer saves no file. Then it computes
      `details` with `answerDetails(entry, hook, values)`, and each `sendMessage` passes `details`.
-     Extend its JSDoc (`:703-712`): a SessionStart answer whose every text the conversation already
+     Extend its JSDoc (`:704-712`): a SessionStart answer whose every text the conversation already
      holds is not sent and saves no file, as Claude Code 2.1.295 decides it, and each message of a
      SessionStart answer keeps the hook and every uncapped text in its details (HOOKASYNCRESUME-01).
    - New module-private `sessionStartAnswerHeld(entry, ctx: ExtensionContext, hook, values)`, right
@@ -370,8 +373,9 @@ the hook runs no npm check for it).
   environment, in the form of the verify commands: `env -i HOME="$HOME" PATH="$PATH" LANG=C.UTF-8
   TMPDIR=/tmp "$S/nondac-sh" -c "node --import \"$PWD/scripts/isolated-pi-home.mjs\" --test
   --test-reporter=spec <files>"`. Run direct coverage with `env -i HOME="$HOME" PATH="$PATH"
-  LANG=C.UTF-8 TMPDIR=/tmp` before the prefix (STATE.md: this container's environment pushes the
-  `dispatch-exec.test.ts` pair over its context cap; the sibling item 261123-gtg fixes that).
+  LANG=C.UTF-8 TMPDIR=/tmp` before the prefix, as the orchestrator asked. The sibling item
+  261123-gtg (c8df983) has since fixed the `dispatch-exec.test.ts` case that needed it, so it is a
+  precaution now; the planner measured the four pairs passing both with and without it.
 - Sibling executors may share the CPUs. Run every cucumber run, the ESLint warm-up, every
   `check:static`, and every commit under `flock -w 3600 "$S/phase07-heavy.lock"`, and pass
   `--parallel 2` right after `--profile <name>` in every cucumber run. `break.sh` takes the lock and
@@ -390,11 +394,16 @@ the hook runs no npm check for it).
 - The worktree's shell guard refuses one-line commands that call `git` inside `$(...)`. When it
   refuses a command of this plan, write the command verbatim into a script under `$D` (for example
   `$D/verify-t1-1.sh`), run it with `bash`, and keep the script for the SUMMARY.
-- Stage by explicit path only; never `git add -A`, `git add .`, or `git commit -a`. Commit in the
-  foreground with `flock -w 3600 "$S/phase07-heavy.lock" env npm_config_script_shell=$S/nondac-sh
+- Stage by explicit path only; never `git add -A`, `git add .`, or `git commit -a`. Commit with
+  `flock -w 3600 "$S/phase07-heavy.lock" env npm_config_script_shell=$S/nondac-sh
   NODE_OPTIONS=--max-old-space-size=6144 git commit -F <message file>` and let the whole hook run
-  (`npm run check:commit` for the fix commit). Do not run the pre-commit tool by hand with a skip
-  list, and never set `SKIP` for a hook: the session's exported `SKIP=trufflehog` stays as it is.
+  (`npm run check:commit` for the fix commit: `check:static`, measured at 287 seconds, then
+  `test:unpaired`, 32 seconds, and the four pairs' direct coverage, 12 seconds, which also passes
+  under the session's full environment). Run it in the foreground with the longest
+  tool timeout; when it can outlast the tool's foreground limit, as the fix commit can, run it
+  once with the tool's background option and wait for its completion notification, never polling
+  with `sleep` (committing skill). Do not run the pre-commit tool by hand with a skip list, and
+  never set `SKIP` for a hook: the session's exported `SKIP=trufflehog` stays as it is.
   When a fixer hook changes a file, the commit fails: restage that file and commit again. Never
   `--no-verify`, `--amend`, a rebase, `git stash`, a push, or a commit on `main`. Inside a worktree
   the hook may check nothing, so the fix commit is preceded by its own `check:static` run and its
@@ -489,7 +498,7 @@ What each break proves (all measured on the planner's prototype; each fails the 
        Change nothing else in the file.
 
     3. In `features/step_definitions/hook/async.steps.ts`, add the setup twin of `When the user
-       releases the hook {string} and pi handles its exit` (`:207-219`). Move that step's body, up
+       releases the hook {string} and pi handles its exit` (`:207-218`). Move that step's body, up
        to and including its turn-start assertion, into a module-private
        `releaseToHandledExit(world: ScenarioWorld, hook: string)` placed right after
        `releaseWaitingHook` (`:180`); it returns `{ lengths, from }`, the log lengths and the
@@ -594,7 +603,7 @@ What each break proves (all measured on the planner's prototype; each fails the 
     <fails_when>non-zero exit: cucumber exited non-zero, or the log lacks `1 scenario (1 passed)` and `18 steps (18 passed)`</fails_when>
     <automated>S=/tmp/claude-0/-home-user-pi-claude-marketplace/36571f01-5770-4f51-bd77-b22d58691339/scratchpad; D=$S/quick-261123-gti; PATH="$D/bin:$PATH" flock -w 3600 "$S/phase07-heavy.lock" env npm_config_script_shell=$S/nondac-sh NODE_OPTIONS=--max-old-space-size=6144 npm run --silent test:cucumber:profile -- --profile builtin --parallel 2 features/hook/async.feature > "$D/builtin-async.log" 2>&1; s=$?; echo "exit=$s" >> "$D/builtin-async.log"; test "$s" -eq 0 && grep -qx '0 scenarios' "$D/builtin-async.log" # [HEAD=present EXPECT==present @85c323b GUARD MUTATION: an MCP implementation tag on the new scenario]</automated>
     <fails_when>non-zero exit: the builtin run failed, or the log lacks the line `0 scenarios` (the new scenario gained an implementation tag)</fails_when>
-    <automated>S=/tmp/claude-0/-home-user-pi-claude-marketplace/36571f01-5770-4f51-bd77-b22d58691339/scratchpad; D=$S/quick-261123-gti; test -s "$D/hook-adapter.log" || { PATH="$D/bin:$PATH" flock -w 3600 "$S/phase07-heavy.lock" env npm_config_script_shell=$S/nondac-sh NODE_OPTIONS=--max-old-space-size=6144 npm run --silent test:cucumber:profile -- --profile adapter --parallel 2 features/hook > "$D/hook-adapter.log" 2>&1; echo "exit=$?" >> "$D/hook-adapter.log"; }; grep -qx 'exit=0' "$D/hook-adapter.log" && grep -Eqx '([0-9]+) scenarios \(\1 passed\)' "$D/hook-adapter.log" && ! grep -q 'function timed out' "$D/hook-adapter.log" # [HEAD=present EXPECT==present @85c323b GUARD MUTATION: break B1 on the fixed tree]</automated>
+    <automated>S=/tmp/claude-0/-home-user-pi-claude-marketplace/36571f01-5770-4f51-bd77-b22d58691339/scratchpad; D=$S/quick-261123-gti; PATH="$D/bin:$PATH" flock -w 3600 "$S/phase07-heavy.lock" env npm_config_script_shell=$S/nondac-sh NODE_OPTIONS=--max-old-space-size=6144 npm run --silent test:cucumber:profile -- --profile adapter --parallel 2 features/hook > "$D/hook-adapter.log" 2>&1; echo "exit=$?" >> "$D/hook-adapter.log"; grep -qx 'exit=0' "$D/hook-adapter.log" && grep -Eqx '([0-9]+) scenarios \(\1 passed\)' "$D/hook-adapter.log" && ! grep -q 'function timed out' "$D/hook-adapter.log" # [HEAD=present EXPECT==present @85c323b GUARD MUTATION: break B1 on the fixed tree]</automated>
     <fails_when>non-zero exit: a hook scenario failed or timed out under the adapter profile (an HKRL-02 scenario of `additional-context.feature` among them); Rule 4 applies to a failure outside the new scenario. Measured on the prototype: `315 scenarios (315 passed)` in 6 minutes 40 seconds; at HEAD the 314 hook scenarios passed inside the recorded `npm run check` at b9c0a04, whose `extensions/`, `features/`, and `test/` match 85c323b</fails_when>
     <automated>S=/tmp/claude-0/-home-user-pi-claude-marketplace/36571f01-5770-4f51-bd77-b22d58691339/scratchpad; D=$S/quick-261123-gti; A=$(cat "$D/fix-commit") && test -n "$A" && c=$(git show -s --format=%ct "$A") && g=$(git show --name-only --format= "$A") && f=$(printf '%s\n' "$g" | LC_ALL=C sort | tr '\n' ' ') && test "$f" = "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts extensions/pi-claude-marketplace/bridges/hooks/event-adapters.ts extensions/pi-claude-marketplace/bridges/hooks/event-router.ts extensions/pi-claude-marketplace/bridges/hooks/session-start-context.ts features/hook/async.feature features/step_definitions/hook/async.steps.ts test/bridges/hooks/async-rewake/registry.test.ts test/bridges/hooks/session-start-context.test.ts " && for n in R0-adapter red-unit-leaf red-unit-registry; do m=$(stat -c %Y "$D/$n.log") && test "$m" -lt "$c" || exit 1; done && t=$(git show -s --format=%s "$A") && test "$t" = "fix(hooks): stop repeating an unchanged async session start answer" # [HEAD=absent EXPECT==present @85c323b]</automated>
     <fails_when>non-zero exit: `$D/fix-commit` is missing, the fix commit changed another file set than the eight, a red log is missing or not older than the fix commit, or the commit title differs</fails_when>
@@ -623,7 +632,7 @@ What each break proves (all measured on the planner's prototype; each fails the 
   <verify>
     <automated>S=/tmp/claude-0/-home-user-pi-claude-marketplace/36571f01-5770-4f51-bd77-b22d58691339/scratchpad; D=$S/quick-261123-gti; R=$(git rev-parse --show-toplevel); B=$(cat "$D/plan-base"); node "$D/check-red.mjs" .planning/quick/261123-gti-hookasyncresume-01-planning-backlog-md-an-async-sessionstart/261123-gti-PLAN.md "$D" "$R" "$B" fix- > "$D/red-fix.log" 2>&1; s=$?; echo "exit=$s" >> "$D/red-fix.log"; test "$s" -eq 0 && grep -qx 'RED-PROOFS OK' "$D/red-fix.log" && for b in B1 B2 B3; do grep -qF '       Then the model receives these calls: # features/step_definitions/model.steps.ts:137' "$D/$b-adapter.log" && grep -q '^diff --git a/extensions/pi-claude-marketplace/bridges/hooks/' "$D/$b-adapter.log" || exit 1; done && y=$(git status --porcelain -- extensions/) && test -z "$y" # [HEAD=absent EXPECT==present @85c323b]</automated>
     <fails_when>non-zero exit: the checker printed a `PROBLEM` line (a log is missing, names another checkout root, lacks `restored=clean`, holds a step timeout, lacks `1 scenario (`, ends with `exit=0`, or the scenario failed outside a `When` or a `Then`), a log does not fail at the model-calls `Then` or holds no diff of a hooks-bridge file, or `extensions/` is dirty</fails_when>
-    <automated>S=/tmp/claude-0/-home-user-pi-claude-marketplace/36571f01-5770-4f51-bd77-b22d58691339/scratchpad; D=$S/quick-261123-gti; test ! -e "$D/brk/B1.planner.json" -a ! -e "$D/brk/B2.planner.json" -a ! -e "$D/brk/B3.planner.json" || grep -q 'rewrote a break' .planning/quick/261123-gti-hookasyncresume-01-planning-backlog-md-an-async-sessionstart/261123-gti-SUMMARY.md # [HEAD=present EXPECT==present @85c323b GUARD MUTATION: a rewritten break file that the SUMMARY does not record]</automated>
+    <automated>S=/tmp/claude-0/-home-user-pi-claude-marketplace/36571f01-5770-4f51-bd77-b22d58691339/scratchpad; D=$S/quick-261123-gti; { [ ! -e "$D/brk/B1.planner.json" ] && [ ! -e "$D/brk/B2.planner.json" ] && [ ! -e "$D/brk/B3.planner.json" ]; } || grep -q 'rewrote a break' .planning/quick/261123-gti-hookasyncresume-01-planning-backlog-md-an-async-sessionstart/261123-gti-SUMMARY.md # [HEAD=present EXPECT==present @85c323b GUARD MUTATION: a rewritten break file that the SUMMARY does not record]</automated>
     <fails_when>non-zero exit: Task 2 rewrote a break file because the code differs from a prescribed line, and the SUMMARY does not say so with the words "rewrote a break" and the reason (run this check after the SUMMARY exists)</fails_when>
   </verify>
   <done>B1, B2, and B3 each fail the scenario at `Then the model receives these calls:`; `check-red.mjs` prints `RED-PROOFS OK` for `fix-`; `extensions/` is clean at the fix commit.</done>
@@ -669,7 +678,7 @@ What each break proves (all measured on the planner's prototype; each fails the 
 
 | Threat ID | Category | Component | Severity | Disposition | Mitigation Plan |
 |-----------|----------|-----------|----------|-------------|-----------------|
-| T-gti-01 | Spoofing | `asyncAnswerHeld` over the session's messages | low | accept | A message of the async custom type that another extension or a hand edit wrote with the same hook fields and texts makes the bridge skip a real answer. The bridge already trusts the session and `pi.sendMessage` in the same way for HKRL-02, and Claude Code trusts its transcript the same way; the model still gets the earlier copy that the conversation holds. |
+| T-gti-01 | Spoofing | `asyncAnswerHeld` over the session's messages | low | accept | A message of the async custom type that another extension or a hand edit wrote with the same hook fields and texts makes the bridge skip a real answer. A writer that can add such a message can already put any text in front of the model; the bridge trusts the session and `pi.sendMessage` in the same way for HKRL-02, and Claude Code trusts its transcript the same way. |
 | T-gti-02 | Tampering | the async details guard in `session-start-context.ts` | low | mitigate | The guard requires `event: "SessionStart"`, a string array `values`, and string `pluginId`, `marketplace`, and `command`; any other shape is no entry, and the reader never throws on one (leaf rows "does not read an answer whose details name no session start" and "... no command"). |
 | T-gti-03 | Denial of service | the uncapped texts in `details.values` | low | accept | A plain async hook keeps at most the first 8,388,608 and the last 65,536 UTF-16 code units of its stdout (D-PG5-17), so one answer adds a bounded amount to the session file; Claude Code keeps the whole response in its transcript too. |
 | T-gti-04 | Information disclosure | the session file under the agent directory | low | accept | The part of a long answer that the cap otherwise keeps only in the saved file under the scope's data root is now also in the user's own session file. It is the text the hook gave the model; the docs paragraph states it. |
@@ -702,33 +711,6 @@ What each break proves (all measured on the planner's prototype; each fails the 
 - Breaks B1 to B3 each fail the scenario's `Then`; `extensions/` ends clean.
 - `docs/hooks-compatibility.md` states the rule and its three known gaps.
 </success_criteria>
-
-<output>
-Create `.planning/quick/261123-gti-hookasyncresume-01-planning-backlog-md-an-async-sessionstart/261123-gti-SUMMARY.md`
-with `status: complete` in its frontmatter, and these sections:
-
-- "Red proofs": the R0, B1, B2, and B3 logs under `$D`, each one's count line and failing step,
-  the two `check-red.mjs` outputs (`RED-PROOFS OK`), the two unit red logs, and any break file
-  that Task 2 had to rewrite, with the reason.
-- "Checks": each command of the verify blocks with its exit status, the commit it ran on, the
-  Node version, and the counts it printed (616 unit cases, 4 coverage lines, the `features/hook`
-  scenario count).
-- "Decisions": the raw comparison of uncapped texts (the A3 evidence of this plan's context and
-  the measured divergence of both other options); the hook identity (plugin, marketplace, declared
-  command); no source gate; no separate guard scenario, with the reason; the reader and the custom
-  types in their own leaf, with `contextKey` left in `event-adapters.ts`.
-- "For the orchestrator" (the executor edits none of these files):
-  - CHANGELOG parent line: "An `async` `SessionStart` hook's unchanged answer no longer reaches the
-    model again each time you resume or fork the session."
-  - BACKLOG closure: "HOOKASYNCRESUME-01: closed 2026-11-23 by commit <fix commit>; an async
-    SessionStart answer that the conversation already holds is not added again, as in Claude Code
-    2.1.295 (raw uncapped texts, nearest SessionStart context, same hook or a synchronous one). The
-    three known gaps are in `docs/hooks-compatibility.md`."
-  - STATE.md: drop HOOKASYNCRESUME-01 from the integration-rescope "Still open" list.
-  - `npm run check` in the main checkout after the merge.
-- "## Threat Flags", even when the answer is "None":
-  `None -- no security-relevant surface outside the plan's <threat_model> was introduced.`
-</output>
 
 ## Source audit
 
@@ -770,7 +752,7 @@ with `status: complete` in its frontmatter, and these sections:
 gives; `fallow dead-code`, the cycle run, `fallow health`, and `fallow dupes` exit 0;
 `check:static` exit 0 in 287 seconds; `test:corresponding` and `check:features` exit 0; the four
 unit files 616 cases, 0 failures; direct coverage of the four pairs 100% (leaf 48/48 branches,
-10/10 functions, 175/175 lines; registry 251/251, 69/69, 1335/1335; event-adapters 181/181,
+10/10 functions, 175/175 lines; registry 251/251, 69/69, 1340/1340; event-adapters 181/181,
 39/39, 936/936; event-router 276/276, 96/96, 1872/1872); the scenario red on the old code and
 green with the fix; B1, B2, and B3 each red at the same `Then`; `features/hook` under the adapter
 profile 315 scenarios (315 passed) in 6 minutes 40 seconds; `features/hook/async.feature` under
@@ -779,3 +761,30 @@ the builtin profile `0 scenarios`; the docs paragraph unchanged by every pre-com
 `ERR_MODULE_NOT_FOUND`; the nine registry rows on the old registry, with `--test-timeout=20000`,
 measured ` tests 9`, ` pass 0`, ` fail 6`, ` cancelled 3` (the three cases that wait for a debug
 line time out) in about a minute.
+
+<output>
+Create `.planning/quick/261123-gti-hookasyncresume-01-planning-backlog-md-an-async-sessionstart/261123-gti-SUMMARY.md`
+with `status: complete` in its frontmatter, and these sections:
+
+- "Red proofs": the R0, B1, B2, and B3 logs under `$D`, each one's count line and failing step,
+  the two `check-red.mjs` outputs (`RED-PROOFS OK`), the two unit red logs, and any break file
+  that Task 2 had to rewrite, with the words "rewrote a break" and the reason.
+- "Checks": each command of the verify blocks with its exit status, the commit it ran on, the
+  Node version, and the counts it printed (616 unit cases, 4 coverage lines, the `features/hook`
+  scenario count).
+- "Decisions": the raw comparison of uncapped texts (the A3 evidence of this plan's context and
+  the measured divergence of both other options); the hook identity (plugin, marketplace, declared
+  command); no source gate; no separate guard scenario, with the reason; the reader and the custom
+  types in their own leaf, with `contextKey` left in `event-adapters.ts`.
+- "For the orchestrator" (the executor edits none of these files):
+  - CHANGELOG parent line: "An `async` `SessionStart` hook's unchanged answer no longer reaches the
+    model again each time you resume or fork the session."
+  - BACKLOG closure: "HOOKASYNCRESUME-01: closed 2026-11-23 by commit <fix commit>; an async
+    SessionStart answer that the conversation already holds is not added again, as in Claude Code
+    2.1.295 (raw uncapped texts, nearest SessionStart context, same hook or a synchronous one). The
+    three known gaps are in `docs/hooks-compatibility.md`."
+  - STATE.md: drop HOOKASYNCRESUME-01 from the integration-rescope "Still open" list.
+  - `npm run check` in the main checkout after the merge.
+- `## Threat Flags`, even when the answer is "None" (AGENTS.md, GSD records), as this line:
+  None -- no security-relevant surface outside the plan's `<threat_model>` was introduced.
+</output>
