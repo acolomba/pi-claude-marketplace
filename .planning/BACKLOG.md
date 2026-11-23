@@ -5524,3 +5524,7 @@ the tag clone's key differs, because a folder with no `origin` keys it by `marke
 (`orchestrators/plugin/clone-cache.ts`). The work: a publication kind for a dir marketplace in a
 git work tree in `features/lib/published-marketplace.ts`, and a scenario that installs a
 constrained dependency from its tag.
+
+## HOOKLATESS-01: no SessionStart run for a plugin that loads after the session starts
+
+Noted 2026-11-23 (integration-rescope, Phase 6.1, HKRL-01 research). A parity question for the maintainer. Claude Code 2.1.296 runs `SessionStart` in headless sessions for a plugin that loads after the session started (CHANGELOG 2.1.296; `.planning/phases/06.1-reload-keeps-sessionstart-context/06.1-UPSTREAM-EVIDENCE.md`), with the original start source and without `initialUserMessage`. The hooks bridge runs `SessionStart` only on Pi's `session_start` and on compaction and runs none on a `/reload` (D-CF5-03), so a plugin installed or enabled mid-session gets no `SessionStart` run until the next session. Decide whether to add a late run (and whether interactive sessions should get it too; upstream's interactive `/reload-plugins` does not run it).

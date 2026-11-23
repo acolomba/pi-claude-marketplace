@@ -1198,6 +1198,8 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ### Blockers/Concerns
 
+- [integration-rescope] CHANGELOG parent line for the milestone PR (Phase 6.1, HKRL-01, `b116f4f`): "A Pi `/reload` before your first prompt no longer drops the context that a plugin's `SessionStart` hook added at startup."
+- [integration-rescope] Parity question for the user at milestone end: HOOKLATESS-01 (BACKLOG) — Claude Code 2.1.296 runs SessionStart in headless mode for a plugin that loads after the session starts; the bridge does not.
 - [integration-rescope] Phase 6.1 (inserted, HKRL-01, user decision 2026-11-22: fix the /reload parity gap in this milestone) planned and checked: design A (SessionStart context sent as a hidden session message); runs beside Phase 7's review loop on disjoint files. Assumption-delta fired on "another"/"additional" (false positives). Decision-coverage gate overridden after the plan checker confirmed coverage, as in earlier phases.
 - [integration-rescope] Phase 7 planning: decision-coverage gate `could-not-parse` (bracket-named decisions); proceeded by override after the plan checker confirmed coverage. Assumption-delta fired on "fallback" (false positive, `no-change`). Phase 6.1 (inserted, HKRL-01) is planned beside it on disjoint files.
 - [integration-rescope] HOOK-E2E-04 parity (user decision 2026-11-22: research upstream first): the integration case `hooks-additionalcontext-end-to-end.test.ts` HOOK-E2E-04 is restored until Claude Code's `/reload-plugins` behavior for buffered SessionStart context is known; the scenario at `features/hook/additional-context.feature:230` pins today's documented drop meanwhile.
