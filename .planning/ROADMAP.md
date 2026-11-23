@@ -342,10 +342,10 @@ Plans:
 **Success Criteria** (what must be TRUE):
   1. A plugin whose path-source dependency carries a version constraint installs that dependency from the marketplace tag that the constraint selects, such as `formatter--v1.0.0`, while the marketplace HEAD has moved past the tag; the installed dependency shows the tag's version and content (TAGS-01, TAGS-03). The scenarios pass under both profiles, fail under a deliberate break, and the cases they replace are gone from `path-source-tag-install` (ITMIG-07).
   2. When no marketplace tag satisfies the constraint, both plugins still install, from the current checkout (TAGS-02). The scenario passes under both profiles, fails under a deliberate break, and the case it replaces is gone from `path-source-tag-install` (ITMIG-07).
-**Plans**: 1 plan
+**Plans**: 1/1 plans executed
 
 Plans:
-- [ ] 07-01-PLAN.md -- Wave 1: the shared release-tag builder `pushGitTag` with the marketplace tag step and its run tokens, the tag scenario and the TAGS-02 fallback scenario in `plugin/install-dependencies.feature`, breaks B1 to B5, then trim `path-source-tag-install` to CR-01 and the two-member git-state case (ITMIG-07)
+- [x] 07-01-PLAN.md -- Wave 1: the shared release-tag builder `pushGitTag` with the marketplace tag step and its run tokens, the tag scenario and the TAGS-02 fallback scenario in `plugin/install-dependencies.feature`, breaks B1 to B5, then trim `path-source-tag-install` to CR-01 and the two-member git-state case (ITMIG-07)
 
 ### Phase 8: Integration Suite Rescope
 
@@ -371,7 +371,7 @@ Plans:
 | 4. Prune | 2/2 | Complete    | 2026-11-22 |
 | 5. MCP Install, Legacy Move, and Overrides | 3/3 | Complete    | 2026-11-22 |
 | 6. Hooks and Auth | 2/2 | Complete    | 2026-11-22 |
-| 7. Path-Source Dependency Tags | 0/1 | Not started | - |
+| 7. Path-Source Dependency Tags | 1/1 | In Progress | - |
 | 8. Integration Suite Rescope | 0/TBD | Not started | - |
 
 ## Carried Forward
