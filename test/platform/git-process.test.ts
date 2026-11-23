@@ -15,7 +15,11 @@ import { GitCommandError } from "../../extensions/pi-claude-marketplace/shared/e
 import { hermeticGitEnvironment } from "../../features/lib/hermetic-git.ts";
 
 import { captureDebugLog } from "./debug-log-capture.ts";
-import { createGitTestRepository } from "./git-test-repository.ts";
+import {
+  createGitTestDirectory,
+  createGitTestRepository,
+  runSystemGit,
+} from "./git-test-repository.ts";
 import { createProcessFake } from "./process-fake.ts";
 
 import type {
@@ -25,6 +29,7 @@ import type {
 } from "../../extensions/pi-claude-marketplace/platform/git-process.ts";
 import type { ProcessSpawn } from "../../extensions/pi-claude-marketplace/platform/process-run.ts";
 import type { GitFailure } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import type { GitTestRepository } from "./git-test-repository.ts";
 import type { ProcessControl, ProcessLaunch } from "./process-fake.ts";
 import type { TestContext } from "node:test";
 
@@ -40,9 +45,10 @@ const FILL: GitRequest = {
   timeoutMs: 5_000,
 };
 
-// D-SG-05: the `-c` pairs of every command, in their order.
-function hardening(hooksPath: string): string[] {
-  return `core.fsmonitor=
+// D-SG-05: the `-c` pairs of every command, in their order, with the
+// network lane's `bans` after the transport bans.
+function hardening(hooksPath: string, bans: readonly string[] = []): string[] {
+  const pairs = `core.fsmonitor=
 core.hooksPath=${hooksPath}
 core.askPass=
 protocol.ext.allow=never
@@ -88,9 +94,9 @@ protocol.ftps.allow=never
 init.defaultRefFormat=files
 core.longpaths=true
 credential.interactive=false
-init.templateDir=`
-    .split("\n")
-    .flatMap((pair) => ["-c", pair]);
+init.templateDir=`.split("\n");
+  const pins = pairs.indexOf("init.defaultRefFormat=files");
+  return [...pairs.slice(0, pins), ...bans, ...pairs.slice(pins)].flatMap((pair) => ["-c", pair]);
 }
 
 // The values every child gets on POSIX, besides PATH and the ceiling.
@@ -294,6 +300,124 @@ async function recordingScript(
   const record = path.join(root, `${name}.ran`);
   await writeFile(script, `#!/bin/sh\necho ran >> '${record}'\n${output}\n`, { mode: 0o755 });
   return { script, record };
+}
+
+// D-SG-02: the `-c` pairs of the local lane, after the D-SG-05 pairs.
+const LOCAL_LANE = [
+  "alias.remote-none=version",
+  "alias.remote-none.command=version",
+  "alias.remote-/.command=version",
+  "fetch.bundleURI=",
+  "help.autocorrect=0",
+  "safe.bareRepository=explicit",
+  "protocol.file.allow=never",
+].flatMap((pair) => ["-c", pair]);
+
+// The user's own git configuration, which every lane keeps.
+const USER_CONFIG = {
+  HOME: "/home/user",
+  GIT_CONFIG_GLOBAL: "/home/user/.gitconfig",
+  GIT_CONFIG_COUNT: "1",
+  GIT_CONFIG_KEY_0: "credential.helper",
+  GIT_CONFIG_VALUE_0: "store",
+  GIT_CONFIG_PARAMETERS: "'user.name'='user'",
+} as const;
+
+const LOCAL_READ: GitRequest = {
+  subcommand: "rev-parse",
+  lane: "local",
+  options: ["--verify"],
+  operands: ["HEAD"],
+  cwd: "/work/clone",
+  timeoutMs: 5_000,
+};
+
+// A real-git run that rejects with `kind` and `exitCode`.
+function rejectsAs(kind: GitFailure["kind"], exitCode: number): (error: unknown) => boolean {
+  return (error) => {
+    assert.ok(error instanceof GitCommandError);
+    assert.deepStrictEqual([error.kind, error.exitCode], [kind, exitCode]);
+    return true;
+  };
+}
+
+// The user config of a case that allows every transport git knows of.
+const PERMISSIVE_CONFIG = `[protocol "file"]
+\tallow = always
+[protocol "https"]
+\tallow = always
+[protocol "ext"]
+\tallow = always
+`;
+
+interface LaneFixture {
+  readonly root: string;
+  readonly repository: GitTestRepository;
+  /** A bare clone of the repository, which is its plain-path `origin`. */
+  readonly bare: string;
+  /** The module, with the case's HOME and its permissive user config. */
+  readonly git: GitProcess;
+  /** The same module with `variables` and `config` over its base environment. */
+  readonly gitWith: (variables: NodeJS.ProcessEnv, config?: string) => Promise<GitProcess>;
+}
+
+// A committed repository with an `origin`, a `v1.0.0` tag, and a `feature`
+// branch, and a module whose user config allows every transport.
+async function laneFixture(t: TestContext): Promise<LaneFixture> {
+  const root = await caseDirectory(t);
+  const repository = await createGitTestRepository(t, { boundary: "local" });
+  const bare = path.join(root, "origin.git");
+  await repository.cloneBare(bare);
+  await repository.run("remote", "add", "origin", bare);
+  await repository.run("tag", "v1.0.0");
+  await repository.run("branch", "feature");
+  const gitWith = async (variables: NodeJS.ProcessEnv, config = ""): Promise<GitProcess> => {
+    const configPath = path.join(await mkdtemp(path.join(root, "gitconfig-")), "config");
+    await writeFile(configPath, `${PERMISSIVE_CONFIG}${config}`);
+    return createGitProcess({
+      spawn: NODE_SPAWN,
+      host: { ...NODE_GIT_HOST, tmpdir: () => root },
+      env: {
+        ...hermeticGitEnvironment(root),
+        GIT_CONFIG_GLOBAL: configPath,
+        ...variables,
+      },
+      killGraceMs: KILL_GRACE_MS,
+    });
+  };
+
+  return { root, repository, bare, git: await gitWith({}), gitWith };
+}
+
+interface ProjectFixture {
+  readonly home: string;
+  /** The user's own project repository. */
+  readonly project: GitTestRepository;
+  /** A clone directory without `.git` inside the project. */
+  readonly nested: string;
+  /** A directory outside the project. */
+  readonly outside: string;
+  /** A symlink in `outside` that points at `nested`. */
+  readonly link: string;
+  /** The module, with the case's HOME and an empty user config. */
+  readonly git: GitProcess;
+}
+
+async function projectFixture(t: TestContext): Promise<ProjectFixture> {
+  const home = await caseDirectory(t);
+  const project = await createGitTestRepository(t, { boundary: "local" });
+  const nested = path.join(project.dir, ".pi/pi-claude-marketplace/clones/tools");
+  await mkdir(nested, { recursive: true });
+  const outside = await createGitTestDirectory(t, { boundary: "local" });
+  const link = path.join(outside, "tools");
+  await symlink(nested, link);
+  const git = createGitProcess({
+    spawn: NODE_SPAWN,
+    host: { ...NODE_GIT_HOST, tmpdir: () => home },
+    env: hermeticGitEnvironment(home),
+    killGraceMs: KILL_GRACE_MS,
+  });
+  return { home, project, nested, outside, link, git };
 }
 
 describe("createGitProcess", () => {
@@ -1275,6 +1399,843 @@ describe("createGitProcess", () => {
       return true;
     });
     await assert.rejects(access(helper.record), { code: "ENOENT" });
+  });
+});
+
+describe("createGitProcess operands and lanes", () => {
+  for (const { label, request, words } of [
+    {
+      label: "clone",
+      request: {
+        subcommand: "clone",
+        options: ["--quiet", "--no-checkout"],
+        operands: ["https://example.test/x.git", "/work/clone"],
+      },
+      words: [
+        "clone",
+        "--quiet",
+        "--no-checkout",
+        "--end-of-options",
+        "https://example.test/x.git",
+        "/work/clone",
+      ],
+    },
+    {
+      label: "fetch",
+      request: { subcommand: "fetch", options: ["--quiet"], operands: ["origin", "main"] },
+      words: ["fetch", "--quiet", "--end-of-options", "origin", "main"],
+    },
+    {
+      label: "ls-remote",
+      request: {
+        subcommand: "ls-remote",
+        options: ["--heads"],
+        operands: ["https://example.test/x.git"],
+      },
+      words: ["ls-remote", "--heads", "--end-of-options", "https://example.test/x.git"],
+    },
+    {
+      label: "config",
+      request: { subcommand: "config", options: ["--get-all"], operands: ["remote.origin.url"] },
+      words: ["config", "--get-all", "--end-of-options", "remote.origin.url"],
+    },
+    {
+      label: "tag",
+      request: { subcommand: "tag", options: ["-l"], operands: ["v*"] },
+      words: ["tag", "-l", "--end-of-options", "v*"],
+    },
+    {
+      label: "update-ref",
+      request: { subcommand: "update-ref", operands: ["refs/heads/pinned", "abc123"] },
+      words: ["update-ref", "--end-of-options", "refs/heads/pinned", "abc123"],
+    },
+    {
+      label: "rev-parse with --verify",
+      request: { subcommand: "rev-parse", options: ["--verify", "--quiet"], operands: ["HEAD"] },
+      words: ["rev-parse", "--verify", "--quiet", "--end-of-options", "HEAD"],
+    },
+    {
+      label: "checkout",
+      request: { subcommand: "checkout", options: ["--quiet"], operands: ["feature"] },
+      words: ["checkout", "--quiet", "feature", "--"],
+    },
+    {
+      label: "credential",
+      request: { subcommand: "credential", options: ["fill"] },
+      words: ["credential", "fill"],
+    },
+    {
+      label: "version",
+      request: { subcommand: "version" },
+      words: ["version"],
+    },
+    {
+      label: "ls-remote with operands that look like the marker or an option",
+      request: {
+        subcommand: "ls-remote",
+        operands: ["--end-of-options", "--", "--upload-pack=x"],
+      },
+      words: ["ls-remote", "--end-of-options", "--end-of-options", "--", "--upload-pack=x"],
+    },
+    {
+      label: "fetch with an empty operand list",
+      request: { subcommand: "fetch", options: ["--quiet"], operands: [] },
+      words: ["fetch", "--quiet"],
+    },
+    {
+      label: "rev-parse without operands",
+      request: { subcommand: "rev-parse", options: ["--show-toplevel"] },
+      words: ["rev-parse", "--show-toplevel"],
+    },
+    {
+      label: "checkout without operands",
+      request: { subcommand: "checkout", options: ["--quiet"] },
+      words: ["checkout", "--quiet"],
+    },
+  ] satisfies ReadonlyArray<{
+    label: string;
+    request: Pick<GitRequest, "subcommand" | "options" | "operands">;
+    words: readonly string[];
+  }>) {
+    test(`SG-PRC-01, E7: places the operands of ${label} after Pi's options`, async () => {
+      // arrange
+      const { git, control, started } = createFakeGit();
+
+      // act
+      const pending = git.run({ ...request, lane: "network", timeoutMs: 5_000 });
+      await started;
+      control.close(0);
+      await pending;
+
+      // assert
+      assert.deepStrictEqual(control.launches()[0]?.[1], [...hardening("/dev/null"), ...words]);
+    });
+  }
+
+  for (const { label, request } of [
+    {
+      label: "rev-parse with an operand and no --verify",
+      request: { subcommand: "rev-parse", operands: ["HEAD"] },
+    },
+    {
+      label: "checkout with an operand that starts with a dash",
+      request: { subcommand: "checkout", operands: ["main", "--detach"] },
+    },
+    {
+      label: "checkout with the operand --",
+      request: { subcommand: "checkout", operands: ["--"] },
+    },
+    {
+      label: "credential with an operand",
+      request: { subcommand: "credential", operands: ["fill"] },
+    },
+    {
+      label: "version with an operand",
+      request: { subcommand: "version", operands: ["--build-options"] },
+    },
+  ] satisfies ReadonlyArray<{
+    label: string;
+    request: Pick<GitRequest, "subcommand" | "operands">;
+  }>) {
+    test(`SG-PRC-01, E7: refuses ${label} before any lookup or spawn`, async () => {
+      // arrange
+      const { git, control, host } = createFakeGit();
+
+      // act & assert
+      await assert.rejects(
+        git.run({ ...request, lane: "local", timeoutMs: 5_000 }),
+        gitFailure({
+          failure: { kind: "refused-input" },
+          operation: request.subcommand,
+          exitCode: null,
+          stderr: "",
+        }),
+      );
+      assert.deepStrictEqual(control.launches(), []);
+      assert.deepStrictEqual(host.probes, []);
+    });
+  }
+
+  for (const { label, variables } of [
+    { label: "unset protocol and ssh values", variables: {} },
+    {
+      label: "empty protocol and ssh values",
+      variables: { GIT_ALLOW_PROTOCOL: "", GIT_SSH_COMMAND: "" },
+    },
+    {
+      label: "a protocol list and an ssh program",
+      variables: { GIT_ALLOW_PROTOCOL: "ext:https", GIT_SSH_COMMAND: "ssh -i /home/user/key" },
+    },
+    {
+      label: "lazy fetch and LFS smudge turned back on",
+      variables: { GIT_NO_LAZY_FETCH: "0", GIT_LFS_SKIP_SMUDGE: "0" },
+    },
+  ]) {
+    test(`D-SG-02, SG-PRC-04: runs a local-lane request on the network-free lane over ${label}`, async () => {
+      // arrange
+      const { git, control, started } = createFakeGit(
+        { PATH: "/usr/bin", ...USER_CONFIG, ...variables },
+        { realpaths: { "/work/clone": "/real/clone" } },
+      );
+
+      // act
+      const pending = git.run(LOCAL_READ);
+      await started;
+      control.close(0);
+      await pending;
+
+      // assert
+      const [launch] = control.launches();
+      assert.deepStrictEqual(
+        [launch?.[1], launch?.[2].env],
+        [
+          [
+            ...hardening("/dev/null"),
+            ...LOCAL_LANE,
+            "rev-parse",
+            "--verify",
+            "--end-of-options",
+            "HEAD",
+          ],
+          {
+            ...POSIX_FORCED,
+            ...USER_CONFIG,
+            PATH: "/usr/bin",
+            GIT_CEILING_DIRECTORIES: "/real",
+            GIT_ALLOW_PROTOCOL: "/",
+            GIT_SSH_COMMAND: "false",
+          },
+        ],
+      );
+    });
+  }
+
+  test("D-SG-02: on Windows removes every spelling of a lane variable before setting it", async () => {
+    // arrange
+    const { git, control, started } = createFakeGit(
+      {
+        Path: String.raw`C:\Git\cmd`,
+        git_allow_protocol: "ext:https",
+        Git_Ssh_Command: "plink",
+        git_no_lazy_fetch: "0",
+      },
+      {
+        platform: "win32",
+        files: [String.raw`C:\Git\cmd\git.exe`],
+        cwd: String.raw`C:\work\project`,
+      },
+    );
+
+    // act
+    const pending = git.run({ ...LOCAL_READ, cwd: String.raw`C:\work\clone` });
+    await started;
+    control.close(0);
+    await pending;
+
+    // assert
+    const [launch] = control.launches();
+    assert.deepStrictEqual(
+      [launch?.[1], launch?.[2].env],
+      [
+        [
+          ...hardening(String.raw`\\.\NUL`),
+          ...LOCAL_LANE,
+          "rev-parse",
+          "--verify",
+          "--end-of-options",
+          "HEAD",
+        ],
+        {
+          ...POSIX_FORCED,
+          Path: String.raw`C:\Git\cmd`,
+          GIT_CEILING_DIRECTORIES: String.raw`C:\work`,
+          GIT_ALLOW_PROTOCOL: "/",
+          GIT_SSH_COMMAND: "false",
+        },
+      ],
+    );
+  });
+
+  test("D-SG-02: gives a network-lane request none of the local lane's values or pairs", async () => {
+    // arrange
+    const { git, control, started } = createFakeGit({
+      PATH: "/usr/bin",
+      GIT_SSH_COMMAND: "ssh -i /home/user/key",
+    });
+
+    // act
+    const pending = git.run({
+      subcommand: "ls-remote",
+      lane: "network",
+      operands: ["https://example.test/x.git"],
+      timeoutMs: 5_000,
+    });
+    await started;
+    control.close(0);
+    await pending;
+
+    // assert
+    const [launch] = control.launches();
+    assert.deepStrictEqual(
+      [launch?.[1], launch?.[2].env],
+      [
+        [...hardening("/dev/null"), "ls-remote", "--end-of-options", "https://example.test/x.git"],
+        {
+          ...POSIX_FORCED,
+          PATH: "/usr/bin",
+          GIT_SSH_COMMAND: "ssh -i /home/user/key",
+          GIT_CEILING_DIRECTORIES: "/",
+        },
+      ],
+    );
+  });
+
+  test("D-SG-02: gives a local-lane run and a network-lane run in flight together their own launch", async () => {
+    // arrange
+    const { git, launches } = createSequencedGit({
+      realpaths: { "/work/clone": "/real/clone" },
+    });
+
+    // act
+    const local = git.run(LOCAL_READ);
+    const network = git.run({ ...FILL, cwd: "/work/clone" });
+    const first = await launches.at(0);
+    const second = await launches.at(1);
+    second.close(0);
+    first.close(0);
+    await Promise.all([local, network]);
+
+    // assert
+    assert.deepStrictEqual(
+      launches.all().map(([, args, options]) => [args, options.env]),
+      [
+        [
+          [
+            ...hardening("/dev/null"),
+            ...LOCAL_LANE,
+            "rev-parse",
+            "--verify",
+            "--end-of-options",
+            "HEAD",
+          ],
+          {
+            ...POSIX_FORCED,
+            PATH: "/usr/bin",
+            GIT_CEILING_DIRECTORIES: "/real",
+            GIT_ALLOW_PROTOCOL: "/",
+            GIT_SSH_COMMAND: "false",
+          },
+        ],
+        [
+          [...hardening("/dev/null"), "credential", "fill"],
+          { ...POSIX_FORCED, PATH: "/usr/bin", GIT_CEILING_DIRECTORIES: "/real" },
+        ],
+      ],
+    );
+  });
+
+  for (const { label, operand } of [
+    { label: "a file:// URL", operand: (fixture: LaneFixture) => `file://${fixture.bare}` },
+    { label: "a plain-path remote", operand: () => "origin" },
+    { label: "an https URL", operand: () => "https://example.invalid/x.git" },
+    { label: "an scp-form ssh URL", operand: () => "git@stand-in.test:acme/tools.git" },
+    { label: "a remote-helper URL", operand: () => "foo::bar" },
+  ]) {
+    test(`SG-PRC-04, E3: refuses a local-lane fetch from ${label} under the user's always config`, async (t) => {
+      // arrange
+      const fixture = await laneFixture(t);
+
+      // act
+      const fetched = fixture.git.run({
+        subcommand: "fetch",
+        lane: "local",
+        operands: [operand(fixture)],
+        cwd: fixture.repository.dir,
+        timeoutMs: 10_000,
+      });
+
+      // assert
+      await assert.rejects(fetched, rejectsAs("protocol-refused", 128));
+    });
+  }
+
+  test("SG-PRC-04: fetches the same plain-path remote on the network lane", async (t) => {
+    // arrange
+    const fixture = await laneFixture(t);
+
+    // act
+    const fetched = await fixture.git.run({
+      subcommand: "fetch",
+      lane: "network",
+      options: ["--quiet"],
+      operands: ["origin"],
+      cwd: fixture.repository.dir,
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    assert.deepStrictEqual(fetched, { exitCode: 0, stdout: "", stderr: "" });
+  });
+
+  for (const { label, request, observe, expected } of [
+    {
+      label: "rev-parse --verify of HEAD",
+      request: () => ({ subcommand: "rev-parse", options: ["--verify"], operands: ["HEAD"] }),
+      observe: ["rev-parse", "HEAD"],
+      expected: (fixture: LaneFixture) => [
+        `${fixture.repository.initialOid}\n`,
+        fixture.repository.initialOid,
+      ],
+    },
+    {
+      label: "tag -l of v*",
+      request: () => ({ subcommand: "tag", options: ["-l"], operands: ["v*"] }),
+      observe: ["tag", "-l"],
+      expected: () => ["v1.0.0\n", "v1.0.0"],
+    },
+    {
+      label: "config --get-all of a key",
+      request: () => ({
+        subcommand: "config",
+        options: ["--get-all"],
+        operands: ["remote.origin.url"],
+      }),
+      observe: ["config", "--get-all", "remote.origin.url"],
+      expected: (fixture: LaneFixture) => [`${fixture.bare}\n`, fixture.bare],
+    },
+    {
+      label: "update-ref of a new ref",
+      request: (fixture: LaneFixture) => ({
+        subcommand: "update-ref",
+        operands: ["refs/heads/pinned", fixture.repository.initialOid],
+      }),
+      observe: ["rev-parse", "refs/heads/pinned"],
+      expected: (fixture: LaneFixture) => ["", fixture.repository.initialOid],
+    },
+    {
+      label: "checkout of a branch",
+      request: () => ({ subcommand: "checkout", options: ["--quiet"], operands: ["feature"] }),
+      observe: ["symbolic-ref", "--short", "HEAD"],
+      expected: () => ["", "feature"],
+    },
+  ] satisfies ReadonlyArray<{
+    label: string;
+    request: (fixture: LaneFixture) => Pick<GitRequest, "subcommand" | "options" | "operands">;
+    observe: readonly string[];
+    expected: (fixture: LaneFixture) => readonly [string, string];
+  }>) {
+    test(`SG-PRC-04, E3: runs a local-lane ${label} under the user's always config`, async (t) => {
+      // arrange
+      const fixture = await laneFixture(t);
+
+      // act
+      const read = await fixture.git.run({
+        ...request(fixture),
+        lane: "local",
+        cwd: fixture.repository.dir,
+        timeoutMs: 10_000,
+      });
+
+      // assert
+      const observed = await runSystemGit(
+        { cwd: fixture.repository.dir, home: fixture.root },
+        ...observe,
+      );
+      assert.deepStrictEqual([read.stdout, observed], expected(fixture));
+    });
+  }
+
+  test("SG-PRC-01: passes an operand that looks like --upload-pack to git as data", async (t) => {
+    // arrange
+    const fixture = await laneFixture(t);
+    const program = await recordingScript(fixture.root, "upload-pack", "exit 1");
+    await assert.rejects(
+      runSystemGit(
+        { cwd: fixture.repository.dir, home: fixture.root },
+        "ls-remote",
+        `--upload-pack=${program.script}`,
+        "origin",
+      ),
+    );
+    await access(program.record);
+    await rm(program.record);
+
+    // act
+    const listed = fixture.git.run({
+      subcommand: "ls-remote",
+      lane: "network",
+      operands: [`--upload-pack=${program.script}`],
+      cwd: fixture.repository.dir,
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    await assert.rejects(listed, rejectsAs("failed", 128));
+    await assert.rejects(access(program.record), { code: "ENOENT" });
+  });
+
+  for (const { label, variables, bans } of [
+    { label: "an unset GIT_ALLOW_PROTOCOL", variables: {}, bans: [] },
+    {
+      label: "a GIT_ALLOW_PROTOCOL key whose value is undefined",
+      variables: { GIT_ALLOW_PROTOCOL: undefined },
+      bans: [],
+    },
+    {
+      label: "GIT_ALLOW_PROTOCOL=https:ssh",
+      variables: { GIT_ALLOW_PROTOCOL: "https:ssh" },
+      bans: ["protocol.http.allow=never", "protocol.file.allow=never"],
+    },
+    {
+      label: "GIT_ALLOW_PROTOCOL=ext:https",
+      variables: { GIT_ALLOW_PROTOCOL: "ext:https" },
+      bans: ["protocol.http.allow=never", "protocol.ssh.allow=never", "protocol.file.allow=never"],
+    },
+    {
+      label: "an empty GIT_ALLOW_PROTOCOL",
+      variables: { GIT_ALLOW_PROTOCOL: "" },
+      bans: [
+        "protocol.https.allow=never",
+        "protocol.http.allow=never",
+        "protocol.ssh.allow=never",
+        "protocol.file.allow=never",
+      ],
+    },
+    {
+      label: "GIT_ALLOW_PROTOCOL=HTTPS, which no name matches exactly",
+      variables: { GIT_ALLOW_PROTOCOL: "HTTPS" },
+      bans: [
+        "protocol.https.allow=never",
+        "protocol.http.allow=never",
+        "protocol.ssh.allow=never",
+        "protocol.file.allow=never",
+      ],
+    },
+    {
+      label: "GIT_ALLOW_PROTOCOL=https::file, with an empty segment",
+      variables: { GIT_ALLOW_PROTOCOL: "https::file" },
+      bans: ["protocol.http.allow=never", "protocol.ssh.allow=never"],
+    },
+  ]) {
+    test(`D-SG-05: turns ${label} into network-lane bans`, async () => {
+      // arrange
+      const { git, control, started } = createFakeGit({ PATH: "/usr/bin", ...variables });
+
+      // act
+      const pending = git.run(FILL);
+      await started;
+      control.close(0);
+      await pending;
+
+      // assert
+      const [launch] = control.launches();
+      assert.deepStrictEqual(
+        [launch?.[1], launch?.[2].env],
+        [
+          [...hardening("/dev/null", bans), "credential", "fill"],
+          { ...POSIX_FORCED, PATH: "/usr/bin", GIT_CEILING_DIRECTORIES: "/" },
+        ],
+      );
+    });
+  }
+
+  test("D-SG-05: on Windows removes every spelling of GIT_ALLOW_PROTOCOL and bans what each omits", async () => {
+    // arrange
+    const { git, control, started } = createFakeGit(
+      {
+        Path: String.raw`C:\Git\cmd`,
+        git_allow_protocol: "https:ssh:file",
+        Git_Allow_Protocol: "https:ssh:http",
+      },
+      {
+        platform: "win32",
+        files: [String.raw`C:\Git\cmd\git.exe`],
+        cwd: String.raw`C:\work\project`,
+        tmpdir: String.raw`C:\Temp`,
+      },
+    );
+
+    // act
+    const pending = git.run(FILL);
+    await started;
+    control.close(0);
+    await pending;
+
+    // assert
+    const [launch] = control.launches();
+    assert.deepStrictEqual(
+      [launch?.[1], launch?.[2].env],
+      [
+        [
+          ...hardening(String.raw`\\.\NUL`, [
+            "protocol.http.allow=never",
+            "protocol.file.allow=never",
+          ]),
+          "credential",
+          "fill",
+        ],
+        { ...POSIX_FORCED, Path: String.raw`C:\Git\cmd`, GIT_CEILING_DIRECTORIES: "C:\\" },
+      ],
+    );
+  });
+
+  test("SG-PRC-03: refuses an ext:: command on the network lane under a user protocol list that names ext", async (t) => {
+    // arrange
+    const fixture = await laneFixture(t);
+    const marker = path.join(fixture.root, "ext-ran");
+    const command = `ext::sh -c touch% ${marker}`;
+    await assert.rejects(
+      runSystemGit(
+        { cwd: fixture.root, home: fixture.root },
+        "-c",
+        "protocol.ext.allow=always",
+        "ls-remote",
+        command,
+      ),
+    );
+    await access(marker);
+    await rm(marker);
+    const git = await fixture.gitWith({ GIT_ALLOW_PROTOCOL: "ext:https" });
+
+    // act
+    const listed = git.run({
+      subcommand: "ls-remote",
+      lane: "network",
+      operands: [command],
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    await assert.rejects(listed, rejectsAs("protocol-refused", 128));
+    await assert.rejects(access(marker), { code: "ENOENT" });
+  });
+
+  for (const { operand } of [
+    { operand: "fd::0" },
+    { operand: "git://127.0.0.1:9/x" },
+    { operand: "ftp://127.0.0.1:9/x" },
+    { operand: "ftps://127.0.0.1:9/x" },
+  ]) {
+    test(`SG-PRC-03: refuses ${operand} on the network lane under a user protocol list that names ext`, async (t) => {
+      // arrange
+      const fixture = await laneFixture(t);
+      const git = await fixture.gitWith({ GIT_ALLOW_PROTOCOL: "ext:https" });
+
+      // act
+      const listed = git.run({
+        subcommand: "ls-remote",
+        lane: "network",
+        operands: [operand],
+        timeoutMs: 10_000,
+      });
+
+      // assert
+      await assert.rejects(listed, rejectsAs("protocol-refused", 128));
+    });
+  }
+
+  test("D-SG-05: keeps the user's protocol list from allowing a file:// URL it leaves out", async (t) => {
+    // arrange
+    const fixture = await laneFixture(t);
+    const git = await fixture.gitWith({ GIT_ALLOW_PROTOCOL: "https:ssh" });
+
+    // act
+    const listed = git.run({
+      subcommand: "ls-remote",
+      lane: "network",
+      operands: [`file://${fixture.bare}`],
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    await assert.rejects(listed, rejectsAs("protocol-refused", 128));
+  });
+
+  test("D-SG-05: lists a file:// URL that the user's protocol list names", async (t) => {
+    // arrange
+    const fixture = await laneFixture(t);
+    const git = await fixture.gitWith({ GIT_ALLOW_PROTOCOL: "file" });
+    const oid = fixture.repository.initialOid;
+
+    // act
+    const listed = await git.run({
+      subcommand: "ls-remote",
+      lane: "network",
+      operands: [`file://${fixture.bare}`],
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    assert.deepStrictEqual(listed, {
+      exitCode: 0,
+      stdout: `${oid}\tHEAD\n${oid}\trefs/heads/main\n`,
+      stderr: "",
+    });
+  });
+
+  test("SG-PRC-03, E5: runs neither a repository hook nor an fsmonitor program during a checkout", async (t) => {
+    // arrange
+    const fixture = await laneFixture(t);
+    const call = { cwd: fixture.repository.dir, home: fixture.root };
+    const hook = await recordingScript(
+      path.join(fixture.repository.gitdir, "hooks"),
+      "post-checkout",
+      "exit 0",
+    );
+    const monitor = await recordingScript(fixture.root, "fsmonitor", "exit 1");
+    await fixture.repository.run("config", "core.hooksPath", ".git/hooks");
+    await fixture.repository.run("config", "core.fsmonitor", monitor.script);
+    await runSystemGit(call, "checkout", "--quiet", "feature");
+    await Promise.all([access(hook.record), access(monitor.record)]);
+    await runSystemGit(call, "checkout", "--quiet", "main");
+    await Promise.all([rm(hook.record), rm(monitor.record)]);
+
+    // act
+    const checkedOut = await fixture.git.run({
+      subcommand: "checkout",
+      lane: "local",
+      options: ["--quiet"],
+      operands: ["feature"],
+      cwd: fixture.repository.dir,
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    assert.deepStrictEqual(checkedOut, { exitCode: 0, stdout: "", stderr: "" });
+    await assert.rejects(access(hook.record), { code: "ENOENT" });
+    await assert.rejects(access(monitor.record), { code: "ENOENT" });
+  });
+
+  test("SG-PRC-03, E5, E6: copies and runs no template hook during a clone", async (t) => {
+    // arrange
+    const fixture = await laneFixture(t);
+    const call = { cwd: fixture.root, home: fixture.root };
+    const configured = path.join(fixture.root, "configured-template");
+    const named = path.join(fixture.root, "named-template");
+    await mkdir(path.join(configured, "hooks"), { recursive: true });
+    await mkdir(path.join(named, "hooks"), { recursive: true });
+    const configuredHook = await recordingScript(
+      path.join(configured, "hooks"),
+      "post-checkout",
+      "exit 0",
+    );
+    const namedHook = await recordingScript(path.join(named, "hooks"), "post-checkout", "exit 0");
+    const source = `file://${fixture.bare}`;
+    await runSystemGit(call, "-c", `init.templateDir=${configured}`, "clone", "-q", source, "a");
+    await runSystemGit(call, "clone", "-q", `--template=${named}`, source, "b");
+    await Promise.all([
+      access(configuredHook.record),
+      access(namedHook.record),
+      access(path.join(fixture.root, "a", ".git", "hooks", "post-checkout")),
+      access(path.join(fixture.root, "b", ".git", "hooks", "post-checkout")),
+    ]);
+    await Promise.all([rm(configuredHook.record), rm(namedHook.record)]);
+    const git = await fixture.gitWith(
+      { GIT_TEMPLATE_DIR: named },
+      `[init]\n\ttemplateDir = ${configured}\n`,
+    );
+    const clone = path.join(fixture.root, "clone");
+
+    // act
+    const cloned = await git.run({
+      subcommand: "clone",
+      lane: "network",
+      options: ["--quiet"],
+      operands: [source, clone],
+      cwd: fixture.root,
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    assert.deepStrictEqual(cloned, { exitCode: 0, stdout: "", stderr: "" });
+    await assert.rejects(access(configuredHook.record), { code: "ENOENT" });
+    await assert.rejects(access(namedHook.record), { code: "ENOENT" });
+    await assert.rejects(access(path.join(clone, ".git", "hooks", "post-checkout")), {
+      code: "ENOENT",
+    });
+  });
+});
+
+// SG-PRC-03, E1, E2, E2b: git acts only on the repository a request names.
+describe("createGitProcess discovery", () => {
+  test("SG-PRC-03: answers the requested repository while GIT_DIR and GIT_WORK_TREE name another", async (t) => {
+    // arrange
+    const home = await caseDirectory(t);
+    const requested = await createGitTestRepository(t, { boundary: "local" });
+    const other = await createGitTestRepository(t, { boundary: "local" });
+    const otherOid = await other.commit([{ filepath: "other.txt", contents: "other\n" }], "other");
+    const pointed = await runSystemGit(
+      { cwd: requested.dir, home },
+      "--git-dir",
+      other.gitdir,
+      "--work-tree",
+      other.dir,
+      "rev-parse",
+      "HEAD",
+    );
+    const git = createGitProcess({
+      spawn: NODE_SPAWN,
+      host: { ...NODE_GIT_HOST, tmpdir: () => home },
+      env: { ...hermeticGitEnvironment(home), GIT_DIR: other.gitdir, GIT_WORK_TREE: other.dir },
+      killGraceMs: KILL_GRACE_MS,
+    });
+
+    // act
+    const read = await git.run({ ...LOCAL_READ, cwd: requested.dir });
+
+    // assert
+    assert.deepStrictEqual([read.stdout, pointed], [`${requested.initialOid}\n`, otherOid]);
+  });
+
+  for (const { label, workingDirectory } of [
+    {
+      label: "a clone directory without .git inside the user's project",
+      workingDirectory: (fixture: ProjectFixture) => fixture.nested,
+    },
+    {
+      label: "a symlink, made outside the project, to that directory",
+      workingDirectory: (fixture: ProjectFixture) => fixture.link,
+    },
+  ]) {
+    test(`SG-PRC-03, E1, E2: finds no repository from ${label}`, async (t) => {
+      // arrange
+      const fixture = await projectFixture(t);
+      const cwd = workingDirectory(fixture);
+      const discovered = await runSystemGit({ cwd, home: fixture.home }, "rev-parse", "HEAD");
+
+      // act
+      const read = fixture.git.run({ ...LOCAL_READ, cwd });
+
+      // assert
+      await assert.rejects(read, rejectsAs("not-a-repository", 128));
+      assert.strictEqual(discovered, fixture.project.initialOid);
+    });
+  }
+
+  test("SG-PRC-03, E2b: ignores the project's url.insteadOf rewrite from a clone directory inside it", async (t) => {
+    // arrange
+    const fixture = await projectFixture(t);
+    const missing = `file://${path.join(fixture.outside, "missing")}`;
+    await fixture.project.run("config", `url.file://${fixture.project.dir}.insteadOf`, missing);
+    const rewritten = await runSystemGit(
+      { cwd: fixture.nested, home: fixture.home },
+      "ls-remote",
+      missing,
+    );
+
+    // act
+    const listed = fixture.git.run({
+      subcommand: "ls-remote",
+      lane: "network",
+      operands: [missing],
+      cwd: fixture.nested,
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    await assert.rejects(listed, rejectsAs("repository-not-found", 128));
+    const oid = fixture.project.initialOid;
+    assert.strictEqual(rewritten, `${oid}\tHEAD\n${oid}\trefs/heads/main`);
   });
 });
 
