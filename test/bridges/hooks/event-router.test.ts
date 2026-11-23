@@ -4809,6 +4809,13 @@ const RUN_EVENTS = {
     message: { role: "assistant", content: [{ type: "text", text: "Done." }], stopReason: "stop" },
     context: { pendingMessages: [] },
   },
+  turn_end_with_queued_message: {
+    type: "turn_end",
+    message: { role: "assistant", content: [{ type: "text", text: "Done." }], stopReason: "stop" },
+    context: {
+      pendingMessages: [{ role: "user", content: [{ type: "text", text: "queued prompt" }] }],
+    },
+  },
   agent_end: { type: "agent_end", messages: [] },
 } as const;
 
@@ -4835,6 +4842,14 @@ for (const { title, before, reason, willRetry, options } of [
     reason: "threshold",
     willRetry: false,
     options: { deliverAs: "steer" },
+  },
+  {
+    title:
+      "holds the SessionStart context of a compaction before a queued message's turn to that turn's end (HKRL-03)",
+    before: ["turn_end_with_queued_message"],
+    reason: "threshold",
+    willRetry: false,
+    options: { triggerTurn: false },
   },
   {
     title:
@@ -4876,7 +4891,10 @@ for (const { title, before, reason, willRetry, options } of [
     routeCompactionHooks(runtime, root);
     const context = makeContext(root, root);
     for (const runEvent of before) {
-      await registeredHandler(registrations, runEvent)(RUN_EVENTS[runEvent], context);
+      await registeredHandler(registrations, RUN_EVENTS[runEvent].type)(
+        RUN_EVENTS[runEvent],
+        context,
+      );
     }
 
     // act

@@ -625,7 +625,10 @@ type GenerationGuard = () => boolean;
 
 /**
  * Where Pi's agent loop is (HKRL-03): idle, inside a model turn, or between
- * two turns of a run, where the run's next model call is still to come.
+ * two turns of a run, where the run's next model call is still to come and
+ * reads a steer. A turn that ends with a steer or a follow-up queued counts
+ * as `turn`: Pi gives that message the next model call and polls a steer only
+ * after it.
  */
 type RunPhase = "idle" | "turn" | "between";
 
@@ -1338,7 +1341,8 @@ function sessionCompactCallback(
  *      (DISP-01) plus `before_agent_start` (the drain point for the
  *      prompt `additionalContext` buffer) plus `turn_start` (marks a model
  *      turn, HKRL-03) plus `turn_end` (sends the context of a queued
- *      follow-up, D-CF5-13, and marks the run between two turns) plus the
+ *      follow-up, D-CF5-13, and, with nothing queued, marks the run
+ *      between two turns) plus the
  *      three turn-boundary surfaces `agent_end` (caches the run's
  *      last-assistant message and marks the agent idle),
  *      `agent_before_settle` (runs the Stop bucket on a `stop`
@@ -1631,11 +1635,14 @@ async function registerHooksBridgeWith(
   );
   // The context of a queued follow-up goes out at the turn end after which
   // the agent reads that follow-up (D-CF5-13). The run now sits between two
-  // turns until the next `turn_start` or `agent_end` (HKRL-03).
+  // turns until the next `turn_start` or `agent_end` (HKRL-03). A queued
+  // steer or follow-up takes the next model call, and Pi polls a steer only
+  // after that call, so a context steered now would force one more call; the
+  // phase stays `turn`, which holds the context to that turn's end.
   pi.on(
     "turn_end",
     bindWithMode(() => (event: FollowUpTurnEnd) => {
-      runPhase = "between";
+      runPhase = event.context.pendingMessages.length === 0 ? "between" : "turn";
       sendDueFollowUpContext(event, runtime, pi);
       return Promise.resolve(undefined);
     }),
