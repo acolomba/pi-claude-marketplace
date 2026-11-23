@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { chmodSync, writeFileSync } from "node:fs";
-import * as fs from "node:fs";
 import {
   chmod,
   cp,
@@ -17,7 +16,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
-import * as git from "isomorphic-git";
 import http from "isomorphic-git/http/node";
 
 import {
@@ -74,6 +72,7 @@ import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
+import { gitTestCheckout, initGitTestCheckout } from "../../platform/git-test-repository.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
@@ -9632,16 +9631,10 @@ test("D-10-18: one bulk run resolves two path-source siblings from the same mark
 
       // A real (initially tag-less) git repository, matching what a
       // marketplace root actually is in production.
-      await git.init({ fs, dir: marketplaceRoot, defaultBranch: "main" });
-      await git.add({ fs, dir: marketplaceRoot, filepath: "." });
-      const oid = await git.commit({
-        fs,
-        dir: marketplaceRoot,
-        message: "seed marketplace",
-        author: { name: "test", email: "test@example.com" },
-      });
-      await git.tag({ fs, dir: marketplaceRoot, ref: "pathfoo--v1.2.0", object: oid });
-      await git.tag({ fs, dir: marketplaceRoot, ref: "pathbar--v1.2.0", object: oid });
+      const checkout = await initGitTestCheckout(marketplaceRoot);
+      const oid = await checkout.commitAll("seed marketplace");
+      await checkout.run("tag", "pathfoo--v1.2.0", oid);
+      await checkout.run("tag", "pathbar--v1.2.0", oid);
 
       const locations = locationsFor("project", cwd);
       await mkdir(locations.extensionRoot, { recursive: true });
@@ -9815,14 +9808,8 @@ async function seedConstrainedPathTarget(
     }),
   );
 
-  await git.init({ fs, dir: marketplaceRoot, defaultBranch: "main" });
-  await git.add({ fs, dir: marketplaceRoot, filepath: "." });
-  const oid = await git.commit({
-    fs,
-    dir: marketplaceRoot,
-    message: "seed marketplace",
-    author: { name: "test", email: "test@example.com" },
-  });
+  const checkout = await initGitTestCheckout(marketplaceRoot);
+  const oid = await checkout.commitAll("seed marketplace");
 
   const locations = locationsFor("project", cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
@@ -9904,7 +9891,7 @@ test("D-10-18: a tag published between two cascade runs is visible to the second
       // act -- two cascade runs through ONE binding, with the release tag
       // published between them.
       await operations.beginPluginUpdateRun(commandNotification())("pathfoo", "mp", "project");
-      await git.tag({ fs, dir: marketplaceRoot, ref: "pathfoo--v1.2.0", object: oid });
+      await gitTestCheckout(marketplaceRoot).run("tag", "pathfoo--v1.2.0", oid);
       await operations.beginPluginUpdateRun(commandNotification())("pathfoo", "mp", "project");
 
       // assert -- run one listed no tag and fell back to the marketplace's

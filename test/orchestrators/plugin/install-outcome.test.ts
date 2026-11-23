@@ -1,11 +1,8 @@
 import assert from "node:assert/strict";
-import * as fs from "node:fs";
 import { chmod, mkdir, readFile, readdir, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 import test from "node:test";
-
-import * as git from "isomorphic-git";
 
 import { canonicalCloneUrl } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -45,6 +42,7 @@ import {
 import { runPhases } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
+import { initGitTestCheckout } from "../../platform/git-test-repository.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { createRemovalOpsFake } from "../../platform/removal-ops-fake.ts";
 import {
@@ -3845,16 +3843,9 @@ test("D-07-06: with no pathPinProbe override, a pinned path-source install falls
   const seeded = await seedPlugin(environment.cwd);
   const marketplaceRoot = seeded.state.marketplaces.marketplace?.marketplaceRoot;
   assert.ok(marketplaceRoot !== undefined, "the fixture records the marketplace it seeds");
-  await git.init({ fs, dir: marketplaceRoot, defaultBranch: "main" });
-  await git.add({ fs, dir: marketplaceRoot, filepath: "." });
-  await git.commit({
-    fs,
-    dir: marketplaceRoot,
-    message: "release 1.0.0",
-    author: { name: "test", email: "test@example.com" },
-  });
-  const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
-  await git.tag({ fs, dir: marketplaceRoot, ref: "empty--v1.0.0", object: tagOid });
+  const checkout = await initGitTestCheckout(marketplaceRoot);
+  const tagOid = await checkout.commitAll("release 1.0.0");
+  await checkout.run("tag", "empty--v1.0.0", tagOid);
   const locations = locationsFor("project", environment.cwd);
 
   // act
