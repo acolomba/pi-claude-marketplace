@@ -33,6 +33,13 @@ export interface E2EEnvironment {
   marketplaceAdded: boolean;
 }
 
+/**
+ * Checks out the real upstream repository. Its git commands keep the shell's
+ * environment on purpose: the fetch needs this machine's network, proxy, CA
+ * bundle, and `GITHUB_TOKEN`. The checkout builds no fixture, and the
+ * hermetic rule for test-side git (DRV-03, SG-HRN-01) covers the unit,
+ * integration, and cucumber suites, not this one.
+ */
 async function prepareUpstreamCheckout(root: string): Promise<string> {
   const dir = path.join(root, "claude-plugins-official");
   await execFileAsync("git", ["init", dir]);
