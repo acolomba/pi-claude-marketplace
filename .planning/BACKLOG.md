@@ -5527,7 +5527,9 @@ the tag clone's key differs, because a folder with no `origin` keys it by `marke
 git work tree in `features/lib/published-marketplace.ts`, and a scenario that installs a
 constrained dependency from its tag.
 
-## HOOKLATESS-01: no SessionStart run for a plugin that loads after the session starts
+## ~~HOOKLATESS-01: no SessionStart run for a plugin that loads after the session starts~~ -- CLOSED
+
+Closed 2026-11-23 by quick task 261123-jdc (`962e8a5`, `efeb21e`, decision HOOKLATESS-D1): in print, json and rpc mode, a plugin that the load-time autoapply activates runs its SessionStart hooks once, with the session's first start source, as Claude Code 2.1.330's headless runner does (`.planning/research/HOOKLATESS-01-UPSTREAM.md`). The first prompt waits at most 10 s; a later answer reaches the next prompt. No run in tui, on `/reload`, after a command install, or in a new session. One Pi capability gap: a held answer lives in memory only. The original note follows.
 
 Noted 2026-11-23 (integration-rescope, Phase 6.1, HKRL-01 research). A parity question for the maintainer. Claude Code 2.1.296 runs `SessionStart` in headless sessions for a plugin that loads after the session started (CHANGELOG 2.1.296; `.planning/phases/06.1-reload-keeps-sessionstart-context/06.1-UPSTREAM-EVIDENCE.md`), with the original start source and without `initialUserMessage`. The hooks bridge runs `SessionStart` only on Pi's `session_start` and on compaction and runs none on a `/reload` (D-CF5-03), so a plugin installed or enabled mid-session gets no `SessionStart` run until the next session. Decide whether to add a late run (and whether interactive sessions should get it too; upstream's interactive `/reload-plugins` does not run it).
 
