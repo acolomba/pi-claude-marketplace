@@ -7,9 +7,9 @@
  * hook creates registers its release here, and the world runs those releases
  * in reverse order when the scenario ends. A passing scenario also fails
  * there when a row array or an MCP config notice of its last results went
- * uncompared, or when a new session reported a result whose fields no step
- * stated. The last results are those of the last `When` step: a command or a
- * new session.
+ * uncompared, or when a reload or a new session reported a result whose
+ * fields no step stated. The last results are those of the last `When` step: a
+ * command, a reload, or a new session.
  *
  * A scenario that needs a model starts a profile Pi of its own (D-CF1-15):
  * the real extension plus the scripted model and the registry probe, in the
@@ -272,10 +272,11 @@ export class ScenarioWorld extends World {
   // by kind. Only `the command reports these results:` states their fields,
   // and it calls `markNoticesCompared()`.
   uncomparedNotices: readonly string[] = [];
-  // The results of the last new session whose fields no step has stated yet,
-  // by kind. A command is always followed by a field step, a session is not,
-  // so a session payload without rows would otherwise pass unseen. The steps
-  // that state the fields of every result call `markResultsCompared()`.
+  // The results of the last reload or new session whose fields no step has
+  // stated yet, by kind. A command is always followed by a field step, a
+  // session is not, so a session payload without rows would otherwise pass
+  // unseen. The steps that state the fields of every result call
+  // `markResultsCompared()`.
   uncomparedSessionResults: readonly string[] = [];
   // A TUI message may produce background notices; its assertion compares the complete set.
   uncomparedTuiNotices = false;

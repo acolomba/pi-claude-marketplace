@@ -13,7 +13,7 @@
  * an implementation. A restart stops the scenario's profile Pi and starts
  * another, which the world checks against the implementation its launch
  * implies (DUAL-02). The new Pi's first session becomes the last session
- * results, as a new session does, so the session steps read its skills and
+ * results, as a reload or a new session does, so the session steps read its skills and
  * results.
  */
 
