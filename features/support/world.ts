@@ -656,8 +656,21 @@ export class ScenarioWorld extends World {
     return published;
   }
 
-  /** Records the git plugin repository `repository` under its name, replacing an earlier record. */
+  /**
+   * Records the git plugin repository `repository` under its name, replacing an
+   * earlier record. A revision token that a marketplace tag token already
+   * names is refused, as `recordMarketplaceTag` refuses the other order.
+   */
   recordGitRepository(repository: GitPluginRepository): void {
+    const tagged = this.marketplaceTags.find(
+      ({ marketplace, tag }) =>
+        marketplace === repository.name &&
+        repository.revisions.some((_sha, index) => tag === String(index + 1)),
+    );
+    assert.ok(
+      tagged === undefined,
+      `{${repository.name} revision ${tagged?.tag}} already stands for another commit`,
+    );
     this.gitRepositories.set(repository.name, repository);
   }
 
