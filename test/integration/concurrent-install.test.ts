@@ -5,9 +5,10 @@
 // moment, the same plugin or two different ones. The state lock (D-15) lets
 // one install win and refuses the other: the scope records exactly one
 // plugin, and the skills on disk are exactly the winner's, so the loser
-// leaves no orphan. A scenario runs one Pi at a time, so
-// `features/plugin/state-lock.feature` can hold the lock but cannot race two
-// installs.
+// leaves no orphan. No step starts two installs at the same moment, so no
+// scenario can make them meet at the state lock;
+// `features/plugin/state-lock.feature` holds the lock from a separate
+// process but runs one command.
 
 import assert from "node:assert/strict";
 import { fork } from "node:child_process";

@@ -3,8 +3,10 @@
 // Two multi-process cases (ITSCOPE-01), each between two forked processes
 // that run load-reconcile-race-child.ts: RECON-06, two concurrent applies of
 // one declared path-source marketplace and plugin, and the first-run
-// migration (MIG-01, D-13) of two concurrent first loads. A scenario runs one
-// Pi at a time. The single-process first load after an upgrade is in
+// migration (MIG-01, D-13) of two concurrent first applies (their shared read
+// pass runs the MIG-01 migration). No step starts two applies at the same
+// moment, so no scenario can make them meet at the state lock. The
+// single-process first load after an upgrade is in
 // `features/plugin/config-migration.feature`.
 //
 // Test design constraint: what a contended reconcile guarantees is
