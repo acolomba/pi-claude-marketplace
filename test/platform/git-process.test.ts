@@ -900,6 +900,63 @@ describe("createGitProcess", () => {
     });
   }
 
+  for (const { label, pathValue, cwd, unresolvable, expected } of [
+    {
+      label: "the working directory's real path cannot be read",
+      pathValue: String.raw`C:\work\project\bin;C:\Git\cmd`,
+      cwd: String.raw`C:\work\project`,
+      unresolvable: [String.raw`C:\work\project`],
+      expected: String.raw`C:\Git\cmd\git.exe`,
+    },
+    {
+      label: "a candidate directory's real path cannot be read",
+      pathValue: String.raw`C:\gone\bin;C:\Git\cmd`,
+      cwd: String.raw`C:\work\project`,
+      unresolvable: [String.raw`C:\gone\bin`],
+      expected: String.raw`C:\Git\cmd\git.exe`,
+    },
+  ]) {
+    test(`WR-03, D-SG-04: finds a Windows git outside the working directory when ${label}`, async () => {
+      // arrange
+      const directories = pathValue.split(";");
+      const { git } = createFakeGit(
+        { PATH: pathValue },
+        {
+          platform: "win32",
+          files: directories.map((directory) => path.win32.join(directory, "git.exe")),
+          cwd,
+          unresolvable,
+        },
+      );
+
+      // act
+      const found = await git.locate();
+
+      // assert
+      assert.strictEqual(found, expected);
+    });
+  }
+
+  test("WR-03, D-SG-04: on macOS gives git-missing for a found git whose real path cannot be read", async () => {
+    // arrange
+    const { git, control } = createFakeGit(
+      { PATH: "/usr/bin" },
+      { platform: "darwin", unresolvable: ["/usr/bin/git"] },
+    );
+
+    // act & assert
+    await assert.rejects(
+      git.run(FILL),
+      gitFailure({
+        failure: { kind: "git-missing", detail: "not-found" },
+        operation: "lookup",
+        exitCode: null,
+        stderr: "",
+      }),
+    );
+    assert.deepStrictEqual(control.launches(), []);
+  });
+
   for (const { label, env, platform } of [
     { label: "an unset PATH", env: {}, platform: "linux" },
     { label: "an empty PATH", env: { PATH: "" }, platform: "linux" },
@@ -1468,7 +1525,7 @@ describe("createGitProcess", () => {
     );
   });
 
-  test("E11: rejects with the filesystem error of a working directory that does not exist", async () => {
+  test("WR-03, E11: rejects as failed with the filesystem error of a working directory that does not exist", async () => {
     // arrange
     const missing = Object.assign(new Error("ENOENT: no such file or directory"), {
       code: "ENOENT",
@@ -1482,10 +1539,16 @@ describe("createGitProcess", () => {
     });
 
     // act & assert
-    await assert.rejects(git.run({ ...FILL, cwd: "/gone" }), (error: unknown) => {
-      assert.strictEqual(error, missing);
-      return true;
-    });
+    await assert.rejects(
+      git.run({ ...FILL, cwd: "/gone" }),
+      gitFailure({
+        failure: { kind: "failed" },
+        operation: "credential fill",
+        exitCode: null,
+        stderr: "",
+        cause: missing,
+      }),
+    );
     assert.deepStrictEqual(control.launches(), []);
   });
 

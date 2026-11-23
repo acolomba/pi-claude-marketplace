@@ -768,15 +768,27 @@ function isWithin(parent: string, directory: string): boolean {
   return first !== ".." && !path.win32.isAbsolute(relative);
 }
 
+// WR-03: the real path of `file`, or undefined when it cannot be read.
+function realpathOrUndefined(host: GitProcessHost, file: string): Promise<string | undefined> {
+  return host.realpath(file).catch(() => undefined);
+}
+
 async function findGitOnWindows(env: NodeJS.ProcessEnv, host: GitProcessHost): Promise<string> {
   const cwd = host.cwd();
-  const workingDirectories = [cwd, await host.realpath(cwd)];
+  // WR-03: a working directory that no longer exists holds no candidate, so
+  // its path as given is enough.
+  const realCwd = await realpathOrUndefined(host, cwd);
+  const workingDirectories = realCwd === undefined ? [cwd] : [cwd, realCwd];
   // Claude Code skips a match inside the working directory and keeps looking.
+  // WR-03: so is a match whose directory has no readable real path.
   const accept = async (candidate: string): Promise<boolean> => {
     const directory = path.win32.dirname(candidate);
-    const directories = [directory, await host.realpath(directory)];
-    return !directories.some((found) =>
-      workingDirectories.some((working) => isWithin(working, found)),
+    const realDirectory = await realpathOrUndefined(host, directory);
+    return (
+      realDirectory !== undefined &&
+      ![directory, realDirectory].some((found) =>
+        workingDirectories.some((working) => isWithin(working, found)),
+      )
     );
   };
 
@@ -805,11 +817,17 @@ async function isXcrunShim(
   env: NodeJS.ProcessEnv,
   host: GitProcessHost,
 ): Promise<boolean> {
-  if ((await host.realpath(git)) !== MACOS_SHIM) {
+  // WR-03: a git whose real path cannot be read is gone.
+  const realGit = await realpathOrUndefined(host, git);
+  if (realGit === undefined) {
+    throw gitMissing("not-found");
+  }
+
+  if (realGit !== MACOS_SHIM) {
     return false;
   }
 
-  const selected = await host.realpath(XCODE_SELECT_LINK).catch(() => undefined);
+  const selected = await realpathOrUndefined(host, XCODE_SELECT_LINK);
   const developerDirectories = [env.DEVELOPER_DIR, selected, COMMAND_LINE_TOOLS].filter(
     (directory): directory is string => directory !== undefined && path.posix.isAbsolute(directory),
   );
@@ -889,6 +907,14 @@ function settleRun(
   );
 }
 
+// WR-03: rethrows a failure that comes before any launch as a `failed`
+// GitCommandError with that failure as its cause.
+function failsBeforeLaunch(operation: string): (error: unknown) => never {
+  return (error) => {
+    throw new GitCommandError({ kind: "failed" }, { operation }, { cause: error });
+  };
+}
+
 // The first line of a `git version` answer.
 function firstLine(text: string): string {
   return text.replace(/\r?\n[\s\S]*/, "");
@@ -962,10 +988,7 @@ export function createGitProcess(options: GitProcessOptions): GitProcess {
 
     const { git, key } = await lookup();
     const rules = rulesFor(host.platform);
-    const cwd =
-      request.cwd === undefined
-        ? await neutralDirectory(operation)
-        : await host.realpath(request.cwd);
+    const cwd = await workingDirectory(request, operation);
     // git cannot hold a ceiling whose path contains the PATH delimiter.
     if (rules.paths.dirname(cwd).includes(rules.paths.delimiter)) {
       throw new GitCommandError({ kind: "refused-input" }, { operation });
@@ -1015,10 +1038,17 @@ export function createGitProcess(options: GitProcessOptions): GitProcess {
   }
 
   // SG-PRC-03: a neutral directory that cannot be made fails the command.
-  async function neutralDirectory(operation: string): Promise<string> {
-    return host.neutralDirectory().catch((error: unknown) => {
-      throw new GitCommandError({ kind: "failed" }, { operation }, { cause: error });
-    });
+  function neutralDirectory(operation: string): Promise<string> {
+    return host.neutralDirectory().catch(failsBeforeLaunch(operation));
+  }
+
+  // WR-03: the real path of the request's directory, or of the neutral
+  // directory without one. A directory that cannot be resolved, such as one
+  // that no longer exists, fails the command before any launch.
+  function workingDirectory(request: GitRequest, operation: string): Promise<string> {
+    return request.cwd === undefined
+      ? neutralDirectory(operation)
+      : host.realpath(request.cwd).catch(failsBeforeLaunch(operation));
   }
 
   // D-SG-06: the version read runs through `execute`, so it never reads the
