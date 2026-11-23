@@ -3,7 +3,8 @@
  * of git marketplaces and git plugins, and the catalog files of hosted
  * marketplaces: arming one repository or catalog to fail, to redirect, or to
  * require a credential, serving a catalog of a given size, letting it serve
- * again, the GitHub base address pi runs with, the credential a user stores
+ * again, the GitHub base address pi runs with, a pi with no git on its path,
+ * the credential a user stores
  * for the host, and the requests the host receives. A step names a repository
  * through the `git repository` parameter type, by the marketplace or the
  * plugin it serves; a hosted marketplace names the directory its catalog is
@@ -200,6 +201,12 @@ Given(
     await this.usePiWithGitHubBaseUrl(value);
   },
 );
+
+// SG-PRC-06: the scenario's Pi finds no git on its PATH. Pi itself starts
+// from an absolute Node path, so only the extension's git lookup changes.
+Given("pi runs without git on its path", async function (this: ScenarioWorld): Promise<void> {
+  await this.usePiWithoutGit();
+});
 
 // The credential lives only in the sandbox HOME, which Pi's git reads through
 // its global config (DRV-03); no git process runs to store it.

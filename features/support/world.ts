@@ -693,6 +693,21 @@ export class ScenarioWorld extends World {
   }
 
   /**
+   * Starts a second Pi as `usePiWithGitHubBaseUrl()` does, except that its
+   * PATH is one empty directory that the scenario owns, so the extension finds
+   * no git (SG-PRC-06). Pi itself starts from the absolute Node path, so it
+   * needs nothing on PATH. The environment keeps its key set; only the value
+   * of PATH changes. The scenario's release stops that Pi and then removes
+   * the directory.
+   */
+  async usePiWithoutGit(): Promise<void> {
+    const run = currentRun();
+    const searchPath = await mkdtemp(path.join(run.root, "no-git-path-"));
+    this.onRelease(() => rm(searchPath, { recursive: true, force: true }));
+    await this.usePiWith({ ...run.piEnvironment, PATH: searchPath });
+  }
+
+  /**
    * Starts a second Pi as `usePiWithGitHubBaseUrl()` does, except that the
    * maximum delay of the background update is `value` (D-PL8-09) instead of
    * the GitHub base override. A Pi's environment is fixed when it starts, and
