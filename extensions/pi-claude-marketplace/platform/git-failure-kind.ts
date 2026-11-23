@@ -16,16 +16,26 @@
 // - A proxy refusal also prints a 403, so its row comes before the HTTPS
 //   authentication row.
 //
-// D-SG-04: an `xcrun: error:` stderr or an exit 127 means git cannot run.
+// WR-01: a server's `remote:` lines reach stderr too, so a host could print
+// a phrase that picks the kind. Every row reads git's own lines, with the
+// `remote:` lines removed, and anchors its pattern where git or ssh starts
+// the line. Only the proxy row reads a `remote:` line, because the proxy
+// speaks through one, and the no-stderr row reads the whole stderr.
+//
+// D-SG-04: an exit 127, or a stderr whose every line is an `xcrun: error:`
+// line, means git cannot run. The xcrun shim prints only that line, while a
+// git that ran and failed prints its own `fatal:` line as well, so a server
+// cannot make a working git look missing.
 // D-SG-06: an exit 129 or an unknown-option line means the git is too old for
 // an option the extension passes.
 
 import type { GitFailure } from "../shared/errors.ts";
 
-// A row fires on an exit code or on a stderr pattern.
-type Trigger = number | RegExp;
+// A row fires on an exit code, on a pattern over git's own lines, or on a
+// pattern over the whole stderr, `remote:` lines included.
+type Trigger = number | RegExp | { readonly wholeStderr: RegExp };
 
-// A row gives a fixed failure, or builds one from the stderr.
+// A row gives a fixed failure, or builds one from git's own lines.
 type Outcome = GitFailure | ((stderr: string) => GitFailure);
 
 // `httpStatus` from `The requested URL returned error: <n>`, and `curlCode`
@@ -40,6 +50,8 @@ function networkFailure(stderr: string): GitFailure {
   };
 }
 
+// curl's and ssh's network texts, inside git's `fatal: unable to access` or
+// `error: RPC failed` line, or on a line ssh starts.
 const NETWORK_TEXT = new RegExp(
   [
     "Could not resolve host",
@@ -48,28 +60,33 @@ const NETWORK_TEXT = new RegExp(
     "Connection timed out",
     "Connection refused",
     "Connection reset",
-    "ssh: Could not resolve hostname",
-    "ssh: connect to host",
-    "fatal: unable to connect to ",
-    String.raw`error: RPC failed;`,
     "SSL certificate problem",
     String.raw`The requested URL returned error: 5\d\d`,
-  ].join("|"),
+  ]
+    .map((text) => String.raw`^(?:fatal|error): .*${text}`)
+    .concat([
+      "^ssh: Could not resolve hostname",
+      "^ssh: connect to host",
+      "^fatal: unable to connect to ",
+      String.raw`^error: RPC failed;`,
+    ])
+    .join("|"),
+  "m",
 );
 
 const ROWS: ReadonlyArray<readonly [Trigger, Outcome]> = [
-  [/xcrun: error:/, { kind: "git-missing", detail: "macos-shim" }],
+  [/^(?:xcrun: error:.*(?:\n|$))+$/, { kind: "git-missing", detail: "macos-shim" }],
   [127, { kind: "git-missing", detail: "not-found" }],
   [129, { kind: "git-too-old" }],
   [/^error: unknown (?:option|switch) /m, { kind: "git-too-old" }],
-  [/detected dubious ownership in repository at '/, { kind: "dubious-ownership" }],
+  [/^fatal: detected dubious ownership in repository at '/m, { kind: "dubious-ownership" }],
   [/^fatal: transport '[^']+' not allowed/m, { kind: "protocol-refused" }],
-  [/REMOTE HOST IDENTIFICATION HAS CHANGED/, { kind: "ssh-host-key-changed" }],
-  [/Host key verification failed/, { kind: "ssh-host-key-unknown" }],
-  [/^remote: access denied by the git proxy/m, { kind: "proxy-refused" }],
-  [/Permission denied \(publickey/, { kind: "ssh-auth" }],
+  [/^@ +WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!/m, { kind: "ssh-host-key-changed" }],
+  [/^Host key verification failed\./m, { kind: "ssh-host-key-unknown" }],
+  [{ wholeStderr: /^remote: access denied by the git proxy/m }, { kind: "proxy-refused" }],
+  [/^\S+: Permission denied \(publickey/m, { kind: "ssh-auth" }],
   [
-    /could not read (?:Username|Password) for '|terminal prompts disabled|Authentication failed for '|The requested URL returned error: 40[13]\b/,
+    /^fatal: could not read (?:Username|Password) for '|^fatal: .*terminal prompts disabled|^fatal: Authentication failed for '|^(?:fatal|error): .*The requested URL returned error: 40[13]\b/m,
     { kind: "https-auth" },
   ],
   // git prints this line for an HTTP 404, without the status.
@@ -78,26 +95,36 @@ const ROWS: ReadonlyArray<readonly [Trigger, Outcome]> = [
     { kind: "repository-not-found", httpStatus: 404 },
   ],
   [
-    /^fatal: repository '.*' not found|does not appear to be a git repository|^fatal: repository '.*' does not exist|ERROR: Repository not found/m,
+    /^fatal: repository '.*' not found|^fatal: '.*' does not appear to be a git repository|^fatal: repository '.*' does not exist|^ERROR: Repository not found/m,
     { kind: "repository-not-found" },
   ],
-  [/The requested URL returned error: 410\b/, { kind: "repository-not-found", httpStatus: 410 }],
   [
-    /couldn't find remote ref |Remote branch .* not found in upstream origin/,
+    /^(?:fatal|error): .*The requested URL returned error: 410\b/m,
+    { kind: "repository-not-found", httpStatus: 410 },
+  ],
+  [
+    /^fatal: couldn't find remote ref |^fatal: Remote branch .* not found in upstream origin/m,
     { kind: "remote-ref-missing" },
   ],
-  [/not our ref |reference is not a tree: /, { kind: "commit-missing" }],
+  [/^fatal: .*not our ref |^fatal: reference is not a tree: /m, { kind: "commit-missing" }],
   [/^error: pathspec '.*' did not match any file/m, { kind: "local-ref-missing" }],
   [/^fatal: not a git repository/m, { kind: "not-a-repository" }],
   [NETWORK_TEXT, networkFailure],
   [/^fatal: unable to access '/m, networkFailure],
   [/^fatal: remote error: /m, { kind: "remote-error" }],
-  [/Could not read from remote repository/, { kind: "ssh-auth" }],
-  [/^\s*$/, { kind: "no-stderr" }],
+  [/^fatal: Could not read from remote repository/m, { kind: "ssh-auth" }],
+  [{ wholeStderr: /^\s*$/ }, { kind: "no-stderr" }],
 ];
 
-function fires(trigger: Trigger, exitCode: number | null, stderr: string): boolean {
-  return typeof trigger === "number" ? trigger === exitCode : trigger.test(stderr);
+// The stderr lines a server sent through git, which start with `remote: `.
+const REMOTE_LINE = /^remote: .*(?:\n|$)/gm;
+
+function fires(trigger: Trigger, exitCode: number | null, stderr: string, own: string): boolean {
+  if (typeof trigger === "number") {
+    return trigger === exitCode;
+  }
+
+  return trigger instanceof RegExp ? trigger.test(own) : trigger.wholeStderr.test(stderr);
 }
 
 /**
@@ -107,11 +134,12 @@ function fires(trigger: Trigger, exitCode: number | null, stderr: string): boole
  */
 export function classifyGitExit(exitCode: number | null, stderr: string): GitFailure {
   const text = stderr.replace(/\r\n?/g, "\n");
-  const row = ROWS.find(([trigger]) => fires(trigger, exitCode, text));
+  const own = text.replace(REMOTE_LINE, "");
+  const row = ROWS.find(([trigger]) => fires(trigger, exitCode, text, own));
   if (row === undefined) {
     return { kind: "failed" };
   }
 
   const [, outcome] = row;
-  return typeof outcome === "function" ? outcome(text) : { ...outcome };
+  return typeof outcome === "function" ? outcome(own) : { ...outcome };
 }

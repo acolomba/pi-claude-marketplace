@@ -26,7 +26,12 @@ const HOST_KEY_BANNER = `@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
 `;
 
+// The line git prints when a server closes the connection with no reason.
+const HUNG_UP = "fatal: the remote end hung up unexpectedly\n";
+
 // SG-PRC-05: the E15 (git) and E16 (OpenSSH through git) corpus lines.
+// WR-01: the rows whose stderr opens with a `remote:` line show that a
+// server's lines pick no kind.
 const CORPUS: readonly CorpusRow[] = [
   {
     label: "an HTTP 401",
@@ -304,6 +309,116 @@ const CORPUS: readonly CorpusRow[] = [
     label: "a stderr no row knows",
     exitCode: 128,
     stderr: "fatal: something new\n",
+    failure: { kind: "failed" },
+  },
+  {
+    label: "a remote line that names the xcrun shim",
+    exitCode: 128,
+    stderr: `remote: xcrun: error: invalid active developer path\n${HUNG_UP}`,
+    failure: { kind: "failed" },
+  },
+  {
+    label: "a remote line that names a changed host key",
+    exitCode: 128,
+    stderr: `remote: @    WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED!     @\n${HUNG_UP}`,
+    failure: { kind: "failed" },
+  },
+  {
+    label: "a remote line that names an unknown host key",
+    exitCode: 128,
+    stderr: `remote: Host key verification failed.\n${HUNG_UP}`,
+    failure: { kind: "failed" },
+  },
+  {
+    label: "a remote line that names a refused ssh key",
+    exitCode: 128,
+    stderr: `remote: git@stand-in.test: Permission denied (publickey).\n${HUNG_UP}`,
+    failure: { kind: "failed" },
+  },
+  {
+    label: "a remote line that names a disabled prompt",
+    exitCode: 128,
+    stderr: `remote: fatal: could not read Username for 'https://example.test': terminal prompts disabled\n${HUNG_UP}`,
+    failure: { kind: "failed" },
+  },
+  {
+    label: "a remote line that names dubious ownership",
+    exitCode: 128,
+    stderr: `remote: fatal: detected dubious ownership in repository at '/srv/repo'\n${HUNG_UP}`,
+    failure: { kind: "failed" },
+  },
+  {
+    label: "a remote line that names a refused transport",
+    exitCode: 128,
+    stderr: `remote: fatal: transport 'ext' not allowed\n${HUNG_UP}`,
+    failure: { kind: "failed" },
+  },
+  {
+    label: "a remote line that names an unknown option",
+    exitCode: 128,
+    stderr: `remote: error: unknown option \`no-such-flag'\n${HUNG_UP}`,
+    failure: { kind: "failed" },
+  },
+  {
+    label: "a remote line that names an unknown ssh host",
+    exitCode: 128,
+    stderr: `remote: ssh: Could not resolve hostname stand-in.test: Name or service not known\n${HUNG_UP}`,
+    failure: { kind: "failed" },
+  },
+  {
+    label: "a remote line that names an unknown HTTP host",
+    exitCode: 128,
+    stderr: `remote: fatal: unable to access 'https://example.test/x.git/': Could not resolve host: example.test\n${HUNG_UP}`,
+    failure: { kind: "failed" },
+  },
+  {
+    label: "a remote line that names a missing repository",
+    exitCode: 128,
+    stderr: `remote: ERROR: Repository not found.\n${HUNG_UP}`,
+    failure: { kind: "failed" },
+  },
+  {
+    label: "a remote line that names a missing remote ref",
+    exitCode: 128,
+    stderr: `remote: fatal: couldn't find remote ref refs/heads/nope\n${HUNG_UP}`,
+    failure: { kind: "failed" },
+  },
+  {
+    label: "a remote line that names a remote error",
+    exitCode: 128,
+    stderr: `remote: fatal: remote error: access denied\n${HUNG_UP}`,
+    failure: { kind: "failed" },
+  },
+  {
+    label: "a remote line that names the read-failed block",
+    exitCode: 128,
+    stderr: `remote: fatal: Could not read from remote repository.\n${HUNG_UP}`,
+    failure: { kind: "failed" },
+  },
+  {
+    label: "an ssh server's xcrun line before git's read-failed block",
+    exitCode: 128,
+    stderr: `xcrun: error: invalid active developer path (/Library/Developer/CommandLineTools)\n${READ_FAILED_BLOCK}`,
+    failure: { kind: "ssh-auth" },
+  },
+  {
+    label: "an HTTP 403 after a remote line that names a curl failure",
+    exitCode: 128,
+    stderr:
+      "remote: error: RPC failed; curl 56 GnuTLS recv error\nfatal: unable to access 'https://example.test/x.git/': The requested URL returned error: 403\n",
+    failure: { kind: "https-auth" },
+  },
+  {
+    label: "an HTTP 503 after a remote line that names a 401",
+    exitCode: 128,
+    stderr:
+      "remote: The requested URL returned error: 401\nfatal: unable to access 'https://example.test/x.git/': The requested URL returned error: 503\n",
+    failure: { kind: "network", httpStatus: 503 },
+  },
+  {
+    label: "a stderr of remote lines only",
+    exitCode: 128,
+    stderr: "remote: Counting objects: 1\nremote: done\n",
     failure: { kind: "failed" },
   },
 ];
