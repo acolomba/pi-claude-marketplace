@@ -438,8 +438,22 @@ export class ScenarioWorld extends World {
     this.errorMessages.set(token, message);
   }
 
-  /** Records that the marketplace `marketplace` tagged its commit `commit` as `tag`. */
+  /**
+   * Records that the marketplace `marketplace` tagged its commit `commit` as
+   * `tag`. A result projects a commit to one token only, so a second tag on a
+   * tagged commit, or a token that another token already names, is refused.
+   */
   recordMarketplaceTag(marketplace: string, tag: string, commit: string): void {
+    const token = `{${marketplace} revision ${tag}}`;
+    const sharing = this.marketplaceTags.find((recorded) => recorded.commit === commit);
+    assert.ok(
+      sharing === undefined,
+      `${token} would stand for the commit of {${sharing?.marketplace} revision ${sharing?.tag}}`,
+    );
+    assert.ok(
+      !this.revisionTokens("revision", (sha) => sha).has(token),
+      `${token} already stands for another commit`,
+    );
     this.marketplaceTags.push({ marketplace, tag, commit });
   }
 
