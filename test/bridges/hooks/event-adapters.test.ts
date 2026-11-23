@@ -211,6 +211,22 @@ function heldEdited(values: readonly string[], text: string): SessionAppend {
   };
 }
 
+// A held SessionStart context message with `values` in its details, then a
+// prompt and a compaction that keeps the conversation from the held message
+// on (`keepsHeld`) or from the prompt on, which summarizes the message away.
+function heldBeforeCompaction(values: readonly string[], keepsHeld: boolean): SessionAppend {
+  return (sessionManager) => {
+    const heldId = sessionManager.appendCustomMessageEntry(
+      "claude-hook-additional-context",
+      [sessionStartPart(values)],
+      false,
+      { event: "SessionStart", values },
+    );
+    const promptId = sessionManager.appendMessage({ role: "user", content: "hello", timestamp: 0 });
+    sessionManager.appendCompaction("compaction summary", keepsHeld ? heldId : promptId, 100);
+  };
+}
+
 // The wrapper `context-cap.ts` gives a context saved to the file `path`.
 function savedOutput(path: string): string {
   return [
@@ -2313,6 +2329,20 @@ describe("adaptObservationResultForEvent", () => {
       held: heldEdited(["old context"], "SessionStart hook additional context: edited context"),
       values: ["old context", "edited context"],
       sends: [["old context"]],
+    },
+    {
+      title: "sends a value again that a compaction summarized away (HKRL-02)",
+      source: "resume",
+      held: heldBeforeCompaction(["held context"], false),
+      values: ["held context"],
+      sends: [["held context"]],
+    },
+    {
+      title: "drops a value that the messages a compaction kept hold (HKRL-02)",
+      source: "resume",
+      held: heldBeforeCompaction(["held context"], true),
+      values: ["held context"],
+      sends: [],
     },
     {
       title: "drops a saved context whose file path differs (HKRL-02)",

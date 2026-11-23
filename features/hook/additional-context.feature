@@ -378,6 +378,37 @@ Feature: Hook additional context
       | label                                | size   | path                                                                                               | preview characters | saved characters |
       | SessionStart hook additional context | 11.7KB | {project dir}/.pi/pi-claude-marketplace/data/_shared/hook-output/hook-{uuid}-additionalContext.txt | 2000               | 12000            |
 
+  Scenario: A continued session sends the session start context again after a compaction summarized it away
+    Given pi keeps only one recent token when the hooks session compacts
+    Given pi runs with the scripted model and saves its session
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event        | matcher | form   | output                                                                               |
+      | primer  | SessionStart | clear   | script | {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"ss-ctx"}} |
+      | refresh | SessionStart | resume  | script | {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"ss-ctx"}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply      |
+      | Hello.     |
+      | Summary A. |
+      | Summary B. |
+      | Done.      |
+    Given the user has prompted "first prompt"
+    Given the user has compacted the session with the hooks recording
+    Given the user has started pi again and continued the last session
+    When the user prompts "second prompt"
+    Then the model call 4 receives these messages:
+      | role      | text                                                                                                                                                                             |
+      | user      | The conversation history before this point was compacted into the following summary:\n\n<summary>\nSummary A.\n\n---\n\n**Turn Context (split turn):**\n\nSummary B.\n</summary> |
+      | assistant | Hello.                                                                                                                                                                           |
+      | user      | SessionStart hook additional context: ss-ctx                                                                                                                                     |
+      | user      | second prompt                                                                                                                                                                    |
+
   Scenario: A manual compaction puts the session start hook's compact context after the summary
     Given pi keeps only one recent token when the hooks session compacts
     Given pi runs with the scripted model
