@@ -33,7 +33,7 @@ Put each test case where it can observe the behavior it checks:
 - A case goes in `test/integration/` only when neither a scenario nor a unit test can observe what it checks. It must be one of these:
   - Peer conformance: it runs a peer's own code (Pi, pi-mcp-adapter, pi-subagents, or the workflow engine) on what this extension writes.
   - Multi-process: two or more processes race, or one process acts on what another process left behind.
-  - Internal: it reads a stored record field that no command shows or state that only an earlier release wrote, injects a fault, or checks a call or a write that must not happen.
+  - Internal: it reads a stored record field that no command shows, injects a fault, or checks a call or a write that must not happen. State that only an earlier release wrote belongs here only for a stored field that no step shows. What a user sees of that state is a scenario, because the earlier-release writers of the cucumber world rebuild it (`.agents/skills/cucumber/rules/world-and-stand-ins.md`).
   - Known bug: it guards a bug that has an entry in `.planning/BACKLOG.md`, until the fix lands.
 - The first comment of each integration file names its class and the behavior that cucumber does not cover. A file that guards a known bug also names the BACKLOG ID.
 - A case that fits none of these classes moves to the unit test of its source pair, or to `test/architecture/` when no single source pair owns it. If a scenario or a unit test already covers the case, delete it: first break the behavior on purpose, see that scenario or test fail, and undo the break.
