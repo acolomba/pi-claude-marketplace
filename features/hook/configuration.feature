@@ -153,7 +153,7 @@ Feature: Hook configuration
       | rm-only   | PreToolUse | Bash    | Bash(rm *)   |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -174,7 +174,7 @@ Feature: Hook configuration
       | every | PreToolUse | Bash    | true |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments               |
       |       | bash | {"command": "echo one"} |
@@ -275,7 +275,7 @@ Feature: Hook configuration
       | notice | Notification |         |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project --partial"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |

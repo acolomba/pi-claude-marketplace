@@ -19,7 +19,7 @@ Feature: Hook tool failure
       | failure | PostToolUseFailure | Edit    |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "document.txt" with the text "first\nmiddle\n" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                                                                             |
@@ -49,7 +49,7 @@ Feature: Hook tool failure
       | replace | PostToolUseFailure | Edit    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUseFailure","updatedToolOutput":{"content":[{"type":"text","text":"replaced"}],"isError":false}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "document.txt" with the text "first\nmiddle\n" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                                                                             |
@@ -80,7 +80,7 @@ Feature: Hook tool failure
       | failure | PostToolUseFailure | Read    |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                   |
       |       | read | {"path":"missing.txt"}     |
@@ -103,7 +103,7 @@ Feature: Hook tool failure
       | failure | PostToolUseFailure | Bash    |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                                                                           |
       |       | bash | {"command": "touch tool-running; i=0; while [ -e tool-running ] && [ $i -lt 200 ]; do sleep 0.1; i=$((i+1)); done"} |
@@ -127,7 +127,7 @@ Feature: Hook tool failure
       | replace | PostToolUseFailure | Read    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUseFailure","updatedToolOutput":{"content":[{"type":"text","text":"replaced"}],"isError":false}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                                    |
       |       | read | {"path": "{home}/marketplaces/fixtures/plugins/demo/notes.txt", "offset": 9} |
@@ -163,7 +163,7 @@ Feature: Hook tool failure
       | after   | PostToolUse        | Read       |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                                    |
       |       | read | {"path": "{home}/marketplaces/fixtures/plugins/demo/notes.txt", "offset": 9} |
@@ -186,7 +186,7 @@ Feature: Hook tool failure
       | failure | PostToolUseFailure | Bash    |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -213,7 +213,7 @@ Feature: Hook tool failure
       | context | PostToolUseFailure | Read    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUseFailure","additionalContext":"checked the error"}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                                    |
       |       | read | {"path": "{home}/marketplaces/fixtures/plugins/demo/notes.txt", "offset": 9} |
@@ -247,7 +247,7 @@ Feature: Hook tool failure
       | notice | PostToolUseFailure | Read    | script | {"systemMessage":"checked the failed read"} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                                    |
       |       | read | {"path": "{home}/marketplaces/fixtures/plugins/demo/notes.txt", "offset": 9} |
@@ -283,7 +283,7 @@ Feature: Hook tool failure
       | exit | PostToolUseFailure | Read    | script | check the error | 2         |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                                    |
       |       | read | {"path": "{home}/marketplaces/fixtures/plugins/demo/notes.txt", "offset": 9} |
@@ -316,7 +316,7 @@ Feature: Hook tool failure
       | block | PostToolUseFailure | Read    | script | {"decision":"block","reason":"look at the offset"} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                                    |
       |       | read | {"path": "{home}/marketplaces/fixtures/plugins/demo/notes.txt", "offset": 9} |

@@ -121,7 +121,7 @@ Feature: Hook session
       | pre  | PreCompact | *       |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply      |
       | Hello.     |
@@ -167,7 +167,7 @@ Feature: Hook session
       | prompt | UserPromptSubmit |         |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the user has named the session "Release prep"
     Given the scripted model plays these steps:
       | reply |
@@ -276,7 +276,7 @@ Feature: Hook session
       | post-auto   | PostCompact | auto    |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply      |
       | Hello.     |
@@ -303,7 +303,7 @@ Feature: Hook session
       | post-other  | PostCompact | threshold, auto  |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply      |
       | Hello.     |

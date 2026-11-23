@@ -15,7 +15,7 @@ Feature: Hook failures
       | guard | UserPromptSubmit |         | script | <exit code> | <stderr> | <output> | <timeout> | <sleep> | block      |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user prompts "say done"
     Then the hooks record these runs:
       | event            | session | prompt   | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
@@ -42,7 +42,7 @@ Feature: Hook failures
       | guard | UserPromptSubmit |         | script | 1         | boom   |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -68,7 +68,7 @@ Feature: Hook failures
       | gone | UserPromptSubmit |         | script | 2         | python3: can't open file '/x/gone.py': [Errno 2] No such file or directory |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -94,7 +94,7 @@ Feature: Hook failures
       | gone | Stop  |         | script | 2         | python3: can't open file '/x/gone.py': [Errno 2] No such file or directory |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -120,7 +120,7 @@ Feature: Hook failures
       | guard | UserPromptSubmit |         | script | 0         | block      |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -145,7 +145,7 @@ Feature: Hook failures
       | missing-guard | UserPromptSubmit |         | missing | block      |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user prompts "say done"
     Then the hooks record these runs:
       | event            | session | prompt   | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                         | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
@@ -166,7 +166,7 @@ Feature: Hook failures
       | missing-guard | UserPromptSubmit |         | missing |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -193,7 +193,7 @@ Feature: Hook failures
       | token-hook | UserPromptSubmit |         | exec | ["${user_config.token}"] |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -234,14 +234,12 @@ Feature: Hook failures
     Given the scripted model plays these steps:
       | reply |
       | Done. |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
       | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
-      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status | reasons    | scope   | cause chain                                                                                                                                                       | cause truncated | leaks | rollback partial |
-      | fixtures         | project           | demo@fixtures | demo | failed | unreadable | project | The plugin options in the install record of demo@fixtures do not parse (userConfig is not an object). Run /claude:plugin reinstall demo@fixtures to restore them. | false           |       |                  |
       | fixtures         | project           | demo@fixtures | demo | failed | unreadable | project | The plugin options in the install record of demo@fixtures do not parse (userConfig is not an object). Run /claude:plugin reinstall demo@fixtures to restore them. | false           |       |                  |
     When the user prompts "say done"
     Then the hooks record these runs:
@@ -276,7 +274,7 @@ Feature: Hook failures
       | mode-hook | UserPromptSubmit |         | script | ["${user_config.mode}"] |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -302,7 +300,7 @@ Feature: Hook failures
       | guard | PreToolUse | Edit    | script | 1         | boom   |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "document.txt" with the text "first\nmiddle\nsecond\n" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                                                                        |

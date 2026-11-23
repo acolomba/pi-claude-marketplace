@@ -17,7 +17,7 @@ Feature: Hook prompt and stop
       | stop-b | Stop  |         | script | allow      | {"decision":"block","reason":"reason B"} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Done.  |
@@ -47,7 +47,7 @@ Feature: Hook prompt and stop
       | always | Stop  |         | script | {"decision":"block","reason":"keep going"} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  | stop reason |
       | Done 1 |             |
@@ -84,7 +84,7 @@ Feature: Hook prompt and stop
       | advise | Stop  |         | script | allow      | {"hookSpecificOutput":{"hookEventName":"Stop","additionalContext":"run the tests"}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply   |
       | Done.   |
@@ -112,7 +112,7 @@ Feature: Hook prompt and stop
       | notice | Stop  |         | script | {"systemMessage":"remember the tests"} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -138,7 +138,7 @@ Feature: Hook prompt and stop
       | always | Stop  |         | script | {"decision":"block","reason":"keep going"} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Done 1 |
@@ -178,7 +178,7 @@ Feature: Hook prompt and stop
       | always | Stop  |         | script | {"decision":"block","reason":"keep going"} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply   | tool | arguments                   | stop reason |
       | Done 1  |      |                             |             |
@@ -217,7 +217,7 @@ Feature: Hook prompt and stop
       | always | Stop  |         | script | {"decision":"block","reason":"keep going"} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply    | stop reason |
       | Before 1 |             |
@@ -260,7 +260,7 @@ Feature: Hook prompt and stop
       | stop | Stop  |         |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the user has set the thinking level "high"
     Given the scripted model plays these steps:
       | reply |

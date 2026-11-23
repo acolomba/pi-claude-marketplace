@@ -1,6 +1,6 @@
 Feature: Hook lifecycle
 
-  Each plugin verb changes which hooks of a bridged plugin run in a new session. A hook that
+  Each plugin verb changes which hooks of a bridged plugin run after a reload. A hook that
   records each run stands in for a plugin's hook, a scripted model for a real one, and a local
   marketplace for a published one.
 
@@ -18,7 +18,7 @@ Feature: Hook lifecycle
 
   Scenario: Disabling a plugin stops its hooks
     Given the user has run "/claude:plugin disable demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -29,7 +29,7 @@ Feature: Hook lifecycle
   Scenario: Enabling a disabled plugin runs its hooks again
     Given the user has run "/claude:plugin disable demo@fixtures --scope project"
     Given the user has run "/claude:plugin enable demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -41,7 +41,7 @@ Feature: Hook lifecycle
 
   Scenario: Uninstalling a plugin stops its hooks
     Given the user has run "/claude:plugin uninstall demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -57,7 +57,7 @@ Feature: Hook lifecycle
       | name        | event      | matcher |
       | fresh-guard | PreToolUse | Bash    |
     Given the user has run "/claude:plugin update demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -77,7 +77,7 @@ Feature: Hook lifecycle
       | watch | PreToolUse | Bash    |
     Given the marketplace "shared" is added to the user scope
     Given the user has run "/claude:plugin install audit@shared --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -98,7 +98,7 @@ Feature: Hook lifecycle
       | watch | PreToolUse | Bash    |
     Given the marketplace "shared" is added to the user scope
     Given the user has run "/claude:plugin install audit@shared --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |

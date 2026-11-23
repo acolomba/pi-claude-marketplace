@@ -15,7 +15,7 @@ Feature: Hook process
       | exec-hook | UserPromptSubmit |         | exec | ["${CLAUDE_PLUGIN_ROOT}/bin/tool", "--data=${CLAUDE_PLUGIN_DATA}", "${CLAUDE_PROJECT_DIR}", "${HOME}"] |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -49,7 +49,7 @@ Feature: Hook process
       | option-hook | UserPromptSubmit |         | exec | ["${user_config.mode}", "--level=${user_config.level}", "${user_config.mode}${user_config.level}"] |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -72,7 +72,7 @@ Feature: Hook process
       | script-hook | UserPromptSubmit |         | exec script | []        |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -95,7 +95,7 @@ Feature: Hook process
       | shell-hook | UserPromptSubmit |         | shell | ["'${CLAUDE_PLUGIN_ROOT}/x'"] |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -130,7 +130,7 @@ Feature: Hook process
       | option-hook | UserPromptSubmit |         | exec | []        |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
@@ -208,7 +208,7 @@ Feature: Hook process
       }
       """
     Given the user has run "/claude:plugin reinstall demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Done. |
