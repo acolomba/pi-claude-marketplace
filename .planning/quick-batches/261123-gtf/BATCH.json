@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "batch_id": "261123-gtf",
+  "created_at": "2026-11-23T12:06:30.169Z",
+  "options": {},
+  "base_revision": "b4ce8d10ed07f11678fe6e0dd43c3fda09c37887",
+  "items": [
+    {
+      "quick_id": "261123-gtg",
+      "client_id": null,
+      "description": "Fix the dispatch-exec portable boundary unit test (test/bridges/hooks/dispatch-exec.test.ts, \"executes a blocking hook through the portable process boundary\") so it no longer depends on the size of process.env: its child echoes the whole environment into additionalContext, which passes the 10,000-character cap of bridges/hooks/context-cap.ts when the environment is large (about 10.6 KB in this container), so the product correctly returns <persisted-output> and the test fails. Keep the proof that the child inherits the whole environment; test-only change.",
+      "status": "pending",
+      "depends_on": [],
+      "planned_files": [],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 0,
+      "commit": null,
+      "failure_reason": null
+    },
+    {
+      "quick_id": "261123-gth",
+      "client_id": null,
+      "description": "DIRGITTAG-01 (.planning/BACKLOG.md): add a publication kind for a dir marketplace whose folder is a git work tree to features/lib/published-marketplace.ts, and a cucumber scenario in features/plugin/install-dependencies.feature that installs a constrained relative-path dependency from that marketplace's <plugin>--v<version> tag (the tag clone is keyed marketplace-name:<name> when the folder has no origin, orchestrators/plugin/clone-cache.ts). Prove the scenario fails under a deliberate product break.",
+      "status": "pending",
+      "depends_on": [],
+      "planned_files": [],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 0,
+      "commit": null,
+      "failure_reason": null
+    },
+    {
+      "quick_id": "261123-gti",
+      "client_id": null,
+      "description": "HOOKASYNCRESUME-01 (.planning/BACKLOG.md): an async SessionStart hook's answer (claude-hook-async-response, bridges/hooks/async-rewake/registry.ts) carries no SessionStart details or label, so the HKRL-02 resume/fork duplicate removal in bridges/hooks/event-adapters.ts does not see it and it repeats on every resume. Match Claude Code 2.1.295 (an unchanged async SessionStart context is not added again on resume): give the async answer the SessionStart details shape and apply the duplicate removal to it, with unit tests at 100% direct coverage, a cucumber scenario that fails without the change, docs/hooks-compatibility.md updated, and a CHANGELOG parent line recorded in the SUMMARY.",
+      "status": "pending",
+      "depends_on": [],
+      "planned_files": [],
+      "directory": null,
+      "worktree": null,
+      "dispatched_worktree": null,
+      "dispatched_branch": null,
+      "dispatched_base": null,
+      "wave": 0,
+      "commit": null,
+      "failure_reason": null
+    }
+  ]
+}
