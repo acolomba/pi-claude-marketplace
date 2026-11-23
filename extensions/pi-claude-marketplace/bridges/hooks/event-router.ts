@@ -654,8 +654,10 @@ interface RunPhaseTracker {
   readonly nextCallReadsSteer: (willRetry: boolean) => boolean;
 }
 
-// HKRL-03: a custom message this bridge sends with `triggerTurn: false`. Pi
-// appends it to the session at the turn end, so it takes no model call.
+// HKRL-03: the bridge's tool and prompt context, which waits for the turn
+// end; Pi appends it to the session there, so it takes no model call. A
+// steered SessionStart context of the same type is read by the next poll
+// before any turn end.
 function isHeldHookContext(message: AgentMessage): boolean {
   return (
     message.role === "custom" &&
@@ -696,6 +698,11 @@ function remainingFollowUps(
  * its text until the run reads that follow-up or a run ends with no user
  * input queued. A model call that ends in `error` or `aborted` ends the run
  * without reading the follow-up queue, and Pi's retry of that call reads it.
+ * The tracker sees only the input that passes the `input` handlers: a typed
+ * steer or follow-up, or one that an extension sends with `sendUserMessage`.
+ * A custom message that an extension steers with `sendMessage` is hidden
+ * from it, and a steer that another extension's `input` handler still holds
+ * when a turn ends is not in `pendingMessages` yet.
  */
 function createRunPhaseTracker(): RunPhaseTracker {
   let phase: RunPhase = "idle";
