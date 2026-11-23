@@ -1,58 +1,49 @@
 /**
- * AUTH-06 / AUTH-08 / AUTH-09. The CredentialOps surface wraps
- * `git credential fill/approve/reject` via node:child_process.spawn.
+ * AUTH-06 / AUTH-08 / AUTH-09. The CredentialOps surface speaks the
+ * `git credential fill/approve/reject` protocol over an injected git process
+ * (platform/git-process.ts). This module spawns nothing: the git process
+ * module is the extension's sanctioned git spawn site (D-SG-01).
  *
  * REJECTED: `pi.exec` from @earendil-works/pi-coding-agent -- verified at
  * node_modules/@earendil-works/pi-coding-agent/dist/core/exec.js:15 to use
  * `stdio: ["ignore", ...]`. git credential REQUIRES stdin.
  *
- * D-21: this is one of four files in
- * extensions/pi-claude-marketplace/ permitted to import node:child_process
- * (whitelist asserted in test/architecture/no-shell-out.test.ts; the other
- * three are bridges/hooks/dispatch-exec.ts,
- * bridges/hooks/async-rewake/registry.ts, and platform/package-manager.ts).
+ * D-SG-01 / D-SG-05: the git process module runs the user's system git with
+ * its hardened environment. `GIT_ASKPASS` is empty, `credential.interactive`
+ * is false, and git has no controlling terminal, so neither git's own prompt
+ * nor the user's askpass programs (`GIT_ASKPASS`, `core.askPass`,
+ * `SSH_ASKPASS`) run. `GCM_INTERACTIVE=never` makes Git Credential Manager
+ * return null on a cache miss instead of opening a browser OAuth flow. Pi
+ * shows the Device Flow URL + code in its own UI via `initiateDeviceFlow`.
  *
- * Failure-mode contract: when git is absent from PATH, the
- * subprocess spawn emits ENOENT. `credentialFill` catches and returns null;
- * `credentialApprove` / `credentialReject` swallow and silently no-op
- * (best-effort persistence). The current operation still
- * succeeds via Device Flow -- only keychain reuse is lost.
+ * The command runs in the neutral directory with the ceiling at its parent,
+ * so a credential helper configured by the repository Pi runs in is never
+ * consulted. The one interactive surface left is a configured
+ * `credential.helper` that prompts on its own (`pass` via gpg-agent
+ * pinentry, 1Password's `op`, a GUI keychain dialog). Such a prompt meets the
+ * timeout, which stops the whole process tree, and `fill` answers null.
  *
- * Error-message discipline (AUTH-09): no Error constructor in
- * this file interpolates a credential field. The only thrown errors from
- * gitCredentialIO reference the subcommand name + timeout-ms or exit code.
- * approve/reject swallow all subprocess errors so they never escape.
+ * Failure-mode contract: every failed run, a missing git included, rejects
+ * with a `GitCommandError`. `credentialFill` catches it and returns null;
+ * `credentialApprove` / `credentialReject` debug-log its message and no-op
+ * (best-effort persistence). The current operation still succeeds via Device
+ * Flow -- only keychain reuse is lost.
  *
- * Non-interactive boundary: env carries `GIT_TERMINAL_PROMPT=0`, which
- * suppresses git's OWN terminal prompt on a helper miss, and
- * `GCM_INTERACTIVE=never`, which makes Git Credential Manager return null on a
- * cache miss instead of opening a browser OAuth flow. Pi shows the Device Flow
- * URL + code in its own UI via `initiateDeviceFlow`.
+ * Error-message discipline (AUTH-09): no Error constructor in this file
+ * interpolates a credential field. A `GitCommandError` names the subcommand
+ * and the action only, and its stderr is redacted.
  *
- * Those two variables bound git and GCM, and `fill` spawns on every host a
- * source names (GAUTH-03). Three interactive surfaces sit outside that bound:
- *   - a configured `credential.helper` that prompts on its own -- `pass` via
- *     gpg-agent pinentry, 1Password's `op`, `gh auth`, a shell one-liner;
- *   - a GUI keychain access-permission dialog, which
- *     `git-credential-osxkeychain` raises outside any TTY;
- *   - `GIT_ASKPASS` / `SSH_ASKPASS` / `core.askPass`, which this env leaves
- *     intact.
- * A prompt on any of them meets the `timeoutMs` SIGTERM, so the user sees a
- * dialog that flashes and a `fill` that answers null. `spawn` passes no `cwd`,
- * so `credential.helper` resolves from whatever repository the Pi process sits
- * in.
- *
- * stdin EOF guarantee: both `child.stdin.write(input)` AND
- * `child.stdin.end()` are called -- the trailing blank line in the input
- * satisfies the wire format; .end() flushes EOF on the pipe so the helper
- * never waits for more input.
+ * stdin EOF guarantee: the git process writes the attribute block to stdin
+ * and then closes it; the trailing blank line satisfies the wire format, so
+ * the helper never waits for more input.
  */
-
-import { spawn } from "node:child_process";
 
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
 
+import { NODE_GIT_PROCESS } from "./git-process.ts";
+
+import type { GitProcess } from "./git-process.ts";
 import type { GitCredentials } from "./git.ts";
 
 /**
@@ -62,10 +53,10 @@ import type { GitCredentials } from "./git.ts";
  *   - approve: persist a credential to the OS keychain
  *   - reject: evict a credential from the OS keychain
  *
- * `createCredentialOps` takes its process launcher and its timeout as
- * explicit collaborators. `NODE_CREDENTIAL_SPAWN` is the launcher that runs
- * the real `git credential fill/approve/reject` subprocess; the composition
- * owner (`orchestrators/auth-host.ts`) supplies it, and an alternate adapter
+ * `createCredentialOps` takes its git process and its timeout as explicit
+ * collaborators. `NODE_CREDENTIAL_GIT` is the git process that runs the real
+ * `git credential fill/approve/reject`; the composition owner
+ * (`orchestrators/auth-host.ts`) supplies it, and an alternate adapter
  * supplies its own.
  *
  * buildAuthCallbacks consumes this seam.
@@ -86,104 +77,44 @@ export interface CredentialOps {
   reject(host: string, cred: GitCredentials): Promise<void>;
 }
 
-export interface CredentialProcess {
-  readonly stdin: {
-    on(event: "error", listener: (error: Error) => void): void;
-    write(input: string): void;
-    end(): void;
-  };
-  readonly stdout: {
-    on(event: "data", listener: (chunk: Buffer) => void): void;
-  };
-  kill(signal: "SIGTERM"): boolean;
-  on(
-    event: "error" | "close",
-    listener: ((error: Error) => void) | ((code: number | null) => void),
-  ): void;
-}
-
-export interface CredentialSpawnOptions {
-  readonly env: NodeJS.ProcessEnv;
-  readonly stdio: readonly ["pipe", "pipe", "pipe"];
-}
-
-export type CredentialSpawn = (
-  command: string,
-  args: readonly string[],
-  options: CredentialSpawnOptions,
-) => CredentialProcess;
+/** The part of a git process the credential protocol uses. */
+export type CredentialGit = Pick<GitProcess, "run">;
 
 /**
- * The real process launcher: Node's own `spawn`, narrowed to the
- * `CredentialSpawn` contract.
- *
- * D-21 keeps the `node:child_process` IMPORT in this module; this binding is
- * how the composition owner names the production launcher without acquiring
- * that import itself. The cast narrows `ChildProcess` to the three streams
- * and two events `gitCredentialIO` actually uses -- the runtime value is
- * Node's `spawn`, unwrapped.
+ * The production git process of the credential protocol: the process's one
+ * git process, so a credential lookup shares its git lookup with every other
+ * git command (D-SG-04).
  */
-export const NODE_CREDENTIAL_SPAWN = spawn as CredentialSpawn;
+export const NODE_CREDENTIAL_GIT: CredentialGit = NODE_GIT_PROCESS;
 
 export interface CreateCredentialOpsOptions {
-  /** The process launcher. `NODE_CREDENTIAL_SPAWN` in production. */
-  readonly spawn: CredentialSpawn;
-  /** Milliseconds before a pending `git credential` subprocess is SIGTERMed. */
+  /** The git process. `NODE_CREDENTIAL_GIT` in production. */
+  readonly git: CredentialGit;
+  /** Milliseconds before a pending `git credential` and its process tree are stopped. */
   readonly timeoutMs: number;
 }
 
+type CredentialAction = "fill" | "approve" | "reject";
+
 /**
- * Spawn `git credential <subcommand>` and feed `input` over stdin. Returns
- * { stdout, code } on close. Rejects on subprocess "error" (ENOENT
- * et al.) or on the caller-supplied timeout.
- *
- * Timeout discipline (CP-4): the setTimeout handle calls .unref() so a
- * pending timer cannot keep the host Pi process alive past success.
+ * Runs `git credential <action>` with `input` on stdin in the neutral
+ * directory. Resolves with stdout; rejects with a `GitCommandError` when the
+ * run failed, a non-zero exit included.
  */
-function gitCredentialIO(
-  subcommand: "fill" | "approve" | "reject",
+async function gitCredentialIO(
+  action: CredentialAction,
   input: string,
-  spawnProcess: CredentialSpawn,
+  git: CredentialGit,
   timeoutMs: number,
-): Promise<{ stdout: string; code: number }> {
-  return new Promise((resolve, reject) => {
-    const child = spawnProcess("git", ["credential", subcommand], {
-      env: {
-        ...process.env,
-        GIT_TERMINAL_PROMPT: "0",
-        GCM_INTERACTIVE: "never",
-      },
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-
-    let stdout = "";
-    child.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf8");
-    });
-
-    const timer = setTimeout(() => {
-      child.kill("SIGTERM");
-      reject(new Error(`git credential ${subcommand} timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-    timer.unref();
-
-    child.on("error", (err: Error) => {
-      clearTimeout(timer);
-      reject(err);
-    });
-    child.on("close", (code: number | null) => {
-      clearTimeout(timer);
-      resolve({ stdout, code: code ?? -1 });
-    });
-
-    // Swallow EPIPE: the credential helper may exit before reading all
-    // input (e.g. non-zero exit on approve/reject with no helper). Without
-    // this listener the 'error' event on child.stdin becomes an unhandled
-    // exception.
-    child.stdin.on("error", () => {});
-    child.stdin.write(input);
-    child.stdin.end();
+): Promise<string> {
+  const run = await git.run({
+    subcommand: "credential",
+    options: [action],
+    lane: "network",
+    input,
+    timeoutMs,
   });
+  return run.stdout;
 }
 
 /**
@@ -248,36 +179,28 @@ function parseCredentialOutput(stdout: string): Record<string, string> {
  * AUTH-08: fill semantics.
  *
  * Returns the stored credential on success, null on any miss path:
- *   - ENOENT (git absent from PATH)         -> try/catch swallow -> null
- *   - subprocess timeout                    -> try/catch swallow -> null
- *   - non-zero exit (no helper, miss)       -> null
+ *   - a failed run (git missing, timeout,
+ *     non-zero exit for no helper or a miss) -> try/catch swallow -> null
  *   - exit 0 but no username= or password=  -> null
  *
  * The `null` return is the affirmative no-result; callers
  * (buildAuthCallbacks) fall through to Device Flow on null.
  */
-type RunGitCredential = (
-  subcommand: "fill" | "approve" | "reject",
-  input: string,
-) => Promise<{ stdout: string; code: number }>;
+type RunGitCredential = (action: CredentialAction, input: string) => Promise<string>;
 
 async function credentialFill(
   host: string,
   runGitCredential: RunGitCredential,
 ): Promise<GitCredentials | null> {
   const input = buildAttributeBlock(host);
-  let result;
+  let stdout;
   try {
-    result = await runGitCredential("fill", input);
+    stdout = await runGitCredential("fill", input);
   } catch {
     return null;
   }
 
-  if (result.code !== 0) {
-    return null;
-  }
-
-  const parsed = parseCredentialOutput(result.stdout);
+  const parsed = parseCredentialOutput(stdout);
   const { username, password } = parsed;
   if (username === undefined || password === undefined) {
     return null;
@@ -290,7 +213,8 @@ async function credentialFill(
  * AUTH-06: approve semantics. Persists the credential via the configured
  * git credential helper (osxkeychain / manager-core / libsecret).
  *
- * Best-effort: failures (ENOENT, non-zero exit, timeout) silently no-op.
+ * Best-effort: a failed run (git missing, non-zero exit, timeout) is
+ * debug-logged and no-ops.
  * The in-memory token still works for the current
  * operation; the user simply does not get keychain reuse on subsequent
  * runs (they will re-run Device Flow next time).
@@ -338,14 +262,14 @@ async function credentialReject(
 }
 
 /**
- * Bind a `CredentialOps` triple to one launcher and one timeout.
+ * Bind a `CredentialOps` triple to one git process and one timeout.
  *
  * Construction performs no I/O: the three returned primitives close over the
- * launcher and only invoke it when they are called.
+ * git process and only run it when they are called.
  */
 export function createCredentialOps(options: CreateCredentialOpsOptions): CredentialOps {
-  const runGitCredential: RunGitCredential = (subcommand, input) =>
-    gitCredentialIO(subcommand, input, options.spawn, options.timeoutMs);
+  const runGitCredential: RunGitCredential = (action, input) =>
+    gitCredentialIO(action, input, options.git, options.timeoutMs);
 
   return {
     fill: (host) => credentialFill(host, runGitCredential),

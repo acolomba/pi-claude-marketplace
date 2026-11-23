@@ -35,7 +35,7 @@ import type {
 } from "../../extensions/pi-claude-marketplace/domain/github-auth.ts";
 import type { GitAuthBundle } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { AuthAttemptResult } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
-import type { CredentialSpawn } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
+import type { CredentialGit } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
 import type {
   ExtensionContext,
   NotificationContext,
@@ -51,13 +51,15 @@ function expectDeviceFlow(auth: GitAuthBundle): Extract<GitAuthBundle, { kind: "
 describe("DEFAULT_CREDENTIAL_OPS", () => {
   test("composes the platform credential protocol without launching a process", () => {
     // arrange
-    const launches: Array<readonly [string, readonly string[]]> = [];
-    const recordingLauncher: CredentialSpawn = (command, args) => {
-      launches.push([command, args]);
-      throw new Error("composing the default credential ops must not launch a process");
+    const runs: unknown[] = [];
+    const git: CredentialGit = {
+      run: (request) => {
+        runs.push(request);
+        throw new Error("composing the default credential ops must not run git");
+      },
     };
 
-    const composed = createCredentialOps({ spawn: recordingLauncher, timeoutMs: 5_000 });
+    const composed = createCredentialOps({ git, timeoutMs: 5_000 });
 
     // act
     const productionOps = DEFAULT_CREDENTIAL_OPS;
@@ -65,7 +67,7 @@ describe("DEFAULT_CREDENTIAL_OPS", () => {
     // assert
     assert.deepStrictEqual(Object.keys(productionOps), Object.keys(composed));
     assert.deepStrictEqual(Object.keys(productionOps), ["fill", "approve", "reject"]);
-    assert.deepStrictEqual(launches, []);
+    assert.deepStrictEqual(runs, []);
   });
 });
 

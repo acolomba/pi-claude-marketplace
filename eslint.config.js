@@ -36,6 +36,17 @@ const PACKAGE_INSTALL_SEAM =
   "./extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts";
 
 /**
+ * D-SG-01: the only modules that may import platform/git-process.ts, the module
+ * every git process starts from. Every other module reaches git through them:
+ * platform/git.ts behind GitOps, and platform/git-credential.ts behind
+ * CredentialOps and its production binding.
+ */
+const GIT_PROCESS_IMPORTERS = [
+  "./extensions/pi-claude-marketplace/platform/git.ts",
+  "./extensions/pi-claude-marketplace/platform/git-credential.ts",
+];
+
+/**
  * NFR-5 / PI-2 / PL-3 / PRL-07: the orchestrators/ and domain/ modules that
  * BLOCK F skips, because each one must name the git surface, or the hosted
  * catalog download (D-PL5-07), itself. BLOCK F is default-deny, so a new
@@ -287,6 +298,20 @@ const IMPORT_DIRECTION_ZONES = [
   },
 ];
 
+/** BLOCK C: D-PL9-10, the package runner zone. */
+const PACKAGE_MANAGER_ZONE = {
+  target: "./extensions/pi-claude-marketplace",
+  from: ["./extensions/pi-claude-marketplace/platform/package-manager.ts"],
+  message: `D-PL9-10: only ${PACKAGE_INSTALL_SEAM} imports platform/package-manager.ts, the spawn runner of a plugin's own package install.`,
+};
+
+/** BLOCK C: D-SG-01, the git process zone. */
+const GIT_PROCESS_ZONE = {
+  target: "./extensions/pi-claude-marketplace",
+  from: ["./extensions/pi-claude-marketplace/platform/git-process.ts"],
+  message: `D-SG-01: only ${GIT_PROCESS_IMPORTERS.join(" and ")} import platform/git-process.ts, the module every git process starts from.`,
+};
+
 export default tseslint.config(
   {
     ignores: [
@@ -535,14 +560,37 @@ export default tseslint.config(
         "error",
         {
           basePath: import.meta.dirname,
-          zones: [
-            ...IMPORT_DIRECTION_ZONES,
-            {
-              target: "./extensions/pi-claude-marketplace",
-              from: ["./extensions/pi-claude-marketplace/platform/package-manager.ts"],
-              message: `D-PL9-10: only ${PACKAGE_INSTALL_SEAM} imports platform/package-manager.ts, the spawn runner of a plugin's own package install.`,
-            },
-          ],
+          zones: [...IMPORT_DIRECTION_ZONES, PACKAGE_MANAGER_ZONE],
+        },
+      ],
+    },
+  },
+  {
+    // Only the two git process importers may reach the git process module.
+    // Flat config keeps only the last matching block's options, so this block
+    // repeats the direction and package-runner zones for every other file.
+    files: ["extensions/pi-claude-marketplace/**/*.ts"],
+    ignores: [PACKAGE_INSTALL_SEAM, ...GIT_PROCESS_IMPORTERS].map((file) => file.slice(2)),
+    rules: {
+      "import-x/no-restricted-paths": [
+        "error",
+        {
+          basePath: import.meta.dirname,
+          zones: [...IMPORT_DIRECTION_ZONES, PACKAGE_MANAGER_ZONE, GIT_PROCESS_ZONE],
+        },
+      ],
+    },
+  },
+  {
+    // The package seam may reach the package runner but not the git process
+    // module.
+    files: [PACKAGE_INSTALL_SEAM.slice(2)],
+    rules: {
+      "import-x/no-restricted-paths": [
+        "error",
+        {
+          basePath: import.meta.dirname,
+          zones: [...IMPORT_DIRECTION_ZONES, GIT_PROCESS_ZONE],
         },
       ],
     },

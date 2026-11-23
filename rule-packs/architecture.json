@@ -113,13 +113,13 @@
       "specifiers": ["node:child_process", "child_process"],
       "files": ["extensions/pi-claude-marketplace/**"],
       "exclude": [
-        "extensions/pi-claude-marketplace/platform/git-credential.ts",
+        "extensions/pi-claude-marketplace/platform/git-process.ts",
         "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts",
         "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
         "extensions/pi-claude-marketplace/platform/package-manager.ts",
         "extensions/pi-claude-marketplace/platform/prompt-shell.ts"
       ],
-      "message": "D-21 / D-PL9-11 / D-CF1-02: only the five sanctioned spawn sites import node:child_process: the git credential helper, the two hook executors, the plugin package manager runner, and the ! prompt shell of user-invoked skills and commands. test/architecture/no-shell-out.test.ts also rejects dynamic import() and require."
+      "message": "D-SG-01 / D-PL9-11 / D-CF1-02: only the five sanctioned spawn sites import node:child_process: the git process module (git and ssh launches), the two hook executors, the plugin package manager runner, and the ! prompt shell of user-invoked skills and commands. test/architecture/no-shell-out.test.ts also rejects dynamic import() and require."
     },
     {
       "id": "proper-lockfile-chokepoint",
@@ -160,7 +160,7 @@
         "undici"
       ],
       "files": ["extensions/pi-claude-marketplace/**"],
-      "message": "IL-4 / NFR-5: the extension opens no network connection of its own. Git traffic goes through platform/git.ts, Device Flow through domain/github-auth.ts, and a hosted marketplace catalog is downloaded through platform/hosted-manifest-fetch.ts."
+      "message": "IL-4 / NFR-5: the extension opens no network connection of its own. Git traffic goes through platform/git.ts and the git subprocesses platform/git-process.ts starts, Device Flow through domain/github-auth.ts, and a hosted marketplace catalog is downloaded through platform/hosted-manifest-fetch.ts."
     },
     {
       "id": "fetch-chokepoint",

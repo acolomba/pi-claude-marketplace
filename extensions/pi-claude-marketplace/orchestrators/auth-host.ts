@@ -42,7 +42,7 @@
 
 import { findProviderForHost } from "../domain/auth-registry.ts";
 import { initiateDeviceFlow } from "../domain/github-auth.ts";
-import { NODE_CREDENTIAL_SPAWN, createCredentialOps } from "../platform/git-credential.ts";
+import { NODE_CREDENTIAL_GIT, createCredentialOps } from "../platform/git-credential.ts";
 import { DeviceFlowUnavailableError } from "../shared/errors.ts";
 import { GITHUB_HOST, gitHubOverrideHost, gitHubWireUrl } from "../shared/github-base-url.ts";
 import { notifyDeviceFlowPrompt } from "../shared/notification-dispatch.ts";
@@ -62,21 +62,25 @@ import type { GitAuthBundle } from "./marketplace/shared.ts";
 // the auth bundle inputs (T-79-10).
 export type { AuthAttemptResult, CredentialOps, DeviceFlowHttp };
 
-/** How long a `git credential` subprocess may run before it is SIGTERMed. */
+/** How long a `git credential` subprocess may run before its process tree is stopped. */
 const CREDENTIAL_TIMEOUT_MS = 5_000;
 
 /**
  * The production credential surface every verb defaults to: the platform
- * credential protocol bound to Node's process launcher and the timeout above.
+ * credential protocol bound to its production git process and the timeout
+ * above.
  *
  * It is composed HERE rather than inside `platform/git-credential.ts` so that
- * module publishes only the protocol and its injected collaborators, and the
- * one concrete binding lives with the other host-keyed auth composition. The
- * call builds three closures and launches nothing; the first subprocess starts
- * when a verb actually calls fill/approve/reject.
+ * module publishes only the protocol, its collaborators, and their production
+ * bindings, and the one concrete composition lives with the other host-keyed
+ * auth composition. This module reaches the git process only through
+ * `NODE_CREDENTIAL_GIT`, because only `platform/git.ts` and
+ * `platform/git-credential.ts` may import `platform/git-process.ts` (D-SG-01).
+ * The call builds three closures and launches nothing; the first subprocess
+ * starts when a verb actually calls fill/approve/reject.
  */
 export const DEFAULT_CREDENTIAL_OPS: CredentialOps = createCredentialOps({
-  spawn: NODE_CREDENTIAL_SPAWN,
+  git: NODE_CREDENTIAL_GIT,
   timeoutMs: CREDENTIAL_TIMEOUT_MS,
 });
 
