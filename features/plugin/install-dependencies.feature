@@ -678,8 +678,20 @@ Feature: Plugin install dependencies
     Given the marketplace "tools" tags its current commit "formatter--v1.0.0"
     Given the marketplace "tools" offers these plugins with dependencies:
       | name      | version | dependencies     |
+      | app       | 1.0.0   | formatter@^1.0.0 |
+      | formatter | 1.1.0   |                  |
+    Given the marketplace "tools" tags its current commit "formatter--v1.1.0"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name      | version | dependencies     |
+      | app       | 1.0.0   | formatter@^1.0.0 |
+      | formatter | 1.1.0   |                  |
+      | linter    | 1.2.0   |                  |
+    Given the marketplace "tools" tags its current commit "linter--v1.2.0"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name      | version | dependencies     |
       | app       | 1.1.0   | formatter@^1.0.0 |
       | formatter | 2.0.0   |                  |
+      | linter    | 1.2.0   |                  |
     Given the marketplace "tools" is added to the project scope
     When the user runs "/claude:plugin install app@tools --scope project"
     Then the result has these fields:
@@ -689,17 +701,17 @@ Feature: Plugin install dependencies
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id              | name            | status    | reasons | scope   | version                                  |
       | tools            | project           | app@tools       | app             | installed |         | project | 1.1.0                                    |
-      | tools            | project           | formatter@tools | formatter@tools | installed |         | project | 1.0.0-{tools revision formatter--v1.0.0} |
+      | tools            | project           | formatter@tools | formatter@tools | installed |         | project | 1.1.0-{tools revision formatter--v1.1.0} |
     Then the installation record of the project scope holds these plugins:
       | id              | version                                  | enabled |
       | app@tools       | 1.1.0                                    | true    |
-      | formatter@tools | 1.0.0-{tools revision formatter--v1.0.0} | true    |
+      | formatter@tools | 1.1.0-{tools revision formatter--v1.1.0} | true    |
     Then the staged skills directory of the project scope holds these files:
       | file                     | text |
       | app-skill/               |      |
       | app-skill/SKILL.md       | ---\nname: app-skill\ndescription: A skill of app 1.1.0.\npi-claude-marketplace: {"names":["app:app-skill","app-skill"],"pluginRoot":"{project dir}/.pi/pi-claude-marketplace/sources/tools/plugins/app","pluginData":"{project dir}/.pi/pi-claude-marketplace/data/tools/app"}\n---\n\nVersion 1.1.0.\n |
       | formatter-skill/         |      |
-      | formatter-skill/SKILL.md | ---\nname: formatter-skill\ndescription: A skill of formatter 1.0.0.\npi-claude-marketplace: {"names":["formatter:formatter-skill","formatter-skill"],"pluginRoot":"{project dir}/.pi/pi-claude-marketplace/plugin-clones/1969ce50f054-{tools revision formatter--v1.0.0}/plugins/formatter","pluginData":"{project dir}/.pi/pi-claude-marketplace/data/tools/formatter"}\n---\n\nVersion 1.0.0.\n |
+      | formatter-skill/SKILL.md | ---\nname: formatter-skill\ndescription: A skill of formatter 1.1.0.\npi-claude-marketplace: {"names":["formatter:formatter-skill","formatter-skill"],"pluginRoot":"{project dir}/.pi/pi-claude-marketplace/plugin-clones/1969ce50f054-{tools revision formatter--v1.1.0}/plugins/formatter","pluginData":"{project dir}/.pi/pi-claude-marketplace/data/tools/formatter"}\n---\n\nVersion 1.1.0.\n |
 
   Scenario: Installing a plugin whose path-source dependency's version constraint no marketplace tag satisfies installs the dependency's current copy as a note (TAGS-02, D-07-03)
     Given the marketplace "tools" is published as a github source
