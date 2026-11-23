@@ -1,8 +1,14 @@
-// MREC-01 / D-MB-04: the install record keeps every declared, non-malformed
-// MCP server in its Claude form, in D-CF6-01 merge order, before
+// test/integration/mcp-server-records.test.ts
+//
+// Six internal cases (ITSCOPE-01) of a stored record field (MREC-01, D-MB-04).
+// The install record's `mcpServerConfigs` keeps every declared MCP server that
+// is not malformed, in its Claude form, in D-CF6-01 merge order, before
 // plugin-variable substitution, the servers pi-mcp-adapter blocks included.
-// Each case drives the real operation in a hermetic home and reads the saved
-// state.json, so a path that bypasses the record producer fails here.
+// Each case runs the real install, update, enable, disabled update,
+// reinstall, or import in a hermetic home and reads the saved state.json, so
+// a path that skips the record producer fails. The enable and reinstall cases
+// start from a record that an earlier release wrote without the field. No
+// command shows the field.
 
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
