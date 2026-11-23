@@ -4920,6 +4920,48 @@ for (const { title, before, reason, willRetry, options } of [
   });
 }
 
+test("starts a new registration's run idle, so its compaction holds the SessionStart context (HKRL-03)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-reregister-");
+  const runtime = createHooksRuntime();
+  const { pi, registrations, messages } = makeRecordingPi();
+  const hydration = createHooksHydration(runtime, EMPTY_STATE_READER);
+  const options = {
+    cwd: root,
+    executor: (entry: RoutingEntry) =>
+      Promise.resolve(
+        entry.claudeEvent === "SessionStart"
+          ? ({ kind: "mutate", additionalContext: "compact context" } as const)
+          : ({ kind: "noop" } as const),
+      ),
+  };
+  await hydration.registerHooksBridge(pi, options);
+  const context = makeContext(root, root);
+  await registeredHandler(registrations, "turn_end")(RUN_EVENTS.turn_end, context);
+  await hydration.registerHooksBridge(pi, options);
+  routeCompactionHooks(runtime, root);
+
+  // act
+  await registeredHandler(
+    registrations,
+    "session_compact",
+    1,
+  )({ ...compactionEvent("reregistered summary"), reason: "threshold" }, context);
+
+  // assert
+  assert.deepStrictEqual(messages, [
+    {
+      message: {
+        customType: "claude-hook-additional-context",
+        content: [{ type: "text", text: "SessionStart hook additional context: compact context" }],
+        display: false,
+        details: { event: "SessionStart", values: ["compact context"] },
+      },
+      options: { triggerTurn: false },
+    },
+  ]);
+});
+
 /** Collects the OBS-01 debug lines a case emits, restoring the flag afterwards. */
 function observeRouterDebug(t: TestContext): () => string[] {
   const previousDebug = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
