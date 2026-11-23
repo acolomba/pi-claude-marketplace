@@ -202,12 +202,12 @@ as ARCHITECTURE.md suggests, or Q2 answered early.
   3. Inside the cucumber harness, a system `git` clone and a fetch by SHA from the HTTPS git-host stand-in succeed with only the harness's CA trust (`GIT_SSL_CAINFO` or `http.sslCAInfo`), and the stand-in's refusing arm makes the fetch by SHA fail, so a later phase can drive the fallback path (SG-HRN-02).
   4. Inside the cucumber harness, a system `git` clone from a `git@<host>:<path>` URL and an SSH probe launch both reach the SSH stand-in (a stub `ssh` on `PATH` or `GIT_SSH_COMMAND`) and get scripted answers, with no real network (SG-HRN-03).
   5. `test/architecture/hermetic-git-environment.test.ts` checks every variable SG-HRN-04 names (the `GIT_CONFIG_*` family, `GIT_SSL_CAINFO`, `GIT_SSH`, `GIT_SSH_COMMAND`, `SSH_AUTH_SOCK`, the proxy variables, `XDG_CONFIG_HOME`, and `CLAUDE_CODE_PLUGIN_PREFER_HTTPS`), and the CI log of every job that runs git shows the git version (SG-HRN-04).
-**Plans**: 8 plans in 4 waves
+**Plans**: 2/8 plans executed in 4 waves
 
 Plans:
 **Wave 1**
-- [ ] 01-01-PLAN.md — Suite-wide git builder with named variables, the system-git runner and checkout handle, and the unit fixture builder, git contract fixtures, and warm mirror seed on system git (wave 1)
-- [ ] 01-02-PLAN.md — `git --version` in every CI test job and the e2e suite's own `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` (wave 1)
+- [x] 01-01-PLAN.md — Suite-wide git builder with named variables, the system-git runner and checkout handle, and the unit fixture builder, git contract fixtures, and warm mirror seed on system git (wave 1)
+- [x] 01-02-PLAN.md — `git --version` in every CI test job and the e2e suite's own `CLAUDE_CODE_PLUGIN_PREFER_HTTPS=1` (wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 01-03-PLAN.md — Clone-cache and list fixtures on system git, and cucumber clone inspection with system git (wave 2)
@@ -328,7 +328,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Harness on System Git | 0/8 | Not started | - |
+| 1. Harness on System Git | 2/8 | In Progress | - |
 | 2. Git Process Seam and Typed Failures | 0/TBD | Not started | - |
 | 3. System Git Transport and Clone Shape | 0/TBD | Not started | - |
 | 4. SSH Sources and Transport Selection | 0/TBD | Not started | - |
