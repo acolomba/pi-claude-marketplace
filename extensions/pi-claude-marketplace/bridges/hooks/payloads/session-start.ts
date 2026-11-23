@@ -33,6 +33,21 @@ export interface ClaudeSessionStartEvent {
    * `translateSessionStart` never writes it to stdin.
    */
   readonly nextCallReadsSteer?: () => boolean;
+  /**
+   * HOOKLATESS-D1: set by the late run of a load. The plugins, as
+   * `<plugin>@<marketplace>`, whose hooks the dispatch runs, as Claude Code's
+   * `newPluginsOnly`. Dispatch selects on it, and `translateSessionStart`
+   * never writes it to stdin.
+   */
+  readonly newPluginsOnly?: ReadonlySet<string>;
+  /**
+   * HOOKLATESS-D1: set by the late run of a load. Called when the hooks end,
+   * it says whether Pi already went on to the first prompt after the
+   * 10-second wait, so the context waits for the next prompt, as Claude Code
+   * holds a late hook's rows until the next turn's input. Dispatch never
+   * matches on it, and `translateSessionStart` never writes it to stdin.
+   */
+  readonly heldForNextPrompt?: () => boolean;
 }
 
 /** The JSON a SessionStart hook reads on stdin. */

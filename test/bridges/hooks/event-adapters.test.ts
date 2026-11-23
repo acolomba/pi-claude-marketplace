@@ -2092,6 +2092,27 @@ describe("adaptObservationResultForEvent", () => {
     ]);
   });
 
+  test("holds the context of a late SessionStart that ended after Pi went on to the first prompt for the next prompt (HOOKLATESS-D1)", () => {
+    // arrange
+    const sent: SentMessage[] = [];
+
+    // act
+    adaptObservationResultForEvent(
+      { kind: "mutate", additionalContext: "late context" },
+      "SessionStart",
+      { ...adapterContext(guardEntry()), pi: createMessagePi(sent) },
+      {
+        event: { source: "startup", heldForNextPrompt: () => true },
+        values: ["late context"],
+      } satisfies SessionStartDispatch,
+    );
+
+    // assert
+    assert.deepStrictEqual(sent, [
+      sessionStartContextMessage(["late context"], { deliverAs: "nextTurn" }),
+    ]);
+  });
+
   test("sends no SessionStart context when it is truly absent", () => {
     // arrange
     const sent: SentMessage[] = [];

@@ -580,3 +580,32 @@ Feature: Hook session
       | event        | session | source | model  | cwd           | transcript path | arguments | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                        | CLAUDE_PLUGIN_DATA                                   | CLAUDE_ENV_FILE                                                     | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
       | SessionStart | first   | clear  | faux-1 | {project dir} |                 | start     | {project dir}      | {home}/marketplaces/fixtures/plugins/demo | {agent dir}/pi-claude-marketplace/data/fixtures/demo | {agent dir}/pi-claude-marketplace/data/_shared/claude-env-first.env | first                  | first             | 1          |
     Then the project directory is empty
+
+  Scenario: A plugin that autoapply installs as pi starts in json mode runs its session start hooks without running the others twice
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name  | version |
+      | early | 1.0.0   |
+      | late  | 1.0.0   |
+    Given the published plugin "early" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name        | event        | matcher |
+      | early-start | SessionStart | *       |
+    Given the published plugin "late" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name       | event        | matcher |
+      | late-start | SessionStart | *       |
+    Given a config in scope project and layer base, with this text:
+      """
+      { "autoapply": true }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install early@fixtures --scope project"
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | early  |         |
+      | fixtures    | late   |         |
+    When the user runs "/claude:plugin list" in pi's json mode with the hooks recording
+    Then the hooks record these runs:
+      | event        | session | source  | model  | cwd           | transcript path | arguments   | CLAUDE_PROJECT_DIR | CLAUDE_PLUGIN_ROOT                         | CLAUDE_PLUGIN_DATA                                          | CLAUDE_ENV_FILE                                                           | CLAUDE_CODE_SESSION_ID | CLAUDE_SESSION_ID | CLAUDECODE |
+      | SessionStart | first   | startup | faux-1 | {project dir} |                 | early-start | {project dir}      | {home}/marketplaces/fixtures/plugins/early | {project dir}/.pi/pi-claude-marketplace/data/fixtures/early | {project dir}/.pi/pi-claude-marketplace/data/_shared/claude-env-first.env | first                  | first             | 1          |
+      | SessionStart | first   | startup | faux-1 | {project dir} |                 | late-start  | {project dir}      | {home}/marketplaces/fixtures/plugins/late  | {project dir}/.pi/pi-claude-marketplace/data/fixtures/late  | {project dir}/.pi/pi-claude-marketplace/data/_shared/claude-env-first.env | first                  | first             | 1          |

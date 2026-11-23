@@ -90,6 +90,7 @@ import {
   promptBlockedText,
 } from "./hook-labels.ts";
 import { ifFires } from "./if-field/index.ts";
+import { sessionStartRunsPlugin } from "./late-session-start.ts";
 import { createHookToolView } from "./mcp-tool-view.ts";
 import { compactTrigger } from "./payloads/compact-trigger.ts";
 import { withToolFacts } from "./payloads/tool-event-facts.ts";
@@ -1667,6 +1668,14 @@ function entryFires(
       entry.matcher,
       (view.event as UserPromptExpansionEvent).command_name,
     );
+  }
+
+  // A late SessionStart runs only the hooks of the plugins that it names (HOOKLATESS-D1).
+  if (
+    claudeEvent === "SessionStart" &&
+    !sessionStartRunsPlugin(view.event as ClaudeSessionStartEvent, entry)
+  ) {
+    return false;
   }
 
   const value = matchValue(claudeEvent, view.event);
