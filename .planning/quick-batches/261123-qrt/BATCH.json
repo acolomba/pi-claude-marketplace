@@ -9,7 +9,7 @@
       "quick_id": "261123-qru",
       "client_id": null,
       "description": "Add `/claude:plugin reload` and the sessionful predicate (.planning/research/HEADLESS-RELOAD.md, decisions 1-4). A single named predicate `acceptsLaterCommands(ctx)` returns `ctx.hasUI`, with the reasoning in its doc comment. The subcommand runs `ctx.reload()` only when the predicate is true (TUI and RPC). In a one-shot host it refuses with a short usage message, and help and completions leave it out there. The reload hint text follows the same predicate: no hint in a one-shot host, while the JSON and RPC payload keeps `needsReload`. The wording of every user-facing instruction to reload goes through one place: `/reload` when the host has a native `/reload` (a single named predicate, true only for the TUI, documented as a Pi fact), and `/claude:plugin reload` in other sessionful hosts. Cover every site listed in the note. Include cucumber scenarios for TUI, RPC and one-shot that fail without the change, unit tests at 100% direct coverage, docs (output catalog, README command list, the relevant compatibility pages), a decision ID in PROJECT.md, and a CHANGELOG parent line in the SUMMARY.",
-      "status": "pending",
+      "status": "complete",
       "depends_on": [],
       "planned_files": [
         "extensions/pi-claude-marketplace/edge/handlers/plugin/shared.ts",
@@ -111,14 +111,14 @@
       "dispatched_branch": null,
       "dispatched_base": null,
       "wave": 0,
-      "commit": null,
+      "commit": "5ec2fdf",
       "failure_reason": null
     },
     {
       "quick_id": "261123-qrv",
       "client_id": null,
       "description": "RPC tests reload instead of starting a new session (.planning/research/HEADLESS-RELOAD.md, decision 5). Add an RPC harness step that sends `/claude:plugin reload` (it depends on the subcommand from the sibling item). Audit every RPC step that calls `startSession` / `new_session` (639 \"the user starts a new pi session\" uses in 92 feature files, plus the library callers the note lists). Switch the ones that only stand in for a reload to the reload step. Keep the ones that test a new session: SessionStart `clear`, SessionEnd hooks, an empty conversation, or the shared Pi reset between scenarios. Fix the `features/lib/pi-commands.ts:162` comment. Both cucumber profiles must stay green, and the audit result (counts per category, with file lists) goes in the SUMMARY.",
-      "status": "pending",
+      "status": "complete",
       "depends_on": [
         "261123-qru"
       ],
@@ -232,7 +232,7 @@
       "dispatched_branch": null,
       "dispatched_base": null,
       "wave": 1,
-      "commit": null,
+      "commit": "6e06697",
       "failure_reason": null
     }
   ]

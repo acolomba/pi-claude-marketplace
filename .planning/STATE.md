@@ -34,7 +34,7 @@ component as a working Pi artifact.
 Phase: Milestone integration-rescope complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-11-23 - Completed quick task 261123-jdc: HOOKLATESS-01 late SessionStart
+Last activity: 2026-11-23 - Completed quick batch 261123-qrt: `/claude:plugin reload` (261123-qru) and the RPC reload migration (261123-qrv)
 
 
 ### integration-rescope closeout: `override_closeout`
@@ -57,7 +57,9 @@ builtin 260/260, 376 direct-coverage records). The archive is
 - Still open: Nyquist validation for all nine phases. Closed after the
   close by quick batch 261123-gtf: the `dispatch-exec.test.ts` fragility
   (261123-gtg), DIRGITTAG-01 (261123-gth), and HOOKASYNCRESUME-01
-  (261123-gti); and by quick task 261123-jdc: HOOKLATESS-01 (HOOKLATESS-D1).
+  (261123-gti); by quick task 261123-jdc: HOOKLATESS-01 (HOOKLATESS-D1);
+  and by quick batch 261123-qrt: `/claude:plugin reload` (261123-qru,
+  RELOADCMD-D1) and the RPC scenarios reloading through it (261123-qrv).
 
 Completed 2026-11-17 on `features/gaps` (not yet pushed, no PR or npm
 release; version stays 0.23.0). 11/11 phases, 102 plans, 42/42 requirements.
@@ -502,6 +504,8 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261123-gth | DIRGITTAG-01: install a dependency from a tag of a local git marketplace | 2026-11-23 | 87446bd | — | .planning/quick/261123-gth-dirgittag-01-planning-backlog-md-add-a-publication-kind-for |
 | 261123-gti | HOOKASYNCRESUME-01: stop repeating an unchanged async SessionStart answer on resume or fork | 2026-11-23 | c099652 | — | .planning/quick/261123-gti-hookasyncresume-01-planning-backlog-md-an-async-sessionstart |
 | 261123-jdc | HOOKLATESS-01: run SessionStart for plugins that autoapply adds in headless modes | 2026-11-23 | 4df8c22 | passed | [261123-jdc-hooklatess-01-late-sessionstart-for-plug](./quick/261123-jdc-hooklatess-01-late-sessionstart-for-plug/) |
+| 261123-qru | Add /claude:plugin reload and word reload hints for the host that shows them | 2026-11-23 | 5ec2fdf | passed | .planning/quick/261123-qru-add-claude-plugin-reload-and-the-sessionful-predicate-planni |
+| 261123-qrv | Reload pi over RPC with /claude:plugin reload instead of starting a new session | 2026-11-23 | 6e06697 | passed | .planning/quick/261123-qrv-rpc-tests-reload-instead-of-starting-a-new-session-planning |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
