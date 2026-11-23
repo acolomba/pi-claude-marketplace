@@ -4630,6 +4630,22 @@ function routeCompactionHooks(runtime: HooksRuntime, cwd: string): void {
   }
 }
 
+// Whether `value` is the compaction leg's delivery hint (HKRL-03).
+function isDeliveryHint(value: unknown): value is () => boolean {
+  return typeof value === "function";
+}
+
+// The event a hook reads, with the compaction leg's delivery hint answered
+// (HKRL-03), so a log of it compares as data.
+function withDeliveryHintRead(event: unknown): unknown {
+  return typeof event === "object" &&
+    event !== null &&
+    "nextCallReadsSteer" in event &&
+    isDeliveryHint(event.nextCallReadsSteer)
+    ? { ...event, nextCallReadsSteer: event.nextCallReadsSteer() }
+    : event;
+}
+
 test("session_compact runs SessionStart with source compact to completion, then PostCompact (D-CF5-04)", async (t) => {
   // arrange
   const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-");
@@ -4639,7 +4655,7 @@ test("session_compact runs SessionStart with source compact to completion, then 
   await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
     cwd: root,
     executor: async (entry, event) => {
-      log.push({ start: entry.claudeEvent, event });
+      log.push({ start: entry.claudeEvent, event: withDeliveryHintRead(event) });
       await new Promise((resolve) => setImmediate(resolve));
       log.push({ end: entry.claudeEvent });
       return { kind: "noop" };
@@ -4657,7 +4673,7 @@ test("session_compact runs SessionStart with source compact to completion, then 
   // assert
   assert.strictEqual(update, undefined);
   assert.deepStrictEqual(log, [
-    { start: "SessionStart", event: { source: "compact", nextCallInRun: false } },
+    { start: "SessionStart", event: { source: "compact", nextCallReadsSteer: false } },
     { end: "SessionStart" },
     { start: "PostCompact", event },
     { end: "PostCompact" },
@@ -4801,32 +4817,168 @@ test("session_compact dispatches nothing when the generation goes stale while it
   );
 });
 
+// A reply that ends its turn with a tool call, so Pi calls the model again
+// for the tool results.
+const TOOL_CALL_REPLY = {
+  role: "assistant",
+  content: [{ type: "toolCall", id: "call-1", name: "bash", arguments: {} }],
+  stopReason: "toolUse",
+} as const;
+
+// A reply that ends its turn with text, so the run reads a queued follow-up.
+const TEXT_REPLY = {
+  role: "assistant",
+  content: [{ type: "text", text: "Done." }],
+  stopReason: "stop",
+} as const;
+
+// A reply that a context overflow ended, so Pi ends the run and may retry it.
+const OVERFLOW_REPLY = {
+  role: "assistant",
+  content: [],
+  stopReason: "error",
+} as const;
+
+// A queued user message with `text`, as Pi queues a steer or a follow-up.
+function queuedUserMessage(text: string): unknown {
+  return { role: "user", content: [{ type: "text", text }] };
+}
+
 /** The Pi events of an agent run that come before a compaction in a delivery row. */
 const RUN_EVENTS = {
   turn_start: { type: "turn_start" },
-  turn_end: {
-    type: "turn_end",
-    message: { role: "assistant", content: [{ type: "text", text: "Done." }], stopReason: "stop" },
-    context: { pendingMessages: [] },
-  },
+  turn_end: { type: "turn_end", message: TEXT_REPLY, context: { pendingMessages: [] } },
   turn_end_with_queued_message: {
     type: "turn_end",
-    message: { role: "assistant", content: [{ type: "text", text: "Done." }], stopReason: "stop" },
+    message: TEXT_REPLY,
+    context: { pendingMessages: [queuedUserMessage("queued prompt")] },
+  },
+  turn_end_with_queued_follow_up: {
+    type: "turn_end",
+    message: TEXT_REPLY,
+    context: { pendingMessages: [queuedUserMessage("also say hi")] },
+  },
+  turn_end_with_hook_context: {
+    type: "turn_end",
+    message: TEXT_REPLY,
     context: {
-      pendingMessages: [{ role: "user", content: [{ type: "text", text: "queued prompt" }] }],
+      pendingMessages: [
+        {
+          role: "custom",
+          customType: "claude-hook-additional-context",
+          content: [{ type: "text", text: "UserPromptSubmit hook additional context: held" }],
+          display: false,
+        },
+      ],
     },
+  },
+  tool_turn_end_with_tool_context: {
+    type: "turn_end",
+    message: TOOL_CALL_REPLY,
+    context: {
+      pendingMessages: [
+        {
+          role: "custom",
+          customType: "claude-hook-tool-context",
+          content: "PostToolUse:Bash hook additional context: checked",
+          display: false,
+        },
+      ],
+    },
+  },
+  tool_turn_end_with_other_message: {
+    type: "turn_end",
+    message: TOOL_CALL_REPLY,
+    context: {
+      pendingMessages: [
+        { role: "custom", customType: "other-extension-context", content: "x", display: false },
+      ],
+    },
+  },
+  tool_turn_end_with_queued_follow_up: {
+    type: "turn_end",
+    message: TOOL_CALL_REPLY,
+    context: { pendingMessages: [queuedUserMessage("also say hi")] },
+  },
+  tool_turn_end_with_two_queued_follow_ups: {
+    type: "turn_end",
+    message: TOOL_CALL_REPLY,
+    context: {
+      pendingMessages: [queuedUserMessage("also say hi"), queuedUserMessage("also say hi")],
+    },
+  },
+  overflow_turn_end: {
+    type: "turn_end",
+    message: OVERFLOW_REPLY,
+    context: { pendingMessages: [] },
+  },
+  overflow_turn_end_with_queued_message: {
+    type: "turn_end",
+    message: OVERFLOW_REPLY,
+    context: { pendingMessages: [queuedUserMessage("queued prompt")] },
+  },
+  overflow_turn_end_with_queued_follow_up: {
+    type: "turn_end",
+    message: OVERFLOW_REPLY,
+    context: { pendingMessages: [queuedUserMessage("also say hi")] },
+  },
+  follow_up_input: {
+    type: "input",
+    text: "also say hi",
+    source: "interactive",
+    streamingBehavior: "followUp",
+  },
+  steer_input: {
+    type: "input",
+    text: "also say hi",
+    source: "interactive",
+    streamingBehavior: "steer",
   },
   agent_end: { type: "agent_end", messages: [] },
 } as const;
+
+// The handler of a run event of a delivery row: an input goes to the bridge's
+// last `input` subscription, which tells the run phase what Pi queues.
+function runEventHandler(
+  registrations: readonly RecordedRegistration[],
+  runEvent: keyof typeof RUN_EVENTS,
+): (...args: unknown[]) => unknown {
+  const { type } = RUN_EVENTS[runEvent];
+  return registeredHandler(registrations, type, type === "input" ? 2 : 0);
+}
 
 for (const { title, before, reason, willRetry, options } of [
   {
     title:
       "steers the SessionStart context of an overflow compaction into the retried model call (HKRL-03)",
-    before: [],
+    before: ["overflow_turn_end", "agent_end"],
     reason: "overflow",
     willRetry: true,
     options: { deliverAs: "steer" },
+  },
+  {
+    title:
+      "holds the SessionStart context of an overflow compaction while a queued message waits ahead of the retry (HKRL-03)",
+    before: ["overflow_turn_end_with_queued_message", "agent_end"],
+    reason: "overflow",
+    willRetry: true,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "steers the SessionStart context of an overflow compaction while only a follow-up waits (HKRL-03)",
+    before: ["follow_up_input", "overflow_turn_end_with_queued_follow_up", "agent_end"],
+    reason: "overflow",
+    willRetry: true,
+    options: { deliverAs: "steer" },
+  },
+  {
+    title:
+      "holds the SessionStart context of an overflow compaction after the user steers the run (HKRL-03)",
+    before: ["overflow_turn_end", "agent_end", "steer_input"],
+    reason: "overflow",
+    willRetry: true,
+    options: { triggerTurn: false },
   },
   {
     title: "holds the SessionStart context of a manual compaction for the next prompt (HKRL-03)",
@@ -4850,6 +5002,118 @@ for (const { title, before, reason, willRetry, options } of [
     reason: "threshold",
     willRetry: false,
     options: { triggerTurn: false },
+  },
+  {
+    title:
+      "holds the SessionStart context of a compaction before a queued follow-up's turn to that turn's end (HKRL-03)",
+    before: ["follow_up_input", "turn_end_with_queued_follow_up"],
+    reason: "threshold",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "steers the SessionStart context of a compaction after a turn whose held hook context Pi appends at the turn end (HKRL-03)",
+    before: ["turn_end_with_hook_context"],
+    reason: "threshold",
+    willRetry: false,
+    options: { deliverAs: "steer" },
+  },
+  {
+    title:
+      "steers the SessionStart context of a compaction after a tool call whose held tool context Pi appends at the turn end (HKRL-03)",
+    before: ["tool_turn_end_with_tool_context"],
+    reason: "threshold",
+    willRetry: false,
+    options: { deliverAs: "steer" },
+  },
+  {
+    title:
+      "holds the SessionStart context of a compaction after a tool call while another extension's message waits (HKRL-03)",
+    before: ["tool_turn_end_with_other_message"],
+    reason: "threshold",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "steers the SessionStart context of a compaction after a tool call while a follow-up waits, as the tool results take the next call (HKRL-03)",
+    before: ["follow_up_input", "tool_turn_end_with_queued_follow_up"],
+    reason: "threshold",
+    willRetry: false,
+    options: { deliverAs: "steer" },
+  },
+  {
+    title:
+      "holds the SessionStart context of a compaction after a tool call while a message that no follow-up input gave waits (HKRL-03)",
+    before: ["tool_turn_end_with_queued_follow_up"],
+    reason: "threshold",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "holds the SessionStart context of a compaction after a tool call while more queued messages wait than follow-up inputs gave (HKRL-03)",
+    before: ["follow_up_input", "tool_turn_end_with_two_queued_follow_ups"],
+    reason: "threshold",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "steers the SessionStart context of a compaction after a tool call while two follow-ups wait (HKRL-03)",
+    before: ["follow_up_input", "follow_up_input", "tool_turn_end_with_two_queued_follow_ups"],
+    reason: "threshold",
+    willRetry: false,
+    options: { deliverAs: "steer" },
+  },
+  {
+    title:
+      "keeps a follow-up waiting after a tool call, so a compaction after the next tool call steers the SessionStart context (HKRL-03)",
+    before: [
+      "follow_up_input",
+      "tool_turn_end_with_queued_follow_up",
+      "tool_turn_end_with_queued_follow_up",
+    ],
+    reason: "threshold",
+    willRetry: false,
+    options: { deliverAs: "steer" },
+  },
+  {
+    title:
+      "counts a follow-up the run read as gone, so the same text queued later holds the SessionStart context (HKRL-03)",
+    before: [
+      "follow_up_input",
+      "turn_end_with_queued_follow_up",
+      "tool_turn_end_with_queued_follow_up",
+    ],
+    reason: "threshold",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "forgets the follow-up inputs of an ended run, so the same text queued later holds the SessionStart context (HKRL-03)",
+    before: ["follow_up_input", "agent_end", "tool_turn_end_with_queued_follow_up"],
+    reason: "threshold",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "holds the SessionStart context of a compaction between two turns after the user steers the run (HKRL-03)",
+    before: ["turn_end", "steer_input"],
+    reason: "threshold",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "steers the SessionStart context of a compaction between two turns after the user queues a follow-up (HKRL-03)",
+    before: ["turn_end", "follow_up_input"],
+    reason: "threshold",
+    willRetry: false,
+    options: { deliverAs: "steer" },
   },
   {
     title:
@@ -4891,10 +5155,7 @@ for (const { title, before, reason, willRetry, options } of [
     routeCompactionHooks(runtime, root);
     const context = makeContext(root, root);
     for (const runEvent of before) {
-      await registeredHandler(registrations, RUN_EVENTS[runEvent].type)(
-        RUN_EVENTS[runEvent],
-        context,
-      );
+      await runEventHandler(registrations, runEvent)(RUN_EVENTS[runEvent], context);
     }
 
     // act
@@ -4919,6 +5180,46 @@ for (const { title, before, reason, willRetry, options } of [
     ]);
   });
 }
+
+test("holds the SessionStart context of a compaction between two turns when the user steers while the hook runs (HKRL-03)", async (t) => {
+  // arrange
+  const { root } = await createHermeticEnvironment(t, "hooks-router-compaction-late-steer-");
+  const runtime = createHooksRuntime();
+  const { pi, registrations, messages } = makeRecordingPi();
+  const context = makeContext(root, root);
+  await createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
+    cwd: root,
+    executor: async (entry) => {
+      if (entry.claudeEvent !== "SessionStart") {
+        return { kind: "noop" };
+      }
+
+      await runEventHandler(registrations, "steer_input")(RUN_EVENTS.steer_input, context);
+      return { kind: "mutate", additionalContext: "compact context" };
+    },
+  });
+  routeCompactionHooks(runtime, root);
+  await runEventHandler(registrations, "turn_end")(RUN_EVENTS.turn_end, context);
+
+  // act
+  await registeredHandler(registrations, "session_compact")(
+    { ...compactionEvent("late steer summary"), reason: "threshold" },
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(messages, [
+    {
+      message: {
+        customType: "claude-hook-additional-context",
+        content: [{ type: "text", text: "SessionStart hook additional context: compact context" }],
+        display: false,
+        details: { event: "SessionStart", values: ["compact context"] },
+      },
+      options: { triggerTurn: false },
+    },
+  ]);
+});
 
 test("starts a new registration's run idle, so its compaction holds the SessionStart context (HKRL-03)", async (t) => {
   // arrange

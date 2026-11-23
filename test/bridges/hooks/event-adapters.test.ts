@@ -143,14 +143,18 @@ interface SessionStartDispatch {
   readonly values: readonly string[];
 }
 
-// `nextCallInRun` stands for the compaction leg's delivery hint (HKRL-03).
+// `nextCallReadsSteer` stands for the answer of the compaction leg's
+// delivery hint (HKRL-03).
 function sessionStartDispatch(
   source: SessionStartSource,
   values: readonly string[],
-  nextCallInRun?: boolean,
+  nextCallReadsSteer?: boolean,
 ): SessionStartDispatch {
   return {
-    event: nextCallInRun === undefined ? { source } : { source, nextCallInRun },
+    event:
+      nextCallReadsSteer === undefined
+        ? { source }
+        : { source, nextCallReadsSteer: () => nextCallReadsSteer },
     values,
   };
 }

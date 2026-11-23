@@ -13,8 +13,9 @@
 // fork made by this launch is `fork`, a session that holds messages is
 // `resume`, and any other is `startup` (D-PG6-14, D-PG6-15). Pi `reload` runs
 // no SessionStart (D-CF5-03), so it is not an input here. The compaction
-// handler sends `compact` itself (D-CF5-04), with the hint `nextCallInRun`
-// that says whether a model call of the running agent follows it (HKRL-03).
+// handler sends `compact` itself (D-CF5-04), with the hint
+// `nextCallReadsSteer` that says, when the hooks finish, whether the running
+// agent's next model call reads a steer (HKRL-03).
 // The active model's id and the session's name follow `source`, each left
 // out when Pi has none, as Claude Code marks both optional (D-PG6-09).
 
@@ -26,12 +27,12 @@ import type { TranslationContext } from "../translation-context.ts";
 export interface ClaudeSessionStartEvent {
   readonly source: SessionStartSource;
   /**
-   * HKRL-03: set by the compaction leg when the next model call of the
-   * running agent follows the compaction, so the context is steered into
-   * that call. Dispatch never matches on it, and `translateSessionStart`
-   * never writes it to stdin.
+   * HKRL-03: set by the compaction leg. Called when the hooks finish, it says
+   * whether the running agent's next model call reads a steer sent then, so
+   * the context is steered into that call. Dispatch never matches on it, and
+   * `translateSessionStart` never writes it to stdin.
    */
-  readonly nextCallInRun?: boolean;
+  readonly nextCallReadsSteer?: () => boolean;
 }
 
 /** The JSON a SessionStart hook reads on stdin. */

@@ -521,6 +521,104 @@ Feature: Hook additional context
       | tool result | bash returned: from-model\n                                                                                                                                                             |
       | user        | SessionStart hook additional context: compact-ctx                                                                                                                                       |
 
+  Scenario: A compaction after a tool call whose hook added context gives the compact context to the next model call
+    Given pi keeps only one recent token when the hooks session compacts
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event        | matcher | form   | output                                                                                       |
+      | recap | SessionStart | compact | script | {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"compact-ctx"}}    |
+      | check | PostToolUse  | Bash    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"checked by hook"}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply      | tool | arguments                      | context tokens |
+      |            | bash | {"command": "echo from-model"} | 120000         |
+      | Summary A. |      |                                |                |
+      | Done.      |      |                                |                |
+    When the user prompts "hello"
+    Then the model call 3 receives these messages:
+      | role | text                                                                                                                      |
+      | user | The conversation history before this point was compacted into the following summary:\n\n<summary>\nSummary A.\n</summary> |
+      | user | PostToolUse:Bash hook additional context: checked by hook                                                                 |
+      | user | SessionStart hook additional context: compact-ctx                                                                         |
+
+  Scenario: A compaction after a tool call while a follow-up waits gives the compact context to the next model call
+    Given pi keeps only one recent token when the hooks session compacts
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event        | matcher | form   | output                                                                                    |
+      | recap | SessionStart | compact | script | {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"compact-ctx"}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply      | tool | arguments                                 | context tokens |
+      |            | bash | {"command": "sleep 3 && echo from-model"} | 120000         |
+      | Summary A. |      |                                           |                |
+      | Done.      |      |                                           |                |
+      | Hi.        |      |                                           |                |
+    When the user prompts "run the echo" and follows up with "also say hi" while the tool runs
+    Then the model call 3 receives these messages:
+      | role        | text                                                                                                                                                                                    |
+      | user        | The conversation history before this point was compacted into the following summary:\n\n<summary>\nNo prior history.\n\n---\n\n**Turn Context (split turn):**\n\nSummary A.\n</summary> |
+      | assistant   | tool call bash {"command":"sleep 3 && echo from-model"}                                                                                                                                 |
+      | tool result | bash returned: from-model\n                                                                                                                                                             |
+      | user        | SessionStart hook additional context: compact-ctx                                                                                                                                       |
+    Then the model call 4 receives these messages:
+      | role        | text                                                                                                                                                                                    |
+      | user        | The conversation history before this point was compacted into the following summary:\n\n<summary>\nNo prior history.\n\n---\n\n**Turn Context (split turn):**\n\nSummary A.\n</summary> |
+      | assistant   | tool call bash {"command":"sleep 3 && echo from-model"}                                                                                                                                 |
+      | tool result | bash returned: from-model\n                                                                                                                                                             |
+      | user        | SessionStart hook additional context: compact-ctx                                                                                                                                       |
+      | assistant   | Done.                                                                                                                                                                                   |
+      | user        | also say hi                                                                                                                                                                             |
+
+  Scenario: A compaction after a tool call while a steer waits keeps the compact context without another model call
+    Given pi keeps only one recent token when the hooks session compacts
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event        | matcher | form   | output                                                                                    |
+      | recap | SessionStart | compact | script | {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"compact-ctx"}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply      | tool | arguments                                 | context tokens |
+      |            | bash | {"command": "sleep 3 && echo from-model"} | 120000         |
+      | Summary A. |      |                                           |                |
+      | Done.      |      |                                           |                |
+      | Next.      |      |                                           |                |
+    When the user prompts "run the echo" and steers with "also say hi" while the tool runs
+    Then the model call 3 receives these messages:
+      | role        | text                                                                                                                                                                                    |
+      | user        | The conversation history before this point was compacted into the following summary:\n\n<summary>\nNo prior history.\n\n---\n\n**Turn Context (split turn):**\n\nSummary A.\n</summary> |
+      | assistant   | tool call bash {"command":"sleep 3 && echo from-model"}                                                                                                                                 |
+      | tool result | bash returned: from-model\n                                                                                                                                                             |
+      | user        | also say hi                                                                                                                                                                             |
+    When the user prompts "next"
+    Then the model call 4 receives these messages:
+      | role        | text                                                                                                                                                                                    |
+      | user        | The conversation history before this point was compacted into the following summary:\n\n<summary>\nNo prior history.\n\n---\n\n**Turn Context (split turn):**\n\nSummary A.\n</summary> |
+      | assistant   | tool call bash {"command":"sleep 3 && echo from-model"}                                                                                                                                 |
+      | tool result | bash returned: from-model\n                                                                                                                                                             |
+      | user        | also say hi                                                                                                                                                                             |
+      | assistant   | Done.                                                                                                                                                                                   |
+      | user        | SessionStart hook additional context: compact-ctx                                                                                                                                       |
+      | user        | next                                                                                                                                                                                    |
+
   Scenario: A compaction before a queued follow-up's turn keeps the compact context without another model call
     Given pi keeps only one recent token when the hooks session compacts
     Given pi runs with the scripted model

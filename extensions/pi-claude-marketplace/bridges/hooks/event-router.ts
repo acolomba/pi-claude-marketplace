@@ -79,11 +79,17 @@ import {
   shutdownInMemoryChildren,
 } from "./async-rewake/registry.ts";
 import { resolveChildRootSession } from "./child-root-session.ts";
-import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
 import {
+  compositeHandlerFor,
+  TOOL_CONTEXT_CUSTOM_TYPE,
+  toolResultCompositeHandler,
+} from "./dispatch.ts";
+import {
+  endsTheWork,
   HOOK_CONTEXT_MESSAGE_TYPE,
   hookContextPart,
   sendDueFollowUpContext,
+  userMessageText,
 } from "./event-adapters.ts";
 import { FILE_SYSTEM_SWEEP_OPS, sweepHookOutput } from "./hook-output-files.ts";
 import { compileIfPredicate, MATCH_ALL_IF } from "./if-field/index.ts";
@@ -115,6 +121,7 @@ import {
 import type { ResolvedOptions } from "../../domain/user-config.ts";
 import type {
   AgentEndEvent,
+  AgentMessage,
   BeforeAgentStartEvent,
   BeforeAgentStartEventResult,
   ExtensionAPI,
@@ -625,12 +632,101 @@ type GenerationGuard = () => boolean;
 
 /**
  * Where Pi's agent loop is (HKRL-03): idle, inside a model turn, or between
- * two turns of a run, where the run's next model call is still to come and
- * reads a steer. A turn that ends with a steer or a follow-up queued counts
- * as `turn`: Pi gives that message the next model call and polls a steer only
- * after it.
+ * two turns of a run, where the run's next model call is still to come. A
+ * turn that ends the work with a message queued counts as `turn`: Pi gives
+ * that message the next model call and reads a steer only after it.
  */
 type RunPhase = "idle" | "turn" | "between";
+
+/**
+ * HKRL-03: whether the next model call of the run reads a context steered at
+ * a compaction now, moved by Pi's run events. Pi 1.5.1's `runLoop` reads its
+ * steering queue after a turn ends and, when that read finds nothing, again
+ * after the preparation that compacts; the retry after an overflow reads it
+ * first. So the next call reads the steer when no steer waits ahead of it and,
+ * between two turns, no follow-up takes the call.
+ */
+interface RunPhaseTracker {
+  readonly turnStarted: () => void;
+  readonly turnEnded: (turn: FollowUpTurnEnd) => void;
+  readonly inputQueued: (event: InputEvent) => void;
+  readonly runEnded: () => void;
+  readonly nextCallReadsSteer: (willRetry: boolean) => boolean;
+}
+
+// HKRL-03: a custom message this bridge sends with `triggerTurn: false`. Pi
+// appends it to the session at the turn end, so it takes no model call.
+function isHeldHookContext(message: AgentMessage): boolean {
+  return (
+    message.role === "custom" &&
+    (message.customType === TOOL_CONTEXT_CUSTOM_TYPE ||
+      message.customType === HOOK_CONTEXT_MESSAGE_TYPE)
+  );
+}
+
+// HKRL-03: the follow-up texts left once each queued message takes one, or
+// undefined when a queued message is not a follow-up that an input queued.
+// Pi's `pendingMessages` holds the queued steers, else the queued follow-ups,
+// with nothing that tells the two apart; a queued text that no follow-up
+// input gave, as a steer's or an expanded template's, counts as a steer.
+function remainingFollowUps(
+  followUps: readonly string[],
+  queued: readonly AgentMessage[],
+): readonly string[] | undefined {
+  let rest = followUps;
+  for (const message of queued) {
+    const text = userMessageText(message);
+    const index = text === undefined ? -1 : rest.indexOf(text);
+    if (index < 0) {
+      return undefined;
+    }
+
+    rest = [...rest.slice(0, index), ...rest.slice(index + 1)];
+  }
+
+  return rest;
+}
+
+/**
+ * HKRL-03: one registration's run phase. At a turn end, a queued message
+ * that is not a follow-up waits ahead of a steer, and queued follow-ups take
+ * the next call when the turn ends the work, which also reads them; after a
+ * tool call the call for its results comes first and reads the steer. A
+ * steer input waits ahead of a steer sent after it. A follow-up input keeps
+ * its text until the run reads that follow-up or ends.
+ */
+function createRunPhaseTracker(): RunPhaseTracker {
+  let phase: RunPhase = "idle";
+  let steerWaits = false;
+  let followUps: readonly string[] = [];
+  return {
+    turnStarted: () => {
+      phase = "turn";
+    },
+    turnEnded: (turn) => {
+      const queued = turn.context.pendingMessages.filter((message) => !isHeldHookContext(message));
+      const rest = remainingFollowUps(followUps, queued);
+      const readsQueued = queued.length > 0 && endsTheWork(turn.message);
+      steerWaits = rest === undefined;
+      phase = readsQueued ? "turn" : "between";
+      if (readsQueued && rest !== undefined) {
+        followUps = rest;
+      }
+    },
+    inputQueued: (event) => {
+      if (event.streamingBehavior === "followUp") {
+        followUps = [...followUps, event.text];
+      }
+
+      steerWaits ||= event.streamingBehavior === "steer";
+    },
+    runEnded: () => {
+      phase = "idle";
+      followUps = [];
+    },
+    nextCallReadsSteer: (willRetry) => !steerWaits && (willRetry || phase === "between"),
+  };
+}
 
 /**
  * The hooks bridge's read port: the one filesystem read both the routing and
@@ -1249,10 +1345,10 @@ function sessionShutdownCallback(
  * The SessionStart leg of a compaction (D-CF5-04): it prepares the shared
  * data directories, as the `session_start` path does, so the compaction
  * SessionStart gets its `CLAUDE_ENV_FILE` too, then runs the SessionStart
- * composite with `source: "compact"` to completion. `nextCallInRun` says
- * whether a model call of the running agent follows the compaction; the
- * adapter then steers the context in, so the retry after an overflow
- * compaction reads it (HKRL-03). A failure is debug-logged and never thrown
+ * composite with `source: "compact"` to completion. `nextCallReadsSteer`
+ * says, when the hooks finish, whether the running agent's next model call
+ * reads a steer; the adapter then steers the context in, so that call reads
+ * it (HKRL-03). A failure is debug-logged and never thrown
  * out of Pi's event (NFR-2). Returns whether the generation is still
  * current, so a stale one stops the compaction's dispatch.
  */
@@ -1261,7 +1357,7 @@ async function runCompactionSessionStart(
   routingState: EventRouterRoutingState,
   ctx: ExtensionContext,
   generationIsCurrent: GenerationGuard,
-  nextCallInRun: boolean,
+  nextCallReadsSteer: () => boolean,
 ): Promise<boolean> {
   try {
     if (!(await prepareSessionStartDataDirs(routingState, ctx, generationIsCurrent))) {
@@ -1269,7 +1365,7 @@ async function runCompactionSessionStart(
     }
 
     requireNotificationMode(ctx.mode);
-    await sessionStartHandler({ source: "compact", nextCallInRun }, ctx);
+    await sessionStartHandler({ source: "compact", nextCallReadsSteer }, ctx);
   } catch (err) {
     hookDebugLog(`session_compact SessionStart skipped: ${errorMessage(err)}`);
   }
@@ -1283,10 +1379,12 @@ async function runCompactionSessionStart(
  * as upstream in main sessions. Child sessions dispatch neither event. The
  * compaction SessionStart never passes the SSDEDUP-01 guard of
  * `session_start`, so each main-session compaction runs it again. The
- * retry after an overflow compaction (`willRetry`) and the next model call
- * after a compaction between two turns (`betweenTurns`) read the steered
- * SessionStart context (HKRL-03). A context whose mode is not a notification
- * mode is skipped with a debug line before the event is read.
+ * SessionStart context is steered into the run when the retry after an
+ * overflow compaction (`willRetry`) or the next model call after a
+ * compaction between two turns reads the steer first, as
+ * `nextCallReadsSteer` decides when the hooks finish (HKRL-03). A context
+ * whose mode is not a notification mode is skipped with a debug line before
+ * the event is read.
  */
 function sessionCompactCallback(
   handlers: {
@@ -1295,7 +1393,7 @@ function sessionCompactCallback(
   },
   routingState: EventRouterRoutingState,
   generationIsCurrent: GenerationGuard,
-  betweenTurns: () => boolean,
+  nextCallReadsSteer: (willRetry: boolean) => boolean,
 ): (event: SessionCompactEvent, ctx: ExtensionContext) => Promise<undefined> {
   return async (event, ctx) => {
     try {
@@ -1315,7 +1413,7 @@ function sessionCompactCallback(
         routingState,
         ctx,
         generationIsCurrent,
-        event.willRetry || betweenTurns(),
+        () => nextCallReadsSteer(event.willRetry),
       ))
     ) {
       return undefined;
@@ -1341,8 +1439,8 @@ function sessionCompactCallback(
  *      (DISP-01) plus `before_agent_start` (the drain point for the
  *      prompt `additionalContext` buffer) plus `turn_start` (marks a model
  *      turn, HKRL-03) plus `turn_end` (sends the context of a queued
- *      follow-up, D-CF5-13, and, with nothing queued, marks the run
- *      between two turns) plus the
+ *      follow-up, D-CF5-13, and marks the run between two turns unless a
+ *      queued message takes the next model call) plus the
  *      three turn-boundary surfaces `agent_end` (caches the run's
  *      last-assistant message and marks the agent idle),
  *      `agent_before_settle` (runs the Stop bucket on a `stop`
@@ -1352,7 +1450,8 @@ function sessionCompactCallback(
  *      subscription right after the UserPromptSubmit one (the
  *      UserPromptExpansion dispatch for a line `opts.resolveTypedExpansion`
  *      names, D-PG6-18) plus a THIRD `input` subscription (the STOP-07
- *      loop-protection reset, distinct from both dispatch handlers). The eight
+ *      loop-protection reset, distinct from both dispatch handlers, which
+ *      also tells the run phase of a queued steer or follow-up). The eight
  *      per-Pi-event Claude buckets fan out from 7 Pi event surfaces because
  *      `tool_result` splits on `event.isError` between the PostToolUse and
  *      PostToolUseFailure buckets (D-59-01); the Stop / StopFailure buckets
@@ -1558,10 +1657,10 @@ async function registerHooksBridgeWith(
         dispatchesInCurrentSession("PreCompact") ? handler(event, ctx) : undefined;
     }),
   );
-  // HKRL-03: where Pi's agent loop is, so a compaction knows whether a model
-  // call of the run follows it. `turn_start`, `turn_end`, and `agent_end`
-  // below move it.
-  let runPhase: RunPhase = "idle";
+  // HKRL-03: where Pi's agent loop is, so a compaction knows whether the
+  // run's next model call reads a steer. `turn_start`, `turn_end`,
+  // `agent_end`, and the last `input` subscription below move it.
+  const runPhase = createRunPhaseTracker();
   pi.on(
     "session_compact",
     bind((generation) =>
@@ -1572,7 +1671,7 @@ async function registerHooksBridgeWith(
         },
         routingState,
         generationIsCurrent,
-        () => runPhase === "between",
+        runPhase.nextCallReadsSteer,
       ),
     ),
   );
@@ -1629,20 +1728,20 @@ async function registerHooksBridgeWith(
   pi.on(
     "turn_start",
     bindWithMode(() => () => {
-      runPhase = "turn";
+      runPhase.turnStarted();
       return undefined;
     }),
   );
   // The context of a queued follow-up goes out at the turn end after which
   // the agent reads that follow-up (D-CF5-13). The run now sits between two
-  // turns until the next `turn_start` or `agent_end` (HKRL-03). A queued
-  // steer or follow-up takes the next model call, and Pi polls a steer only
-  // after that call, so a context steered now would force one more call; the
-  // phase stays `turn`, which holds the context to that turn's end.
+  // turns until the next `turn_start` or `agent_end`, unless a queued
+  // message takes the next model call (HKRL-03): Pi reads a steer only after
+  // that call, so a context steered now would force one more call, and the
+  // context is held to that turn's end instead.
   pi.on(
     "turn_end",
     bindWithMode(() => (event: FollowUpTurnEnd) => {
-      runPhase = event.context.pendingMessages.length === 0 ? "between" : "turn";
+      runPhase.turnEnded(event);
       sendDueFollowUpContext(event, runtime, pi);
       return Promise.resolve(undefined);
     }),
@@ -1659,7 +1758,7 @@ async function registerHooksBridgeWith(
     bindWithMode((generation) => {
       const cacheLastAssistant = agentEndCacheHandler(runtime, generation);
       return (event: AgentEndEvent) => {
-        runPhase = "idle";
+        runPhase.runEnded();
         cacheLastAssistant(event);
       };
     }),
@@ -1691,10 +1790,19 @@ async function registerHooksBridgeWith(
   // Stop re-entry flag and resets the consecutive-block counter + one-shot cap
   // latch on a genuine user input. A Stop continuation does NOT pass through
   // `input`, so the flag never self-clears. The woken mark of
-  // an async rewake ends at the next run start instead (D-BG-210).
+  // an async rewake ends at the next run start instead (D-BG-210). The
+  // subscription also tells the run phase which steer or follow-up Pi
+  // queues next (HKRL-03); it runs last of the bridge's `input` handlers,
+  // after the ones that can stop the input.
   pi.on(
     "input",
-    bindWithMode((generation) => inputResetHandlerFor(runtime, generation)),
+    bindWithMode((generation) => {
+      const resetLoopProtection = inputResetHandlerFor(runtime, generation);
+      return (event: InputEvent) => {
+        runPhase.inputQueued(event);
+        resetLoopProtection();
+      };
+    }),
   );
 }
 

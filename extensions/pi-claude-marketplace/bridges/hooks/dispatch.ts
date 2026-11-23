@@ -875,7 +875,7 @@ function showHookNotices(
  * prompt and session context type and from the Stop and async-rewake
  * re-entry types, so each carrier stays separable in the transcript.
  */
-const TOOL_CONTEXT_CUSTOM_TYPE = "claude-hook-tool-context" as const;
+export const TOOL_CONTEXT_CUSTOM_TYPE = "claude-hook-tool-context" as const;
 
 /**
  * D-CF5-13: send the folded `additionalContext` of a PreToolUse,

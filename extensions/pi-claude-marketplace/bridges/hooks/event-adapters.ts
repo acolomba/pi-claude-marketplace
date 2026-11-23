@@ -658,9 +658,11 @@ export interface FollowUpTurnEnd {
   readonly context: { readonly pendingMessages: readonly AgentMessage[] };
 }
 
-// Whether the agent stops working after `message` and so reads the next
-// follow-up: the turn ended without a tool call, an error, or an abort.
-function endsTheWork(message: AgentMessage): boolean {
+/**
+ * Whether the agent stops working after `message` and so reads the next
+ * follow-up: the turn ended without a tool call, an error, or an abort.
+ */
+export function endsTheWork(message: AgentMessage): boolean {
   if (message.role !== "assistant") {
     return false;
   }
@@ -672,8 +674,8 @@ function endsTheWork(message: AgentMessage): boolean {
   );
 }
 
-// The text of a queued user message, as Pi matches its queues by text.
-function userMessageText(message: AgentMessage | undefined): string | undefined {
+/** The text of a queued user message, as Pi matches its queues by text. */
+export function userMessageText(message: AgentMessage | undefined): string | undefined {
   if (message?.role !== "user") {
     return undefined;
   }
@@ -903,7 +905,7 @@ function sendSessionStartContext(
     sessionStartFailureLog(context.attributedTo),
     {
       details: { event: "SessionStart", values: sent },
-      steer: start.event.nextCallInRun === true,
+      steer: start.event.nextCallReadsSteer?.() === true,
     },
   );
 }

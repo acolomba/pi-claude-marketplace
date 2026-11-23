@@ -137,7 +137,10 @@ describe("translateSessionStart", () => {
     } satisfies TranslationContext;
 
     // act
-    const payload = translateSessionStart({ source: "compact", nextCallInRun: true }, context);
+    const payload = translateSessionStart(
+      { source: "compact", nextCallReadsSteer: () => true },
+      context,
+    );
 
     // assert
     assert.deepStrictEqual(payload, {
