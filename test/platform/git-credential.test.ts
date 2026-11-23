@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { writeFile } from "node:fs/promises";
+import path from "node:path";
 import { describe, test } from "node:test";
 
 import {
@@ -6,19 +8,16 @@ import {
   NODE_CREDENTIAL_GIT,
   type CredentialOps,
 } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
-import { NODE_GIT_PROCESS } from "../../extensions/pi-claude-marketplace/platform/git-process.ts";
 import { GitCommandError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import { registerCredentialOpsContract } from "./credential-ops-contract.ts";
 import { captureDebugLog } from "./debug-log-capture.ts";
+import { createHermeticEnvironment } from "./hermetic-environment.ts";
 
 import type { CredentialGit } from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
 import type * as GitCredentialPlatform from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
-import type {
-  GitRequest,
-  GitResult,
-} from "../../extensions/pi-claude-marketplace/platform/git-process.ts";
 import type { GitCredentials } from "../../extensions/pi-claude-marketplace/platform/git.ts";
+import type { TestContext } from "node:test";
 
 /** The timeout `orchestrators/auth-host.ts` binds into the production ops. */
 const DEFAULT_TIMEOUT_MS = 5_000;
@@ -37,29 +36,40 @@ void ({
   reject: () => Promise.resolve(),
 } satisfies CredentialOps);
 
-type GitAnswer = (request: GitRequest) => Promise<GitResult>;
+// WR-05: the port runs `git credential` only, so it takes no git request.
+// @ts-expect-error a clone request is not a credential action
+void ((git: CredentialGit) => git({ subcommand: "clone", lane: "network" }, "", 5_000));
+// @ts-expect-error only fill, approve, and reject run
+void ((git: CredentialGit) => git("erase", "", 5_000));
+
+interface CredentialRequest {
+  readonly action: Parameters<CredentialGit>[0];
+  readonly input: string;
+  readonly timeoutMs: number;
+}
+
+type GitAnswer = (request: CredentialRequest) => Promise<string>;
 
 interface RecordingGit {
   readonly git: CredentialGit;
-  readonly requests: GitRequest[];
+  readonly requests: CredentialRequest[];
 }
 
-// A git process that records each request and answers it with `answer`.
+// A credential runner that records each request and answers it with `answer`.
 function createGit(answer: GitAnswer): RecordingGit {
-  const requests: GitRequest[] = [];
+  const requests: CredentialRequest[] = [];
   return {
     requests,
-    git: {
-      run: (request) => {
-        requests.push(request);
-        return answer(request);
-      },
+    git: (action, input, timeoutMs) => {
+      const request = { action, input, timeoutMs };
+      requests.push(request);
+      return answer(request);
     },
   };
 }
 
-function exited(stdout: string): Promise<GitResult> {
-  return Promise.resolve({ exitCode: 0, stdout, stderr: "" });
+function exited(stdout: string): Promise<string> {
+  return Promise.resolve(stdout);
 }
 
 // What git rejects with when a credential action exits with 128.
@@ -90,13 +100,13 @@ function credentialsMatch(left: GitCredentials, right: GitCredentials): boolean 
 function createProductionCredentialOps(): CredentialOps {
   const credentials = new Map<string, GitCredentials>();
   const { git } = createGit((request) => {
-    const attributes = credentialAttributes(request.input ?? "");
+    const attributes = credentialAttributes(request.input);
     const host = attributes.host;
     if (attributes.protocol !== "https" || host === undefined) {
       throw new Error("git credential received an invalid attribute block");
     }
 
-    const [action] = request.options ?? [];
+    const { action } = request;
     if (action === "fill") {
       const credential = credentials.get(host);
       return credential === undefined
@@ -123,13 +133,49 @@ function createProductionCredentialOps(): CredentialOps {
   return createCredentialOps({ git, timeoutMs: DEFAULT_TIMEOUT_MS });
 }
 
+// Points this process's git at a user config whose credential helper answers
+// every lookup, with no system config, and restores the variables after `t`.
+async function answeringHelper(t: TestContext): Promise<void> {
+  const environment = await createHermeticEnvironment(t, "pi-cm-credential-git-");
+  const config = path.join(environment.root, "gitconfig");
+  await writeFile(
+    config,
+    '[credential]\n\thelper = "!f() { echo username=helper-user; echo password=helper-token; }; f"\n',
+  );
+  const previous = {
+    GIT_CONFIG_GLOBAL: process.env.GIT_CONFIG_GLOBAL,
+    GIT_CONFIG_NOSYSTEM: process.env.GIT_CONFIG_NOSYSTEM,
+  };
+  t.after(() => {
+    for (const [name, value] of Object.entries(previous)) {
+      if (value === undefined) {
+        Reflect.deleteProperty(process.env, name);
+      } else {
+        process.env[name] = value;
+      }
+    }
+  });
+  process.env.GIT_CONFIG_GLOBAL = config;
+  process.env.GIT_CONFIG_NOSYSTEM = "1";
+}
+
 describe("NODE_CREDENTIAL_GIT", () => {
-  test("D-SG-04: is the process's one production git process", () => {
+  test("D-SG-04, WR-05: runs git credential through this process's git", async (t) => {
+    // arrange
+    await answeringHelper(t);
+
     // act
-    const productionGit: unknown = NODE_CREDENTIAL_GIT;
+    const stdout = await NODE_CREDENTIAL_GIT(
+      "fill",
+      "protocol=https\nhost=pi-claude-marketplace.invalid\n\n",
+      10_000,
+    );
 
     // assert
-    assert.strictEqual(productionGit, NODE_GIT_PROCESS);
+    assert.strictEqual(
+      stdout,
+      "protocol=https\nhost=pi-claude-marketplace.invalid\nusername=helper-user\npassword=helper-token\n",
+    );
   });
 });
 
@@ -164,9 +210,7 @@ describe("createCredentialOps", () => {
     assert.deepStrictEqual(credential, { username: "x-access-token", password: "token-1" });
     assert.deepStrictEqual(requests, [
       {
-        subcommand: "credential",
-        options: ["fill"],
-        lane: "network",
+        action: "fill",
         input: "protocol=https\nhost=github.com\n\n",
         timeoutMs: DEFAULT_TIMEOUT_MS,
       },
@@ -220,9 +264,7 @@ describe("createCredentialOps", () => {
       // assert
       assert.deepStrictEqual(requests, [
         {
-          subcommand: "credential",
-          options: [action],
-          lane: "network",
+          action,
           input: "protocol=https\nhost=github.com\nusername=x-access-token\npassword=token-1\n\n",
           timeoutMs: DEFAULT_TIMEOUT_MS,
         },

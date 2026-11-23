@@ -73,9 +73,11 @@ const CREDENTIAL_TIMEOUT_MS = 5_000;
  * It is composed HERE rather than inside `platform/git-credential.ts` so that
  * module publishes only the protocol, its collaborators, and their production
  * bindings, and the one concrete composition lives with the other host-keyed
- * auth composition. This module reaches the git process only through
- * `NODE_CREDENTIAL_GIT`, because only `platform/git.ts` and
- * `platform/git-credential.ts` may import `platform/git-process.ts` (D-SG-01).
+ * auth composition. This module reaches git only through
+ * `NODE_CREDENTIAL_GIT`, which runs `git credential fill/approve/reject` and
+ * nothing else, because only `platform/git.ts` and
+ * `platform/git-credential.ts` may import `platform/git-process.ts` (D-SG-01,
+ * WR-05).
  * The call builds three closures and launches nothing; the first subprocess
  * starts when a verb actually calls fill/approve/reject.
  */

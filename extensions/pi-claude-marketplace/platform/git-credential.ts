@@ -1,8 +1,9 @@
 /**
  * AUTH-06 / AUTH-08 / AUTH-09. The CredentialOps surface speaks the
- * `git credential fill/approve/reject` protocol over an injected git process
- * (platform/git-process.ts). This module spawns nothing: the git process
- * module is the extension's sanctioned git spawn site (D-SG-01).
+ * `git credential fill/approve/reject` protocol over an injected credential
+ * runner, which runs git through platform/git-process.ts in production. This
+ * module spawns nothing: the git process module is the extension's sanctioned
+ * git spawn site (D-SG-01).
  *
  * REJECTED: `pi.exec` from @earendil-works/pi-coding-agent -- verified at
  * node_modules/@earendil-works/pi-coding-agent/dist/core/exec.js:15 to use
@@ -43,7 +44,6 @@ import { errorMessage } from "../shared/errors.ts";
 
 import { NODE_GIT_PROCESS } from "./git-process.ts";
 
-import type { GitProcess } from "./git-process.ts";
 import type { GitCredentials } from "./git.ts";
 
 /**
@@ -53,9 +53,9 @@ import type { GitCredentials } from "./git.ts";
  *   - approve: persist a credential to the OS keychain
  *   - reject: evict a credential from the OS keychain
  *
- * `createCredentialOps` takes its git process and its timeout as explicit
- * collaborators. `NODE_CREDENTIAL_GIT` is the git process that runs the real
- * `git credential fill/approve/reject`; the composition owner
+ * `createCredentialOps` takes its credential runner and its timeout as
+ * explicit collaborators. `NODE_CREDENTIAL_GIT` is the runner that starts the
+ * real `git credential fill/approve/reject`; the composition owner
  * (`orchestrators/auth-host.ts`) supplies it, and an alternate adapter
  * supplies its own.
  *
@@ -77,37 +77,29 @@ export interface CredentialOps {
   reject(host: string, cred: GitCredentials): Promise<void>;
 }
 
-/** The part of a git process the credential protocol uses. */
-export type CredentialGit = Pick<GitProcess, "run">;
-
 /**
- * The production git process of the credential protocol: the process's one
- * git process, so a credential lookup shares its git lookup with every other
- * git command (D-SG-04).
+ * WR-05, D-SG-01: runs `git credential <action>` with `input` on stdin, and
+ * nothing else. Resolves with stdout; rejects with a `GitCommandError` when
+ * the run failed, a non-zero exit included. The port takes no git request,
+ * so a module that may import this one cannot reach a clone, a fetch, or any
+ * other git command through it, and the GIT_PROCESS_IMPORTERS zone of
+ * eslint.config.js keeps its meaning.
  */
-export const NODE_CREDENTIAL_GIT: CredentialGit = NODE_GIT_PROCESS;
-
-export interface CreateCredentialOpsOptions {
-  /** The git process. `NODE_CREDENTIAL_GIT` in production. */
-  readonly git: CredentialGit;
-  /** Milliseconds before a pending `git credential` and its process tree are stopped. */
-  readonly timeoutMs: number;
-}
-
-type CredentialAction = "fill" | "approve" | "reject";
-
-/**
- * Runs `git credential <action>` with `input` on stdin in the neutral
- * directory. Resolves with stdout; rejects with a `GitCommandError` when the
- * run failed, a non-zero exit included.
- */
-async function gitCredentialIO(
-  action: CredentialAction,
+export type CredentialGit = (
+  action: "fill" | "approve" | "reject",
   input: string,
-  git: CredentialGit,
   timeoutMs: number,
-): Promise<string> {
-  const run = await git.run({
+) => Promise<string>;
+
+type CredentialAction = Parameters<CredentialGit>[0];
+
+/**
+ * The production credential runner: `git credential` on the network lane of
+ * the process's one git process, in the neutral directory, so a credential
+ * lookup shares its git lookup with every other git command (D-SG-04).
+ */
+export const NODE_CREDENTIAL_GIT: CredentialGit = async (action, input, timeoutMs) => {
+  const run = await NODE_GIT_PROCESS.run({
     subcommand: "credential",
     options: [action],
     lane: "network",
@@ -115,6 +107,13 @@ async function gitCredentialIO(
     timeoutMs,
   });
   return run.stdout;
+};
+
+export interface CreateCredentialOpsOptions {
+  /** The credential runner. `NODE_CREDENTIAL_GIT` in production. */
+  readonly git: CredentialGit;
+  /** Milliseconds before a pending `git credential` and its process tree are stopped. */
+  readonly timeoutMs: number;
 }
 
 /**
@@ -262,14 +261,14 @@ async function credentialReject(
 }
 
 /**
- * Bind a `CredentialOps` triple to one git process and one timeout.
+ * Bind a `CredentialOps` triple to one credential runner and one timeout.
  *
  * Construction performs no I/O: the three returned primitives close over the
- * git process and only run it when they are called.
+ * credential runner and only run it when they are called.
  */
 export function createCredentialOps(options: CreateCredentialOpsOptions): CredentialOps {
   const runGitCredential: RunGitCredential = (action, input) =>
-    gitCredentialIO(action, input, options.git, options.timeoutMs);
+    options.git(action, input, options.timeoutMs);
 
   return {
     fill: (host) => credentialFill(host, runGitCredential),

@@ -52,11 +52,9 @@ describe("DEFAULT_CREDENTIAL_OPS", () => {
   test("composes the platform credential protocol without launching a process", () => {
     // arrange
     const runs: unknown[] = [];
-    const git: CredentialGit = {
-      run: (request) => {
-        runs.push(request);
-        throw new Error("composing the default credential ops must not run git");
-      },
+    const git: CredentialGit = (action) => {
+      runs.push(action);
+      throw new Error("composing the default credential ops must not run git");
     };
 
     const composed = createCredentialOps({ git, timeoutMs: 5_000 });
