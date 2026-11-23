@@ -1,6 +1,7 @@
 /**
- * @fileoverview The system-git runner of the unit and integration suites and
- * the fixture repositories they build with it.
+ * @fileoverview The system-git runner of the unit and integration suites, the
+ * checkout handle their fixture and inspection sites share, and the fixture
+ * repositories they build with it.
  *
  * Every git here runs through `hermeticGitEnvironment` with a scratch HOME
  * made for that one call, so no fixture git reads the runner's git variables,
@@ -9,7 +10,10 @@
  * A fixture commit takes its date from the history: the first commit of a
  * branch is dated 1_700_000_001 and each later one a second after its parent's
  * author date. So two repositories built from the same files and messages get
- * the same commit ids, and no two commits of one history share a timestamp.
+ * the same commit ids, no two commits of one history share a timestamp, and a
+ * handle opened again on a repository continues the count. Every other git of
+ * the handle runs with both dates fixed, so a tag object is the same on every
+ * run too.
  */
 
 import { spawn } from "node:child_process";
@@ -23,6 +27,7 @@ import type { HermeticGitVariables } from "../../features/lib/hermetic-git.ts";
 import type { TestContext } from "node:test";
 
 const FIRST_COMMIT_SECONDS = 1_700_000_001;
+const RUN_SECONDS = 1_700_000_000;
 
 /** One system git: where it runs, its HOME, its named variables, and its stdin. */
 export interface SystemGitCall {
@@ -109,6 +114,8 @@ function fixedDates(seconds: number): HermeticGitVariables {
   return { GIT_AUTHOR_DATE: date, GIT_COMMITTER_DATE: date };
 }
 
+const RUN_DATES = fixedDates(RUN_SECONDS);
+
 async function scratchGit(
   dir: string,
   variables: HermeticGitVariables,
@@ -146,6 +153,78 @@ async function commitStaged(dir: string, message: string): Promise<string> {
   return scratchGit(dir, {}, "rev-parse", "HEAD");
 }
 
+/** A system-git handle on one repository directory. */
+export interface GitTestCheckout {
+  readonly dir: string;
+  /**
+   * Runs git in `dir` with both dates at 1_700_000_000, so an annotated tag
+   * gets a fixed tagger date, and returns its trimmed standard output.
+   */
+  run(...args: string[]): Promise<string>;
+  /** Stages exactly `paths`, makes the dated commit, and returns its id. */
+  commitPaths(message: string, paths: readonly string[]): Promise<string>;
+  /** Stages every change in `dir`, makes the dated commit, and returns its id. */
+  commitAll(message: string): Promise<string>;
+  /** Writes `contents` as a blob and returns its id. */
+  hashObject(contents: string | Buffer): Promise<string>;
+  /** Clones the repository bare into `target`, as a git host serves it. */
+  cloneBare(target: string): Promise<void>;
+}
+
+/**
+ * Returns the handle of the existing repository in `dir`. It runs no git until
+ * a member is called.
+ */
+export function gitTestCheckout(dir: string): GitTestCheckout {
+  return {
+    dir,
+    run(...args) {
+      return scratchGit(dir, RUN_DATES, ...args);
+    },
+    async commitPaths(message, paths) {
+      if (paths.length > 0) {
+        await scratchGit(dir, RUN_DATES, "add", "--", ...paths);
+      }
+
+      return commitStaged(dir, message);
+    },
+    async commitAll(message) {
+      await scratchGit(dir, RUN_DATES, "add", "-A");
+      return commitStaged(dir, message);
+    },
+    hashObject(contents) {
+      return withScratchHome((home) =>
+        runSystemGit(
+          { cwd: dir, home, variables: RUN_DATES, input: contents },
+          "hash-object",
+          "-w",
+          "--stdin",
+        ),
+      );
+    },
+    async cloneBare(target) {
+      await scratchGit(dir, RUN_DATES, "clone", "-q", "--bare", dir, target);
+    },
+  };
+}
+
+/**
+ * Initializes a repository in the existing directory `dir`, adds the remote
+ * `origin` when `options.origin` names one, and returns its handle.
+ */
+export async function initGitTestCheckout(
+  dir: string,
+  options: { readonly origin?: string } = {},
+): Promise<GitTestCheckout> {
+  const checkout = gitTestCheckout(dir);
+  await checkout.run("init", "-q");
+  if (options.origin !== undefined) {
+    await checkout.run("remote", "add", "origin", options.origin);
+  }
+
+  return checkout;
+}
+
 export interface GitTestRepositoryOptions {
   readonly boundary: "local";
 }
@@ -155,8 +234,7 @@ export interface GitTestCommitFile {
   readonly contents: string;
 }
 
-export interface GitTestRepository {
-  readonly dir: string;
+export interface GitTestRepository extends GitTestCheckout {
   readonly gitdir: string;
   readonly initialOid: string;
   commit(files: readonly GitTestCommitFile[], message: string): Promise<string>;
@@ -187,8 +265,7 @@ export async function createGitTestRepository(
   const dir = await mkdtemp(join(tmpdir(), "pi-cm-git-contract-"));
   const gitdir = join(dir, ".git");
   t.after(() => rm(dir, { recursive: true, force: true }));
-
-  await scratchGit(dir, {}, "init", "-q");
+  const checkout = await initGitTestCheckout(dir);
 
   async function commit(files: readonly GitTestCommitFile[], message: string): Promise<string> {
     for (const file of files) {
@@ -197,11 +274,10 @@ export async function createGitTestRepository(
       await writeFile(absolutePath, file.contents);
     }
 
-    if (files.length > 0) {
-      await scratchGit(dir, {}, "add", "--", ...files.map((file) => file.filepath));
-    }
-
-    return commitStaged(dir, message);
+    return checkout.commitPaths(
+      message,
+      files.map((file) => file.filepath),
+    );
   }
 
   const initialOid = await commit([{ filepath: "README.md", contents: "# local\n" }], "initial");
@@ -214,5 +290,5 @@ export async function createGitTestRepository(
     return { oid, packfile };
   }
 
-  return { dir, gitdir, initialOid, commit, pack };
+  return { ...checkout, gitdir, initialOid, commit, pack };
 }

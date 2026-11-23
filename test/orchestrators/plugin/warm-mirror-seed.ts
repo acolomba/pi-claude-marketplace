@@ -3,17 +3,13 @@
  * test can resolve a warm git tree offline (VER-01, NFR-5).
  */
 
-import * as fs from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import * as git from "isomorphic-git";
-
 import { pluginMirrorKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
+import { gitTestCheckout, initGitTestCheckout } from "../../platform/git-test-repository.ts";
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-
-const AUTHOR = { name: "test", email: "test@example.com" };
 
 /**
  * Creates a mirror for `canonicalUrl` with one commit. The commit holds
@@ -32,15 +28,13 @@ export async function seedWarmMirror(
     path.join(mirrorDirectory, filepath),
     manifest === undefined ? "no plugins here" : JSON.stringify(manifest),
   );
-  await git.init({ fs, dir: mirrorDirectory, defaultBranch: "main" });
-  await git.add({ fs, dir: mirrorDirectory, filepath });
-  const head = await git.commit({ fs, dir: mirrorDirectory, message: "initial", author: AUTHOR });
+  const checkout = await initGitTestCheckout(mirrorDirectory);
+  const head = await checkout.commitPaths("initial", [filepath]);
   return { mirrorDirectory, head };
 }
 
 /** Adds a second commit to a seeded mirror and returns its new HEAD commit. */
 export async function advanceWarmMirror(mirrorDirectory: string): Promise<string> {
   await writeFile(path.join(mirrorDirectory, "CHANGELOG.md"), "a newer revision");
-  await git.add({ fs, dir: mirrorDirectory, filepath: "CHANGELOG.md" });
-  return git.commit({ fs, dir: mirrorDirectory, message: "newer", author: AUTHOR });
+  return gitTestCheckout(mirrorDirectory).commitPaths("newer", ["CHANGELOG.md"]);
 }
