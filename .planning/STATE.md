@@ -498,6 +498,9 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261119-h5n | Pin fallow 3.44.0 and move shared harness files out of test/ to fix the degraded fallow audit | 2026-11-19 | fa449db | — | [261119-h5n-fallow-3-44-pin-and-audit-degraded-fix](./quick/261119-h5n-fallow-3-44-pin-and-audit-degraded-fix/) |
 | 261119-jmd | Split test/e2e/_helpers.ts into modules named by function | 2026-11-19 | bcbea72 | — | [261119-jmd-split-test-e2e-helpers-ts-by-function](./quick/261119-jmd-split-test-e2e-helpers-ts-by-function/) |
 | 47 | Make PluginBrowser.render() typecheck against pi-tui 1.6.0 (copy rendered lines); CHANGELOG line | 2026-11-20 | dff44ec | — | — |
+| 261123-gtg | Make the dispatch-exec portable boundary test independent of environment size | 2026-11-23 | c8df983 | — | .planning/quick/261123-gtg-fix-the-dispatch-exec-portable-boundary-unit-test-test-bridg |
+| 261123-gth | DIRGITTAG-01: install a dependency from a tag of a local git marketplace | 2026-11-23 | 87446bd | — | .planning/quick/261123-gth-dirgittag-01-planning-backlog-md-add-a-publication-kind-for |
+| 261123-gti | HOOKASYNCRESUME-01: stop repeating an unchanged async SessionStart answer on resume or fork | 2026-11-23 | c099652 | — | .planning/quick/261123-gti-hookasyncresume-01-planning-backlog-md-an-async-sessionstart |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
