@@ -33,6 +33,11 @@ Carried review items to settle here: Phase 4 IN-03 (`standalone-prune` header sa
 - [Bugs] Q: "A case exposing a product bug?" → Selected: "Rule 4: small fix with a unit test and CHANGELOG parent line, else BACKLOG entry and the case stays" — milestone rule.
 - [Final gate] Q: "When is ITSCOPE-04 checked?" → Selected: "After the last Phase 8 merge and after Phase 6.1 merges: `npm run check` on the combined tree, both cucumber profiles green, 100% direct coverage" — ITSCOPE-04.
 
+- [Moved-catalog row] Q: "Does the moved-catalog `list` row of `mcp-verdict-migration:202` become a scenario?" → Selected: "No: the file header says the kept cases compare whole rendered text while the scenarios compare result fields" — research recommendation.
+- [Charter wording] Q: "'multi-process' or 'multi-process race'?" → Selected: "'multi-process' (a hand-off to a dead process is not a race)" — research.
+- [TESTING.md counts] Q: "Refresh the whole dated count block in TESTING.md?" → Selected: "No: fix only the integration bullet (it still says 16 files)" — scope.
+- [Doc claims] Q: "The Phase 1 source-read claims (`docs/mcp-compatibility.md:770`, `docs/hooks-compatibility.md:77`) match the peer sources but no test shows them" → Selected: "Reword each to say it was read in the peer's source, as research drafts; also fix the stale pointer in `docs/output-catalog.md:695` the deletions create" — research.
+
 ### Claude's Discretion
 - Plan count and waves (likely: classification and moves per group of files; charter and headers; final gate).
 
