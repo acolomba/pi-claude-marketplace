@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: integration-rescope
 milestone_name: Integration Test Rescope
-current_phase: "06.1"
-current_phase_name: Reload Keeps SessionStart Context
+current_phase: 08
+current_phase_name: Integration Suite Rescope
 status: executing
-stopped_at: Phase 07 complete, ready to execute Phase 06.1
-last_updated: "2026-11-23T02:44:15.477Z"
+stopped_at: Phase 06.1 complete, ready to execute Phase 08
+last_updated: "2026-11-23T09:00:57.438Z"
 last_activity: 2026-11-23
-last_activity_desc: Phase 07 complete, transitioned to Phase 06.1
-state_head: 31c9c6fffbcf2bf7b979bcfa78ded730370b5dd5
+last_activity_desc: Phase 06.1 complete, transitioned to Phase 08
+state_head: 85a817a847780baa986ff02f81c083c42f3dbd89
 progress:
   total_phases: 9
   completed_phases: 7
-  total_plans: 19
-  completed_plans: 18
+  total_plans: 26
+  completed_plans: 25
   percent: 78
 ---
 
@@ -31,10 +31,10 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 6.1 of 8 (Reload Keeps SessionStart Context, inserted)
-Plan: 1 of 1
-Status: Executing (Phase 7 complete: verified 9/9, threats 0 open)
-Last activity: 2026-11-23 — Phase 07 complete, transitioned to Phase 06.1
+Phase: 08 of 8 (Integration Suite Rescope)
+Plan: 5
+Status: Ready to execute
+Last activity: 2026-11-23 — Phase 06.1 complete, transitioned to Phase 08
 
 Progress: [████████░░] 78%
 
@@ -1312,7 +1312,7 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 ## Session Continuity
 
 Last session: 2026-11-22T15:00:00.000Z
-Stopped at: Phase 07 complete, ready to execute Phase 06.1
+Stopped at: Phase 06.1 complete, ready to execute Phase 08
 Resume file: None
 
 ### Phase 2 completion-helper notes

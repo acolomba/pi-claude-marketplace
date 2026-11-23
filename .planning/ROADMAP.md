@@ -119,7 +119,7 @@ them at the merge.
 - [x] **Phase 4: Prune** - Scenarios prove the `prune` cases a user can see that the suite left out (completed 2026-11-22)
 - [x] **Phase 5: MCP Install, Legacy Move, and Overrides** - Scenarios prove the MCP install refusals and warnings, the legacy `mcp.json` move, and the pi-mcp-adapter override cases (completed 2026-11-22)
 - [x] **Phase 6: Hooks and Auth** - Scenarios prove hooks in both scopes after `apply`, a reload that clears buffered context, no `.pi` directory from a hook dispatch, and the print-mode and credential-eviction sign-in cases (completed 2026-11-22)
-- [ ] **Phase 06.1: Reload Keeps SessionStart Context** (INSERTED) - A `/reload` before the first prompt keeps the startup SessionStart context, as Claude Code's `/reload-plugins` does
+- [x] **Phase 06.1: Reload Keeps SessionStart Context** (INSERTED) - A `/reload` before the first prompt keeps the startup SessionStart context, as Claude Code's `/reload-plugins` does (completed 2026-11-23)
 - [x] **Phase 7: Path-Source Dependency Tags** - A step publishes a marketplace repository with a tag, and scenarios prove that a constrained path-source dependency installs from that tag, with the TAGS-02 fallback (completed 2026-11-23)
 - [ ] **Phase 8: Integration Suite Rescope** - Every case left in `test/integration/` is conformance, a race, or internal, each file says what it guards, the charter is written down, and `npm run check` passes on the combined tree
 
@@ -329,7 +329,7 @@ Plans:
   3. `docs/hooks-compatibility.md` describes the new behavior, the change has unit tests with 100% direct coverage, and `npm run check` passes (HKRL-01).
   4. After a fork or a resume, a SessionStart context value the conversation already holds is not sent again; a changed value is added; scenarios show both, and a new session carries nothing from the old one (HKRL-02, user decision 2026-11-23 after review CR-01).
   5. After a compaction in the middle of a run and after an overflow compaction with a retry, the next model call carries the SessionStart(compact) context; after a manual `/compact` it lands after the summary; scenarios show each path (HKRL-03, user decision 2026-11-23).
-**Plans:** 3/3 plans executed
+**Plans:** 3/3 plans complete
 
 Plans:
 - [x] 06.1-01-PLAN.md -- Wave 1: the five flipped SessionStart scenarios of `hook/additional-context.feature`, ten unit cases, and HOOK-E2E-04 rewritten to the post-fix shape, all red on the current code, then the SessionStart send through one shared context message helper in `bridges/hooks/event-adapters.ts`, in one commit with the integration suite green; breaks B1 and B2 on the fix commit; then the SessionStart buffer removed from the hooks runtime and routing state with the integration file `hooks-additionalcontext-end-to-end` deleted; then the docs and the D-CF5-13 amendment, B1f and B2f on the final tree, the hook-wide set, and one full adapter run (HKRL-01)
