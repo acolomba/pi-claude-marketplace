@@ -21,17 +21,19 @@
  * seed uses a message that is neither, such as `Authentication failed (401)`.
  * A reply step with stop reason `length` ends its call with that stop reason.
  *
- * A reply step with context tokens reports them as the usage of its own call
- * (D-BG-07). The faux core replaces the usage of every scripted message with
- * its own estimate, so the player carries the value on the message it returns,
- * a plain field the faux core's copies keep, and the provider's stream wraps
- * the faux stream: it removes the field from every event, and on the `done`
- * event it sets the usage to that many input tokens. The value rides on the
- * call's own message, so no state outlives the call and a child agent's Pi
- * cannot inherit it. Pi compacts on its own, with reason `threshold`, when the
- * context tokens of a reply exceed the context window minus `reserveTokens`:
- * 128000 - 16384 = 111616 for `faux-1`. Pi reads input above the context
- * window as an overflow instead.
+ * A reply or a tool step with context tokens reports them as the usage of its
+ * own call (D-BG-07, HKRL-03). The faux core replaces the usage of every
+ * scripted message with its own estimate, so the player carries the value on
+ * the message it returns, a plain field the faux core's copies keep, and the
+ * provider's stream wraps the faux stream: it removes the field from every
+ * event, and on the `done` event it sets the usage to that many input tokens.
+ * The value rides on the call's own message, so no state outlives the call
+ * and a child agent's Pi cannot inherit it. Pi compacts on its own, with
+ * reason `threshold`, when the context tokens of a call exceed the context
+ * window minus `reserveTokens`:
+ * 128000 - 16384 = 111616 for `faux-1`. After a reply, Pi compacts when the
+ * run ends; after a tool call, between that turn and the next model call of
+ * the run. Pi reads input above the context window as an overflow instead.
  *
  * The faux models cannot reason, so Pi holds their thinking level at `off`.
  * When the harness directory holds the reasoning-model file at registration,
@@ -157,8 +159,8 @@ function toolsOf(messages: readonly Message[]): ModelCall["tools"] {
   }));
 }
 
-// The field that carries a reply step's context tokens from the player to the
-// provider's stream, on the message of that call only.
+// The field that carries a reply or tool step's context tokens from the
+// player to the provider's stream, on the message of that call only.
 const CONTEXT_TOKENS_FIELD = "scriptedContextTokens";
 
 function withContextTokens(message: AssistantMessage, tokens: number): AssistantMessage {
@@ -220,7 +222,7 @@ async function forwardEvents(
   outer.end(settledMessage(await inner.result()));
 }
 
-// The faux stream of one call, with the usage its reply step reports. A
+// The faux stream of one call, with the usage its step reports. A
 // failure while forwarding ends the call in an error that names its cause,
 // so the turn fails with it and Node reports no unhandled rejection.
 function withContextUsage(inner: AssistantMessageEventStream): AssistantMessageEventStream {
@@ -275,9 +277,12 @@ async function playNextStep(messages: readonly Message[]): Promise<AssistantMess
 
   // The script validator admits only JSON values, so the arguments are a JSON object.
   const toolArguments = step.arguments as Parameters<typeof fauxToolCall>[1];
-  return fauxAssistantMessage([fauxToolCall(step.tool, toolArguments)], {
+  const toolMessage = fauxAssistantMessage([fauxToolCall(step.tool, toolArguments)], {
     stopReason: "toolUse",
   });
+  return step.contextTokens === undefined
+    ? toolMessage
+    : withContextTokens(toolMessage, step.contextTokens);
 }
 
 export default function scriptedModel(pi: ExtensionAPI): void {

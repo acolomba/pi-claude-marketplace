@@ -87,7 +87,7 @@ async function applyOptionVariablesWith(apply: () => Promise<void>): Promise<voi
  * Registers the extension's Pi hooks, tools, and slash command surface.
  */
 // DISP-01: async factory; Pi's loader awaits this Promise (loader.d.ts
-// `loadExtensionFromFactory(...): Promise<Extension>`), so the 14 pi.on call sites
+// `loadExtensionFromFactory(...): Promise<Extension>`), so the 15 pi.on call sites
 // inside `registerHooksBridge` complete BEFORE the loader
 // proceeds to emit any session-lifecycle event. The `void` fire-and-forget
 // alternative would race against the first session_start because the loader
@@ -178,7 +178,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   //      project cache. Both are idempotent against the same cwd.
   //
   // The `await` is LOAD-BEARING: Pi's loader awaits the factory Promise, so
-  // the 14 pi.on call sites + user-scope cache hydrate inside `registerHooksBridge`
+  // the 15 pi.on call sites + user-scope cache hydrate inside `registerHooksBridge`
   // are guaranteed to complete BEFORE the first Pi event fires.
   //
   // D-PG6-18: the bridge's resolver of a typed line and the skill alias

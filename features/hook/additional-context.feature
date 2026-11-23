@@ -406,6 +406,59 @@ Feature: Hook additional context
       | 3    | user      | SessionStart hook additional context: compact-ctx                                                                                                                                       |
       | 3    | user      | next                                                                                                                                                                                    |
 
+  Scenario: A compaction after a turn that fills the context window keeps the compact context for the next prompt
+    Given pi keeps only one recent token when the hooks session compacts
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event        | matcher | form   | output                                                                                    |
+      | recap | SessionStart | compact | script | {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"compact-ctx"}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply      | context tokens |
+      | Hello.     | 120000         |
+      | Summary A. |                |
+      | Next.      |                |
+    Given the user has prompted "hello"
+    When the user prompts "next"
+    Then the model receives these calls:
+      | call | role      | text                                                                                                                                                                                    |
+      | 3    | user      | The conversation history before this point was compacted into the following summary:\n\n<summary>\nNo prior history.\n\n---\n\n**Turn Context (split turn):**\n\nSummary A.\n</summary> |
+      | 3    | assistant | Hello.                                                                                                                                                                                  |
+      | 3    | user      | SessionStart hook additional context: compact-ctx                                                                                                                                       |
+      | 3    | user      | next                                                                                                                                                                                    |
+
+  Scenario: A compaction in the middle of a run gives the compact context to the next model call
+    Given pi keeps only one recent token when the hooks session compacts
+    Given pi runs with the scripted model
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name  | event        | matcher | form   | output                                                                                    |
+      | recap | SessionStart | compact | script | {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"compact-ctx"}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply      | tool | arguments                      | context tokens |
+      |            | bash | {"command": "echo from-model"} | 120000         |
+      | Summary A. |      |                                |                |
+      | Done.      |      |                                |                |
+    When the user prompts "hello"
+    Then the model call 3 receives these messages:
+      | role        | text                                                                                                                                                                                    |
+      | user        | The conversation history before this point was compacted into the following summary:\n\n<summary>\nNo prior history.\n\n---\n\n**Turn Context (split turn):**\n\nSummary A.\n</summary> |
+      | assistant   | tool call bash {"command":"echo from-model"}                                                                                                                                            |
+      | tool result | bash returned: from-model\n                                                                                                                                                             |
+      | user        | SessionStart hook additional context: compact-ctx                                                                                                                                       |
+
   Scenario: The retry after an overflow compaction gives the compact context to the retried model call
     Given pi keeps only one recent token when the hooks session compacts
     Given pi runs with the scripted model

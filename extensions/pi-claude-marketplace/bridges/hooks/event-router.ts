@@ -114,6 +114,7 @@ import {
 
 import type { ResolvedOptions } from "../../domain/user-config.ts";
 import type {
+  AgentEndEvent,
   BeforeAgentStartEvent,
   BeforeAgentStartEventResult,
   ExtensionAPI,
@@ -621,6 +622,12 @@ interface HydratedScope {
 
 /** True while awaited work still belongs to the lifecycle that started it. */
 type GenerationGuard = () => boolean;
+
+/**
+ * Where Pi's agent loop is (HKRL-03): idle, inside a model turn, or between
+ * two turns of a run, where the run's next model call is still to come.
+ */
+type RunPhase = "idle" | "turn" | "between";
 
 /**
  * The hooks bridge's read port: the one filesystem read both the routing and
@@ -1273,7 +1280,8 @@ async function runCompactionSessionStart(
  * as upstream in main sessions. Child sessions dispatch neither event. The
  * compaction SessionStart never passes the SSDEDUP-01 guard of
  * `session_start`, so each main-session compaction runs it again. The
- * retry after an overflow compaction (`willRetry`) reads the steered
+ * retry after an overflow compaction (`willRetry`) and the next model call
+ * after a compaction between two turns (`betweenTurns`) read the steered
  * SessionStart context (HKRL-03). A context whose mode is not a notification
  * mode is skipped with a debug line before the event is read.
  */
@@ -1284,6 +1292,7 @@ function sessionCompactCallback(
   },
   routingState: EventRouterRoutingState,
   generationIsCurrent: GenerationGuard,
+  betweenTurns: () => boolean,
 ): (event: SessionCompactEvent, ctx: ExtensionContext) => Promise<undefined> {
   return async (event, ctx) => {
     try {
@@ -1303,7 +1312,7 @@ function sessionCompactCallback(
         routingState,
         ctx,
         generationIsCurrent,
-        event.willRetry,
+        event.willRetry || betweenTurns(),
       ))
     ) {
       return undefined;
@@ -1325,12 +1334,14 @@ function sessionCompactCallback(
  *   4. Hydrate the parsed-config cache from disk, then rebuild routing tables.
  *   5. Reap persisted orphans per scope (D-62-05), then remove the scope's
  *      saved hook output older than 30 days (D-PG5-15).
- *   6. Register exactly 14 pi.on call sites -- 7 Bucket-A dispatch surfaces
+ *   6. Register exactly 15 pi.on call sites -- 7 Bucket-A dispatch surfaces
  *      (DISP-01) plus `before_agent_start` (the drain point for the
- *      prompt `additionalContext` buffer) plus `turn_end` (sends
- *      the context of a queued follow-up, D-CF5-13) plus the three
- *      turn-boundary surfaces `agent_end` (caches the run's last-assistant
- *      message), `agent_before_settle` (runs the Stop bucket on a `stop`
+ *      prompt `additionalContext` buffer) plus `turn_start` (marks a model
+ *      turn, HKRL-03) plus `turn_end` (sends the context of a queued
+ *      follow-up, D-CF5-13, and marks the run between two turns) plus the
+ *      three turn-boundary surfaces `agent_end` (caches the run's
+ *      last-assistant message and marks the agent idle),
+ *      `agent_before_settle` (runs the Stop bucket on a `stop`
  *      ending and continues the run on a block; D-PG5-01), and
  *      `agent_settled` (runs the StopFailure bucket on an `error` or
  *      `length` ending; STOP-01, D-PG5-03) plus a SECOND `input`
@@ -1342,8 +1353,8 @@ function sessionCompactCallback(
  *      `tool_result` splits on `event.isError` between the PostToolUse and
  *      PostToolUseFailure buckets (D-59-01); the Stop / StopFailure buckets
  *      are driven off the turn-boundary surfaces rather than a per-Pi-event
- *      surface. The Pi event-name set has 12 names (`input` appears three
- *      times), so 14 calls.
+ *      surface. The Pi event-name set has 13 names (`input` appears three
+ *      times), so 15 calls.
  *
  * `opts.executor` is the hook-execution injection point, forwarded verbatim
  * to every `compositeHandlerFor` / `toolResultCompositeHandler` /
@@ -1543,6 +1554,10 @@ async function registerHooksBridgeWith(
         dispatchesInCurrentSession("PreCompact") ? handler(event, ctx) : undefined;
     }),
   );
+  // HKRL-03: where Pi's agent loop is, so a compaction knows whether a model
+  // call of the run follows it. `turn_start`, `turn_end`, and `agent_end`
+  // below move it.
+  let runPhase: RunPhase = "idle";
   pi.on(
     "session_compact",
     bind((generation) =>
@@ -1553,6 +1568,7 @@ async function registerHooksBridgeWith(
         },
         routingState,
         generationIsCurrent,
+        () => runPhase === "between",
       ),
     ),
   );
@@ -1603,11 +1619,23 @@ async function registerHooksBridgeWith(
     "before_agent_start",
     bindWithMode((generation) => createBeforeAgentStartHandler(runtime, generation)),
   );
+  // HKRL-03: a model turn has started, so its request may already be built;
+  // a compaction inside it (Pi compacts in `prepareRequest` for a virtual
+  // model, after the turn's steering poll) holds its context to the turn end.
+  pi.on(
+    "turn_start",
+    bindWithMode(() => () => {
+      runPhase = "turn";
+      return undefined;
+    }),
+  );
   // The context of a queued follow-up goes out at the turn end after which
-  // the agent reads that follow-up (D-CF5-13).
+  // the agent reads that follow-up (D-CF5-13). The run now sits between two
+  // turns until the next `turn_start` or `agent_end` (HKRL-03).
   pi.on(
     "turn_end",
     bindWithMode(() => (event: FollowUpTurnEnd) => {
+      runPhase = "between";
       sendDueFollowUpContext(event, runtime, pi);
       return Promise.resolve(undefined);
     }),
@@ -1617,9 +1645,17 @@ async function registerHooksBridgeWith(
   // agent_settled the StopFailure bucket on an `error` or `length` ending
   // (STOP-01, D-PG5-01, D-PG5-03). A pi-subagents child runs no Stop hook
   // (D-PG3-04), and its boundary handler leaves the cache for agent_settled.
+  // agent_end also marks the agent idle, so a compaction after the run ends
+  // holds its context for the next prompt (HKRL-03).
   pi.on(
     "agent_end",
-    bindWithMode((generation) => agentEndCacheHandler(runtime, generation)),
+    bindWithMode((generation) => {
+      const cacheLastAssistant = agentEndCacheHandler(runtime, generation);
+      return (event: AgentEndEvent) => {
+        runPhase = "idle";
+        cacheLastAssistant(event);
+      };
+    }),
   );
   pi.on(
     "agent_before_settle",

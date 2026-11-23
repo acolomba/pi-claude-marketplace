@@ -627,6 +627,7 @@ test(
       "register:tool_call",
       "register:tool_result",
       "register:before_agent_start",
+      "register:turn_start",
       "register:turn_end",
       "register:agent_end",
       "register:agent_before_settle",
@@ -645,6 +646,7 @@ test(
         { event: "tool_call", handlerType: "function" },
         { event: "tool_result", handlerType: "function" },
         { event: "before_agent_start", handlerType: "function" },
+        { event: "turn_start", handlerType: "function" },
         { event: "turn_end", handlerType: "function" },
         { event: "agent_end", handlerType: "function" },
         { event: "agent_before_settle", handlerType: "function" },
@@ -2790,7 +2792,7 @@ test(
     assert.strictEqual(sessionStartUpdate, undefined);
     assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
     assert.deepStrictEqual(messages, []);
-    assert.strictEqual(registrations.length, 14);
+    assert.strictEqual(registrations.length, 15);
     assert.deepStrictEqual(diagnostics, [
       `[hooks] hydrate: loadState failed for scope=project extensionRoot=${factoryProjectLocations.extensionRoot}: factory project state refused`,
     ]);
@@ -2844,7 +2846,7 @@ test("same-runtime registration invalidates an earlier callback before lazy hydr
     locationsFor("project", projectRoot).extensionRoot,
   ]);
   assert.deepStrictEqual(messages, []);
-  assert.strictEqual(registrations.length, 28);
+  assert.strictEqual(registrations.length, 30);
 });
 
 test(
@@ -2934,7 +2936,7 @@ test(
     assert.deepStrictEqual(Array.from(runtime.parsedConfigEntries()), []);
     assert.deepStrictEqual(runtime.getRoutingBucket("PreToolUse"), []);
     assert.deepStrictEqual(messages, []);
-    assert.strictEqual(registrations.length, 28);
+    assert.strictEqual(registrations.length, 30);
   },
 );
 
@@ -3670,6 +3672,7 @@ test(
         { event: "tool_call", handlerType: "function" },
         { event: "tool_result", handlerType: "function" },
         { event: "before_agent_start", handlerType: "function" },
+        { event: "turn_start", handlerType: "function" },
         { event: "turn_end", handlerType: "function" },
         { event: "agent_end", handlerType: "function" },
         { event: "agent_before_settle", handlerType: "function" },
@@ -3724,7 +3727,7 @@ test(
     assert.deepStrictEqual(dispatched, ["project", "user"]);
     assert.strictEqual(userSharedBytes, "regular-file-boundary");
     assert.strictEqual(projectSharedStat.isDirectory(), true);
-    assert.strictEqual(registrations.length, 14);
+    assert.strictEqual(registrations.length, 15);
   },
 );
 
@@ -3777,7 +3780,7 @@ for (const mode of ["tui", "print", "json", "rpc"] as const) {
     assert.deepStrictEqual(messages, []);
     assert.deepStrictEqual(capture.entries, []);
     capture.assertValid();
-    assert.strictEqual(registrations.length, 14);
+    assert.strictEqual(registrations.length, 15);
   });
 }
 
@@ -4591,7 +4594,7 @@ test("session_start contains a lazy project cwd failure and still delegates safe
   assert.strictEqual(sessionStartUpdate, undefined);
   assert.deepStrictEqual(dispatches, []);
   assert.deepStrictEqual(messages, []);
-  assert.strictEqual(registrations.length, 14);
+  assert.strictEqual(registrations.length, 15);
 });
 
 /** A manual compaction event whose entry carries `summary`. */
@@ -4822,6 +4825,30 @@ for (const { title, before, reason, willRetry, options } of [
     title: "holds the SessionStart context of a manual compaction for the next prompt (HKRL-03)",
     before: [],
     reason: "manual",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "steers the SessionStart context of a compaction between two turns into the next model call (HKRL-03)",
+    before: ["turn_end"],
+    reason: "threshold",
+    willRetry: false,
+    options: { deliverAs: "steer" },
+  },
+  {
+    title:
+      "holds the SessionStart context of a compaction after the run ended for the next prompt (HKRL-03)",
+    before: ["turn_end", "agent_end"],
+    reason: "threshold",
+    willRetry: false,
+    options: { triggerTurn: false },
+  },
+  {
+    title:
+      "holds the SessionStart context of a compaction during a model call to the turn end (HKRL-03)",
+    before: ["turn_end", "turn_start"],
+    reason: "threshold",
     willRetry: false,
     options: { triggerTurn: false },
   },

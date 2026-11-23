@@ -11,8 +11,9 @@
  *
  * A step is a reply, a tool call, or an error that ends the call with stop
  * reason `error` and the message the scenario chooses. A reply may end with
- * stop reason `length` instead of `stop` (D-BG-06), and may report the
- * context tokens of its own call, so Pi starts its own compaction (D-BG-07).
+ * stop reason `length` instead of `stop` (D-BG-06). A reply or a tool call
+ * may report the context tokens of its own call, so Pi starts its own
+ * compaction (D-BG-07, HKRL-03).
  */
 
 import { writeFile } from "node:fs/promises";
@@ -26,9 +27,9 @@ import { projectToolResult, projectUserText } from "../upstream/index.ts";
 
 /**
  * One step of a model script: a reply text, which may end with stop reason
- * `length` and may report the context tokens of its call; one tool call; or
- * an error message that ends the call with stop reason `error` (D-BG-06,
- * D-BG-07).
+ * `length`; one tool call; or an error message that ends the call with stop
+ * reason `error` (D-BG-06). A reply or a tool call may report the context
+ * tokens of its call (D-BG-07, HKRL-03).
  */
 export type ScriptStep =
   | {
@@ -36,7 +37,11 @@ export type ScriptStep =
       readonly stopReason?: "length";
       readonly contextTokens?: number;
     }
-  | { readonly tool: string; readonly arguments: Readonly<Record<string, unknown>> }
+  | {
+      readonly tool: string;
+      readonly arguments: Readonly<Record<string, unknown>>;
+      readonly contextTokens?: number;
+    }
   | { readonly error: string };
 
 const SCRIPT_FILE = "model-script.json";
@@ -54,7 +59,11 @@ const SCRIPT_VALIDATOR = Compile(
         { additionalProperties: false },
       ),
       Type.Object(
-        { tool: Type.String(), arguments: Type.Record(Type.String(), Type.Unknown()) },
+        {
+          tool: Type.String(),
+          arguments: Type.Record(Type.String(), Type.Unknown()),
+          contextTokens: Type.Optional(Type.Integer({ minimum: 1 })),
+        },
         { additionalProperties: false },
       ),
       Type.Object({ error: Type.String() }, { additionalProperties: false }),
@@ -90,7 +99,10 @@ const SCRIPT_COLUMNS: ReadonlySet<string> = new Set([
 const STEP_KINDS = ["reply", "tool", "error"] as const;
 
 // The columns that only a reply row may set.
-const REPLY_ONLY_COLUMNS: readonly string[] = ["stop reason", "context tokens"];
+const REPLY_ONLY_COLUMNS: readonly string[] = ["stop reason"];
+
+// The columns that a reply or a tool row may set, and only an error row refuses.
+const RESPONSE_ONLY_COLUMNS: readonly string[] = ["context tokens"];
 
 type Cell = (column: string) => string;
 
@@ -141,7 +153,7 @@ function replyStopReason(text: string, row: number): { stopReason?: "length" } {
   return { stopReason: text };
 }
 
-function replyContextTokens(text: string, row: number): { contextTokens?: number } {
+function stepContextTokens(text: string, row: number): { contextTokens?: number } {
   if (text === "") {
     return {};
   }
@@ -160,7 +172,7 @@ function replyStep(cell: Cell, row: number): ScriptStep {
   return {
     reply: cell("reply"),
     ...replyStopReason(cell("stop reason"), row),
-    ...replyContextTokens(cell("context tokens"), row),
+    ...stepContextTokens(cell("context tokens"), row),
   };
 }
 
@@ -170,7 +182,11 @@ function toolStep(cell: Cell, row: number): ScriptStep {
     throw new Error(`model script row ${row} needs arguments for its tool`);
   }
 
-  return { tool: cell("tool"), arguments: parseArguments(argumentsText, row) };
+  return {
+    tool: cell("tool"),
+    arguments: parseArguments(argumentsText, row),
+    ...stepContextTokens(cell("context tokens"), row),
+  };
 }
 
 // Refuses a column set on a row of a kind that does not take it.
@@ -179,11 +195,13 @@ function checkRowColumns(cell: Cell, kind: (typeof STEP_KINDS)[number], row: num
     throw new Error(`model script row ${row} has arguments but no tool`);
   }
 
-  const misplaced =
-    kind === "reply" ? [] : REPLY_ONLY_COLUMNS.filter((column) => cell(column) !== "");
+  const misplaced = [
+    ...(kind === "reply" ? [] : REPLY_ONLY_COLUMNS),
+    ...(kind === "error" ? RESPONSE_ONLY_COLUMNS : []),
+  ].filter((column) => cell(column) !== "");
   if (misplaced.length > 0) {
     throw new Error(
-      `model script row ${row} sets ${misplaced.join(", ")}, which only a reply takes`,
+      `model script row ${row} sets ${misplaced.join(", ")}, which a ${kind} row does not take`,
     );
   }
 }
