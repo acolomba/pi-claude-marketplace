@@ -232,7 +232,7 @@ Las configuraciones de ámbito de usuario se encuentran en tu directorio de inic
 
 ## Referencia de comandos
 
-Esta extensión replica el comando `/plugin` de Claude Code. Usa `/claude:plugin` en Pi para operaciones de mercado y complementos. Después de instalar, desinstalar, actualizar o reinstalar complementos, ejecuta `/reload`. Así, Pi detecta los recursos modificados. Si editas una configuración a mano, ejecuta `/claude:plugin apply` antes de `/reload`.
+Esta extensión replica el comando `/plugin` de Claude Code. Usa `/claude:plugin` en Pi para operaciones de mercado y complementos. Después de instalar, desinstalar, actualizar o reinstalar complementos, recarga Pi. Así, Pi detecta los recursos modificados. En la terminal de Pi, ejecuta `/reload`. Por RPC, que no tiene `/reload`, ejecuta `/claude:plugin reload`. Una ejecución de una sola vez, como `pi -p`, no necesita recarga, porque la siguiente ejecución carga el cambio. Si editas una configuración a mano, ejecuta `/claude:plugin apply` antes de recargar.
 
 ### Mercado
 
@@ -433,6 +433,12 @@ Recarga Pi después de los cambios. Ni `/reload` ni `/claude:plugin apply` elimi
 
 ```text
 /reload
+```
+
+Recarga Pi con un comando: `/claude:plugin reload`. En la terminal de Pi, hace lo mismo que `/reload`. Por RPC, que no tiene `/reload`, es la forma de recargar. Una ejecución de una sola vez lo rechaza, porque su siguiente ejecución carga los cambios. Mientras Pi trabaja en un prompt, el comando lo rechaza y no recarga nada. Ejecútalo de nuevo cuando el prompt termine.
+
+```text
+/claude:plugin reload
 ```
 
 #### Complementos remotos

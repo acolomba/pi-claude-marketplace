@@ -694,6 +694,8 @@ pi-mcp-adapter and pi-subagents keep some data under the old server names. The m
 
 Some entries cannot move. They stay in `mcp.json` and keep working under their old names. The notice lists them on every `/reload` until you remove the cause (AMIG-01, AMIG-04):
 
+In Pi's terminal the notice names `/reload`. A one-shot run leaves the reload instruction out, because its next run tries again, and RPC gets the rows as data (RELOADCMD-D1).
+
 | Cause                                                                                                         | What to do                                                                                                                                                                         |
 | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | No installed plugin in the scope owns the entry.                                                              | Install the plugin, or remove the entry from `mcp.json`.                                                                                                                           |

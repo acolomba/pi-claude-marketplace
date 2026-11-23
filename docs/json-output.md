@@ -146,7 +146,7 @@ After preparation, combine every selected `needsReload` with boolean OR. This in
 printf '%s\n' "$command_entries" | jq 'any(.[]; .needsReload)'
 ```
 
-The output is the JSON boolean `true` or `false`. This example reports reload needs even for failed commands. Use the exit-status example to judge success.
+The output is the JSON boolean `true` or `false`. This example reports reload needs even for failed commands. Use the exit-status example to judge success. An RPC client that reads `true` sends `/claude:plugin reload`, because RPC has no `/reload` (RELOADCMD-D1).
 
 ## Keep partial results
 
@@ -173,13 +173,13 @@ Every kind includes these fields. The `internal-error` kind narrows origin and s
 
 <!-- fields: common-fields -->
 
-| Field path      | Type              | Presence | Meaning                                                |
-| --------------- | ----------------- | -------- | ------------------------------------------------------ |
-| `schemaVersion` | integer `1`       | required | Payload compatibility version.                         |
-| `kind`          | string            | required | Payload kind from the twenty-five kind sections below. |
-| `origin`        | [Origin](#origin) | required | Source of this notification.                           |
-| `severity`      | string            | required | `info`, `warning`, or `error`, in increasing order.    |
-| `needsReload`   | boolean           | required | Whether completed changes need `/reload`.              |
+| Field path      | Type              | Presence | Meaning                                                                                                                                           |
+| --------------- | ----------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schemaVersion` | integer `1`       | required | Payload compatibility version.                                                                                                                    |
+| `kind`          | string            | required | Payload kind from the twenty-five kind sections below.                                                                                            |
+| `origin`        | [Origin](#origin) | required | Source of this notification.                                                                                                                      |
+| `severity`      | string            | required | `info`, `warning`, or `error`, in increasing order.                                                                                               |
+| `needsReload`   | boolean           | required | Whether completed changes need a reload: `/reload` in Pi's terminal, `/claude:plugin reload` over RPC. A one-shot run loads them at its next run. |
 
 <!-- /fields -->
 
