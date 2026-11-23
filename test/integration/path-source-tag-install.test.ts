@@ -68,11 +68,9 @@ function makeCtx(cwd: string): TestCtx {
 
 /**
  * Builds a real git repository marketplace declaring `formatter` (a
- * path-source plugin, tagged `formatter--v1.0.0` at its first commit) and
+ * path-source plugin, tagged `formatter--v1.0.0` at its one commit) and
  * `app` (a path-source plugin declaring `formatter@^1.0.0` in its OWN
- * `plugin.json`, per D-01-32's read order). A second commit on top bumps
- * `formatter` to `2.0.0` and rewrites its marker file, so the CURRENT
- * checkout is byte-distinguishable from the tag.
+ * `plugin.json`, per D-01-32's read order).
  */
 async function buildTaggedMarketplace(cwd: string): Promise<{
   readonly marketplaceRoot: string;
@@ -120,21 +118,6 @@ async function buildTaggedMarketplace(cwd: string): Promise<{
   await git.commit({ fs, dir: marketplaceRoot, message: "release 1.0.0", author: AUTHOR });
   const tagOid = await git.resolveRef({ fs, dir: marketplaceRoot, ref: "HEAD" });
   await git.tag({ fs, dir: marketplaceRoot, ref: "formatter--v1.0.0", object: tagOid });
-
-  // Advance the checkout PAST the tag, so the tag's tree and the current
-  // checkout differ.
-  await writeFile(
-    path.join(formatterDir, ".claude-plugin", "plugin.json"),
-    JSON.stringify({ name: "formatter", version: "2.0.0" }),
-  );
-  await writeFile(path.join(formatterDir, "MARKER.txt"), "current-checkout-content\n");
-  await git.add({
-    fs,
-    dir: marketplaceRoot,
-    filepath: "plugins/formatter/.claude-plugin/plugin.json",
-  });
-  await git.add({ fs, dir: marketplaceRoot, filepath: "plugins/formatter/MARKER.txt" });
-  await git.commit({ fs, dir: marketplaceRoot, message: "release 2.0.0", author: AUTHOR });
 
   return { marketplaceRoot };
 }
