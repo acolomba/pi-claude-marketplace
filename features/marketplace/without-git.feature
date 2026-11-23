@@ -1,8 +1,8 @@
 Feature: Marketplace without git
 
   A git marketplace needs system git, with no fallback to another transport, so adding one with no git
-  fails before any request (SG-PRC-06, D-SG-01). The scenarios run a headless Pi whose PATH holds no
-  git, against a loopback https git host that records every request.
+  fails before any request, while dir, file, and hosted marketplaces still add (SG-PRC-06, D-SG-01).
+  The scenarios run a headless Pi whose PATH holds no git, against a loopback https git host that records every request.
 
   Scenario Outline: Adding a git marketplace with no git fails as git missing and sends no request
     Given the marketplace "tools" is published as a <source kind> source
@@ -30,3 +30,53 @@ Feature: Marketplace without git
       | github      | acme/tools                        |
       | github      | https://github.com/acme/tools     |
       | github      | https://github.com/acme/tools.git |
+
+  Scenario: Adding a dir marketplace with no git records it
+    Given the marketplace "tools" is published as a dir source
+    Given pi runs without git on its path
+    When the user runs "/claude:plugin marketplace add {home}/marketplaces/tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                    |
+      | tools | {home}/marketplaces/tools |
+    Then the git host receives no request
+
+  Scenario: Adding a file marketplace with no git records it
+    Given the marketplace "tools" is published as a file source
+    Given pi runs without git on its path
+    When the user runs "/claude:plugin marketplace add {home}/marketplaces/tools/.claude-plugin/marketplace.json --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                                                    |
+      | tools | {home}/marketplaces/tools/.claude-plugin/marketplace.json |
+    Then the git host receives no request
+
+  Scenario: Adding a hosted marketplace with no git downloads its catalog once
+    Given the marketplace "tools" is published as a hosted source
+    Given pi runs without git on its path
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools/marketplace.json --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                                         |
+      | tools | https://{git host}/acme/tools/marketplace.json |
+    Then the git host receives these requests:
+      | method | path                         | status |
+      | GET    | /acme/tools/marketplace.json | 200    |
