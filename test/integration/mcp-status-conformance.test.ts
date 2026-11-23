@@ -9,8 +9,12 @@
 // reads as no usable snapshot. A drift guard pins the channel, the version and
 // the status union in the adapter's `dist/types.d.ts`. ASTAT-01 is also in
 // `features/mcp-server/companion-missing.feature` and
-// `features/mcp-server/project-scope.feature`; the shutdown snapshot and the
-// drift guard need the adapter's own code.
+// `features/mcp-server/project-scope.feature`, which show the status of a
+// server in one scope. Only the first case compares the whole `info` text of
+// both scopes, where the user row reads `(overridden by project scope)` under
+// pi-mcp-adapter; `features/mcp-server/builtin-status.feature` shows that row
+// only under Pi's built-in MCP. The shutdown snapshot and the drift guard need
+// the adapter's own code.
 //
 // pi-mcp-adapter is an optional peer. The test imports its compiled
 // `dist/types.js` constants in place from the declared floor that
