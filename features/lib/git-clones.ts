@@ -8,12 +8,18 @@
  * clone pinned to a commit (PURL-04, D-77-04), and alone for the mirror of an
  * unpinned source (MIRR-01). The URL hash covers the git host's random port,
  * so a clone is told apart by the `origin` URL its checkout records instead.
+ *
+ * Each clone is read with system git, pointed at the clone's own `.git` with
+ * `--git-dir`, so a clone without one fails instead of git finding a parent
+ * repository (SG-HRN-01).
  */
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import path from "node:path";
+
+import { runGit } from "./hermetic-git.ts";
 
 /** One git clone of a scope: a plugin or marketplace clone, its origin URL, and its pin. */
 export interface GitClone {
@@ -41,60 +47,39 @@ async function subdirectories(directory: string): Promise<readonly string[]> {
   return entries.map((entry) => entry.name);
 }
 
-// The `url` of `[remote "origin"]` in the `.git/config` of `checkout`.
-async function originUrl(checkout: string): Promise<string> {
-  const file = path.join(checkout, ".git", "config");
-  const config = await readFile(file, "utf8");
-  let inOrigin = false;
-  for (const rawLine of config.split("\n")) {
-    const line = rawLine.trim();
-    if (line.startsWith("[")) {
-      inOrigin = line === '[remote "origin"]';
-    } else if (inOrigin && line.startsWith("url")) {
-      const [, url = ""] = /^url\s*=(.*)$/u.exec(line) ?? [];
-      if (url.trim() !== "") {
-        return url.trim();
-      }
-    }
-  }
-
-  assert.fail(`${file} has no origin url: ${config}`);
+// Runs system git on the repository in the `.git` of `checkout` alone.
+function cloneGit(checkout: string, gitHome: string, ...args: string[]): Promise<string> {
+  return runGit(checkout, gitHome, `--git-dir=${path.join(checkout, ".git")}`, ...args);
 }
 
-// The first 12 hex digits of the commit checked out at `checkout`, read from
-// git's loose or packed refs without spawning git.
-async function headRevision(checkout: string): Promise<string> {
-  const gitDirectory = path.join(checkout, ".git");
-  const head = (await readFile(path.join(gitDirectory, "HEAD"), "utf8")).trim();
-  if (!head.startsWith("ref: ")) {
-    return head.slice(0, 12);
-  }
-
-  const ref = head.slice("ref: ".length).trim();
+// The `origin` URL the clone at `checkout` records.
+async function originUrl(checkout: string, gitHome: string): Promise<string> {
   try {
-    return (await readFile(path.join(gitDirectory, ref), "utf8")).trim().slice(0, 12);
+    return await cloneGit(checkout, gitHome, "config", "--get", "remote.origin.url");
   } catch (error) {
-    if (!(error instanceof Error && "code" in error && error.code === "ENOENT")) {
-      throw error;
+    // `git config --get` exits 1 when the key is unset.
+    if (error instanceof Error && "code" in error && error.code === 1) {
+      assert.fail(`${path.join(checkout, ".git", "config")} has no origin url`);
     }
-  }
 
-  const packed = await readFile(path.join(gitDirectory, "packed-refs"), "utf8");
-  for (const line of packed.split("\n")) {
-    const [revision, name] = line.split(/\s+/u);
-    if (name === ref && revision !== undefined) {
-      return revision.slice(0, 12);
-    }
+    throw error;
   }
-
-  assert.fail(`${path.join(gitDirectory, "HEAD")} resolves to no commit`);
 }
 
-async function pluginClone(clonesDirectory: string, key: string): Promise<GitClone> {
+// The first 12 hex digits of the commit checked out at `checkout`.
+async function headRevision(checkout: string, gitHome: string): Promise<string> {
+  return (await cloneGit(checkout, gitHome, "rev-parse", "HEAD")).slice(0, 12);
+}
+
+async function pluginClone(
+  clonesDirectory: string,
+  key: string,
+  gitHome: string,
+): Promise<GitClone> {
   const checkout = path.join(clonesDirectory, key);
-  const origin = await originUrl(checkout);
+  const origin = await originUrl(checkout, gitHome);
   if (MIRROR_KEY.test(key)) {
-    return { clone: "plugin", origin, revision: await headRevision(checkout) };
+    return { clone: "plugin", origin, revision: await headRevision(checkout, gitHome) };
   }
 
   const pin = PINNED_KEY.exec(key)?.[1];
@@ -109,9 +94,10 @@ async function pluginClone(clonesDirectory: string, key: string): Promise<GitClo
  * Returns the git clones under the extension root `extensionRoot` of a scope:
  * each directory under `plugin-clones/`, which must be named by a clone key,
  * and each directory under `sources/` that holds a `.git` directory. Fails
- * when a clone records no origin URL.
+ * when a clone records no origin URL. Each git runs with the scratch HOME
+ * `gitHome`.
  */
-export async function readGitClones(extensionRoot: string): Promise<GitClone[]> {
+export async function readGitClones(extensionRoot: string, gitHome: string): Promise<GitClone[]> {
   const clonesDirectory = path.join(extensionRoot, "plugin-clones");
   const sourcesDirectory = path.join(extensionRoot, "sources");
   const stagingDirectory = path.join(extensionRoot, "sources-staging");
@@ -121,7 +107,9 @@ export async function readGitClones(extensionRoot: string): Promise<GitClone[]> 
     `${stagingDirectory} holds unfinished clone staging directories`,
   );
   const pluginClones = await Promise.all(
-    (await subdirectories(clonesDirectory)).map((key) => pluginClone(clonesDirectory, key)),
+    (await subdirectories(clonesDirectory)).map((key) =>
+      pluginClone(clonesDirectory, key, gitHome),
+    ),
   );
   const marketplaceCheckouts = (await subdirectories(sourcesDirectory)).map((name) =>
     path.join(sourcesDirectory, name),
@@ -129,7 +117,7 @@ export async function readGitClones(extensionRoot: string): Promise<GitClone[]> 
   const marketplaceClones = await Promise.all(
     marketplaceCheckouts.map(async (checkout): Promise<GitClone> => ({
       clone: "marketplace",
-      origin: await originUrl(checkout),
+      origin: await originUrl(checkout, gitHome),
     })),
   );
   return [...pluginClones, ...marketplaceClones];
