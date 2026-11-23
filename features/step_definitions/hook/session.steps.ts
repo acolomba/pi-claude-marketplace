@@ -43,7 +43,9 @@
  * a crash does. The fork setup `Given` performs the fork restart, the
  * continue setup `Given` the continue restart, and the first-prompt fork
  * setup `Given` the in-session fork at the first prompt; each records no
- * turn.
+ * turn. The new-session setup `Given` performs the new-session restart, and
+ * the resume setup `Given` switches Pi to the saved session whose file holds
+ * a prompt; neither records a turn.
  */
 
 import assert from "node:assert/strict";
@@ -58,7 +60,11 @@ import { HOOK_RUNS_LOG, waitForHookLifecycle } from "../../lib/hook-recorder.ts"
 import { startSession } from "../../lib/pi-commands.ts";
 import { promptDisposition } from "../../lib/pi-rpc.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
-import { latestSessionFile, sessionsFolder } from "../../lib/saved-sessions.ts";
+import {
+  latestSessionFile,
+  sessionFileWithPrompt,
+  sessionsFolder,
+} from "../../lib/saved-sessions.ts";
 import { modelCallsOf, readModelCalls } from "../../lib/scripted-model/script.ts";
 import { isRunning, readLogLengths, readLogLinesSince } from "../../lib/turn-records.ts";
 import { PROFILE_PI_START_TIMEOUT_MS, SCRIPTED_TUI_READY_MS } from "../../support/world.ts";
@@ -448,6 +454,41 @@ Given(
     const continued = await latestSessionFile(sessionsFolder(this.tokens));
     await this.restartPi("continue-session");
     assert.strictEqual(await currentSessionFile(this), continued);
+  },
+);
+
+// `new-session` starts the profile Pi again in a new saved session, so the
+// step checks that Pi is in a file of the sessions folder that it did not
+// leave.
+Given(
+  "the user has started pi again in a new session",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    const left = await currentSessionFile(this);
+    await this.restartPi("new-session");
+    const started = await currentSessionFile(this);
+    assert.deepStrictEqual(
+      { folder: started === undefined ? undefined : path.dirname(started), left: started === left },
+      { folder: sessionsFolder(this.tokens), left: false },
+    );
+  },
+);
+
+// RPC `switch_session` answers after the left session's shutdown handlers
+// and the resumed session's start handlers ran, the hooks among them.
+Given(
+  "the user has resumed the session of the prompt {string}",
+  async function (this: ScenarioWorld, prompt: string) {
+    const sessionPath = await sessionFileWithPrompt(
+      sessionsFolder(this.tokens),
+      expandTokens(prompt, this.tokens),
+    );
+    const { response } = await this.pi.request({ type: "switch_session", sessionPath });
+    assert.deepStrictEqual(
+      { success: response.success, data: response.data },
+      { success: true, data: { cancelled: false } },
+    );
+    assert.strictEqual(await currentSessionFile(this), sessionPath);
   },
 );
 

@@ -355,6 +355,37 @@ Feature: Hook additional context
       | 2    | user | SessionStart hook additional context: ss-ctx |
       | 2    | user | second prompt                                |
 
+  Scenario: A resumed session carries nothing from the session the user left
+    Given pi runs with the scripted model and saves its session
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has these hooks, each recording its runs:
+      | name    | event        | matcher | form   | output                                                                              |
+      | primer  | SessionStart | clear   | script | {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"a-ctx"}} |
+      | other   | SessionStart | startup | script | {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"b-ctx"}} |
+      | refresh | SessionStart | resume  | script | {"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"a-ctx"}} |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has started a new pi session
+    Given the scripted model plays these steps:
+      | reply  |
+      | Hello. |
+      | Hi.    |
+      | Done.  |
+    Given the user has prompted "a prompt"
+    Given the user has started pi again in a new session
+    Given the user has prompted "b prompt"
+    Given the user has resumed the session of the prompt "a prompt"
+    When the user prompts "again"
+    Then the model call 3 receives these messages:
+      | role      | text                                        |
+      | user      | SessionStart hook additional context: a-ctx |
+      | user      | a prompt                                    |
+      | assistant | Hello.                                      |
+      | user      | again                                       |
+
   Scenario: A continued session keeps one copy of a session start context saved to a file
     Given pi runs with the scripted model and saves its session
     Given the marketplace "fixtures" is published as a dir source
