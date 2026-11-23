@@ -1198,6 +1198,7 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ### Blockers/Concerns
 
+- [integration-rescope] CHANGELOG parent line for the milestone PR (Phase 6.1, HKRL-03, `c93f75f`/`996f933`): "A plugin's `SessionStart` context now reaches the next model call after a compaction in the middle of a run or after a context overflow."
 - [integration-rescope] CHANGELOG parent line for the milestone PR (Phase 6.1, HKRL-02, `66219fb`): "A resumed or forked session no longer shows a plugin's `SessionStart` context twice; only context that changed is added."
 - [integration-rescope] Phase 8 planned and checked (5 plans, 2 waves); decision-coverage gate overridden after the plan checker confirmed coverage. Wave 1 runs beside Phase 6.1's gap planning on disjoint files; 08-05 waits for Phase 6.1 to complete.
 - [integration-rescope] CHANGELOG parent line for the milestone PR (Phase 6.1, HKRL-01, `b116f4f`): "A Pi `/reload` before your first prompt no longer drops the context that a plugin's `SessionStart` hook added at startup."
