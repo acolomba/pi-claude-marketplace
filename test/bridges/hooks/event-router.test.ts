@@ -4849,6 +4849,7 @@ function queuedUserMessage(text: string): unknown {
 const RUN_EVENTS = {
   turn_start: { type: "turn_start" },
   turn_end: { type: "turn_end", message: TEXT_REPLY, context: { pendingMessages: [] } },
+  tool_turn_end: { type: "turn_end", message: TOOL_CALL_REPLY, context: { pendingMessages: [] } },
   turn_end_with_queued_message: {
     type: "turn_end",
     message: TEXT_REPLY,
@@ -4859,9 +4860,9 @@ const RUN_EVENTS = {
     message: TEXT_REPLY,
     context: { pendingMessages: [queuedUserMessage("also say hi")] },
   },
-  turn_end_with_hook_context: {
+  tool_turn_end_with_hook_context: {
     type: "turn_end",
-    message: TEXT_REPLY,
+    message: TOOL_CALL_REPLY,
     context: {
       pendingMessages: [
         {
@@ -4991,7 +4992,7 @@ for (const { title, before, queuedAtRunEnd = false, reason, willRetry, options }
   {
     title:
       "steers the SessionStart context of a compaction between two turns into the next model call (HKRL-03)",
-    before: ["turn_end"],
+    before: ["tool_turn_end"],
     reason: "threshold",
     willRetry: false,
     options: { deliverAs: "steer" },
@@ -5014,8 +5015,8 @@ for (const { title, before, queuedAtRunEnd = false, reason, willRetry, options }
   },
   {
     title:
-      "steers the SessionStart context of a compaction after a turn whose held hook context Pi appends at the turn end (HKRL-03)",
-    before: ["turn_end_with_hook_context"],
+      "steers the SessionStart context of a compaction after a tool call whose held prompt context Pi appends at the turn end (HKRL-03)",
+    before: ["tool_turn_end_with_hook_context"],
     reason: "threshold",
     willRetry: false,
     options: { deliverAs: "steer" },
@@ -5117,7 +5118,7 @@ for (const { title, before, queuedAtRunEnd = false, reason, willRetry, options }
   {
     title:
       "holds the SessionStart context of a compaction between two turns after the user steers the run (HKRL-03)",
-    before: ["turn_end", "steer_input"],
+    before: ["tool_turn_end", "steer_input"],
     reason: "threshold",
     willRetry: false,
     options: { triggerTurn: false },
@@ -5125,7 +5126,7 @@ for (const { title, before, queuedAtRunEnd = false, reason, willRetry, options }
   {
     title:
       "steers the SessionStart context of a compaction between two turns after the user queues a follow-up (HKRL-03)",
-    before: ["turn_end", "follow_up_input"],
+    before: ["tool_turn_end", "follow_up_input"],
     reason: "threshold",
     willRetry: false,
     options: { deliverAs: "steer" },
@@ -5215,7 +5216,7 @@ test("holds the SessionStart context of a compaction between two turns when the 
     },
   });
   routeCompactionHooks(runtime, root);
-  await runEventHandler(registrations, "turn_end")(RUN_EVENTS.turn_end, context);
+  await runEventHandler(registrations, "tool_turn_end")(RUN_EVENTS.tool_turn_end, context);
 
   // act
   await registeredHandler(registrations, "session_compact")(
@@ -5254,7 +5255,7 @@ test("starts a new registration's run idle, so its compaction holds the SessionS
   };
   await hydration.registerHooksBridge(pi, options);
   const context = makeContext(root, root);
-  await registeredHandler(registrations, "turn_end")(RUN_EVENTS.turn_end, context);
+  await registeredHandler(registrations, "turn_end")(RUN_EVENTS.tool_turn_end, context);
   await hydration.registerHooksBridge(pi, options);
   routeCompactionHooks(runtime, root);
 
