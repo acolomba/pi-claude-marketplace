@@ -1,9 +1,9 @@
 ---
 phase: "2"
 slug: "git-process-seam-and-typed-failures"
-status: open_threats
+status: secured
 # threats_open = count of OPEN threats at or above workflow.security_block_on severity (the blocking gate)
-threats_open: 1
+threats_open: 0
 asvs_level: 1
 created: "2026-11-23"
 ---
@@ -76,8 +76,8 @@ created: "2026-11-23"
 | T-02-37 | Tampering | the user's ssh choice silently replaced | medium | mitigate | `[command, ...options]` keeps the user's command and arguments first (`git-process.ts:480-489`); precedence and variant rows `git-process.test.ts:2510-2682`; real-git `-i` case `:2861` | closed |
 | T-02-38 | Tampering | a stale chokepoint description in the codebase map | medium | mitigate | 02-08 verify script re-run by the auditor, exit 0; `CONVENTIONS.md:68` and `ARCHITECTURE.md:237` name all five exempt files and not `git-credential.ts` | closed |
 | T-02-39 | Repudiation | a deferred manual check nobody tracks | medium | mitigate | open `unrun-verify` entry #120 (`.planning/WINDOWS.md:137`). Caveat: `workflow.windows_enforce` is false, so the entry does not block `/gsd-ship` by itself | closed |
-| T-02-40 | Denial of service | Windows lookup or macOS shim misfiring on a real machine | high | mitigate | checkpoint steps 1, 5, 6, 7, 8 not run; deferred to the PR (WINDOWS #120). Fake-host rows do not prove real-machine behavior | open |
-| T-02-41 | Information disclosure | a credential dialog or prompt during a lookup | medium | mitigate | checkpoint steps 3, 4, 9, 10 not run; deferred to the PR (WINDOWS #120); the Linux behavior is proven under T-02-10 | open — below high threshold (non-blocking) |
+| T-02-40 | Denial of service | Windows lookup or macOS shim misfiring on a real machine | high | accept (until PR) | checkpoint steps 1, 5, 6, 7, 8 not run; deferred to the PR (WINDOWS #120). Fake-host rows do not prove real-machine behavior. Accepted until the PR (AR-02-02) | closed |
+| T-02-41 | Information disclosure | a credential dialog or prompt during a lookup | medium | accept (until PR) | checkpoint steps 3, 4, 9, 10 not run; deferred to the PR (WINDOWS #120); the Linux behavior is proven under T-02-10. Accepted until the PR (AR-02-03) | closed |
 | T-02-SC | Tampering | npm/pip/cargo installs (plans 02-01 to 02-08) | high | mitigate | `git diff --stat 6c34252 HEAD -- package.json package-lock.json` is empty; the 46-file diff has no dependency file | closed |
 
 *Status: open · closed · open — below high threshold (non-blocking)*
@@ -91,6 +91,8 @@ created: "2026-11-23"
 | Risk ID | Threat Ref | Rationale | Accepted By | Date |
 |---------|------------|-----------|-------------|------|
 | AR-02-01 | T-02-21 | A remote can print text that matches an unanchored kind row, through a `remote:` sideband line or an ssh server banner (`xcrun: error:`, the host-key texts, `Permission denied (publickey`). The exit-code rows (127, 129) cannot be spoofed. A sideband line cannot spoof the line-anchored rows, because git prefixes each one with `remote: `. The effect stays inside the closed reason set: a misleading reason, a dropped found-git cache entry (the next command looks git up again), and at most one `git version` debug read. No code runs and no credential moves (`platform/git-failure-kind.ts:60-97`). Re-check when the clone transport moves to system git: an `https-auth` kind may then drive the stored-credential reject path. | plan 02-04 (autonomous run; pending maintainer review) | 2026-11-23 |
+| AR-02-02 | T-02-40 | The macOS xcrun-shim check and the Windows lookup, `.cmd`/`.bat` refusal, cwd skip and `taskkill` tree kill have code and fake-host unit cases only; no Mac or Windows machine was attached. Accepted until the pull request: before merge the 02-08 steps 1-10 run on a real Mac and a real Windows machine and WINDOWS #120 and #121 close. | maintainer (2026-11-23, chose "accept, check at PR") | 2026-11-23 |
+| AR-02-03 | T-02-41 | Same deferral for the no-credential-window and no-console-window steps (3, 4, 9, 10). | maintainer (2026-11-23, chose "accept, check at PR") | 2026-11-23 |
 
 ---
 

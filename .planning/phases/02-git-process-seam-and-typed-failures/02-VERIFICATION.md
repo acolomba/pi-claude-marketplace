@@ -1,7 +1,7 @@
 ---
 phase: 02-git-process-seam-and-typed-failures
 verified: 2026-11-23T20:45:00Z
-status: human_needed
+status: passed
 score: 5/5 must-haves verified
 covered_files:
   - ".planning/phases/02-git-process-seam-and-typed-failures/02-01-PLAN.md"
@@ -169,3 +169,8 @@ No gaps. Each of the five ROADMAP success criteria has code evidence and a passi
 
 _Verified: 2026-11-23T20:45:00Z_
 _Verifier: Claude (gsd-verifier)_
+
+
+## Maintainer decision 2026-11-23
+
+The maintainer accepted the human-verification item (the manual macOS and Windows check) as "accept, check at PR": Phase 2 is marked passed, the check runs on real machines before the pull request merges (WINDOWS #120, #121; SECURITY AR-02-02, AR-02-03).

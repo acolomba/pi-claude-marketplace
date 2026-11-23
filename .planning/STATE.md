@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: system-git
 milestone_name: System Git
-current_phase: 2
-current_phase_name: Git Process Seam and Typed Failures
-status: executing
-stopped_at: Phase 01 complete, ready to plan Phase 2
-last_updated: "2026-11-23T13:36:44.198Z"
+current_phase: 3
+current_phase_name: System Git Transport and Clone Shape
+status: ready_to_plan
+stopped_at: Phase 2 complete, ready to plan Phase 3
+last_updated: "2026-11-23T20:48:38.381Z"
 last_activity: 2026-11-23
-last_activity_desc: Phase 01 complete, transitioned to Phase 2
-state_head: eb02f86a4eafb5d5c91d83c8ca93dee7c071aee2
+last_activity_desc: Phase 2 complete, transitioned to Phase 3
+state_head: 0a96a3b5e2d037156b40df30de141283f0077245
 progress:
   total_phases: 8
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 16
-  completed_plans: 8
-  percent: 13
+  completed_plans: 16
+  percent: 25
 ---
 
 # Project State
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-11-23 after Phase 1)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 2 — Git Process Seam and Typed Failures
+**Current focus:** Phase 3 — System Git Transport and Clone Shape
 
 ## Current Position
 
-Phase: 2 (Git Process Seam and Typed Failures) — READY TO EXECUTE
+Phase: 3 — System Git Transport and Clone Shape
 Plan: Not started
-Status: Ready to execute
-Last activity: 2026-11-23 — Phase 01 complete, transitioned to Phase 2
+Status: Ready to plan
+Last activity: 2026-11-23 — Phase 2 complete, transitioned to Phase 3
 
-Progress: [█░░░░░░░░░] 13%
+Progress: [███░░░░░░░] 25%
 
 
 ### system-git Phase 1 (Harness on System Git): records for Phase 3
@@ -1310,7 +1310,7 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 ## Session Continuity
 
 Last session: 2026-11-23
-Stopped at: Phase 1 complete, ready to plan Phase 2
+Stopped at: Phase 2 complete, ready to verify Phase 3
 Resume file: None
 
 ### Phase 2 completion-helper notes
