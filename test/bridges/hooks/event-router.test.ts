@@ -52,11 +52,13 @@ import { adapterCommand } from "../../platform/pi-inventory-seed.ts";
 import type { SpawnDeps } from "../../../extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts";
 import type { HookExecutor } from "../../../extensions/pi-claude-marketplace/bridges/hooks/dispatch.ts";
 import type {
+  HooksBridge,
   HooksHydrationDeps,
   TypedExpansionResolver,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/event-router.ts";
 import type { HookExecResult } from "../../../extensions/pi-claude-marketplace/bridges/hooks/exec-result.ts";
 import type { McpServerNamesReader } from "../../../extensions/pi-claude-marketplace/bridges/hooks/mcp-server-table.ts";
+import type { ClaudeSessionStartEvent } from "../../../extensions/pi-claude-marketplace/bridges/hooks/payloads/session-start.ts";
 import type {
   HooksRuntime,
   HooksRuntimeChildEntry,
@@ -71,6 +73,7 @@ import type {
   ExtensionContext,
   InputEvent,
   SessionCompactEvent,
+  SessionStartEvent,
   ToolCallEvent,
   ToolResultEvent,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -4042,21 +4045,25 @@ function withSessionManager(
   });
 }
 
-// Registers the bridge with `processStartedAt` and returns its session_start
-// handler and the scope and event of each SessionStart dispatch.
+// Registers the bridge with `processStartedAt` and returns its runtime, the
+// bridge, its session_start handler, and the scope and event of each
+// SessionStart dispatch.
 async function launchRouter(
   t: TestContext,
   processStartedAt: number,
 ): Promise<{
   readonly root: string;
   readonly projectRoot: string;
+  readonly runtime: HooksRuntime;
+  readonly bridge: HooksBridge;
   readonly sessionStart: (...args: unknown[]) => unknown;
-  readonly dispatched: readonly unknown[];
+  readonly dispatched: readonly { readonly scope: string; readonly event: unknown }[];
 }> {
   const { root, projectRoot } = await makeSessionStartFixture(t);
   const { pi, registrations } = makeRecordingPi();
-  const dispatched: unknown[] = [];
-  await createHooksHydration(createHooksRuntime(), {
+  const dispatched: { readonly scope: string; readonly event: unknown }[] = [];
+  const runtime = createHooksRuntime();
+  const bridge = await createHooksHydration(runtime, {
     loadState,
     readHooksJson,
     readMcpServerNames: readStoredServerNames,
@@ -4071,9 +4078,78 @@ async function launchRouter(
   return {
     root,
     projectRoot,
+    runtime,
+    bridge,
     sessionStart: registeredHandler(registrations, "session_start"),
     dispatched,
   };
+}
+
+// The router context with `mode` in place of its own.
+function withMode(context: ExtensionContext, mode: string): ExtensionContext {
+  return new Proxy(context, {
+    get(target, property, receiver): unknown {
+      return property === "mode" ? mode : Reflect.get(target, property, receiver);
+    },
+  });
+}
+
+// Gives the plugin `pluginId` a project-scope SessionStart route, as a load's
+// autoapply does.
+function addSessionStartRoute(runtime: HooksRuntime, pluginId: string, projectRoot: string): void {
+  runtime.setRoutingBucket("SessionStart", [
+    ...runtime.getRoutingBucket("SessionStart"),
+    routeEntry("SessionStart", "*", pluginId, projectRoot),
+  ]);
+}
+
+// Registers the bridge, runs the session's SessionStart for Pi's `reason` in
+// `mode`, then gives the plugin `added` a project-scope SessionStart route, as
+// a load's autoapply does.
+async function sessionWithAddedPlugin(
+  t: TestContext,
+  options: {
+    readonly mode: string;
+    readonly reason: SessionStartEvent["reason"];
+    readonly prepare?: (context: ExtensionContext, root: string) => ExtensionContext;
+  },
+): Promise<{
+  readonly bridge: HooksBridge;
+  readonly runtime: HooksRuntime;
+  readonly root: string;
+  readonly projectRoot: string;
+  readonly context: ExtensionContext;
+  readonly dispatched: readonly { readonly scope: string; readonly event: unknown }[];
+}> {
+  const { root, projectRoot, runtime, bridge, sessionStart, dispatched } = await launchRouter(t, 0);
+  const modeContext = withMode(makeContext(projectRoot, root), options.mode);
+  const context = options.prepare?.(modeContext, root) ?? modeContext;
+  await sessionStart({ type: "session_start", reason: options.reason }, context);
+  addSessionStartRoute(runtime, "added", projectRoot);
+  return { bridge, runtime, root, projectRoot, context, dispatched };
+}
+
+// What one dispatch received: its scope, its source, and the plugins a late
+// run names.
+function dispatchSummary(dispatch: { readonly scope: string; readonly event: unknown }): {
+  readonly scope: string;
+  readonly source: string;
+  readonly plugins: readonly string[];
+} {
+  const event = dispatch.event as ClaudeSessionStartEvent;
+  return {
+    scope: dispatch.scope,
+    source: event.source,
+    plugins: [...(event.newPluginsOnly ?? [])],
+  };
+}
+
+// The two dispatches of the session's own SessionStart, project scope first.
+function sessionRuns(source: string): readonly ReturnType<typeof dispatchSummary>[] {
+  return [
+    { scope: "project", source, plugins: [] },
+    { scope: "user", source, plugins: [] },
+  ];
 }
 
 for (const { launch, header, holdsMessage, processStartedAt, source } of [
@@ -4131,6 +4207,145 @@ for (const { launch, header, holdsMessage, processStartedAt, source } of [
     ]);
   });
 }
+
+for (const mode of ["print", "json", "rpc"] as const) {
+  test(`a ${mode} load runs SessionStart for the plugin that gained a route after the session's SessionStart, with its source (HOOKLATESS-D1)`, async (t) => {
+    // arrange
+    const { bridge, context, dispatched } = await sessionWithAddedPlugin(t, {
+      mode,
+      reason: "startup",
+    });
+
+    // act
+    await bridge.runLateSessionStart("startup", context);
+
+    // assert
+    assert.deepStrictEqual(dispatched.map(dispatchSummary), [
+      ...sessionRuns("startup"),
+      { scope: "project", source: "startup", plugins: ["added@catalog"] },
+    ]);
+  });
+}
+
+test("a load after a resumed launch sends source resume (HOOKLATESS-D1)", async (t) => {
+  // arrange
+  const { bridge, context, dispatched } = await sessionWithAddedPlugin(t, {
+    mode: "json",
+    reason: "startup",
+    prepare: (modeContext, root) =>
+      withSessionManager(modeContext, launchSession(root, { timestamp: LAUNCH_HEADER_TIME }, true)),
+  });
+
+  // act
+  await bridge.runLateSessionStart("startup", context);
+
+  // assert
+  assert.deepStrictEqual(dispatched.map(dispatchSummary), [
+    ...sessionRuns("resume"),
+    { scope: "project", source: "resume", plugins: ["added@catalog"] },
+  ]);
+});
+
+test("a tui load runs no late SessionStart (HOOKLATESS-D1)", async (t) => {
+  // arrange
+  const { bridge, context, dispatched } = await sessionWithAddedPlugin(t, {
+    mode: "tui",
+    reason: "startup",
+  });
+
+  // act
+  await bridge.runLateSessionStart("startup", context);
+
+  // assert
+  assert.deepStrictEqual(dispatched.map(dispatchSummary), sessionRuns("startup"));
+});
+
+test("a reload runs no late SessionStart (HOOKLATESS-D1)", async (t) => {
+  // arrange
+  const { bridge, context, dispatched } = await sessionWithAddedPlugin(t, {
+    mode: "print",
+    reason: "startup",
+  });
+
+  // act
+  await bridge.runLateSessionStart("reload", context);
+
+  // assert
+  assert.deepStrictEqual(dispatched.map(dispatchSummary), sessionRuns("startup"));
+});
+
+test("a second load runs no late SessionStart (HOOKLATESS-D1)", async (t) => {
+  // arrange
+  const { bridge, runtime, projectRoot, context, dispatched } = await sessionWithAddedPlugin(t, {
+    mode: "rpc",
+    reason: "startup",
+  });
+  await bridge.runLateSessionStart("startup", context);
+  addSessionStartRoute(runtime, "later", projectRoot);
+
+  // act
+  await bridge.runLateSessionStart("startup", context);
+
+  // assert
+  assert.deepStrictEqual(dispatched.map(dispatchSummary), [
+    ...sessionRuns("startup"),
+    { scope: "project", source: "startup", plugins: ["added@catalog"] },
+  ]);
+});
+
+test("a load after a new session runs no late SessionStart (HOOKLATESS-D1)", async (t) => {
+  // arrange
+  const { bridge, context, dispatched } = await sessionWithAddedPlugin(t, {
+    mode: "json",
+    reason: "new",
+  });
+
+  // act
+  await bridge.runLateSessionStart("startup", context);
+
+  // assert
+  assert.deepStrictEqual(dispatched.map(dispatchSummary), sessionRuns("clear"));
+});
+
+test(
+  "a load in a pi-subagents child runs no late SessionStart (HOOKLATESS-D1)",
+  { concurrency: false },
+  async (t) => {
+    // arrange
+    enterChild(t, undefined);
+    const { bridge, context, dispatched } = await sessionWithAddedPlugin(t, {
+      mode: "json",
+      reason: "startup",
+    });
+
+    // act
+    await bridge.runLateSessionStart("startup", context);
+
+    // assert
+    assert.deepStrictEqual(dispatched.map(dispatchSummary), []);
+  },
+);
+
+test("a load whose mode is not a notification mode debug-logs and runs no late SessionStart (HOOKLATESS-D1, NFR-2)", async (t) => {
+  // arrange
+  const debugLines = observeRouterDebug(t);
+  const { bridge, context, dispatched } = await sessionWithAddedPlugin(t, {
+    mode: "print",
+    reason: "startup",
+  });
+
+  // act
+  await bridge.runLateSessionStart("startup", withMode(context, "web"));
+
+  // assert
+  assert.deepStrictEqual(
+    { dispatched: dispatched.map(dispatchSummary), debugLines: debugLines() },
+    {
+      dispatched: sessionRuns("startup"),
+      debugLines: ["[hooks] late SessionStart skipped: Unsupported notification mode: web"],
+    },
+  );
+});
 
 for (const read of ["getHeader", "getEntries"] as const) {
   test(`session_start at Pi startup debug-logs a ${read} that throws and dispatches SessionStart with source startup (NFR-2)`, async (t) => {
@@ -5442,20 +5657,29 @@ for (const { claudeEvent, event } of [
   }
 }
 
-function preToolUseEntry(pluginId: string, cwd: string): RoutingEntry {
+function routeEntry(
+  claudeEvent: BucketAEvent,
+  rawMatcher: string,
+  pluginId: string,
+  cwd: string,
+): RoutingEntry {
   return {
     scope: "project",
     marketplace: "catalog",
     pluginId,
     resolvedSource: asAbsolutePluginRoot(path.join(cwd, pluginId)),
-    claudeEvent: "PreToolUse",
-    matcher: parseMatcher("Bash"),
-    rawMatcher: "Bash",
+    claudeEvent,
+    matcher: parseMatcher(rawMatcher),
+    rawMatcher,
     handlerDecl: { type: "command", command: `run-${pluginId}` },
     declarationIndex: 0,
     ifPredicate: MATCH_ALL_IF,
     options: resolveOptions(undefined),
   };
+}
+
+function preToolUseEntry(pluginId: string, cwd: string): RoutingEntry {
+  return routeEntry("PreToolUse", "Bash", pluginId, cwd);
 }
 
 /**
@@ -6071,7 +6295,7 @@ for (const scenario of [
 // of its folder after `load` runs (D-PG5-15).
 async function hookOutputAfterLoad(
   loc: ReturnType<typeof locationsFor>,
-  load: () => Promise<void>,
+  load: () => Promise<unknown>,
 ): Promise<string[]> {
   const savedPath = await saveHookOutput(loc, "old-output", "additionalContext", "saved");
   const old = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);
@@ -6085,7 +6309,7 @@ test("a bridge load removes the old saved hook output of each scope it reaps (D-
   const { root } = await createHermeticEnvironment(t, "event-router-output-sweep-");
   const runtime = createHooksRuntime();
   const { pi } = makeRecordingPi();
-  const load = (): Promise<void> =>
+  const load = (): Promise<unknown> =>
     createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, { cwd: root });
 
   // act
@@ -6358,13 +6582,13 @@ async function expansionFixture(
   readonly registrations: RecordedRegistration[];
   readonly runs: ExpansionRun[];
   readonly context: ExtensionContext;
-  readonly register: () => Promise<void>;
+  readonly register: () => Promise<unknown>;
 }> {
   const { root } = await createHermeticEnvironment(t, "hooks-router-expansion-");
   const runtime = createHooksRuntime();
   const { pi, registrations } = makeRecordingPi();
   const runs: ExpansionRun[] = [];
-  const register = (): Promise<void> =>
+  const register = (): Promise<unknown> =>
     createHooksHydration(runtime, EMPTY_STATE_READER).registerHooksBridge(pi, {
       cwd: root,
       executor: (entry, event) => {

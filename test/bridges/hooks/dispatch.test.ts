@@ -1648,6 +1648,49 @@ describe("composite dispatch closure partitions", () => {
     });
   }
 
+  test("runs only the SessionStart hooks of the plugins that a late SessionStart names (HOOKLATESS-D1)", async () => {
+    // arrange
+    const runtime = createHooksRuntime();
+    runtime.advanceGeneration();
+    const context = createExtensionContext("/workspace/dispatch-session-late");
+    const event = {
+      source: "startup",
+      newPluginsOnly: new Set(["session-added@dispatch-catalog"]),
+    } satisfies ClaudeSessionStartEvent;
+    runtime.setRoutingBucket("SessionStart", [
+      createRoutingEntry({
+        pluginId: "session-seen",
+        claudeEvent: "SessionStart",
+        rawMatcher: "*",
+        declarationIndex: 0,
+      }),
+      createRoutingEntry({
+        pluginId: "session-added",
+        claudeEvent: "SessionStart",
+        rawMatcher: "*",
+        declarationIndex: 1,
+      }),
+    ]);
+    const executorCalls: RecordedCall[] = [];
+    const executor = createRecordingExecutor(
+      { "session-seen": { kind: "noop" }, "session-added": { kind: "noop" } },
+      executorCalls,
+    );
+    const handler = compositeHandlerFor(
+      runtime,
+      "SessionStart",
+      runtime.currentGeneration(),
+      undefined,
+      executor,
+    );
+
+    // act
+    await handler(event, context);
+
+    // assert
+    assert.deepStrictEqual(executorCalls, [{ pluginId: "session-added", event }]);
+  });
+
   for (const { reason, expectedPluginIds } of [
     { reason: "other", expectedPluginIds: ["session-end-empty", "session-end-other"] },
     { reason: "clear", expectedPluginIds: ["session-end-empty", "session-end-clear"] },

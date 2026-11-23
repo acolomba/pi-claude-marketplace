@@ -33,6 +33,13 @@ export interface ClaudeSessionStartEvent {
    * `translateSessionStart` never writes it to stdin.
    */
   readonly nextCallReadsSteer?: () => boolean;
+  /**
+   * HOOKLATESS-D1: set by the late run of a load. The plugins, as
+   * `<plugin>@<marketplace>`, whose hooks the dispatch runs, as Claude Code's
+   * `newPluginsOnly`. Dispatch selects on it, and `translateSessionStart`
+   * never writes it to stdin.
+   */
+  readonly newPluginsOnly?: ReadonlySet<string>;
 }
 
 /** The JSON a SessionStart hook reads on stdin. */

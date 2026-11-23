@@ -92,6 +92,7 @@ import {
 } from "./event-adapters.ts";
 import { FILE_SYSTEM_SWEEP_OPS, sweepHookOutput } from "./hook-output-files.ts";
 import { compileIfPredicate, MATCH_ALL_IF } from "./if-field/index.ts";
+import { createLateSessionStartLedger, type LateSessionStartLedger } from "./late-session-start.ts";
 import {
   mcpServerEntries,
   type McpServerEntry,
@@ -129,6 +130,7 @@ import type {
   ExtensionMode,
   InputEvent,
   InputEventResult,
+  ResourcesDiscoverEvent,
   SessionCompactEvent,
   SessionShutdownEvent,
 } from "../../platform/pi-api.ts";
@@ -199,6 +201,10 @@ function dispatchesInCurrentSession(event: BucketAEvent): boolean {
 }
 
 const NO_LAUNCH_FACTS: SessionLaunchFacts = { holdsMessages: false, forkedByThisLaunch: false };
+
+// HOOKLATESS-D1: the modes of Claude Code's headless runner, the only one
+// that runs a late SessionStart.
+const LATE_SESSION_START_MODES: ReadonlySet<ExtensionMode> = new Set(["print", "json", "rpc"]);
 
 // D-PG6-13..15: read from Pi's session manager only, never from a file or
 // the command line. A new session already holds setting entries, so only a
@@ -826,9 +832,25 @@ export interface HooksHydration {
    * state and reaches no network.
    */
   readonly refreshMcpServers: (cwd: string, projectTrusted: boolean) => Promise<void>;
+  /** Registers the bridge and resolves to what it gives the extension's load (HOOKLATESS-D1). */
   readonly registerHooksBridge: (
     pi: ExtensionAPI,
     opts: RegisterHooksBridgeOptions,
+  ) => Promise<HooksBridge>;
+}
+
+/**
+ * What a registered bridge gives the extension's load (HOOKLATESS-D1). After a
+ * load with Pi's `startup` resources reason, in print, json, or rpc mode,
+ * `runLateSessionStart` runs SessionStart once for the plugins that gained a
+ * SessionStart route since the session's own SessionStart, with that run's
+ * source, as Claude Code's headless runner does for a plugin that loads after
+ * the session started. It never throws (NFR-2).
+ */
+export interface HooksBridge {
+  readonly runLateSessionStart: (
+    reason: ResourcesDiscoverEvent["reason"],
+    ctx: ExtensionContext,
   ) => Promise<void>;
 }
 
@@ -1313,6 +1335,44 @@ async function prepareSessionStartDataDirs(
 }
 
 /**
+ * HOOKLATESS-D1: the late SessionStart run of one bridge generation. It takes
+ * the ledger first, so the first load takes it whatever follows. It runs only
+ * after a load with Pi's `startup` resources reason, because a reload runs no
+ * SessionStart (D-CF5-03), and only in print, json, or rpc mode, because
+ * Claude Code runs the late hooks only in its headless runner. The mode is
+ * read last, so a load with nothing owed reads nothing of `ctx`. The shared
+ * data directories are prepared as for every SessionStart dispatch, and the
+ * dispatch runs only the hooks of the owed plugins, with the source of the
+ * session's own SessionStart. A failure is debug-logged and the load goes on
+ * (NFR-2).
+ */
+function lateSessionStartRun(
+  ledger: LateSessionStartLedger,
+  sessionStartHandler: CompositeHandler<"SessionStart">,
+  routingState: EventRouterRoutingState,
+  generationIsCurrent: GenerationGuard,
+): HooksBridge["runLateSessionStart"] {
+  return async (reason, ctx) => {
+    try {
+      const late = ledger.takeLateRun(routingState.getRoutingBucket("SessionStart"));
+      if (
+        late === undefined ||
+        reason !== "startup" ||
+        !LATE_SESSION_START_MODES.has(requireNotificationMode(ctx.mode))
+      ) {
+        return;
+      }
+
+      // The handler checks the generation itself.
+      await prepareSessionStartDataDirs(routingState, ctx, generationIsCurrent);
+      await sessionStartHandler({ source: late.source, newPluginsOnly: late.plugins }, ctx);
+    } catch (err: unknown) {
+      hookDebugLog(`late SessionStart skipped: ${errorMessage(err)}`);
+    }
+  };
+}
+
+/**
  * The `session_shutdown` callback: it maps Pi's reason once, with the live
  * session mode, and dispatches the Claude-side SessionEnd event (D-CF5-02).
  * Pi `reload` keeps the session, so it runs no SessionEnd (D-CF5-03). In a
@@ -1469,6 +1529,8 @@ function sessionCompactCallback(
  *      are driven off the turn-boundary surfaces rather than a per-Pi-event
  *      surface. The Pi event-name set has 13 names (`input` appears three
  *      times), so 15 calls.
+ *   7. Return the late SessionStart run of this generation, which the
+ *      extension's load calls (HOOKLATESS-D1).
  *
  * `opts.executor` is the hook-execution injection point, forwarded verbatim
  * to every `compositeHandlerFor` / `toolResultCompositeHandler` /
@@ -1486,10 +1548,13 @@ async function registerHooksBridgeWith(
   reader: HooksHydrationDeps,
   pi: ExtensionAPI,
   opts: RegisterHooksBridgeOptions,
-): Promise<void> {
+): Promise<HooksBridge> {
   const routingState = createRoutingStateOperations(runtime);
   const capturedGeneration = runtime.advanceGeneration();
   const generationIsCurrent = (): boolean => runtime.currentGeneration() === capturedGeneration;
+  // What this generation's SessionStart dispatch saw, for the load after it
+  // (HOOKLATESS-D1).
+  const lateSessionStart = createLateSessionStartLedger();
   function bind<Args extends readonly unknown[], Result>(
     callbackForGeneration: RegistrationCallbackFactory<Args, Result>,
   ): (...args: Args) => Result | undefined {
@@ -1636,10 +1701,9 @@ async function registerHooksBridgeWith(
               event.reason === "startup"
                 ? readSessionLaunchFacts(ctx.sessionManager, processStartedAt)
                 : NO_LAUNCH_FACTS;
-            await sessionStartHandler(
-              { source: claudeSessionStartSource(event.reason, launch) },
-              ctx,
-            );
+            const source = claudeSessionStartSource(event.reason, launch);
+            lateSessionStart.recordDispatch(source, routingState.getRoutingBucket("SessionStart"));
+            await sessionStartHandler({ source }, ctx);
           }
 
           if (!generationIsCurrent()) {
@@ -1816,6 +1880,14 @@ async function registerHooksBridgeWith(
       };
     }),
   );
+  return {
+    runLateSessionStart: lateSessionStartRun(
+      lateSessionStart,
+      compositeHandlerFor(runtime, "SessionStart", capturedGeneration, pi, opts.executor),
+      routingState,
+      generationIsCurrent,
+    ),
+  };
 }
 
 /**
@@ -1865,8 +1937,8 @@ export function createHooksHydration(
       const generationIsCurrent = (): boolean => runtime.currentGeneration() === capturedGeneration;
       await refreshMcpServersWith(reader, cwd, projectTrusted, routingState, generationIsCurrent);
     },
-    async registerHooksBridge(pi: ExtensionAPI, opts: RegisterHooksBridgeOptions): Promise<void> {
-      await registerHooksBridgeWith(runtime, reader, pi, opts);
+    registerHooksBridge(pi: ExtensionAPI, opts: RegisterHooksBridgeOptions): Promise<HooksBridge> {
+      return registerHooksBridgeWith(runtime, reader, pi, opts);
     },
   };
 }

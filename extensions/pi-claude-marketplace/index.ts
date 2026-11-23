@@ -183,8 +183,11 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   //
   // D-PG6-18: the bridge's resolver of a typed line and the skill alias
   // handler read one plugin name cache, so both see the same table.
+  //
+  // HOOKLATESS-D1: the registration returns the late SessionStart run that the
+  // load calls.
   const pluginNames = createPluginNamesCache(pi, loadPluginNames);
-  await hooksHydration.registerHooksBridge(pi, {
+  const hooksBridge = await hooksHydration.registerHooksBridge(pi, {
     cwd: homedir(),
     resolveTypedExpansion: createTypedExpansionResolver(pi, pluginNames),
   });
@@ -258,6 +261,13 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
     // D-PG10-23: the project scope's option variables follow the load's trust
     // answer; the constant above is the only trust read.
     await applyOptionVariablesWith(() => optionVariables.applyForLoad(event.cwd, projectTrusted));
+
+    // HOOKLATESS-D1: the plugins that this load's autoapply activated run their
+    // SessionStart hooks in print, json, and rpc mode, as Claude Code's headless
+    // runner runs a plugin that loads after the session started. It comes last,
+    // so the hooks see this load's plugin PATH and option variables, and it
+    // catches its own failure (NFR-2).
+    await hooksBridge.runLateSessionStart(event.reason, ctx);
   }
 
   // The peer's own `ExtensionAPI.on("resources_discover", ...)` overload checks
