@@ -4,6 +4,13 @@ import { test } from "node:test";
 import { builtinServerConfig } from "../../../extensions/pi-claude-marketplace/bridges/mcp/builtin-entry.ts";
 import { resolveOptions } from "../../../extensions/pi-claude-marketplace/domain/user-config.ts";
 
+import {
+  EXPANSION_BUILTINS,
+  EXPANSION_CASES,
+  OPTION_FIELD_CASES,
+  type ExpansionField,
+} from "./expansion-cases.ts";
+
 import type { McpSubstitutionContext } from "../../../extensions/pi-claude-marketplace/bridges/mcp/substitute.ts";
 
 const CONTEXT: McpSubstitutionContext = {
@@ -305,3 +312,97 @@ test("D-PG10-12: a command that options resolve to a leading ~/ gives no config,
   // assert
   assert.strictEqual(config, undefined);
 });
+
+// BLT-02: Pi resolves only `env` and `headers` values when it connects, so
+// every other field must hold Claude Code's value as written. The Pi
+// conformance test runs the `env` and `headers` rows through Pi's resolver.
+type WrittenAsIsField = Exclude<ExpansionField, "env" | "env-builtin" | "headers">;
+
+/** How one field sits in a Claude server object, and how to read it back from the config. */
+interface WrittenAsIsShape {
+  readonly server: (value: string) => Record<string, unknown>;
+  readonly written: (config: Readonly<Record<string, unknown>>) => unknown;
+}
+
+const REMOTE_URL = "https://mcp.example.test";
+
+function member(value: unknown, key: string): unknown {
+  return typeof value === "object" && value !== null ? Reflect.get(value, key) : undefined;
+}
+
+const WRITTEN_AS_IS_SHAPES: Readonly<Record<WrittenAsIsField, WrittenAsIsShape>> = {
+  command: { server: (value) => ({ command: value }), written: (config) => config.command },
+  args: {
+    server: (value) => ({ command: "server", args: [value] }),
+    written: (config) => member(config.args, "0"),
+  },
+  url: { server: (value) => ({ type: "http", url: value }), written: (config) => config.url },
+  "oauth.clientId": {
+    server: (value) => ({ type: "http", url: REMOTE_URL, oauth: { clientId: value } }),
+    written: (config) => member(config.oauth, "clientId"),
+  },
+  "oauth.scope": {
+    server: (value) => ({ type: "http", url: REMOTE_URL, oauth: { scopes: value } }),
+    written: (config) => member(config.oauth, "scope"),
+  },
+  "oauth.authServerMetadataUrl": {
+    server: (value) => ({ type: "http", url: REMOTE_URL, oauth: { authServerMetadataUrl: value } }),
+    written: (config) => member(config.oauth, "authServerMetadataUrl"),
+  },
+};
+
+function isWrittenAsIs<T extends { readonly field: ExpansionField }>(
+  row: T,
+): row is T & { readonly field: WrittenAsIsField } {
+  return Object.hasOwn(WRITTEN_AS_IS_SHAPES, row.field);
+}
+
+function writtenField(
+  field: WrittenAsIsField,
+  raw: string,
+  context: McpSubstitutionContext,
+): unknown {
+  const shape = WRITTEN_AS_IS_SHAPES[field];
+  const config = builtinServerConfig(shape.server(raw), context, undefined);
+  assert.ok(config !== undefined, `no config for ${raw}`);
+  return shape.written({ ...config });
+}
+
+// The built-in path registers per session, so `projectDir` is the session's
+// working directory at both scopes (P2-DC-03).
+for (const row of EXPANSION_CASES.filter(isWrittenAsIs)) {
+  test(`BLT-02: ${row.title} is written as Claude Code's value`, () => {
+    // arrange
+    const context: McpSubstitutionContext = {
+      ...EXPANSION_BUILTINS,
+      env: row.runtimeEnv,
+      options: undefined,
+    };
+
+    // act
+    const written = writtenField(row.field, row.raw, context);
+
+    // assert
+    assert.strictEqual(written, row.claudeOutput);
+  });
+}
+
+// D-PG10-12: the option `opt` of one plugin, whose default is the row's value.
+for (const row of OPTION_FIELD_CASES.filter(isWrittenAsIs)) {
+  test(`D-PG10-12: ${row.title} is written as Claude Code's value`, () => {
+    // arrange
+    const context: McpSubstitutionContext = {
+      ...EXPANSION_BUILTINS,
+      env: {},
+      options: resolveOptions({
+        opt: { type: "string", title: "Option", description: "The option.", default: row.value },
+      }),
+    };
+
+    // act
+    const written = writtenField(row.field, row.raw, context);
+
+    // assert
+    assert.strictEqual(written, row.claudeOutput);
+  });
+}
