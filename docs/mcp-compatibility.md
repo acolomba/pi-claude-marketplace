@@ -823,7 +823,7 @@ The behaviors below differ from Claude Code. Each item names its reason: a recor
 - Under Pi's built-in MCP, info shows `not connected` for a server that is connecting, failed, waits for a sign-in, or offers no tool. Reason: a Pi capability gap (D-MB-20). Pi gives an extension no connection state (`features/mcp-server/builtin-status.feature`).
 - Under Pi's built-in MCP, the resolved values of each server, secrets included, are in the Pi session, where every extension of the same Pi process can read them. Reason: a project decision (D-MB-14, which amends D-MB-04). Pi expands variables with rules that are not the rules of Claude Code, so this extension resolves them itself (`dist/core/extensions/loader.js`, `dist/core/resolve-config-value.js`). See [Variables under Pi's built-in MCP](#variables-under-pis-built-in-mcp).
 - Under Pi's built-in MCP, a remote server with an `oauth.clientId` and no `oauth.callbackPort` signs in with the redirect address `http://127.0.0.1:<port>/callback`. Claude Code uses `localhost`. Reason: a project decision (D-MB-25). This extension writes `callbackUrl` only for a port that the plugin names (`dist/extensions/mcp/oauth.js`).
-- Under pi-mcp-adapter and Pi's built-in MCP, the withheld credentials follow the deny-lists of Claude Code 2.1.291, not 2.1.318. Reason: a project decision (D-MB-27). The lists are pinned until a later release checks them again (`test/integration/mcp-builtin-encoding-conformance.test.ts`).
+- Under pi-mcp-adapter and Pi's built-in MCP, the withheld credentials follow the deny-lists of Claude Code 2.1.291, not 2.1.318. Reason: a project decision (D-MB-27). The lists are pinned until a later release checks them again (`test/domain/claude-credential-denylist.test.ts`).
 
 ### Agents
 
