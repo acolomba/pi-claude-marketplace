@@ -40,8 +40,10 @@
  * continue, open, and fork restarts start it with `--continue`, or with
  * `--session` or `--fork` on the newest file of that folder, which is the
  * session the stopped Pi was in. Each records the turn as the restart after
- * a crash does. The fork setup `Given` performs the fork restart and records
- * no turn.
+ * a crash does. The fork setup `Given` performs the fork restart, the
+ * continue setup `Given` the continue restart, and the first-prompt fork
+ * setup `Given` the in-session fork at the first prompt; each records no
+ * turn.
  */
 
 import assert from "node:assert/strict";
@@ -416,6 +418,39 @@ Given(
   },
 );
 
+// Pi forks a session at a user message the caller names, so the step asks
+// Pi for the messages it can fork at and picks the first.
+async function forkAtFirstPrompt(world: ScenarioWorld): Promise<void> {
+  const listed = await world.pi.request({ type: "get_fork_messages" });
+  assert.strictEqual(listed.response.success, true, JSON.stringify(listed.response));
+  const { messages } = listed.response.data as {
+    readonly messages: ReadonlyArray<{ readonly entryId: string; readonly text: string }>;
+  };
+  const [first] = messages;
+  if (first === undefined) {
+    assert.fail("the session holds no prompt to fork at");
+  }
+
+  const forked = await world.pi.request({ type: "fork", entryId: first.entryId });
+  assert.deepStrictEqual(forked.response.data, { text: first.text, cancelled: false });
+}
+
+Given("the user has forked the session at its first prompt", async function (this: ScenarioWorld) {
+  await forkAtFirstPrompt(this);
+});
+
+// `--continue` opens the newest file of the sessions folder, so the step
+// reads that file before the restart and checks that Pi is in it after.
+Given(
+  "the user has started pi again and continued the last session",
+  { timeout: PROFILE_PI_START_TIMEOUT_MS },
+  async function (this: ScenarioWorld) {
+    const continued = await latestSessionFile(sessionsFolder(this.tokens));
+    await this.restartPi("continue-session");
+    assert.strictEqual(await currentSessionFile(this), continued);
+  },
+);
+
 Given(
   "pi's process has died, leaving its hook processes running",
   async function (this: ScenarioWorld) {
@@ -465,25 +500,10 @@ When(
   },
 );
 
-// Pi forks a session at a user message the caller names, so the step asks
-// Pi for the messages it can fork at and picks the first.
 When(
   "the user forks the session at its first prompt with the hooks recording",
   async function (this: ScenarioWorld) {
-    await recordSessionAction(this, "fork", async () => {
-      const listed = await this.pi.request({ type: "get_fork_messages" });
-      assert.strictEqual(listed.response.success, true, JSON.stringify(listed.response));
-      const { messages } = listed.response.data as {
-        readonly messages: ReadonlyArray<{ readonly entryId: string; readonly text: string }>;
-      };
-      const [first] = messages;
-      if (first === undefined) {
-        assert.fail("the session holds no prompt to fork at");
-      }
-
-      const forked = await this.pi.request({ type: "fork", entryId: first.entryId });
-      assert.deepStrictEqual(forked.response.data, { text: first.text, cancelled: false });
-    });
+    await recordSessionAction(this, "fork", () => forkAtFirstPrompt(this));
   },
 );
 

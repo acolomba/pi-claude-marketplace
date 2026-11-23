@@ -345,14 +345,19 @@ interface MutateOutcome {
   readonly result: MutateResult;
 }
 
-// Every hook's non-empty `additionalContext`, joined in routing order, or
-// `undefined` when no hook gave one.
-function joinedContext(outcomes: readonly BucketOutcome[]): string | undefined {
-  const contexts = outcomes.flatMap(({ result }) =>
+// Every hook's non-empty `additionalContext`, in routing order.
+function contextValues(outcomes: readonly BucketOutcome[]): readonly string[] {
+  return outcomes.flatMap(({ result }) =>
     result.additionalContext === undefined || result.additionalContext === ""
       ? []
       : [result.additionalContext],
   );
+}
+
+// Every hook's non-empty `additionalContext`, joined in routing order, or
+// `undefined` when no hook gave one.
+function joinedContext(outcomes: readonly BucketOutcome[]): string | undefined {
+  const contexts = contextValues(outcomes);
   return contexts.length === 0 ? undefined : contexts.join("\n");
 }
 
@@ -1469,6 +1474,13 @@ async function adaptForEvent(
     case "PreCompact":
       return adaptPreCompactResult(folded.outcomes.map((outcome) => outcome.result));
     case "SessionStart":
+      // HKRL-02: the adapter compares each hook's value with what a resumed
+      // or forked session holds, so it gets the values and the `source`.
+      adaptObservationResultForEvent(result, claudeEvent, context, {
+        event: event as ClaudeSessionStartEvent,
+        values: contextValues(folded.outcomes),
+      });
+      return undefined;
     case "SessionEnd":
     case "PostCompact":
       adaptObservationResultForEvent(result, claudeEvent, context);
