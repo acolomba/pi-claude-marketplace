@@ -11,9 +11,14 @@
 // repository could plant its own git there. On Windows only git.exe runs.
 // Node cannot start a git.cmd or a git.bat without a shell (D-PL9-18), so one
 // found first is refused, and a candidate inside Pi's working directory is
-// skipped. Each instance keeps a found git per PATH and working directory. It
-// never keeps a miss, so a git installed after a failure is found by the next
-// command without a Pi restart (NFR-2).
+// skipped. On macOS, a git whose real path is /usr/bin/git is the xcrun shim
+// unless a developer directory holds a real git; the lookup refuses the shim
+// before any spawn, because running it opens the Command Line Tools installer.
+// Each instance keeps a found git per PATH and working directory. It never
+// keeps a miss, so a git installed after a failure is found by the next
+// command without a Pi restart (NFR-2). A run that finds its git gone (a start
+// error with the file missing, an exit 127, or an `xcrun: error:` stderr)
+// drops the found git, so the next lookup searches PATH again.
 //
 // D-SG-05, SG-PRC-02, SG-PRC-03: one builder hardens every command. The `-c`
 // pairs turn off hooks, fsmonitor, askpass, template hooks, and the ext, fd,
@@ -219,6 +224,15 @@ const STDERR_CAPTURE: OutputCapture = { limit: 65_536, keep: "tail" };
 
 const WINDOWS_LOOKUP_EXTENSIONS = [".exe", ".cmd", ".bat"] as const;
 
+// D-SG-04: the xcrun shim, and the developer directories that hold a real git
+// behind it.
+const MACOS_SHIM = "/usr/bin/git";
+const XCODE_SELECT_LINK = "/var/db/xcode_select_link";
+const COMMAND_LINE_TOOLS = "/Library/Developer/CommandLineTools";
+
+// The start errors of a git that may no longer exist.
+const MISSING_START_CODES: ReadonlySet<unknown> = new Set(["ENOENT", "EACCES"]);
+
 // D-SG-06: the one version read after a `git-too-old` failure.
 const VERSION_REQUEST: GitRequest = { subcommand: "version", lane: "network", timeoutMs: 5_000 };
 
@@ -336,7 +350,9 @@ function gitArguments(request: GitRequest, rules: PlatformRules): string[] {
   ];
 }
 
-function gitMissing(detail: Extract<GitFailure, { kind: "git-missing" }>["detail"]): Error {
+function gitMissing(
+  detail: Extract<GitFailure, { kind: "git-missing" }>["detail"],
+): GitCommandError {
   return new GitCommandError({ kind: "git-missing", detail }, { operation: "lookup" });
 }
 
@@ -389,24 +405,87 @@ async function findGitOnWindows(env: NodeJS.ProcessEnv, host: GitProcessHost): P
   return found;
 }
 
+// D-SG-04: whether `git` is the macOS xcrun shim. Claude Code checks before
+// every spawn, with no spawn of its own, but its build does not show which
+// files it reads. So this check is an assumption, and the manual check on a
+// Mac confirms it: xcrun finds a developer directory through DEVELOPER_DIR,
+// the xcode-select choice, or the Command Line Tools.
+async function isXcrunShim(
+  git: string,
+  env: NodeJS.ProcessEnv,
+  host: GitProcessHost,
+): Promise<boolean> {
+  if ((await host.realpath(git)) !== MACOS_SHIM) {
+    return false;
+  }
+
+  const selected = await host.realpath(XCODE_SELECT_LINK).catch(() => undefined);
+  const developerDirectories = [env.DEVELOPER_DIR, selected, COMMAND_LINE_TOOLS].filter(
+    (directory): directory is string => directory !== undefined && path.posix.isAbsolute(directory),
+  );
+  const holdsGit = await Promise.all(
+    developerDirectories.map((directory) => host.isFile(path.posix.join(directory, "usr/bin/git"))),
+  );
+  return !holdsGit.includes(true);
+}
+
+async function findGit(
+  env: NodeJS.ProcessEnv,
+  host: GitProcessHost,
+  directories: readonly string[],
+): Promise<string> {
+  if (host.platform === "win32") {
+    return findGitOnWindows(env, host);
+  }
+
+  const git = await findGitOnPosix(directories, host);
+  if (host.platform === "darwin" && (await isXcrunShim(git, env, host))) {
+    throw gitMissing("macos-shim");
+  }
+
+  return git;
+}
+
+// D-SG-04: a start error whose git file is gone. The working directory exists
+// by then, because its real path resolved, so the ENOENT is the git's (E11).
+async function startFailedWithoutGit(
+  failure: GitCommandError,
+  git: string,
+  host: GitProcessHost,
+): Promise<boolean> {
+  const { cause } = failure;
+  return (
+    failure.kind === "failed" &&
+    cause instanceof Error &&
+    "code" in cause &&
+    MISSING_START_CODES.has(cause.code) &&
+    !(await host.isFile(git))
+  );
+}
+
 // The error's operation is the subcommand and its first Pi-owned word, such as
 // `credential fill`, never an operand or the input (AUTH-09).
 function operationOf(request: GitRequest): string {
   return [request.subcommand, ...(request.options ?? []).slice(0, 1)].join(" ");
 }
 
-function settleRun(run: ProcessRun, request: GitRequest, operation: string): GitResult {
+// The result of a finished run, or the error it rejects with.
+function settleRun(
+  run: ProcessRun,
+  request: GitRequest,
+  operation: string,
+): GitResult | GitCommandError {
   const details = { operation, stderr: run.stderr };
   if (request.signal?.aborted === true) {
-    throw new GitCommandError({ kind: "aborted" }, details, { cause: request.signal.reason });
+    return new GitCommandError({ kind: "aborted" }, details, { cause: request.signal.reason });
   }
 
   if (run.error !== undefined) {
-    throw new GitCommandError({ kind: "failed" }, details, { cause: run.error });
+    return new GitCommandError({ kind: "failed" }, details, { cause: run.error });
   }
 
   if (run.timedOut) {
-    throw new GitCommandError({ kind: "timeout", timeoutMs: request.timeoutMs }, details);
+    return new GitCommandError({ kind: "timeout", timeoutMs: request.timeoutMs }, details);
   }
 
   const { code } = run;
@@ -414,7 +493,7 @@ function settleRun(run: ProcessRun, request: GitRequest, operation: string): Git
     return { exitCode: code, stdout: run.stdout, stderr: run.stderr };
   }
 
-  throw new GitCommandError(
+  return new GitCommandError(
     classifyGitExit(code, run.stderr),
     code === null ? details : { ...details, exitCode: code },
   );
@@ -434,21 +513,45 @@ export function createGitProcess(options: GitProcessOptions): GitProcess {
   const { host } = options;
   const found = new Map<string, string>();
 
-  async function locate(): Promise<string> {
+  async function lookup(): Promise<{ readonly git: string; readonly key: string }> {
     const rules = rulesFor(host.platform);
     const search = searchPath(options.env, rules);
     const key = JSON.stringify([search.value ?? null, host.cwd()]);
     const cached = found.get(key);
     if (cached !== undefined) {
-      return cached;
+      return { git: cached, key };
     }
 
-    const git =
-      host.platform === "win32"
-        ? await findGitOnWindows(options.env, host)
-        : await findGitOnPosix(search.directories, host);
+    const git = await findGit(options.env, host, search.directories);
     found.set(key, git);
+    return { git, key };
+  }
+
+  async function locate(): Promise<string> {
+    const { git } = await lookup();
     return git;
+  }
+
+  // D-SG-04: a run whose git is gone reports git-missing and drops the found
+  // git. A run that already holds it finishes with it; only later lookups
+  // search again.
+  async function backstop(
+    failure: GitCommandError,
+    git: string,
+    key: string,
+  ): Promise<GitCommandError> {
+    const reported = (await startFailedWithoutGit(failure, git, host))
+      ? new GitCommandError(
+          { kind: "git-missing", detail: "not-found" },
+          { operation: failure.operation },
+          { cause: failure.cause },
+        )
+      : failure;
+    if (reported.kind === "git-missing") {
+      found.delete(key);
+    }
+
+    return reported;
   }
 
   async function execute(request: GitRequest): Promise<GitResult> {
@@ -461,7 +564,7 @@ export function createGitProcess(options: GitProcessOptions): GitProcess {
       );
     }
 
-    const git = await locate();
+    const { git, key } = await lookup();
     const rules = rulesFor(host.platform);
     const cwd = await host.realpath(request.cwd ?? host.tmpdir());
     // git cannot hold a ceiling whose path contains the PATH delimiter.
@@ -485,7 +588,12 @@ export function createGitProcess(options: GitProcessOptions): GitProcess {
         windowsHide: true,
       },
     );
-    return settleRun(processRun, request, operation);
+    const settled = settleRun(processRun, request, operation);
+    if (settled instanceof GitCommandError) {
+      throw await backstop(settled, git, key);
+    }
+
+    return settled;
   }
 
   // D-SG-06: the version read runs through `execute`, so it never reads the

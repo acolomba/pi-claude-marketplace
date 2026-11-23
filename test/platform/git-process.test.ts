@@ -113,6 +113,8 @@ interface HostSetup {
   readonly realpaths?: Readonly<Record<string, string>>;
   readonly cwd?: string;
   readonly tmpdir?: string;
+  /** The paths whose real path cannot be read. */
+  readonly unresolvable?: readonly string[];
 }
 
 interface RecordingHost {
@@ -144,7 +146,10 @@ function createHost(setup: HostSetup = {}): RecordingHost {
       signalGroup: (pid, signal) => {
         groupSignals.push([pid, signal]);
       },
-      realpath: (file) => Promise.resolve(setup.realpaths?.[file] ?? file),
+      realpath: (file) =>
+        setup.unresolvable?.includes(file) === true
+          ? Promise.reject(Object.assign(new Error(`ENOENT: ${file}`), { code: "ENOENT" }))
+          : Promise.resolve(setup.realpaths?.[file] ?? file),
       cwd: () => recording.cwd,
       tmpdir: () => setup.tmpdir ?? "/tmp",
     },
@@ -180,11 +185,13 @@ interface FakeGit {
   readonly host: RecordingHost;
 }
 
+// A null `pid` makes a process that never starts, so only an `error` settles it.
 function createFakeGit(
   env: NodeJS.ProcessEnv = { PATH: "/usr/bin" },
   setup: HostSetup = {},
+  pid: number | null = 4242,
 ): FakeGit {
-  const control = createProcessFake(4242);
+  const control = createProcessFake(pid ?? undefined);
   const launcher = startedLauncher(control);
   const host = createHost(setup);
   const git = createGitProcess({
@@ -636,6 +643,224 @@ describe("createGitProcess", () => {
     assert.strictEqual(found, "/usr/bin/git");
     assert.deepStrictEqual(host.probes, ["/usr/bin/git", "/usr/bin/git"]);
   });
+
+  for (const { label, env, setup } of [
+    { label: "/usr/bin/git", env: { PATH: "/usr/bin" }, setup: {} },
+    {
+      label: "a git whose real path is /usr/bin/git",
+      env: { PATH: "/usr/local/bin" },
+      setup: {
+        files: ["/usr/local/bin/git"],
+        realpaths: { "/usr/local/bin/git": "/usr/bin/git" },
+      },
+    },
+    {
+      label: "/usr/bin/git with a relative DEVELOPER_DIR",
+      env: { PATH: "/usr/bin", DEVELOPER_DIR: "Developer" },
+      setup: { files: ["/usr/bin/git", "Developer/usr/bin/git"] },
+    },
+    {
+      label: "/usr/bin/git with an unreadable xcode-select link",
+      env: { PATH: "/usr/bin" },
+      setup: { unresolvable: ["/var/db/xcode_select_link"] },
+    },
+  ]) {
+    test(`D-SG-04, SG-PRC-06: on macOS refuses ${label} as the xcrun shim before any spawn`, async () => {
+      // arrange
+      const { git, control } = createFakeGit(env, { platform: "darwin", ...setup });
+
+      // act & assert
+      await assert.rejects(
+        git.run(FILL),
+        gitFailure({
+          failure: { kind: "git-missing", detail: "macos-shim" },
+          operation: "lookup",
+          exitCode: null,
+          stderr: "",
+        }),
+      );
+      assert.deepStrictEqual(control.launches(), []);
+    });
+  }
+
+  test("D-SG-04: on macOS looks for a real git in DEVELOPER_DIR, the xcode-select choice, and the Command Line Tools", async () => {
+    // arrange
+    const { git, host } = createFakeGit(
+      { PATH: "/usr/bin", DEVELOPER_DIR: "/Applications/Xcode.app/Contents/Developer" },
+      {
+        platform: "darwin",
+        realpaths: {
+          "/var/db/xcode_select_link": "/Applications/Xcode-beta.app/Contents/Developer",
+        },
+      },
+    );
+
+    // act
+    await assert.rejects(git.locate(), GitCommandError);
+
+    // assert
+    assert.deepStrictEqual(host.probes, [
+      "/usr/bin/git",
+      "/Applications/Xcode.app/Contents/Developer/usr/bin/git",
+      "/Applications/Xcode-beta.app/Contents/Developer/usr/bin/git",
+      "/Library/Developer/CommandLineTools/usr/bin/git",
+    ]);
+  });
+
+  for (const { label, env, setup } of [
+    {
+      label: "DEVELOPER_DIR",
+      env: { PATH: "/usr/bin", DEVELOPER_DIR: "/Applications/Xcode.app/Contents/Developer" },
+      setup: { files: ["/usr/bin/git", "/Applications/Xcode.app/Contents/Developer/usr/bin/git"] },
+    },
+    {
+      label: "the xcode-select choice",
+      env: { PATH: "/usr/bin" },
+      setup: {
+        files: ["/usr/bin/git", "/Applications/Xcode.app/Contents/Developer/usr/bin/git"],
+        realpaths: { "/var/db/xcode_select_link": "/Applications/Xcode.app/Contents/Developer" },
+      },
+    },
+    {
+      label: "the Command Line Tools",
+      env: { PATH: "/usr/bin" },
+      setup: { files: ["/usr/bin/git", "/Library/Developer/CommandLineTools/usr/bin/git"] },
+    },
+  ]) {
+    test(`D-SG-04: on macOS runs /usr/bin/git when ${label} holds a real git`, async () => {
+      // arrange
+      const { git } = createFakeGit(env, { platform: "darwin", ...setup });
+
+      // act
+      const found = await git.locate();
+
+      // assert
+      assert.strictEqual(found, "/usr/bin/git");
+    });
+  }
+
+  test("D-SG-04: on macOS runs a git found before /usr/bin with no shim check", async () => {
+    // arrange
+    const { git, host } = createFakeGit(
+      { PATH: "/opt/homebrew/bin:/usr/bin" },
+      {
+        platform: "darwin",
+        files: ["/opt/homebrew/bin/git", "/usr/bin/git"],
+        realpaths: { "/opt/homebrew/bin/git": "/opt/homebrew/Cellar/git/2.47.0/bin/git" },
+      },
+    );
+
+    // act
+    const found = await git.locate();
+
+    // assert
+    assert.strictEqual(found, "/opt/homebrew/bin/git");
+    assert.deepStrictEqual(host.probes, ["/opt/homebrew/bin/git"]);
+  });
+
+  test("NFR-2: finds the Command Line Tools installed after a shim verdict", async () => {
+    // arrange
+    const { git, host } = createFakeGit({ PATH: "/usr/bin" }, { platform: "darwin" });
+    await assert.rejects(git.locate(), GitCommandError);
+    host.files.add("/Library/Developer/CommandLineTools/usr/bin/git");
+
+    // act
+    const found = await git.locate();
+
+    // assert
+    assert.strictEqual(found, "/usr/bin/git");
+  });
+
+  for (const { code } of [{ code: "ENOENT" }, { code: "EACCES" }]) {
+    test(`D-SG-04: reports a git that is gone at a spawn ${code} as git-missing and looks it up again`, async () => {
+      // arrange
+      const startError = Object.assign(new Error(`spawn /usr/bin/git ${code}`), { code });
+      const { git, control, started, host } = createFakeGit(undefined, undefined, null);
+      const pending = git.run(FILL);
+      await started;
+      host.files.delete("/usr/bin/git");
+      control.fail(startError);
+      await assert.rejects(
+        pending,
+        gitFailure({
+          failure: { kind: "git-missing", detail: "not-found" },
+          operation: "credential fill",
+          exitCode: null,
+          stderr: "",
+          cause: startError,
+        }),
+      );
+      host.files.add("/usr/bin/git");
+
+      // act
+      const found = await git.locate();
+
+      // assert
+      assert.strictEqual(found, "/usr/bin/git");
+      assert.deepStrictEqual(host.probes, ["/usr/bin/git", "/usr/bin/git", "/usr/bin/git"]);
+    });
+  }
+
+  test("D-SG-04: keeps a git that still exists after a spawn ENOENT and reports failed", async () => {
+    // arrange
+    const startError = Object.assign(new Error("spawn /usr/bin/git ENOENT"), { code: "ENOENT" });
+    const { git, control, started, host } = createFakeGit(undefined, undefined, null);
+    const pending = git.run(FILL);
+    await started;
+    control.fail(startError);
+    await assert.rejects(
+      pending,
+      gitFailure({
+        failure: { kind: "failed" },
+        operation: "credential fill",
+        exitCode: null,
+        stderr: "",
+        cause: startError,
+      }),
+    );
+
+    // act
+    const found = await git.locate();
+
+    // assert
+    assert.strictEqual(found, "/usr/bin/git");
+    assert.deepStrictEqual(host.probes, ["/usr/bin/git", "/usr/bin/git"]);
+  });
+
+  for (const { label, code, stderr, failure } of [
+    {
+      label: "an exit 127",
+      code: 127,
+      stderr: "",
+      failure: { kind: "git-missing", detail: "not-found" },
+    },
+    {
+      label: "an xcrun error",
+      code: 1,
+      stderr: "xcrun: error: invalid active developer path (/Library/Developer/CommandLineTools)\n",
+      failure: { kind: "git-missing", detail: "macos-shim" },
+    },
+  ] as const) {
+    test(`D-SG-04: reports ${label} as git-missing and looks git up again`, async () => {
+      // arrange
+      const { git, control, started, host } = createFakeGit();
+      const pending = git.run(FILL);
+      await started;
+      control.writeStderr(stderr);
+      control.close(code);
+      await assert.rejects(
+        pending,
+        gitFailure({ failure, operation: "credential fill", exitCode: code, stderr }),
+      );
+
+      // act
+      const found = await git.locate();
+
+      // assert
+      assert.strictEqual(found, "/usr/bin/git");
+      assert.deepStrictEqual(host.probes, ["/usr/bin/git", "/usr/bin/git"]);
+    });
+  }
 
   test("resolves a run that exits with 0 under a signal that never aborts", async () => {
     // arrange
