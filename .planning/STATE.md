@@ -4,18 +4,18 @@ milestone: integration-rescope
 milestone_name: Integration Test Rescope
 current_phase: 7
 current_phase_name: Path-Source Dependency Tags
-status: verifying
+status: executing
 stopped_at: Phase 06 complete, ready to verify Phase 7
-last_updated: "2026-11-22T15:18:44.424Z"
+last_updated: "2026-11-23T01:08:59.202Z"
 last_activity: 2026-11-22
 last_activity_desc: Phase 06 complete, transitioned to Phase 7
-state_head: b61c7f2b6eab28a3e05eb088ee2baf340b2c6055
+state_head: bd493f353b2a175475ae5723916f552d127d5576
 progress:
-  total_phases: 8
+  total_phases: 9
   completed_phases: 6
-  total_plans: 17
+  total_plans: 18
   completed_plans: 17
-  percent: 75
+  percent: 67
 ---
 
 # Project State
@@ -31,12 +31,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 7 of 8 (Path-Source Dependency Tags)
+Phase: 7 (Path-Source Dependency Tags) — READY TO EXECUTE
 Plan: Not started
-Status: Ready to plan
+Status: Ready to execute
 Last activity: 2026-11-22 — Phase 06 complete, transitioned to Phase 7
 
-Progress: [████████░░] 75%
+Progress: [███████░░░] 67%
 
 
 ### parity-gaps closeout: `override_closeout`
@@ -1198,6 +1198,7 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ### Blockers/Concerns
 
+- [integration-rescope] Phase 7 planning: decision-coverage gate `could-not-parse` (bracket-named decisions); proceeded by override after the plan checker confirmed coverage. Assumption-delta fired on "fallback" (false positive, `no-change`). Phase 6.1 (inserted, HKRL-01) is planned beside it on disjoint files.
 - [integration-rescope] HOOK-E2E-04 parity (user decision 2026-11-22: research upstream first): the integration case `hooks-additionalcontext-end-to-end.test.ts` HOOK-E2E-04 is restored until Claude Code's `/reload-plugins` behavior for buffered SessionStart context is known; the scenario at `features/hook/additional-context.feature:230` pins today's documented drop meanwhile.
 - [integration-rescope] Phase 6 planning: decision-coverage gate `could-not-parse` (bracket-named decisions); proceeded by override after the plan checker confirmed coverage. Assumption-delta fired on "additional" (file name, false positive, `no-change`). Research found the async.feature:261 flake cause (ESRCH in `features/lib/hook-files.ts`, a zombie hook under PID 1) and a partial-line race in `features/lib/turn-records.ts`; plan 06-01 fixes both. Open parity question for the user at milestone end: whether Claude Code keeps SessionStart context across `/reload-plugins` (HOOK-E2E-04 pins today's documented drop). A planning commit title (`965c0ec`) names the milestone, against the committing skill; history is not rewritten.
 - [integration-rescope] Phase 5 gate: `features/hook/async.feature:261` ("A plain async hook runs past its declared timeout") failed in its After hook (`scenario releases failed`, `features/support/world.ts:1053`) in 2 of 4 full adapter runs on 8f1a87b, and passed alone (4/4), with its feature (3/3), and in an instrumented full run. Cause not captured; candidates: `pi.stop()` or the scenario cwd removal while the timed-out hook still runs. Input for Phase 6 (Hooks). The gate verdict on 8f1a87b is composed: check:static and direct coverage (p5d), test:unpaired and test:integration (p5e), adapter 2259/2259 (instrumented run, release message only), builtin 260/260.
