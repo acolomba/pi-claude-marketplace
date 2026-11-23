@@ -54,9 +54,10 @@ builtin 260/260, 376 direct-coverage records). The archive is
 - For the PR: the three Phase 6.1 CHANGELOG parent lines (Blockers/Concerns),
   the version bump offer, and the accepted fallow `weakened-tests` finding on
   `standalone-prune`.
-- Still open: HOOKLATESS-01 (a parity question for the user),
-  HOOKASYNCRESUME-01, Nyquist validation for all nine phases, and the
-  `dispatch-exec.test.ts` large-environment fragility.
+- Still open: HOOKLATESS-01 (a parity question for the user) and Nyquist
+  validation for all nine phases. Closed after the close by quick batch
+  261123-gtf: the `dispatch-exec.test.ts` fragility (261123-gtg),
+  DIRGITTAG-01 (261123-gth), and HOOKASYNCRESUME-01 (261123-gti).
 
 Completed 2026-11-17 on `features/gaps` (not yet pushed, no PR or npm
 release; version stays 0.23.0). 11/11 phases, 102 plans, 42/42 requirements.
@@ -1219,6 +1220,7 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 - [integration-rescope] CHANGELOG parent line for the milestone PR (Phase 6.1, HKRL-03, `c93f75f`/`996f933`): "A plugin's `SessionStart` context now reaches the next model call after a compaction in the middle of a run or after a context overflow."
 - [integration-rescope] CHANGELOG parent line for the milestone PR (Phase 6.1, HKRL-02, `66219fb`): "A resumed or forked session no longer shows a plugin's `SessionStart` context twice; only context that changed is added."
 - [integration-rescope] Phase 8 planned and checked (5 plans, 2 waves); decision-coverage gate overridden after the plan checker confirmed coverage. Wave 1 runs beside Phase 6.1's gap planning on disjoint files; 08-05 waits for Phase 6.1 to complete.
+- [integration-rescope] CHANGELOG parent line for the milestone PR (quick task 261123-gti, HOOKASYNCRESUME-01, `c099652`): "An `async` `SessionStart` hook's unchanged answer no longer reaches the model again each time you resume or fork the session."
 - [integration-rescope] CHANGELOG parent line for the milestone PR (Phase 6.1, HKRL-01, `b116f4f`): "A Pi `/reload` before your first prompt no longer drops the context that a plugin's `SessionStart` hook added at startup."
 - [integration-rescope] Parity question for the user at milestone end: HOOKLATESS-01 (BACKLOG) — Claude Code 2.1.296 runs SessionStart in headless mode for a plugin that loads after the session starts; the bridge does not.
 - [integration-rescope] Phase 6.1 (inserted, HKRL-01, user decision 2026-11-22: fix the /reload parity gap in this milestone) planned and checked: design A (SessionStart context sent as a hidden session message); runs beside Phase 7's review loop on disjoint files. Assumption-delta fired on "another"/"additional" (false positives). Decision-coverage gate overridden after the plan checker confirmed coverage, as in earlier phases.
