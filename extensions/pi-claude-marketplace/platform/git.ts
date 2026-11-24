@@ -100,6 +100,13 @@ export interface FetchCommitOptions {
    */
   ref?: string;
   /**
+   * D-SG-09: false skips the `--unshallow` rung, so the fetch asks the remote
+   * for the one commit only and the first rung's failure is the one thrown.
+   * Omitted, a shallow clone falls back to it, as Claude Code's pin ladder
+   * does.
+   */
+  unshallow?: boolean;
+  /**
    * Optional auth bundle. git asks the user's credential helpers itself; the
    * bundle decides what an auth failure of a rung leads to (D-SG-14, GAUTH-04).
    */
@@ -459,7 +466,8 @@ const ORIGIN_URL_KEY = "remote.origin.url";
  * `rev-parse --is-shallow-repository` prints `true`, the second rung is
  * `fetch --unshallow origin [<ref>]`, and its failure is the one thrown. A
  * complete clone skips that rung, because git refuses `--unshallow` on one,
- * and the first rung's error is thrown. Each rung runs through `runRemote`,
+ * and the first rung's error is thrown. So does a request with `unshallow:
+ * false` (D-SG-09). Each rung runs through `runRemote`,
  * so it reads its own limit and carries the scope's abort signal.
  *
  * D-SG-16: the clone records its canonical origin, so a `fetch origin` with no
@@ -486,7 +494,7 @@ export async function fetchCommit(
     return;
   } catch (error: unknown) {
     const aborted = error instanceof GitCommandError && error.kind === "aborted";
-    if (aborted || !(await isShallowClone(opts.dir, gitProcess))) {
+    if (aborted || opts.unshallow === false || !(await isShallowClone(opts.dir, gitProcess))) {
       throw error;
     }
   }

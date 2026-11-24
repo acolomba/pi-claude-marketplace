@@ -1082,8 +1082,8 @@ export async function materializeMarketplaceTagClone(args: {
     // into an empty tree, so the checkout is the only thing that writes the
     // work tree and it writes exactly the tag's tree. D-SG-09: a git
     // marketplace is a depth-1 clone, so the copy first fetches the tag's
-    // commit from the marketplace remote; a directory marketplace's
-    // repository already holds it.
+    // commit, and that commit alone, from the marketplace remote with
+    // `fetch --depth 1`; a directory marketplace's repository already holds it.
     const remote = gitMarketplaceSource(args.marketplaceSource);
     try {
       await copyGitDir(path.join(args.marketplaceRoot, ".git"), staging);
@@ -1091,6 +1091,7 @@ export async function materializeMarketplaceTagClone(args: {
         await gitOps.fetchCommit({
           dir: staging,
           sha: args.tagOid,
+          unshallow: false,
           ...(args.resolveAuth !== undefined && {
             auth: args.resolveAuth(canonicalCloneUrl(remote), remote.kind),
           }),

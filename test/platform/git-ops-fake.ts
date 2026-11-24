@@ -45,6 +45,7 @@ export interface GitOpsFakeCalls {
     readonly dir: string;
     readonly sha: string;
     readonly ref?: string;
+    readonly unshallow?: boolean;
     readonly auth?: GitAuthBundle;
   }>;
   readonly checkout: Array<{

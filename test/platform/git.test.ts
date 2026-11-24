@@ -804,6 +804,31 @@ describe("fetchCommit", () => {
     ]);
   });
 
+  test("D-SG-09: with unshallow false, a shallow clone fetches the one commit only and throws the first failure", async (t) => {
+    // arrange
+    const systemGit = await hermeticGitProcess(t);
+    const { dir } = await shallowFileClone(t);
+    const recorded = recordingGitProcess(systemGit);
+
+    // act
+    const fetching = fetchCommit({ dir, sha: OID_MAIN, unshallow: false }, recorded.gitProcess);
+
+    // assert
+    await assert.rejects(fetching, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.deepStrictEqual(
+        { kind: error.kind, operation: error.operation },
+        { kind: "commit-missing", operation: "fetch --depth" },
+      );
+      return true;
+    });
+    assert.deepStrictEqual(recorded.commands, [ORIGIN_READ, `fetch --depth 1 origin ${OID_MAIN}`]);
+    assert.strictEqual(
+      await gitTestCheckout(dir).run("rev-parse", "--is-shallow-repository"),
+      "true",
+    );
+  });
+
   test("SG-TRN-02: a complete clone skips the unshallow rung and throws the first failure", async (t) => {
     // arrange
     const systemGit = await hermeticGitProcess(t);

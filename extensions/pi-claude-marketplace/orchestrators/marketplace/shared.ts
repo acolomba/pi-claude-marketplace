@@ -168,12 +168,14 @@ export interface GitOps {
    * SG-TRN-02, C5: fetch the commit `sha` into the clone `dir` with `fetch
    * --depth 1 origin <sha>`. When that fails other than by an abort, a
    * shallow clone falls back to `fetch --unshallow origin [<ref>]`, whose
-   * failure is the one thrown; a complete clone throws the first failure.
+   * failure is the one thrown; a complete clone, or `unshallow: false`
+   * (D-SG-09), throws the first failure.
    */
   fetchCommit(opts: {
     dir: string;
     sha: string;
     ref?: string;
+    unshallow?: boolean;
     auth?: GitAuthBundle;
   }): Promise<void>;
   /**

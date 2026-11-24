@@ -3042,6 +3042,7 @@ interface TagCopyOperation {
   readonly copied: boolean;
   readonly sha?: string;
   readonly ref?: string;
+  readonly unshallow?: boolean;
   readonly fromCopiedGitDir?: boolean;
   readonly auth?: GitAuthBundle;
 }
@@ -3068,6 +3069,7 @@ function recordingTagCopyGitOps(
           op: "fetchCommit",
           ...(await where(opts.dir)),
           sha: opts.sha,
+          ...(opts.unshallow !== undefined && { unshallow: opts.unshallow }),
           ...(opts.auth !== undefined && { auth: opts.auth }),
         });
         return fetchCommit(opts);
@@ -3085,7 +3087,7 @@ function recordingTagCopyGitOps(
   };
 }
 
-void test("D-SG-09: a github marketplace's tag copy fetches the tag's commit into the copy with its host's bundle, then checks it out", async (t) => {
+void test("D-SG-09: a github marketplace's tag copy fetches only the tag's commit into the copy with its host's bundle, then checks it out", async (t) => {
   // arrange
   const locations = await freshLocations(t);
   const marketplaceRoot = await buildMarketplaceCheckout(t, {
@@ -3118,7 +3120,7 @@ void test("D-SG-09: a github marketplace's tag copy fetches the tag's commit int
     {
       kind: "materialized",
       operations: [
-        { op: "fetchCommit", inStaging: true, copied: true, sha: tagOid, auth },
+        { op: "fetchCommit", inStaging: true, copied: true, sha: tagOid, unshallow: false, auth },
         { op: "checkout", inStaging: true, copied: true, ref: tagOid, fromCopiedGitDir: true },
       ],
       authRequests: [[GITHUB_REPO_URL, "github"]],
