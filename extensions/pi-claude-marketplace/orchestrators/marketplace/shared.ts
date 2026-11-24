@@ -183,8 +183,13 @@ export interface GitOps {
   }): Promise<void>;
   /** D-14 step 2 (symbolic HEAD): force-set local branch ref to remote SHA. */
   forceUpdateRef(opts: { dir: string; ref: string; value: string }): Promise<void>;
-  /** D-14 step 3: move HEAD to ref/SHA. */
-  checkout(opts: { dir: string; ref: string; force?: boolean }): Promise<void>;
+  /**
+   * D-14 step 3: move HEAD to ref/SHA and write its tree. D-SG-11: set
+   * `fromCopiedGitDir` when `dir/.git` is a copy of another clone's git
+   * directory, so the clone keys an `isomorphic-git` clone carries are unset
+   * before the checkout.
+   */
+  checkout(opts: { dir: string; ref: string; fromCopiedGitDir?: boolean }): Promise<void>;
   /** Resolve a ref name to its SHA (used to read remote SHA after fetch). */
   resolveRef(opts: { dir: string; ref: string }): Promise<string>;
   /**

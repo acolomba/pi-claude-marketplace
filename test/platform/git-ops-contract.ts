@@ -11,6 +11,11 @@ export interface GitOpsContractParticipant {
   readonly initialOid: string;
   readonly updatedOid: string;
   readFile(dir: string, filepath: string): Promise<string | null>;
+  /**
+   * Returns a new directory that holds a copy of the worktree's `.git` and no
+   * index or work-tree file, as the clone cache's copy step makes one.
+   */
+  copyGitDir(): Promise<string>;
 }
 
 export type GitOpsFactory = (
@@ -27,6 +32,7 @@ export const GIT_OPS_CASE_NAMES = [
   "fetches updated remote state without moving the worktree",
   "force-updates a ref to the requested commit",
   "checks out the requested branch and worktree",
+  "checks out a commit into a copied git directory",
   "resolves a local ref to its commit",
   "rejects a missing local ref",
   "returns the attached current branch",
@@ -159,6 +165,30 @@ export const gitOpsContractCases = [
       // assert
       assert.strictEqual(checkout, undefined);
       assert.strictEqual(branch, "feature");
+      assert.strictEqual(oid, participant.updatedOid);
+      assert.strictEqual(contents, "# updated\n");
+    },
+  },
+  {
+    name: "checks out a commit into a copied git directory",
+    run: async (createGitOps, t) => {
+      // arrange
+      const participant = await createGitOps(t);
+      const copyDir = await participant.copyGitDir();
+
+      // act
+      const checkout = await observeVoid(
+        participant.gitOps.checkout({
+          dir: copyDir,
+          ref: participant.updatedOid,
+          fromCopiedGitDir: true,
+        }),
+      );
+      const oid = await participant.gitOps.resolveRef({ dir: copyDir, ref: "HEAD" });
+      const contents = await participant.readFile(copyDir, "README.md");
+
+      // assert
+      assert.strictEqual(checkout, undefined);
       assert.strictEqual(oid, participant.updatedOid);
       assert.strictEqual(contents, "# updated\n");
     },

@@ -2468,6 +2468,90 @@ void test("GIT-01: a real per-commit copy holds the commit's tree with relative 
   assert.strictEqual(await pathExists(path.join(result, "untracked.txt")), false);
 });
 
+/**
+ * D-SG-11: makes the URL-keyed mirror of `cloneUrl` a system-git clone of a
+ * repository whose one commit holds `README.md` and the relative symlink
+ * `link`, and returns the mirror root and that commit.
+ */
+async function seedSymlinkMirror(
+  t: TestContext,
+  locations: ScopedLocations,
+  cloneUrl: string,
+): Promise<{ readonly mirrorRoot: string; readonly sha: string }> {
+  const source = await mkdtemp(path.join(tmpdir(), "clone-cache-symlink-source-"));
+  t.after(() => rm(source, { recursive: true, force: true }));
+  await writeFile(path.join(source, "README.md"), "# linked\n");
+  await fs.promises.symlink("README.md", path.join(source, "link"));
+  const sha = await (await initGitTestCheckout(source)).commitPaths("link", ["README.md", "link"]);
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+  await gitTestCheckout(source).run("clone", "-q", source, mirrorRoot);
+  return { mirrorRoot, sha };
+}
+
+/** Whether `file` is a symlink, its target when it is one, and the local `core.` key names. */
+async function linkAndCoreKeys(
+  root: string,
+  file: string,
+): Promise<{ readonly symlink: boolean; readonly target?: string; readonly keys: string[] }> {
+  const filePath = path.join(root, file);
+  const listed = await gitTestCheckout(root).run("config", "--local", "--name-only", "--list");
+  const keys = listed.split("\n").filter((key) => key.startsWith("core."));
+  return (await fs.promises.lstat(filePath)).isSymbolicLink()
+    ? { symlink: true, target: await fs.promises.readlink(filePath), keys }
+    : { symlink: false, keys };
+}
+
+void test("SG-MIG-01: a per-commit copy of an old clone unsets its clone keys and writes the symlink as a link", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  const { mirrorRoot, sha } = await seedSymlinkMirror(t, locations, cloneUrl);
+  const mirror = gitTestCheckout(mirrorRoot);
+  await mirror.run("config", "core.symlinks", "false");
+  await mirror.run("config", "core.ignorecase", "true");
+  await mirror.run("config", "core.filemode", "false");
+
+  // act
+  const copyRoot = await materializePluginCommitCopy({
+    locations,
+    cloneUrl,
+    networkUrl: cloneUrl,
+    sha,
+    resolveAuth: () => assert.fail("a mirror copy never builds clone auth"),
+  });
+
+  // assert
+  assert.deepStrictEqual(await linkAndCoreKeys(copyRoot, "link"), {
+    symlink: true,
+    target: "README.md",
+    keys: ["core.repositoryformatversion", "core.bare", "core.logallrefupdates"],
+  });
+});
+
+void test("SG-MIG-01: a per-commit copy of a clone without the clone keys checks out the same tree", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  const { mirrorRoot, sha } = await seedSymlinkMirror(t, locations, cloneUrl);
+  await gitTestCheckout(mirrorRoot).run("config", "--unset", "core.filemode");
+
+  // act
+  const copyRoot = await materializePluginCommitCopy({
+    locations,
+    cloneUrl,
+    networkUrl: cloneUrl,
+    sha,
+    resolveAuth: () => assert.fail("a mirror copy never builds clone auth"),
+  });
+
+  // assert
+  assert.deepStrictEqual(await linkAndCoreKeys(copyRoot, "link"), {
+    symlink: true,
+    target: "README.md",
+    keys: ["core.repositoryformatversion", "core.bare", "core.logallrefupdates"],
+  });
+});
+
 void test("GIT-01: a mirror that lacks the commit falls back to a clone of it", async (t) => {
   // arrange
   const locations = await freshLocations(t);

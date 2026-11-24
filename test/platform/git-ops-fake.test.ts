@@ -36,6 +36,10 @@ function createFakeParticipant(): GitOpsContractParticipant {
     initialOid: INITIAL_OID,
     updatedOid: UPDATED_OID,
     readFile: (dir, filepath) => git.readFile(dir, filepath),
+    copyGitDir: async () => {
+      await Promise.resolve();
+      return "/memory/copy";
+    },
   };
 }
 
@@ -84,6 +88,7 @@ describe("createGitOpsFake", () => {
 
     // act
     await git.gitOps.fetch({ dir: "/memory/worktree", remote: "upstream", ref: "main" });
+    await git.gitOps.checkout({ dir: "/memory/copy", ref: "feature", fromCopiedGitDir: true });
     await git.gitOps.resolveRemoteRef({ url: REMOTE_URL, ref: "main" });
 
     // assert
@@ -91,7 +96,7 @@ describe("createGitOpsFake", () => {
       clone: [],
       fetch: [{ dir: "/memory/worktree", remote: "upstream", ref: "main" }],
       forceUpdateRef: [],
-      checkout: [],
+      checkout: [{ dir: "/memory/copy", ref: "feature", fromCopiedGitDir: true }],
       resolveRef: [],
       currentBranch: [],
       resolveRemoteRef: [{ url: REMOTE_URL, ref: "main" }],

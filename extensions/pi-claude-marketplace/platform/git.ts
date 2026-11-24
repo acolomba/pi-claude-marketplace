@@ -14,8 +14,10 @@ import { gitHubWireUrl } from "../shared/github-base-url.ts";
 
 import { buildAuthCallbacks } from "./git-auth-callbacks.ts";
 import { NODE_GIT_PROCESS } from "./git-process.ts";
+import { gitTimeoutMs } from "./git-timeout.ts";
 
 import type { BuildAuthCallbacksOpts } from "./git-auth-callbacks.ts";
+import type { GitProcess } from "./git-process.ts";
 import type { GitHttpRequest, GitHttpResponse, HttpClient } from "isomorphic-git/http/node";
 
 /**
@@ -26,9 +28,14 @@ import type { GitHttpRequest, GitHttpResponse, HttpClient } from "isomorphic-git
  * `platform/git-process.ts` for it, so with no usable git on PATH they reject
  * with that module's `git-missing` GitCommandError before isomorphic-git runs
  * or a request goes out (SG-PRC-06). The system-git transport will raise the
- * same error from the same place. The local verbs still run in-process with
- * pure-JS `isomorphic-git` and need no git, so a path-source marketplace still
- * reads its own release tags without one (TAGS-01).
+ * same error from the same place.
+ *
+ * SG-TRN-01: `checkout` runs system git through `NODE_GIT_PROCESS` on the
+ * local lane, which reaches no transport. The other local verbs still run
+ * in-process with pure-JS `isomorphic-git` and need no git, so a path-source
+ * marketplace still reads its own release tags without one (TAGS-01). Each
+ * system-git function takes the git process as a defaulted last parameter,
+ * and every request it sends takes its limit from `gitTimeoutMs()` (D-SG-13).
  *
  * Pins `fs` (Node's built-in) and `http` so the marketplace orchestrators
  * don't thread them through every call. `http` is the module-private client
@@ -108,8 +115,14 @@ export interface CheckoutOptions {
   dir: string;
   /** Branch, tag, or SHA. */
   ref: string;
-  /** Default false. Set true to keep working-tree files at HEAD. */
-  noCheckout?: boolean;
+  /**
+   * D-SG-11, SG-MIG-01: set true when `dir/.git` is a copy of another clone's
+   * git directory. The checkout then first unsets `core.symlinks`,
+   * `core.ignorecase`, and `core.filemode` in the copy's config, the keys an
+   * `isomorphic-git` clone carries, so git decides them for this machine as
+   * it does for a fresh clone. No key is written (D-SG-12).
+   */
+  fromCopiedGitDir?: boolean;
 }
 
 export interface ResolveRefOptions {
@@ -647,12 +660,52 @@ export async function fetch(opts: FetchOptions): Promise<void> {
   );
 }
 
-export async function checkout(opts: CheckoutOptions): Promise<void> {
-  await git.checkout({
-    fs,
-    dir: opts.dir,
-    ref: opts.ref,
-    ...(opts.noCheckout !== undefined && { noCheckout: opts.noCheckout }),
+/**
+ * D-SG-11: the keys an `isomorphic-git` clone writes into `.git/config`
+ * (03-EVIDENCE Q5). A copy that keeps `core.symlinks=false` would check a
+ * symlink out as a text file.
+ */
+const COPIED_CLONE_KEYS = ["core.symlinks", "core.ignorecase", "core.filemode"] as const;
+
+/** `git config --unset-all` exits 5 when the key is not set. */
+const CONFIG_KEY_ABSENT = 5;
+
+/**
+ * SG-TRN-01: checks `opts.ref` out in `opts.dir` with `checkout -f`, so the
+ * work tree gets the target commit's files even when the current branch's ref
+ * moved under it. A SHA or a tag leaves HEAD detached. The operand rule puts
+ * the ref before `--` and refuses one that starts with `-`.
+ *
+ * With `fromCopiedGitDir`, the D-SG-11 keys are unset first, one command per
+ * key, because each `git config` write takes the config file's lock. A key
+ * that is not set is no failure, so a second run of the same copy succeeds.
+ */
+export async function checkout(
+  opts: CheckoutOptions,
+  gitProcess: GitProcess = NODE_GIT_PROCESS,
+): Promise<void> {
+  if (opts.fromCopiedGitDir === true) {
+    for (const key of COPIED_CLONE_KEYS) {
+      // eslint-disable-next-line no-await-in-loop -- each git config write takes the config file's lock
+      await gitProcess.run({
+        subcommand: "config",
+        lane: "local",
+        cwd: opts.dir,
+        options: ["--local", "--unset-all"],
+        operands: [key],
+        allowExit: [CONFIG_KEY_ABSENT],
+        timeoutMs: gitTimeoutMs(),
+      });
+    }
+  }
+
+  await gitProcess.run({
+    subcommand: "checkout",
+    lane: "local",
+    cwd: opts.dir,
+    options: ["-f", "--quiet"],
+    operands: [opts.ref],
+    timeoutMs: gitTimeoutMs(),
   });
 }
 

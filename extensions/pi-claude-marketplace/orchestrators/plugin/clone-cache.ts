@@ -271,12 +271,14 @@ export async function materializePluginClone(args: {
  * empty staging dir `staging`, the one copy-and-checkout step every
  * per-commit copy and tag clone shares.
  *
- * Only `.git` is copied (symlinks verbatim), and its index is dropped, so the
- * non-forced checkout compares against an empty tree and writes exactly the
- * commit's tree: no untracked or edited file of the source work tree rides
- * along, a relative symlink stays relative instead of pointing back into the
- * source (NFR-10), and a directory that holds only a symlink checks out
- * (a forced checkout refuses it). Throws raw; the caller owns the staging
+ * Only `.git` is copied (symlinks verbatim), and its index is dropped, so no
+ * stat data of the source work tree carries over and the checkout writes
+ * exactly the commit's tree: no untracked or edited file of the source work
+ * tree rides along, a relative symlink stays relative instead of pointing
+ * back into the source (NFR-10), and a directory that holds only a symlink
+ * checks out. D-SG-11, SG-MIG-01: the checkout first unsets the clone keys an
+ * `isomorphic-git` clone carries in the copied config, so a copy of an old
+ * clone writes a symlink as a link. Throws raw; the caller owns the staging
  * cleanup.
  */
 async function checkoutGitDirCopy(
@@ -288,7 +290,7 @@ async function checkoutGitDirCopy(
   await mkdir(staging, { recursive: true });
   await cp(gitDir, path.join(staging, ".git"), { recursive: true, verbatimSymlinks: true });
   await rm(path.join(staging, ".git", "index"), { force: true });
-  await gitOps.checkout({ dir: staging, ref });
+  await gitOps.checkout({ dir: staging, ref, fromCopiedGitDir: true });
 }
 
 /**

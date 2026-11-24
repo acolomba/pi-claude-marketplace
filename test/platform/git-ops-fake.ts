@@ -46,7 +46,11 @@ export interface GitOpsFakeCalls {
     readonly ref: string;
     readonly value: string;
   }>;
-  readonly checkout: Array<{ readonly dir: string; readonly ref: string }>;
+  readonly checkout: Array<{
+    readonly dir: string;
+    readonly ref: string;
+    readonly fromCopiedGitDir?: boolean;
+  }>;
   readonly resolveRef: Array<{ readonly dir: string; readonly ref: string }>;
   readonly currentBranch: Array<{ readonly dir: string }>;
   readonly resolveRemoteRef: Array<{
