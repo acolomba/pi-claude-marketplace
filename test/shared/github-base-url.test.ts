@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import { InvalidGitHubBaseUrlError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
+  gitHubInsteadOfPairs,
   gitHubOverrideHost,
   gitHubWireUrl,
 } from "../../extensions/pi-claude-marketplace/shared/github-base-url.ts";
@@ -17,6 +18,7 @@ const EXPECTED_MESSAGES = {
   userinfo: "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must not contain a user name or password.",
   query: "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must not contain a query.",
   fragment: "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must not contain a fragment.",
+  "equals-sign": "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must not contain an equals sign.",
 } as const;
 
 describe("gitHubWireUrl", () => {
@@ -158,6 +160,8 @@ describe("gitHubWireUrl", () => {
     { base: "   ", problem: "not-a-url" },
     { base: "https://mirror.example:0x", problem: "not-a-url" },
     { base: "http://user:secret@mirror.example/?a#b", problem: "scheme" },
+    { base: "https://h.example/a=b", problem: "equals-sign" },
+    { base: "https://a=b.example", problem: "equals-sign" },
   ] as const) {
     test(`GHB-03: refuses base ${JSON.stringify(base)} for its ${problem} without echoing it`, (t) => {
       // arrange
@@ -187,6 +191,65 @@ describe("gitHubWireUrl", () => {
       );
     });
   }
+});
+
+describe("gitHubInsteadOfPairs", () => {
+  for (const { state, value } of [
+    { state: "unset", value: undefined },
+    { state: "empty", value: "" },
+  ]) {
+    test(`D-SG-16: gives a github.com URL no pair when the variable is ${state}`, (t) => {
+      // arrange
+      setGitHubBaseUrl(t, value);
+
+      // act
+      const pairs = gitHubInsteadOfPairs(GITHUB_URL);
+
+      // assert
+      assert.deepStrictEqual(pairs, []);
+    });
+  }
+
+  for (const base of ["https://127.0.0.1:4443/base/", "https://127.0.0.1:4443/base//"]) {
+    test(`D-SG-16: rewrites https://github.com/ to base ${base} as one insteadOf pair`, (t) => {
+      // arrange
+      setGitHubBaseUrl(t, base);
+
+      // act
+      const pairs = gitHubInsteadOfPairs(GITHUB_URL);
+
+      // assert
+      assert.deepStrictEqual(pairs, [
+        "url.https://127.0.0.1:4443/base/.insteadOf=https://github.com/",
+      ]);
+    });
+  }
+
+  test("GHB-04: gives a URL outside github.com no pair and does not read an invalid variable", (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "http://mirror.example");
+
+    // act
+    const pairs = gitHubInsteadOfPairs("https://gitlab.com/x.git");
+
+    // assert
+    assert.deepStrictEqual(pairs, []);
+  });
+
+  test("GHB-03: refuses a base with an equals sign, which would break the config key", (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://h.example/a=b");
+
+    // act & assert
+    assert.throws(
+      () => gitHubInsteadOfPairs(GITHUB_URL),
+      (error: unknown) => {
+        assert.ok(error instanceof InvalidGitHubBaseUrlError);
+        assert.strictEqual(error.problem, "equals-sign");
+        return true;
+      },
+    );
+  });
 });
 
 describe("gitHubOverrideHost", () => {

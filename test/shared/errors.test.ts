@@ -1632,6 +1632,10 @@ describe("InvalidGitHubBaseUrlError", () => {
       problem: "fragment",
       message: "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must not contain a fragment.",
     },
+    {
+      problem: "equals-sign",
+      message: "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must not contain an equals sign.",
+    },
   ] as const) {
     test(`names the variable and the ${problem} rule`, () => {
       // arrange

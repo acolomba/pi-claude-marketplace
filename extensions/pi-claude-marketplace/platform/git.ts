@@ -11,7 +11,7 @@ import {
   GitCommandError,
   TooManyRedirectsError,
 } from "../shared/errors.ts";
-import { gitHubWireUrl } from "../shared/github-base-url.ts";
+import { gitHubInsteadOfPairs, gitHubWireUrl } from "../shared/github-base-url.ts";
 
 import { buildAuthCallbacks } from "./git-auth-callbacks.ts";
 import { NODE_GIT_PROCESS } from "./git-process.ts";
@@ -25,15 +25,17 @@ import type { GitHttpRequest, GitHttpResponse, HttpClient } from "isomorphic-git
  * platform/git.ts -- isomorphic-git wrapper (D-18, D-19, D-20).
  *
  * D-SG-01 (reverses D-21): the network verbs `clone`, `fetch`,
- * `resolveRemoteRef`, and `listRemoteTags` need system git. Each first asks
- * `platform/git-process.ts` for it, so with no usable git on PATH they reject
- * with that module's `git-missing` GitCommandError before isomorphic-git runs
- * or a request goes out (SG-PRC-06). The system-git transport will raise the
- * same error from the same place.
+ * `fetchCommit`, `resolveRemoteRef`, and `listRemoteTags` need system git.
+ * Each first asks `platform/git-process.ts` for it, so with no usable git on
+ * PATH they reject with that module's `git-missing` GitCommandError before
+ * isomorphic-git runs or a request goes out (SG-PRC-06).
  *
- * SG-TRN-01: `checkout`, `resolveRef`, and `listRemotes` run system git
- * through `NODE_GIT_PROCESS` on the local lane, which reaches no transport.
- * `resolveRef` answers undefined for a ref that names no commit, and
+ * SG-TRN-01: `fetchCommit` and `resolveRemoteRef` send their requests with
+ * system git through `runRemote`, the one network request path of this
+ * module: the network lane, the D-SG-13 limit, the D-PL8-24 abort signal, and
+ * the D-SG-16 `insteadOf` pair. `checkout`, `resolveRef`, and `listRemotes`
+ * run system git through `NODE_GIT_PROCESS` on the local lane, which reaches
+ * no transport. `resolveRef` answers undefined for a ref that names no commit, and
  * `resolveRemoteRef` for a ref the remote does not advertise. The other local
  * verbs still run in-process with pure-JS `isomorphic-git` and need no git, so
  * a path-source marketplace still reads its own release tags without one
@@ -161,11 +163,9 @@ export interface ResolveRemoteRefOptions {
    */
   ref?: string;
   /**
-   * Optional auth bundle. Same shape as `CloneOptions.auth`; when present,
-   * resolveRemoteRef builds isomorphic-git `onAuth`/`onAuthFailure` callbacks
-   * via `buildAuthCallbacks` and threads them into `listServerRefs` so an
-   * unpinned private-repo HEAD resolution can authenticate (PROV-03). When
-   * omitted, the resolution behaves identically to the public-only path.
+   * Optional auth bundle. Same shape as `CloneOptions.auth`. git asks the
+   * user's credential helpers itself; the bundle decides what an auth failure
+   * of the request leads to (PROV-03).
    */
   auth?: BuildAuthCallbacksOpts;
 }
@@ -572,11 +572,68 @@ async function networkCall<T>(wireUrl: string, url: string, call: () => Promise<
   return result;
 }
 
+/** One remote request that `runRemote` sends with system git. */
+interface RemoteRequest {
+  readonly subcommand: "fetch" | "ls-remote";
+  /** Pi-owned flags; the first one names the operation in a failure (`operationOf`). */
+  readonly options: readonly string[];
+  readonly operands: readonly string[];
+  /** The clone the command runs in; omitted, git runs in the neutral directory. */
+  readonly cwd?: string;
+  /**
+   * The canonical URL the request reaches: the URL operand, or the clone's
+   * recorded origin. It alone decides the D-SG-16 pair and the GHB-01 cause.
+   */
+  readonly url: string;
+}
+
 /**
- * The protocol version 2 ref advertisement that `resolveRemoteRef` and
- * `listRemoteTags` both read, with annotated tags peeled. `extra` carries the
- * one option each caller adds. Returns the URL sent (GHB-01), which the caller
- * names in its own refusals.
+ * SG-TRN-01: the one network request path. It asks for git first, so a
+ * missing git rejects with the lookup's own error and no cause (SG-PRC-06).
+ * Then it runs `remote` on the network lane with the limit of
+ * `gitTimeoutMs()` read for this command (D-SG-13), the signal of the abort
+ * scope it runs in (D-PL8-24), and the D-SG-16 pair of
+ * `gitHubInsteadOfPairs(remote.url)`, which throws `InvalidGitHubBaseUrlError`
+ * before anything starts. A failure of a request the base rewrote gains the
+ * `FetchedUrlCause` of the URL git fetched (GHB-01).
+ */
+async function runRemote(remote: RemoteRequest, gitProcess: GitProcess): Promise<GitResult> {
+  await gitProcess.locate();
+  const config = gitHubInsteadOfPairs(remote.url);
+  const signal = gitAbortScope.getStore();
+  const request: GitRequest = {
+    subcommand: remote.subcommand,
+    lane: "network",
+    options: remote.options,
+    operands: remote.operands,
+    config,
+    ...(remote.cwd !== undefined && { cwd: remote.cwd }),
+    timeoutMs: gitTimeoutMs(),
+    ...(signal !== undefined && { signal }),
+  };
+  return withFetchedUrlCause(gitHubWireUrl(remote.url), remote.url, () => gitProcess.run(request));
+}
+
+/**
+ * The refs an `ls-remote` printed, each name mapped to its object id. git
+ * prints one `<oid> TAB <name>` line per ref, and `<name>^{}` for the commit
+ * an annotated tag peels to.
+ */
+function advertisedRefs(stdout: string): Map<string, string> {
+  const refs = new Map<string, string>();
+  for (const line of stdout.split("\n")) {
+    const tab = line.indexOf("\t");
+    if (tab !== -1) {
+      refs.set(line.slice(tab + 1), line.slice(0, tab));
+    }
+  }
+
+  return refs;
+}
+
+/**
+ * The protocol version 2 ref advertisement that `listRemoteTags` reads, with
+ * annotated tags peeled. `extra` carries the ref prefix it adds.
  *
  * Same conditional-spread + AuthFailureCallback cast idiom as `clone()`: the
  * callbacks are built only when `opts.auth` is defined, so the public-only
@@ -584,7 +641,7 @@ async function networkCall<T>(wireUrl: string, url: string, call: () => Promise<
  */
 async function listServerRefsAt(
   opts: { readonly url: string; readonly auth?: BuildAuthCallbacksOpts | undefined },
-  extra: { readonly symrefs?: true; readonly prefix?: string },
+  extra: { readonly prefix: string },
 ): Promise<{ readonly wireUrl: string; readonly refs: git.ServerRef[] }> {
   const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
   const wireUrl = gitHubWireUrl(opts.url);
@@ -681,33 +738,39 @@ export async function fetch(opts: FetchOptions): Promise<void> {
   );
 }
 
+/** `git config --get` and `--get-all` exit 1 when the key has no value. */
+const CONFIG_VALUE_ABSENT = 1;
+
 /**
  * SG-TRN-02, C5: fetches the commit `opts.sha` into the clone `opts.dir`, as
  * Claude Code's pin ladder does. The first rung is `fetch --depth 1 origin
- * <sha>` on the network lane. When it fails for a reason other than an abort,
- * and only when `rev-parse --is-shallow-repository` prints `true`, the second
- * rung is `fetch --unshallow origin [<ref>]`, and its failure is the one
- * thrown. A complete clone skips that rung, because git refuses
- * `--unshallow` on one, and the first rung's error is thrown. Each rung reads
- * its own limit from `gitTimeoutMs()` and carries the abort signal of the
- * scope it runs in (D-PL8-24).
+ * <sha>`. When it fails for a reason other than an abort, and only when
+ * `rev-parse --is-shallow-repository` prints `true`, the second rung is
+ * `fetch --unshallow origin [<ref>]`, and its failure is the one thrown. A
+ * complete clone skips that rung, because git refuses `--unshallow` on one,
+ * and the first rung's error is thrown. Each rung runs through `runRemote`,
+ * so it reads its own limit and carries the scope's abort signal.
+ *
+ * D-SG-16: the clone records its canonical origin, so a `fetch origin` with no
+ * pair would go to the real github.com. The recorded origin is read first,
+ * with `config --local --get remote.origin.url` on the local lane, and decides
+ * the pair of both rungs. A clone with no origin url sends no pair, and git
+ * then refuses the fetch itself.
  */
 export async function fetchCommit(
   opts: FetchCommitOptions,
   gitProcess: GitProcess = NODE_GIT_PROCESS,
 ): Promise<void> {
-  const signal = gitAbortScope.getStore();
-  const fetchRung = (options: readonly string[], operands: readonly string[]): GitRequest => ({
+  const url = await recordedOriginUrl(opts.dir, gitProcess);
+  const fetchRung = (options: readonly string[], operands: readonly string[]): RemoteRequest => ({
     subcommand: "fetch",
-    lane: "network",
     cwd: opts.dir,
     options,
     operands,
-    timeoutMs: gitTimeoutMs(),
-    ...(signal !== undefined && { signal }),
+    url,
   });
   try {
-    await gitProcess.run(fetchRung(["--depth", "1"], ["origin", opts.sha]));
+    await runRemote(fetchRung(["--depth", "1"], ["origin", opts.sha]), gitProcess);
     return;
   } catch (error: unknown) {
     const aborted = error instanceof GitCommandError && error.kind === "aborted";
@@ -716,9 +779,24 @@ export async function fetchCommit(
     }
   }
 
-  await gitProcess.run(
+  await runRemote(
     fetchRung(["--unshallow"], opts.ref === undefined ? ["origin"] : ["origin", opts.ref]),
+    gitProcess,
   );
+}
+
+/** The url `origin` records in the clone `dir`, or the empty string when it records none. */
+async function recordedOriginUrl(dir: string, gitProcess: GitProcess): Promise<string> {
+  const read = await gitProcess.run({
+    subcommand: "config",
+    lane: "local",
+    cwd: dir,
+    options: ["--local", "--get"],
+    operands: ["remote.origin.url"],
+    allowExit: [CONFIG_VALUE_ABSENT],
+    timeoutMs: gitTimeoutMs(),
+  });
+  return read.stdout.trim();
 }
 
 /**
@@ -813,51 +891,42 @@ export async function resolveRef(
 }
 
 /**
- * D-77-05 / PURL-09: resolve a remote ref (or the default-branch HEAD) to its
- * full commit SHA WITHOUT a full clone. Wraps isomorphic-git's
- * `listServerRefs` (protocol version 2 ref advertisement) so the install
- * clone-cache seam can pin an unpinned source at install time.
+ * D-77-05 / PURL-09, SG-TRN-01: resolves a remote ref, or the remote HEAD, to
+ * the commit it names WITHOUT a clone, so the install clone-cache seam can pin
+ * an unpinned source at install time. It runs `ls-remote <url> <names...>`
+ * through `runRemote`, which sends the same `GET info/refs` and one
+ * `POST git-upload-pack` as a protocol version 2 ref listing.
  *
- * `symrefs: true` makes the remote HEAD entry carry its `target` symref so an
- * unpinned resolution follows HEAD to the default branch; `peelTags: true`
- * peels annotated tags so a tag `ref` resolves to the underlying commit oid
- * (via the `refs/tags/<ref>^{}` peeled entry) rather than the tag object.
- *
- * Ref selection (opts.ref):
- *   - undefined: return the HEAD entry's oid (default-branch commit), or
+ * Ref selection, by exact name, whatever order git prints the lines in:
+ *   - `opts.ref` undefined: the `HEAD` line (the default branch's commit), or
  *     undefined when the remote advertises no HEAD.
- *   - given: match `refs/heads/<ref>` / `refs/tags/<ref>` / a bare `<ref>`;
- *     for an annotated tag, prefer the `peeled` commit oid so the returned
- *     value is a commit, not the tag object. Undefined when the remote
- *     advertises no such ref.
+ *   - `opts.ref` given: `refs/heads/<ref>`, then the commit an annotated
+ *     `refs/tags/<ref>` peels to (`refs/tags/<ref>^{}`), then
+ *     `refs/tags/<ref>` itself (a lightweight tag), then a ref named exactly
+ *     `<ref>`, such as `HEAD`. A branch therefore wins over a tag of the same
+ *     name. Undefined when the remote advertises none of them.
  *
- * Auth is threaded through the optional `opts.auth` bundle so an unpinned
- * private-repo HEAD resolution can authenticate (PROV-03); omitted = the
- * public-only path. No sparse/partial fetch is exposed (documented
- * divergence; see the NOT-exposed list above).
+ * The names are also the `ls-remote` patterns. git matches a pattern against
+ * the end of each ref name and prints a peeled line only for a pattern that
+ * names it, so the `^{}` name must be one of them. The extra lines a tail
+ * match brings, such as `refs/heads/x/<ref>`, never match a name.
  *
- * GHB-01: the URL sent is `shared/github-base-url.ts::gitHubWireUrl` of
- * `opts.url`; the caller names that URL when it refuses an undefined answer.
- *
- * Source: node_modules/isomorphic-git/index.d.ts -- listServerRefs({ http,
- * url, onAuth, onAuthFailure, protocolVersion, symrefs, peelTags }) =>
- * Promise<ServerRef[]>, where each ServerRef is { ref, oid, target?, peeled? }.
+ * GHB-01: under the base override, a failure names the URL fetched.
  */
-export async function resolveRemoteRef(opts: ResolveRemoteRefOptions): Promise<string | undefined> {
-  await NODE_GIT_PROCESS.locate();
-  const { refs } = await listServerRefsAt(opts, { symrefs: true });
-
-  if (opts.ref === undefined) {
-    return refs.find((r) => r.ref === "HEAD")?.oid;
-  }
-
-  const match = refs.find(
-    (r) =>
-      r.ref === `refs/heads/${opts.ref}` || r.ref === `refs/tags/${opts.ref}` || r.ref === opts.ref,
+export async function resolveRemoteRef(
+  opts: ResolveRemoteRefOptions,
+  gitProcess: GitProcess = NODE_GIT_PROCESS,
+): Promise<string | undefined> {
+  const names =
+    opts.ref === undefined
+      ? ["HEAD"]
+      : [`refs/heads/${opts.ref}`, `refs/tags/${opts.ref}^{}`, `refs/tags/${opts.ref}`, opts.ref];
+  const listed = await runRemote(
+    { subcommand: "ls-remote", options: [], operands: [opts.url, ...names], url: opts.url },
+    gitProcess,
   );
-  // For an annotated tag the `peeled` field carries the commit the tag points
-  // at; prefer it so a tag resolves to a commit, not the tag object.
-  return match === undefined ? undefined : (match.peeled ?? match.oid);
+  const refs = advertisedRefs(listed.stdout);
+  return names.map((name) => refs.get(name)).find((oid) => oid !== undefined);
 }
 
 /** Ref namespace a tag advertisement is filtered to -- the `--tags` equivalent. */
@@ -1058,9 +1127,6 @@ export async function currentBranch(opts: CurrentBranchOptions): Promise<string 
   const branch = await git.currentBranch({ fs, dir: opts.dir });
   return branch ?? undefined;
 }
-
-/** `git config --get-all` exits 1 when the key has no value. */
-const CONFIG_VALUE_ABSENT = 1;
 
 /**
  * D-3-03 / MA-12 / MA-13: report whether `dir` is a readable git clone and,
