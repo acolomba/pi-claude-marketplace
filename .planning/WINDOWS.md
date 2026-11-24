@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 21
+open_count: 22
 waived_count: 52
 fixed_count: 48
-total_count: 121
-last_updated: 2026-11-23T20:17:06.190Z
+total_count: 122
+last_updated: 2026-11-24T03:43:08.597Z
 ---
 
 # Broken Windows Ledger
@@ -136,6 +136,7 @@ last_updated: 2026-11-23T20:17:06.190Z
 | 119 | 02 | deviation | .planning/codebase/CONVENTIONS.md |  | [system-git] fallow-ignore marker counts are now 54 total and 16 unused-export | open |  | 2026-11-23T15:38:44.330Z |  |
 | 120 | 2 | unrun-verify | extensions/pi-claude-marketplace/platform/git-process.ts |  | [system-git] the manual macOS and Windows check of the git process module (02-08 steps 1-10: no-git message, shim and lookup rules, no credential window, no console window, no process left after a hanging helper) is deferred to the pull request | open |  | 2026-11-23T18:29:44.674Z |  |
 | 121 | 2 | unrun-verify | extensions/pi-claude-marketplace/platform/git-neutral-directory.ts |  | [system-git] the Windows branches added by the code-review fixes (neutral directory without owner/mode checks, GIT_ALLOW_PROTOCOL spelling intersection, lookup with unreadable real paths) have fake-host unit cases only; the manual Windows check covers them | open |  | 2026-11-23T20:17:06.190Z |  |
+| 122 | 3 | unrun-verify | extensions/pi-claude-marketplace/platform/git.ts |  | [system-git] a copy of an old clone checks out with core.symlinks unset, so Git for Windows' system config decides symlinks; the manual Windows check covers it (A9) | open |  | 2026-11-24T03:43:08.597Z |  |
 
 ````json
 [
@@ -1653,6 +1654,19 @@ last_updated: 2026-11-23T20:17:06.190Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-11-23T20:17:06.190Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 122,
+    "kind": "unrun-verify",
+    "phase": "3",
+    "file": "extensions/pi-claude-marketplace/platform/git.ts",
+    "line": null,
+    "description": "[system-git] a copy of an old clone checks out with core.symlinks unset, so Git for Windows' system config decides symlinks; the manual Windows check covers it (A9)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-24T03:43:08.597Z",
     "resolved_at": null,
     "milestone": null
   }
