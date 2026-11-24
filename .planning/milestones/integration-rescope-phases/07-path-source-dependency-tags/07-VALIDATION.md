@@ -2,9 +2,9 @@
 phase: "7"
 slug: "path-source-dependency-tags"
 # status lifecycle: draft (seeded by plan-phase) → validated (set by validate-phase §6)
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: validated
+nyquist_compliant: true
+wave_0_complete: true
 created: "2026-11-21"
 ---
 
@@ -41,9 +41,9 @@ Filled by the planner from `07-RESEARCH.md` "Phase Requirements → Test Map" an
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 07-01-01 | 01 | 1 | ITMIG-07 | T-07-01, T-07-02, T-07-03, T-07-05 | The tag step runs hermetic git against the loopback git host; the break is restored and never committed | behavioral (tracer) | `install-dependencies.feature` 60 passed, builtin 1 passed; the 27 tag-only scenarios pass; B1-tracer fails S1 on a `Then` (`check-red.mjs ... tracer-`); `check:static` | ✅ | ⬜ pending |
-| 07-01-02 | 01 | 1 | ITMIG-07 | T-07-03 | Every copied file equals its frozen copy (`cmp`) | behavioral | `install-dependencies.feature` 61 passed, builtin 1 passed; `check:static` | ✅ | ⬜ pending |
-| 07-01-03 | 01 | 1 | ITMIG-07 | T-07-01, T-07-04, T-07-06, T-07-07 | CR-01 is kept; every break is restored; the trim follows `RED-PROOFS OK` | break + checker + integration | B1 to B5 under adapter (`RED-PROOFS OK`, B5 the survivor); trimmed `path-source-tag-install` 2 passed, and B5 on it fails the two-member case; `check:static`; `fallow audit` shows only `weakened-tests` | ✅ | ⬜ pending |
+| 07-01-01 | 01 | 1 | ITMIG-07 | T-07-01, T-07-02, T-07-03, T-07-05 | The tag step runs hermetic git against the loopback git host; the break is restored and never committed | behavioral (tracer) | `install-dependencies.feature` 60 passed, builtin 1 passed; the 27 tag-only scenarios pass; B1-tracer fails S1 on a `Then` (`check-red.mjs ... tracer-`); `check:static` | ✅ | ✅ green |
+| 07-01-02 | 01 | 1 | ITMIG-07 | T-07-03 | Every copied file equals its frozen copy (`cmp`) | behavioral | `install-dependencies.feature` 61 passed, builtin 1 passed; `check:static` | ✅ | ✅ green |
+| 07-01-03 | 01 | 1 | ITMIG-07 | T-07-01, T-07-04, T-07-06, T-07-07 | CR-01 is kept; every break is restored; the trim follows `RED-PROOFS OK` | break + checker + integration | B1 to B5 under adapter (`RED-PROOFS OK`, B5 the survivor); trimmed `path-source-tag-install` 2 passed, and B5 on it fails the two-member case; `check:static`; `fallow audit` shows only `weakened-tests` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -68,6 +68,16 @@ All phase behaviors have automated verification. Each deliberate break is a reve
 - [x] Wave 0 covers all MISSING references
 - [x] No watch-mode flags
 - [x] Feedback latency < 120s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved 2026-11-24
+
+Audit evidence (current tree): `features/plugin/install-dependencies.feature:672` (S1, TAGS-01/TAGS-03), `:716` (S2, TAGS-02/D-07-03), and `:748` (local-git-folder marketplace tag variant) pass under adapter (`npm run --silent test:cucumber:profile -- --profile adapter --parallel 2 features/plugin/install-dependencies.feature:672 features/plugin/install-dependencies.feature:716 features/plugin/install-dependencies.feature:748`, 3 passed); the file under builtin passes (1 passed); `node --import ./scripts/isolated-pi-home.mjs --test test/integration/path-source-tag-install.test.ts` passes 2/2 (CR-01 and the two-member git-state case). S2 moved from `:704` to `:716` after later work; it still covers the behavior. The deliberate breaks B1 to B5 are recorded in 07-01-SUMMARY.md and were not rerun.
+
+## Validation Audit 2026-11-24
+
+| Metric | Count |
+|---|---|
+| Gaps found | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
