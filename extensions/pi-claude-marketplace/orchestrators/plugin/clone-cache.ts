@@ -284,10 +284,10 @@ export async function materializePluginClone(args: {
  * exactly the commit's tree: no untracked or edited file of the source work
  * tree rides along, a relative symlink stays relative instead of pointing
  * back into the source (NFR-10), and a directory that holds only a symlink
- * checks out. D-SG-11, SG-MIG-01: the checkout first unsets the clone keys an
- * `isomorphic-git` clone carries in the copied config, so a copy of an old
- * clone writes a symlink as a link. Throws raw; the caller owns the staging
- * cleanup.
+ * checks out. D-SG-11, SG-MIG-01: the checkout first unsets the clone keys
+ * that a clone made before the system git transport (D-SG-01) carries in the
+ * copied config, so a copy of an old clone writes a symlink as a link. Throws
+ * raw; the caller owns the staging cleanup.
  */
 async function checkoutGitDirCopy(
   gitOps: GitOps,
@@ -1019,11 +1019,10 @@ export async function resolveGitPluginRootWithSubdir(
  * there. D-SG-09: a `github` or `url` marketplace is a depth-1 clone, so
  * between the copy and the checkout the copy fetches the tag's commit
  * (`fetch --depth 1 origin <oid>`) with the marketplace host's auth bundle; a
- * failed fetch cleans the staging dir and fails the copy. The tag is checked out inside a COPY's own gitdir, never against a
- * `gitdir` naming the marketplace clone -- verified against the installed
- * isomorphic-git source that a checkout writes `${gitdir}/index` regardless
- * of `noUpdateHead`, which would silently desync the marketplace clone's own
- * index. Copying `.git` alone (not the work tree) means every index read and
+ * failed fetch cleans the staging dir and fails the copy. The tag is checked
+ * out inside a COPY's own gitdir, never against a `gitdir` naming the
+ * marketplace clone: a checkout writes the index of the gitdir it runs
+ * against, which would silently desync the marketplace clone's own index. Copying `.git` alone (not the work tree) means every index read and
  * write lands on the copy, the marketplace clone is never opened by any git
  * API at all, AND the checkout is the only thing that ever writes into the
  * work tree -- an untracked or gitignored file in the marketplace root

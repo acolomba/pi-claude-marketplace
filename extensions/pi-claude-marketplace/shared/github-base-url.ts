@@ -123,8 +123,9 @@ export function gitHubInsteadOfPairs(url: string): readonly string[] {
 /**
  * GHB-02: returns the base's `host[:port]`, the host a GitHub credential is
  * bound to while the variable is set, or undefined when it is unset or empty.
- * WHATWG drops a default port and keeps IPv6 brackets, which is the form
- * `onAuth` compares. Like `gitHubWireUrl`, it reads the variable on every call
+ * WHATWG drops a default port and keeps IPv6 brackets, which is the form a
+ * stored credential's host takes. Like `gitHubWireUrl`, it reads the
+ * variable on every call
  * and throws `InvalidGitHubBaseUrlError` for an invalid value.
  */
 export function gitHubOverrideHost(): string | undefined {

@@ -1,10 +1,11 @@
 /**
  * GitHub OAuth Device Flow state machine.
  *
- * Ships `initiateDeviceFlow` -- the authentication engine. This is wrapped in
- * isomorphic-git's `onAuth` / `onAuthFailure` closures via `buildAuthCallbacks`;
- * `onAuthRequired` is threaded through `GitOps` and wired at the orchestrator
- * call sites.
+ * Ships `initiateDeviceFlow` -- the authentication engine. A `device-flow`
+ * auth bundle's `onAuthRequired` runs it, and `platform/git.ts` calls that
+ * closure when a git request failed because no credential helper answered,
+ * then runs the request once more with the new token (D-SG-14). The bundle is
+ * threaded through `GitOps` and wired at the orchestrator call sites.
  *
  * Locked decisions:
  *   - D-32-01: file lives in domain/ (auth policy is domain-tier).

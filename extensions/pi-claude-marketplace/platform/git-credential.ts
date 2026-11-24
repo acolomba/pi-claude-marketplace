@@ -233,8 +233,8 @@ function parseCredentialOutput(stdout: string): Record<string, string> {
  *     non-zero exit for no helper or a miss) -> try/catch swallow -> null
  *   - exit 0 but no username= or password=  -> null
  *
- * The `null` return is the affirmative no-result; callers
- * (buildAuthCallbacks) fall through to Device Flow on null.
+ * The `null` return is the affirmative no-result: no stored credential
+ * answers for the host.
  */
 type RunGitCredential = (action: CredentialAction, input: string) => Promise<string>;
 

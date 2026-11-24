@@ -2572,11 +2572,12 @@ function lockHeldRow(pluginName: string, version: string | undefined): PluginInf
 /**
  * FTCH-04 / D-81-04 / GLK-01: fold a git-source fetch/read throw to a
  * closed-set reason. An `info --fetch` materialize failure narrows through the
- * shared host ladder with the plugin-clone rule (D-PL7-02): HttpError 401/403
- * and a denied/expired Device Flow's `UserCanceledError` -> `authentication
- * required`, network errnos -> `network unreachable`, a host 404/410 or a
- * missing pin -> `source missing`, any other HTTP status -> `network error`,
- * as `fetch` and install read the same answer. Info rows have no cause slot,
+ * shared host ladder with the plugin-clone rule (D-PL7-02): git's `https-auth`
+ * failure, a denied/expired Device Flow's included (D-SG-14) ->
+ * `authentication required`, a host git cannot reach -> `network
+ * unreachable`, a host 404/410 or a missing pin -> `source missing`, any
+ * other HTTP status -> `network error`, as `fetch` and install read the same
+ * answer. Info rows have no cause slot,
  * so the reason token is the whole report (D-PL7-03). Any other throw
  * (warm-tree disk error, etc.) falls through to the existing
  * `narrowProbeError` ladder. Never returns a new REASONS member.

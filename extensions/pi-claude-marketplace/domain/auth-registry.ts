@@ -5,7 +5,8 @@
  * engine (domain/github-auth.ts) needs to authenticate against a given host:
  * the two OAuth endpoints, the public OAuth App client_id, the requested
  * scope, a host-match predicate, and a pure `credentialFrom` mapping from an
- * access token to the isomorphic-git credential shape.
+ * access token to the `{ username, password }` credential that `git
+ * credential approve` stores and the D-SG-14 retry hands to git.
  *
  * Descriptors are COMPILE-TIME constants; there is no runtime provider
  * configuration (PROV-07 per-source declarations are deferred). The engine
@@ -78,15 +79,15 @@ export const GITHUB_PROVIDER: GitAuthProvider = {
  * 4. A GitLab device-flow access token expires in 7200 seconds and the
  *    response issues NO refresh_token, unlike GitHub's classic OAuth App
  *    tokens which do not expire by default. A GitLab user therefore
- *    re-authenticates occasionally. AUTH-07's `onAuthFailure` (in
- *    `platform/git-auth-callbacks.ts::buildAuthCallbacks`) evicts the
- *    expired credential and always cancels the in-flight operation (CP-9);
- *    it does not itself retrigger Device Flow. Recovery happens on the NEXT
- *    auth attempt: with the credential evicted, `onAuth`'s
- *    `credentialOps.fill(host)` call
- *    misses and falls through to `onAuthRequired`, so the following
- *    `marketplace update`/`install`/etc. invocation re-runs Device Flow.
- *    There is no refresh or expiry-tracking logic here by design.
+ *    re-authenticates occasionally. When the host refuses the expired
+ *    token, git fails as `https-auth` with the `rejected` detail, and
+ *    `platform/git.ts` throws that failure without a second sign-in
+ *    (D-SG-14). git's own credential helpers may erase the refused token, as
+ *    under Claude Code. Recovery happens on the NEXT auth attempt: with no
+ *    stored token, git fails as `https-auth` with the `no-credential` detail,
+ *    so the following `marketplace update`/`install`/etc. invocation re-runs
+ *    Device Flow. There is no refresh or expiry-tracking logic here by
+ *    design.
  */
 const GITLAB_PROVIDER: GitAuthProvider = {
   id: "gitlab",
