@@ -46,6 +46,8 @@ const LOCATION_KEYS = [
   "sourceCloneDir",
   "pluginCloneDir",
   "sourcesStagingDir",
+  "sourceSwapStagingDir",
+  "pluginMirrorStagingDir",
   "sourceBackupDir",
   "pluginCloneBackupDir",
   "pluginCacheFile",
@@ -278,6 +280,8 @@ test("returns every safe derived path inside its exact scope root", async () => 
       "sources-staging",
       "123e4567-e89b-12d3-a456-426614174000",
     ),
+    sourceSwapStaging: path.join(extensionRoot, "sources-staging", "marketplace-market.theta"),
+    pluginMirrorStaging: path.join(extensionRoot, "sources-staging", "mirror-0123456789ab"),
     sourceBackup: path.join(extensionRoot, "sources-backup", "market.eta"),
     pluginCloneBackup: path.join(
       extensionRoot,
@@ -292,6 +296,8 @@ test("returns every safe derived path inside its exact scope root", async () => 
     sourceClone: "market-gamma",
     pluginClone: "0123456789ab-abcdef012345",
     sourcesStaging: "123e4567-e89b-12d3-a456-426614174000",
+    sourceSwapStaging: "marketplace-market.theta",
+    pluginMirrorStaging: "mirror-0123456789ab",
     sourceBackup: "market.eta",
     pluginCloneBackup: "0123456789ab-abcdef012345",
     pluginCache: path.join("plugins", "market-zeta.json"),
@@ -304,6 +310,8 @@ test("returns every safe derived path inside its exact scope root", async () => 
     sourceClone: await locations.sourceCloneDir("market-gamma"),
     pluginClone: await locations.pluginCloneDir("0123456789ab-abcdef012345"),
     sourcesStaging: await locations.sourcesStagingDir("123e4567-e89b-12d3-a456-426614174000"),
+    sourceSwapStaging: await locations.sourceSwapStagingDir("market.theta"),
+    pluginMirrorStaging: await locations.pluginMirrorStagingDir("0123456789ab"),
     sourceBackup: await locations.sourceBackupDir("market.eta"),
     pluginCloneBackup: await locations.pluginCloneBackupDir("0123456789ab-abcdef012345"),
     pluginCache: await locations.pluginCacheFile("market-zeta"),
@@ -316,6 +324,14 @@ test("returns every safe derived path inside its exact scope root", async () => 
     sourcesStaging: path.relative(
       path.join(extensionRoot, "sources-staging"),
       paths.sourcesStaging,
+    ),
+    sourceSwapStaging: path.relative(
+      path.join(extensionRoot, "sources-staging"),
+      paths.sourceSwapStaging,
+    ),
+    pluginMirrorStaging: path.relative(
+      path.join(extensionRoot, "sources-staging"),
+      paths.pluginMirrorStaging,
     ),
     sourceBackup: path.relative(path.join(extensionRoot, "sources-backup"), paths.sourceBackup),
     pluginCloneBackup: path.relative(
@@ -371,6 +387,24 @@ for (const { title, parentFor, linkSegments, childSegments, invoke, label } of [
     childSegments: ["stage-id"],
     invoke: (locations: ScopedLocations) => locations.sourcesStagingDir("stage-id"),
     label: "sourcesStagingDir(stage-id)",
+  },
+  {
+    title: "a refresh's source staging refuses a symlinked marketplace component",
+    parentFor: (locations: ScopedLocations) =>
+      path.join(locations.extensionRoot, "sources-staging"),
+    linkSegments: ["marketplace-market"],
+    childSegments: ["marketplace-market"],
+    invoke: (locations: ScopedLocations) => locations.sourceSwapStagingDir("market"),
+    label: "sourceSwapStagingDir(market)",
+  },
+  {
+    title: "a mirror's source staging refuses a symlinked clone-key component",
+    parentFor: (locations: ScopedLocations) =>
+      path.join(locations.extensionRoot, "sources-staging"),
+    linkSegments: ["mirror-clone-key"],
+    childSegments: ["mirror-clone-key"],
+    invoke: (locations: ScopedLocations) => locations.pluginMirrorStagingDir("clone-key"),
+    label: "pluginMirrorStagingDir(clone-key)",
   },
   {
     title: "source backups refuse a symlinked marketplace component",
@@ -517,6 +551,28 @@ for (const {
     expectedErrorName: "Error",
     expectedErrorMessage: (_extensionRoot: string, name: string) =>
       `sourceBackupDir marketplace name "${name}" "${name}" must not contain path separators.`,
+  },
+  {
+    title: "rejects a parent marketplace beside a safe refresh staging path",
+    safeName: "market.next",
+    unsafeName: "..",
+    invoke: (locations: ScopedLocations, name: string) => locations.sourceSwapStagingDir(name),
+    expectedSafePath: (extensionRoot: string, name: string) =>
+      path.join(extensionRoot, "sources-staging", `marketplace-${name}`),
+    expectedErrorName: "Error",
+    expectedErrorMessage: () =>
+      'sourceSwapStagingDir marketplace name ".." must not be "." or "..".',
+  },
+  {
+    title: "rejects the active platform separator beside a safe mirror staging path",
+    safeName: "0123456789ab",
+    unsafeName: activeSeparatorName,
+    invoke: (locations: ScopedLocations, name: string) => locations.pluginMirrorStagingDir(name),
+    expectedSafePath: (extensionRoot: string, name: string) =>
+      path.join(extensionRoot, "sources-staging", `mirror-${name}`),
+    expectedErrorName: "Error",
+    expectedErrorMessage: (_extensionRoot: string, name: string) =>
+      `pluginMirrorStagingDir clone key "${name}" "${name}" must not contain path separators.`,
   },
   {
     title: "rejects a parent clone key beside a safe clone backup path",

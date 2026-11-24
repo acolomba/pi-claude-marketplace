@@ -40,6 +40,7 @@ const COMMIT_A = "a".repeat(40);
 const COMMIT_B = "b".repeat(40);
 const MANIFEST_A = '{"name":"tools","revision":"a"}\n';
 const MANIFEST_B = '{"name":"tools","revision":"b"}\n';
+const MANIFEST_C = '{"name":"tools","revision":"c"}\n';
 const OWNERSHIP_MARKER = '{\n  "generatedBy": "pi-claude-marketplace"\n}\n';
 
 const AUTH: GitAuthBundle = {
@@ -52,6 +53,7 @@ interface Swap {
   readonly locations: ScopedLocations;
   readonly liveDir: string;
   readonly backupDir: string;
+  readonly stagingDir: string;
   readonly stagingRoot: string;
 }
 
@@ -63,6 +65,7 @@ async function swapRoot(t: TestContext): Promise<Swap> {
     locations,
     liveDir: await locations.sourceCloneDir("tools"),
     backupDir: await locations.sourceBackupDir("tools"),
+    stagingDir: await locations.sourceSwapStagingDir("tools"),
     stagingRoot: path.join(locations.extensionRoot, "sources-staging"),
   };
 }
@@ -137,9 +140,9 @@ function swapArgs(
   > = {},
 ): CloneSwapArgs {
   return {
-    locations: swap.locations,
     liveDir: swap.liveDir,
     backupDir: swap.backupDir,
+    stagingDir: swap.stagingDir,
     url: REMOTE_URL,
     gitOps,
     auth: AUTH,
@@ -192,11 +195,9 @@ test("D-SG-10: a stale checkout is cloned into staging and swapped in with the o
   assert.strictEqual(replacedCount, 1);
   assert.deepStrictEqual(git.state.calls.resolveRef, [{ dir: swap.liveDir, ref: "HEAD" }]);
   assert.deepStrictEqual(git.state.calls.resolveRemoteRef, [{ url: REMOTE_URL, auth: AUTH }]);
-  const [clone] = git.state.calls.clone;
-  assert.deepStrictEqual(
-    { ...clone, dir: path.dirname(clone?.dir ?? "") },
-    { dir: swap.stagingRoot, url: REMOTE_URL, auth: AUTH },
-  );
+  assert.deepStrictEqual(git.state.calls.clone, [
+    { dir: swap.stagingDir, url: REMOTE_URL, auth: AUTH },
+  ]);
   assert.deepStrictEqual(await entriesOf(swap.stagingRoot), []);
   assert.deepStrictEqual(await entriesOf(path.dirname(swap.backupDir)), []);
 });
@@ -647,12 +648,14 @@ test("D-SG-10 / NFR-3: a backup beside a valid checkout is removed and the check
   assert.deepStrictEqual(await entriesOf(path.dirname(swap.backupDir)), []);
 });
 
-test("D-SG-10: a staging directory an earlier run left is not this run's and stays", async (t) => {
+test("D-SG-10 / NFR-3: a refresh removes the staging directory an interrupted refresh left, and leaves other staging alone", async (t) => {
   // arrange
   const swap = await swapRoot(t);
   await writeCheckout(swap.liveDir, MANIFEST_A);
-  const leftover = path.join(swap.stagingRoot, "earlier-run");
-  await writeCheckout(leftover, MANIFEST_B);
+  await writeCheckout(swap.stagingDir, MANIFEST_C);
+  await writeFile(path.join(swap.stagingDir, "half-written"), "left by a killed clone\n");
+  const otherRun = path.join(swap.stagingRoot, "123e4567-e89b-12d3-a456-426614174000");
+  await writeCheckout(otherRun, MANIFEST_C);
   const git = gitAt({
     localHead: COMMIT_A,
     remoteHead: COMMIT_B,
@@ -664,8 +667,27 @@ test("D-SG-10: a staging directory an earlier run left is not this run's and sta
 
   // assert
   assert.deepStrictEqual(swapped, { kind: "replaced" });
-  assert.deepStrictEqual(await entriesOf(swap.stagingRoot), ["earlier-run"]);
-  assert.strictEqual(await manifestOf(leftover), MANIFEST_B);
+  assert.strictEqual(await manifestOf(swap.liveDir), MANIFEST_B);
+  assert.deepStrictEqual(await entriesOf(swap.stagingRoot), [path.basename(otherRun)]);
+});
+
+test("D-SG-10 / NFR-3: a current checkout still loses the staging directory an interrupted refresh left", async (t) => {
+  // arrange
+  const swap = await swapRoot(t);
+  await writeCheckout(swap.liveDir, MANIFEST_A);
+  await writeCheckout(swap.stagingDir, MANIFEST_C);
+  const git = gitAt({
+    localHead: COMMIT_A,
+    remoteHead: COMMIT_A,
+    cloneFrom: await remoteTree(t, MANIFEST_B),
+  });
+
+  // act
+  const swapped = await refreshCloneBySwap(swapArgs(swap, git.gitOps));
+
+  // assert
+  assert.deepStrictEqual(swapped, { kind: "current" });
+  assert.deepStrictEqual(await entriesOf(swap.stagingRoot), []);
 });
 
 for (const value of [undefined, "", "   ", "0", "false", "no", "off", "2"]) {

@@ -1295,6 +1295,41 @@ void test("MIRR-01: mirror ABSENT materializes into staging then renames to plug
   assert.deepStrictEqual(created, [bareKey]);
 });
 
+void test("D-SG-10 / NFR-3: a cold mirror clone removes the staging directory an interrupted clone of its key left", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const { gitOps, state } = mirrorGitOps();
+  const key = pluginMirrorKey("https://example.com/repo");
+  const stagingDir = await locations.pluginMirrorStagingDir(key);
+  await mkdir(stagingDir, { recursive: true });
+  await writeFile(path.join(stagingDir, "half-written"), "left by a killed clone\n");
+
+  // act
+  const { pluginRoot } = await materializeOrRefreshPluginMirror({
+    auth: publicCloneAuth(),
+    locations,
+    cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
+    gitOps,
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      pluginRoot,
+      cloneDirs: state.cloneCalls.map(({ dir }) => dir),
+      leftover: await pathExists(path.join(pluginRoot, "half-written")),
+      staging: await entriesOf(path.dirname(stagingDir)),
+    },
+    {
+      pluginRoot: await locations.pluginCloneDir(key),
+      cloneDirs: [stagingDir],
+      leftover: false,
+      staging: [],
+    },
+  );
+});
+
 void test("MURL-08 / PURL-04: materializeOrRefreshPluginMirror forwards the caller's wire url and keys the mirror off the identity url", async (t) => {
   const locations = await freshLocations(t);
   const { gitOps, state } = mirrorGitOps();
@@ -1447,7 +1482,7 @@ void test("D-SG-10: a warm mirror whose remote moved is cloned into staging and 
       refreshed,
       refReads: mirror.git.state.calls.resolveRef,
       checks: mirror.git.state.calls.resolveRemoteRef.map(({ url, ref }) => ({ url, ref })),
-      cloneParents: mirror.git.state.calls.clone.map(({ dir }) => path.dirname(dir)),
+      cloneDirs: mirror.git.state.calls.clone.map(({ dir }) => dir),
       tree: await treeOf(mirror.mirrorRoot),
       backups: await entriesOf(path.dirname(mirror.backupDir)),
       staging: await entriesOf(path.join(mirror.locations.extensionRoot, "sources-staging")),
@@ -1460,7 +1495,9 @@ void test("D-SG-10: a warm mirror whose remote moved is cloned into staging and 
         { dir: mirror.mirrorRoot, ref: "HEAD" },
       ],
       checks: [{ url: "https://example.com/repo", ref: undefined }],
-      cloneParents: [path.join(mirror.locations.extensionRoot, "sources-staging")],
+      cloneDirs: [
+        await mirror.locations.pluginMirrorStagingDir(pluginMirrorKey("https://example.com/repo")),
+      ],
       tree: "B\n",
       backups: [],
       staging: [],

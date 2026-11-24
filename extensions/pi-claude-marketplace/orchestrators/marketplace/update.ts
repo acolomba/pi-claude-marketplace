@@ -552,9 +552,9 @@ async function refreshGitSource(
   const liveDir = await locations.sourceCloneDir(name);
   try {
     return await refreshCloneBySwap({
-      locations,
       liveDir,
       backupDir: await locations.sourceBackupDir(name),
+      stagingDir: await locations.sourceSwapStagingDir(name),
       url: await swapCloneUrl(liveDir, source, gitOps),
       ...(source.ref !== undefined && { ref: source.ref }),
       gitOps,

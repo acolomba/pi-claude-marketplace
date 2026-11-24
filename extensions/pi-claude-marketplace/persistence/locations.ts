@@ -176,6 +176,23 @@ export interface ScopedLocations {
   /** Returns `<extensionRoot>/sources-staging/<uuid>/` after SC-7 / NFR-10 containment check (D-09 same-FS sibling of `sourcesDir`). */
   sourcesStagingDir(uuid: string): Promise<string>;
   /**
+   * D-SG-10 / NFR-3 / NFR-10: returns
+   * `<extensionRoot>/sources-staging/marketplace-<mp>/` after `assertSafeName`
+   * + `assertPathInside`, the one staging directory a refresh of marketplace
+   * `mp` clones into. Its name is fixed, as Claude Code's `<name>..clone` is,
+   * so the next refresh removes what an interrupted one left. No
+   * `sourcesStagingDir` UUID starts with `marketplace-`.
+   */
+  sourceSwapStagingDir(mp: string): Promise<string>;
+  /**
+   * D-SG-10 / NFR-3 / NFR-10: returns `<extensionRoot>/sources-staging/mirror-<key>/`
+   * after `assertSafeName` + `assertPathInside`, the one staging directory
+   * the plugin mirror `key` is cloned into, cold or on a refresh, so the next
+   * run removes what an interrupted one left. No `sourcesStagingDir` UUID
+   * starts with `mirror-`.
+   */
+  pluginMirrorStagingDir(key: string): Promise<string>;
+  /**
    * D-SG-10 / NFR-10: returns `<extensionRoot>/sources-backup/<mp>/` after
    * `assertSafeName` + `assertPathInside`, where a refresh sets the live
    * checkout aside while the new clone moves in. It sits outside `sourcesDir`
@@ -399,6 +416,24 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
       const sourcesStagingRoot = path.join(extensionRoot, "sources-staging");
       const candidate = path.join(sourcesStagingRoot, uuid);
       await assertPathInside(sourcesStagingRoot, candidate, `sourcesStagingDir(${uuid})`);
+      return candidate;
+    },
+
+    async sourceSwapStagingDir(mp: string): Promise<string> {
+      // D-SG-10: the sourceCloneDir chokepoint under the staging root.
+      assertSafeName(mp, `sourceSwapStagingDir marketplace name "${mp}"`);
+      const stagingRoot = path.join(extensionRoot, "sources-staging");
+      const candidate = path.join(stagingRoot, `marketplace-${mp}`);
+      await assertPathInside(stagingRoot, candidate, `sourceSwapStagingDir(${mp})`);
+      return candidate;
+    },
+
+    async pluginMirrorStagingDir(key: string): Promise<string> {
+      // D-SG-10: the pluginCloneDir chokepoint under the staging root.
+      assertSafeName(key, `pluginMirrorStagingDir clone key "${key}"`);
+      const stagingRoot = path.join(extensionRoot, "sources-staging");
+      const candidate = path.join(stagingRoot, `mirror-${key}`);
+      await assertPathInside(stagingRoot, candidate, `pluginMirrorStagingDir(${key})`);
       return candidate;
     },
 

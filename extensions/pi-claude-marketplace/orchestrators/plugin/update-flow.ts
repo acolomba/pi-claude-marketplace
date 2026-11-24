@@ -299,9 +299,9 @@ async function syncMarketplaceBySwap(args: {
     // plugin installed into the checkout before the swap carries packages.
     const { marketplaces } = await loadState(locations.extensionRoot);
     const swapped = await refreshCloneBySwap({
-      locations,
       liveDir,
       backupDir: await locations.sourceBackupDir(mpName),
+      stagingDir: await locations.sourceSwapStagingDir(mpName),
       url,
       ...(source.ref !== undefined && { ref: source.ref }),
       gitOps,

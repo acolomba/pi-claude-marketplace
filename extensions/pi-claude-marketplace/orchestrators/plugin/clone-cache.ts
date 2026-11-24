@@ -524,7 +524,12 @@ export async function materializeOrRefreshPluginMirror(args: {
   // mirror tracks a moving ref).
   let promotion: "renamed" | "raced" | undefined;
   if (!(await pathExists(mirrorRoot))) {
-    const stagingDir = await args.locations.sourcesStagingDir(randomUUID());
+    // NFR-3: the staging name is fixed and the caller holds the scope lock,
+    // so a staging directory already there is an interrupted run's leftover.
+    const stagingDir = await args.locations.pluginMirrorStagingDir(key);
+    if (await pathExists(stagingDir)) {
+      await removalOps.rm(stagingDir, { recursive: true, force: true });
+    }
 
     try {
       await cloneIntoStaging(gitOps, stagingDir, networkUrl, args);
@@ -614,9 +619,9 @@ async function refreshMirrorBySwap(args: {
   readonly mirrorRoot: string;
 }): Promise<void> {
   const swapped = await refreshCloneBySwap({
-    locations: args.locations,
     liveDir: args.mirrorRoot,
     backupDir: await args.locations.pluginCloneBackupDir(args.key),
+    stagingDir: await args.locations.pluginMirrorStagingDir(args.key),
     url: args.networkUrl,
     ...(args.ref !== undefined && { ref: args.ref }),
     gitOps: args.gitOps,

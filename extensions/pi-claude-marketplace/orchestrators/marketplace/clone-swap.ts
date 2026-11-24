@@ -2,8 +2,9 @@
 //
 // D-SG-10: Claude Code's refresh of a cloned checkout. A freshness check
 // compares the checkout's `HEAD` with what the remote advertises; a stale
-// checkout is cloned again into `sources-staging/<uuid>` and swapped in through
-// a backup directory, so the live checkout is never half updated (NFR-1). A
+// checkout is cloned again into a staging directory of fixed name under
+// `sources-staging/` and swapped in through a backup directory, so the live
+// checkout is never half updated (NFR-1). A
 // moved default branch or a moved tag is followed because the clone reads the
 // remote again, and nothing here reads `refs/remotes/origin/HEAD`.
 //
@@ -19,7 +20,6 @@
 // `ScopedLocations` getter (NFR-10), and both renames stay under the extension
 // root, on one filesystem.
 
-import { randomUUID } from "node:crypto";
 import { mkdir, rename } from "node:fs/promises";
 import path from "node:path";
 
@@ -37,7 +37,6 @@ import { cleanupStaging, pathExists, type RemovalOps } from "../../shared/fs-uti
 import { assertPathInside } from "../../shared/path-safety.ts";
 
 import type { GitHubSource, UrlSource } from "../../domain/source.ts";
-import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { GitAuthBundle, GitOps } from "./shared.ts";
 
@@ -126,11 +125,16 @@ export type CloneSwapResult =
   | { readonly kind: "kept-in-use"; readonly cause: Error };
 
 export interface CloneSwapArgs {
-  readonly locations: ScopedLocations;
   /** The live checkout, from a `ScopedLocations` getter. */
   readonly liveDir: string;
   /** Where the live checkout waits while the new clone moves in, from a getter. */
   readonly backupDir: string;
+  /**
+   * NFR-3: the fixed staging directory the new clone is made in, from a
+   * getter. The caller holds the scope lock, so whatever it holds when the
+   * refresh starts is the leftover of an interrupted run.
+   */
+  readonly stagingDir: string;
   readonly url: string;
   readonly ref?: string;
   readonly gitOps: GitOps;
@@ -250,13 +254,21 @@ async function checkFreshness(args: CloneSwapArgs): Promise<Freshness> {
 }
 
 /**
- * D-SG-10 / NFR-3: put back what an interrupted swap left. A backup beside a
- * valid checkout is removed. A backup beside a checkout that lacks its marker,
- * or beside no checkout, is renamed back, after the invalid checkout is
- * removed. A staging directory of an earlier run is not this run's and is left
- * to the removal of its own run.
+ * D-SG-10 / NFR-3: put back what an interrupted swap left, in Claude Code's
+ * order. A backup beside a valid checkout is removed. A backup beside a
+ * checkout that lacks its marker, or beside no checkout, is renamed back,
+ * after the invalid checkout is removed. Then a staging directory that an
+ * interrupted clone left is removed.
  */
 async function recoverInterruptedSwap(args: CloneSwapArgs): Promise<void> {
+  await restoreInterruptedBackup(args);
+  if (await pathExists(args.stagingDir)) {
+    await args.removalOps.rm(args.stagingDir, { recursive: true, force: true });
+  }
+}
+
+/** D-SG-10: the backup half of `recoverInterruptedSwap`. */
+async function restoreInterruptedBackup(args: CloneSwapArgs): Promise<void> {
   const { liveDir, backupDir, removalOps } = args;
   if (!(await pathExists(backupDir))) {
     return;
@@ -276,7 +288,7 @@ async function recoverInterruptedSwap(args: CloneSwapArgs): Promise<void> {
 }
 
 /**
- * D-SG-10 / MA-12: clone into a staging directory of this run and mark it as
+ * D-SG-10 / MA-12: clone into the staging directory and mark it as
  * this extension's own. A failed clone removes the staging directory and
  * leaves the live checkout untouched (MA-9: a leak is appended, not masked).
  * After an unreachable check the clone fails the same way, so the check's
@@ -284,7 +296,7 @@ async function recoverInterruptedSwap(args: CloneSwapArgs): Promise<void> {
  * helpers acted on it, as a stored credential the host rejected (GAUTH-04).
  */
 async function cloneIntoStaging(args: CloneSwapArgs, freshness: Freshness): Promise<string> {
-  const stagingDir = await args.locations.sourcesStagingDir(randomUUID());
+  const { stagingDir } = args;
   try {
     await args.gitOps.clone({
       dir: stagingDir,
