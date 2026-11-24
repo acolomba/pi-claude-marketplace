@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 
+import { GitCommandError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+
 import type { GitOps } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 
 export interface GitOpsContractParticipant {
@@ -11,6 +13,16 @@ export interface GitOpsContractParticipant {
   readonly initialOid: string;
   readonly updatedOid: string;
   readFile(dir: string, filepath: string): Promise<string | null>;
+  /**
+   * Returns a new directory that holds a copy of the worktree's `.git` and no
+   * index or work-tree file, as the clone cache's copy step makes one.
+   */
+  copyGitDir(): Promise<string>;
+  /**
+   * Returns a clone whose `origin` holds the commit `sha` and which does not
+   * hold it yet. The real participant's origin is a `file://` repository.
+   */
+  unfetchedCommit(): Promise<{ readonly dir: string; readonly sha: string }>;
 }
 
 export type GitOpsFactory = (
@@ -25,16 +37,19 @@ interface GitOpsContractCase {
 export const GIT_OPS_CASE_NAMES = [
   "clones the requested branch into the requested directory",
   "fetches updated remote state without moving the worktree",
+  "fetches one commit the remote holds",
   "force-updates a ref to the requested commit",
   "checks out the requested branch and worktree",
+  "checks out a commit into a copied git directory",
+  "rejects a checkout of a commit the clone does not hold",
   "resolves a local ref to its commit",
-  "rejects a missing local ref",
+  "answers undefined for a missing local ref",
   "returns the attached current branch",
   "returns undefined for a detached HEAD",
   "resolves the remote HEAD commit",
   "resolves a named remote branch",
   "resolves a remote annotated tag to its peeled commit",
-  "rejects a missing remote ref",
+  "answers undefined for an unadvertised remote ref",
   "reports the origin remote url",
 ] as const;
 
@@ -42,6 +57,9 @@ export const GIT_OPS_CASE_NAMES = [
 // Global ordering is caller-owned; the port exposes per-operation effects rather than a workflow API.
 // Deletion is inapplicable because GitOps has no delete operation.
 // Raw HTTP, auth, filesystem cleanup, and option forwarding are production-owner mechanics.
+
+/** A commit id that neither participant's repositories hold; the fake names it absent. */
+export const MISSING_OID = "0123456789abcdef0123456789abcdef01234567";
 
 function observeVoid(promise: Promise<void>): Promise<unknown> {
   return promise;
@@ -115,6 +133,22 @@ export const gitOpsContractCases = [
     },
   },
   {
+    name: "fetches one commit the remote holds",
+    run: async (createGitOps, t) => {
+      // arrange
+      const participant = await createGitOps(t);
+      const { dir, sha } = await participant.unfetchedCommit();
+
+      // act
+      const fetching = await observeVoid(participant.gitOps.fetchCommit({ dir, sha }));
+      const oid = await participant.gitOps.resolveRef({ dir, ref: sha });
+
+      // assert
+      assert.strictEqual(fetching, undefined);
+      assert.strictEqual(oid, sha);
+    },
+  },
+  {
     name: "force-updates a ref to the requested commit",
     run: async (createGitOps, t) => {
       // arrange
@@ -164,6 +198,53 @@ export const gitOpsContractCases = [
     },
   },
   {
+    name: "checks out a commit into a copied git directory",
+    run: async (createGitOps, t) => {
+      // arrange
+      const participant = await createGitOps(t);
+      const copyDir = await participant.copyGitDir();
+
+      // act
+      const checkout = await observeVoid(
+        participant.gitOps.checkout({
+          dir: copyDir,
+          ref: participant.updatedOid,
+          fromCopiedGitDir: true,
+        }),
+      );
+      const oid = await participant.gitOps.resolveRef({ dir: copyDir, ref: "HEAD" });
+      const contents = await participant.readFile(copyDir, "README.md");
+
+      // assert
+      assert.strictEqual(checkout, undefined);
+      assert.strictEqual(oid, participant.updatedOid);
+      assert.strictEqual(contents, "# updated\n");
+    },
+  },
+  {
+    name: "rejects a checkout of a commit the clone does not hold",
+    run: async (createGitOps, t) => {
+      // arrange
+      const participant = await createGitOps(t);
+
+      // act
+      const checkout = participant.gitOps.checkout({
+        dir: participant.worktreeDir,
+        ref: MISSING_OID,
+      });
+
+      // assert
+      await assert.rejects(checkout, (error: unknown) => {
+        assert.ok(error instanceof GitCommandError);
+        assert.deepStrictEqual(
+          { kind: error.kind, operation: error.operation },
+          { kind: "commit-missing", operation: "checkout -f" },
+        );
+        return true;
+      });
+    },
+  },
+  {
     name: "resolves a local ref to its commit",
     run: async (createGitOps, t) => {
       // arrange
@@ -180,24 +261,19 @@ export const gitOpsContractCases = [
     },
   },
   {
-    name: "rejects a missing local ref",
+    name: "answers undefined for a missing local ref",
     run: async (createGitOps, t) => {
       // arrange
       const participant = await createGitOps(t);
 
       // act
-      const resolution = participant.gitOps.resolveRef({
+      const oid = await participant.gitOps.resolveRef({
         dir: participant.worktreeDir,
         ref: "refs/heads/missing",
       });
 
       // assert
-      await assert.rejects(resolution, (error: unknown) => {
-        assert.ok(error instanceof Error);
-        assert.strictEqual(error.name, "NotFoundError");
-        assert.strictEqual((error as Error & { code?: string }).code, "NotFoundError");
-        return true;
-      });
+      assert.strictEqual(oid, undefined);
     },
   },
   {
@@ -276,22 +352,19 @@ export const gitOpsContractCases = [
     },
   },
   {
-    name: "rejects a missing remote ref",
+    name: "answers undefined for an unadvertised remote ref",
     run: async (createGitOps, t) => {
       // arrange
       const participant = await createGitOps(t);
 
       // act
-      const resolution = participant.gitOps.resolveRemoteRef({
+      const oid = await participant.gitOps.resolveRemoteRef({
         url: participant.remoteUrl,
         ref: "missing",
       });
 
       // assert
-      await assert.rejects(resolution, {
-        name: "Error",
-        message: `remote ${participant.remoteUrl} has no ref "missing"`,
-      });
+      assert.strictEqual(oid, undefined);
     },
   },
   {

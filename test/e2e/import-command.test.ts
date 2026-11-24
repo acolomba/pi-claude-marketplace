@@ -86,6 +86,9 @@ function fixtureGitOps(): GitOps {
     async fetch(): Promise<void> {
       await Promise.resolve();
     },
+    async fetchCommit(): Promise<void> {
+      await Promise.resolve();
+    },
     async forceUpdateRef(): Promise<void> {
       await Promise.resolve();
     },

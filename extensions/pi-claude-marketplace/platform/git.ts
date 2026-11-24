@@ -8,14 +8,17 @@ import nodeHttpClient from "isomorphic-git/http/node";
 import {
   CrossOriginChallengeError,
   FetchedUrlCause,
+  GitCommandError,
   TooManyRedirectsError,
 } from "../shared/errors.ts";
 import { gitHubWireUrl } from "../shared/github-base-url.ts";
 
 import { buildAuthCallbacks } from "./git-auth-callbacks.ts";
 import { NODE_GIT_PROCESS } from "./git-process.ts";
+import { gitTimeoutMs } from "./git-timeout.ts";
 
 import type { BuildAuthCallbacksOpts } from "./git-auth-callbacks.ts";
+import type { GitProcess, GitRequest, GitResult } from "./git-process.ts";
 import type { GitHttpRequest, GitHttpResponse, HttpClient } from "isomorphic-git/http/node";
 
 /**
@@ -26,9 +29,17 @@ import type { GitHttpRequest, GitHttpResponse, HttpClient } from "isomorphic-git
  * `platform/git-process.ts` for it, so with no usable git on PATH they reject
  * with that module's `git-missing` GitCommandError before isomorphic-git runs
  * or a request goes out (SG-PRC-06). The system-git transport will raise the
- * same error from the same place. The local verbs still run in-process with
- * pure-JS `isomorphic-git` and need no git, so a path-source marketplace still
- * reads its own release tags without one (TAGS-01).
+ * same error from the same place.
+ *
+ * SG-TRN-01: `checkout`, `resolveRef`, and `listRemotes` run system git
+ * through `NODE_GIT_PROCESS` on the local lane, which reaches no transport.
+ * `resolveRef` answers undefined for a ref that names no commit, and
+ * `resolveRemoteRef` for a ref the remote does not advertise. The other local
+ * verbs still run in-process with pure-JS `isomorphic-git` and need no git, so
+ * a path-source marketplace still reads its own release tags without one
+ * (TAGS-01). Each
+ * system-git function takes the git process as a defaulted last parameter,
+ * and every request it sends takes its limit from `gitTimeoutMs()` (D-SG-13).
  *
  * Pins `fs` (Node's built-in) and `http` so the marketplace orchestrators
  * don't thread them through every call. `http` is the module-private client
@@ -104,12 +115,35 @@ export interface FetchOptions {
   tags?: boolean;
 }
 
+export interface FetchCommitOptions {
+  /** The clone to fetch into. */
+  dir: string;
+  /** The full id of the commit to fetch. */
+  sha: string;
+  /**
+   * The ref the source names. The `--unshallow` rung fetches it as well,
+   * because a depth-1 clone's fetch refspec names only the branch it cloned.
+   */
+  ref?: string;
+  /**
+   * Accepted for the callers; the credential path of the network requests
+   * reads it once that path lands.
+   */
+  auth?: BuildAuthCallbacksOpts;
+}
+
 export interface CheckoutOptions {
   dir: string;
   /** Branch, tag, or SHA. */
   ref: string;
-  /** Default false. Set true to keep working-tree files at HEAD. */
-  noCheckout?: boolean;
+  /**
+   * D-SG-11, SG-MIG-01: set true when `dir/.git` is a copy of another clone's
+   * git directory. The checkout then first unsets `core.symlinks`,
+   * `core.ignorecase`, and `core.filemode` in the copy's config, the keys an
+   * `isomorphic-git` clone carries, so git decides them for this machine as
+   * it does for a fresh clone. No key is written (D-SG-12).
+   */
+  fromCopiedGitDir?: boolean;
 }
 
 export interface ResolveRefOptions {
@@ -647,21 +681,135 @@ export async function fetch(opts: FetchOptions): Promise<void> {
   );
 }
 
-export async function checkout(opts: CheckoutOptions): Promise<void> {
-  await git.checkout({
-    fs,
-    dir: opts.dir,
-    ref: opts.ref,
-    ...(opts.noCheckout !== undefined && { noCheckout: opts.noCheckout }),
+/**
+ * SG-TRN-02, C5: fetches the commit `opts.sha` into the clone `opts.dir`, as
+ * Claude Code's pin ladder does. The first rung is `fetch --depth 1 origin
+ * <sha>` on the network lane. When it fails for a reason other than an abort,
+ * and only when `rev-parse --is-shallow-repository` prints `true`, the second
+ * rung is `fetch --unshallow origin [<ref>]`, and its failure is the one
+ * thrown. A complete clone skips that rung, because git refuses
+ * `--unshallow` on one, and the first rung's error is thrown. Each rung reads
+ * its own limit from `gitTimeoutMs()` and carries the abort signal of the
+ * scope it runs in (D-PL8-24).
+ */
+export async function fetchCommit(
+  opts: FetchCommitOptions,
+  gitProcess: GitProcess = NODE_GIT_PROCESS,
+): Promise<void> {
+  const signal = gitAbortScope.getStore();
+  const fetchRung = (options: readonly string[], operands: readonly string[]): GitRequest => ({
+    subcommand: "fetch",
+    lane: "network",
+    cwd: opts.dir,
+    options,
+    operands,
+    timeoutMs: gitTimeoutMs(),
+    ...(signal !== undefined && { signal }),
+  });
+  try {
+    await gitProcess.run(fetchRung(["--depth", "1"], ["origin", opts.sha]));
+    return;
+  } catch (error: unknown) {
+    const aborted = error instanceof GitCommandError && error.kind === "aborted";
+    if (aborted || !(await isShallowClone(opts.dir, gitProcess))) {
+      throw error;
+    }
+  }
+
+  await gitProcess.run(
+    fetchRung(["--unshallow"], opts.ref === undefined ? ["origin"] : ["origin", opts.ref]),
+  );
+}
+
+/**
+ * Whether the clone in `dir` is shallow. A read that fails counts as a
+ * complete clone, so the caller throws the error it already holds.
+ */
+async function isShallowClone(dir: string, gitProcess: GitProcess): Promise<boolean> {
+  const read = await gitProcess
+    .run({
+      subcommand: "rev-parse",
+      lane: "local",
+      cwd: dir,
+      options: ["--is-shallow-repository"],
+      timeoutMs: gitTimeoutMs(),
+    })
+    .catch(() => undefined);
+  return read?.stdout.trim() === "true";
+}
+
+/**
+ * D-SG-11: the keys an `isomorphic-git` clone writes into `.git/config`
+ * (03-EVIDENCE Q5). A copy that keeps `core.symlinks=false` would check a
+ * symlink out as a text file.
+ */
+const COPIED_CLONE_KEYS = ["core.symlinks", "core.ignorecase", "core.filemode"] as const;
+
+/** `git config --unset-all` exits 5 when the key is not set. */
+const CONFIG_KEY_ABSENT = 5;
+
+/**
+ * SG-TRN-01: checks `opts.ref` out in `opts.dir` with `checkout -f`, so the
+ * work tree gets the target commit's files even when the current branch's ref
+ * moved under it. A SHA or a tag leaves HEAD detached. The operand rule puts
+ * the ref before `--` and refuses one that starts with `-`.
+ *
+ * With `fromCopiedGitDir`, the D-SG-11 keys are unset first, one command per
+ * key, because each `git config` write takes the config file's lock. A key
+ * that is not set is no failure, so a second run of the same copy succeeds.
+ */
+export async function checkout(
+  opts: CheckoutOptions,
+  gitProcess: GitProcess = NODE_GIT_PROCESS,
+): Promise<void> {
+  if (opts.fromCopiedGitDir === true) {
+    for (const key of COPIED_CLONE_KEYS) {
+      // eslint-disable-next-line no-await-in-loop -- each git config write takes the config file's lock
+      await gitProcess.run({
+        subcommand: "config",
+        lane: "local",
+        cwd: opts.dir,
+        options: ["--local", "--unset-all"],
+        operands: [key],
+        allowExit: [CONFIG_KEY_ABSENT],
+        timeoutMs: gitTimeoutMs(),
+      });
+    }
+  }
+
+  await gitProcess.run({
+    subcommand: "checkout",
+    lane: "local",
+    cwd: opts.dir,
+    options: ["-f", "--quiet"],
+    operands: [opts.ref],
+    timeoutMs: gitTimeoutMs(),
   });
 }
 
-export async function resolveRef(opts: ResolveRefOptions): Promise<string> {
-  return git.resolveRef({
-    fs,
-    dir: opts.dir,
-    ref: opts.ref,
+/** `rev-parse --verify --quiet` exits 1, printing nothing, for a name that names no object. */
+const REF_ABSENT = 1;
+
+/**
+ * SG-TRN-01: the commit `opts.ref` names in `opts.dir`, or undefined when it
+ * names none: no such ref, or a ref or tag that names a tree or a blob.
+ * `^{commit}` peels an annotated tag, a tag of a tag included, to its commit.
+ * The ref follows `--end-of-options`, so git never reads it as an option.
+ */
+export async function resolveRef(
+  opts: ResolveRefOptions,
+  gitProcess: GitProcess = NODE_GIT_PROCESS,
+): Promise<string | undefined> {
+  const read = await gitProcess.run({
+    subcommand: "rev-parse",
+    lane: "local",
+    cwd: opts.dir,
+    options: ["--verify", "--quiet"],
+    operands: [`${opts.ref}^{commit}`],
+    allowExit: [REF_ABSENT],
+    timeoutMs: gitTimeoutMs(),
   });
+  return read.exitCode === REF_ABSENT ? undefined : read.stdout.trim();
 }
 
 /**
@@ -676,47 +824,40 @@ export async function resolveRef(opts: ResolveRefOptions): Promise<string> {
  * (via the `refs/tags/<ref>^{}` peeled entry) rather than the tag object.
  *
  * Ref selection (opts.ref):
- *   - undefined: return the HEAD entry's oid (default-branch commit).
+ *   - undefined: return the HEAD entry's oid (default-branch commit), or
+ *     undefined when the remote advertises no HEAD.
  *   - given: match `refs/heads/<ref>` / `refs/tags/<ref>` / a bare `<ref>`;
  *     for an annotated tag, prefer the `peeled` commit oid so the returned
- *     value is a commit, not the tag object.
+ *     value is a commit, not the tag object. Undefined when the remote
+ *     advertises no such ref.
  *
  * Auth is threaded through the optional `opts.auth` bundle so an unpinned
  * private-repo HEAD resolution can authenticate (PROV-03); omitted = the
  * public-only path. No sparse/partial fetch is exposed (documented
  * divergence; see the NOT-exposed list above).
  *
- * GHB-01: the URL sent, and named in the two refusals below, is
- * `shared/github-base-url.ts::gitHubWireUrl` of `opts.url`.
+ * GHB-01: the URL sent is `shared/github-base-url.ts::gitHubWireUrl` of
+ * `opts.url`; the caller names that URL when it refuses an undefined answer.
  *
  * Source: node_modules/isomorphic-git/index.d.ts -- listServerRefs({ http,
  * url, onAuth, onAuthFailure, protocolVersion, symrefs, peelTags }) =>
  * Promise<ServerRef[]>, where each ServerRef is { ref, oid, target?, peeled? }.
  */
-export async function resolveRemoteRef(opts: ResolveRemoteRefOptions): Promise<string> {
+export async function resolveRemoteRef(opts: ResolveRemoteRefOptions): Promise<string | undefined> {
   await NODE_GIT_PROCESS.locate();
-  const { wireUrl, refs } = await listServerRefsAt(opts, { symrefs: true });
+  const { refs } = await listServerRefsAt(opts, { symrefs: true });
 
   if (opts.ref === undefined) {
-    const head = refs.find((r) => r.ref === "HEAD");
-    if (head === undefined) {
-      throw new Error(`remote ${wireUrl} advertised no HEAD ref`);
-    }
-
-    return head.oid;
+    return refs.find((r) => r.ref === "HEAD")?.oid;
   }
 
   const match = refs.find(
     (r) =>
       r.ref === `refs/heads/${opts.ref}` || r.ref === `refs/tags/${opts.ref}` || r.ref === opts.ref,
   );
-  if (match === undefined) {
-    throw new Error(`remote ${wireUrl} has no ref "${opts.ref}"`);
-  }
-
   // For an annotated tag the `peeled` field carries the commit the tag points
   // at; prefer it so a tag resolves to a commit, not the tag object.
-  return match.peeled ?? match.oid;
+  return match === undefined ? undefined : (match.peeled ?? match.oid);
 }
 
 /** Ref namespace a tag advertisement is filtered to -- the `--tags` equivalent. */
@@ -918,43 +1059,40 @@ export async function currentBranch(opts: CurrentBranchOptions): Promise<string 
   return branch ?? undefined;
 }
 
+/** `git config --get-all` exits 1 when the key has no value. */
+const CONFIG_VALUE_ABSENT = 1;
+
 /**
  * D-3-03 / MA-12 / MA-13: report whether `dir` is a readable git clone and,
- * if so, what its `origin` remote names -- WITHOUT throwing. This is the only
- * function in this file that reports failure as a return value instead of a
- * throw: every sibling above throws on absence, ambiguity, or a read error,
- * but a caller here (`marketplace add`'s leftover-clone recognition) must
- * tell "this is definitely a foreign or unreadable tree" apart from "I could
- * not look at all", and a catch block collapses that distinction.
+ * if so, what its `origin` remote names -- WITHOUT throwing. A caller here
+ * (`marketplace add`'s leftover-clone recognition) must tell "this is
+ * definitely a foreign or unreadable tree" apart from "I could not look at
+ * all", and a catch block collapses that distinction.
  *
- * The function reads `<dir>/.git/config` itself, BEFORE calling
- * `git.getConfigAll`, and uses that read alone to choose among the
- * `not-a-repo`, `permission-denied` and `unreadable` arms. This ordering is required, not
- * stylistic: isomorphic-git's internal filesystem wrapper
- * (node_modules/isomorphic-git/index.js, the `read` helper backing
- * `GitConfigManager.get`) catches every filesystem error and resolves `null`,
- * so `git.getConfigAll({ fs, dir, path })` returns `[]` identically for a
- * missing `.git`, an unreadable `.git/config`, and a real repo with no origin
- * url -- wrapping the library call in a `try`/`catch` would be unreachable
- * code, and the 100%-branch gate would have no way to cover it. The probe
- * read doubles as the existence check, so no separate `stat` is needed.
+ * The function reads `<dir>/.git/config` itself first, and that read alone
+ * chooses among the `not-a-repo` and `permission-denied` arms and the
+ * `unreadable` arm of a filesystem error. The probe read doubles as the
+ * existence check, so no separate `stat` is needed.
  *
- * git fetches from the FIRST `url` under `origin`, and the library's
- * single-value config read returns the LAST. The function therefore reads
- * every `remote.origin.url` value, in file order, across every
- * `[remote "origin"]` section, and reports `origin` only for exactly one
- * value. No value and two or more values report `no-origin`, which the caller
- * refuses (D-3-03, MA-13). The check is on the value's type
- * because the library declares the values `any`, so any string, including an
- * empty one, reaches the caller verbatim. The read folds the section name's
- * case as git does, so a capitalized `Remote` section names the origin remote.
+ * SG-TRN-01: system git then reads every `remote.origin.url` value, in file
+ * order, across every `[remote "origin"]` section, with `config --local
+ * --null --get-all` on the local lane. git folds the section name's case, so
+ * a capitalized `Remote` section names the origin remote. git fetches from
+ * the FIRST `url` under `origin`, so the function reports `origin` only for
+ * exactly one value, an empty one included. No value (exit 1) and two or more
+ * values report `no-origin`, which the caller refuses (D-3-03, MA-13). Any
+ * other failure of that read, such as a config git cannot parse, is
+ * `unreadable`.
  *
  * The returned `url`, when present, is the wire form stored on disk,
  * verbatim. This tier may not import `domain/` (the `platform` zone's
  * `.fallowrc.json` boundary allows only `shared`), so the identity
  * comparison against `canonicalCloneUrl` belongs to the caller.
  */
-export async function listRemotes(opts: ListRemotesOptions): Promise<ListRemotesResult> {
+export async function listRemotes(
+  opts: ListRemotesOptions,
+  gitProcess: GitProcess = NODE_GIT_PROCESS,
+): Promise<ListRemotesResult> {
   try {
     await fs.promises.readFile(path.join(opts.dir, ".git", "config"));
   } catch (err) {
@@ -971,15 +1109,28 @@ export async function listRemotes(opts: ListRemotesOptions): Promise<ListRemotes
     return { kind: "unreadable" };
   }
 
-  const urls: readonly unknown[] = await git.getConfigAll({
-    fs,
-    dir: opts.dir,
-    path: "remote.origin.url",
-  });
-  const url = urls[0];
-  return urls.length === 1 && typeof url === "string"
-    ? { kind: "origin", url }
-    : { kind: "no-origin" };
+  let read: GitResult;
+  try {
+    read = await gitProcess.run({
+      subcommand: "config",
+      lane: "local",
+      cwd: opts.dir,
+      options: ["--local", "--null", "--get-all"],
+      operands: ["remote.origin.url"],
+      allowExit: [CONFIG_VALUE_ABSENT],
+      timeoutMs: gitTimeoutMs(),
+    });
+  } catch {
+    // The git process rejects only with a GitCommandError: a config git
+    // cannot parse, for example.
+    return { kind: "unreadable" };
+  }
+
+  // `--null` ends every value with NUL, so a value that holds a newline stays
+  // one value.
+  const urls = read.stdout.split("\0").slice(0, -1);
+  const [url] = urls;
+  return urls.length === 1 && url !== undefined ? { kind: "origin", url } : { kind: "no-origin" };
 }
 
 /**

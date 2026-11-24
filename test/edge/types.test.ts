@@ -52,6 +52,7 @@ const gitOps = {
   clone: () => Promise.resolve(),
   currentBranch: () => Promise.resolve("main"),
   fetch: () => Promise.resolve(),
+  fetchCommit: () => Promise.resolve(),
   forceUpdateRef: () => Promise.resolve(),
   resolveRef: () => Promise.resolve("a1b2c3d"),
   resolveRemoteRef: () => Promise.resolve("a1b2c3d"),

@@ -193,6 +193,7 @@ function makeForbiddenGitOps(): { readonly calls: Array<keyof GitOps>; readonly 
       clone: () => reject("clone"),
       currentBranch: () => reject("currentBranch"),
       fetch: () => reject("fetch"),
+      fetchCommit: () => reject("fetchCommit"),
       forceUpdateRef: () => reject("forceUpdateRef"),
       resolveRef: () => reject("resolveRef"),
       resolveRemoteRef: () => reject("resolveRemoteRef"),

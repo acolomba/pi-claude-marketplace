@@ -1,7 +1,17 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import * as fs from "node:fs";
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  cp,
+  lstat,
+  mkdir,
+  readdir,
+  readFile,
+  readlink,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import nodeHttp from "node:http";
 import https from "node:https";
 import * as path from "node:path";
@@ -13,10 +23,16 @@ import http from "isomorphic-git/http/node";
 import { mock, verify } from "strong-mock";
 
 import {
+  createGitProcess,
+  NODE_GIT_HOST,
+  NODE_GIT_SPAWN,
+} from "../../extensions/pi-claude-marketplace/platform/git-process.ts";
+import {
   checkout,
   clone,
   currentBranch,
   fetch,
+  fetchCommit,
   forceUpdateRef,
   listRemotes,
   listRemoteTags,
@@ -33,6 +49,7 @@ import {
   GitCommandError,
   TooManyRedirectsError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { hermeticGitEnvironment } from "../../features/lib/hermetic-git.ts";
 import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
 
 import { createCredentialOpsFake } from "./credential-ops-fake.ts";
@@ -45,6 +62,10 @@ import {
 
 import type { GitOps } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { OnAuthRequiredFn } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
+import type {
+  GitProcess,
+  GitRequest,
+} from "../../extensions/pi-claude-marketplace/platform/git-process.ts";
 import type * as GitPlatform from "../../extensions/pi-claude-marketplace/platform/git.ts";
 import type {
   GitCredentials,
@@ -353,18 +374,100 @@ async function installRepositoryTransport(
   });
 }
 
-const productionGitOps = {
-  clone,
-  fetch,
-  forceUpdateRef,
-  checkout,
-  resolveRef,
-  currentBranch,
-  resolveRemoteRef,
-  listRemotes,
-} satisfies GitOps;
+/**
+ * A git process over real system git with a scratch HOME, no system or global
+ * config, and the case's own neutral directory, so no git variable or config
+ * of the shell that runs the suite reaches it (SG-HRN-01).
+ */
+async function hermeticGitProcess(t: TestContext): Promise<GitProcess> {
+  const root = await realpath(await createGitTestDirectory(t, { boundary: "local" }));
+  return createGitProcess({
+    spawn: NODE_GIT_SPAWN,
+    host: { ...NODE_GIT_HOST, neutralDirectory: () => Promise.resolve(root) },
+    env: hermeticGitEnvironment(root),
+    killGraceMs: 1_000,
+  });
+}
+
+/** The production GitOps, its system-git verbs bound to `systemGit`. */
+function productionGitOps(systemGit: GitProcess): GitOps {
+  return {
+    clone,
+    fetch,
+    fetchCommit: (options) => fetchCommit(options, systemGit),
+    forceUpdateRef,
+    checkout: (options) => checkout(options, systemGit),
+    resolveRef: (options) => resolveRef(options, systemGit),
+    currentBranch,
+    resolveRemoteRef,
+    listRemotes: (options) => listRemotes(options, systemGit),
+  };
+}
+
+/**
+ * Copies the `.git` of `dir` into a new directory, without its index, as the
+ * clone cache's copy step does, and returns the new directory.
+ */
+async function copyOfGitDir(t: TestContext, dir: string): Promise<string> {
+  const copyDir = await createGitTestDirectory(t, { boundary: "local" });
+  await cp(path.join(dir, ".git"), path.join(copyDir, ".git"), {
+    recursive: true,
+    verbatimSymlinks: true,
+  });
+  await rm(path.join(copyDir, ".git", "index"));
+  return copyDir;
+}
+
+/**
+ * D-SG-11: a repository whose last commit adds the relative symlink `link`,
+ * with the clone keys an `isomorphic-git` clone writes (03-EVIDENCE Q5), and a
+ * copy of its `.git` taken after the keys were set.
+ */
+async function copyOfOldClone(
+  t: TestContext,
+): Promise<{ readonly copyDir: string; readonly linkOid: string }> {
+  const repository = await createGitTestRepository(t, { boundary: "local" });
+  await fs.promises.symlink("README.md", path.join(repository.dir, "link"));
+  const linkOid = await repository.commitPaths("link", ["link"]);
+  await repository.run("config", "core.symlinks", "false");
+  await repository.run("config", "core.ignorecase", "true");
+  await repository.run("config", "core.filemode", "false");
+  return { copyDir: await copyOfGitDir(t, repository.dir), linkOid };
+}
+
+/** The target of the copy's `link` when it is a symlink, and its local `core.` keys. */
+async function copyCheckoutShape(
+  copyDir: string,
+): Promise<{ readonly link: string; readonly coreKeys: readonly string[] }> {
+  const linkPath = path.join(copyDir, "link");
+  const link = (await lstat(linkPath)).isSymbolicLink()
+    ? await readlink(linkPath)
+    : "a regular file";
+  const coreKeys = await gitTestCheckout(copyDir).run(
+    "config",
+    "--local",
+    "--name-only",
+    "--get-regexp",
+    String.raw`^core\.`,
+  );
+  return { link, coreKeys: coreKeys.split("\n") };
+}
+
+/** Sets CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS for one case and restores it afterwards. */
+function setGitTimeoutVariable(t: TestContext, value: string): void {
+  const previous = process.env.CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS;
+  t.after(() => {
+    if (previous === undefined) {
+      delete process.env.CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS;
+    } else {
+      process.env.CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS = previous;
+    }
+  });
+  process.env.CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS = value;
+}
 
 async function createProductionGitOps(t: TestContext): Promise<GitOpsContractParticipant> {
+  const systemGit = await hermeticGitProcess(t);
   const remote = await createGitTestRepository(t, { boundary: "local" });
   const updatedOid = await remote.commit(
     [{ filepath: "README.md", contents: "# updated\n" }],
@@ -384,7 +487,7 @@ async function createProductionGitOps(t: TestContext): Promise<GitOpsContractPar
   await installRepositoryTransport(t, remote);
 
   return {
-    gitOps: productionGitOps,
+    gitOps: productionGitOps(systemGit),
     worktreeDir: worktree.dir,
     cloneDir,
     remoteUrl: REMOTE_URL,
@@ -400,6 +503,48 @@ async function createProductionGitOps(t: TestContext): Promise<GitOpsContractPar
 
         throw error;
       }
+    },
+    copyGitDir: () => copyOfGitDir(t, worktree.dir),
+    unfetchedCommit: async () => {
+      const { dir, olderOids } = await shallowFileClone(t);
+      return { dir, sha: olderOids[0] };
+    },
+  };
+}
+
+/**
+ * SG-TRN-02: a repository with three commits and a depth-1 clone of it over
+ * `file://`, so the clone holds only the last commit. `olderOids` are the two
+ * commits the clone lacks, oldest first.
+ */
+async function shallowFileClone(t: TestContext): Promise<{
+  readonly dir: string;
+  readonly olderOids: readonly [string, string];
+}> {
+  const origin = await createGitTestRepository(t, { boundary: "local" });
+  const secondOid = await origin.commit([{ filepath: "two.txt", contents: "two\n" }], "two");
+  await origin.commit([{ filepath: "three.txt", contents: "three\n" }], "three");
+  const dir = path.join(await createGitTestDirectory(t, { boundary: "local" }), "clone");
+  await origin.run("clone", "-q", "--depth", "1", `file://${origin.dir}`, dir);
+  return { dir, olderOids: [origin.initialOid, secondOid] };
+}
+
+/** A git process that runs `systemGit` and records each request as one line. */
+function recordingGitProcess(systemGit: GitProcess): {
+  readonly gitProcess: GitProcess;
+  readonly commands: string[];
+} {
+  const commands: string[] = [];
+  return {
+    commands,
+    gitProcess: {
+      locate: systemGit.locate,
+      run: (request) => {
+        commands.push(
+          [request.subcommand, ...(request.options ?? []), ...(request.operands ?? [])].join(" "),
+        );
+        return systemGit.run(request);
+      },
     },
   };
 }
@@ -818,13 +963,56 @@ describe("local Git operations", () => {
 
   test("resolves HEAD to the initial commit", async (t) => {
     // arrange
+    const systemGit = await hermeticGitProcess(t);
     const repository = await createGitTestRepository(t, { boundary: "local" });
 
     // act
-    const oid = await resolveRef({ dir: repository.dir, ref: "HEAD" });
+    const oid = await resolveRef({ dir: repository.dir, ref: "HEAD" }, systemGit);
 
     // assert
     assert.strictEqual(oid, repository.initialOid);
+  });
+
+  test("SG-TRN-01: answers undefined for a ref the repository does not hold", async (t) => {
+    // arrange
+    const systemGit = await hermeticGitProcess(t);
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+
+    // act
+    const oid = await resolveRef(
+      { dir: repository.dir, ref: "refs/remotes/origin/nosuch" },
+      systemGit,
+    );
+
+    // assert
+    assert.strictEqual(oid, undefined);
+  });
+
+  test("SG-TRN-01: resolves an annotated tag to the commit it tags", async (t) => {
+    // arrange
+    const systemGit = await hermeticGitProcess(t);
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    await repository.run("tag", "-a", "-m", "release", "v1", repository.initialOid);
+
+    // act
+    const oid = await resolveRef({ dir: repository.dir, ref: "refs/tags/v1" }, systemGit);
+
+    // assert
+    assert.strictEqual(oid, repository.initialOid);
+  });
+
+  test("SG-TRN-01: answers undefined for a tag that names a tree", async (t) => {
+    // arrange
+    const systemGit = await hermeticGitProcess(t);
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    const tree = await repository.run("rev-parse", `${repository.initialOid}^{tree}`);
+    await repository.run("tag", "tree-tag", tree);
+
+    // act
+    const oid = await resolveRef({ dir: repository.dir, ref: "refs/tags/tree-tag" }, systemGit);
+
+    // assert
+    assert.strictEqual(oid, undefined);
   });
 
   test("force-updates the requested local ref", async (t) => {
@@ -851,6 +1039,7 @@ describe("local Git operations", () => {
 
   test("checks out an existing branch", async (t) => {
     // arrange
+    const systemGit = await hermeticGitProcess(t);
     const repository = await createGitTestRepository(t, { boundary: "local" });
     await forceUpdateRef({
       dir: repository.dir,
@@ -859,39 +1048,43 @@ describe("local Git operations", () => {
     });
 
     // act
-    await checkout({ dir: repository.dir, ref: "feature" });
+    await checkout({ dir: repository.dir, ref: "feature" }, systemGit);
 
     // assert
     assert.strictEqual(await currentBranch({ dir: repository.dir }), "feature");
   });
 
-  test("moves HEAD without checking out the worktree when requested", async (t) => {
+  test("SG-TRN-01: checks out the files of a commit the current branch moved to", async (t) => {
     // arrange
+    const systemGit = await hermeticGitProcess(t);
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    const featureOid = await repository.commit(
-      [{ filepath: "feature.txt", contents: "feature\n" }],
-      "feature",
+    const movedOid = await repository.commit(
+      [{ filepath: "README.md", contents: "# moved\n" }],
+      "moved",
     );
-    await forceUpdateRef({
-      dir: repository.dir,
-      ref: "refs/heads/feature",
-      value: featureOid,
-    });
-    await checkout({ dir: repository.dir, ref: "main" });
+    await repository.run("reset", "-q", "--hard", repository.initialOid);
+    await repository.run("update-ref", "refs/heads/main", movedOid);
 
     // act
-    await checkout({ dir: repository.dir, ref: "feature", noCheckout: true });
+    await checkout({ dir: repository.dir, ref: "main" }, systemGit);
 
     // assert
-    assert.strictEqual(await currentBranch({ dir: repository.dir }), "feature");
+    assert.deepStrictEqual(
+      {
+        branch: await currentBranch({ dir: repository.dir }),
+        readme: await readFile(path.join(repository.dir, "README.md"), "utf8"),
+      },
+      { branch: "main", readme: "# moved\n" },
+    );
   });
 
   test("checks out a detached commit", async (t) => {
     // arrange
+    const systemGit = await hermeticGitProcess(t);
     const repository = await createGitTestRepository(t, { boundary: "local" });
 
     // act
-    await checkout({ dir: repository.dir, ref: repository.initialOid });
+    await checkout({ dir: repository.dir, ref: repository.initialOid }, systemGit);
 
     // assert
     assert.strictEqual(await currentBranch({ dir: repository.dir }), undefined);
@@ -899,6 +1092,77 @@ describe("local Git operations", () => {
       await resolveRef({ dir: repository.dir, ref: "HEAD" }),
       repository.initialOid,
     );
+  });
+
+  test("D-SG-11: a copy checkout unsets the copied clone keys and writes a symlink as a link", async (t) => {
+    // arrange
+    const systemGit = await hermeticGitProcess(t);
+    const { copyDir, linkOid } = await copyOfOldClone(t);
+
+    // act
+    await checkout({ dir: copyDir, ref: linkOid, fromCopiedGitDir: true }, systemGit);
+
+    // assert
+    assert.deepStrictEqual(await copyCheckoutShape(copyDir), {
+      link: "README.md",
+      coreKeys: ["core.repositoryformatversion", "core.bare", "core.logallrefupdates"],
+    });
+  });
+
+  test("D-SG-11: a second copy checkout finds the keys absent and leaves the same tree", async (t) => {
+    // arrange
+    const systemGit = await hermeticGitProcess(t);
+    const { copyDir, linkOid } = await copyOfOldClone(t);
+    await checkout({ dir: copyDir, ref: linkOid, fromCopiedGitDir: true }, systemGit);
+
+    // act
+    await checkout({ dir: copyDir, ref: linkOid, fromCopiedGitDir: true }, systemGit);
+
+    // assert
+    assert.deepStrictEqual(await copyCheckoutShape(copyDir), {
+      link: "README.md",
+      coreKeys: ["core.repositoryformatversion", "core.bare", "core.logallrefupdates"],
+    });
+  });
+
+  test("D-SG-13: a copy checkout sends three key drops and the checkout, each with the configured limit", async (t) => {
+    // arrange
+    setGitTimeoutVariable(t, "4321");
+    const requests: GitRequest[] = [];
+    const recordingGit: GitProcess = {
+      locate: () => Promise.resolve("/usr/bin/git"),
+      run: (request) => {
+        requests.push(request);
+        return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+      },
+    };
+    const keyDrop = (key: string): GitRequest => ({
+      subcommand: "config",
+      lane: "local",
+      cwd: "/copy",
+      options: ["--local", "--unset-all"],
+      operands: [key],
+      allowExit: [5],
+      timeoutMs: 4321,
+    });
+
+    // act
+    await checkout({ dir: "/copy", ref: OID_MAIN, fromCopiedGitDir: true }, recordingGit);
+
+    // assert
+    assert.deepStrictEqual(requests, [
+      keyDrop("core.symlinks"),
+      keyDrop("core.ignorecase"),
+      keyDrop("core.filemode"),
+      {
+        subcommand: "checkout",
+        lane: "local",
+        cwd: "/copy",
+        options: ["-f", "--quiet"],
+        operands: [OID_MAIN],
+        timeoutMs: 4321,
+      },
+    ]);
   });
 });
 
@@ -940,36 +1204,30 @@ describe("SG-PRC-06: the git-required gate", () => {
     });
   }
 
-  test("TAGS-01: the local verbs read and write a clone with no git on the path", async (t) => {
+  test("TAGS-01: the in-process local verbs read and write a clone with no git on the path", async (t) => {
     // arrange
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    await repository.run("remote", "add", "origin", REMOTE_URL);
     await repository.run("tag", "v1.0.0", repository.initialOid);
-    const nextOid = await repository.commit([{ filepath: "next.txt", contents: "next\n" }], "next");
+    await repository.commit([{ filepath: "next.txt", contents: "next\n" }], "next");
     await withoutGitOnPath(t);
     const { dir } = repository;
 
     // act
     await forceUpdateRef({ dir, ref: "refs/heads/feature", value: repository.initialOid });
-    await checkout({ dir, ref: "feature" });
 
     // assert
     assert.deepStrictEqual(
       {
         branch: await currentBranch({ dir }),
-        head: await resolveRef({ dir, ref: "HEAD" }),
-        main: await resolveRef({ dir, ref: "refs/heads/main" }),
+        feature: await readFile(path.join(dir, ".git", "refs", "heads", "feature"), "utf8"),
         tags: await listTags({ dir }),
         tag: await resolveTagOid({ dir, name: "v1.0.0", cache: {} }),
-        remotes: await listRemotes({ dir }),
       },
       {
-        branch: "feature",
-        head: repository.initialOid,
-        main: nextOid,
+        branch: "main",
+        feature: `${repository.initialOid}\n`,
         tags: ["v1.0.0"],
         tag: repository.initialOid,
-        remotes: { kind: "origin", url: REMOTE_URL },
       },
     );
   });
@@ -1398,6 +1656,209 @@ describe("fetch", () => {
   });
 });
 
+describe("fetchCommit", () => {
+  test("SG-TRN-02: fetches an older commit into a depth-1 clone with one depth-1 fetch", async (t) => {
+    // arrange
+    const systemGit = await hermeticGitProcess(t);
+    const { dir, olderOids } = await shallowFileClone(t);
+    const recorded = recordingGitProcess(systemGit);
+
+    // act
+    await fetchCommit({ dir, sha: olderOids[0] }, recorded.gitProcess);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        commands: recorded.commands,
+        oid: await resolveRef({ dir, ref: olderOids[0] }, systemGit),
+      },
+      { commands: [`fetch --depth 1 origin ${olderOids[0]}`], oid: olderOids[0] },
+    );
+  });
+
+  test("SG-TRN-02: a commit the remote lacks makes a shallow clone fetch its whole history", async (t) => {
+    // arrange
+    const systemGit = await hermeticGitProcess(t);
+    const { dir, olderOids } = await shallowFileClone(t);
+    const recorded = recordingGitProcess(systemGit);
+
+    // act
+    await fetchCommit({ dir, sha: OID_MAIN }, recorded.gitProcess);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        commands: recorded.commands,
+        shallow: await gitTestCheckout(dir).run("rev-parse", "--is-shallow-repository"),
+        oid: await resolveRef({ dir, ref: olderOids[1] }, systemGit),
+      },
+      {
+        commands: [
+          `fetch --depth 1 origin ${OID_MAIN}`,
+          "rev-parse --is-shallow-repository",
+          "fetch --unshallow origin",
+        ],
+        shallow: "false",
+        oid: olderOids[1],
+      },
+    );
+  });
+
+  test("SG-TRN-02: the unshallow rung fetches the source's ref, and its failure is the one thrown", async (t) => {
+    // arrange
+    const systemGit = await hermeticGitProcess(t);
+    const { dir } = await shallowFileClone(t);
+    const recorded = recordingGitProcess(systemGit);
+
+    // act
+    const fetching = fetchCommit({ dir, sha: OID_MAIN, ref: "nosuch" }, recorded.gitProcess);
+
+    // assert
+    await assert.rejects(fetching, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.deepStrictEqual(
+        { kind: error.kind, operation: error.operation },
+        { kind: "remote-ref-missing", operation: "fetch --unshallow" },
+      );
+      return true;
+    });
+    assert.deepStrictEqual(recorded.commands, [
+      `fetch --depth 1 origin ${OID_MAIN}`,
+      "rev-parse --is-shallow-repository",
+      "fetch --unshallow origin nosuch",
+    ]);
+  });
+
+  test("SG-TRN-02: a complete clone skips the unshallow rung and throws the first failure", async (t) => {
+    // arrange
+    const systemGit = await hermeticGitProcess(t);
+    const origin = await createGitTestRepository(t, { boundary: "local" });
+    const dir = path.join(await createGitTestDirectory(t, { boundary: "local" }), "clone");
+    await origin.run("clone", "-q", `file://${origin.dir}`, dir);
+    const recorded = recordingGitProcess(systemGit);
+
+    // act
+    const fetching = fetchCommit({ dir, sha: OID_MAIN }, recorded.gitProcess);
+
+    // assert
+    await assert.rejects(fetching, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.deepStrictEqual(
+        { kind: error.kind, operation: error.operation },
+        { kind: "commit-missing", operation: "fetch --depth" },
+      );
+      return true;
+    });
+    assert.deepStrictEqual(recorded.commands, [
+      `fetch --depth 1 origin ${OID_MAIN}`,
+      "rev-parse --is-shallow-repository",
+    ]);
+  });
+
+  test("D-PL8-24: an aborted first rung is thrown at once, with no second rung", async (t) => {
+    // arrange
+    const systemGit = await hermeticGitProcess(t);
+    const { dir, olderOids } = await shallowFileClone(t);
+    const recorded = recordingGitProcess(systemGit);
+    const controller = new AbortController();
+    controller.abort(new Error("cancelled"));
+
+    // act
+    const fetching = runWithGitAbortSignal(controller.signal, () =>
+      fetchCommit({ dir, sha: olderOids[0] }, recorded.gitProcess),
+    );
+
+    // assert
+    await assert.rejects(fetching, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.strictEqual(error.kind, "aborted");
+      return true;
+    });
+    assert.deepStrictEqual(recorded.commands, [`fetch --depth 1 origin ${olderOids[0]}`]);
+  });
+
+  test("D-SG-13 / D-PL8-24: each rung reads its own limit and carries the scope's signal", async (t) => {
+    // arrange
+    setGitTimeoutVariable(t, "4321");
+    const signal = new AbortController().signal;
+    const requests: GitRequest[] = [];
+    const stubGit: GitProcess = {
+      locate: () => Promise.resolve("/usr/bin/git"),
+      run: (request) => {
+        requests.push(request);
+        if (requests.length === 1) {
+          return Promise.reject(
+            new GitCommandError({ kind: "commit-missing" }, { operation: "fetch --depth" }),
+          );
+        }
+
+        return Promise.resolve({ exitCode: 0, stdout: "true\n", stderr: "" });
+      },
+    };
+
+    // act
+    await runWithGitAbortSignal(signal, () =>
+      fetchCommit({ dir: "/clone", sha: OID_MAIN, ref: "dev" }, stubGit),
+    );
+
+    // assert
+    assert.deepStrictEqual(requests, [
+      {
+        subcommand: "fetch",
+        lane: "network",
+        cwd: "/clone",
+        options: ["--depth", "1"],
+        operands: ["origin", OID_MAIN],
+        timeoutMs: 4321,
+        signal,
+      },
+      {
+        subcommand: "rev-parse",
+        lane: "local",
+        cwd: "/clone",
+        options: ["--is-shallow-repository"],
+        timeoutMs: 4321,
+      },
+      {
+        subcommand: "fetch",
+        lane: "network",
+        cwd: "/clone",
+        options: ["--unshallow"],
+        operands: ["origin", "dev"],
+        timeoutMs: 4321,
+        signal,
+      },
+    ]);
+  });
+
+  test("SG-TRN-02: a shallow check that fails throws the first rung's failure", async () => {
+    // arrange
+    const firstFailure = new GitCommandError(
+      { kind: "commit-missing" },
+      { operation: "fetch --depth" },
+    );
+    const subcommands: string[] = [];
+    const stubGit: GitProcess = {
+      locate: () => Promise.resolve("/usr/bin/git"),
+      run: (request) => {
+        subcommands.push(request.subcommand);
+        return Promise.reject(
+          request.subcommand === "fetch"
+            ? firstFailure
+            : new GitCommandError({ kind: "not-a-repository" }, { operation: "rev-parse" }),
+        );
+      },
+    };
+
+    // act
+    const fetching = fetchCommit({ dir: "/clone", sha: OID_MAIN }, stubGit);
+
+    // assert
+    await assert.rejects(fetching, (error: unknown) => error === firstFailure);
+    assert.deepStrictEqual(subcommands, ["fetch", "rev-parse"]);
+  });
+});
+
 describe("resolveRemoteRef", () => {
   test("resolves the advertised remote HEAD", async (t) => {
     // arrange
@@ -1447,33 +1908,27 @@ describe("resolveRemoteRef", () => {
     assert.deepStrictEqual(requests, expectedPublicRequests());
   });
 
-  test("rejects a remote without an advertised HEAD", async (t) => {
+  test("answers undefined for a remote without an advertised HEAD", async (t) => {
     // arrange
     const requests = installRemoteTransport(t, [`${OID_DEV} refs/heads/dev`]);
 
     // act
-    const resolution = resolveRemoteRef({ url: REMOTE_URL });
+    const oid = await resolveRemoteRef({ url: REMOTE_URL });
 
     // assert
-    await assert.rejects(resolution, {
-      name: "Error",
-      message: `remote ${REMOTE_URL} advertised no HEAD ref`,
-    });
+    assert.strictEqual(oid, undefined);
     assert.deepStrictEqual(requests, expectedPublicRequests());
   });
 
-  test("rejects an unadvertised remote ref", async (t) => {
+  test("answers undefined for an unadvertised remote ref", async (t) => {
     // arrange
     const requests = installRemoteTransport(t, FULL_ADVERTISEMENT);
 
     // act
-    const resolution = resolveRemoteRef({ url: REMOTE_URL, ref: "missing" });
+    const oid = await resolveRemoteRef({ url: REMOTE_URL, ref: "missing" });
 
     // assert
-    await assert.rejects(resolution, {
-      name: "Error",
-      message: `remote ${REMOTE_URL} has no ref "missing"`,
-    });
+    assert.strictEqual(oid, undefined);
     assert.deepStrictEqual(requests, expectedPublicRequests());
   });
 
@@ -1490,19 +1945,16 @@ describe("resolveRemoteRef", () => {
     assert.deepStrictEqual(requests, expectedPublicRequests());
   });
 
-  test("names the wire URL when the base advertises no HEAD", async (t) => {
+  test("GHB-01: answers undefined when the base advertises no HEAD", async (t) => {
     // arrange
     const requests = installRemoteTransport(t, [`${OID_DEV} refs/heads/dev`]);
     setGitHubBaseUrl(t, `https://${HOST}`);
 
     // act
-    const resolution = resolveRemoteRef({ url: GITHUB_REMOTE_URL });
+    const oid = await resolveRemoteRef({ url: GITHUB_REMOTE_URL });
 
     // assert
-    await assert.rejects(resolution, {
-      name: "Error",
-      message: `remote ${REMOTE_URL} advertised no HEAD ref`,
-    });
+    assert.strictEqual(oid, undefined);
     assert.deepStrictEqual(requests, expectedPublicRequests());
   });
 
@@ -2133,6 +2585,19 @@ describe("listRemotes", () => {
 
     // assert
     assert.deepStrictEqual(remotes, { kind: "no-origin" });
+  });
+
+  test("SG-TRN-01: reports unreadable for a .git/config that git cannot parse", async (t) => {
+    // arrange
+    const systemGit = await hermeticGitProcess(t);
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    await writeFile(path.join(repository.dir, ".git", "config"), "[core\n");
+
+    // act
+    const remotes = await listRemotes({ dir: repository.dir }, systemGit);
+
+    // assert
+    assert.deepStrictEqual(remotes, { kind: "unreadable" });
   });
 
   test("reports unreadable for a .git/config that cannot be read as a file", async (t) => {

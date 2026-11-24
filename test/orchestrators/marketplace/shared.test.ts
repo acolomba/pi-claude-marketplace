@@ -34,6 +34,7 @@ import { atomicWriteJson } from "../../../extensions/pi-claude-marketplace/share
 import { McpConfigFileError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
   CrossOriginChallengeError,
+  GitCommandError,
   InvalidMarketplaceManifestError,
   MarketplaceInBaseLayerOnlyError,
   MarketplaceInLocalLayerOnlyError,
@@ -87,6 +88,8 @@ type GitCall =
 
 interface GitScenario {
   readonly resolveRefResult?: string;
+  /** Every ref read answers undefined, as for a ref the clone does not hold. */
+  readonly refAbsent?: true;
   readonly currentBranchResult?: string;
   readonly fetchError?: Error;
   readonly resolveRefError?: Error;
@@ -142,10 +145,17 @@ function createGitOps(scenario: GitScenario): {
 
       return Promise.resolve();
     },
-    resolveRef(args): Promise<string> {
+    fetchCommit(): Promise<void> {
+      return Promise.reject(new Error("unexpected commit fetch"));
+    },
+    resolveRef(args): Promise<string | undefined> {
       calls.push({ operation: "resolveRef", args: { ...args } });
       if (scenario.resolveRefError !== undefined) {
         return Promise.reject(scenario.resolveRefError);
+      }
+
+      if (scenario.refAbsent === true) {
+        return Promise.resolve(undefined);
       }
 
       return Promise.resolve(
@@ -445,6 +455,7 @@ test("DEFAULT_GIT_OPS exposes every platform git function by exact reference", (
   const expectedReferences = {
     clone: defaultGit.clone,
     fetch: defaultGit.fetch,
+    fetchCommit: defaultGit.fetchCommit,
     forceUpdateRef: defaultGit.forceUpdateRef,
     checkout: defaultGit.checkout,
     resolveRef: defaultGit.resolveRef,
@@ -591,11 +602,9 @@ test("refreshGitHubClone advances a stored remote branch in lifecycle order", as
   assert.deepStrictEqual(calls, expectedCalls);
 });
 
-test("refreshGitHubClone treats only NotFoundError as a detached stored ref", async () => {
+test("refreshGitHubClone checks out a stored ref detached when the fetch brought no branch of that name", async () => {
   // arrange
-  const notFound = new Error("missing remote tag");
-  notFound.name = "NotFoundError";
-  const { gitOps, calls } = createGitOps({ resolveRefError: notFound });
+  const { gitOps, calls } = createGitOps({ refAbsent: true });
   const expectedCalls: GitCall[] = [
     { operation: "fetch", args: { dir: "/cache/tag", remote: "origin", ref: "v1.2.3" } },
     {
@@ -612,7 +621,7 @@ test("refreshGitHubClone treats only NotFoundError as a detached stored ref", as
   assert.deepStrictEqual(calls, expectedCalls);
 });
 
-test("refreshGitHubClone propagates a non-NotFound ref failure without later work", async () => {
+test("refreshGitHubClone propagates a ref read failure without later work", async () => {
   // arrange
   const refError = Object.assign(new Error("cannot read packed refs"), { code: "EACCES" });
   const { gitOps, calls } = createGitOps({ resolveRefError: refError });
@@ -632,6 +641,33 @@ test("refreshGitHubClone propagates a non-NotFound ref failure without later wor
     {
       operation: "resolveRef",
       args: { dir: "/cache/broken", ref: "refs/remotes/origin/main" },
+    },
+  ]);
+});
+
+test("refreshGitHubClone fails as a missing local ref when the clone has no default-branch tracking ref", async () => {
+  // arrange
+  const { gitOps, calls } = createGitOps({ refAbsent: true });
+  let caught: unknown;
+
+  // act
+  try {
+    await refreshGitHubClone("/cache/headless", undefined, gitOps);
+  } catch (error) {
+    caught = error;
+  }
+
+  // assert
+  assert.ok(caught instanceof GitCommandError);
+  assert.deepStrictEqual(
+    { failure: caught.failure, operation: caught.operation },
+    { failure: { kind: "local-ref-missing" }, operation: "rev-parse --verify" },
+  );
+  assert.deepStrictEqual(calls, [
+    { operation: "fetch", args: { dir: "/cache/headless", remote: "origin" } },
+    {
+      operation: "resolveRef",
+      args: { dir: "/cache/headless", ref: "refs/remotes/origin/HEAD" },
     },
   ]);
 });

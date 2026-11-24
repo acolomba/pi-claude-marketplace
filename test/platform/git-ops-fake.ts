@@ -1,5 +1,7 @@
 import { cp, mkdir } from "node:fs/promises";
 
+import { GitCommandError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+
 import type {
   GitAuthBundle,
   GitOps,
@@ -24,6 +26,11 @@ export interface GitOpsFakeOptions {
   readonly checkoutError?: Error;
   readonly resolveRemoteRefError?: Error;
   readonly listRemotesResult?: ListRemotesResult;
+  /**
+   * Commit ids the fake's clones do not hold. A checkout of one fails as
+   * `commit-missing`; a checkout of any other 40-hex SHA succeeds.
+   */
+  readonly absentCommits?: readonly string[];
 }
 
 export interface GitOpsFakeCalls {
@@ -41,12 +48,22 @@ export interface GitOpsFakeCalls {
     readonly tags?: boolean;
     readonly auth?: GitAuthBundle;
   }>;
+  readonly fetchCommit: Array<{
+    readonly dir: string;
+    readonly sha: string;
+    readonly ref?: string;
+    readonly auth?: GitAuthBundle;
+  }>;
   readonly forceUpdateRef: Array<{
     readonly dir: string;
     readonly ref: string;
     readonly value: string;
   }>;
-  readonly checkout: Array<{ readonly dir: string; readonly ref: string }>;
+  readonly checkout: Array<{
+    readonly dir: string;
+    readonly ref: string;
+    readonly fromCopiedGitDir?: boolean;
+  }>;
   readonly resolveRef: Array<{ readonly dir: string; readonly ref: string }>;
   readonly currentBranch: Array<{ readonly dir: string }>;
   readonly resolveRemoteRef: Array<{
@@ -70,10 +87,19 @@ export interface GitOpsFake {
   readFile(dir: string, filepath: string): Promise<string | null>;
 }
 
-function notFound(ref: string): Error & { code: string } {
-  const error = new Error(`Could not find ${ref}.`);
-  error.name = "NotFoundError";
-  return Object.assign(error, { code: "NotFoundError" });
+const FULL_SHA = /^[a-f0-9]{40}$/i;
+
+/**
+ * The rejection of a system-git checkout that cannot check `ref` out: a 40-hex
+ * SHA the clone does not hold is `commit-missing`, and any other name it does
+ * not hold is `local-ref-missing` (SG-PRC-05). git prints `fatal: reference is
+ * not a tree:` for the first and `fatal: invalid reference:` for the second.
+ */
+export function checkoutFailure(ref: string): GitCommandError {
+  return new GitCommandError(
+    { kind: FULL_SHA.test(ref) ? "commit-missing" : "local-ref-missing" },
+    { operation: "checkout -f", exitCode: 128 },
+  );
 }
 
 function snapshotCloneCall(
@@ -87,6 +113,14 @@ function snapshotCloneCall(
 function snapshotFetchCall(
   options: Parameters<GitOps["fetch"]>[0],
 ): GitOpsFakeCalls["fetch"][number] {
+  const { auth, ...dataOptions } = options;
+  const snapshot = structuredClone(dataOptions);
+  return auth === undefined ? snapshot : { ...snapshot, auth };
+}
+
+function snapshotFetchCommitCall(
+  options: Parameters<GitOps["fetchCommit"]>[0],
+): GitOpsFakeCalls["fetchCommit"][number] {
   const { auth, ...dataOptions } = options;
   const snapshot = structuredClone(dataOptions);
   return auth === undefined ? snapshot : { ...snapshot, auth };
@@ -119,6 +153,7 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
   const calls: GitOpsFakeCalls = {
     clone: [],
     fetch: [],
+    fetchCommit: [],
     forceUpdateRef: [],
     checkout: [],
     resolveRef: [],
@@ -146,6 +181,8 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
       throw new Error(`createGitOpsFake blocked unplanned remote ${url}`);
     }
   }
+
+  const absentCommits = new Set(options.absentCommits ?? []);
 
   function updateWorktree(dir: string, oid: string): void {
     files.set(`${dir}/README.md`, oid === updatedOid ? "# updated\n" : "# local\n");
@@ -180,6 +217,21 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
       const ref = fetchOptions.ref ?? "main";
       state.localRefs[`refs/remotes/${remote}/${ref}`] = state.remoteRefs[ref] ?? remoteHead;
     },
+    // SG-TRN-02: a commit the fake remote holds becomes a local ref of the
+    // clone; any other commit fails the fetch as `commit-missing`.
+    async fetchCommit(fetchOptions) {
+      calls.fetchCommit.push(snapshotFetchCommitCall(fetchOptions));
+      await Promise.resolve();
+      const remoteCommits = new Set([remoteHead, ...Object.values(state.remoteRefs)]);
+      if (!remoteCommits.has(fetchOptions.sha)) {
+        throw new GitCommandError(
+          { kind: "commit-missing" },
+          { operation: "fetch --depth", exitCode: 128 },
+        );
+      }
+
+      state.localRefs[fetchOptions.sha] = fetchOptions.sha;
+    },
     async forceUpdateRef(updateOptions) {
       calls.forceUpdateRef.push(structuredClone(updateOptions));
       await Promise.resolve();
@@ -197,9 +249,11 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
         state.localRefs[`refs/heads/${checkoutOptions.ref}`];
       const oid =
         branchOid ??
-        (/^[a-f0-9]{40}$/i.test(checkoutOptions.ref) ? checkoutOptions.ref : undefined);
+        (FULL_SHA.test(checkoutOptions.ref) && !absentCommits.has(checkoutOptions.ref)
+          ? checkoutOptions.ref
+          : undefined);
       if (oid === undefined) {
-        throw notFound(checkoutOptions.ref);
+        throw checkoutFailure(checkoutOptions.ref);
       }
 
       state.head = oid;
@@ -214,12 +268,7 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
         return state.head;
       }
 
-      const oid = state.localRefs[resolveOptions.ref];
-      if (oid === undefined) {
-        throw notFound(resolveOptions.ref);
-      }
-
-      return oid;
+      return state.localRefs[resolveOptions.ref];
     },
     async currentBranch(branchOptions) {
       calls.currentBranch.push(structuredClone(branchOptions));
@@ -234,16 +283,7 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
       }
 
       await Promise.resolve();
-      if (resolveOptions.ref === undefined) {
-        return remoteHead;
-      }
-
-      const oid = state.remoteRefs[resolveOptions.ref];
-      if (oid === undefined) {
-        throw new Error(`remote ${resolveOptions.url} has no ref "${resolveOptions.ref}"`);
-      }
-
-      return oid;
+      return resolveOptions.ref === undefined ? remoteHead : state.remoteRefs[resolveOptions.ref];
     },
     // D-3-03: no call ledger. `git-ops-fake.test.ts` deep-equals the whole
     // `state.calls` object, and the guard calls this member at most once per
