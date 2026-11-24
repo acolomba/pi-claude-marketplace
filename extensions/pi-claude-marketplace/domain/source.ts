@@ -133,28 +133,62 @@ function optionalString(obj: Record<string, unknown>, key: string): string | und
 }
 
 /**
- * Clone-key / commit-version invariant (domain/clone-key.ts, domain/version.ts):
- * a git source's `sha` must be the FULL 40-hex commit sha -- `pluginCloneKey`
- * and `shaVersion` slice its first 12 chars unchecked.
+ * SG-TRN-02: a git source's `sha` must be a full commit id, 40 hex digits for
+ * SHA-1 or 64 for SHA-256, read after lower-casing. Claude Code refuses any
+ * other pin before git runs, so an abbreviated or crafted sha is refused here
+ * rather than dropped to an unpinned clone. The clone key and the commit
+ * version (domain/clone-key.ts, domain/version.ts) slice the first 12 digits,
+ * which both lengths have.
  */
-const FULL_SHA_RE = /^[0-9a-f]{40}$/i;
+const FULL_SHA_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+
+/**
+ * SG-TRN-02: Claude Code's reason for refusing a pin that is not a full commit
+ * id, or undefined when `sha` is absent or a full commit id.
+ */
+function shaRefusal(sha: string | undefined): string | undefined {
+  return sha === undefined || FULL_SHA_RE.test(sha.toLowerCase())
+    ? undefined
+    : `Invalid sha "${sha}": must be a full commit hash (40 or 64 hex digits)`;
+}
+
+/**
+ * SG-TRN-02 (T-03-04): Claude Code's reason for refusing a ref that git could
+ * read as an option, such as `--upload-pack=<command>`, or undefined when `ref`
+ * is absent or does not start with `-`. Every path that sets a ref on a github,
+ * url, or git-subdir source checks it here, before any git command runs.
+ */
+function refRefusal(ref: string | undefined): string | undefined {
+  return ref?.startsWith("-") === true ? `Invalid ref "${ref}": cannot start with "-"` : undefined;
+}
+
+/** SG-TRN-02: the `unknown` source for a string form whose `#` or `@` ref is refused. */
+function refusedRefSource(raw: string, ref: string | undefined): UnknownSource | undefined {
+  const reason = refRefusal(ref);
+  return reason === undefined ? undefined : { kind: "unknown", raw, reason };
+}
 
 /**
  * Spread the manifest object's optional `ref` / `sha` onto a git-backed source
  * (the only kinds that carry them -- the constraint keeps path/npm/unknown
  * sources from smuggling the fields through the spread). `ref` is freeform (any
- * branch/tag name); `sha` must satisfy FULL_SHA_RE or it is DROPPED so the
- * source degrades to unpinned rather than mis-keying the clone cache or
- * emitting a commit version (GV-01) that is not 12 hex characters. A valid sha
- * is lowercased for the same reason: the renderer reads lowercase hex only.
+ * branch/tag name) that does not start with `-`. A `sha` that fails FULL_SHA_RE
+ * or a ref that starts with `-` makes the whole source `unknown` (SG-TRN-02). A
+ * valid sha is lowercased, because the commit version (GV-01) and the clone key
+ * read lowercase hex only.
  */
-function withOptionalSourceFields<T extends GitHubSource | UrlSource | GitSubdirSource>(
-  source: T,
+function withOptionalSourceFields(
+  source: GitBackedSource,
   obj: Record<string, unknown>,
-): T {
+): ParsedSource {
   const ref = optionalString(obj, "ref");
   const rawSha = optionalString(obj, "sha");
-  const sha = rawSha !== undefined && FULL_SHA_RE.test(rawSha) ? rawSha.toLowerCase() : undefined;
+  const refusal = shaRefusal(rawSha) ?? refRefusal(ref);
+  if (refusal !== undefined) {
+    return unknownObjectSource(obj, refusal);
+  }
+
+  const sha = rawSha?.toLowerCase();
   return {
     ...source,
     ...(ref !== undefined && { ref }),
@@ -495,7 +529,7 @@ function parseShorthandSourceForm(raw: string): ParsedSource {
   const github = parseOwnerRepo(raw.slice(0, delimIdx), raw);
   const ref = raw.slice(delimIdx + 1);
   if (github.kind === "github" && ref.length > 0) {
-    return { ...github, ref };
+    return refusedRefSource(raw, ref) ?? { ...github, ref };
   }
 
   if (github.kind === "github" && raw[delimIdx] === "#") {
@@ -661,8 +695,13 @@ export function ensureGitSuffix(url: string): string {
  * what makes that identity a fixed point across a persist-and-reload round trip
  * (D-2-05).
  */
-function parseUrlSource(raw: string): UrlSource {
+function parseUrlSource(raw: string): UrlSource | UnknownSource {
   const { base, ref } = stripUrlDecorations(raw);
+  const refused = refusedRefSource(raw, ref);
+  if (refused !== undefined) {
+    return refused;
+  }
+
   return ref === undefined ? { kind: "url", raw, url: base } : { kind: "url", raw, url: base, ref };
 }
 
@@ -735,6 +774,11 @@ function parseGitHubUrl(raw: string, rest: string): GitHubSource | UnknownSource
       // eslint-disable-next-line local/no-github-literal -- GHB-02: a reason names the github.com form the user types
       reason: `${raw} must be https://github.com/<owner>/<repo>[.git][#<ref>]`,
     };
+  }
+
+  const refused = refusedRefSource(raw, ref);
+  if (refused !== undefined) {
+    return refused;
   }
 
   const [owner, repo] = parts;

@@ -35,6 +35,7 @@ interface SourceComparisonCase {
 }
 
 const FULL_SHA = "0123456789abcdef0123456789abcdef01234567";
+const FULL_SHA_256 = `${FULL_SHA}${"89abcdef".repeat(3)}`;
 
 const PARSE_CASES: readonly ParseCase[] = [
   {
@@ -354,12 +355,12 @@ const PARSE_CASES: readonly ParseCase[] = [
     },
   },
   {
-    name: "drops an abbreviated commit SHA",
+    name: "SG-TRN-02: refuses an abbreviated commit SHA",
     raw: { source: "url", url: "https://gitlab.com/acme/mp", sha: "abc1234" },
     source: {
-      kind: "url",
-      raw: "https://gitlab.com/acme/mp",
-      url: "https://gitlab.com/acme/mp",
+      kind: "unknown",
+      raw: JSON.stringify({ source: "url", url: "https://gitlab.com/acme/mp", sha: "abc1234" }),
+      reason: 'Invalid sha "abc1234": must be a full commit hash (40 or 64 hex digits)',
     },
   },
   {
@@ -379,9 +380,113 @@ const PARSE_CASES: readonly ParseCase[] = [
     },
   },
   {
-    name: "drops a traversal-shaped commit SHA",
+    name: "SG-TRN-02: refuses a traversal-shaped commit SHA",
     raw: { source: "github", repo: "o/r", sha: "../../../../etc/passwd" },
-    source: { kind: "github", raw: "o/r", owner: "o", repo: "r" },
+    source: {
+      kind: "unknown",
+      raw: JSON.stringify({ source: "github", repo: "o/r", sha: "../../../../etc/passwd" }),
+      reason:
+        'Invalid sha "../../../../etc/passwd": must be a full commit hash (40 or 64 hex digits)',
+    },
+  },
+  {
+    name: "SG-TRN-02: refuses a 41-digit commit SHA",
+    raw: { source: "github", repo: "o/r", sha: `${FULL_SHA}0` },
+    source: {
+      kind: "unknown",
+      raw: JSON.stringify({ source: "github", repo: "o/r", sha: `${FULL_SHA}0` }),
+      reason: `Invalid sha "${FULL_SHA}0": must be a full commit hash (40 or 64 hex digits)`,
+    },
+  },
+  {
+    name: "SG-TRN-02: accepts a full lowercase SHA-256 commit",
+    raw: { source: "url", url: "https://gitlab.com/acme/mp", sha: FULL_SHA_256 },
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/acme/mp",
+      url: "https://gitlab.com/acme/mp",
+      sha: FULL_SHA_256,
+    },
+  },
+  {
+    name: "SG-TRN-02: lowercases a full uppercase SHA-256 commit",
+    raw: { source: "github", repo: "o/r", sha: FULL_SHA_256.toUpperCase() },
+    source: { kind: "github", raw: "o/r", owner: "o", repo: "r", sha: FULL_SHA_256 },
+  },
+  {
+    name: "SG-TRN-02: refuses a GitHub object reference that starts with a dash",
+    raw: { source: "github", repo: "o/r", ref: "-x" },
+    source: {
+      kind: "unknown",
+      raw: JSON.stringify({ source: "github", repo: "o/r", ref: "-x" }),
+      reason: 'Invalid ref "-x": cannot start with "-"',
+    },
+  },
+  {
+    name: "SG-TRN-02: refuses a URL object reference that starts with a dash",
+    raw: { source: "url", url: "https://gitlab.com/acme/mp", ref: "-x" },
+    source: {
+      kind: "unknown",
+      raw: JSON.stringify({ source: "url", url: "https://gitlab.com/acme/mp", ref: "-x" }),
+      reason: 'Invalid ref "-x": cannot start with "-"',
+    },
+  },
+  {
+    name: "SG-TRN-02: refuses a Git subdirectory object reference that starts with a dash",
+    raw: { source: "git-subdir", url: "https://example.com/mono", path: "plugins/p", ref: "-x" },
+    source: {
+      kind: "unknown",
+      raw: JSON.stringify({
+        source: "git-subdir",
+        url: "https://example.com/mono",
+        path: "plugins/p",
+        ref: "-x",
+      }),
+      reason: 'Invalid ref "-x": cannot start with "-"',
+    },
+  },
+  {
+    name: "SG-TRN-02: refuses a URL fragment reference that starts with a dash",
+    raw: "https://h.example/r.git#--upload-pack=x",
+    source: {
+      kind: "unknown",
+      raw: "https://h.example/r.git#--upload-pack=x",
+      reason: 'Invalid ref "--upload-pack=x": cannot start with "-"',
+    },
+  },
+  {
+    name: "SG-TRN-02: refuses a GitHub URL fragment reference that starts with a dash",
+    raw: "https://github.com/o/r#-x",
+    source: {
+      kind: "unknown",
+      raw: "https://github.com/o/r#-x",
+      reason: 'Invalid ref "-x": cannot start with "-"',
+    },
+  },
+  {
+    name: "SG-TRN-02: refuses a shorthand fragment reference that starts with a dash",
+    raw: "o/r#-x",
+    source: { kind: "unknown", raw: "o/r#-x", reason: 'Invalid ref "-x": cannot start with "-"' },
+  },
+  {
+    name: "SG-TRN-02: refuses a shorthand at-sign reference that starts with a dash",
+    raw: "o/r@-x",
+    source: { kind: "unknown", raw: "o/r@-x", reason: 'Invalid ref "-x": cannot start with "-"' },
+  },
+  {
+    name: "SG-TRN-02: keeps an object reference with a dash after its first character",
+    raw: { source: "url", url: "https://gitlab.com/acme/mp", ref: "feature/-x" },
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/acme/mp",
+      url: "https://gitlab.com/acme/mp",
+      ref: "feature/-x",
+    },
+  },
+  {
+    name: "SG-TRN-02: keeps a shorthand reference with a dash after its first character",
+    raw: "o/r#feature/-x",
+    source: { kind: "github", raw: "o/r#feature/-x", owner: "o", repo: "r", ref: "feature/-x" },
   },
   {
     name: "parses an https URL to a .json file as a hosted catalog",

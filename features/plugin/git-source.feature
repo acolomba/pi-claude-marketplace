@@ -339,6 +339,52 @@ Feature: Plugin git source
     Then the project scope has no installed plugins
     Then the project scope holds no git clones
 
+  Scenario: Installing a plugin pinned to an abbreviated commit is refused before git runs
+    Given the git repository "urlp" holds these plugins:
+      | name | version | path |
+      | urlp | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | urlp | url         | urlp       | false  |
+    Given the marketplace "gits" pins the plugin "urlp" to the commit "{urlp revision 1}"
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin install urlp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status      | reasons            |
+      | gits             | project           | urlp@gits | urlp | unavailable | unsupported source |
+    Then the project scope has no installed plugins
+    Then the project scope holds no git clones
+    Then the git host receives no request
+
+  Scenario: Installing a plugin whose ref starts with a dash is refused before git runs
+    Given the git repository "urlp" holds these plugins:
+      | name | version | path |
+      | urlp | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | urlp | url         | urlp       | false  |
+    Given the marketplace "gits" names the ref "-x" for the plugin "urlp"
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin install urlp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status      | reasons            |
+      | gits             | project           | urlp@gits | urlp | unavailable | unsupported source |
+    Then the project scope has no installed plugins
+    Then the project scope holds no git clones
+    Then the git host receives no request
+
   Scenario: A plugin pinned to a commit only a tag reaches installs through the clone of the ref the marketplace names
     Given the git repository "ghp" holds these plugins:
       | name | version | path |

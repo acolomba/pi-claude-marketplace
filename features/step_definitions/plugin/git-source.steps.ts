@@ -19,6 +19,7 @@ import { pushGitRepository } from "../../lib/git-marketplace.ts";
 import { pushTagOnlyRevision, readRepositoryPlugins } from "../../lib/git-plugin.ts";
 import { runGit } from "../../lib/hermetic-git.ts";
 import { rewritePublishedManifest } from "../../lib/published-marketplace.ts";
+import { expandTokens } from "../../lib/run-tokens.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -115,6 +116,13 @@ Given(
   async function (this: ScenarioWorld, name: string, plugin: string) {
     assert.strictEqual(this.gitRepositoryServing(plugin).revisions.includes(ABSENT_COMMIT), false);
     await changeGitPluginSource(this, name, plugin, { sha: ABSENT_COMMIT });
+  },
+);
+
+Given(
+  "the marketplace {string} pins the plugin {string} to the commit {string}",
+  async function (this: ScenarioWorld, name: string, plugin: string, commit: string) {
+    await changeGitPluginSource(this, name, plugin, { sha: expandTokens(commit, this.tokens) });
   },
 );
 
