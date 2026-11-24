@@ -22,9 +22,11 @@ import {
   recordEarlierVersionMarketplace,
   recordedMarketplace,
 } from "../../lib/earlier-version-state.ts";
+import { runGit } from "../../lib/hermetic-git.ts";
 import {
   readOfferedPlugins,
   readOfferedPluginsWithDependencies,
+  writeMarketplace,
 } from "../../lib/path-marketplace.ts";
 import { runCommand } from "../../lib/pi-commands.ts";
 import {
@@ -47,8 +49,33 @@ import {
 import { expandTokens } from "../../lib/run-tokens.ts";
 
 import type { OfferedPlugin } from "../../lib/path-marketplace.ts";
-import type { SourceKind } from "../../lib/published-marketplace.ts";
+import type { GitPublication, SourceKind } from "../../lib/published-marketplace.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
+
+/**
+ * Commits the marketplace `name`, offering `plugins`, on a branch started from
+ * `main`, tags that commit `tag`, pushes the tag alone, and deletes the
+ * branch, so only the tag reaches the commit. Returns the commit.
+ */
+async function pushTagOnlyMarketplaceRevision(
+  published: GitPublication,
+  name: string,
+  plugins: readonly OfferedPlugin[],
+  tag: string,
+): Promise<string> {
+  const { root, gitHome, manifestPath } = published;
+  const branch = `tag-only-${tag}`;
+  await runGit(root, gitHome, "checkout", "-q", "-b", branch, "main");
+  await writeMarketplace(root, name, plugins, manifestPath);
+  await runGit(root, gitHome, "add", "-A");
+  await runGit(root, gitHome, "commit", "-q", "-m", `publish ${tag}`);
+  await runGit(root, gitHome, "tag", tag);
+  const revision = await runGit(root, gitHome, "rev-parse", "HEAD");
+  await runGit(root, gitHome, "push", "-q", "origin", `refs/tags/${tag}`);
+  await runGit(root, gitHome, "checkout", "-q", "-f", "main");
+  await runGit(root, gitHome, "branch", "-q", "-D", branch);
+  return revision;
+}
 
 /** Republishes the marketplace `name` as its recorded kind, offering `plugins`. */
 async function offer(
@@ -145,6 +172,44 @@ Given(
   "the marketplace {string} offers these plugins with dependencies:",
   async function (this: ScenarioWorld, name: string, table: DataTable) {
     await offer(this, name, readOfferedPluginsWithDependencies(table));
+  },
+);
+
+// D-SG-09: the revision is recorded as one of the marketplace repository's
+// own, so `{<name> revision <n>}` stands for the version a plugin of the
+// marketplace records at the tag.
+Given(
+  "the marketplace {string} has a revision only the tag {string} reaches, offering these plugins:",
+  async function (this: ScenarioWorld, name: string, tag: string, table: DataTable) {
+    const published = this.requirePublished(name);
+    if (published.kind !== "url" && published.kind !== "github") {
+      assert.fail(`the marketplace ${name} is published as a ${published.kind} source, not git`);
+    }
+
+    const revision = await pushTagOnlyMarketplaceRevision(
+      published,
+      name,
+      readOfferedPlugins(table),
+      tag,
+    );
+    const { owner, root, bareRepository, gitHome } = published;
+    const revisions = this.gitRepository(name)?.revisions ?? [];
+    this.recordGitRepository({
+      name,
+      owner,
+      workTree: root,
+      bareRepository,
+      gitHome,
+      plugins: [],
+      revisions: [...revisions, revision],
+    });
+    assert.deepStrictEqual(
+      [
+        await runGit(bareRepository, gitHome, "rev-parse", `refs/tags/${tag}^{commit}`),
+        await runGit(bareRepository, gitHome, "branch", "--contains", revision),
+      ],
+      [revision, ""],
+    );
   },
 );
 
