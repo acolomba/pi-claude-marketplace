@@ -22,7 +22,7 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { listTags, resolveTagOid } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
+import { listLocalTags } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import {
   DependencyCascadeError,
   PluginShapeError,
@@ -1875,6 +1875,12 @@ test("D-09-05: a root range on a path-source root reaches the marketplace tag pr
     ["bar"],
     "the marketplace tag probe is queried once for the root",
   );
+  // D-SG-09: the probe gets the marketplace record's source, which decides
+  // where the tags are read, and the member's own auth context.
+  assert.deepStrictEqual(
+    seen.map((query) => [query.marketplaceSource, query.auth?.ctx.mode]),
+    [[state.marketplaces[MARKETPLACE]?.source, "tui"]],
+  );
   assert.deepStrictEqual(
     cascade.kind === "installed" &&
       cascade.members.find((member) => member.key === `bar@${MARKETPLACE}`)?.fellBackToCurrentCopy,
@@ -2030,16 +2036,18 @@ test("WR-02: two path-source members constrained against the SAME marketplace cl
   const locations = locationsFor("project", environment.cwd);
 
   // A marketplaceTagProbe that delegates to the REAL probe but counts the
-  // underlying `listTags` calls -- the only observable proof that the memo
-  // `runInstallCascade` allocates (and threads via `options.tagMemo` below)
-  // is actually reaching the local probe's own memo parameter.
-  const listTagsCalls: { dir: string }[] = [];
+  // underlying `listLocalTags` calls -- the only observable proof that the
+  // memo `runInstallCascade` allocates (and threads via `options.tagMemo`
+  // below) is actually reaching the probe's own memo parameter.
+  const listLocalTagsCalls: { dir: string }[] = [];
   const countingSeam: MarketplaceTagListingSeam = {
-    listTags: (opts) => {
-      listTagsCalls.push(opts);
-      return listTags(opts);
+    listRemoteTags: () => {
+      throw new Error("not expected on a directory marketplace");
     },
-    resolveTagOid,
+    listLocalTags: (opts) => {
+      listLocalTagsCalls.push(opts);
+      return listLocalTags(opts);
+    },
   };
   const countingMarketplaceTagProbe = (options: MarketplaceTagProbeOptions) =>
     probeMarketplaceTags({ ...options, seam: countingSeam });
@@ -2068,7 +2076,7 @@ test("WR-02: two path-source members constrained against the SAME marketplace cl
   // assert
   assert.strictEqual(cascade.kind, "installed");
   assert.strictEqual(
-    listTagsCalls.length,
+    listLocalTagsCalls.length,
     1,
     "both members share ONE run's marketplaceTagMemo, so the clone's tags are listed once",
   );
@@ -2171,7 +2179,7 @@ test("TAGS-02 / D-07-07 a path-source member whose local listing THROWS resolves
 
 test("TAGS-02 / D-07-07 a path-source member whose marketplace root is not a git repository resolves anyway", async (t) => {
   // arrange: a real, UNMOCKED probe against a marketplace root with no `.git`
-  // at all -- `listTags` throws, `probeMarketplaceTags` catches it into
+  // at all -- `listLocalTags` throws, `probeMarketplaceTags` catches it into
   // `tag-listing-failed`, and the SAME fallback arm applies with no injected
   // seam of any kind.
   const environment = await createHermeticEnvironment(t, "install-cascade-path-no-repo-");

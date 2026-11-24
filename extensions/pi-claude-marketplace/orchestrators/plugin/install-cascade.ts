@@ -799,8 +799,9 @@ function toIntersectionFailure(
 
 /**
  * Where a member's release tags would live: the git-backed source's own
- * repository, or -- for a `path` source -- its marketplace clone's local
- * tags (TAGS-01). The SOURCE comes from the member's own marketplace entry,
+ * repository, or -- for a `path` source -- its marketplace repository's tags,
+ * read from the marketplace remote for a git marketplace and from the
+ * checkout for a directory marketplace (TAGS-01, D-SG-09). The SOURCE comes from the member's own marketplace entry,
  * never from the declaration that named it -- a dependency declaration
  * carries a version, and a version may select among a source's tags but may
  * never change which source is read.
@@ -814,7 +815,11 @@ function toIntersectionFailure(
  */
 type MemberTagSource =
   | { readonly kind: "git"; readonly source: GitBackedSource }
-  | { readonly kind: "path"; readonly marketplaceRoot: string }
+  | {
+      readonly kind: "path";
+      readonly marketplaceRoot: string;
+      readonly marketplaceSource: unknown;
+    }
   | { readonly kind: "absent" };
 
 async function resolveMemberTagSource(
@@ -841,7 +846,11 @@ async function resolveMemberTagSource(
   }
 
   if (parsed.kind === "path") {
-    return { kind: "path", marketplaceRoot: record.marketplaceRoot };
+    return {
+      kind: "path",
+      marketplaceRoot: record.marketplaceRoot,
+      marketplaceSource: record.source,
+    };
   }
 
   return { kind: "absent" };
@@ -922,6 +931,7 @@ async function probeMemberPin(
     };
   }
 
+  const auth = probeAuth(options.ledgerOptionsFor(member));
   if (tagSource.kind === "path") {
     // TAGS-01/03: a satisfying tag pins the member exactly like a git-backed
     // source does.
@@ -929,11 +939,13 @@ async function probeMemberPin(
     const probed = await marketplaceTagProbe({
       pluginName: member.name,
       marketplaceRoot: tagSource.marketplaceRoot,
+      marketplaceSource: tagSource.marketplaceSource,
       range,
       tagMemo: options.marketplaceTagMemo,
+      auth,
     });
 
-    // TAGS-02 / D-07-07: no tag satisfies the constraint, or the local
+    // TAGS-02 / D-07-07: no tag satisfies the constraint, or the
     // listing could not even be read (an unreadable listing and an empty one
     // are the same user-visible fact -- there is no tag here that satisfies
     // you) -- either way the member resolves anyway, installing the
@@ -947,21 +959,29 @@ async function probeMemberPin(
     return toMemberConstraintOutcome(member, declared, probed);
   }
 
-  const ledger = options.ledgerOptionsFor(member);
   const probed = await options.tagProbe({
     pluginName: member.name,
     source: tagSource.source,
     range,
     tagMemo: options.tagMemo,
-    auth: {
-      ctx: ledger.ctx,
-      run: ledger.run,
-      credentialOps: ledger.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
-      ...(ledger.deviceFlowHttp !== undefined && { deviceFlowHttp: ledger.deviceFlowHttp }),
-      ...(ledger.authMemo !== undefined && { authMemo: ledger.authMemo }),
-    },
+    auth,
   });
   return toMemberConstraintOutcome(member, declared, probed);
+}
+
+/**
+ * The auth context a member's tag query authenticates with, lifted from its
+ * own ledger options so the query and the clone that follows it share one
+ * host bundle and one per-host memo (AUTH-09).
+ */
+function probeAuth(ledger: InstallLedgerOptions): DependencyTagProbeOptions["auth"] {
+  return {
+    ctx: ledger.ctx,
+    run: ledger.run,
+    credentialOps: ledger.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
+    ...(ledger.deviceFlowHttp !== undefined && { deviceFlowHttp: ledger.deviceFlowHttp }),
+    ...(ledger.authMemo !== undefined && { authMemo: ledger.authMemo }),
+  };
 }
 
 /**

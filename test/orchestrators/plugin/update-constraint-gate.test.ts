@@ -18,6 +18,7 @@ import { whileStateLockHeld } from "../state-lock.ts";
 
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type {
+  AuthAttemptResult,
   CredentialOps,
   DeviceFlowHttp,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
@@ -138,6 +139,7 @@ function options(overrides: Partial<UpdateConstraintOptions> = {}): UpdateConstr
     marketplace: "mp",
     entry: { name: "target", source: pathSource("./plugins/target") },
     marketplaceRoot: "/cwd/mp",
+    marketplaceSource: pathSource("/cwd/mp"),
     state: stateOf({ mp: { target: pluginRecord() } }),
     locations: locationsFor("project", "/cwd"),
     auth: { credentialOps: credentialOps() },
@@ -631,6 +633,50 @@ describe("evaluateUpdateConstraint", () => {
     assert.strictEqual(calls[0]?.pluginName, "target");
     assert.strictEqual(calls[0]?.marketplaceRoot, "/cwd/mp");
     assert.strictEqual(calls[0]?.range, ">=1.0.0 <2.0.0-0");
+    assert.deepStrictEqual(
+      [calls[0]?.marketplaceSource, calls[0]?.auth],
+      [pathSource("/cwd/mp"), undefined],
+    );
+  });
+
+  test("D-SG-09: a path entry source hands the probe the marketplace source and the caller's auth context", async () => {
+    // arrange
+    const declarations = new Map<string, readonly AddressedDependency[]>([
+      ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
+    ]);
+    const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
+    const calls: Parameters<UpdateConstraintSeam["probeMarketplaceTags"]>[0][] = [];
+    const seam: UpdateConstraintSeam = {
+      buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
+      probeDependencyTags: () => {
+        throw new Error("not expected on a path entry source");
+      },
+      probeMarketplaceTags: (probeOptions) => {
+        calls.push(probeOptions);
+        return Promise.resolve({ kind: "no-matching-tag" });
+      },
+    };
+    const ctx = silentCtx();
+    const run = runWithNothingLoaded();
+    const ops = credentialOps();
+    const authMemo = new Map<string, AuthAttemptResult>();
+    const marketplaceSource = "https://example.com/acme/marketplace.git";
+
+    // act
+    await evaluateUpdateConstraint(
+      options({
+        state,
+        seam,
+        marketplaceSource,
+        auth: { notification: { ctx, run }, credentialOps: ops, authMemo },
+      }),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      calls.map((call) => [call.marketplaceSource, call.auth]),
+      [[marketplaceSource, { ctx, run, credentialOps: ops, authMemo }]],
+    );
   });
 
   test("D-10-14: a path source with no satisfying tag falls back and is re-checked", async () => {
@@ -673,9 +719,14 @@ describe("evaluateUpdateConstraint", () => {
     ]);
     const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
     const listingSeam: MarketplaceTagListingSeam = {
-      listTags: () => Promise.resolve(["target--v1.2.0", "target--v0.9.0"]),
-      resolveTagOid: (opts) =>
-        Promise.resolve(opts.name === "target--v1.2.0" ? "oid-1.2.0" : "oid-0.9.0"),
+      listRemoteTags: () => {
+        throw new Error("not expected on a directory marketplace");
+      },
+      listLocalTags: () =>
+        Promise.resolve([
+          { name: "target--v1.2.0", oid: "oid-1.2.0" },
+          { name: "target--v0.9.0", oid: "oid-0.9.0" },
+        ]),
     };
     const seam: UpdateConstraintSeam = {
       buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
@@ -882,13 +933,15 @@ describe("evaluateUpdateConstraint", () => {
       ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
     ]);
     const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
-    const listTagsCalls: { dir: string }[] = [];
+    const listLocalTagsCalls: { dir: string }[] = [];
     const listingSeam: MarketplaceTagListingSeam = {
-      listTags: (opts) => {
-        listTagsCalls.push(opts);
-        return Promise.resolve(["target--v1.0.0"]);
+      listRemoteTags: () => {
+        throw new Error("not expected on a directory marketplace");
       },
-      resolveTagOid: () => Promise.resolve("oid-1.0.0"),
+      listLocalTags: (opts) => {
+        listLocalTagsCalls.push(opts);
+        return Promise.resolve([{ name: "target--v1.0.0", oid: "oid-1.0.0" }]);
+      },
     };
     const seam: UpdateConstraintSeam = {
       buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
@@ -905,7 +958,7 @@ describe("evaluateUpdateConstraint", () => {
     await evaluateUpdateConstraint(options({ state, seam, marketplaceTagMemo }));
 
     // assert
-    assert.strictEqual(listTagsCalls.length, 1);
+    assert.strictEqual(listLocalTagsCalls.length, 1);
   });
 
   test("D-10-18: a failed listing is re-queried on the next evaluation in the same run", async () => {

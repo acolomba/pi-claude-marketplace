@@ -201,21 +201,9 @@ export interface RemoteTag {
   oid: string;
 }
 
-export interface ListTagsOptions {
+export interface ListLocalTagsOptions {
   /** Working-tree directory of a local repository. */
   dir: string;
-}
-
-export interface ResolveTagOidOptions {
-  /** Working-tree directory of a local repository. */
-  dir: string;
-  /** Tag name, with no `refs/tags/` prefix. */
-  name: string;
-  /**
-   * isomorphic-git object cache. Peels that share one cache load each packfile
-   * into memory once instead of once per peel.
-   */
-  cache: object;
 }
 
 export interface ForceUpdateRefOptions {
@@ -1058,94 +1046,87 @@ export async function listRemoteTags(
 }
 
 /**
- * D-07-05: local, network-free counterpart of `listRemoteTags` -- the tag
- * names a local checkout already carries on disk. Wraps isomorphic-git's
- * `listTags({ fs, dir })`, which returns bare tag names with no oid; a name
- * alone is not the object a caller reads back through `resolveTagOid`.
- *
- * A `path`-source dependency has no remote repository of its own to query;
- * its release tags live on the marketplace clone that already sits on disk,
- * so this reads THAT clone's own `refs/tags/` namespace with no network call
- * (TAGS-01).
- *
- * Source: node_modules/isomorphic-git/index.d.ts -- listTags({ fs, dir,
- * gitdir }) => Promise<Array<string>>.
+ * The `for-each-ref` format of one local tag: its name, the type and id of
+ * the object the ref names, and the type and id that object peels to one
+ * level down. A ref name holds no space (`git check-ref-format`), so the
+ * fields split on a space. A lightweight tag leaves the peeled fields empty.
  */
-export async function listTags(opts: ListTagsOptions): Promise<string[]> {
-  return git.listTags({ fs, dir: opts.dir });
+const LOCAL_TAG_FORMAT =
+  "--format=%(refname:strip=2) %(objecttype) %(objectname) %(*objecttype) %(*objectname)";
+
+/**
+ * D-SG-09, D-07-05: the tags a local repository holds, each with the commit
+ * it names, in one `for-each-ref refs/tags` on the local lane, so a directory
+ * marketplace's release tags are read with no network call. The local
+ * counterpart of `listRemoteTags`, and it answers the same shape.
+ *
+ * A lightweight tag of a commit names it directly, and an annotated tag of a
+ * commit names it in the peeled fields. `%(*objectname)` peels one level
+ * only, so a tag of a tag is read again with `resolveRef`, whose `^{commit}`
+ * peels it all the way. A tag whose object is no commit, such as a tree or a
+ * blob, is dropped: it is no candidate a checkout can use (WR-06). Tags come
+ * in `for-each-ref`'s refname order.
+ */
+export async function listLocalTags(
+  opts: ListLocalTagsOptions,
+  gitProcess: GitProcess = NODE_GIT_PROCESS,
+): Promise<RemoteTag[]> {
+  const listed = await gitProcess.run({
+    subcommand: "for-each-ref",
+    lane: "local",
+    cwd: opts.dir,
+    options: [LOCAL_TAG_FORMAT],
+    operands: ["refs/tags"],
+    timeoutMs: gitTimeoutMs(),
+  });
+
+  const lines = listed.stdout.split("\n").filter((line) => line !== "");
+  const peeled = await Promise.all(
+    lines.map(async (line) => {
+      const [name = "", type, oid = "", peeledType, peeledOid = ""] = line.split(" ");
+      const commit = await localTagCommit(opts.dir, gitProcess, {
+        name,
+        type,
+        oid,
+        peeledType,
+        peeledOid,
+      });
+      return commit === undefined ? [] : [{ name, oid: commit }];
+    }),
+  );
+  return peeled.flat();
 }
 
-/**
- * Bounds a tag-of-tag peel chain in `resolveTagOid` so a cyclic or
- * pathological annotated-tag graph cannot loop forever. No real release
- * tooling produces a chain this long; the bound exists only to make a
- * corrupt history fail fast rather than hang.
- */
-const MAX_TAG_PEEL_HOPS = 10;
+/** One `for-each-ref` line of `LOCAL_TAG_FORMAT`, split into its fields. */
+interface LocalTagLine {
+  readonly name: string;
+  readonly type: string | undefined;
+  readonly oid: string;
+  readonly peeledType: string | undefined;
+  readonly peeledOid: string;
+}
 
-/**
- * D-07-05: resolve a LOCAL tag name to the commit it names, peeling an
- * annotated tag to the commit it points at. The local counterpart of
- * `listRemoteTags`' `peeled ?? oid` preference (D-03-02.2 pins the remote
- * path) -- for an annotated tag the tag OBJECT's own oid is never what a
- * caller wants, only the commit it tags.
- *
- * Resolves `refs/tags/<name>` via `resolveRef`, then attempts `readTag` on the
- * result:
- *   - a throw means the oid already names a non-tag object (a LIGHTWEIGHT tag
- *     resolves directly to its target); the target's own type decides the
- *     result -- a commit is returned as-is, anything else (blob / tree) is
- *     not checkout-able and yields `undefined`;
- *   - `tag.type === "commit"` returns `tag.object`, the commit the tag names;
- *   - `tag.type === "tag"` is a tag pointing at another tag; the peel repeats
- *     on that tag's own object, bounded by `MAX_TAG_PEEL_HOPS` so a
- *     tag-of-tag chain cannot loop;
- *   - any other tagged type (`blob` / `tree`) is not a commit at all and
- *     cannot be checked out as one; `undefined` is returned, and the caller
- *     is responsible for dropping a candidate that does not resolve to a
- *     commit.
- *   - exhausting `MAX_TAG_PEEL_HOPS` without reaching a commit means the
- *     chain never terminated within the bound; `undefined` is returned for
- *     the same reason -- there is no commit oid to hand back.
- *
- * Source: node_modules/isomorphic-git/index.d.ts -- resolveRef({ fs, dir, ref
- * }) => Promise<string>; readTag({ fs, dir, gitdir, oid, cache }) => Promise<{ oid,
- * tag: TagObject, payload }>, where TagObject.type is "blob" | "tree" |
- * "commit" | "tag" and TagObject.object is the oid of the tagged object.
- */
-export async function resolveTagOid(opts: ResolveTagOidOptions): Promise<string | undefined> {
-  let oid = await git.resolveRef({ fs, dir: opts.dir, ref: `refs/tags/${opts.name}` });
-
-  for (let hop = 0; hop < MAX_TAG_PEEL_HOPS; hop++) {
-    let read: Awaited<ReturnType<typeof git.readTag>>;
-    try {
-      // eslint-disable-next-line no-await-in-loop -- each hop reads the oid the previous tag names
-      read = await git.readTag({ fs, dir: opts.dir, oid, cache: opts.cache });
-    } catch {
-      // Not a tag object: a LIGHTWEIGHT tag names its target directly. Only a
-      // commit is checkout-able, so anything else -- a blob, a tree, or an
-      // unreadable object -- is dropped like an annotated blob/tree tag is.
-      try {
-        // eslint-disable-next-line no-await-in-loop -- runs once: the lightweight-tag path returns after it
-        await git.readCommit({ fs, dir: opts.dir, oid, cache: opts.cache });
-        return oid;
-      } catch {
-        return undefined;
-      }
-    }
-
-    if (read.tag.type === "commit") {
-      return read.tag.object;
-    }
-
-    if (read.tag.type !== "tag") {
-      return undefined;
-    }
-
-    oid = read.tag.object;
+/** The commit one listed tag names, or undefined when it names none. */
+async function localTagCommit(
+  dir: string,
+  gitProcess: GitProcess,
+  line: LocalTagLine,
+): Promise<string | undefined> {
+  if (line.type === "commit") {
+    return line.oid;
   }
 
-  return undefined;
+  if (line.type !== "tag") {
+    return undefined;
+  }
+
+  if (line.peeledType === "commit") {
+    return line.peeledOid;
+  }
+
+  return line.peeledType === "tag"
+    ? resolveRef({ dir, ref: `${TAG_REF_PREFIX}${line.name}` }, gitProcess)
+    : undefined;
 }
 
 /**

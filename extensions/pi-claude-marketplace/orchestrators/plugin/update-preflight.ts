@@ -1236,6 +1236,7 @@ export async function preparePluginUpdate(
       marketplace: options.marketplace,
       entry: triaged.entry,
       marketplaceRoot: marketplace.marketplaceRoot,
+      marketplaceSource: marketplace.source,
       state,
       locations: options.locations,
       auth,
