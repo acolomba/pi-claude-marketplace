@@ -38,34 +38,48 @@ const CORPUS: readonly CorpusRow[] = [
     exitCode: 128,
     stderr:
       "fatal: could not read Username for 'http://127.0.0.1:18931': terminal prompts disabled\n",
-    failure: { kind: "https-auth" },
+    failure: { kind: "https-auth", detail: "no-credential" },
   },
   {
     label: "an HTTP 401 with a user in the URL",
     exitCode: 128,
     stderr:
       "fatal: could not read Password for 'http://alice@127.0.0.1:18931': terminal prompts disabled\n",
-    failure: { kind: "https-auth" },
+    failure: { kind: "https-auth", detail: "no-credential" },
   },
   {
     label: "an HTTP 401 with a password in the URL",
     exitCode: 128,
     stderr: "fatal: Authentication failed for 'http://127.0.0.1:18931/auth/x.git/'\n",
-    failure: { kind: "https-auth" },
+    failure: { kind: "https-auth", detail: "rejected" },
   },
   {
     label: "credential fill with no helper",
     exitCode: 128,
     stderr:
       "fatal: could not read Username for 'https://example.test': terminal prompts disabled\n",
-    failure: { kind: "https-auth" },
+    failure: { kind: "https-auth", detail: "no-credential" },
+  },
+  {
+    label: "a refused credential after a disabled prompt",
+    exitCode: 128,
+    stderr:
+      "fatal: could not read Password for 'http://alice@127.0.0.1:18602': terminal prompts disabled\nfatal: Authentication failed for 'http://127.0.0.1:18602/acme/tools.git/'\n",
+    failure: { kind: "https-auth", detail: "rejected" },
+  },
+  {
+    label: "an HTTP 401 status line",
+    exitCode: 128,
+    stderr:
+      "fatal: unable to access 'http://127.0.0.1:18931/auth/x.git/': The requested URL returned error: 401\n",
+    failure: { kind: "https-auth", detail: "rejected" },
   },
   {
     label: "an HTTP 403",
     exitCode: 128,
     stderr:
       "fatal: unable to access 'http://127.0.0.1:18931/forbidden/x.git/': The requested URL returned error: 403\n",
-    failure: { kind: "https-auth" },
+    failure: { kind: "https-auth", detail: "rejected" },
   },
   {
     label: "an HTTP 404",
@@ -144,9 +158,21 @@ const CORPUS: readonly CorpusRow[] = [
     failure: { kind: "commit-missing" },
   },
   {
+    label: "a protocol v0 refusal of an unadvertised commit",
+    exitCode: 1,
+    stderr: `error: Server does not allow request for unadvertised object ${SHA}\n`,
+    failure: { kind: "commit-missing" },
+  },
+  {
     label: "a checkout of an unknown name",
     exitCode: 1,
     stderr: "error: pathspec 'nope' did not match any file(s) known to git\n",
+    failure: { kind: "local-ref-missing" },
+  },
+  {
+    label: "a checkout of an unknown name before the operand marker",
+    exitCode: 128,
+    stderr: "fatal: invalid reference: nosuch\n",
     failure: { kind: "local-ref-missing" },
   },
   {
@@ -342,6 +368,24 @@ const CORPUS: readonly CorpusRow[] = [
     failure: { kind: "failed" },
   },
   {
+    label: "a remote line that names a refused credential",
+    exitCode: 128,
+    stderr: `remote: fatal: Authentication failed for 'https://example.test/x.git/'\n${HUNG_UP}`,
+    failure: { kind: "failed" },
+  },
+  {
+    label: "a remote line that names an unadvertised commit",
+    exitCode: 1,
+    stderr: `remote: error: Server does not allow request for unadvertised object ${SHA}\n`,
+    failure: { kind: "failed" },
+  },
+  {
+    label: "a remote line that names an invalid reference",
+    exitCode: 128,
+    stderr: `remote: fatal: invalid reference: nosuch\n${HUNG_UP}`,
+    failure: { kind: "failed" },
+  },
+  {
     label: "a remote line that names dubious ownership",
     exitCode: 128,
     stderr: `remote: fatal: detected dubious ownership in repository at '/srv/repo'\n${HUNG_UP}`,
@@ -406,7 +450,7 @@ const CORPUS: readonly CorpusRow[] = [
     exitCode: 128,
     stderr:
       "remote: error: RPC failed; curl 56 GnuTLS recv error\nfatal: unable to access 'https://example.test/x.git/': The requested URL returned error: 403\n",
-    failure: { kind: "https-auth" },
+    failure: { kind: "https-auth", detail: "rejected" },
   },
   {
     label: "an HTTP 503 after a remote line that names a 401",

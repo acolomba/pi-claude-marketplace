@@ -397,15 +397,24 @@ describe("classifyGitFailure", () => {
       remoteUrl: undefined,
       expected: { reason: "git missing" },
     },
-    ...(["https-auth", "ssh-auth", "ssh-host-key-unknown", "ssh-host-key-changed"] as const).map(
-      (kind) => ({
-        title: `SG-PRC-05: classifies a ${kind} failure as authentication required with no frame`,
-        createFailure: () => gitCommandFailure({ kind }),
-        rule: UNKNOWN_RULE,
-        remoteUrl: REMOTE_URL,
-        expected: { reason: "authentication required" },
-      }),
-    ),
+    ...(
+      [
+        {
+          label: "an https-auth no-credential",
+          failure: { kind: "https-auth", detail: "no-credential" },
+        },
+        { label: "an https-auth rejected", failure: { kind: "https-auth", detail: "rejected" } },
+        { label: "an ssh-auth", failure: { kind: "ssh-auth" } },
+        { label: "an ssh-host-key-unknown", failure: { kind: "ssh-host-key-unknown" } },
+        { label: "an ssh-host-key-changed", failure: { kind: "ssh-host-key-changed" } },
+      ] satisfies ReadonlyArray<{ label: string; failure: GitFailure }>
+    ).map(({ label, failure }) => ({
+      title: `SG-PRC-05, D-SG-14: classifies ${label} failure as authentication required with no frame`,
+      createFailure: () => gitCommandFailure(failure),
+      rule: UNKNOWN_RULE,
+      remoteUrl: REMOTE_URL,
+      expected: { reason: "authentication required" },
+    })),
     {
       title: "SG-PRC-05: classifies a timeout as network unreachable",
       createFailure: () => gitCommandFailure({ kind: "timeout", timeoutMs: 5000 }),

@@ -368,6 +368,15 @@ function rejectsAs(kind: GitFailure["kind"], exitCode: number): (error: unknown)
   };
 }
 
+// A real-git run that rejects with the whole `failure` and `exitCode`.
+function rejectsWithFailure(failure: GitFailure, exitCode: number): (error: unknown) => boolean {
+  return (error) => {
+    assert.ok(error instanceof GitCommandError);
+    assert.deepStrictEqual([error.failure, error.exitCode], [failure, exitCode]);
+    return true;
+  };
+}
+
 // The user config of a case that allows every transport git knows of.
 const PERMISSIVE_CONFIG = `[protocol "file"]
 \tallow = always
@@ -3498,7 +3507,7 @@ const PROCESS_GROUPS = {
 // SG-PRC-02: a remote that asks for a password, a passphrase, or a host-key
 // answer fails without a prompt, and a timeout leaves no process behind.
 describe("createGitProcess without prompts or leftovers", () => {
-  test("SG-PRC-02, E10: rejects an https remote that asks for a password as https-auth without askpass", async (t) => {
+  test("SG-PRC-02, E10, D-SG-14: rejects an https remote that asks for a password as https-auth no-credential without askpass", async (t) => {
     // arrange
     const fixture = await httpsFixture(t);
     await fixture.host.arm("tools", { kind: "credential", user: "acme", password: "secret" });
@@ -3528,8 +3537,36 @@ describe("createGitProcess without prompts or leftovers", () => {
     });
 
     // assert
-    await assert.rejects(listed, rejectsAs("https-auth", 128));
+    await assert.rejects(
+      listed,
+      rejectsWithFailure({ kind: "https-auth", detail: "no-credential" }, 128),
+    );
     await assert.rejects(access(askpass.record), { code: "ENOENT" });
+  });
+
+  test("D-SG-14, GAUTH-04: rejects an https remote that refuses the helper's credential as https-auth rejected", async (t) => {
+    // arrange
+    const fixture = await httpsFixture(t);
+    await fixture.host.arm("tools", { kind: "credential", user: "acme", password: "secret" });
+    const git = await realGit({
+      root: fixture.root,
+      env: fixture.env,
+      config: `[credential]\n\thelper = "!f() { echo username=acme; echo password=wrong; }; f"\n`,
+    });
+
+    // act
+    const listed = git.run({
+      subcommand: "ls-remote",
+      lane: "network",
+      operands: [fixture.url],
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    await assert.rejects(
+      listed,
+      rejectsWithFailure({ kind: "https-auth", detail: "rejected" }, 128),
+    );
   });
 
   test("SG-PRC-02, E16: runs the user's ssh without a terminal and with the batch options", async (t) => {
