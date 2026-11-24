@@ -6,8 +6,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import * as git from "isomorphic-git";
-
 import {
   needsAgentGrantRewrite,
   rewriteAgentGrantForms,
@@ -44,6 +42,7 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   DependencyDeclarationsUnreadableError,
+  GitCommandError,
   InvalidGitHubBaseUrlError,
   LayerConfigUnreadableError,
   PluginInBaseLayerOnlyError,
@@ -4890,7 +4889,14 @@ test("SRC-01: a cold-cache reinstall whose git host answers 404 fails as source 
         { recursive: true, force: true },
       );
       const stateBefore = await readFile(locations.stateJsonPath, "utf8");
-      const notFound = new git.Errors.HttpError(404, "Not Found", "");
+      const notFound = new GitCommandError(
+        { kind: "repository-not-found", httpStatus: 404 },
+        {
+          operation: "clone --depth",
+          exitCode: 128,
+          stderr: "fatal: repository 'https://github.com/org/repo.git/' not found\n",
+        },
+      );
       const { gitOps } = createGitOps({ cloneThrows: notFound });
       const { ctx, run, notifications } = makeCtx();
 
@@ -4912,14 +4918,14 @@ test("SRC-01: a cold-cache reinstall whose git host answers 404 fails as source 
         marketplace: "mp",
         scope: "project",
         fromVersion: "9.9.9",
-        notes: ["HTTP Error: 404 Not Found"],
+        notes: ["git clone --depth failed: repository-not-found, exit code 128"],
         reasons: ["source missing"],
         cause: new Error("404 on https://github.com/org/repo.git", { cause: notFound }),
       });
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ gp v9.9.9 (failed) {source missing}\n    cause: 404 on https://github.com/org/repo.git -> HTTP Error: 404 Not Found",
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ gp v9.9.9 (failed) {source missing}\n    cause: 404 on https://github.com/org/repo.git -> git clone --depth failed: repository-not-found, exit code 128",
           severity: "error",
         },
       ]);

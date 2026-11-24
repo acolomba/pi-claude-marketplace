@@ -5,7 +5,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import * as git from "isomorphic-git";
 import lockfile from "proper-lockfile";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -20,6 +19,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
   CleanupLeakError,
+  GitCommandError,
   InvalidGitHubBaseUrlError,
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -40,6 +40,7 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { GitFailure } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import type { TestContext } from "node:test";
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
@@ -2424,11 +2425,22 @@ test("D-18-11: an enabled record at the same version under another root is prepa
 });
 
 const offline = Object.assign(new Error("offline"), { code: "ENETUNREACH" });
-const refusedWith = (status: number, message: string): Error =>
-  new git.Errors.HttpError(status, message, "");
-const notFound = refusedWith(404, "Not Found");
-const unavailable = refusedWith(503, "Service Unavailable");
-const challenge = refusedWith(401, "Unauthorized");
+// SG-PRC-05: each refusal is the `GitCommandError` that system git's clone of
+// the source gives, with the line git prints for it.
+const refusedWith = (failure: GitFailure, stderr: string): GitCommandError =>
+  new GitCommandError(failure, { operation: "clone --depth", exitCode: 128, stderr });
+const notFound = refusedWith(
+  { kind: "repository-not-found", httpStatus: 404 },
+  "fatal: repository 'https://example.com/private/' not found\n",
+);
+const unavailable = refusedWith(
+  { kind: "network", httpStatus: 503 },
+  "fatal: unable to access 'https://example.com/private/': The requested URL returned error: 503\n",
+);
+const challenge = refusedWith(
+  { kind: "https-auth", detail: "no-credential" },
+  "fatal: could not read Username for 'https://example.com': terminal prompts disabled\n",
+);
 const leakedChallenge = new CleanupLeakError(challenge, "clone tmp left at /tmp/x");
 
 for (const { title, error, reasons, cause } of [
