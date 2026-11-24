@@ -13710,8 +13710,9 @@ test("plugin install authentication: threads a host-keyed bundle for a host the 
         ],
       );
       assert.deepStrictEqual(
-        git.state.cloneCalls.map(({ auth, ref, singleBranch, url }) => ({
+        git.state.cloneCalls.map(({ auth, noCheckout, ref, singleBranch, url }) => ({
           authHost: auth?.host,
+          noCheckout,
           ref,
           singleBranch,
           url,
@@ -13719,6 +13720,8 @@ test("plugin install authentication: threads a host-keyed bundle for a host the 
         [
           {
             authHost: "gitlab.example.com",
+            // SG-TRN-02: the first rung of the pin ladder checks nothing out.
+            noCheckout: true,
             ref: undefined,
             singleBranch: undefined,
             url: cloneUrl,

@@ -183,6 +183,7 @@ function createGitOps(
   readonly state: {
     readonly cloneCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["clone"];
     readonly fetchCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["fetch"];
+    readonly fetchCommitCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["fetchCommit"];
     readonly forceUpdateRefCalls: ReturnType<
       typeof createGitOpsFake
     >["state"]["calls"]["forceUpdateRef"];
@@ -242,6 +243,7 @@ function createGitOps(
     state: {
       cloneCalls: fake.state.calls.clone,
       fetchCalls: fake.state.calls.fetch,
+      fetchCommitCalls: fake.state.calls.fetchCommit,
       forceUpdateRefCalls: fake.state.calls.forceUpdateRef,
       checkoutCalls: fake.state.calls.checkout,
       resolveRefCalls: fake.state.calls.resolveRef,
@@ -10244,8 +10246,8 @@ test("PURL-03 pinned git-subdir update: the new clone's subdir anchors the plugi
         cwd,
         cloneUrl,
         fixtureRepoDir,
-        // Pinned sha bump PLUS a ref: resolvePluginPin returns the ref so the
-        // re-clone consumes it as the singleBranch fetch hint.
+        // Pinned sha bump PLUS a ref: resolvePluginPin returns the ref, and
+        // the pin ladder fetches it in its unshallow rung (SG-TRN-02).
         entrySource: {
           source: "git-subdir",
           url: cloneUrl,
@@ -10284,7 +10286,14 @@ test("PURL-03 pinned git-subdir update: the new clone's subdir anchors the plugi
         path.join(newCloneRoot, "plugins", "p"),
         "resolvedSource anchors to the SUBDIR under the new clone root (never the monorepo root)",
       );
-      assert.equal(gitState.cloneCalls[0]?.ref, "main", "the re-clone consumed the ref hint");
+      assert.deepStrictEqual(
+        {
+          cloneRef: gitState.cloneCalls[0]?.ref,
+          fetchCommit: gitState.fetchCommitCalls.map(({ sha, ref }) => ({ sha, ref })),
+        },
+        { cloneRef: undefined, fetchCommit: [{ sha: SHA_NEW, ref: "main" }] },
+        "C5: the re-clone names no branch, and the commit fetch consumed the ref hint",
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

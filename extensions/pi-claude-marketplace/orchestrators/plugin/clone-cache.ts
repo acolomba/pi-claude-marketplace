@@ -109,8 +109,8 @@ async function promoteStagingToClone(
 }
 
 /**
- * Clone `url` into `stagingDir`: a ref hint clones only that ref's branch,
- * and no ref clones the default branch.
+ * Clone `url` into `stagingDir` at depth 1 (C5): a ref hint clones only that
+ * ref's branch, and no ref clones the default branch.
  */
 async function cloneIntoStaging(
   gitOps: GitOps,
@@ -127,43 +127,58 @@ async function cloneIntoStaging(
 }
 
 /**
- * Check out the exact pin, recovering from a stale ref hint.
+ * SG-TRN-02, C5, INR-03: Claude Code's pin ladder. A depth-1 clone with no
+ * checkout and no `--branch`, then `fetchCommit` (`fetch --depth 1 origin
+ * <pin>`, and `fetch --unshallow origin [<ref>]` when the clone is shallow),
+ * then a checkout of the pin, then a check that `HEAD` is the pin.
  *
- * PURL-04: a `singleBranch` ref-hint clone fetches only that ref's closure.
- * When the pinned sha moved ahead of a stale hint it sits outside the closure,
- * so checkout fails as `commit-missing`. The recovery applies ONLY after
- * a ref-hint clone -- a no-ref clone already fetched every head, so the same
- * error there is a genuinely unreachable sha that must fail clean. The clone
- * left the wildcard fetch refspec, so one full fetch pulls every head and
- * every tag (INR-06) and the retry succeeds. A sha the fresh clone still
- * lacks, with or without the refetch, throws `PinnedCommitMissingError`
- * (INR-03) into the caller's fail-clean fold.
+ * The pin is lower-cased first, so a mixed-case 40-hex pin is fetched,
+ * checked out, and compared as git prints it. A fetch that brings no such
+ * commit (`commit-missing`, which a complete clone throws because it skips
+ * the unshallow rung) leaves the answer to the checkout; any other fetch
+ * failure propagates. A checkout that finds no commit is
+ * `PinnedCommitMissingError(pin)`. A `HEAD` other than the pin is a
+ * `pin-mismatch` GitCommandError (`source missing`), and the caller removes
+ * the staging tree before anything is promoted.
  */
-async function checkoutPinWithRefetch(
+async function cloneAtPin(
   gitOps: GitOps,
   stagingDir: string,
+  url: string,
   args: { readonly pin: string; readonly ref?: string; readonly auth: GitAuthBundle },
 ): Promise<void> {
+  const pin = args.pin.toLowerCase();
+  await gitOps.clone({ dir: stagingDir, url, noCheckout: true, auth: args.auth });
   try {
-    await gitOps.checkout({ dir: stagingDir, ref: args.pin });
-  } catch (checkoutErr) {
-    if (args.ref === undefined || !isGitFailureOf(checkoutErr, ["commit-missing"])) {
-      throw asPinnedCommitMissing(checkoutErr, args.pin);
+    await gitOps.fetchCommit({
+      dir: stagingDir,
+      sha: pin,
+      ...(args.ref !== undefined && { ref: args.ref }),
+      auth: args.auth,
+    });
+  } catch (fetchErr) {
+    if (!isGitFailureOf(fetchErr, ["commit-missing"])) {
+      throw fetchErr;
     }
+  }
 
-    await gitOps.fetch({ dir: stagingDir, remote: "origin", tags: true, auth: args.auth });
-    try {
-      await gitOps.checkout({ dir: stagingDir, ref: args.pin });
-    } catch (retryErr) {
-      throw asPinnedCommitMissing(retryErr, args.pin);
-    }
+  try {
+    await gitOps.checkout({ dir: stagingDir, ref: pin });
+  } catch (checkoutErr) {
+    throw asPinnedCommitMissing(checkoutErr, args.pin);
+  }
+
+  const head = await gitOps.resolveRef({ dir: stagingDir, ref: "HEAD" });
+  if (head !== pin) {
+    throw new GitCommandError({ kind: "pin-mismatch" }, { operation: "rev-parse --verify" });
   }
 }
 
 /**
- * INR-03: a fresh clone that still lacks the pin means the git host does not
- * have it. Any other checkout throw passes through unchanged. INR-06: git's
- * error is not chained, because its stderr names nothing a Pi user can act on.
+ * INR-03: a fresh clone that still lacks the pin after the ladder's fetch
+ * means the git host does not have it. Any other checkout throw passes
+ * through unchanged. INR-06: git's error is not chained, because its stderr
+ * names nothing a Pi user can act on.
  */
 function asPinnedCommitMissing(err: unknown, pin: string): unknown {
   return isGitFailureOf(err, ["commit-missing"]) ? new PinnedCommitMissingError(pin) : err;
@@ -177,15 +192,13 @@ function asPinnedCommitMissing(err: unknown, pin: string): unknown {
  *   1. key = pluginCloneKey(cloneUrl, pin); cloneRoot = pluginCloneDir(key).
  *   2. Warm-cache short-circuit: if cloneRoot exists, return it -- NO clone,
  *      NO network (PURL-02 offline / PURL-04 dedup).
- *   3. Clone into a staging dir (ref-hint singleBranch fetch when a ref is
- *      given), then checkout the exact `pin` (sha over ref). When the pin is
- *      outside the ref hint's history the singleBranch fetch never pulled the
- *      pinned commit, so the checkout fails as `commit-missing`; the
- *      clone left a wildcard fetch refspec, so one full fetch widens the
- *      staging clone to every head and tag (INR-06) and the checkout is
- *      retried ONCE. A genuinely unreachable pin throws
- *      `PinnedCommitMissingError` (INR-03) and folds into the fail-clean path.
- *      A clone/checkout throw cleans staging and append-leak-rethrows (MA-9).
+ *   3. Reach the exact `pin` (sha over ref) in a staging dir by the
+ *      `cloneAtPin` ladder: a depth-1 no-checkout clone, a fetch of the pin
+ *      (unshallowing the ref, or the default branch, when the shallow fetch
+ *      fails), a checkout, and a `HEAD` check. A genuinely unreachable pin
+ *      throws `PinnedCommitMissingError` (INR-03) and a `HEAD` other than the
+ *      pin `pin-mismatch`; both fold into the fail-clean path. Any throw
+ *      cleans staging and append-leak-rethrows (MA-9).
  *   4. Atomic same-FS rename staging -> cloneRoot. An EEXIST/ENOTEMPTY rename
  *      means a concurrent install of the same url+sha already won the race;
  *      its tree is byte-equivalent (same key => same content), so clean our
@@ -234,11 +247,9 @@ export async function materializePluginClone(args: {
   const cold = { ...args, auth: args.resolveAuth() };
   const stagingDir = await args.locations.sourcesStagingDir(randomUUID());
 
-  // Clone the ref-hint (or default branch), then checkout the exact pin so the
-  // recorded commit is the pin even when a moving tag/branch ref is given.
+  // The recorded commit is the pin even when a moving tag/branch ref is given.
   try {
-    await cloneIntoStaging(gitOps, stagingDir, networkUrl, cold);
-    await checkoutPinWithRefetch(gitOps, stagingDir, cold);
+    await cloneAtPin(gitOps, stagingDir, networkUrl, cold);
   } catch (err) {
     const leak = await cleanupStaging(removalOps, stagingDir, "plugin clone staging");
     throw appendLeakToError(err, leak);

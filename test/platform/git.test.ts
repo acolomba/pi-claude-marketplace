@@ -24,11 +24,6 @@ import { mock, verify } from "strong-mock";
 
 import { refreshGitHubClone } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import {
-  createGitProcess,
-  NODE_GIT_HOST,
-  NODE_GIT_SPAWN,
-} from "../../extensions/pi-claude-marketplace/platform/git-process.ts";
-import {
   checkout,
   clone,
   currentBranch,
@@ -53,7 +48,6 @@ import {
   StoredCredentialRejectedError,
   TooManyRedirectsError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { hermeticGitEnvironment } from "../../features/lib/hermetic-git.ts";
 import {
   cgiEnvironment,
   httpBackendArguments,
@@ -70,8 +64,8 @@ import {
   createGitTestRepository,
   gitTestCheckout,
 } from "./git-test-repository.ts";
+import { hermeticGitProcess, recordingGitProcess, systemGitOps } from "./system-git-ops.ts";
 
-import type { GitOps } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { OnAuthRequiredFn } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import type {
   GitProcess,
@@ -362,39 +356,6 @@ async function installRepositoryTransport(
 }
 
 /**
- * A git process over real system git with a scratch HOME, no system or global
- * config, and the case's own neutral directory, so no git variable or config
- * of the shell that runs the suite reaches it (SG-HRN-01).
- */
-async function hermeticGitProcess(
-  t: TestContext,
-  variables: NodeJS.ProcessEnv = {},
-): Promise<GitProcess> {
-  const root = await realpath(await createGitTestDirectory(t, { boundary: "local" }));
-  return createGitProcess({
-    spawn: NODE_GIT_SPAWN,
-    host: { ...NODE_GIT_HOST, neutralDirectory: () => Promise.resolve(root) },
-    env: { ...hermeticGitEnvironment(root), ...variables },
-    killGraceMs: 1_000,
-  });
-}
-
-/** The production GitOps, its system-git verbs bound to `systemGit`. */
-function productionGitOps(systemGit: GitProcess): GitOps {
-  return {
-    clone: (options) => clone(options, systemGit),
-    fetch,
-    fetchCommit: (options) => fetchCommit(options, systemGit),
-    forceUpdateRef,
-    checkout: (options) => checkout(options, systemGit),
-    resolveRef: (options) => resolveRef(options, systemGit),
-    currentBranch,
-    resolveRemoteRef: (options) => resolveRemoteRef(options, systemGit),
-    listRemotes: (options) => listRemotes(options, systemGit),
-  };
-}
-
-/**
  * Copies the `.git` of `dir` into a new directory, without its index, as the
  * clone cache's copy step does, and returns the new directory.
  */
@@ -488,7 +449,7 @@ async function createProductionGitOps(t: TestContext): Promise<GitOpsContractPar
   await installRepositoryTransport(t, remote);
 
   return {
-    gitOps: productionGitOps(systemGit),
+    gitOps: systemGitOps(systemGit),
     worktreeDir: worktree.dir,
     cloneDir,
     remoteUrl: REMOTE_URL,
@@ -528,30 +489,6 @@ async function shallowFileClone(t: TestContext): Promise<{
   const dir = path.join(await createGitTestDirectory(t, { boundary: "local" }), "clone");
   await origin.run("clone", "-q", "--depth", "1", `file://${origin.dir}`, dir);
   return { dir, olderOids: [origin.initialOid, secondOid] };
-}
-
-/** A git process that runs `systemGit` and records each request, and each as one line. */
-function recordingGitProcess(systemGit: GitProcess): {
-  readonly gitProcess: GitProcess;
-  readonly commands: string[];
-  readonly requests: GitRequest[];
-} {
-  const commands: string[] = [];
-  const requests: GitRequest[] = [];
-  return {
-    commands,
-    requests,
-    gitProcess: {
-      locate: systemGit.locate,
-      run: (request) => {
-        requests.push(request);
-        commands.push(
-          [request.subcommand, ...(request.options ?? []), ...(request.operands ?? [])].join(" "),
-        );
-        return systemGit.run(request);
-      },
-    },
-  };
 }
 
 /**
@@ -1450,7 +1387,7 @@ describe("D-14 on a depth-1 system-git clone", () => {
       await installHttpBackendTransport(t, projectRoot);
 
       // act
-      await refreshGitHubClone(dir, ref, productionGitOps(systemGit));
+      await refreshGitHubClone(dir, ref, systemGitOps(systemGit));
 
       // assert
       assert.deepStrictEqual(
