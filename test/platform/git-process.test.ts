@@ -2004,33 +2004,38 @@ describe("createGitProcess operands and lanes", () => {
     });
   }
 
-  for (const { label, request, words } of [
+  for (const { label, request, pairs, words } of [
     {
       label: "a local-lane read",
       request: { ...LOCAL_READ, config: ["a.b=c", "d.e=f"] },
-      words: [
-        ...LOCAL_LANE,
-        ...["-c", "a.b=c", "-c", "d.e=f"],
-        ...["rev-parse", "--verify", "--end-of-options", "HEAD"],
-      ],
+      pairs: ["-c", "a.b=c", "-c", "d.e=f"],
+      words: [...LOCAL_LANE, ...["rev-parse", "--verify", "--end-of-options", "HEAD"]],
     },
     {
       label: "a network-lane credential fill",
       request: { ...FILL, config: ["a.b=c", "d.e=f"] },
-      words: ["-c", "a.b=c", "-c", "d.e=f", "credential", "fill"],
+      pairs: ["-c", "a.b=c", "-c", "d.e=f"],
+      words: ["credential", "fill"],
     },
     {
       label: "a request whose pair repeats a hardening pair",
       request: { ...FILL, config: ["core.hooksPath=/tmp/hooks"] },
-      words: ["-c", "core.hooksPath=/tmp/hooks", "credential", "fill"],
+      pairs: ["-c", "core.hooksPath=/tmp/hooks"],
+      words: ["credential", "fill"],
     },
     {
       label: "a request with an empty list",
       request: { ...LOCAL_READ, config: [] },
+      pairs: [],
       words: [...LOCAL_LANE, "rev-parse", "--verify", "--end-of-options", "HEAD"],
     },
-  ] satisfies ReadonlyArray<{ label: string; request: GitRequest; words: readonly string[] }>) {
-    test(`D-SG-16, D-SG-14: passes the config pairs of ${label} after the module's own pairs`, async () => {
+  ] satisfies ReadonlyArray<{
+    label: string;
+    request: GitRequest;
+    pairs: readonly string[];
+    words: readonly string[];
+  }>) {
+    test(`D-SG-05: passes the config pairs of ${label} before the module's own pairs, so the last pair of a key is the module's`, async () => {
       // arrange
       const { git, control, started } = createFakeGit();
 
@@ -2041,7 +2046,11 @@ describe("createGitProcess operands and lanes", () => {
       await pending;
 
       // assert
-      assert.deepStrictEqual(control.launches()[0]?.[1], [...hardening("/dev/null"), ...words]);
+      assert.deepStrictEqual(control.launches()[0]?.[1], [
+        ...pairs,
+        ...hardening("/dev/null"),
+        ...words,
+      ]);
     });
   }
 

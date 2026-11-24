@@ -30,7 +30,10 @@
 // The user's own git configuration stays: HOME, the global and system config
 // files, GIT_CONFIG_COUNT and its keys, GIT_CONFIG_PARAMETERS, credential
 // helpers, and proxies. A request's own `-c` pairs (D-SG-16, D-SG-14) come
-// after the module's pairs, so none of them can undo the hardening.
+// before the module's pairs. git keeps the last value of a single-valued key,
+// so no request pair can undo the hardening. The request pairs still come
+// after every config file, so an empty `credential.helper` among them still
+// resets the user's helpers.
 //
 // SG-PRC-03: a request without a working directory runs in the neutral
 // directory, a private, empty directory that platform/git-neutral-directory.ts
@@ -144,9 +147,10 @@ export interface GitRequest {
   readonly options?: readonly string[];
   /**
    * D-SG-16, D-SG-14: Pi-owned `-c` pairs, such as an `insteadOf` rewrite or
-   * a credential helper. They follow the module's own pairs, so a later pair
-   * can never undo the hardening placed before it. They never go through
-   * GIT_CONFIG_COUNT, which the module keeps for the user.
+   * a credential helper. They come before the module's own pairs: git keeps
+   * the last value of a single-valued key, so the hardening placed after them
+   * always wins (D-SG-05). They never go through GIT_CONFIG_COUNT, which the
+   * module keeps for the user.
    */
   readonly config?: readonly string[];
   /**
@@ -763,10 +767,10 @@ function gitArguments(
   words: readonly string[],
 ): string[] {
   const pairs = [
+    ...(request.config ?? []),
     ...rules.config,
     ...PIN_PAIRS,
     ...LANES[request.lane].pairs,
-    ...(request.config ?? []),
   ];
   return [...pairs.flatMap((pair) => ["-c", pair]), request.subcommand, ...words];
 }
