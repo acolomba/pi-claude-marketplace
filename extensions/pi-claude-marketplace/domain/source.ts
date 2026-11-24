@@ -133,28 +133,45 @@ function optionalString(obj: Record<string, unknown>, key: string): string | und
 }
 
 /**
- * Clone-key / commit-version invariant (domain/clone-key.ts, domain/version.ts):
- * a git source's `sha` must be the FULL 40-hex commit sha -- `pluginCloneKey`
- * and `shaVersion` slice its first 12 chars unchecked.
+ * SG-TRN-02: a git source's `sha` must be a full commit id, 40 hex digits for
+ * SHA-1 or 64 for SHA-256, read after lower-casing. Claude Code refuses any
+ * other pin before git runs, so an abbreviated or crafted sha is refused here
+ * rather than dropped to an unpinned clone. The clone key and the commit
+ * version (domain/clone-key.ts, domain/version.ts) slice the first 12 digits,
+ * which both lengths have.
  */
-const FULL_SHA_RE = /^[0-9a-f]{40}$/i;
+const FULL_SHA_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+
+/**
+ * SG-TRN-02: Claude Code's reason for refusing a pin that is not a full commit
+ * id, or undefined when `sha` is absent or a full commit id.
+ */
+function shaRefusal(sha: string | undefined): string | undefined {
+  return sha === undefined || FULL_SHA_RE.test(sha.toLowerCase())
+    ? undefined
+    : `Invalid sha "${sha}": must be a full commit hash (40 or 64 hex digits)`;
+}
 
 /**
  * Spread the manifest object's optional `ref` / `sha` onto a git-backed source
  * (the only kinds that carry them -- the constraint keeps path/npm/unknown
  * sources from smuggling the fields through the spread). `ref` is freeform (any
- * branch/tag name); `sha` must satisfy FULL_SHA_RE or it is DROPPED so the
- * source degrades to unpinned rather than mis-keying the clone cache or
- * emitting a commit version (GV-01) that is not 12 hex characters. A valid sha
- * is lowercased for the same reason: the renderer reads lowercase hex only.
+ * branch/tag name). A `sha` that fails FULL_SHA_RE makes the whole source
+ * `unknown` (SG-TRN-02). A valid sha is lowercased, because the commit version
+ * (GV-01) and the clone key read lowercase hex only.
  */
-function withOptionalSourceFields<T extends GitHubSource | UrlSource | GitSubdirSource>(
-  source: T,
+function withOptionalSourceFields(
+  source: GitBackedSource,
   obj: Record<string, unknown>,
-): T {
+): ParsedSource {
   const ref = optionalString(obj, "ref");
   const rawSha = optionalString(obj, "sha");
-  const sha = rawSha !== undefined && FULL_SHA_RE.test(rawSha) ? rawSha.toLowerCase() : undefined;
+  const refusal = shaRefusal(rawSha);
+  if (refusal !== undefined) {
+    return unknownObjectSource(obj, refusal);
+  }
+
+  const sha = rawSha?.toLowerCase();
   return {
     ...source,
     ...(ref !== undefined && { ref }),
