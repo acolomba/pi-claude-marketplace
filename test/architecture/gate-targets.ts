@@ -160,11 +160,11 @@ export const CREDENTIAL_LEAK_TARGETS = [
   "extensions/pi-claude-marketplace/orchestrators/auth-host.ts",
   "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts",
   "extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts",
-  // AUTH-09: buildAuthCallbacks and its three hookDebugLog calls live in this
-  // module, not in platform/git.ts, so a scan aimed only at git.ts would pass
-  // over the credential-adjacent logging. Appended last so no existing
-  // positional binding in no-credential-leak.test.ts is re-aimed.
-  "extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts",
+  // AUTH-09, D-SG-14: the one-shot helper writes the token a Device Flow
+  // sign-in returned to a file for one git retry. It took the slot of the
+  // in-process auth-callback module (SG-TRN-01), so no existing positional
+  // binding in no-credential-leak.test.ts is re-aimed.
+  "extensions/pi-claude-marketplace/platform/git-one-shot-credential.ts",
   // D-PL5-07: the hosted catalog download, which must send no header,
   // credential, or cookie. Appended last for the reason given above.
   "extensions/pi-claude-marketplace/platform/hosted-manifest-fetch.ts",

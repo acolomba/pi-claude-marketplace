@@ -507,15 +507,13 @@ test("D-75-01 guard: the component-level ` (unsupported)` hook-event suffix surv
   );
 });
 
-test("D-75-01 guard: overwrite `force: true` semantics survive (rm / writeRef / staging)", () => {
+test("D-75-01 guard: overwrite `force: true` semantics survive (rm / staging)", () => {
   // act
-  // node-fs `rm({ force: true })` and isomorphic-git `writeRef({ force: true })`
-  // are a DIFFERENT `force` than the degrade flag; they must stay byte-identical.
+  // node-fs `rm({ force: true })` is a DIFFERENT `force` than the degrade flag;
+  // it must stay byte-identical. The git ref-write homonym left with the last
+  // `writeRef` call, when D-SG-10 replaced the in-place refresh.
   const rmForce = filesMatching(/force:\s*true/, EXT_SOURCES).filter((f) =>
     f.includes("/bridges/"),
-  );
-  const gitForce = filesContaining("force", EXT_SOURCES).filter((f) =>
-    f.endsWith("platform/git.ts"),
   );
   // The agents commit's overwrite gate (`commitPreparedAgents`'s `force` option, read as
   // `options?.force`; RINST-01, D-18-15).
@@ -527,10 +525,6 @@ test("D-75-01 guard: overwrite `force: true` semantics survive (rm / writeRef / 
   assert.ok(
     rmForce.length > 0,
     "the bridge staging `force: true` overwrite must survive (an over-rename would corrupt it)",
-  );
-  assert.ok(
-    gitForce.length > 0,
-    "the isomorphic-git `writeRef` force semantics in platform/git.ts must survive",
   );
   assert.ok(
     stageForce.length > 0,

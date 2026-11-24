@@ -616,14 +616,6 @@ export class StoredCredentialRejectedError extends Error {
   }
 }
 
-/** IN-03: the HTTP client in `platform/git.ts` met an eleventh consecutive redirect. */
-export class TooManyRedirectsError extends Error {
-  constructor() {
-    super("too many redirects");
-    this.name = "TooManyRedirectsError";
-  }
-}
-
 /**
  * D-PL5-07 / D-PL5-10: the host answered a hosted catalog download with a
  * status that is not 2xx. `code` and `data.statusCode` have the shape of an

@@ -54,7 +54,6 @@ import {
   StateLockCompromisedError,
   StateLockHeldError,
   StoredCredentialRejectedError,
-  TooManyRedirectsError,
   UnreadableSourceCloneError,
   UnremovableLeftoverCloneError,
   UnsupportedSourceError,
@@ -1516,28 +1515,6 @@ describe("StoredCredentialRejectedError", () => {
     assert.deepStrictEqual(
       { message: error.message, cause: error.cause },
       { message: "git.example.com rejected the stored credential", cause: failure },
-    );
-  });
-});
-
-describe("TooManyRedirectsError", () => {
-  test("reports the redirect cap", () => {
-    // arrange
-    const expectedError = {
-      name: "TooManyRedirectsError",
-      message: "too many redirects",
-      cause: undefined,
-    };
-
-    // act
-    const error = new TooManyRedirectsError();
-
-    // assert
-    assert.ok(error instanceof TooManyRedirectsError);
-    assert.ok(error instanceof Error);
-    assert.deepStrictEqual(
-      { name: error.name, message: error.message, cause: error.cause },
-      expectedError,
     );
   });
 });

@@ -22,7 +22,6 @@ export interface GitOpsFakeOptions {
     readonly sourceDir: string;
   };
   readonly cloneError?: Error;
-  readonly fetchError?: Error;
   readonly checkoutError?: Error;
   readonly resolveRemoteRefError?: Error;
   readonly listRemotesResult?: ListRemotesResult;
@@ -42,23 +41,11 @@ export interface GitOpsFakeCalls {
     readonly noCheckout?: boolean;
     readonly auth?: GitAuthBundle;
   }>;
-  readonly fetch: Array<{
-    readonly dir: string;
-    readonly remote?: string;
-    readonly ref?: string;
-    readonly tags?: boolean;
-    readonly auth?: GitAuthBundle;
-  }>;
   readonly fetchCommit: Array<{
     readonly dir: string;
     readonly sha: string;
     readonly ref?: string;
     readonly auth?: GitAuthBundle;
-  }>;
-  readonly forceUpdateRef: Array<{
-    readonly dir: string;
-    readonly ref: string;
-    readonly value: string;
   }>;
   readonly checkout: Array<{
     readonly dir: string;
@@ -66,7 +53,6 @@ export interface GitOpsFakeCalls {
     readonly fromCopiedGitDir?: boolean;
   }>;
   readonly resolveRef: Array<{ readonly dir: string; readonly ref: string }>;
-  readonly currentBranch: Array<{ readonly dir: string }>;
   readonly resolveRemoteRef: Array<{
     readonly url: string;
     readonly ref?: string;
@@ -124,14 +110,6 @@ function snapshotCloneCall(
   return auth === undefined ? snapshot : { ...snapshot, auth };
 }
 
-function snapshotFetchCall(
-  options: Parameters<GitOps["fetch"]>[0],
-): GitOpsFakeCalls["fetch"][number] {
-  const { auth, ...dataOptions } = options;
-  const snapshot = structuredClone(dataOptions);
-  return auth === undefined ? snapshot : { ...snapshot, auth };
-}
-
 function snapshotFetchCommitCall(
   options: Parameters<GitOps["fetchCommit"]>[0],
 ): GitOpsFakeCalls["fetchCommit"][number] {
@@ -166,12 +144,9 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
   files.set(`${worktreeDir}/README.md`, "# local\n");
   const calls: GitOpsFakeCalls = {
     clone: [],
-    fetch: [],
     fetchCommit: [],
-    forceUpdateRef: [],
     checkout: [],
     resolveRef: [],
-    currentBranch: [],
     resolveRemoteRef: [],
   };
   const state: GitOpsFakeState = {
@@ -229,17 +204,6 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
         updateWorktree(cloneOptions.dir, remoteHead);
       }
     },
-    async fetch(fetchOptions) {
-      calls.fetch.push(snapshotFetchCall(fetchOptions));
-      if (options.fetchError !== undefined) {
-        throw options.fetchError;
-      }
-
-      await Promise.resolve();
-      const remote = fetchOptions.remote ?? "origin";
-      const ref = fetchOptions.ref ?? "main";
-      state.localRefs[`refs/remotes/${remote}/${ref}`] = state.remoteRefs[ref] ?? remoteHead;
-    },
     // SG-TRN-02: a commit the fake remote holds becomes a local ref of the
     // clone; any other commit fails the fetch as `commit-missing`.
     async fetchCommit(fetchOptions) {
@@ -254,11 +218,6 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
       }
 
       state.localRefs[fetchOptions.sha] = fetchOptions.sha;
-    },
-    async forceUpdateRef(updateOptions) {
-      calls.forceUpdateRef.push(structuredClone(updateOptions));
-      await Promise.resolve();
-      state.localRefs[updateOptions.ref] = updateOptions.value;
     },
     async checkout(checkoutOptions) {
       calls.checkout.push(structuredClone(checkoutOptions));
@@ -298,11 +257,6 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
       }
 
       return state.localRefs[resolveOptions.ref];
-    },
-    async currentBranch(branchOptions) {
-      calls.currentBranch.push(structuredClone(branchOptions));
-      await Promise.resolve();
-      return state.branch;
     },
     async resolveRemoteRef(resolveOptions) {
       calls.resolveRemoteRef.push(snapshotRemoteRefCall(resolveOptions));

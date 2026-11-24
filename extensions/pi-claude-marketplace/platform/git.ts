@@ -2,72 +2,50 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import * as git from "isomorphic-git";
-import nodeHttpClient from "isomorphic-git/http/node";
-
 import { hookDebugLog } from "../shared/debug-log.ts";
 import {
-  CrossOriginChallengeError,
   FetchedUrlCause,
   GitCommandError,
   StoredCredentialRejectedError,
-  TooManyRedirectsError,
 } from "../shared/errors.ts";
 import { gitHubInsteadOfPairs, gitHubWireUrl } from "../shared/github-base-url.ts";
 
-import { buildAuthCallbacks } from "./git-auth-callbacks.ts";
 import { withOneShotCredential } from "./git-one-shot-credential.ts";
 import { NODE_GIT_PROCESS } from "./git-process.ts";
 import { gitTimeoutMs } from "./git-timeout.ts";
 
-import type { BuildAuthCallbacksOpts } from "./git-auth-callbacks.ts";
+import type { GitAuthBundle } from "./git-credential.ts";
 import type { GitProcess, GitRequest, GitResult } from "./git-process.ts";
-import type { GitHttpRequest, GitHttpResponse, HttpClient } from "isomorphic-git/http/node";
 
 /**
- * platform/git.ts -- isomorphic-git wrapper (D-18, D-19, D-20).
+ * platform/git.ts -- the git surface of the extension (D-18, D-19, D-20).
  *
- * D-SG-01 (reverses D-21): the network verbs `clone`, `fetch`,
- * `fetchCommit`, `resolveRemoteRef`, and `listRemoteTags` need system git.
- * Each first asks `platform/git-process.ts` for it, so with no usable git on
- * PATH they reject with that module's `git-missing` GitCommandError before
- * a request goes out (SG-PRC-06).
- *
- * SG-TRN-01: `clone`, `fetchCommit`, `resolveRemoteRef`, and `listRemoteTags`
- * send their requests with system git through `runRemote`, the one network
- * request path of this module: the network lane, the D-SG-13 limit, the
- * D-PL8-24 abort signal, and the D-SG-16 `insteadOf` pair. `fetch` still runs
- * in-process with `isomorphic-git` until the re-clone swap replaces D-14. `checkout`, `resolveRef`, and `listRemotes`
- * run system git through `NODE_GIT_PROCESS` on the local lane, which reaches
- * no transport. `resolveRef` answers undefined for a ref that names no commit, and
- * `resolveRemoteRef` for a ref the remote does not advertise. The other local
- * verbs still run in-process with pure-JS `isomorphic-git` and need no git, so
- * a path-source marketplace still reads its own release tags without one
- * (TAGS-01). Each
- * system-git function takes the git process as a defaulted last parameter,
- * and every request it sends takes its limit from `gitTimeoutMs()` (D-SG-13).
- *
- * Pins `fs` (Node's built-in) and `http` so the marketplace orchestrators
- * don't thread them through every call. `http` is the module-private client
- * below: it sends each hop through `isomorphic-git/http/node` and follows
- * redirects itself, so a credential never reaches another origin (GAUTH-06).
+ * SG-TRN-01, D-SG-01 (reverses D-21): every operation runs system git
+ * through `platform/git-process.ts`, the one git transport. The network
+ * verbs `clone`, `fetchCommit`, `resolveRemoteRef`, and `listRemoteTags`
+ * send their requests through `runRemote`, the one network request path of
+ * this module: the network lane, the D-SG-13 limit, the D-PL8-24 abort
+ * signal, the D-SG-16 `insteadOf` pair, and the D-SG-14 retry. With no
+ * usable git on PATH they reject with the git process module's `git-missing`
+ * GitCommandError before a request goes out (SG-PRC-06). `checkout`,
+ * `resolveRef`, `listLocalTags`, and `listRemotes` run on the local lane,
+ * which reaches no transport. `resolveRef` answers undefined for a ref that
+ * names no commit, and `resolveRemoteRef` for a ref the remote does not
+ * advertise. Each function takes the git process as a defaulted last
+ * parameter, and every request it sends takes its limit from
+ * `gitTimeoutMs()` (D-SG-13).
  *
  * NOT exposed:
  *   - sparse checkout (PRD §11 deferred)
  *   - submodules (a clone passes `--no-recurse-submodules`, C5)
- *   - custom auth surface beyond the optional `opts.auth` bundle
- *     (`platform/git-auth-callbacks.ts::buildAuthCallbacks` + the
- *     `FetchOptions.auth?` ledge; the GitHub Device Flow orchestrator wires
- *     it at the call sites). When `opts.auth` is omitted, fetch behaves as
- *     the public-only path.
+ *   - an auth surface beyond the optional `opts.auth` bundle
+ *     (`platform/git-credential.ts::GitAuthBundle`). git asks the user's
+ *     credential helpers itself; the bundle decides what an auth failure
+ *     leads to, and an omitted bundle is the public-only path.
  *
- * The wrapper is the canonical platform-git surface; the optional-auth
- * callbacks are consumed by isomorphic-git's onAuth / onAuthFailure hooks.
- *
- * D-PL8-24: `runWithGitAbortSignal` runs a call inside an abort scope. When
- * its signal aborts, `http` stops the hop in flight and the response body
- * being read, so the network call fails like a network drop mid-request.
- * Local operations do not read the scope.
+ * D-PL8-24: `runWithGitAbortSignal` runs a call inside an abort scope. Each
+ * network request the call sends carries the scope's signal, so an abort
+ * stops the git command in flight.
  */
 
 export interface CloneOptions {
@@ -108,23 +86,7 @@ export interface CloneOptions {
    * GAUTH-04). A public clone never fails on auth, so the bundle is not
    * consulted.
    */
-  auth?: BuildAuthCallbacksOpts;
-}
-
-export interface FetchOptions {
-  /**
-   * Optional auth bundle. Same shape as `CloneOptions.auth`;
-   * fetch() builds the callbacks when present and behaves as the
-   * public-only path when omitted.
-   */
-  auth?: BuildAuthCallbacksOpts;
-  dir: string;
-  /** Default "origin". */
-  remote?: string;
-  /** Optional ref to fetch. */
-  ref?: string;
-  /** INR-06: also fetch tags (isomorphic-git fetches only branches by default). */
-  tags?: boolean;
+  auth?: GitAuthBundle;
 }
 
 export interface FetchCommitOptions {
@@ -141,7 +103,7 @@ export interface FetchCommitOptions {
    * Optional auth bundle. git asks the user's credential helpers itself; the
    * bundle decides what an auth failure of a rung leads to (D-SG-14, GAUTH-04).
    */
-  auth?: BuildAuthCallbacksOpts;
+  auth?: GitAuthBundle;
 }
 
 export interface CheckoutOptions {
@@ -151,9 +113,10 @@ export interface CheckoutOptions {
   /**
    * D-SG-11, SG-MIG-01: set true when `dir/.git` is a copy of another clone's
    * git directory. The checkout then first unsets `core.symlinks`,
-   * `core.ignorecase`, and `core.filemode` in the copy's config, the keys an
-   * `isomorphic-git` clone carries, so git decides them for this machine as
-   * it does for a fresh clone. No key is written (D-SG-12).
+   * `core.ignorecase`, and `core.filemode` in the copy's config, the keys a
+   * clone made by an earlier version of this extension carries, so git decides
+   * them for this machine as it does for a fresh clone. No key is written
+   * (D-SG-12).
    */
   fromCopiedGitDir?: boolean;
 }
@@ -177,7 +140,7 @@ export interface ResolveRemoteRefOptions {
    * user's credential helpers itself; the bundle decides what an auth failure
    * of the request leads to (PROV-03).
    */
-  auth?: BuildAuthCallbacksOpts;
+  auth?: GitAuthBundle;
 }
 
 export interface ListRemoteTagsOptions {
@@ -187,7 +150,7 @@ export interface ListRemoteTagsOptions {
    * Optional auth bundle. Same shape as `CloneOptions.auth`; it maps an auth
    * failure of the listing as it does for `resolveRemoteRef` (RESV-03).
    */
-  auth?: BuildAuthCallbacksOpts;
+  auth?: GitAuthBundle;
 }
 
 /** One advertised tag, resolved to the object the tag names. */
@@ -203,16 +166,6 @@ export interface RemoteTag {
 
 export interface ListLocalTagsOptions {
   /** Working-tree directory of a local repository. */
-  dir: string;
-}
-
-export interface ForceUpdateRefOptions {
-  dir: string;
-  ref: string;
-  value: string;
-}
-
-export interface CurrentBranchOptions {
   dir: string;
 }
 
@@ -239,277 +192,17 @@ export type ListRemotesResult =
   | { readonly kind: "permission-denied" }
   | { readonly kind: "unreadable" };
 
-/** The redirect cap of `simple-get`, which `http` keeps. */
-const MAX_REDIRECTS = 10;
-
-/**
- * WR-03: the only headers a hop keeps when its origin differs from the
- * original request's. isomorphic-git sets `accept`, `content-type` and
- * `git-protocol`; `simple-get` sets `accept-encoding` and `content-length`.
- */
-const CROSS_ORIGIN_HEADERS: ReadonlySet<string> = new Set([
-  "accept",
-  "accept-encoding",
-  "content-length",
-  "content-type",
-  "git-protocol",
-  "user-agent",
-]);
-
-/** Headers that describe a request body; they go with the body. */
-const BODY_HEADERS: ReadonlySet<string> = new Set(["content-length", "content-type"]);
-
-/** Redirect statuses on which a POST is re-sent as a GET. */
-const POST_TO_GET_STATUSES: ReadonlySet<number> = new Set([301, 302]);
-
-/** Q-02: the statuses on which isomorphic-git's `discover` calls `onAuth`. */
-const CHALLENGE_STATUSES: ReadonlySet<number> = new Set([401, 203]);
-
-/** What one hop of a redirect chain passes to the next. */
-interface RedirectChain {
-  /** `URL.origin` of the original request. */
-  readonly origin: string;
-  /** Redirects followed so far. */
-  readonly redirects: number;
-  /** Whether any hop so far was on another origin than the original request's. */
-  readonly leftOrigin: boolean;
-}
-
-function headersWhere(
-  headers: Record<string, string>,
-  keep: (lowerCaseName: string) => boolean,
-): Record<string, string> {
-  return Object.fromEntries(Object.entries(headers).filter(([name]) => keep(name.toLowerCase())));
-}
-
-/**
- * The target of a redirect, or undefined when `response` goes back to
- * isomorphic-git: a status outside 3xx, or a `Location` that is absent, empty
- * or not a URL (WR-04, IN-02).
- */
-function redirectTarget(response: GitHttpResponse, base: string): URL | undefined {
-  const { statusCode, headers = {} } = response;
-  const location = headers.location;
-  if (statusCode < 300 || statusCode >= 400 || location === undefined || location.trim() === "") {
-    return undefined;
-  }
-
-  return URL.canParse(location, base) ? new URL(location, base) : undefined;
-}
-
-/** Builds the request for the hop that `statusCode` redirected to `target`. */
-function nextHop(
-  hop: GitHttpRequest,
-  statusCode: number,
-  target: URL,
-  origin: string,
-): GitHttpRequest {
-  const { headers = {}, body, ...rest } = hop;
-  const kept =
-    target.origin === origin
-      ? headers
-      : headersWhere(headers, (name) => CROSS_ORIGIN_HEADERS.has(name));
-  if (hop.method === "POST" && POST_TO_GET_STATUSES.has(statusCode)) {
-    return {
-      ...rest,
-      url: target.href,
-      method: "GET",
-      headers: headersWhere(kept, (name) => !BODY_HEADERS.has(name)),
-    };
-  }
-
-  return { ...rest, url: target.href, headers: kept, ...(body !== undefined && { body }) };
-}
-
-/** Sends one hop; the abort scope may wrap it. */
-type HopSender = (hop: GitHttpRequest) => Promise<GitHttpResponse>;
-
 /** D-PL8-24: the abort signal of the call that runs in the current async context. */
 const gitAbortScope = new AsyncLocalStorage<AbortSignal>();
 
-/** D-PL8-24: signals whose abort cut off a request or a body read that had not settled. */
-const interruptedSignals = new WeakSet<AbortSignal>();
-
 /**
- * D-PL8-24: runs `run` in an abort scope. Each HTTP request that `run` makes
- * through this module rejects with `signal.reason` once `signal` aborts.
+ * D-PL8-24: runs `run` in an abort scope. Each network request that `run`
+ * sends through this module carries `signal`, so once it aborts the git
+ * command in flight stops and the request fails as aborted.
  */
 export function runWithGitAbortSignal<T>(signal: AbortSignal, run: () => Promise<T>): Promise<T> {
   return gitAbortScope.run(signal, run);
 }
-
-function sendPlainHop(hop: GitHttpRequest): Promise<GitHttpResponse> {
-  return nodeHttpClient.request({ ...hop, fetchOptions: { followRedirects: false } });
-}
-
-/**
- * Settles as `pending` does, or rejects with the abort reason when `signal`
- * aborts first, after `onAbort` has released what `pending` holds. The abort
- * listener is removed once `pending` settles. An abort that lands after
- * `pending` settled interrupts nothing and is ignored.
- */
-function raceAbort<T>(signal: AbortSignal, pending: Promise<T>, onAbort: () => void): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const abort = (): void => {
-      interruptedSignals.add(signal);
-      onAbort();
-      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the scope rejects with the reason its owner passed to abort(), as fetch does.
-      reject(signal.reason);
-    };
-
-    const removeAbortListener = (): void => {
-      signal.removeEventListener("abort", abort);
-    };
-
-    pending.then(removeAbortListener, removeAbortListener);
-    pending.then(resolve, reject);
-    if (signal.aborted) {
-      abort();
-      return;
-    }
-
-    signal.addEventListener("abort", abort, { once: true });
-  });
-}
-
-/** Ends a body that nobody reads any more; a failure to end it is of no use to anyone. */
-function endBody(body: AsyncIterableIterator<Uint8Array> | undefined): void {
-  Promise.resolve(body?.return?.()).catch(() => undefined);
-}
-
-/** A hop that the abort beat; a response that still arrives has its body ended. */
-function releaseLateHop(pending: Promise<GitHttpResponse>): void {
-  pending.then(
-    (late) => {
-      endBody(late.body);
-    },
-    () => undefined,
-  );
-}
-
-function abortableHopSender(signal: AbortSignal): HopSender {
-  return (hop) => {
-    signal.throwIfAborted();
-    const pending = sendPlainHop(hop);
-    return raceAbort(signal, pending, () => {
-      releaseLateHop(pending);
-    });
-  };
-}
-
-/** Reads `body` until `signal` aborts; the abort ends the body and rejects the read. */
-function abortableBody(
-  body: AsyncIterableIterator<Uint8Array>,
-  signal: AbortSignal,
-): AsyncIterableIterator<Uint8Array> {
-  const iterator: AsyncIterableIterator<Uint8Array> = {
-    next: () =>
-      raceAbort(signal, body.next(), () => {
-        endBody(body);
-      }),
-    [Symbol.asyncIterator]: () => iterator,
-  };
-  return iterator;
-}
-
-async function sendHop(
-  hop: GitHttpRequest,
-  chain: RedirectChain,
-  send: HopSender,
-): Promise<GitHttpResponse> {
-  const response = await send(hop);
-  const target = redirectTarget(response, hop.url);
-  if (target === undefined) {
-    if (chain.leftOrigin && CHALLENGE_STATUSES.has(response.statusCode)) {
-      await response.body?.return?.();
-      throw new CrossOriginChallengeError(new URL(hop.url).origin);
-    }
-
-    return response;
-  }
-
-  await response.body?.return?.();
-  if (chain.redirects === MAX_REDIRECTS) {
-    throw new TooManyRedirectsError();
-  }
-
-  return sendHop(
-    nextHop(hop, response.statusCode, target, chain.origin),
-    {
-      origin: chain.origin,
-      redirects: chain.redirects + 1,
-      leftOrigin: chain.leftOrigin || target.origin !== chain.origin,
-    },
-    send,
-  );
-}
-
-async function requestWithinOrigin(original: GitHttpRequest): Promise<GitHttpResponse> {
-  const chain: RedirectChain = {
-    origin: new URL(original.url).origin,
-    redirects: 0,
-    leftOrigin: false,
-  };
-  const signal = gitAbortScope.getStore();
-  if (signal === undefined) {
-    return sendHop(original, chain, sendPlainHop);
-  }
-
-  const response = await sendHop(original, chain, abortableHopSender(signal));
-  const { body } = response;
-  return body === undefined ? response : { ...response, body: abortableBody(body, signal) };
-}
-
-/**
- * The HTTP client every isomorphic-git call in this file uses (GAUTH-06).
- *
- * `simple-get@4.0.1`, under `isomorphic-git/http/node`, follows redirects on
- * its own and drops `authorization` and `cookie` only when the hostname
- * changes (node_modules/simple-get/index.js:55-60). This client sends each hop
- * with `followRedirects: false`, gets every 3xx back unchanged, and follows
- * the redirect itself.
- *
- * Origin rule (WR-03). The origin is the scheme, host and port as `URL.origin`
- * normalizes them, compared with the original request's. A hop on another
- * origin keeps only `accept`, `accept-encoding`, `content-length`,
- * `content-type`, `git-protocol` and `user-agent`. The credential, a cookie
- * and any header the credential brings stay behind. `onAuth` applies the same
- * normalization to the bound host. Each hop starts from the previous one, so a
- * header dropped once stays dropped, also after the chain returns to the
- * original origin.
- *
- * Challenges (Q-02). When a hop answers 401 or 203 after any hop of the chain
- * left the original origin, the client throws `CrossOriginChallengeError`
- * before isomorphic-git's auth loop sees the response. No credential is looked
- * up, evicted or minted for that server. git would ask its credential helper
- * for the target's own credential, but isomorphic-git calls `onAuth` only with
- * the original URL, so this stays the recorded DD-3 capability gap.
- *
- * Parity scope (IN-01). git follows a redirect only on its initial `info/refs`
- * request (`http.followRedirects=initial`) and sends later requests to the
- * redirected base URL. This client follows redirects on every request,
- * including the `git-upload-pack` POST, and isomorphic-git sends every request
- * to the original URL.
- *
- * The other redirect rules come from `simple-get`. After 10 redirects the next
- * one throws `TooManyRedirectsError` (IN-03). A 3xx whose `Location` is absent,
- * empty or not a URL is returned unchanged, and isomorphic-git raises
- * `HttpError` with the server's status (WR-04, IN-02). The body of a redirect
- * is discarded. A POST answered with 301 or 302 becomes a GET without its
- * body, `content-type` and `content-length`. A POST answered with 303, 307 or
- * 308 keeps its method, as `simple-get` does, although RFC 9110 section 15.4.4
- * makes a 303 a GET. It also keeps its body, where `simple-get` re-sends an
- * empty one. isomorphic-git's request bodies are arrays, so the same reference
- * sends the same bytes again.
- *
- * Abort scope (D-PL8-24). Inside `runWithGitAbortSignal`, a hop does not start
- * once the signal has aborted, a hop in flight rejects with the abort reason,
- * and a response that arrives after that has its body ended. Each read of the
- * final response body also races the signal; the abort ends the body, which
- * destroys its stream. A hop aborted before its response arrives keeps its
- * socket until the host answers or closes it.
- */
-const http: HttpClient = { request: requestWithinOrigin };
 
 /**
  * GHB-01: runs one network call. When the call sends `wireUrl` in place of the
@@ -517,6 +210,7 @@ const http: HttpClient = { request: requestWithinOrigin };
  * `FetchedUrlCause` naming `wireUrl`, so a wrong base shows in the failure
  * output. The code-bearing error stays at depth 0 for the failure classifiers.
  * An unrewritten call runs with no `try` and its failure is unchanged (GHB-04).
+ * A `git-missing` failure fetched nothing, so it gains no cause (SG-PRC-06).
  */
 async function withFetchedUrlCause<T>(
   wireUrl: string,
@@ -531,7 +225,12 @@ async function withFetchedUrlCause<T>(
     return await call();
   } catch (error: unknown) {
     // A rejection that is not a writable Error passes through unchanged.
-    if (error instanceof Error && error.cause === undefined && Object.isExtensible(error)) {
+    if (
+      error instanceof Error &&
+      error.cause === undefined &&
+      Object.isExtensible(error) &&
+      !isGitMissing(error)
+    ) {
       error.cause = new FetchedUrlCause(wireUrl);
     }
 
@@ -539,31 +238,9 @@ async function withFetchedUrlCause<T>(
   }
 }
 
-/**
- * D-PL8-24: runs one network call and fails it with the abort reason when the
- * scope's signal cut the call off. isomorphic-git reads a failed
- * ref-advertisement body as the end of the list, so without this check an
- * interrupted listing could return a cut-short ref list as a success. A call
- * that settled before the abort reached it is returned or thrown as it settled.
- */
-async function networkCall<T>(wireUrl: string, url: string, call: () => Promise<T>): Promise<T> {
-  const signal = gitAbortScope.getStore();
-  let result: T;
-  try {
-    result = await withFetchedUrlCause(wireUrl, url, call);
-  } catch (error: unknown) {
-    if (signal !== undefined && interruptedSignals.has(signal)) {
-      signal.throwIfAborted();
-    }
-
-    throw error;
-  }
-
-  if (signal !== undefined && interruptedSignals.has(signal)) {
-    signal.throwIfAborted();
-  }
-
-  return result;
+/** Whether `error` is the git process module's report that it found no git. */
+function isGitMissing(error: Error): boolean {
+  return error instanceof GitCommandError && error.kind === "git-missing";
 }
 
 /** A remote request as `runRemote` built it: its config pairs are always present. */
@@ -583,13 +260,14 @@ interface RemoteRequest {
    */
   readonly url: string;
   /** The caller's auth bundle, which decides what an auth failure leads to. */
-  readonly auth?: BuildAuthCallbacksOpts | undefined;
+  readonly auth?: GitAuthBundle | undefined;
 }
 
 /**
- * SG-TRN-01: the one network request path. It asks for git first, so a
- * missing git rejects with the lookup's own error and no cause (SG-PRC-06).
- * Then it runs `remote` on the network lane with the limit of
+ * SG-TRN-01: the one network request path. It runs `remote` once on the
+ * network lane, and that run finds git itself: a missing git fails it as
+ * `git-missing` with no cause (SG-PRC-06), and no separate lookup runs first
+ * (IN-01). The run has the limit of
  * `gitTimeoutMs()` read for this command (D-SG-13), the signal of the abort
  * scope it runs in (D-PL8-24), and the D-SG-16 pair of
  * `gitHubInsteadOfPairs(remote.url)`, which throws `InvalidGitHubBaseUrlError`
@@ -598,7 +276,6 @@ interface RemoteRequest {
  * git fetched (GHB-01).
  */
 async function runRemote(remote: RemoteRequest, gitProcess: GitProcess): Promise<GitResult> {
-  await gitProcess.locate();
   const config = gitHubInsteadOfPairs(remote.url);
   const signal = gitAbortScope.getStore();
   const request: RemoteGitRequest = {
@@ -631,7 +308,7 @@ async function runRemote(remote: RemoteRequest, gitProcess: GitProcess): Promise
  */
 async function runWithAuthBundle(
   request: RemoteGitRequest,
-  auth: BuildAuthCallbacksOpts | undefined,
+  auth: GitAuthBundle | undefined,
   gitProcess: GitProcess,
 ): Promise<GitResult> {
   try {
@@ -668,7 +345,7 @@ async function runWithAuthBundle(
  */
 async function retryAfterSignIn(
   request: RemoteGitRequest,
-  auth: Extract<BuildAuthCallbacksOpts, { kind: "device-flow" }>,
+  auth: Extract<GitAuthBundle, { kind: "device-flow" }>,
   failure: GitCommandError,
   gitProcess: GitProcess,
 ): Promise<GitResult> {
@@ -739,44 +416,6 @@ export async function clone(
       auth: opts.auth,
     },
     gitProcess,
-  );
-}
-
-/**
- * Fetches `opts.remote` (default "origin") into its remote-tracking refs.
- *
- * GHB-01: the remote's recorded url is read and sent as
- * `shared/github-base-url.ts::gitHubWireUrl` of it, never as recorded. A
- * rewritten url goes to isomorphic-git as an explicit `url` beside the remote
- * name, so the tracking refs update and `.git/config` keeps the canonical url.
- */
-export async function fetch(opts: FetchOptions): Promise<void> {
-  await NODE_GIT_PROCESS.locate();
-  const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
-  const remote = opts.remote ?? "origin";
-  const recordedUrl: unknown = await git.getConfig({
-    fs,
-    dir: opts.dir,
-    path: `remote.${remote}.url`,
-  });
-  // A remote with no recorded url sends nothing new, so isomorphic-git raises
-  // its own MissingParameterError.
-  const url = typeof recordedUrl === "string" ? recordedUrl : "";
-  const wireUrl = gitHubWireUrl(url);
-  await networkCall(wireUrl, url, () =>
-    git.fetch({
-      fs,
-      http,
-      dir: opts.dir,
-      ...(opts.remote !== undefined && { remote: opts.remote }),
-      ...(wireUrl !== url && { remote, url: wireUrl }),
-      ...(opts.ref !== undefined && { ref: opts.ref }),
-      ...(opts.tags !== undefined && { tags: opts.tags }),
-      ...(authCbs !== undefined && {
-        onAuth: authCbs.onAuth,
-        onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
-      }),
-    }),
   );
 }
 
@@ -863,9 +502,9 @@ async function isShallowClone(dir: string, gitProcess: GitProcess): Promise<bool
 }
 
 /**
- * D-SG-11: the keys an `isomorphic-git` clone writes into `.git/config`
- * (03-EVIDENCE Q5). A copy that keeps `core.symlinks=false` would check a
- * symlink out as a text file.
+ * D-SG-11, SG-MIG-01: the keys a clone made by an earlier version of this
+ * extension wrote into `.git/config`. A copy that keeps `core.symlinks=false`
+ * would check a symlink out as a text file.
  */
 const COPIED_CLONE_KEYS = ["core.symlinks", "core.ignorecase", "core.filemode"] as const;
 
@@ -1130,47 +769,6 @@ async function localTagCommit(
 }
 
 /**
- * D-14 step 2 (symbolic HEAD): force-set a local ref to a given SHA.
- * Wraps isomorphic-git's `writeRef({ force: true })`. The
- * orchestrators call this via the GitOps interface; exposing it here
- * keeps orchestrator-tier code from importing isomorphic-git directly
- * (D-13).
- *
- * Source: node_modules/isomorphic-git/index.d.ts -- writeRef({ fs, dir,
- * ref, value, force, symbolic? }).
- */
-export async function forceUpdateRef(opts: ForceUpdateRefOptions): Promise<void> {
-  await git.writeRef({
-    fs,
-    dir: opts.dir,
-    ref: opts.ref,
-    value: opts.value,
-    force: true,
-  });
-}
-
-/**
- * Return the symbolic name of the currently checked-out branch (e.g.
- * "main"), or undefined when HEAD is detached. Wraps isomorphic-git's
- * `currentBranch({ fs, dir })`.
- *
- * CR-01: required by the D-14 default-branch path so the orchestrator
- * can `forceUpdateRef("refs/heads/<branch>", remoteSha)` instead of
- * mistakenly using the HEAD SHA as a ref name (which produced a
- * meaningless `refs/<40-hex>` write).
- *
- * Source: node_modules/isomorphic-git/index.d.ts:1283-1289 currentBranch
- * returns Promise<string | void>; we normalize void -> undefined.
- */
-export async function currentBranch(opts: CurrentBranchOptions): Promise<string | undefined> {
-  // isomorphic-git's currentBranch returns Promise<string | void>; the
-  // void variant carries no string, so the ?? funnel normalizes to
-  // undefined.
-  const branch = await git.currentBranch({ fs, dir: opts.dir });
-  return branch ?? undefined;
-}
-
-/**
  * D-3-03 / MA-12 / MA-13: report whether `dir` is a readable git clone and,
  * if so, what its `origin` remote names -- WITHOUT throwing. A caller here
  * (`marketplace add`'s leftover-clone recognition) must tell "this is
@@ -1242,15 +840,12 @@ export async function listRemotes(
 }
 
 /**
- * Credential shape consumed by isomorphic-git's onAuth / onAuthFailure callbacks.
- * Matches isomorphic-git's GitAuth; re-exported here so consumers
- * import from platform/git.ts (D-13 boundary) rather than
- * directly from isomorphic-git.
+ * A credential as git's credential helpers store it: the `username` and
+ * `password` attributes of `git credential` (D-31). The keychain protocol of
+ * `platform/git-credential.ts` and the one-shot helper of a D-SG-14 retry
+ * read and write this shape.
  */
 export interface GitCredentials {
   username?: string;
   password?: string;
-  headers?: Record<string, string>;
-  /** Set true to throw UserCanceledError instead of HttpError. */
-  cancel?: boolean;
 }

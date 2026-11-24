@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { EventEmitter } from "node:events";
 import * as fs from "node:fs";
 import {
   cp,
@@ -12,23 +11,15 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
-import nodeHttp from "node:http";
-import https from "node:https";
 import * as path from "node:path";
-import { PassThrough, Readable } from "node:stream";
 import { describe, test, type TestContext } from "node:test";
 
-import * as git from "isomorphic-git";
-import http from "isomorphic-git/http/node";
 import { mock, verify } from "strong-mock";
 
 import {
   checkout,
   clone,
-  currentBranch,
-  fetch,
   fetchCommit,
-  forceUpdateRef,
   listRemotes,
   listLocalTags,
   listRemoteTags,
@@ -38,13 +29,11 @@ import {
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 import { getAgentDir } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import {
-  CrossOriginChallengeError,
   DeviceFlowUnavailableError,
   FetchedUrlCause,
   GitCommandError,
   InvalidGitHubBaseUrlError,
   StoredCredentialRejectedError,
-  TooManyRedirectsError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { HttpsGitHost } from "../../features/lib/https-git-host/server.ts";
 import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
@@ -70,10 +59,9 @@ import type {
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 import type { CredentialOpsFake } from "./credential-ops-fake.ts";
 import type { GitOpsContractParticipant } from "./git-ops-contract.ts";
-import type { GitHttpRequest, GitHttpResponse } from "isomorphic-git/http/node";
 
-// The authentication-callback protocol lives in platform/git-auth-callbacks.ts;
-// git.ts imports the factory rather than publishing it. Restoring the export
+// SG-TRN-01: the in-process authentication callbacks left with the second git
+// transport; git asks its credential helpers itself. Restoring the export
 // makes the `satisfies` resolve and turns the directive below into an unused
 // one (TS2578).
 // @ts-expect-error platform/git.ts does not expose the auth-callback factory
@@ -95,258 +83,9 @@ const GITHUB_TOOLS_URL = "https://github.com/acme/tools.git";
 const OTHER_HOST = "other.example.invalid";
 const OTHER_REMOTE_URL = `https://${OTHER_HOST}/owner/repo.git`;
 const OID_MAIN = "1111111111111111111111111111111111111111";
-const OID_DEV = "2222222222222222222222222222222222222222";
 const OID_TAG = "3333333333333333333333333333333333333333";
 const OID_PEELED = "4444444444444444444444444444444444444444";
 const OID_LIGHTWEIGHT = "5555555555555555555555555555555555555555";
-const FLUSH = Buffer.from("0000", "utf8");
-
-const FULL_ADVERTISEMENT = [
-  `${OID_MAIN} HEAD symref-target:refs/heads/main`,
-  `${OID_MAIN} refs/heads/main`,
-  `${OID_DEV} refs/heads/dev`,
-  `${OID_TAG} refs/tags/v1.0.0 peeled:${OID_PEELED}`,
-] as const;
-
-interface RecordedHttpRequest {
-  readonly url: string;
-  readonly method: string | undefined;
-  readonly headers: Readonly<Record<string, string>>;
-  readonly body: Buffer;
-}
-
-function packet(payload: string): Buffer {
-  const body = Buffer.from(payload, "utf8");
-  return packetBytes(body);
-}
-
-function packetBytes(body: Uint8Array): Buffer {
-  return Buffer.concat([
-    Buffer.from((body.length + 4).toString(16).padStart(4, "0"), "utf8"),
-    body,
-  ]);
-}
-
-/**
- * Removes the `agent=` capability from a pkt-line body.
- *
- * isomorphic-git advertises its own package version in that capability, so a
- * byte-exact body assertion would otherwise pin these tests to whichever
- * version happens to be installed.
- */
-function withoutAgentPacket(body: Buffer): Buffer {
-  const kept: Buffer[] = [];
-  let offset = 0;
-
-  while (offset + 4 <= body.length) {
-    const declared = Number.parseInt(body.toString("utf8", offset, offset + 4), 16);
-    // A flush ("0000") and a delimiter ("0001") declare no payload of their own.
-    const size = declared < 4 ? 4 : declared;
-    const line = body.subarray(offset, offset + size);
-
-    if (!line.toString("utf8", 4).startsWith("agent=")) {
-      kept.push(line);
-    }
-
-    offset += size;
-  }
-
-  return Buffer.concat(kept);
-}
-
-function advertisementBody(): Buffer {
-  return Buffer.concat([
-    packet("# service=git-upload-pack\n"),
-    FLUSH,
-    packet("version 2\n"),
-    packet("ls-refs\n"),
-    packet("fetch\n"),
-    FLUSH,
-  ]);
-}
-
-function refsBody(refs: readonly string[]): Buffer {
-  return Buffer.concat([...refs.map((ref) => packet(`${ref}\n`)), FLUSH]);
-}
-
-function uploadPackAdvertisementBody(oid: string, tag?: string): Buffer {
-  return Buffer.concat([
-    packet("# service=git-upload-pack\n"),
-    FLUSH,
-    packet(`${oid} HEAD\0multi_ack_detailed side-band-64k ofs-delta symref=HEAD:refs/heads/main\n`),
-    packet(`${oid} refs/heads/main\n`),
-    ...(tag === undefined ? [] : [packet(`${oid} refs/tags/${tag}\n`)]),
-    FLUSH,
-  ]);
-}
-
-/** A protocol version 1 `git-upload-pack` result: a NAK, then `packfile` on side band 1. */
-function packResultBody(packfile: Buffer): Buffer {
-  return Buffer.concat([
-    packet("NAK\n"),
-    packetBytes(Buffer.concat([Buffer.from([1]), packfile])),
-    FLUSH,
-  ]);
-}
-
-async function collectBody(body: GitHttpRequest["body"]): Promise<Buffer> {
-  const chunks: Uint8Array[] = [];
-  if (body !== undefined) {
-    for await (const chunk of body) {
-      chunks.push(chunk);
-    }
-  }
-
-  return Buffer.concat(chunks);
-}
-
-function response(
-  url: string,
-  statusCode: number,
-  statusMessage: string,
-  contentType: string,
-  bytes: Buffer,
-): GitHttpResponse {
-  async function* body(): AsyncIterableIterator<Uint8Array> {
-    await Promise.resolve();
-    yield Uint8Array.from(bytes);
-  }
-
-  return {
-    url,
-    statusCode,
-    statusMessage,
-    headers: { "content-type": contentType },
-    body: body(),
-  };
-}
-
-function installRemoteTransport(
-  t: TestContext,
-  refs: readonly string[],
-  options: { readonly challengeOnce?: boolean; readonly remoteUrl?: string } = {},
-): RecordedHttpRequest[] {
-  const requests: RecordedHttpRequest[] = [];
-  const remoteUrl = options.remoteUrl ?? REMOTE_URL;
-  let challenged = false;
-
-  t.mock.method(http, "request", async (request: GitHttpRequest): Promise<GitHttpResponse> => {
-    const body = await collectBody(request.body);
-    requests.push({
-      url: request.url,
-      method: request.method,
-      headers: { ...(request.headers ?? {}) },
-      body: withoutAgentPacket(body),
-    });
-
-    const infoUrl = `${remoteUrl}/info/refs?service=git-upload-pack`;
-    if (request.url === infoUrl && request.method === "GET") {
-      if (options.challengeOnce === true && !challenged) {
-        challenged = true;
-        return response(request.url, 401, "Unauthorized", "text/plain", Buffer.alloc(0));
-      }
-
-      return response(
-        request.url,
-        200,
-        "OK",
-        "application/x-git-upload-pack-advertisement",
-        advertisementBody(),
-      );
-    }
-
-    if (request.url === `${remoteUrl}/git-upload-pack` && request.method === "POST") {
-      return response(
-        request.url,
-        200,
-        "OK",
-        "application/x-git-upload-pack-result",
-        refsBody(refs),
-      );
-    }
-
-    throw new Error(`unplanned Git HTTP request: ${request.method ?? "undefined"} ${request.url}`);
-  });
-
-  return requests;
-}
-
-function installFailedDiscoveryTransport(
-  t: TestContext,
-  options: { readonly challengeOnce?: boolean } = {},
-): RecordedHttpRequest[] {
-  const requests: RecordedHttpRequest[] = [];
-  let challenged = false;
-
-  t.mock.method(http, "request", async (request: GitHttpRequest): Promise<GitHttpResponse> => {
-    requests.push({
-      url: request.url,
-      method: request.method,
-      headers: { ...(request.headers ?? {}) },
-      body: await collectBody(request.body),
-    });
-
-    if (
-      request.url !== `${REMOTE_URL}/info/refs?service=git-upload-pack` ||
-      request.method !== "GET"
-    ) {
-      throw new Error(
-        `unplanned Git HTTP request: ${request.method ?? "undefined"} ${request.url}`,
-      );
-    }
-
-    if (options.challengeOnce === true && !challenged) {
-      challenged = true;
-      return response(request.url, 401, "Unauthorized", "text/plain", Buffer.alloc(0));
-    }
-
-    return response(request.url, 503, "Unavailable", "text/plain", Buffer.from("offline"));
-  });
-
-  return requests;
-}
-
-async function installRepositoryTransport(
-  t: TestContext,
-  repository: Awaited<ReturnType<typeof createGitTestRepository>>,
-  tag?: string,
-): Promise<void> {
-  const { oid, packfile } = await repository.pack();
-  const refs = [
-    `${oid} HEAD symref-target:refs/heads/main`,
-    `${oid} refs/heads/main`,
-    `${OID_TAG} refs/tags/v1.0.0 peeled:${oid}`,
-  ] as const;
-
-  t.mock.method(http, "request", async (request: GitHttpRequest): Promise<GitHttpResponse> => {
-    await collectBody(request.body);
-    const infoUrl = `${REMOTE_URL}/info/refs?service=git-upload-pack`;
-    if (request.url === infoUrl && request.method === "GET") {
-      const protocolV2 = request.headers?.["Git-Protocol"] === "version=2";
-      return response(
-        request.url,
-        200,
-        "OK",
-        "application/x-git-upload-pack-advertisement",
-        protocolV2 ? advertisementBody() : uploadPackAdvertisementBody(oid, tag),
-      );
-    }
-
-    if (request.url === `${REMOTE_URL}/git-upload-pack` && request.method === "POST") {
-      const protocolV2 = request.headers?.["Git-Protocol"] === "version=2";
-      return response(
-        request.url,
-        200,
-        "OK",
-        "application/x-git-upload-pack-result",
-        protocolV2 ? refsBody(refs) : packResultBody(packfile),
-      );
-    }
-
-    throw new Error(`unplanned Git HTTP request: ${request.method ?? "undefined"} ${request.url}`);
-  });
-}
-
 /**
  * Copies the `.git` of `dir` into a new directory, without its index, as the
  * clone cache's copy step does, and returns the new directory.
@@ -410,10 +149,9 @@ function setGitTimeoutVariable(t: TestContext, value: string): void {
 }
 
 /**
- * The real participant serves one repository two ways: system git, the clone
- * included, reaches it through a user config `insteadOf` whose base is its
- * local path (D-SG-16), and the in-process `fetch` reaches it through the
- * transport double, so no request leaves the machine.
+ * The real participant serves one repository to system git through a user
+ * config `insteadOf` whose base is its local path (D-SG-16), so no request
+ * leaves the machine.
  */
 async function createProductionGitOps(t: TestContext): Promise<GitOpsContractParticipant> {
   const remote = await createGitTestRepository(t, { boundary: "local" });
@@ -438,7 +176,6 @@ async function createProductionGitOps(t: TestContext): Promise<GitOpsContractPar
   await worktree.run("checkout", "-q", "-f", "main");
   await worktree.run("remote", "add", "origin", REMOTE_URL);
   const cloneDir = await createGitTestDirectory(t, { boundary: "local" });
-  await installRepositoryTransport(t, remote);
 
   return {
     gitOps: systemGitOps(systemGit),
@@ -484,8 +221,8 @@ async function shallowFileClone(t: TestContext): Promise<{
 }
 
 /**
- * SG-PRC-06: the lookup's own failure, unwrapped, so a missing git gets no
- * fetched-URL cause even when the GitHub base override rewrote the URL.
+ * SG-PRC-06: the git process module's own failure, unwrapped, so a missing git
+ * gets no fetched-URL cause even when the GitHub base override rewrote the URL.
  */
 function isGitMissingWithoutCause(error: unknown): boolean {
   assert.ok(error instanceof GitCommandError);
@@ -493,268 +230,6 @@ function isGitMissingWithoutCause(error: unknown): boolean {
   assert.strictEqual(error.message, "Git is required to install marketplaces.");
   assert.strictEqual(error.cause, undefined);
   return true;
-}
-
-/**
- * Points PATH at an empty directory for one test, so this process finds no
- * git. Build every fixture first: the fixtures run system git through PATH.
- * The restore is registered before PATH changes; the returned function
- * restores it early, and the registered restore then writes the same value.
- */
-async function withoutGitOnPath(t: TestContext): Promise<() => void> {
-  const directory = await createGitTestDirectory(t, { boundary: "local" });
-  const previous = process.env.PATH;
-  const restore = (): void => {
-    if (previous === undefined) {
-      delete process.env.PATH;
-    } else {
-      process.env.PATH = previous;
-    }
-  };
-
-  t.after(restore);
-  process.env.PATH = directory;
-  return restore;
-}
-
-function isExpectedDiscoveryError(error: unknown, caller: "git.fetch"): boolean {
-  assert.ok(error instanceof git.Errors.HttpError);
-  assert.strictEqual(error.caller, caller);
-  assert.deepStrictEqual(error.data, {
-    statusCode: 503,
-    statusMessage: "Unavailable",
-    response: "offline",
-  });
-  return true;
-}
-
-function expectedDiscoveryRequest(
-  headers: Readonly<Record<string, string>> = {},
-): RecordedHttpRequest {
-  return {
-    url: `${REMOTE_URL}/info/refs?service=git-upload-pack`,
-    method: "GET",
-    headers,
-    body: Buffer.alloc(0),
-  };
-}
-
-const INFO_REFS_PATH = "/info/refs?service=git-upload-pack";
-const BOUND_INFO_URL = `${REMOTE_URL}${INFO_REFS_PATH}`;
-const BOUND_UPLOAD_PACK_URL = `${REMOTE_URL}/git-upload-pack`;
-const RENAMED_REMOTE_URL = `https://${HOST}/renamed/repo.git`;
-const RENAMED_INFO_URL = `${RENAMED_REMOTE_URL}${INFO_REFS_PATH}`;
-const RENAMED_UPLOAD_PACK_URL = `${RENAMED_REMOTE_URL}/git-upload-pack`;
-const OTHER_PORT_INFO_URL = `https://${HOST}:8443/owner/repo.git${INFO_REFS_PATH}`;
-const OTHER_PORT_UPLOAD_PACK_URL = `https://${HOST}:8443/owner/repo.git/git-upload-pack`;
-const HTTP_SAME_HOST_UPLOAD_PACK_URL = `http://${HOST}/owner/repo.git/git-upload-pack`;
-const OTHER_HOST_UPLOAD_PACK_URL = `${OTHER_REMOTE_URL}/git-upload-pack`;
-const BASIC_CREDENTIAL = "Basic dXNlcjpzZWNyZXQ=";
-
-/** The options `simple-get` passes to the `request` function of `node:https` and `node:http`. */
-interface WireRequestOptions {
-  readonly protocol: string;
-  readonly hostname: string;
-  readonly port: string | null;
-  readonly path: string;
-  readonly method: string;
-  readonly headers: Readonly<Record<string, string | number>>;
-}
-
-/** One request as it reaches the socket. Node lower-cases every header name. */
-interface WireRequest {
-  readonly url: string;
-  readonly method: string;
-  readonly headers: Readonly<Record<string, string | number>>;
-  readonly body: Buffer;
-}
-
-/** The answer a wire double gives to one request. */
-interface WireResponse {
-  readonly statusCode: number;
-  readonly statusMessage: string;
-  readonly headers: Readonly<Record<string, string>>;
-  readonly body: Buffer;
-}
-
-/** A redirect case: what the redirect is about, and its `Location` header. */
-interface RedirectRow {
-  readonly kind: string;
-  readonly location: string;
-}
-
-/** A cross-origin redirect case, with the origin its `Location` names. */
-interface CrossOriginRedirectRow extends RedirectRow {
-  readonly origin: string;
-}
-
-/** How `git-upload-pack` is re-sent after its POST is redirected. */
-interface PostRedirectRow {
-  readonly title: string;
-  readonly statusCode: number;
-  readonly finalMethod: string;
-  /** Whether the re-sent request carries the original POST body. */
-  readonly keepsBody: boolean;
-  readonly finalContentHeaders: readonly string[];
-}
-
-/**
- * Replaces the socket door of both `node:https` and `node:http`.
- *
- * The real `simple-get`, `isomorphic-git/http/node` and isomorphic-git all
- * run, so every hop a redirect produces reaches `serve` as its own request.
- * `simple-get` picks the module by scheme, which is why both are replaced.
- */
-function installWireTransport(
-  t: TestContext,
-  serve: (request: WireRequest) => WireResponse,
-): WireRequest[] {
-  const requests: WireRequest[] = [];
-
-  function request(
-    options: WireRequestOptions,
-    onResponse: (response: Readable) => void,
-  ): EventEmitter {
-    const url = new URL(options.path, `${options.protocol}//${options.hostname}`);
-    url.port = options.port ?? "";
-
-    return Object.assign(new EventEmitter(), {
-      end(body: Buffer = Buffer.alloc(0)): void {
-        const wireRequest = {
-          url: url.href,
-          method: options.method,
-          headers: { ...options.headers },
-          body,
-        };
-        requests.push(wireRequest);
-        const answer = serve(wireRequest);
-        setImmediate(() => {
-          onResponse(
-            Object.assign(Readable.from([answer.body]), {
-              statusCode: answer.statusCode,
-              statusMessage: answer.statusMessage,
-              headers: answer.headers,
-            }),
-          );
-        });
-      },
-    });
-  }
-
-  t.mock.method(https, "request", request);
-  t.mock.method(nodeHttp, "request", request);
-  return requests;
-}
-
-function unauthorizedWireResponse(): WireResponse {
-  return { statusCode: 401, statusMessage: "Unauthorized", headers: {}, body: Buffer.alloc(0) };
-}
-
-function redirectWireResponse(statusCode: number, location: string): WireResponse {
-  return {
-    statusCode,
-    statusMessage: "Redirect",
-    headers: { location },
-    body: Buffer.from("moved"),
-  };
-}
-
-function unplannedWireRequest(request: WireRequest): Error {
-  return new Error(`unplanned wire request: ${request.method} ${request.url}`);
-}
-
-/** The bound host redirects `info/refs` to `location`; every other request is challenged. */
-function crossOriginServer(
-  location: string,
-  challenge: () => WireResponse = unauthorizedWireResponse,
-): (request: WireRequest) => WireResponse {
-  return (request) =>
-    request.url === BOUND_INFO_URL ? redirectWireResponse(302, location) : challenge();
-}
-
-/**
- * The bound host redirects `info/refs` to `location`, inside its own origin.
- * The renamed `info/refs` and the bound `git-upload-pack` answer only a
- * request that carries a credential.
- */
-function sameOriginServer(
-  location: string,
-  served: ServedCommit,
-): (request: WireRequest) => WireResponse {
-  return (request) => {
-    if (request.url === BOUND_INFO_URL) {
-      return redirectWireResponse(302, location);
-    }
-
-    if (request.headers.authorization === undefined) {
-      return unauthorizedWireResponse();
-    }
-
-    if (request.url === RENAMED_INFO_URL) {
-      return served.advertisement;
-    }
-
-    if (request.url === BOUND_UPLOAD_PACK_URL) {
-      return served.pack;
-    }
-
-    throw unplannedWireRequest(request);
-  };
-}
-
-/** The bound host redirects its `git-upload-pack` POST to the renamed repository. */
-function postRedirectServer(
-  statusCode: number,
-  served: ServedCommit,
-): (request: WireRequest) => WireResponse {
-  return (request) => {
-    if (request.url === BOUND_INFO_URL) {
-      return served.advertisement;
-    }
-
-    if (request.url === BOUND_UPLOAD_PACK_URL) {
-      return redirectWireResponse(statusCode, RENAMED_UPLOAD_PACK_URL);
-    }
-
-    if (request.url === RENAMED_UPLOAD_PACK_URL) {
-      return served.pack;
-    }
-
-    throw unplannedWireRequest(request);
-  };
-}
-
-/**
- * The bound host challenges `info/refs`, then redirects the authenticated
- * `git-upload-pack` POST to `location`. `respondAtLocation` answers whatever
- * request reaches `location`, so a same-origin control can require the
- * credential while a cross-origin row proves it never arrives (GAUTH-06).
- */
-function authenticatedPostRedirectServer(
-  statusCode: number,
-  location: string,
-  served: ServedCommit,
-  respondAtLocation: (request: WireRequest) => WireResponse,
-): (request: WireRequest) => WireResponse {
-  return (request) => {
-    if (request.url === BOUND_INFO_URL) {
-      return request.headers.authorization === undefined
-        ? unauthorizedWireResponse()
-        : served.advertisement;
-    }
-
-    if (request.url === BOUND_UPLOAD_PACK_URL) {
-      return request.headers.authorization === undefined
-        ? unauthorizedWireResponse()
-        : redirectWireResponse(statusCode, location);
-    }
-
-    if (request.url === location) {
-      return respondAtLocation(request);
-    }
-
-    throw unplannedWireRequest(request);
-  };
 }
 
 /** A credential fake whose helper holds `user:secret` for the bound host. */
@@ -774,50 +249,13 @@ function boundAuth(credentials: CredentialOpsFake): NonNullable<GitPlatform.Clon
   };
 }
 
-/** The url of each wire request and the credential header it carried, or null. */
-function wireCredentials(
-  requests: readonly WireRequest[],
-): Array<{ readonly url: string; readonly authorization: string | number | null }> {
-  return requests.map(({ url, headers }) => ({
-    url,
-    authorization: headers.authorization ?? null,
-  }));
-}
-
-/** The wire log of a challenge from `location`, on another origin, that fails before any credential. */
-function expectedCrossOriginWireLog(
-  location: string,
-): Array<{ readonly url: string; readonly authorization: string | null }> {
-  return [
-    { url: BOUND_INFO_URL, authorization: null },
-    { url: location, authorization: null },
-  ];
-}
-
-/** Q-02: accepts only the cross-origin challenge failure naming `origin`. */
-function crossOriginChallengeFrom(origin: string): (error: unknown) => boolean {
-  return (error) => {
-    assert.ok(error instanceof CrossOriginChallengeError);
-    assert.strictEqual(
-      error.message,
-      `redirected request to ${origin} asked for credentials; a credential is not sent after a redirect to another origin`,
-    );
-    return true;
-  };
+/** The branch HEAD names in `dir`, or undefined when HEAD is detached. */
+async function checkedOutBranch(dir: string): Promise<string | undefined> {
+  const branch = await gitTestCheckout(dir).run("rev-parse", "--abbrev-ref", "HEAD");
+  return branch === "HEAD" ? undefined : branch;
 }
 
 describe("local Git operations", () => {
-  test("reports the current branch after the initial commit", async (t) => {
-    // arrange
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-
-    // act
-    const branch = await currentBranch({ dir: repository.dir });
-
-    // assert
-    assert.strictEqual(branch, "main");
-  });
-
   test("resolves HEAD to the initial commit", async (t) => {
     // arrange
     const systemGit = await hermeticGitProcess(t);
@@ -872,43 +310,17 @@ describe("local Git operations", () => {
     assert.strictEqual(oid, undefined);
   });
 
-  test("force-updates the requested local ref", async (t) => {
-    // arrange
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    const nextOid = await repository.commit(
-      [{ filepath: "README.md", contents: "# next\n" }],
-      "next",
-    );
-
-    // act
-    await forceUpdateRef({
-      dir: repository.dir,
-      ref: "refs/heads/release",
-      value: nextOid,
-    });
-
-    // assert
-    assert.strictEqual(
-      await resolveRef({ dir: repository.dir, ref: "refs/heads/release" }),
-      nextOid,
-    );
-  });
-
   test("checks out an existing branch", async (t) => {
     // arrange
     const systemGit = await hermeticGitProcess(t);
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    await forceUpdateRef({
-      dir: repository.dir,
-      ref: "refs/heads/feature",
-      value: repository.initialOid,
-    });
+    await repository.run("branch", "feature", repository.initialOid);
 
     // act
     await checkout({ dir: repository.dir, ref: "feature" }, systemGit);
 
     // assert
-    assert.strictEqual(await currentBranch({ dir: repository.dir }), "feature");
+    assert.strictEqual(await checkedOutBranch(repository.dir), "feature");
   });
 
   test("SG-TRN-01: checks out the files of a commit the current branch moved to", async (t) => {
@@ -928,7 +340,7 @@ describe("local Git operations", () => {
     // assert
     assert.deepStrictEqual(
       {
-        branch: await currentBranch({ dir: repository.dir }),
+        branch: await checkedOutBranch(repository.dir),
         readme: await readFile(path.join(repository.dir, "README.md"), "utf8"),
       },
       { branch: "main", readme: "# moved\n" },
@@ -944,7 +356,7 @@ describe("local Git operations", () => {
     await checkout({ dir: repository.dir, ref: repository.initialOid }, systemGit);
 
     // assert
-    assert.strictEqual(await currentBranch({ dir: repository.dir }), undefined);
+    assert.strictEqual(await checkedOutBranch(repository.dir), undefined);
     assert.strictEqual(
       await resolveRef({ dir: repository.dir, ref: "HEAD" }),
       repository.initialOid,
@@ -1024,81 +436,101 @@ describe("local Git operations", () => {
 });
 
 describe("SG-PRC-06: the git-required gate", () => {
-  interface GateDirectories {
-    /** A repository whose origin is the GitHub remote. */
-    readonly repository: string;
-    /** An empty directory a clone would write into. */
-    readonly target: string;
+  /**
+   * A git process over real system git whose own search path is an empty
+   * directory, so it finds no git, recording each lookup and each request it
+   * is asked for. The search path of this process stays as it is.
+   */
+  async function gitlessProcess(t: TestContext): Promise<{
+    readonly gitProcess: GitProcess;
+    readonly asked: () => { readonly lookups: number; readonly subcommands: readonly string[] };
+  }> {
+    const gitless = await hermeticGitProcess(t, {
+      PATH: await createGitTestDirectory(t, { boundary: "local" }),
+    });
+    let lookups = 0;
+    const subcommands: string[] = [];
+    return {
+      gitProcess: {
+        locate: () => {
+          lookups += 1;
+          return gitless.locate();
+        },
+        run: (request) => {
+          subcommands.push(request.subcommand);
+          return gitless.run(request);
+        },
+      },
+      asked: () => ({ lookups, subcommands }),
+    };
   }
 
   const networkVerbs: readonly {
     readonly name: string;
-    readonly call: (directories: GateDirectories) => Promise<unknown>;
+    /** `target` is an empty directory a clone would write into. */
+    readonly call: (target: string, gitProcess: GitProcess) => Promise<unknown>;
+    /** The subcommand of the verb's first request. */
+    readonly firstRequest: string;
   }[] = [
-    { name: "clone", call: ({ target }) => clone({ dir: target, url: GITHUB_REMOTE_URL }) },
-    { name: "fetch", call: ({ repository }) => fetch({ dir: repository }) },
-    { name: "resolveRemoteRef", call: () => resolveRemoteRef({ url: GITHUB_REMOTE_URL }) },
-    { name: "listRemoteTags", call: () => listRemoteTags({ url: GITHUB_REMOTE_URL }) },
+    {
+      name: "clone",
+      call: (target, gitProcess) => clone({ dir: target, url: GITHUB_REMOTE_URL }, gitProcess),
+      firstRequest: "clone",
+    },
+    {
+      name: "fetchCommit",
+      call: (target, gitProcess) => fetchCommit({ dir: target, sha: OID_MAIN }, gitProcess),
+      firstRequest: "config",
+    },
+    {
+      name: "resolveRemoteRef",
+      call: (_target, gitProcess) => resolveRemoteRef({ url: GITHUB_REMOTE_URL }, gitProcess),
+      firstRequest: "ls-remote",
+    },
+    {
+      name: "listRemoteTags",
+      call: (_target, gitProcess) => listRemoteTags({ url: GITHUB_REMOTE_URL }, gitProcess),
+      firstRequest: "ls-remote",
+    },
   ];
 
   for (const verb of networkVerbs) {
-    test(`D-SG-01: ${verb.name} fails as git missing and sends no request`, async (t) => {
+    test(`D-SG-01: ${verb.name} fails as git missing in its first request and looks git up no other way`, async (t) => {
       // arrange
-      const requests = installRemoteTransport(t, FULL_ADVERTISEMENT);
-      const repository = await createGitTestRepository(t, { boundary: "local" });
-      await repository.run("remote", "add", "origin", GITHUB_REMOTE_URL);
       const target = await createGitTestDirectory(t, { boundary: "local" });
+      const gitless = await gitlessProcess(t);
       setGitHubBaseUrl(t, `https://${HOST}`);
-      await withoutGitOnPath(t);
 
       // act
-      const calling = verb.call({ repository: repository.dir, target });
+      const calling = verb.call(target, gitless.gitProcess);
 
       // assert
       await assert.rejects(calling, isGitMissingWithoutCause);
-      assert.deepStrictEqual(requests, []);
+      assert.deepStrictEqual(gitless.asked(), { lookups: 0, subcommands: [verb.firstRequest] });
       assert.deepStrictEqual(await readdir(target), []);
     });
   }
 
-  test("SG-PRC-06: the in-process local verbs read and write a clone with no git on the path", async (t) => {
-    // arrange
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    await repository.commit([{ filepath: "next.txt", contents: "next\n" }], "next");
-    await withoutGitOnPath(t);
-    const { dir } = repository;
-
-    // act
-    await forceUpdateRef({ dir, ref: "refs/heads/feature", value: repository.initialOid });
-
-    // assert
-    assert.deepStrictEqual(
-      {
-        branch: await currentBranch({ dir }),
-        feature: await readFile(path.join(dir, ".git", "refs", "heads", "feature"), "utf8"),
-      },
-      {
-        branch: "main",
-        feature: `${repository.initialOid}\n`,
-      },
-    );
-  });
-
-  test("D-SG-04: a clone succeeds once git is back on the path", async (t) => {
+  test("D-SG-04: a clone succeeds once git is back", async (t) => {
     // arrange
     const repository = await createGitTestRepository(t, { boundary: "local" });
     const url = `file://${repository.dir}`;
     const refused = await createGitTestDirectory(t, { boundary: "local" });
     const dir = await createGitTestDirectory(t, { boundary: "local" });
-    const restorePath = await withoutGitOnPath(t);
-    await assert.rejects(clone({ dir: refused, url }), isGitMissingWithoutCause);
-    restorePath();
+    const systemGit = await hermeticGitProcess(t);
+    let current = (await gitlessProcess(t)).gitProcess;
+    const gitProcess: GitProcess = {
+      locate: () => current.locate(),
+      run: (request) => current.run(request),
+    };
+    await assert.rejects(clone({ dir: refused, url }, gitProcess), isGitMissingWithoutCause);
+    current = systemGit;
 
     // act
-    await clone({ dir, url });
+    await clone({ dir, url }, gitProcess);
 
     // assert
-    assert.strictEqual(await resolveRef({ dir, ref: "HEAD" }), repository.initialOid);
+    assert.strictEqual(await resolveRef({ dir, ref: "HEAD" }, systemGit), repository.initialOid);
   });
 });
 
@@ -1292,223 +724,6 @@ describe("clone", () => {
   });
 });
 
-describe("fetch", () => {
-  test("preserves a typed auth refusal from the real fetch operation", async (t) => {
-    // arrange
-    const requests = installFailedDiscoveryTransport(t, { challengeOnce: true });
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    await repository.run("remote", "add", "origin", REMOTE_URL);
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
-    const refusal = new DeviceFlowUnavailableError();
-
-    // act & assert
-    await assert.rejects(
-      fetch({
-        dir: repository.dir,
-        auth: {
-          kind: "device-flow",
-          host: HOST,
-          credentialOps: credentials.credentialOps,
-          onAuthRequired: () => Promise.reject(refusal),
-        },
-      }),
-      (error: unknown) => {
-        assert.strictEqual(error, refusal);
-        return true;
-      },
-    );
-    assert.deepStrictEqual(requests, [expectedDiscoveryRequest()]);
-    assert.deepStrictEqual(credentials.calls, { fill: [{ host: HOST }], approve: [], reject: [] });
-  });
-
-  test("uses the default remote without auth", async (t) => {
-    // arrange
-    const requests = installFailedDiscoveryTransport(t);
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    await repository.run("remote", "add", "origin", REMOTE_URL);
-
-    // act
-    const fetching = fetch({ dir: repository.dir });
-
-    // assert
-    await assert.rejects(fetching, (error: unknown) =>
-      isExpectedDiscoveryError(error, "git.fetch"),
-    );
-    assert.deepStrictEqual(requests, [expectedDiscoveryRequest()]);
-  });
-
-  test("forwards an explicit remote, ref, and auth bundle", async (t) => {
-    // arrange
-    const requests = installFailedDiscoveryTransport(t, { challengeOnce: true });
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    await repository.run("remote", "add", "upstream", REMOTE_URL);
-    const credentials = createCredentialOpsFake({
-      boundary: "memory",
-      credentials: [[HOST, { username: "user", password: "secret" }]],
-    });
-
-    // act
-    const fetching = fetch({
-      dir: repository.dir,
-      remote: "upstream",
-      ref: "main",
-      auth: {
-        credentialOps: credentials.credentialOps,
-        host: HOST,
-        kind: "device-flow",
-        onAuthRequired: () => {
-          throw new Error("interactive auth is forbidden on a stored-credential hit");
-        },
-      },
-    });
-
-    // assert
-    await assert.rejects(fetching, (error: unknown) =>
-      isExpectedDiscoveryError(error, "git.fetch"),
-    );
-    assert.deepStrictEqual(credentials.calls, {
-      fill: [{ host: HOST }],
-      approve: [],
-      reject: [],
-    });
-    assert.deepStrictEqual(requests, [
-      expectedDiscoveryRequest(),
-      expectedDiscoveryRequest({ Authorization: "Basic dXNlcjpzZWNyZXQ=" }),
-    ]);
-  });
-
-  test("GHB-01 / D-02: fetches a canonical github.com origin from the base and keeps the recorded origin", async (t) => {
-    // arrange
-    const remote = await createGitTestRepository(t, { boundary: "local" });
-    const updatedOid = await remote.commit(
-      [{ filepath: "README.md", contents: "# updated\n" }],
-      "updated",
-    );
-    const worktree = await createGitTestRepository(t, { boundary: "local" });
-    await worktree.run("remote", "add", "origin", GITHUB_REMOTE_URL);
-    await installRepositoryTransport(t, remote);
-    setGitHubBaseUrl(t, `https://${HOST}`);
-
-    // act
-    await fetch({ dir: worktree.dir, remote: "origin" });
-
-    // assert
-    assert.strictEqual(
-      await resolveRef({ dir: worktree.dir, ref: "refs/remotes/origin/main" }),
-      updatedOid,
-    );
-    assert.deepStrictEqual(await listRemotes({ dir: worktree.dir }), {
-      kind: "origin",
-      url: GITHUB_REMOTE_URL,
-    });
-  });
-
-  test("INR-06: a fetch asked for tags also fetches the remote's tags", async (t) => {
-    // arrange
-    const remote = await createGitTestRepository(t, { boundary: "local" });
-    const taggedOid = await remote.commit(
-      [{ filepath: "README.md", contents: "# tagged\n" }],
-      "tagged",
-    );
-    const worktree = await createGitTestRepository(t, { boundary: "local" });
-    await worktree.run("remote", "add", "origin", GITHUB_REMOTE_URL);
-    await installRepositoryTransport(t, remote, "v1.0.0");
-    setGitHubBaseUrl(t, `https://${HOST}`);
-
-    // act
-    await fetch({ dir: worktree.dir, remote: "origin", tags: true });
-
-    // assert
-    assert.strictEqual(await resolveRef({ dir: worktree.dir, ref: "refs/tags/v1.0.0" }), taggedOid);
-  });
-
-  test("D-10: a failed fetch from the base names the fetched URL", async (t) => {
-    // arrange
-    const requests = installFailedDiscoveryTransport(t);
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    await repository.run("remote", "add", "origin", GITHUB_REMOTE_URL);
-    setGitHubBaseUrl(t, `https://${HOST}`);
-
-    // act
-    const fetching = fetch({ dir: repository.dir });
-
-    // assert
-    await assert.rejects(fetching, (error: unknown) => {
-      assert.ok(isExpectedDiscoveryError(error, "git.fetch"));
-      assert.ok(error instanceof Error && error.cause instanceof FetchedUrlCause);
-      assert.deepStrictEqual(
-        {
-          message: error.cause.message,
-          url: error.cause.url,
-          cause: error.cause.cause,
-        },
-        { message: `fetched ${REMOTE_URL}`, url: REMOTE_URL, cause: undefined },
-      );
-      return true;
-    });
-    assert.deepStrictEqual(requests, [expectedDiscoveryRequest()]);
-  });
-
-  test("a fetch whose remote records no url passes none and fails as before", async (t) => {
-    // arrange
-    const requests = installFailedDiscoveryTransport(t);
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    setGitHubBaseUrl(t, `https://${HOST}`);
-
-    // act
-    const fetching = fetch({ dir: repository.dir });
-
-    // assert
-    await assert.rejects(fetching, (error: unknown) => {
-      assert.ok(error instanceof git.Errors.MissingParameterError);
-      assert.strictEqual(error.cause, undefined);
-      return true;
-    });
-    assert.deepStrictEqual(requests, []);
-  });
-
-  test("D-10: a rewritten fetch failure keeps a cause it already carries", async (t) => {
-    // arrange
-    const firstCause = new Error("connection reset");
-    const failure = new Error("socket hang up", { cause: firstCause });
-    t.mock.method(http, "request", () => Promise.reject(failure));
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    await repository.run("remote", "add", "origin", GITHUB_REMOTE_URL);
-    setGitHubBaseUrl(t, `https://${HOST}`);
-
-    // act
-    const fetching = fetch({ dir: repository.dir });
-
-    // assert
-    await assert.rejects(fetching, (error: unknown) => {
-      assert.strictEqual(error, failure);
-      assert.strictEqual(failure.cause, firstCause);
-      return true;
-    });
-  });
-
-  test("GHB-04: an unrewritten failed fetch carries no fetched cause", async (t) => {
-    // arrange
-    const requests = installFailedDiscoveryTransport(t);
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    await repository.run("remote", "add", "origin", REMOTE_URL);
-    setGitHubBaseUrl(t, undefined);
-
-    // act
-    const fetching = fetch({ dir: repository.dir });
-
-    // assert
-    await assert.rejects(fetching, (error: unknown) => {
-      assert.ok(isExpectedDiscoveryError(error, "git.fetch"));
-      assert.ok(error instanceof Error);
-      assert.strictEqual(error.cause, undefined);
-      return true;
-    });
-    assert.deepStrictEqual(requests, [expectedDiscoveryRequest()]);
-  });
-});
-
-/** D-SG-16: the read of the recorded origin that decides the pair of each rung. */
 const ORIGIN_READ = "config --local --get remote.origin.url";
 
 describe("fetchCommit", () => {
@@ -2447,510 +1662,6 @@ describe("D-SG-14 and GAUTH-04: an auth failure of a remote request", () => {
   });
 });
 
-/** A commit the wire doubles serve over protocol version 1: its advertisement and its pack. */
-interface ServedCommit {
-  readonly oid: string;
-  readonly packfile: Buffer;
-  readonly advertisement: WireResponse;
-  readonly pack: WireResponse;
-}
-
-/**
- * A clone whose origin is `REMOTE_URL`, and a commit of another repository
- * that the wire doubles serve it, so `fetch` drives the redirect client.
- */
-async function wireFetchFixture(
-  t: TestContext,
-): Promise<{ readonly dir: string; readonly served: ServedCommit }> {
-  const remote = await createGitTestRepository(t, { boundary: "local" });
-  await remote.commit([{ filepath: "next.txt", contents: "next\n" }], "next");
-  const { oid, packfile } = await remote.pack();
-  return {
-    dir: await cloneOfRemote(t),
-    served: {
-      oid,
-      packfile,
-      advertisement: {
-        statusCode: 200,
-        statusMessage: "OK",
-        headers: { "content-type": "application/x-git-upload-pack-advertisement" },
-        body: uploadPackAdvertisementBody(oid),
-      },
-      pack: {
-        statusCode: 200,
-        statusMessage: "OK",
-        headers: { "content-type": "application/x-git-upload-pack-result" },
-        body: packResultBody(packfile),
-      },
-    },
-  };
-}
-
-/**
- * The headers isomorphic-git's discovery request keeps on a hop to another
- * origin: protocol headers only, never a credential or a cookie (WR-03).
- */
-const CROSS_ORIGIN_DISCOVERY_HEADERS = ["accept-encoding"];
-
-/** A repository whose origin is `REMOTE_URL`, which a fetch fills. */
-async function cloneOfRemote(t: TestContext): Promise<string> {
-  const local = await createGitTestRepository(t, { boundary: "local" });
-  await local.run("remote", "add", "origin", REMOTE_URL);
-  return local.dir;
-}
-
-/** The commit `refs/remotes/origin/main` names in `dir` after a fetch. */
-function fetchedMain(dir: string): Promise<string | undefined> {
-  return resolveRef({ dir, ref: "refs/remotes/origin/main" });
-}
-
-// GAUTH-06, Q-02, WR-03, WR-04, IN-03: the redirect client that every
-// isomorphic-git request of `platform/git.ts` goes through, driven by `fetch`.
-describe("the redirect client", () => {
-  const CROSS_ORIGIN_REDIRECTS: readonly CrossOriginRedirectRow[] = [
-    {
-      kind: "another port of the same host",
-      location: OTHER_PORT_INFO_URL,
-      origin: `https://${HOST}:8443`,
-    },
-    {
-      kind: "http on the same host",
-      location: `http://${HOST}/owner/repo.git${INFO_REFS_PATH}`,
-      origin: `http://${HOST}`,
-    },
-    {
-      kind: "another host",
-      location: `${OTHER_REMOTE_URL}${INFO_REFS_PATH}`,
-      origin: `https://${OTHER_HOST}`,
-    },
-  ];
-
-  for (const { kind, location, origin } of CROSS_ORIGIN_REDIRECTS) {
-    test(`Q-02: fails a challenge after a redirect to ${kind} without a credential lookup`, async (t) => {
-      // arrange
-      const requests = installWireTransport(t, crossOriginServer(location));
-      const { dir } = await wireFetchFixture(t);
-      const credentials = storedCredentials();
-
-      // act
-      const fetching = fetch({ dir, auth: boundAuth(credentials) });
-
-      // assert
-      await assert.rejects(fetching, crossOriginChallengeFrom(origin));
-      assert.deepStrictEqual(wireCredentials(requests), expectedCrossOriginWireLog(location));
-      assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
-    });
-  }
-
-  test("Q-02: fails a cross-origin challenge without starting a Device Flow", async (t) => {
-    // arrange
-    const requests = installWireTransport(t, crossOriginServer(OTHER_PORT_INFO_URL));
-    const { dir } = await wireFetchFixture(t);
-    const credentials = storedCredentials();
-    const onAuthRequired = mock<OnAuthRequiredFn>({ exactParams: true, name: "device flow" });
-
-    // act
-    const fetching = fetch({
-      dir,
-      auth: {
-        credentialOps: credentials.credentialOps,
-        host: HOST,
-        kind: "device-flow",
-        onAuthRequired,
-      },
-    });
-
-    // assert
-    await assert.rejects(fetching, crossOriginChallengeFrom(`https://${HOST}:8443`));
-    assert.deepStrictEqual(
-      wireCredentials(requests),
-      expectedCrossOriginWireLog(OTHER_PORT_INFO_URL),
-    );
-    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
-    verify(onAuthRequired);
-  });
-
-  test("Q-02: fails a 203 from another origin the same way as a 401", async (t) => {
-    // arrange
-    const requests = installWireTransport(
-      t,
-      crossOriginServer(OTHER_PORT_INFO_URL, () => ({
-        statusCode: 203,
-        statusMessage: "Non-Authoritative Information",
-        headers: {},
-        body: Buffer.alloc(0),
-      })),
-    );
-    const { dir } = await wireFetchFixture(t);
-    const credentials = storedCredentials();
-
-    // act
-    const fetching = fetch({ dir, auth: boundAuth(credentials) });
-
-    // assert
-    await assert.rejects(fetching, crossOriginChallengeFrom(`https://${HOST}:8443`));
-    assert.deepStrictEqual(
-      wireCredentials(requests),
-      expectedCrossOriginWireLog(OTHER_PORT_INFO_URL),
-    );
-    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
-  });
-
-  test("Q-02: fails a challenge back on the original origin after a detour through another origin", async (t) => {
-    // arrange
-    const { dir, served } = await wireFetchFixture(t);
-    const requests = installWireTransport(t, (request) => {
-      if (request.url === BOUND_INFO_URL) {
-        return request.headers.authorization === undefined
-          ? unauthorizedWireResponse()
-          : redirectWireResponse(302, OTHER_PORT_INFO_URL);
-      }
-
-      if (request.url === OTHER_PORT_INFO_URL) {
-        return redirectWireResponse(302, RENAMED_INFO_URL);
-      }
-
-      if (request.url === RENAMED_INFO_URL) {
-        return request.headers.authorization === undefined
-          ? unauthorizedWireResponse()
-          : served.advertisement;
-      }
-
-      throw unplannedWireRequest(request);
-    });
-    const credentials = storedCredentials();
-    const onAuthRequired = mock<OnAuthRequiredFn>({ exactParams: true, name: "device flow" });
-
-    // act
-    const fetching = fetch({
-      dir,
-      auth: {
-        credentialOps: credentials.credentialOps,
-        host: HOST,
-        kind: "device-flow",
-        onAuthRequired,
-      },
-    });
-
-    // assert
-    await assert.rejects(fetching, crossOriginChallengeFrom(`https://${HOST}`));
-    assert.deepStrictEqual(wireCredentials(requests), [
-      { url: BOUND_INFO_URL, authorization: null },
-      { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
-      { url: OTHER_PORT_INFO_URL, authorization: null },
-      { url: RENAMED_INFO_URL, authorization: null },
-    ]);
-    assert.deepStrictEqual(credentials.calls, { fill: [{ host: HOST }], approve: [], reject: [] });
-    verify(onAuthRequired);
-  });
-
-  test("WR-03: keeps only protocol headers on a hop to another origin", async (t) => {
-    // arrange
-    const { dir, served } = await wireFetchFixture(t);
-    const requests = installWireTransport(t, (request) => {
-      if (request.url === BOUND_INFO_URL) {
-        return request.headers.authorization === undefined
-          ? unauthorizedWireResponse()
-          : redirectWireResponse(302, OTHER_PORT_INFO_URL);
-      }
-
-      if (request.url === OTHER_PORT_INFO_URL) {
-        return served.advertisement;
-      }
-
-      if (request.url === BOUND_UPLOAD_PACK_URL && request.headers.authorization !== undefined) {
-        return served.pack;
-      }
-
-      throw unplannedWireRequest(request);
-    });
-    const credentials = createCredentialOpsFake({
-      boundary: "memory",
-      credentials: [
-        [
-          HOST,
-          {
-            username: "user",
-            password: "secret",
-            headers: { cookie: "session=1", "private-token": "token-1" },
-          },
-        ],
-      ],
-    });
-
-    // act
-    await fetch({ dir, auth: boundAuth(credentials) });
-
-    // assert
-    assert.strictEqual(await fetchedMain(dir), served.oid);
-    assert.deepStrictEqual(
-      requests.map(({ url, headers }) => ({
-        url,
-        authorization: headers.authorization ?? null,
-        cookie: headers.cookie ?? null,
-        privateToken: headers["private-token"] ?? null,
-      })),
-      [
-        { url: BOUND_INFO_URL, authorization: null, cookie: null, privateToken: null },
-        {
-          url: BOUND_INFO_URL,
-          authorization: BASIC_CREDENTIAL,
-          cookie: "session=1",
-          privateToken: "token-1",
-        },
-        { url: OTHER_PORT_INFO_URL, authorization: null, cookie: null, privateToken: null },
-        {
-          url: BOUND_UPLOAD_PACK_URL,
-          authorization: BASIC_CREDENTIAL,
-          cookie: "session=1",
-          privateToken: "token-1",
-        },
-      ],
-    );
-    assert.deepStrictEqual(
-      Object.keys(requests[2]?.headers ?? {}).sort(),
-      CROSS_ORIGIN_DISCOVERY_HEADERS,
-    );
-  });
-
-  const SAME_ORIGIN_REDIRECTS: readonly RedirectRow[] = [
-    { kind: "another path", location: RENAMED_INFO_URL },
-    { kind: "a relative location", location: `/renamed/repo.git${INFO_REFS_PATH}` },
-    {
-      kind: "an explicit default port",
-      location: `https://${HOST}:443/renamed/repo.git${INFO_REFS_PATH}`,
-    },
-  ];
-
-  for (const { kind, location } of SAME_ORIGIN_REDIRECTS) {
-    test(`GAUTH-06: forwards the credential on a redirect within its origin (${kind})`, async (t) => {
-      // arrange
-      const { dir, served } = await wireFetchFixture(t);
-      const requests = installWireTransport(t, sameOriginServer(location, served));
-      const credentials = storedCredentials();
-
-      // act
-      await fetch({ dir, auth: boundAuth(credentials) });
-
-      // assert
-      assert.strictEqual(await fetchedMain(dir), served.oid);
-      assert.deepStrictEqual(wireCredentials(requests), [
-        { url: BOUND_INFO_URL, authorization: null },
-        { url: RENAMED_INFO_URL, authorization: null },
-        { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
-        { url: RENAMED_INFO_URL, authorization: BASIC_CREDENTIAL },
-        { url: BOUND_UPLOAD_PACK_URL, authorization: BASIC_CREDENTIAL },
-      ]);
-    });
-  }
-
-  const POST_REDIRECTS: readonly PostRedirectRow[] = [
-    {
-      title: "re-sends a POST answered with 302 as a GET without its body",
-      statusCode: 302,
-      finalMethod: "GET",
-      keepsBody: false,
-      finalContentHeaders: [],
-    },
-    {
-      title: "re-sends a POST answered with 307 with its body",
-      statusCode: 307,
-      finalMethod: "POST",
-      keepsBody: true,
-      finalContentHeaders: ["content-length", "content-type"],
-    },
-  ];
-
-  for (const { title, statusCode, finalMethod, keepsBody, finalContentHeaders } of POST_REDIRECTS) {
-    test(title, async (t) => {
-      // arrange
-      const { dir, served } = await wireFetchFixture(t);
-      const requests = installWireTransport(t, postRedirectServer(statusCode, served));
-
-      // act
-      await fetch({ dir });
-
-      // assert
-      assert.strictEqual(await fetchedMain(dir), served.oid);
-      assert.deepStrictEqual(
-        requests.map(({ method, url }) => `${method} ${url}`),
-        [
-          `GET ${BOUND_INFO_URL}`,
-          `POST ${BOUND_UPLOAD_PACK_URL}`,
-          `${finalMethod} ${RENAMED_UPLOAD_PACK_URL}`,
-        ],
-      );
-      assert.deepStrictEqual(
-        requests.slice(-1).map(({ headers, body }) => ({
-          body,
-          contentHeaders: Object.keys(headers)
-            .filter((name) => name.startsWith("content-"))
-            .sort(),
-        })),
-        [
-          {
-            body: keepsBody ? requests[1]?.body : Buffer.alloc(0),
-            contentHeaders: finalContentHeaders,
-          },
-        ],
-      );
-    });
-  }
-
-  // GAUTH-06 rows: what happens to the credential when the *authenticated*
-  // git-upload-pack POST -- not just info/refs -- is redirected. A wrong
-  // `nextHop` that scrubs credential headers only on GET hops, or only on
-  // the POST->GET (302/303) arm, would leave `authorization` on the 307 row.
-  const CROSS_ORIGIN_POST_REDIRECTS: readonly CrossOriginRedirectRow[] = [
-    {
-      kind: "another port of the same host (POST kept, 307)",
-      location: OTHER_PORT_UPLOAD_PACK_URL,
-      origin: `https://${HOST}:8443`,
-    },
-    {
-      kind: "http on the same host",
-      location: HTTP_SAME_HOST_UPLOAD_PACK_URL,
-      origin: `http://${HOST}`,
-    },
-    {
-      kind: "another host",
-      location: OTHER_HOST_UPLOAD_PACK_URL,
-      origin: `https://${OTHER_HOST}`,
-    },
-  ];
-
-  for (const { kind, location, origin } of CROSS_ORIGIN_POST_REDIRECTS) {
-    test(`GAUTH-06: does not forward the credential on a git-upload-pack POST redirect to ${kind}`, async (t) => {
-      // arrange
-      const { dir, served } = await wireFetchFixture(t);
-      const requests = installWireTransport(
-        t,
-        authenticatedPostRedirectServer(307, location, served, () => unauthorizedWireResponse()),
-      );
-      const credentials = storedCredentials();
-
-      // act
-      const fetching = fetch({ dir, auth: boundAuth(credentials) });
-
-      // assert
-      await assert.rejects(fetching, crossOriginChallengeFrom(origin));
-      assert.deepStrictEqual(wireCredentials(requests), [
-        { url: BOUND_INFO_URL, authorization: null },
-        { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
-        { url: BOUND_UPLOAD_PACK_URL, authorization: BASIC_CREDENTIAL },
-        { url: location, authorization: null },
-      ]);
-    });
-  }
-
-  test("GAUTH-06: does not forward the credential on a git-upload-pack POST redirect to another port (302, POST->GET)", async (t) => {
-    // arrange
-    const { dir, served } = await wireFetchFixture(t);
-    const requests = installWireTransport(
-      t,
-      authenticatedPostRedirectServer(302, OTHER_PORT_UPLOAD_PACK_URL, served, () =>
-        unauthorizedWireResponse(),
-      ),
-    );
-    const credentials = storedCredentials();
-
-    // act
-    const fetching = fetch({ dir, auth: boundAuth(credentials) });
-
-    // assert
-    await assert.rejects(fetching, crossOriginChallengeFrom(`https://${HOST}:8443`));
-    assert.deepStrictEqual(wireCredentials(requests), [
-      { url: BOUND_INFO_URL, authorization: null },
-      { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
-      { url: BOUND_UPLOAD_PACK_URL, authorization: BASIC_CREDENTIAL },
-      { url: OTHER_PORT_UPLOAD_PACK_URL, authorization: null },
-    ]);
-  });
-
-  test("GAUTH-06: forwards the credential on a git-upload-pack POST redirect within its origin (307)", async (t) => {
-    // arrange
-    const { dir, served } = await wireFetchFixture(t);
-    const requests = installWireTransport(
-      t,
-      authenticatedPostRedirectServer(307, RENAMED_UPLOAD_PACK_URL, served, (request) =>
-        request.headers.authorization === undefined ? unauthorizedWireResponse() : served.pack,
-      ),
-    );
-    const credentials = storedCredentials();
-
-    // act
-    await fetch({ dir, auth: boundAuth(credentials) });
-
-    // assert
-    assert.strictEqual(await fetchedMain(dir), served.oid);
-    assert.deepStrictEqual(wireCredentials(requests), [
-      { url: BOUND_INFO_URL, authorization: null },
-      { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
-      { url: BOUND_UPLOAD_PACK_URL, authorization: BASIC_CREDENTIAL },
-      { url: RENAMED_UPLOAD_PACK_URL, authorization: BASIC_CREDENTIAL },
-    ]);
-  });
-
-  const UNUSABLE_LOCATIONS: ReadonlyArray<{
-    readonly kind: string;
-    readonly headers: Readonly<Record<string, string>>;
-  }> = [
-    { kind: "no Location header", headers: {} },
-    { kind: "an empty Location", headers: { location: "" } },
-    { kind: "a Location that is not a URL", headers: { location: "https://exa mple:99999/" } },
-  ];
-
-  for (const { kind, headers } of UNUSABLE_LOCATIONS) {
-    test(`WR-04: returns a redirect with ${kind} to isomorphic-git as an HttpError`, async (t) => {
-      // arrange
-      const requests = installWireTransport(t, () => ({
-        statusCode: 302,
-        statusMessage: "Found",
-        headers,
-        body: Buffer.alloc(0),
-      }));
-      const { dir } = await wireFetchFixture(t);
-
-      // act
-      const fetching = fetch({ dir });
-
-      // assert
-      await assert.rejects(fetching, (error: unknown) => {
-        assert.ok(error instanceof git.Errors.HttpError);
-        assert.deepStrictEqual(error.data, {
-          statusCode: 302,
-          statusMessage: "Found",
-          response: "",
-        });
-        return true;
-      });
-      assert.deepStrictEqual(
-        requests.map(({ url }) => url),
-        [BOUND_INFO_URL],
-      );
-    });
-  }
-
-  test("IN-03: rejects an eleventh consecutive redirect with TooManyRedirectsError", async (t) => {
-    // arrange
-    const requests = installWireTransport(t, () => redirectWireResponse(302, BOUND_INFO_URL));
-    const { dir } = await wireFetchFixture(t);
-
-    // act
-    const fetching = fetch({ dir });
-
-    // assert
-    await assert.rejects(fetching, (error: unknown) => {
-      assert.ok(error instanceof TooManyRedirectsError);
-      return true;
-    });
-    assert.deepStrictEqual(
-      requests.map(({ url }) => url),
-      Array.from({ length: 11 }, () => BOUND_INFO_URL),
-    );
-  });
-});
-
 describe("listRemotes", () => {
   test("reports the origin remote url of a real repository", async (t) => {
     // arrange
@@ -3033,17 +1744,24 @@ describe("listRemotes", () => {
   }
 
   // D-3-03 / MA-13: the origin shapes an interrupted rewrite or a hand edit
-  // leaves behind. `libraryRemotes` is the library's per-section enumeration:
-  // it is `unknown` because a url-less section comes back holding `undefined`,
-  // and it reports the LAST url of a multi-valued origin. `libraryUrls` is
-  // every `remote.origin.url` value in file order, which is the read
-  // `listRemotes` makes; git fetches from the first (WR-11, T-3-05).
+  // leaves behind. `fileUrls` is every `remote.origin.url` value in file
+  // order, which is the read `listRemotes` makes; git fetches from the first
+  // (WR-11, T-3-05).
   interface OriginSectionShape {
     readonly title: string;
     readonly config: string;
-    readonly libraryRemotes: unknown;
-    readonly libraryUrls: readonly string[];
+    readonly fileUrls: readonly string[];
     readonly wrapperResult: GitPlatform.ListRemotesResult;
+  }
+
+  /** Every `remote.origin.url` value of the clone `dir`, in file order, as `git config --list` reads them. */
+  async function originUrlsInFile(dir: string): Promise<string[]> {
+    const key = "remote.origin.url\n";
+    const listed = await gitTestCheckout(dir).run("config", "--local", "--null", "--list");
+    return listed
+      .split("\0")
+      .filter((entry) => entry.startsWith(key))
+      .map((entry) => entry.slice(key.length));
   }
 
   const ORIGIN_SECTION_SHAPES: readonly OriginSectionShape[] = [
@@ -3051,64 +1769,48 @@ describe("listRemotes", () => {
       title: "reports no-origin for an origin section with a fetch line but no url",
       config:
         '[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n',
-      libraryRemotes: [{ remote: "origin", url: undefined }],
-      libraryUrls: [],
+      fileUrls: [],
       wrapperResult: { kind: "no-origin" },
     },
     {
       title: "reports no-origin for an origin section with no keys",
       config: '[core]\n\trepositoryformatversion = 0\n[remote "origin"]\n',
-      libraryRemotes: [{ remote: "origin", url: undefined }],
-      libraryUrls: [],
+      fileUrls: [],
       wrapperResult: { kind: "no-origin" },
     },
     {
       title: "reports the empty url of an origin section whose url value is empty",
       config: '[remote "origin"]\n\turl =\n',
-      libraryRemotes: [{ remote: "origin", url: "" }],
-      libraryUrls: [""],
+      fileUrls: [""],
       wrapperResult: { kind: "origin", url: "" },
     },
     {
       title: "reports no-origin for an origin section whose first of two urls is foreign",
       config: `[remote "origin"]\n\turl = ${OTHER_REMOTE_URL}\n\turl = ${REMOTE_URL}\n`,
-      libraryRemotes: [{ remote: "origin", url: REMOTE_URL }],
-      libraryUrls: [OTHER_REMOTE_URL, REMOTE_URL],
+      fileUrls: [OTHER_REMOTE_URL, REMOTE_URL],
       wrapperResult: { kind: "no-origin" },
     },
     {
       title: "reports no-origin for an origin section whose second of two urls is foreign",
       config: `[remote "origin"]\n\turl = ${REMOTE_URL}\n\turl = ${OTHER_REMOTE_URL}\n`,
-      libraryRemotes: [{ remote: "origin", url: OTHER_REMOTE_URL }],
-      libraryUrls: [REMOTE_URL, OTHER_REMOTE_URL],
+      fileUrls: [REMOTE_URL, OTHER_REMOTE_URL],
       wrapperResult: { kind: "no-origin" },
     },
     {
       title: "reports no-origin for two origin sections that each record a url",
       config: `[remote "origin"]\n\turl = ${OTHER_REMOTE_URL}\n[remote "origin"]\n\turl = ${REMOTE_URL}\n`,
-      libraryRemotes: [
-        { remote: "origin", url: REMOTE_URL },
-        { remote: "origin", url: REMOTE_URL },
-      ],
-      libraryUrls: [OTHER_REMOTE_URL, REMOTE_URL],
+      fileUrls: [OTHER_REMOTE_URL, REMOTE_URL],
       wrapperResult: { kind: "no-origin" },
     },
     {
       title: "reports the origin url of an origin section whose section name is capitalized",
       config: `[Remote "origin"]\n\turl = ${REMOTE_URL}\n`,
-      libraryRemotes: [],
-      libraryUrls: [REMOTE_URL],
+      fileUrls: [REMOTE_URL],
       wrapperResult: { kind: "origin", url: REMOTE_URL },
     },
   ];
 
-  for (const {
-    title,
-    config,
-    libraryRemotes,
-    libraryUrls,
-    wrapperResult,
-  } of ORIGIN_SECTION_SHAPES) {
+  for (const { title, config, fileUrls, wrapperResult } of ORIGIN_SECTION_SHAPES) {
     test(title, async (t) => {
       // arrange
       const repository = await createGitTestRepository(t, { boundary: "local" });
@@ -3120,11 +1822,7 @@ describe("listRemotes", () => {
       // assert
       // Proves the fixture reproduces the shape, so a mis-authored config
       // cannot pass through the empty-remote-list path.
-      assert.deepStrictEqual(await git.listRemotes({ fs, dir: repository.dir }), libraryRemotes);
-      assert.deepStrictEqual(
-        await git.getConfigAll({ fs, dir: repository.dir, path: "remote.origin.url" }),
-        libraryUrls,
-      );
+      assert.deepStrictEqual(await originUrlsInFile(repository.dir), fileUrls);
       assert.deepStrictEqual(remotes, wrapperResult);
     });
   }
@@ -3388,538 +2086,6 @@ describe("listLocalTags", () => {
         },
       ],
     );
-  });
-});
-
-/** A promise and the two functions that settle it. */
-interface Settleable<T> {
-  readonly promise: Promise<T>;
-  readonly resolve: (value: T) => void;
-  readonly reject: (reason: Error) => void;
-}
-
-function settleable<T>(): Settleable<T> {
-  let resolve: (value: T) => void = () => {
-    throw new Error("the promise was not created");
-  };
-
-  let reject: (reason: Error) => void = () => {
-    throw new Error("the promise was not created");
-  };
-
-  const promise = new Promise<T>((settleWith, failWith) => {
-    resolve = settleWith;
-    reject = failWith;
-  });
-  return { promise, resolve, reject };
-}
-
-/** A request the transport holds until the case settles `answer`. */
-interface HeldTransport {
-  readonly requests: string[];
-  readonly arrived: Promise<void>;
-  readonly answer: Settleable<GitHttpResponse>;
-}
-
-function installHeldTransport(t: TestContext): HeldTransport {
-  const requests: string[] = [];
-  const arrival = settleable<undefined>();
-  const answer = settleable<GitHttpResponse>();
-  t.mock.method(http, "request", (request: GitHttpRequest): Promise<GitHttpResponse> => {
-    requests.push(`${request.method ?? "GET"} ${request.url}`);
-    arrival.resolve(undefined);
-    return answer.promise;
-  });
-  return { requests, arrived: arrival.promise, answer };
-}
-
-/** A response body whose `return()` calls are counted. */
-function countedBody(chunks: readonly Uint8Array[]): {
-  readonly body: AsyncIterableIterator<Uint8Array>;
-  readonly returns: () => number;
-} {
-  let returned = 0;
-  const source = chunks[Symbol.iterator]();
-  const body: AsyncIterableIterator<Uint8Array> = {
-    next: () => Promise.resolve(source.next()),
-    return: () => {
-      returned += 1;
-      return Promise.resolve({ done: true, value: undefined });
-    },
-    [Symbol.asyncIterator]: () => body,
-  };
-  return { body, returns: () => returned };
-}
-
-/**
- * Serves `served` to isomorphic-git: its advertisement, then its pack. The
- * pack body runs `onPackRead` when its last read settles. Returns each
- * request as `METHOD url`.
- */
-function installServedTransport(
-  t: TestContext,
-  served: ServedCommit,
-  onPackRead: () => void = () => undefined,
-): string[] {
-  const requests: string[] = [];
-  t.mock.method(http, "request", async (request: GitHttpRequest): Promise<GitHttpResponse> => {
-    await collectBody(request.body);
-    requests.push(`${request.method ?? "GET"} ${request.url}`);
-    if (request.method !== "POST") {
-      return response(
-        request.url,
-        200,
-        "OK",
-        "application/x-git-upload-pack-advertisement",
-        served.advertisement.body,
-      );
-    }
-
-    const source = [Uint8Array.from(served.pack.body)][Symbol.iterator]();
-    const body: AsyncIterableIterator<Uint8Array> = {
-      next: () => {
-        const chunk = source.next();
-        if (chunk.done === true) {
-          onPackRead();
-        }
-
-        return Promise.resolve(chunk);
-      },
-      [Symbol.asyncIterator]: () => body,
-    };
-    return {
-      url: request.url,
-      statusCode: 200,
-      statusMessage: "OK",
-      headers: { "content-type": "application/x-git-upload-pack-result" },
-      body,
-    };
-  });
-  return requests;
-}
-
-/** Which answer of a fetch is cut off, and the bytes it yields before its held read. */
-interface CutOffBody {
-  readonly method: "GET" | "POST";
-  readonly first: Buffer;
-}
-
-/**
- * The `info/refs` answer of an empty repository with no flush after its
- * service line: isomorphic-git reads a failed read of it as the end of an
- * empty advertisement, and a fetch of an empty remote succeeds.
- */
-const CUT_OFF_ADVERTISEMENT: CutOffBody = {
-  method: "GET",
-  first: Buffer.concat([packet("# service=git-upload-pack\n"), FLUSH]),
-};
-
-/** The whole pack with no flush after it, so the next read is the held one. */
-function cutOffPack(served: ServedCommit): CutOffBody {
-  return {
-    method: "POST",
-    first: Buffer.concat([
-      packet("NAK\n"),
-      packetBytes(Buffer.concat([Buffer.from([1]), served.packfile])),
-    ]),
-  };
-}
-
-/**
- * Serves `served`, except that the answer to `cut.method` yields `cut.first`
- * and holds its next read; `onHeldRead` runs when that read starts.
- */
-function installCutOffBody(
-  t: TestContext,
-  served: ServedCommit,
-  cut: CutOffBody,
-  onHeldRead: () => void,
-): { readonly returns: () => number } {
-  let returned = 0;
-  t.mock.method(http, "request", async (request: GitHttpRequest): Promise<GitHttpResponse> => {
-    await collectBody(request.body);
-    if (request.method !== cut.method) {
-      return response(
-        request.url,
-        200,
-        "OK",
-        "application/x-git-upload-pack-advertisement",
-        served.advertisement.body,
-      );
-    }
-
-    let reads = 0;
-    const body: AsyncIterableIterator<Uint8Array> = {
-      next: () => {
-        reads += 1;
-        if (reads === 1) {
-          return Promise.resolve({ done: false, value: Uint8Array.from(cut.first) });
-        }
-
-        onHeldRead();
-        return new Promise(() => undefined);
-      },
-      return: () => {
-        returned += 1;
-        return Promise.resolve({ done: true, value: undefined });
-      },
-      [Symbol.asyncIterator]: () => body,
-    };
-    return {
-      url: request.url,
-      statusCode: 200,
-      statusMessage: "OK",
-      headers: {
-        "content-type":
-          cut.method === "GET"
-            ? "application/x-git-upload-pack-advertisement"
-            : "application/x-git-upload-pack-result",
-      },
-      body,
-    };
-  });
-  return { returns: () => returned };
-}
-
-/**
- * Answers `info/refs` with a protocol version 1 advertisement/**
- * Answers `info/refs` with a protocol version 1 advertisement of `OID_MAIN`,
- * then answers `git-upload-pack` with a NAK and a pack stream that stays open.
- */
-function installStalledPackWireTransport(t: TestContext): {
-  readonly pack: PassThrough;
-  readonly packAnswered: Promise<void>;
-} {
-  const pack = new PassThrough();
-  const packAnswer = settleable<undefined>();
-
-  function request(
-    options: WireRequestOptions,
-    onResponse: (response: Readable) => void,
-  ): EventEmitter {
-    return Object.assign(new EventEmitter(), {
-      end(): void {
-        setImmediate(() => {
-          if (options.method === "GET") {
-            onResponse(
-              Object.assign(Readable.from([uploadPackAdvertisementBody(OID_MAIN)]), {
-                statusCode: 200,
-                statusMessage: "OK",
-                headers: { "content-type": "application/x-git-upload-pack-advertisement" },
-              }),
-            );
-            return;
-          }
-
-          onResponse(
-            Object.assign(pack, {
-              statusCode: 200,
-              statusMessage: "OK",
-              headers: { "content-type": "application/x-git-upload-pack-result" },
-            }),
-          );
-          pack.write(packet("NAK\n"));
-          packAnswer.resolve(undefined);
-        });
-      },
-    });
-  }
-
-  t.mock.method(https, "request", request);
-  return { pack, packAnswered: packAnswer.promise };
-}
-
-async function remoteBranchesAndHead(
-  dir: string,
-): Promise<{ readonly head: string; readonly remoteBranches: string[] }> {
-  const checkout = gitTestCheckout(dir);
-  const remoteRefs = await checkout.run(
-    "for-each-ref",
-    "--format=%(refname:lstrip=3)",
-    "refs/remotes/origin",
-  );
-  return {
-    head: await checkout.run("rev-parse", "HEAD"),
-    remoteBranches: remoteRefs === "" ? [] : remoteRefs.split("\n"),
-  };
-}
-
-function isAbortReason(reason: Error): (error: unknown) => boolean {
-  return (error) => {
-    assert.strictEqual(error, reason);
-    return true;
-  };
-}
-
-/**
- * Runs `run` in this many microtask turns: late enough that a request or body
- * read that settled just now has already told its abort race, early enough
- * that the call has not returned to its caller.
- */
-function afterSettlement(run: () => void): void {
-  queueMicrotask(() => {
-    queueMicrotask(() => {
-      queueMicrotask(run);
-    });
-  });
-}
-
-describe("runWithGitAbortSignal", () => {
-  test("D-PL8-24: a fetch whose request never answers rejects with the abort reason and leaves the refs as they were", async (t) => {
-    // arrange
-    const transport = installHeldTransport(t);
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    await repository.run("remote", "add", "origin", REMOTE_URL);
-    const refsBefore = await remoteBranchesAndHead(repository.dir);
-    const controller = new AbortController();
-    const reason = new Error("background step stopped");
-    const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir: repository.dir }));
-    await transport.arrived;
-
-    // act
-    controller.abort(reason);
-
-    // assert
-    await assert.rejects(fetching, isAbortReason(reason));
-    assert.deepStrictEqual(await remoteBranchesAndHead(repository.dir), refsBefore);
-    assert.deepStrictEqual(transport.requests, [`GET ${BOUND_INFO_URL}`]);
-  });
-
-  test("D-PL8-24: a fetch whose pack stalls rejects with the abort reason and destroys the pack stream", async (t) => {
-    // arrange
-    const transport = installStalledPackWireTransport(t);
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    await repository.run("remote", "add", "origin", REMOTE_URL);
-    const controller = new AbortController();
-    const reason = new Error("background step stopped");
-    const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir: repository.dir }));
-    await transport.packAnswered;
-    await new Promise((resolve) => {
-      setImmediate(resolve);
-    });
-
-    // act
-    controller.abort(reason);
-
-    // assert
-    await assert.rejects(fetching, isAbortReason(reason));
-    assert.strictEqual(transport.pack.destroyed, true);
-  });
-
-  test("D-PL8-24: an already-aborted signal rejects before any request is sent", async (t) => {
-    // arrange
-    const dir = await cloneOfRemote(t);
-    const transport = installHeldTransport(t);
-    const reason = new Error("background step stopped");
-
-    // act
-    const fetching = runWithGitAbortSignal(AbortSignal.abort(reason), () => fetch({ dir }));
-
-    // assert
-    await assert.rejects(fetching, isAbortReason(reason));
-    assert.deepStrictEqual(transport.requests, []);
-  });
-
-  test("D-PL8-24: a response that arrives after its request was aborted has its body ended", async (t) => {
-    // arrange
-    const dir = await cloneOfRemote(t);
-    const transport = installHeldTransport(t);
-    const controller = new AbortController();
-    const reason = new Error("background step stopped");
-    const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir }));
-    await transport.arrived;
-    controller.abort(reason);
-    await assert.rejects(fetching, isAbortReason(reason));
-    const late = countedBody([advertisementBody()]);
-
-    // act
-    transport.answer.resolve({
-      url: BOUND_INFO_URL,
-      statusCode: 200,
-      statusMessage: "OK",
-      headers: { "content-type": "application/x-git-upload-pack-advertisement" },
-      body: late.body,
-    });
-    await new Promise((resolve) => {
-      setImmediate(resolve);
-    });
-
-    // assert
-    assert.strictEqual(late.returns(), 1);
-  });
-
-  test("D-PL8-24: a late response whose body fails to end raises no unhandled rejection", async (t) => {
-    // arrange
-    const dir = await cloneOfRemote(t);
-    const transport = installHeldTransport(t);
-    const controller = new AbortController();
-    const reason = new Error("background step stopped");
-    const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir }));
-    await transport.arrived;
-    controller.abort(reason);
-    await assert.rejects(fetching, isAbortReason(reason));
-    let returned = 0;
-    const body: AsyncIterableIterator<Uint8Array> = {
-      next: () => Promise.resolve({ done: true, value: undefined }),
-      return: () => {
-        returned += 1;
-        return Promise.reject(new Error("socket already closed"));
-      },
-      [Symbol.asyncIterator]: () => body,
-    };
-    const unhandled: unknown[] = [];
-    const onUnhandled = (error: unknown): void => {
-      unhandled.push(error);
-    };
-
-    process.on("unhandledRejection", onUnhandled);
-    t.after(() => {
-      process.off("unhandledRejection", onUnhandled);
-    });
-
-    // act
-    transport.answer.resolve({
-      url: BOUND_INFO_URL,
-      statusCode: 200,
-      statusMessage: "OK",
-      headers: { "content-type": "application/x-git-upload-pack-advertisement" },
-      body,
-    });
-    await new Promise((resolve) => {
-      setImmediate(resolve);
-    });
-
-    // assert
-    assert.deepStrictEqual({ returned, unhandled }, { returned: 1, unhandled: [] });
-  });
-
-  test("D-PL8-24: a request that fails after its abort still rejects with the abort reason", async (t) => {
-    // arrange
-    const dir = await cloneOfRemote(t);
-    const transport = installHeldTransport(t);
-    const controller = new AbortController();
-    const reason = new Error("background step stopped");
-    const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir }));
-    await transport.arrived;
-    controller.abort(reason);
-
-    // act
-    transport.answer.reject(new Error("socket closed"));
-
-    // assert
-    await assert.rejects(fetching, isAbortReason(reason));
-  });
-
-  test("D-PL8-24: a call that already failed for another reason rejects with that error when the abort lands afterwards", async (t) => {
-    // arrange
-    const dir = await cloneOfRemote(t);
-    const controller = new AbortController();
-    const failure = new Error("socket closed");
-    t.mock.method(http, "request", (): Promise<GitHttpResponse> => {
-      afterSettlement(() => {
-        controller.abort(new Error("background step stopped"));
-      });
-      return Promise.reject(failure);
-    });
-
-    // act
-    const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir }));
-
-    // assert
-    await assert.rejects(fetching, (error: unknown) => error === failure);
-  });
-
-  test("D-PL8-24: a call that already completed returns its result when the abort lands afterwards", async (t) => {
-    // arrange
-    const { dir, served } = await wireFetchFixture(t);
-    const controller = new AbortController();
-    installServedTransport(t, served, () => {
-      afterSettlement(() => {
-        controller.abort(new Error("background step stopped"));
-      });
-    });
-
-    // act
-    await runWithGitAbortSignal(controller.signal, () => fetch({ dir }));
-
-    // assert
-    assert.strictEqual(await fetchedMain(dir), served.oid);
-  });
-
-  test("D-PL8-24: a fetch whose advertisement is cut off by the abort rejects instead of reporting an empty remote", async (t) => {
-    // arrange
-    const { dir, served } = await wireFetchFixture(t);
-    const controller = new AbortController();
-    const reason = new Error("background step stopped");
-    const advertisement = installCutOffBody(t, served, CUT_OFF_ADVERTISEMENT, () => {
-      queueMicrotask(() => {
-        controller.abort(reason);
-      });
-    });
-
-    // act
-    const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir }));
-
-    // assert
-    await assert.rejects(fetching, isAbortReason(reason));
-    assert.strictEqual(advertisement.returns(), 1);
-  });
-
-  test("D-PL8-24: a pack read that starts after the abort ends the body and rejects", async (t) => {
-    // arrange
-    const { dir, served } = await wireFetchFixture(t);
-    const controller = new AbortController();
-    const reason = new Error("background step stopped");
-    const pack = installCutOffBody(t, served, cutOffPack(served), () => {
-      controller.abort(reason);
-    });
-
-    // act
-    const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir }));
-
-    // assert
-    await assert.rejects(fetching, isAbortReason(reason));
-    assert.strictEqual(pack.returns(), 1);
-  });
-
-  test("D-PL8-24: a scope whose signal never aborts fetches with the same requests", async (t) => {
-    // arrange
-    const { dir, served } = await wireFetchFixture(t);
-    const requests = installServedTransport(t, served);
-
-    // act
-    await runWithGitAbortSignal(new AbortController().signal, () => fetch({ dir }));
-
-    // assert
-    assert.strictEqual(await fetchedMain(dir), served.oid);
-    assert.deepStrictEqual(requests, [`GET ${BOUND_INFO_URL}`, `POST ${BOUND_UPLOAD_PACK_URL}`]);
-  });
-
-  test("D-PL8-24: a response without a body reaches isomorphic-git unchanged inside a scope", async (t) => {
-    // arrange
-    const dir = await cloneOfRemote(t);
-    t.mock.method(http, "request", (request: GitHttpRequest): Promise<GitHttpResponse> =>
-      Promise.resolve({
-        url: request.url,
-        statusCode: 500,
-        statusMessage: "Internal Server Error",
-        headers: {},
-      }),
-    );
-
-    // act
-    const fetching = runWithGitAbortSignal(new AbortController().signal, () => fetch({ dir }));
-
-    // assert
-    await assert.rejects(fetching, (error: unknown) => {
-      assert.ok(error instanceof git.Errors.HttpError);
-      assert.deepStrictEqual(error.data, {
-        statusCode: 500,
-        statusMessage: "Internal Server Error",
-        response: undefined,
-      });
-      return true;
-    });
   });
 });
 
