@@ -8,14 +8,17 @@
  * and the plugin clone paths reach it through `buildCloneAuth`, instead of any
  * of them hardcoding `github.com` + `initiateDeviceFlow`.
  *
- * GAUTH-03 contract: EVERY host gets a bundle, so `buildAuthCallbacks` runs
- * and its fill-first path consults `credentialOps.fill(host)` on every host.
- * The provider registry gates only the interactive half:
+ * GAUTH-03 contract: EVERY host gets a bundle. git asks the user's credential
+ * helpers itself on every host, and the bundle decides what an authentication
+ * failure of the run leads to (D-SG-14). The provider registry gates only the
+ * interactive half:
  *   - Provider found  -> a `device-flow` bundle whose `onAuthRequired` runs
- *     that provider's Device Flow, host-keyed (PROV-03).
+ *     that provider's Device Flow, host-keyed (PROV-03). `platform/git.ts`
+ *     calls it when no helper answered, then runs the request once more.
  *   - No provider     -> a `stored-credential` bundle from
  *     `buildStoredCredentialAuth`, so a credential already in the user's
- *     helper still authenticates and a miss cancels (GAUTH-04).
+ *     helper still authenticates, a miss fails as git failed, and a refused
+ *     credential stays stored (GAUTH-04).
  *
  * GitHub bundles come from `buildGitHubAuth`. While
  * `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` is set, it binds the override host
@@ -28,13 +31,12 @@
  *
  * Gate discipline: this module lives in the orchestrator tier but MUST NOT
  * name `gitOps` / `DEFAULT_GIT_OPS` or import `platform/git.ts` as a VALUE --
- * only `import type` from platform/git.ts and its auth-callback sibling is
- * permitted -- so consumers (install-outcome.ts) that import it stay clean
- * under BLOCK F in `eslint.config.js`. It imports the provider registry
- * (domain), the Device Flow engine (domain), the device-flow prompt helper
- * (shared), the auth-callback seam types (platform/git-auth-callbacks.ts), and
- * the credential surface (platform/git-credential.ts), and the GitHub base
- * seam (shared/github-base-url.ts).
+ * only `import type` from platform/git.ts is permitted -- so consumers
+ * (install-outcome.ts) that import it stay clean under BLOCK F in
+ * `eslint.config.js`. It imports the provider registry (domain), the Device
+ * Flow engine (domain), the device-flow prompt helper (shared), the credential
+ * surface with the bundle and sign-in types (platform/git-credential.ts), and
+ * the GitHub base seam (shared/github-base-url.ts).
  *
  * AUTH-09: no credential field is ever interpolated into an Error/notify here;
  * enforced by test/architecture/no-credential-leak.test.ts (PROV-05).
@@ -48,11 +50,14 @@ import { GITHUB_HOST, gitHubOverrideHost, gitHubWireUrl } from "../shared/github
 import { notifyDeviceFlowPrompt } from "../shared/notification-dispatch.ts";
 
 import type { DeviceFlowHttp } from "../domain/github-auth.ts";
-import type { AuthAttemptResult, OnAuthRequiredFn } from "../platform/git-auth-callbacks.ts";
-import type { CredentialOps } from "../platform/git-credential.ts";
+import type {
+  AuthAttemptResult,
+  CredentialOps,
+  GitAuthBundle,
+  OnAuthRequiredFn,
+} from "../platform/git-credential.ts";
 import type { NotificationContext } from "../platform/pi-api.ts";
 import type { NotificationRun } from "../shared/notification-run.ts";
-import type { GitAuthBundle } from "./marketplace/shared.ts";
 
 // Re-export the auth/credential types the network-gated plugin orchestrators
 // (install-outcome.ts / reinstall-flow.ts) need. Those files MUST NOT import
@@ -132,9 +137,9 @@ export const NO_STORED_CREDENTIAL_CAUSE: (host: string) => string = (host) =>
 
 /**
  * Build the `stored-credential` bundle for `host`: the user's git credential
- * helper is the only credential source, a helper miss cancels, and a credential
- * the server rejects stays stored because it is the only copy (GAUTH-04,
- * D-1-01). It does no I/O.
+ * helper is the only credential source, a helper miss fails as git failed, and
+ * a credential the server rejects stays stored because it is the only copy
+ * (GAUTH-04, D-1-01). It does no I/O.
  *
  * `buildAuthForHost` returns it for a host the provider registry does not
  * claim. The autoupdate cascade asks for it on every host, because it has no
@@ -148,32 +153,25 @@ export function buildStoredCredentialAuth(
 }
 
 /**
- * Build the `GitAuthBundle` for `host`. Every host gets one, so
- * `platform/git.ts` always builds auth callbacks and their fill-first path
- * consults `credentialOps.fill(host)` before anything else (GAUTH-03, D-1-01).
+ * Build the `GitAuthBundle` for `host`. Every host gets one, so an
+ * authentication failure on any host maps by the bundle's kind (GAUTH-03,
+ * D-1-01, D-SG-14).
  *
  * A registry host gets a `device-flow` bundle: its `onAuthRequired` runs that
  * provider's Device Flow (D-79-05) and, if an `authMemo` is supplied, records
  * the result so the flow runs AT MOST ONCE per host across a single command
- * invocation (D-79-02). Its credential re-mints on the next fill miss, so
- * evicting a rejected one is recoverable (AUTH-07). A host the registry does
- * not claim gets `buildStoredCredentialAuth`'s bundle.
+ * invocation (D-79-02). A host the registry does not claim gets
+ * `buildStoredCredentialAuth`'s bundle.
  *
- * The memo caps Device Flow round-trips and cannot cap `git credential fill`:
- * `platform/git-auth-callbacks.ts::onAuth` reaches `onAuthRequired` only AFTER
- * `fill`, so `fill` runs once per auth challenge per operation. That is the
- * AUTH-02 silent-reuse contract.
+ * The memo caps Device Flow round-trips, not git's own helper queries: git
+ * asks the user's credential helpers on every run, and `platform/git.ts`
+ * reaches `onAuthRequired` only after a run failed because no helper answered
+ * (D-SG-14). That is the AUTH-02 silent-reuse contract.
  *
- * A host-keyed bundle on an unregistered host is safe at the transport level:
- * isomorphic-git invokes `onAuth` only from `discover`, with the caller's own
- * URL and never a redirect target (`node_modules/isomorphic-git/index.cjs`);
- * `platform/git.ts` follows redirects itself and never forwards the credential
- * headers to another origin (scheme, host and port); and `credentialFill`
- * emits `protocol` + `host` and never a `path` line
- * (`platform/git-credential.ts`), so the lookup is strictly host-keyed.
- * What remains is a bundle whose bound `host` disagrees
- * with the URL being cloned, and `buildAuthCallbacks.onAuth` compares the two
- * directly (D-1-03, T-79-04).
+ * The bundle hands git no credential of its own: git makes every lookup in
+ * the user's helpers itself, and a sign-in's token reaches git only through a
+ * one-shot helper for the one retried run (`platform/git-one-shot-credential.ts`,
+ * D-SG-14).
  */
 export function buildAuthForHost(args: {
   host: string;

@@ -13,7 +13,7 @@ import { captureDebugLog } from "./debug-log-capture.ts";
 import type {
   AuthAttemptResult,
   OnAuthRequiredFn,
-} from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
+} from "../../extensions/pi-claude-marketplace/platform/git-credential.ts";
 
 const HOST = "git.example.invalid";
 const REMOTE_URL = `https://${HOST}/owner/repo.git`;

@@ -68,7 +68,7 @@ import type { UnstageWorkflowFailure } from "../../bridges/workflows/types.ts";
 import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { BuildAuthCallbacksOpts } from "../../platform/git-auth-callbacks.ts";
+import type { GitAuthBundle } from "../../platform/git-credential.ts";
 import type { ListRemotesResult } from "../../platform/git.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
@@ -122,17 +122,14 @@ export class WorkflowsUnstageFailureError extends Error {
 }
 
 /**
- * Optional auth bundle passed through GitOps.clone, GitOps.fetch, and
- * GitOps.resolveRemoteRef: the readonly form of the platform's
- * `BuildAuthCallbacksOpts`, which is also the type of
- * `CloneOptions.auth?` / `FetchOptions.auth?`. When undefined, every call
- * site behaves identically to the public-only path.
- *
- * D-13 boundary: this names only a TYPE from the platform tier
- * (`BuildAuthCallbacksOpts`) -- no isomorphic-git symbol crosses into the
- * orchestrator tier.
+ * The optional auth bundle of GitOps.clone, GitOps.fetchCommit, and
+ * GitOps.resolveRemoteRef, owned by `platform/git-credential.ts`. It decides
+ * what an authentication failure of the git run leads to (D-SG-14); when it is
+ * undefined, every call site behaves identically to the public-only path.
+ * The marketplace and plugin orchestrators import it from here, beside the
+ * git surface that takes it.
  */
-export type GitAuthBundle = Readonly<BuildAuthCallbacksOpts>;
+export type { GitAuthBundle };
 
 /**
  * D-12, D-13: marketplace orchestrator git surface.
