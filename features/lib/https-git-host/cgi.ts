@@ -104,18 +104,26 @@ export function cgiEnvironment(
   return environment;
 }
 
-function headerBlockEnd(output: Buffer): { readonly end: number; readonly gap: number } {
+// Where the header block of `output` ends and how long its blank line is, or undefined without one.
+function findHeaderBlockEnd(
+  output: Buffer,
+): { readonly end: number; readonly gap: number } | undefined {
   const crlf = output.indexOf("\r\n\r\n");
   const lf = output.indexOf("\n\n");
   if (crlf !== -1 && (lf === -1 || crlf < lf)) {
     return { end: crlf, gap: 4 };
   }
 
-  if (lf === -1) {
+  return lf === -1 ? undefined : { end: lf, gap: 2 };
+}
+
+function headerBlockEnd(output: Buffer): { readonly end: number; readonly gap: number } {
+  const found = findHeaderBlockEnd(output);
+  if (found === undefined) {
     throw new Error("the CGI response has no blank line after its headers");
   }
 
-  return { end: lf, gap: 2 };
+  return found;
 }
 
 function headerLine(line: string): readonly [string, string] {
@@ -166,8 +174,12 @@ export function parseCgiResponse(output: Buffer): CgiResponse {
 /**
  * Runs git with `args`, the arguments `httpBackendArguments` returns, and with
  * `env`, writes `body` to it, and resolves with everything it prints. Hands
- * the child to `track` first, so the host can kill it. Rejects with the exit
- * code and stderr when it fails.
+ * the child to `track` first, so the host can kill it. It also resolves when
+ * the backend exits non-zero after it printed a whole header block: upload-pack
+ * writes its own error packet, such as `ERR upload-pack: not our ref <sha>`,
+ * then exits non-zero, and the client must see git's answer, not a 500 the
+ * host made up (SG-HRN-02). Rejects with the exit code and stderr when it
+ * exits non-zero without a whole header block, and when a signal ends it.
  */
 export function runHttpBackend(
   args: readonly string[],
@@ -195,8 +207,9 @@ export function runHttpBackend(
       stderr += chunk;
     });
     child.on("close", (code) => {
-      if (code === 0) {
-        resolve(Buffer.concat(chunks));
+      const output = Buffer.concat(chunks);
+      if (code === 0 || (code !== null && findHeaderBlockEnd(output) !== undefined)) {
+        resolve(output);
       } else {
         reject(new Error(`git http-backend exited ${code ?? "on a signal"}: ${stderr}`));
       }

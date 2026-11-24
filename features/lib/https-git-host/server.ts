@@ -657,9 +657,12 @@ export class HttpsGitHost {
     res: ServerResponse,
     arm: GitHostArm | undefined,
   ): Promise<void> {
-    // The request answers 500, and the log says so, when the CGI fails or is
-    // killed, or when the CGI prints a status or a header Node cannot send.
-    // Nothing escapes, so no request can crash the worker that hosts the server.
+    // A CGI that printed its header block answers with its own status and
+    // body, also when it then exits non-zero, as upload-pack does after it
+    // refuses a want (SG-HRN-02). The request answers 500, and the log says so,
+    // when the CGI fails before its header block ends or is killed, or when
+    // it prints a status or a header Node cannot send. Nothing escapes, so no
+    // request can crash the worker that hosts the server.
     try {
       const request = {
         method: logged.method,
