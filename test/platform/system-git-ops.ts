@@ -1,6 +1,5 @@
 import { realpath } from "node:fs/promises";
 
-import { DEFAULT_GIT_OPS } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import {
   createGitProcess,
   NODE_GIT_HOST,
@@ -68,13 +67,9 @@ export function recordingGitProcess(systemGit: GitProcess): {
   };
 }
 
-/**
- * The production GitOps, its system-git verbs bound to `systemGit`; the
- * in-process D-14 verbs stay the production ones.
- */
+/** The production GitOps, each of its system-git verbs bound to `systemGit`. */
 export function systemGitOps(systemGit: GitProcess): GitOps {
   return {
-    ...DEFAULT_GIT_OPS,
     clone: (options) => clone(options, systemGit),
     fetchCommit: (options) => fetchCommit(options, systemGit),
     checkout: (options) => checkout(options, systemGit),

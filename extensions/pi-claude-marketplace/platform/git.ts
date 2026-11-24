@@ -210,6 +210,7 @@ export function runWithGitAbortSignal<T>(signal: AbortSignal, run: () => Promise
  * `FetchedUrlCause` naming `wireUrl`, so a wrong base shows in the failure
  * output. The code-bearing error stays at depth 0 for the failure classifiers.
  * An unrewritten call runs with no `try` and its failure is unchanged (GHB-04).
+ * A `git-missing` failure fetched nothing, so it gains no cause (SG-PRC-06).
  */
 async function withFetchedUrlCause<T>(
   wireUrl: string,
@@ -224,12 +225,22 @@ async function withFetchedUrlCause<T>(
     return await call();
   } catch (error: unknown) {
     // A rejection that is not a writable Error passes through unchanged.
-    if (error instanceof Error && error.cause === undefined && Object.isExtensible(error)) {
+    if (
+      error instanceof Error &&
+      error.cause === undefined &&
+      Object.isExtensible(error) &&
+      !isGitMissing(error)
+    ) {
       error.cause = new FetchedUrlCause(wireUrl);
     }
 
     throw error;
   }
+}
+
+/** Whether `error` is the git process module's report that it found no git. */
+function isGitMissing(error: Error): boolean {
+  return error instanceof GitCommandError && error.kind === "git-missing";
 }
 
 /** A remote request as `runRemote` built it: its config pairs are always present. */
@@ -253,9 +264,10 @@ interface RemoteRequest {
 }
 
 /**
- * SG-TRN-01: the one network request path. It asks for git first, so a
- * missing git rejects with the lookup's own error and no cause (SG-PRC-06).
- * Then it runs `remote` on the network lane with the limit of
+ * SG-TRN-01: the one network request path. It runs `remote` once on the
+ * network lane, and that run finds git itself: a missing git fails it as
+ * `git-missing` with no cause (SG-PRC-06), and no separate lookup runs first
+ * (IN-01). The run has the limit of
  * `gitTimeoutMs()` read for this command (D-SG-13), the signal of the abort
  * scope it runs in (D-PL8-24), and the D-SG-16 pair of
  * `gitHubInsteadOfPairs(remote.url)`, which throws `InvalidGitHubBaseUrlError`
@@ -264,7 +276,6 @@ interface RemoteRequest {
  * git fetched (GHB-01).
  */
 async function runRemote(remote: RemoteRequest, gitProcess: GitProcess): Promise<GitResult> {
-  await gitProcess.locate();
   const config = gitHubInsteadOfPairs(remote.url);
   const signal = gitAbortScope.getStore();
   const request: RemoteGitRequest = {

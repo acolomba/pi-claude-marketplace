@@ -104,8 +104,7 @@
       "kind": "banned-import",
       "specifiers": ["isomorphic-git"],
       "files": ["extensions/pi-claude-marketplace/**"],
-      "exclude": ["extensions/pi-claude-marketplace/platform/git.ts"],
-      "message": "D-13: only platform/git.ts imports isomorphic-git. Reach git through its wrappers and the GitOps seam in orchestrators/marketplace/shared.ts."
+      "message": "D-SG-01, SG-TRN-01: every git operation runs system git, so no extension file imports isomorphic-git. Reach git through platform/git.ts and the GitOps seam in orchestrators/marketplace/shared.ts."
     },
     {
       "id": "child-process-chokepoint",

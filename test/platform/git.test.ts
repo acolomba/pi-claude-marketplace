@@ -221,8 +221,8 @@ async function shallowFileClone(t: TestContext): Promise<{
 }
 
 /**
- * SG-PRC-06: the lookup's own failure, unwrapped, so a missing git gets no
- * fetched-URL cause even when the GitHub base override rewrote the URL.
+ * SG-PRC-06: the git process module's own failure, unwrapped, so a missing git
+ * gets no fetched-URL cause even when the GitHub base override rewrote the URL.
  */
 function isGitMissingWithoutCause(error: unknown): boolean {
   assert.ok(error instanceof GitCommandError);
@@ -230,28 +230,6 @@ function isGitMissingWithoutCause(error: unknown): boolean {
   assert.strictEqual(error.message, "Git is required to install marketplaces.");
   assert.strictEqual(error.cause, undefined);
   return true;
-}
-
-/**
- * Points PATH at an empty directory for one test, so this process finds no
- * git. Build every fixture first: the fixtures run system git through PATH.
- * The restore is registered before PATH changes; the returned function
- * restores it early, and the registered restore then writes the same value.
- */
-async function withoutGitOnPath(t: TestContext): Promise<() => void> {
-  const directory = await createGitTestDirectory(t, { boundary: "local" });
-  const previous = process.env.PATH;
-  const restore = (): void => {
-    if (previous === undefined) {
-      delete process.env.PATH;
-    } else {
-      process.env.PATH = previous;
-    }
-  };
-
-  t.after(restore);
-  process.env.PATH = directory;
-  return restore;
 }
 
 /** A credential fake whose helper holds `user:secret` for the bound host. */
@@ -458,47 +436,101 @@ describe("local Git operations", () => {
 });
 
 describe("SG-PRC-06: the git-required gate", () => {
+  /**
+   * A git process over real system git whose own search path is an empty
+   * directory, so it finds no git, recording each lookup and each request it
+   * is asked for. The search path of this process stays as it is.
+   */
+  async function gitlessProcess(t: TestContext): Promise<{
+    readonly gitProcess: GitProcess;
+    readonly asked: () => { readonly lookups: number; readonly subcommands: readonly string[] };
+  }> {
+    const gitless = await hermeticGitProcess(t, {
+      PATH: await createGitTestDirectory(t, { boundary: "local" }),
+    });
+    let lookups = 0;
+    const subcommands: string[] = [];
+    return {
+      gitProcess: {
+        locate: () => {
+          lookups += 1;
+          return gitless.locate();
+        },
+        run: (request) => {
+          subcommands.push(request.subcommand);
+          return gitless.run(request);
+        },
+      },
+      asked: () => ({ lookups, subcommands }),
+    };
+  }
+
   const networkVerbs: readonly {
     readonly name: string;
     /** `target` is an empty directory a clone would write into. */
-    readonly call: (target: string) => Promise<unknown>;
+    readonly call: (target: string, gitProcess: GitProcess) => Promise<unknown>;
+    /** The subcommand of the verb's first request. */
+    readonly firstRequest: string;
   }[] = [
-    { name: "clone", call: (target) => clone({ dir: target, url: GITHUB_REMOTE_URL }) },
-    { name: "resolveRemoteRef", call: () => resolveRemoteRef({ url: GITHUB_REMOTE_URL }) },
-    { name: "listRemoteTags", call: () => listRemoteTags({ url: GITHUB_REMOTE_URL }) },
+    {
+      name: "clone",
+      call: (target, gitProcess) => clone({ dir: target, url: GITHUB_REMOTE_URL }, gitProcess),
+      firstRequest: "clone",
+    },
+    {
+      name: "fetchCommit",
+      call: (target, gitProcess) => fetchCommit({ dir: target, sha: OID_MAIN }, gitProcess),
+      firstRequest: "config",
+    },
+    {
+      name: "resolveRemoteRef",
+      call: (_target, gitProcess) => resolveRemoteRef({ url: GITHUB_REMOTE_URL }, gitProcess),
+      firstRequest: "ls-remote",
+    },
+    {
+      name: "listRemoteTags",
+      call: (_target, gitProcess) => listRemoteTags({ url: GITHUB_REMOTE_URL }, gitProcess),
+      firstRequest: "ls-remote",
+    },
   ];
 
   for (const verb of networkVerbs) {
-    test(`D-SG-01: ${verb.name} fails as git missing and sends no request`, async (t) => {
+    test(`D-SG-01: ${verb.name} fails as git missing in its first request and looks git up no other way`, async (t) => {
       // arrange
       const target = await createGitTestDirectory(t, { boundary: "local" });
+      const gitless = await gitlessProcess(t);
       setGitHubBaseUrl(t, `https://${HOST}`);
-      await withoutGitOnPath(t);
 
       // act
-      const calling = verb.call(target);
+      const calling = verb.call(target, gitless.gitProcess);
 
       // assert
       await assert.rejects(calling, isGitMissingWithoutCause);
+      assert.deepStrictEqual(gitless.asked(), { lookups: 0, subcommands: [verb.firstRequest] });
       assert.deepStrictEqual(await readdir(target), []);
     });
   }
 
-  test("D-SG-04: a clone succeeds once git is back on the path", async (t) => {
+  test("D-SG-04: a clone succeeds once git is back", async (t) => {
     // arrange
     const repository = await createGitTestRepository(t, { boundary: "local" });
     const url = `file://${repository.dir}`;
     const refused = await createGitTestDirectory(t, { boundary: "local" });
     const dir = await createGitTestDirectory(t, { boundary: "local" });
-    const restorePath = await withoutGitOnPath(t);
-    await assert.rejects(clone({ dir: refused, url }), isGitMissingWithoutCause);
-    restorePath();
+    const systemGit = await hermeticGitProcess(t);
+    let current = (await gitlessProcess(t)).gitProcess;
+    const gitProcess: GitProcess = {
+      locate: () => current.locate(),
+      run: (request) => current.run(request),
+    };
+    await assert.rejects(clone({ dir: refused, url }, gitProcess), isGitMissingWithoutCause);
+    current = systemGit;
 
     // act
-    await clone({ dir, url });
+    await clone({ dir, url }, gitProcess);
 
     // assert
-    assert.strictEqual(await resolveRef({ dir, ref: "HEAD" }), repository.initialOid);
+    assert.strictEqual(await resolveRef({ dir, ref: "HEAD" }, systemGit), repository.initialOid);
   });
 });
 
