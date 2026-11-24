@@ -578,13 +578,18 @@ No package is installed in this phase. The only package change is the `isomorphi
 | A9 | Windows `core.symlinks` default after unsetting matches a fresh clone | D-SG-11 | Copies on Windows without symlink rights; covered by the deferred manual check |
 | A10 | git removes a failed clone's directory, so a clone retry starts clean | D-SG-14 | Pre-clean the staging dir before the retry |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Delete or demote `isomorphic-git` now?** We know fallow will likely flag it once production stops importing it. Unclear: whether Phase 3 may touch `package.json` dependencies (SG-CLS-01 is Phase 8). Recommendation: move it to `devDependencies` in Wave 2 if any test still needs it, else remove it, and ask the maintainer during planning.
+   RESOLVED: `isomorphic-git` is removed from `dependencies` (and from `package-lock.json`) in 03-15, once no production, test, script, or features file imports it; it does not move to `devDependencies`.
 2. **Keep the D-14 interim in Wave 2?** Fewer plans in Wave 3, but rows change twice and two verbs exist briefly. Recommendation: skip the interim if one plan can carry the refresh swap; otherwise keep it and delete `update-ref`/`symbolic-ref` use in Wave 3.
+   RESOLVED: no interim D-14 on system git; the refresh goes straight to D-SG-10's re-clone and swap, for `marketplace update` in 03-07 and for the mirror refresh and the PUP-2 sync in 03-09 (03-06's real-git case checks that the old D-14 verbs still serve depth-1 clones until then).
 3. **KEEP and kept-in-use row tokens.** Both need a closed-set token before Phase 6 rewords them. Recommendation: one new marketplace reason with warning severity, plus a diagnostic note naming the variable; register it in the closed-set tests and `docs/output-catalog.md`.
+   RESOLVED: no new token; a kept checkout reuses the closed reasons `network unreachable` (D-SG-15) and `permission denied` (kept-in-use) with the existing cause shape, and Phase 6 owns the wording.
 4. **Marketplace SHA `ref` today.** `clone --branch=<40-hex>` fails (`Remote branch ... not found`). SG-PIN-01 (Phase 7) owns the SHA path for marketplaces. Check that no current scenario adds a marketplace at a SHA ref; if one does, keep it on the plugin ladder path or mark it for Phase 7.
+   RESOLVED: match upstream (maintainer decision): `marketplace add` refuses only a ref that looks like a commit id with capital letters, as Claude Code 2.1.330's `wCn` does (03-11); a lower-case 40- or 64-hex ref reaches git and fails clean as a missing ref, and working marketplace pins wait for SG-PIN-01 (Phase 7).
 5. **GAUTH-04 credential survival.** git erases a rejected helper credential. Recommendation: accept (upstream parity), record it for Phase 5 (SG-AUTH-03 wording).
+   RESOLVED: GAUTH-04 and SG-AUTH-03 stay unchanged in this phase; the erase is accepted as upstream parity, and 03-05's output carries the note for Phase 5.
 
 ## Sources
 
