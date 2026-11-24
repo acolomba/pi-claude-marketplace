@@ -609,8 +609,8 @@ export class CrossOriginChallengeError extends Error {
  */
 export class StoredCredentialRejectedError extends Error {
   readonly host: string;
-  constructor(host: string) {
-    super(`${host} rejected the stored credential`);
+  constructor(host: string, opts?: { cause?: unknown }) {
+    super(`${host} rejected the stored credential`, opts);
     this.name = "StoredCredentialRejectedError";
     this.host = host;
   }
@@ -700,11 +700,14 @@ const INVALID_GITHUB_BASE_URL_RULES = {
   userinfo: "must not contain a user name or password.",
   query: "must not contain a query.",
   fragment: "must not contain a fragment.",
+  "equals-sign": "must not contain an equals sign.",
 } as const;
 
 /**
  * GHB-03: the GitHub base URL variable is set to a value the override refuses.
- * `problem` names the first rule the value breaks.
+ * `problem` names the first rule the value breaks. `equals-sign` exists because
+ * the base becomes part of a `-c url.<base>/.insteadOf=` key, and git splits a
+ * `-c` pair at its first `=` (D-SG-16).
  *
  * AUTH-09: the message names the variable and the rule, never the value, which
  * can carry a token. It contains no slash, because json and rpc command-failure
@@ -713,10 +716,10 @@ const INVALID_GITHUB_BASE_URL_RULES = {
  */
 export class InvalidGitHubBaseUrlError extends Error {
   readonly variable: string;
-  readonly problem: "not-a-url" | "scheme" | "userinfo" | "query" | "fragment";
+  readonly problem: "not-a-url" | "scheme" | "userinfo" | "query" | "fragment" | "equals-sign";
   constructor(
     variable: string,
-    problem: "not-a-url" | "scheme" | "userinfo" | "query" | "fragment",
+    problem: "not-a-url" | "scheme" | "userinfo" | "query" | "fragment" | "equals-sign",
   ) {
     super(`${variable} ${INVALID_GITHUB_BASE_URL_RULES[problem]}`);
     this.name = "InvalidGitHubBaseUrlError";

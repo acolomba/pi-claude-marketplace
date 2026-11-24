@@ -8,8 +8,14 @@
 //
 // GHB-03: the module reads the environment on every call and holds no state.
 // An empty value counts as unset. A set value must be an https URL with no
-// user name, password, query, or fragment, or the read throws
+// user name, password, query, fragment, or `=`, or the read throws
 // `InvalidGitHubBaseUrlError`.
+//
+// D-SG-16: system git gets the base as the config pair
+// `url.<base>/.insteadOf=https://github.com/` on every remote command. git
+// splits a `-c` pair at its first `=`, so a base holding one would build a
+// different key, the rewrite would not apply, and the request would go to the
+// real github.com. That is why `=` is refused.
 
 import { InvalidGitHubBaseUrlError } from "./errors.ts";
 
@@ -67,7 +73,12 @@ function readGitHubBase(): { url: string; host: string } | undefined {
     pathname = pathname.slice(0, -1);
   }
 
-  return { url: `${base.origin}${pathname}`, host: base.host };
+  const url = `${base.origin}${pathname}`;
+  if (url.includes("=")) {
+    throw new InvalidGitHubBaseUrlError(GITHUB_BASE_URL_VARIABLE, "equals-sign");
+  }
+
+  return { url, host: base.host };
 }
 
 /**
@@ -88,6 +99,25 @@ export function gitHubWireUrl(url: string): string {
 
   const base = readGitHubBase();
   return base === undefined ? url : `${base.url}${url.slice(GITHUB_ORIGIN.length)}`;
+}
+
+/**
+ * D-SG-16: the `-c` pairs a git remote command needs to reach `url`: the one
+ * pair `url.<base>/.insteadOf=https://github.com/` when `url` starts with the
+ * exact prefix `https://github.com/` and the variable is set, else none. git
+ * then sends the request to the base and keys its credential by the base's
+ * host (GHB-02), while the recorded origin stays the github.com URL.
+ *
+ * Like `gitHubWireUrl`, the variable is read only after the prefix matched, so
+ * a URL outside github.com never reads or validates it (GHB-04).
+ */
+export function gitHubInsteadOfPairs(url: string): readonly string[] {
+  if (!url.startsWith(`${GITHUB_ORIGIN}/`)) {
+    return [];
+  }
+
+  const base = readGitHubBase();
+  return base === undefined ? [] : [`url.${base.url}/.insteadOf=${GITHUB_ORIGIN}/`];
 }
 
 /**

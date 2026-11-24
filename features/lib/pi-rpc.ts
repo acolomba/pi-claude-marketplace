@@ -73,6 +73,20 @@ export interface RpcGitEnvironment {
    * keeps the ten-minute maximum and a new session cancels it.
    */
   readonly PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS?: string;
+  /**
+   * The harness CONNECT proxy, set only for the Device Flow profile, so a
+   * system git request of that Pi reaches `github.com` through the git host
+   * or is refused and logged (D-SG-14). Lowercase, the spelling git and curl
+   * read. The shell's own proxy never reaches a child.
+   */
+  readonly https_proxy?: string;
+  /**
+   * The hosts the proxy leaves out, set with `https_proxy`. Pi's own `fetch`
+   * honors the proxy variables too (undici's `EnvHttpProxyAgent`), and the
+   * GitHub redirect sends Pi's sign-in requests to `127.0.0.1`, which the
+   * proxy refuses, so `127.0.0.1` is left out.
+   */
+  readonly no_proxy?: string;
 }
 
 /**
@@ -225,6 +239,14 @@ export function rpcChildEnvironment(
     if (git.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS !== undefined) {
       environment.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS =
         git.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS;
+    }
+
+    if (git.https_proxy !== undefined) {
+      environment.https_proxy = git.https_proxy;
+    }
+
+    if (git.no_proxy !== undefined) {
+      environment.no_proxy = git.no_proxy;
     }
   }
 

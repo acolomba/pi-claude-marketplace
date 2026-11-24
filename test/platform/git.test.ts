@@ -42,14 +42,18 @@ import {
   resolveTagOid,
   runWithGitAbortSignal,
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
+import { getAgentDir } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import {
   CrossOriginChallengeError,
   DeviceFlowUnavailableError,
   FetchedUrlCause,
   GitCommandError,
+  InvalidGitHubBaseUrlError,
+  StoredCredentialRejectedError,
   TooManyRedirectsError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { hermeticGitEnvironment } from "../../features/lib/hermetic-git.ts";
+import { HttpsGitHost } from "../../features/lib/https-git-host/server.ts";
 import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
 
 import { createCredentialOpsFake } from "./credential-ops-fake.ts";
@@ -94,6 +98,7 @@ void ({} satisfies { readonly retired?: GitPlatform.ListBranchesOptions });
 const HOST = "git.example.invalid";
 const REMOTE_URL = `https://${HOST}/owner/repo.git`;
 const GITHUB_REMOTE_URL = "https://github.com/owner/repo.git";
+const GITHUB_TOOLS_URL = "https://github.com/acme/tools.git";
 const OTHER_HOST = "other.example.invalid";
 const OTHER_REMOTE_URL = `https://${OTHER_HOST}/owner/repo.git`;
 const OID_MAIN = "1111111111111111111111111111111111111111";
@@ -102,10 +107,6 @@ const OID_TAG = "3333333333333333333333333333333333333333";
 const OID_PEELED = "4444444444444444444444444444444444444444";
 const OID_LIGHTWEIGHT = "5555555555555555555555555555555555555555";
 const FLUSH = Buffer.from("0000", "utf8");
-const DELIM = Buffer.from("0001", "utf8");
-// Hand-authored rather than imported from the module under test: feeding the
-// module's own literal back in could not fail.
-const TAG_REF_PREFIX = "refs/tags/";
 
 const FULL_ADVERTISEMENT = [
   `${OID_MAIN} HEAD symref-target:refs/heads/main`,
@@ -186,26 +187,11 @@ function uploadPackAdvertisementBody(oid: string, tag?: string): Buffer {
   ]);
 }
 
-function expectedListRefsBody(): Buffer {
+/** A protocol version 1 `git-upload-pack` result: a NAK, then `packfile` on side band 1. */
+function packResultBody(packfile: Buffer): Buffer {
   return Buffer.concat([
-    packet("command=ls-refs\n"),
-    DELIM,
-    packet("peel"),
-    packet("symrefs"),
-    FLUSH,
-  ]);
-}
-
-/**
- * The ls-refs command a tag listing sends: peeling on, no symrefs, and the
- * server-side ref-prefix that makes the advertisement the `--tags` equivalent.
- */
-function expectedListTagsBody(): Buffer {
-  return Buffer.concat([
-    packet("command=ls-refs\n"),
-    DELIM,
-    packet("peel"),
-    packet(`ref-prefix ${TAG_REF_PREFIX}`),
+    packet("NAK\n"),
+    packetBytes(Buffer.concat([Buffer.from([1]), packfile])),
     FLUSH,
   ]);
 }
@@ -360,13 +346,7 @@ async function installRepositoryTransport(
         200,
         "OK",
         "application/x-git-upload-pack-result",
-        protocolV2
-          ? refsBody(refs)
-          : Buffer.concat([
-              packet("NAK\n"),
-              packetBytes(Buffer.concat([Buffer.from([1]), packfile])),
-              FLUSH,
-            ]),
+        protocolV2 ? refsBody(refs) : packResultBody(packfile),
       );
     }
 
@@ -379,12 +359,15 @@ async function installRepositoryTransport(
  * config, and the case's own neutral directory, so no git variable or config
  * of the shell that runs the suite reaches it (SG-HRN-01).
  */
-async function hermeticGitProcess(t: TestContext): Promise<GitProcess> {
+async function hermeticGitProcess(
+  t: TestContext,
+  variables: NodeJS.ProcessEnv = {},
+): Promise<GitProcess> {
   const root = await realpath(await createGitTestDirectory(t, { boundary: "local" }));
   return createGitProcess({
     spawn: NODE_GIT_SPAWN,
     host: { ...NODE_GIT_HOST, neutralDirectory: () => Promise.resolve(root) },
-    env: hermeticGitEnvironment(root),
+    env: { ...hermeticGitEnvironment(root), ...variables },
     killGraceMs: 1_000,
   });
 }
@@ -399,7 +382,7 @@ function productionGitOps(systemGit: GitProcess): GitOps {
     checkout: (options) => checkout(options, systemGit),
     resolveRef: (options) => resolveRef(options, systemGit),
     currentBranch,
-    resolveRemoteRef,
+    resolveRemoteRef: (options) => resolveRemoteRef(options, systemGit),
     listRemotes: (options) => listRemotes(options, systemGit),
   };
 }
@@ -466,13 +449,24 @@ function setGitTimeoutVariable(t: TestContext, value: string): void {
   process.env.CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS = value;
 }
 
+/**
+ * The real participant serves one repository two ways: isomorphic-git's
+ * requests to `REMOTE_URL` reach it through the transport double, and system
+ * git reaches it through a user config `insteadOf` whose base is its local
+ * path (D-SG-16), so no request leaves the machine.
+ */
 async function createProductionGitOps(t: TestContext): Promise<GitOpsContractParticipant> {
-  const systemGit = await hermeticGitProcess(t);
   const remote = await createGitTestRepository(t, { boundary: "local" });
   const updatedOid = await remote.commit(
     [{ filepath: "README.md", contents: "# updated\n" }],
     "updated",
   );
+  await remote.run("tag", "-a", "-m", "v1.0.0", "v1.0.0");
+  const systemGit = await hermeticGitProcess(t, {
+    GIT_CONFIG_COUNT: "1",
+    GIT_CONFIG_KEY_0: `url.file://${remote.dir}.insteadOf`,
+    GIT_CONFIG_VALUE_0: REMOTE_URL,
+  });
   const worktree = await createGitTestRepository(t, { boundary: "local" });
   const localUpdatedOid = await worktree.commit(
     [{ filepath: "README.md", contents: "# updated\n" }],
@@ -529,17 +523,21 @@ async function shallowFileClone(t: TestContext): Promise<{
   return { dir, olderOids: [origin.initialOid, secondOid] };
 }
 
-/** A git process that runs `systemGit` and records each request as one line. */
+/** A git process that runs `systemGit` and records each request, and each as one line. */
 function recordingGitProcess(systemGit: GitProcess): {
   readonly gitProcess: GitProcess;
   readonly commands: string[];
+  readonly requests: GitRequest[];
 } {
   const commands: string[] = [];
+  const requests: GitRequest[] = [];
   return {
     commands,
+    requests,
     gitProcess: {
       locate: systemGit.locate,
       run: (request) => {
+        requests.push(request);
         commands.push(
           [request.subcommand, ...(request.options ?? []), ...(request.operands ?? [])].join(" "),
         );
@@ -583,10 +581,7 @@ async function withoutGitOnPath(t: TestContext): Promise<() => void> {
   return restore;
 }
 
-function isExpectedDiscoveryError(
-  error: unknown,
-  caller: "git.clone" | "git.fetch" | "git.listServerRefs",
-): boolean {
+function isExpectedDiscoveryError(error: unknown, caller: "git.clone" | "git.fetch"): boolean {
   assert.ok(error instanceof git.Errors.HttpError);
   assert.strictEqual(error.caller, caller);
   assert.deepStrictEqual(error.data, {
@@ -601,10 +596,7 @@ function isExpectedDiscoveryError(
  * D-10: the discovery failure stays the error itself, so the classifiers still
  * read its code at depth 0, and its cause names the URL actually fetched.
  */
-function isFetchedUrlDiscoveryError(
-  error: unknown,
-  caller: "git.clone" | "git.listServerRefs",
-): boolean {
+function isFetchedUrlDiscoveryError(error: unknown, caller: "git.clone"): boolean {
   assert.ok(isExpectedDiscoveryError(error, caller));
   assert.ok(error instanceof Error && error.cause instanceof FetchedUrlCause);
   assert.deepStrictEqual(
@@ -616,49 +608,6 @@ function isFetchedUrlDiscoveryError(
     { message: `fetched ${REMOTE_URL}`, url: REMOTE_URL, cause: undefined },
   );
   return true;
-}
-
-function isUserCanceledError(error: unknown): boolean {
-  assert.ok(error instanceof git.Errors.UserCanceledError);
-  assert.strictEqual(error.code, "UserCanceledError");
-  return true;
-}
-
-/** The urls of the recorded requests that carried a credential header. */
-function requestsCarryingAuthorization(
-  requests: readonly RecordedHttpRequest[],
-): readonly string[] {
-  return requests.filter((r) => "Authorization" in r.headers).map((r) => r.url);
-}
-
-function expectedPublicRequests(): readonly [RecordedHttpRequest, RecordedHttpRequest] {
-  return [
-    {
-      url: `${REMOTE_URL}/info/refs?service=git-upload-pack`,
-      method: "GET",
-      headers: { "Git-Protocol": "version=2" },
-      body: Buffer.alloc(0),
-    },
-    {
-      url: `${REMOTE_URL}/git-upload-pack`,
-      method: "POST",
-      headers: {
-        "Git-Protocol": "version=2",
-        "content-type": "application/x-git-upload-pack-request",
-        accept: "application/x-git-upload-pack-result",
-      },
-      body: expectedListRefsBody(),
-    },
-  ];
-}
-
-/**
- * The same two-request envelope a ref resolution sends, carrying the tag
- * listing's own ls-refs command instead.
- */
-function expectedTagRequests(): readonly [RecordedHttpRequest, RecordedHttpRequest] {
-  const [discovery, listRefs] = expectedPublicRequests();
-  return [discovery, { ...listRefs, body: expectedListTagsBody() }];
 }
 
 function expectedDiscoveryRequest(
@@ -726,7 +675,8 @@ interface PostRedirectRow {
   readonly title: string;
   readonly statusCode: number;
   readonly finalMethod: string;
-  readonly finalBody: Buffer;
+  /** Whether the re-sent request carries the original POST body. */
+  readonly keepsBody: boolean;
   readonly finalContentHeaders: readonly string[];
 }
 
@@ -791,24 +741,6 @@ function redirectWireResponse(statusCode: number, location: string): WireRespons
   };
 }
 
-function advertisementWireResponse(): WireResponse {
-  return {
-    statusCode: 200,
-    statusMessage: "OK",
-    headers: { "content-type": "application/x-git-upload-pack-advertisement" },
-    body: advertisementBody(),
-  };
-}
-
-function refsWireResponse(): WireResponse {
-  return {
-    statusCode: 200,
-    statusMessage: "OK",
-    headers: { "content-type": "application/x-git-upload-pack-result" },
-    body: refsBody(FULL_ADVERTISEMENT),
-  };
-}
-
 function unplannedWireRequest(request: WireRequest): Error {
   return new Error(`unplanned wire request: ${request.method} ${request.url}`);
 }
@@ -827,7 +759,10 @@ function crossOriginServer(
  * The renamed `info/refs` and the bound `git-upload-pack` answer only a
  * request that carries a credential.
  */
-function sameOriginServer(location: string): (request: WireRequest) => WireResponse {
+function sameOriginServer(
+  location: string,
+  served: ServedCommit,
+): (request: WireRequest) => WireResponse {
   return (request) => {
     if (request.url === BOUND_INFO_URL) {
       return redirectWireResponse(302, location);
@@ -838,11 +773,11 @@ function sameOriginServer(location: string): (request: WireRequest) => WireRespo
     }
 
     if (request.url === RENAMED_INFO_URL) {
-      return advertisementWireResponse();
+      return served.advertisement;
     }
 
     if (request.url === BOUND_UPLOAD_PACK_URL) {
-      return refsWireResponse();
+      return served.pack;
     }
 
     throw unplannedWireRequest(request);
@@ -850,10 +785,13 @@ function sameOriginServer(location: string): (request: WireRequest) => WireRespo
 }
 
 /** The bound host redirects its `git-upload-pack` POST to the renamed repository. */
-function postRedirectServer(statusCode: number): (request: WireRequest) => WireResponse {
+function postRedirectServer(
+  statusCode: number,
+  served: ServedCommit,
+): (request: WireRequest) => WireResponse {
   return (request) => {
     if (request.url === BOUND_INFO_URL) {
-      return advertisementWireResponse();
+      return served.advertisement;
     }
 
     if (request.url === BOUND_UPLOAD_PACK_URL) {
@@ -861,7 +799,7 @@ function postRedirectServer(statusCode: number): (request: WireRequest) => WireR
     }
 
     if (request.url === RENAMED_UPLOAD_PACK_URL) {
-      return refsWireResponse();
+      return served.pack;
     }
 
     throw unplannedWireRequest(request);
@@ -877,13 +815,14 @@ function postRedirectServer(statusCode: number): (request: WireRequest) => WireR
 function authenticatedPostRedirectServer(
   statusCode: number,
   location: string,
+  served: ServedCommit,
   respondAtLocation: (request: WireRequest) => WireResponse,
 ): (request: WireRequest) => WireResponse {
   return (request) => {
     if (request.url === BOUND_INFO_URL) {
       return request.headers.authorization === undefined
         ? unauthorizedWireResponse()
-        : advertisementWireResponse();
+        : served.advertisement;
     }
 
     if (request.url === BOUND_UPLOAD_PACK_URL) {
@@ -1526,25 +1465,6 @@ describe("fetch", () => {
     ]);
   });
 
-  test("Q-02: fails a challenge from another port of the same host without a credential lookup", async (t) => {
-    // arrange
-    const requests = installWireTransport(t, crossOriginServer(OTHER_PORT_INFO_URL));
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    await repository.run("remote", "add", "origin", REMOTE_URL);
-    const credentials = storedCredentials();
-
-    // act
-    const fetching = fetch({ dir: repository.dir, auth: boundAuth(credentials) });
-
-    // assert
-    await assert.rejects(fetching, crossOriginChallengeFrom(`https://${HOST}:8443`));
-    assert.deepStrictEqual(
-      wireCredentials(requests),
-      expectedCrossOriginWireLog(OTHER_PORT_INFO_URL),
-    );
-    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
-  });
-
   test("GHB-01 / D-02: fetches a canonical github.com origin from the base and keeps the recorded origin", async (t) => {
     // arrange
     const remote = await createGitTestRepository(t, { boundary: "local" });
@@ -1656,6 +1576,9 @@ describe("fetch", () => {
   });
 });
 
+/** D-SG-16: the read of the recorded origin that decides the pair of each rung. */
+const ORIGIN_READ = "config --local --get remote.origin.url";
+
 describe("fetchCommit", () => {
   test("SG-TRN-02: fetches an older commit into a depth-1 clone with one depth-1 fetch", async (t) => {
     // arrange
@@ -1672,7 +1595,10 @@ describe("fetchCommit", () => {
         commands: recorded.commands,
         oid: await resolveRef({ dir, ref: olderOids[0] }, systemGit),
       },
-      { commands: [`fetch --depth 1 origin ${olderOids[0]}`], oid: olderOids[0] },
+      {
+        commands: [ORIGIN_READ, `fetch --depth 1 origin ${olderOids[0]}`],
+        oid: olderOids[0],
+      },
     );
   });
 
@@ -1694,6 +1620,7 @@ describe("fetchCommit", () => {
       },
       {
         commands: [
+          ORIGIN_READ,
           `fetch --depth 1 origin ${OID_MAIN}`,
           "rev-parse --is-shallow-repository",
           "fetch --unshallow origin",
@@ -1723,6 +1650,7 @@ describe("fetchCommit", () => {
       return true;
     });
     assert.deepStrictEqual(recorded.commands, [
+      ORIGIN_READ,
       `fetch --depth 1 origin ${OID_MAIN}`,
       "rev-parse --is-shallow-repository",
       "fetch --unshallow origin nosuch",
@@ -1750,6 +1678,7 @@ describe("fetchCommit", () => {
       return true;
     });
     assert.deepStrictEqual(recorded.commands, [
+      ORIGIN_READ,
       `fetch --depth 1 origin ${OID_MAIN}`,
       "rev-parse --is-shallow-repository",
     ]);
@@ -1774,7 +1703,10 @@ describe("fetchCommit", () => {
       assert.strictEqual(error.kind, "aborted");
       return true;
     });
-    assert.deepStrictEqual(recorded.commands, [`fetch --depth 1 origin ${olderOids[0]}`]);
+    assert.deepStrictEqual(recorded.commands, [
+      ORIGIN_READ,
+      `fetch --depth 1 origin ${olderOids[0]}`,
+    ]);
   });
 
   test("D-SG-13 / D-PL8-24: each rung reads its own limit and carries the scope's signal", async (t) => {
@@ -1787,6 +1719,10 @@ describe("fetchCommit", () => {
       run: (request) => {
         requests.push(request);
         if (requests.length === 1) {
+          return Promise.resolve({ exitCode: 0, stdout: `${REMOTE_URL}\n`, stderr: "" });
+        }
+
+        if (requests.length === 2) {
           return Promise.reject(
             new GitCommandError({ kind: "commit-missing" }, { operation: "fetch --depth" }),
           );
@@ -1804,11 +1740,21 @@ describe("fetchCommit", () => {
     // assert
     assert.deepStrictEqual(requests, [
       {
+        subcommand: "config",
+        lane: "local",
+        cwd: "/clone",
+        options: ["--local", "--get"],
+        operands: ["remote.origin.url"],
+        allowExit: [1],
+        timeoutMs: 4321,
+      },
+      {
         subcommand: "fetch",
         lane: "network",
-        cwd: "/clone",
         options: ["--depth", "1"],
         operands: ["origin", OID_MAIN],
+        config: [],
+        cwd: "/clone",
         timeoutMs: 4321,
         signal,
       },
@@ -1822,13 +1768,63 @@ describe("fetchCommit", () => {
       {
         subcommand: "fetch",
         lane: "network",
-        cwd: "/clone",
         options: ["--unshallow"],
         operands: ["origin", "dev"],
+        config: [],
+        cwd: "/clone",
         timeoutMs: 4321,
         signal,
       },
     ]);
+  });
+
+  test("D-SG-16: a clone whose origin is a github.com URL fetches with the base as insteadOf", async (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://127.0.0.1:4443/base/");
+    const requests: GitRequest[] = [];
+    const stubGit: GitProcess = {
+      locate: () => Promise.resolve("/usr/bin/git"),
+      run: (request) => {
+        requests.push(request);
+        return Promise.resolve({ exitCode: 0, stdout: `${GITHUB_TOOLS_URL}\n`, stderr: "" });
+      },
+    };
+
+    // act
+    await fetchCommit({ dir: "/clone", sha: OID_MAIN }, stubGit);
+
+    // assert
+    assert.deepStrictEqual(
+      requests.map((request) => [request.subcommand, request.config]),
+      [
+        ["config", undefined],
+        ["fetch", ["url.https://127.0.0.1:4443/base/.insteadOf=https://github.com/"]],
+      ],
+    );
+  });
+
+  test("GHB-01: a failed rung under the base names the URL git fetched", async (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://127.0.0.1:4443/base/");
+    const stubGit: GitProcess = {
+      locate: () => Promise.resolve("/usr/bin/git"),
+      run: (request) =>
+        request.subcommand === "config"
+          ? Promise.resolve({ exitCode: 0, stdout: `${GITHUB_TOOLS_URL}\n`, stderr: "" })
+          : Promise.reject(
+              new GitCommandError({ kind: "repository-not-found" }, { operation: "fetch --depth" }),
+            ),
+    };
+
+    // act
+    const fetching = fetchCommit({ dir: "/clone", sha: OID_MAIN }, stubGit);
+
+    // assert
+    await assert.rejects(fetching, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError && error.cause instanceof FetchedUrlCause);
+      assert.strictEqual(error.cause.url, "https://127.0.0.1:4443/base/acme/tools.git");
+      return true;
+    });
   });
 
   test("SG-TRN-02: a shallow check that fails throws the first rung's failure", async () => {
@@ -1842,6 +1838,10 @@ describe("fetchCommit", () => {
       locate: () => Promise.resolve("/usr/bin/git"),
       run: (request) => {
         subcommands.push(request.subcommand);
+        if (request.subcommand === "config") {
+          return Promise.resolve({ exitCode: 1, stdout: "", stderr: "" });
+        }
+
         return Promise.reject(
           request.subcommand === "fetch"
             ? firstFailure
@@ -1855,271 +1855,701 @@ describe("fetchCommit", () => {
 
     // assert
     await assert.rejects(fetching, (error: unknown) => error === firstFailure);
-    assert.deepStrictEqual(subcommands, ["fetch", "rev-parse"]);
+    assert.deepStrictEqual(subcommands, ["config", "fetch", "rev-parse"]);
   });
 });
 
+/**
+ * SG-TRN-01: a repository served at a `file://` URL. `main` holds the initial
+ * commit, which the lightweight tag `light`, the annotated tag `v1`, and an
+ * annotated tag named `dev` name; the branch `dev` is one commit past it.
+ */
+async function advertisingRemote(t: TestContext): Promise<{
+  readonly url: string;
+  readonly initialOid: string;
+  readonly devOid: string;
+}> {
+  const repository = await createGitTestRepository(t, { boundary: "local" });
+  await repository.run("tag", "light");
+  await repository.run("tag", "-a", "-m", "v1", "v1");
+  await repository.run("tag", "-a", "-m", "dev", "dev");
+  await repository.run("checkout", "-q", "-b", "dev");
+  const devOid = await repository.commit([{ filepath: "dev.txt", contents: "dev\n" }], "dev");
+  await repository.run("checkout", "-q", "main");
+  return { url: `file://${repository.dir}`, initialOid: repository.initialOid, devOid };
+}
+
+/**
+ * The https git host serving the repository `acme/tools`, and a git process
+ * that trusts its certificate, with `variables` over its environment.
+ */
+async function httpsStandIn(
+  t: TestContext,
+  variables: NodeJS.ProcessEnv = {},
+): Promise<{
+  readonly host: HttpsGitHost;
+  readonly oid: string;
+  readonly gitProcess: GitProcess;
+}> {
+  const root = await realpath(await createGitTestDirectory(t, { boundary: "local" }));
+  const host = await HttpsGitHost.start(root);
+  t.after(() => host.close());
+  const served = await createGitTestRepository(t, { boundary: "local" });
+  await served.cloneBare(host.repositoryPath("tools"));
+  return {
+    host,
+    oid: served.initialOid,
+    gitProcess: await hermeticGitProcess(t, {
+      GIT_SSL_CAINFO: host.certificatePath,
+      ...variables,
+    }),
+  };
+}
+
+/** D-SG-16: the https git host, with the GitHub base override pointed at it. */
+async function gitHubBaseStandIn(t: TestContext): ReturnType<typeof httpsStandIn> {
+  const standIn = await httpsStandIn(t);
+  setGitHubBaseUrl(t, `https://${standIn.host.address}`);
+  return standIn;
+}
+
 describe("resolveRemoteRef", () => {
-  test("resolves the advertised remote HEAD", async (t) => {
+  const SELECTIONS: ReadonlyArray<{
+    readonly title: string;
+    readonly ref?: string;
+    readonly expected: (remote: Awaited<ReturnType<typeof advertisingRemote>>) => string;
+  }> = [
+    { title: "resolves the remote HEAD", expected: (remote) => remote.initialOid },
+    {
+      title: "resolves a branch by its short name before a tag of the same name",
+      ref: "dev",
+      expected: (remote) => remote.devOid,
+    },
+    {
+      title: "resolves an annotated tag to the commit it peels to",
+      ref: "v1",
+      expected: (remote) => remote.initialOid,
+    },
+    {
+      title: "resolves a lightweight tag to its commit",
+      ref: "light",
+      expected: (remote) => remote.initialOid,
+    },
+    {
+      title: "resolves a bare advertised ref name",
+      ref: "HEAD",
+      expected: (remote) => remote.initialOid,
+    },
+  ];
+
+  for (const { title, ref, expected } of SELECTIONS) {
+    test(`SG-TRN-01: ${title}`, async (t) => {
+      // arrange
+      const remote = await advertisingRemote(t);
+      const systemGit = await hermeticGitProcess(t);
+
+      // act
+      const oid = await resolveRemoteRef(
+        { url: remote.url, ...(ref !== undefined && { ref }) },
+        systemGit,
+      );
+
+      // assert
+      assert.strictEqual(oid, expected(remote));
+    });
+  }
+
+  test("SG-TRN-01: answers undefined for a ref the remote does not advertise", async (t) => {
     // arrange
-    const requests = installRemoteTransport(t, FULL_ADVERTISEMENT);
+    const remote = await advertisingRemote(t);
+    const systemGit = await hermeticGitProcess(t);
 
     // act
-    const oid = await resolveRemoteRef({ url: REMOTE_URL });
-
-    // assert
-    assert.strictEqual(oid, OID_MAIN);
-    assert.deepStrictEqual(requests, expectedPublicRequests());
-  });
-
-  test("resolves a branch by its short name", async (t) => {
-    // arrange
-    const requests = installRemoteTransport(t, FULL_ADVERTISEMENT);
-
-    // act
-    const oid = await resolveRemoteRef({ url: REMOTE_URL, ref: "dev" });
-
-    // assert
-    assert.strictEqual(oid, OID_DEV);
-    assert.deepStrictEqual(requests, expectedPublicRequests());
-  });
-
-  test("prefers an annotated tag's peeled commit", async (t) => {
-    // arrange
-    const requests = installRemoteTransport(t, FULL_ADVERTISEMENT);
-
-    // act
-    const oid = await resolveRemoteRef({ url: REMOTE_URL, ref: "v1.0.0" });
-
-    // assert
-    assert.strictEqual(oid, OID_PEELED);
-    assert.deepStrictEqual(requests, expectedPublicRequests());
-  });
-
-  test("resolves a bare advertised ref name", async (t) => {
-    // arrange
-    const requests = installRemoteTransport(t, FULL_ADVERTISEMENT);
-
-    // act
-    const oid = await resolveRemoteRef({ url: REMOTE_URL, ref: "HEAD" });
-
-    // assert
-    assert.strictEqual(oid, OID_MAIN);
-    assert.deepStrictEqual(requests, expectedPublicRequests());
-  });
-
-  test("answers undefined for a remote without an advertised HEAD", async (t) => {
-    // arrange
-    const requests = installRemoteTransport(t, [`${OID_DEV} refs/heads/dev`]);
-
-    // act
-    const oid = await resolveRemoteRef({ url: REMOTE_URL });
+    const oid = await resolveRemoteRef({ url: remote.url, ref: "missing" }, systemGit);
 
     // assert
     assert.strictEqual(oid, undefined);
-    assert.deepStrictEqual(requests, expectedPublicRequests());
   });
 
-  test("answers undefined for an unadvertised remote ref", async (t) => {
+  test("SG-TRN-01: answers undefined for a remote whose HEAD names no commit", async (t) => {
     // arrange
-    const requests = installRemoteTransport(t, FULL_ADVERTISEMENT);
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    const bare = path.join(await createGitTestDirectory(t, { boundary: "local" }), "unborn.git");
+    await repository.cloneBare(bare);
+    await gitTestCheckout(bare).run("symbolic-ref", "HEAD", "refs/heads/nosuch");
+    const systemGit = await hermeticGitProcess(t);
 
     // act
-    const oid = await resolveRemoteRef({ url: REMOTE_URL, ref: "missing" });
+    const oid = await resolveRemoteRef({ url: `file://${bare}` }, systemGit);
 
     // assert
     assert.strictEqual(oid, undefined);
-    assert.deepStrictEqual(requests, expectedPublicRequests());
   });
 
-  test("GHB-01: resolves a github.com URL against the base", async (t) => {
+  test("D-SG-13 / D-PL8-24: sends one ls-remote of the four names with the limit and the scope's signal", async (t) => {
     // arrange
-    const requests = installRemoteTransport(t, FULL_ADVERTISEMENT);
-    setGitHubBaseUrl(t, `https://${HOST}`);
+    setGitTimeoutVariable(t, "4321");
+    const remote = await advertisingRemote(t);
+    const recorded = recordingGitProcess(await hermeticGitProcess(t));
+    const signal = new AbortController().signal;
 
     // act
-    const oid = await resolveRemoteRef({ url: GITHUB_REMOTE_URL });
-
-    // assert
-    assert.strictEqual(oid, OID_MAIN);
-    assert.deepStrictEqual(requests, expectedPublicRequests());
-  });
-
-  test("GHB-01: answers undefined when the base advertises no HEAD", async (t) => {
-    // arrange
-    const requests = installRemoteTransport(t, [`${OID_DEV} refs/heads/dev`]);
-    setGitHubBaseUrl(t, `https://${HOST}`);
-
-    // act
-    const oid = await resolveRemoteRef({ url: GITHUB_REMOTE_URL });
-
-    // assert
-    assert.strictEqual(oid, undefined);
-    assert.deepStrictEqual(requests, expectedPublicRequests());
-  });
-
-  test("D-10: a failed resolution from the base names the fetched URL", async (t) => {
-    // arrange
-    const requests = installFailedDiscoveryTransport(t);
-    setGitHubBaseUrl(t, `https://${HOST}`);
-
-    // act
-    const resolution = resolveRemoteRef({ url: GITHUB_REMOTE_URL });
-
-    // assert
-    await assert.rejects(resolution, (error: unknown) =>
-      isFetchedUrlDiscoveryError(error, "git.listServerRefs"),
+    await runWithGitAbortSignal(signal, () =>
+      resolveRemoteRef({ url: remote.url, ref: "dev" }, recorded.gitProcess),
     );
-    assert.deepStrictEqual(requests, [expectedDiscoveryRequest({ "Git-Protocol": "version=2" })]);
-  });
-
-  test("keeps auth callbacks idle for a successful public response", async (t) => {
-    // arrange
-    const requests = installRemoteTransport(t, FULL_ADVERTISEMENT);
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
-    const onAuthRequired: OnAuthRequiredFn = () => {
-      throw new Error("interactive auth is forbidden for a successful public response");
-    };
-
-    // act
-    const oid = await resolveRemoteRef({
-      url: REMOTE_URL,
-      ref: "main",
-      auth: {
-        credentialOps: credentials.credentialOps,
-        host: HOST,
-        kind: "device-flow",
-        onAuthRequired,
-      },
-    });
 
     // assert
-    assert.strictEqual(oid, OID_MAIN);
-    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
-    assert.deepStrictEqual(requests, expectedPublicRequests());
-  });
-
-  test("retries an authentication challenge with the exact credential header", async (t) => {
-    // arrange
-    const requests = installRemoteTransport(t, FULL_ADVERTISEMENT, { challengeOnce: true });
-    const credentials = createCredentialOpsFake({
-      boundary: "memory",
-      credentials: [[HOST, { username: "user", password: "secret" }]],
-    });
-    const onAuthRequired: OnAuthRequiredFn = () => {
-      throw new Error("interactive auth is forbidden on a stored-credential hit");
-    };
-
-    // act
-    const oid = await resolveRemoteRef({
-      url: REMOTE_URL,
-      auth: {
-        credentialOps: credentials.credentialOps,
-        host: HOST,
-        kind: "device-flow",
-        onAuthRequired,
-      },
-    });
-
-    // assert
-    assert.strictEqual(oid, OID_MAIN);
-    assert.deepStrictEqual(credentials.calls, {
-      fill: [{ host: HOST }],
-      approve: [],
-      reject: [],
-    });
-    assert.deepStrictEqual(requests, [
-      expectedPublicRequests()[0],
+    assert.deepStrictEqual(recorded.requests, [
       {
-        ...expectedPublicRequests()[0],
-        headers: {
-          "Git-Protocol": "version=2",
-          Authorization: "Basic dXNlcjpzZWNyZXQ=",
-        },
-      },
-      {
-        ...expectedPublicRequests()[1],
-        headers: {
-          ...expectedPublicRequests()[1].headers,
-          Authorization: "Basic dXNlcjpzZWNyZXQ=",
-        },
+        subcommand: "ls-remote",
+        lane: "network",
+        options: [],
+        operands: [remote.url, "refs/heads/dev", "refs/tags/dev^{}", "refs/tags/dev", "dev"],
+        config: [],
+        timeoutMs: 4321,
+        signal,
       },
     ]);
   });
 
-  test("cancels a challenge the bundle cannot answer and sends no credential", async (t) => {
+  test("D-SG-16, GHB-01: resolves a github.com URL at the base through its insteadOf pair", async (t) => {
     // arrange
-    const requests = installRemoteTransport(t, FULL_ADVERTISEMENT, { challengeOnce: true });
+    const standIn = await gitHubBaseStandIn(t);
+    const recorded = recordingGitProcess(standIn.gitProcess);
+
+    // act
+    const oid = await resolveRemoteRef({ url: GITHUB_TOOLS_URL }, recorded.gitProcess);
+
+    // assert
+    assert.strictEqual(oid, standIn.oid);
+    assert.deepStrictEqual(
+      recorded.requests.map((request) => request.config),
+      [[`url.https://${standIn.host.address}/.insteadOf=https://github.com/`]],
+    );
+  });
+
+  test("GHB-01: a failure at the base names the URL git fetched", async (t) => {
+    // arrange
+    const standIn = await gitHubBaseStandIn(t);
+
+    // act
+    const resolution = resolveRemoteRef(
+      { url: "https://github.com/acme/missing.git" },
+      standIn.gitProcess,
+    );
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.ok(error.cause instanceof FetchedUrlCause);
+      assert.deepStrictEqual(
+        { kind: error.kind, url: error.cause.url },
+        { kind: "repository-not-found", url: standIn.host.repositoryUrl("missing") },
+      );
+      return true;
+    });
+  });
+
+  test("GHB-04: a failure outside github.com carries no cause and never reads the variable", async (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "http://mirror.example");
+    const missing = path.join(await createGitTestDirectory(t, { boundary: "local" }), "missing");
+    const systemGit = await hermeticGitProcess(t);
+
+    // act
+    const resolution = resolveRemoteRef({ url: `file://${missing}` }, systemGit);
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.deepStrictEqual(
+        { kind: error.kind, cause: error.cause },
+        { kind: "repository-not-found", cause: undefined },
+      );
+      return true;
+    });
+  });
+
+  test("GHB-03: an invalid base refuses a github.com URL before git runs", async (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://h.example/a=b");
+    const recorded = recordingGitProcess(await hermeticGitProcess(t));
+
+    // act
+    const resolution = resolveRemoteRef({ url: GITHUB_TOOLS_URL }, recorded.gitProcess);
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => {
+      assert.ok(error instanceof InvalidGitHubBaseUrlError);
+      assert.strictEqual(error.problem, "equals-sign");
+      return true;
+    });
+    assert.deepStrictEqual(recorded.requests, []);
+  });
+});
+
+/** The password the credential stand-in wants; no captured text may hold it (AUTH-09). */
+const RETRY_TOKEN = "gho_retry-token-sentinel";
+
+/** A git process that runs `systemGit` and keeps each request and the text of each outcome. */
+function tracingGitProcess(systemGit: GitProcess): {
+  readonly gitProcess: GitProcess;
+  readonly requests: GitRequest[];
+  readonly texts: string[];
+} {
+  const requests: GitRequest[] = [];
+  const texts: string[] = [];
+  return {
+    requests,
+    texts,
+    gitProcess: {
+      locate: systemGit.locate,
+      run: async (request) => {
+        requests.push(request);
+        try {
+          const result = await systemGit.run(request);
+          texts.push(result.stdout, result.stderr);
+          return result;
+        } catch (error: unknown) {
+          assert.ok(error instanceof GitCommandError);
+          texts.push(error.message, error.stderr);
+          throw error;
+        }
+      },
+    },
+  };
+}
+
+/** Turns debug logging on for one case and keeps every line it writes. */
+function captureDebugLines(t: TestContext): string[] {
+  const lines: string[] = [];
+  const previous = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  t.after(() => {
+    if (previous === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    } else {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previous;
+    }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  t.mock.method(console, "error", (line: string) => {
+    lines.push(line);
+  });
+  return lines;
+}
+
+/** The one-shot directories left under the user scope's extension root. */
+async function oneShotDirectoriesLeft(): Promise<string[]> {
+  const root = path.join(getAgentDir(), "pi-claude-marketplace");
+  const entries = await readdir(root).catch(() => []);
+  return entries.filter((entry) => entry.startsWith("git-credential-"));
+}
+
+/** The https git host serving `acme/tools`, armed to want `acme` and `RETRY_TOKEN`. */
+async function credentialStandIn(
+  t: TestContext,
+  helper?: string,
+): Promise<Awaited<ReturnType<typeof httpsStandIn>> & { readonly url: string }> {
+  const standIn = await httpsStandIn(
+    t,
+    helper === undefined
+      ? {}
+      : {
+          GIT_CONFIG_COUNT: "1",
+          GIT_CONFIG_KEY_0: "credential.helper",
+          GIT_CONFIG_VALUE_0: helper,
+        },
+  );
+  await standIn.host.arm("tools", { kind: "credential", user: "acme", password: RETRY_TOKEN });
+  return { ...standIn, url: standIn.host.repositoryUrl("tools") };
+}
+
+/** A user helper that answers every `get` with a password the host refuses. */
+const WRONG_PASSWORD_HELPER = "!f() { echo username=acme; echo password=wrong; }; f";
+
+/** A Device Flow bundle for `host` whose sign-in answers `result`, counting its calls. */
+function deviceFlowBundle(
+  host: string,
+  result: Awaited<ReturnType<OnAuthRequiredFn>>,
+): {
+  readonly auth: NonNullable<GitPlatform.CloneOptions["auth"]>;
+  readonly signIns: () => number;
+} {
+  let signIns = 0;
+  return {
+    auth: {
+      kind: "device-flow",
+      credentialOps: createCredentialOpsFake({ boundary: "memory" }).credentialOps,
+      host,
+      onAuthRequired: () => {
+        signIns += 1;
+        return Promise.resolve(result);
+      },
+    },
+    signIns: () => signIns,
+  };
+}
+
+/** A git process whose every remote run fails as `https-auth` with `detail`. */
+function failingAuthGitProcess(detail: "no-credential" | "rejected"): {
+  readonly gitProcess: GitProcess;
+  readonly failures: GitCommandError[];
+  readonly requests: GitRequest[];
+} {
+  const failures: GitCommandError[] = [];
+  const requests: GitRequest[] = [];
+  return {
+    failures,
+    requests,
+    gitProcess: {
+      locate: () => Promise.resolve("/usr/bin/git"),
+      run: (request) => {
+        requests.push(request);
+        if (request.subcommand === "config") {
+          return Promise.resolve({ exitCode: 0, stdout: `${REMOTE_URL}\n`, stderr: "" });
+        }
+
+        const failure = new GitCommandError(
+          { kind: "https-auth", detail },
+          { operation: request.subcommand, exitCode: 128 },
+        );
+        failures.push(failure);
+        return Promise.reject(failure);
+      },
+    },
+  };
+}
+
+/** The `-c` pairs of the one-shot helper, as the retry carries them after the request's own. */
+const ONE_SHOT_PAIRS = [
+  "credential.helper=",
+  /^credential\.helper=!f\(\) \{ test "\$1" = get && cat '[^']+\/git-credential-[^/']+\/credential'; \}; f$/,
+] as const;
+
+function assertOneShotPairs(config: readonly string[] | undefined): void {
+  assert.strictEqual(config?.length, 2);
+  assert.strictEqual(config[0], ONE_SHOT_PAIRS[0]);
+  assert.match(config[1] ?? "", ONE_SHOT_PAIRS[1]);
+}
+
+describe("D-SG-14 and GAUTH-04: an auth failure of a remote request", () => {
+  test("D-SG-14: a missing credential under a Device Flow bundle signs in once and the retry succeeds through a removed one-shot helper", async (t) => {
+    // arrange
+    const standIn = await credentialStandIn(t);
+    const traced = tracingGitProcess(standIn.gitProcess);
+    const bundle = deviceFlowBundle(standIn.host.address, {
+      ok: true,
+      cred: { username: "acme", password: RETRY_TOKEN },
+    });
+    const debugLines = captureDebugLines(t);
+
+    // act
+    const oid = await resolveRemoteRef({ url: standIn.url, auth: bundle.auth }, traced.gitProcess);
+
+    // assert
+    assert.deepStrictEqual(
+      { oid, signIns: bundle.signIns(), runs: traced.requests.length },
+      { oid: standIn.oid, signIns: 1, runs: 2 },
+    );
+    assert.deepStrictEqual(traced.requests[0]?.config, []);
+    assertOneShotPairs(traced.requests[1]?.config);
+    assert.deepStrictEqual(await oneShotDirectoriesLeft(), []);
+    const captured = JSON.stringify({ requests: traced.requests, texts: traced.texts, debugLines });
+    assert.ok(
+      !captured.includes(RETRY_TOKEN),
+      "a captured argv, output, or log line holds the token",
+    );
+    assert.ok(
+      debugLines.includes(
+        `[auth] git ls-remote: signed in to ${standIn.host.address}, running it once more`,
+      ),
+    );
+  });
+
+  test("D-SG-14: a request that succeeds signs in no time", async (t) => {
+    // arrange
+    const standIn = await httpsStandIn(t);
+    const onAuthRequired = mock<OnAuthRequiredFn>({ exactParams: true, name: "device flow" });
     const credentials = createCredentialOpsFake({ boundary: "memory" });
-    const onAuthRequired: OnAuthRequiredFn = async () => {
-      await Promise.resolve();
-      return {
-        ok: false,
-        reason: "no credential was obtained for git.example.invalid",
-      };
-    };
 
     // act
-    const resolution = resolveRemoteRef({
-      url: REMOTE_URL,
-      ref: "main",
-      auth: {
-        credentialOps: credentials.credentialOps,
-        host: HOST,
-        kind: "device-flow",
-        onAuthRequired,
-      },
-    });
-
-    // assert
-    await assert.rejects(resolution, isUserCanceledError);
-    assert.deepStrictEqual(credentials.calls, {
-      fill: [{ host: HOST }],
-      approve: [],
-      reject: [],
-    });
-    assert.deepStrictEqual(requests, [expectedPublicRequests()[0]]);
-    assert.deepStrictEqual(requestsCarryingAuthorization(requests), []);
-  });
-
-  test("cancels a challenge from a url on another host without querying the helper", async (t) => {
-    // arrange
-    const requests = installRemoteTransport(t, FULL_ADVERTISEMENT, {
-      challengeOnce: true,
-      remoteUrl: OTHER_REMOTE_URL,
-    });
-    const credentials = createCredentialOpsFake({
-      boundary: "memory",
-      credentials: [[HOST, { username: "user", password: "secret" }]],
-    });
-    const onAuthRequired: OnAuthRequiredFn = () => {
-      throw new Error("interactive auth is forbidden on a host mismatch");
-    };
-
-    // act
-    const resolution = resolveRemoteRef({
-      url: OTHER_REMOTE_URL,
-      ref: "main",
-      auth: {
-        credentialOps: credentials.credentialOps,
-        host: HOST,
-        kind: "device-flow",
-        onAuthRequired,
-      },
-    });
-
-    // assert
-    await assert.rejects(resolution, isUserCanceledError);
-    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
-    assert.deepStrictEqual(requests, [
+    const oid = await resolveRemoteRef(
       {
-        ...expectedPublicRequests()[0],
-        url: `${OTHER_REMOTE_URL}/info/refs?service=git-upload-pack`,
+        url: standIn.host.repositoryUrl("tools"),
+        auth: {
+          kind: "device-flow",
+          credentialOps: credentials.credentialOps,
+          host: standIn.host.address,
+          onAuthRequired,
+        },
       },
-    ]);
-    assert.deepStrictEqual(requestsCarryingAuthorization(requests), []);
+      standIn.gitProcess,
+    );
+
+    // assert
+    assert.strictEqual(oid, standIn.oid);
+    verify(onAuthRequired);
   });
 
+  test("D-SG-14: a failed sign-in throws the first failure with the sign-in's reason as its cause", async (t) => {
+    // arrange
+    const standIn = await credentialStandIn(t);
+    const traced = tracingGitProcess(standIn.gitProcess);
+    const bundle = deviceFlowBundle(standIn.host.address, {
+      ok: false,
+      reason: "Device Flow cancelled.",
+    });
+
+    // act
+    const resolution = resolveRemoteRef({ url: standIn.url, auth: bundle.auth }, traced.gitProcess);
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.ok(error.cause instanceof Error);
+      assert.deepStrictEqual(
+        { failure: error.failure, cause: error.cause.message },
+        {
+          failure: { kind: "https-auth", detail: "no-credential" },
+          cause: "Device Flow cancelled.",
+        },
+      );
+      return true;
+    });
+    assert.deepStrictEqual(
+      { signIns: bundle.signIns(), runs: traced.requests.length },
+      { signIns: 1, runs: 1 },
+    );
+  });
+
+  test("D-SG-14: the retry runs once, and its own failure is the one thrown", async () => {
+    // arrange
+    const failing = failingAuthGitProcess("no-credential");
+    const bundle = deviceFlowBundle(HOST, {
+      ok: true,
+      cred: { username: "acme", password: RETRY_TOKEN },
+    });
+
+    // act
+    const resolution = resolveRemoteRef({ url: REMOTE_URL, auth: bundle.auth }, failing.gitProcess);
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => error === failing.failures[1]);
+    assert.deepStrictEqual(
+      { signIns: bundle.signIns(), failures: failing.failures.length },
+      { signIns: 1, failures: 2 },
+    );
+    assert.deepStrictEqual(await oneShotDirectoriesLeft(), []);
+  });
+
+  test("D-SG-14: a sign-in that Pi cannot show rejects with DeviceFlowUnavailableError and runs no retry", async () => {
+    // arrange
+    const failing = failingAuthGitProcess("no-credential");
+    const unavailable = new DeviceFlowUnavailableError();
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+
+    // act
+    const resolution = resolveRemoteRef(
+      {
+        url: REMOTE_URL,
+        auth: {
+          kind: "device-flow",
+          credentialOps: credentials.credentialOps,
+          host: HOST,
+          onAuthRequired: () => Promise.reject(unavailable),
+        },
+      },
+      failing.gitProcess,
+    );
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => error === unavailable);
+    assert.strictEqual(failing.requests.length, 1);
+  });
+
+  test("D-SG-14: a missing credential under a stored-credential bundle is thrown with no retry", async (t) => {
+    // arrange
+    const standIn = await credentialStandIn(t);
+    const traced = tracingGitProcess(standIn.gitProcess);
+    const credentials = storedCredentials();
+
+    // act
+    const resolution = resolveRemoteRef(
+      {
+        url: standIn.url,
+        auth: { kind: "stored-credential", credentialOps: credentials.credentialOps, host: HOST },
+      },
+      traced.gitProcess,
+    );
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.deepStrictEqual(
+        { failure: error.failure, cause: error.cause },
+        { failure: { kind: "https-auth", detail: "no-credential" }, cause: undefined },
+      );
+      return true;
+    });
+    assert.strictEqual(traced.requests.length, 1);
+  });
+
+  test("GAUTH-04: a refused stored credential throws StoredCredentialRejectedError with the git failure as its cause", async (t) => {
+    // arrange
+    const standIn = await credentialStandIn(t, WRONG_PASSWORD_HELPER);
+    const credentials = storedCredentials();
+
+    // act
+    const resolution = resolveRemoteRef(
+      {
+        url: standIn.url,
+        auth: {
+          kind: "stored-credential",
+          credentialOps: credentials.credentialOps,
+          host: standIn.host.address,
+        },
+      },
+      standIn.gitProcess,
+    );
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => {
+      assert.ok(error instanceof StoredCredentialRejectedError);
+      assert.ok(error.cause instanceof GitCommandError);
+      assert.deepStrictEqual(
+        { host: error.host, failure: error.cause.failure },
+        { host: standIn.host.address, failure: { kind: "https-auth", detail: "rejected" } },
+      );
+      return true;
+    });
+  });
+
+  test("GAUTH-04: a refused credential under a Device Flow bundle is thrown unchanged, with no sign-in", async (t) => {
+    // arrange
+    const standIn = await credentialStandIn(t, WRONG_PASSWORD_HELPER);
+    const onAuthRequired = mock<OnAuthRequiredFn>({ exactParams: true, name: "device flow" });
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+
+    // act
+    const resolution = resolveRemoteRef(
+      {
+        url: standIn.url,
+        auth: {
+          kind: "device-flow",
+          credentialOps: credentials.credentialOps,
+          host: standIn.host.address,
+          onAuthRequired,
+        },
+      },
+      standIn.gitProcess,
+    );
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.deepStrictEqual(error.failure, { kind: "https-auth", detail: "rejected" });
+      return true;
+    });
+    verify(onAuthRequired);
+  });
+
+  test("D-SG-14: a fetchCommit rung retries with the one-shot helper after its sign-in", async () => {
+    // arrange
+    const requests: GitRequest[] = [];
+    const firstFailure = new GitCommandError(
+      { kind: "https-auth", detail: "no-credential" },
+      { operation: "fetch --depth", exitCode: 128 },
+    );
+    const stubGit: GitProcess = {
+      locate: () => Promise.resolve("/usr/bin/git"),
+      run: (request) => {
+        requests.push(request);
+        if (request.subcommand === "config") {
+          return Promise.resolve({ exitCode: 0, stdout: `${REMOTE_URL}\n`, stderr: "" });
+        }
+
+        return requests.length === 2
+          ? Promise.reject(firstFailure)
+          : Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+      },
+    };
+    const bundle = deviceFlowBundle(HOST, {
+      ok: true,
+      cred: { username: "acme", password: RETRY_TOKEN },
+    });
+
+    // act
+    await fetchCommit({ dir: "/clone", sha: OID_MAIN, auth: bundle.auth }, stubGit);
+
+    // assert
+    assert.deepStrictEqual(
+      { signIns: bundle.signIns(), subcommands: requests.map((request) => request.subcommand) },
+      { signIns: 1, subcommands: ["config", "fetch", "fetch"] },
+    );
+    assertOneShotPairs(requests[2]?.config);
+  });
+});
+
+/** A commit the wire doubles serve over protocol version 1: its advertisement and its pack. */
+interface ServedCommit {
+  readonly oid: string;
+  readonly packfile: Buffer;
+  readonly advertisement: WireResponse;
+  readonly pack: WireResponse;
+}
+
+/**
+ * A clone whose origin is `REMOTE_URL`, and a commit of another repository
+ * that the wire doubles serve it, so `fetch` drives the redirect client.
+ */
+async function wireFetchFixture(
+  t: TestContext,
+): Promise<{ readonly dir: string; readonly served: ServedCommit }> {
+  const remote = await createGitTestRepository(t, { boundary: "local" });
+  await remote.commit([{ filepath: "next.txt", contents: "next\n" }], "next");
+  const { oid, packfile } = await remote.pack();
+  return {
+    dir: await cloneOfRemote(t),
+    served: {
+      oid,
+      packfile,
+      advertisement: {
+        statusCode: 200,
+        statusMessage: "OK",
+        headers: { "content-type": "application/x-git-upload-pack-advertisement" },
+        body: uploadPackAdvertisementBody(oid),
+      },
+      pack: {
+        statusCode: 200,
+        statusMessage: "OK",
+        headers: { "content-type": "application/x-git-upload-pack-result" },
+        body: packResultBody(packfile),
+      },
+    },
+  };
+}
+
+/**
+ * The headers isomorphic-git's discovery request keeps on a hop to another
+ * origin: protocol headers only, never a credential or a cookie (WR-03).
+ */
+const CROSS_ORIGIN_DISCOVERY_HEADERS = ["accept-encoding"];
+
+/** A repository whose origin is `REMOTE_URL`, which a fetch fills. */
+async function cloneOfRemote(t: TestContext): Promise<string> {
+  const local = await createGitTestRepository(t, { boundary: "local" });
+  await local.run("remote", "add", "origin", REMOTE_URL);
+  return local.dir;
+}
+
+/** The commit `refs/remotes/origin/main` names in `dir` after a fetch. */
+function fetchedMain(dir: string): Promise<string | undefined> {
+  return resolveRef({ dir, ref: "refs/remotes/origin/main" });
+}
+
+// GAUTH-06, Q-02, WR-03, WR-04, IN-03: the redirect client that every
+// isomorphic-git request of `platform/git.ts` goes through, driven by `fetch`.
+describe("the redirect client", () => {
   const CROSS_ORIGIN_REDIRECTS: readonly CrossOriginRedirectRow[] = [
     {
       kind: "another port of the same host",
@@ -2142,13 +2572,14 @@ describe("resolveRemoteRef", () => {
     test(`Q-02: fails a challenge after a redirect to ${kind} without a credential lookup`, async (t) => {
       // arrange
       const requests = installWireTransport(t, crossOriginServer(location));
+      const { dir } = await wireFetchFixture(t);
       const credentials = storedCredentials();
 
       // act
-      const resolution = resolveRemoteRef({ url: REMOTE_URL, auth: boundAuth(credentials) });
+      const fetching = fetch({ dir, auth: boundAuth(credentials) });
 
       // assert
-      await assert.rejects(resolution, crossOriginChallengeFrom(origin));
+      await assert.rejects(fetching, crossOriginChallengeFrom(origin));
       assert.deepStrictEqual(wireCredentials(requests), expectedCrossOriginWireLog(location));
       assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
     });
@@ -2157,12 +2588,13 @@ describe("resolveRemoteRef", () => {
   test("Q-02: fails a cross-origin challenge without starting a Device Flow", async (t) => {
     // arrange
     const requests = installWireTransport(t, crossOriginServer(OTHER_PORT_INFO_URL));
+    const { dir } = await wireFetchFixture(t);
     const credentials = storedCredentials();
     const onAuthRequired = mock<OnAuthRequiredFn>({ exactParams: true, name: "device flow" });
 
     // act
-    const resolution = resolveRemoteRef({
-      url: REMOTE_URL,
+    const fetching = fetch({
+      dir,
       auth: {
         credentialOps: credentials.credentialOps,
         host: HOST,
@@ -2172,7 +2604,7 @@ describe("resolveRemoteRef", () => {
     });
 
     // assert
-    await assert.rejects(resolution, crossOriginChallengeFrom(`https://${HOST}:8443`));
+    await assert.rejects(fetching, crossOriginChallengeFrom(`https://${HOST}:8443`));
     assert.deepStrictEqual(
       wireCredentials(requests),
       expectedCrossOriginWireLog(OTHER_PORT_INFO_URL),
@@ -2192,13 +2624,14 @@ describe("resolveRemoteRef", () => {
         body: Buffer.alloc(0),
       })),
     );
+    const { dir } = await wireFetchFixture(t);
     const credentials = storedCredentials();
 
     // act
-    const resolution = resolveRemoteRef({ url: REMOTE_URL, auth: boundAuth(credentials) });
+    const fetching = fetch({ dir, auth: boundAuth(credentials) });
 
     // assert
-    await assert.rejects(resolution, crossOriginChallengeFrom(`https://${HOST}:8443`));
+    await assert.rejects(fetching, crossOriginChallengeFrom(`https://${HOST}:8443`));
     assert.deepStrictEqual(
       wireCredentials(requests),
       expectedCrossOriginWireLog(OTHER_PORT_INFO_URL),
@@ -2208,6 +2641,7 @@ describe("resolveRemoteRef", () => {
 
   test("Q-02: fails a challenge back on the original origin after a detour through another origin", async (t) => {
     // arrange
+    const { dir, served } = await wireFetchFixture(t);
     const requests = installWireTransport(t, (request) => {
       if (request.url === BOUND_INFO_URL) {
         return request.headers.authorization === undefined
@@ -2222,7 +2656,7 @@ describe("resolveRemoteRef", () => {
       if (request.url === RENAMED_INFO_URL) {
         return request.headers.authorization === undefined
           ? unauthorizedWireResponse()
-          : advertisementWireResponse();
+          : served.advertisement;
       }
 
       throw unplannedWireRequest(request);
@@ -2231,8 +2665,8 @@ describe("resolveRemoteRef", () => {
     const onAuthRequired = mock<OnAuthRequiredFn>({ exactParams: true, name: "device flow" });
 
     // act
-    const resolution = resolveRemoteRef({
-      url: REMOTE_URL,
+    const fetching = fetch({
+      dir,
       auth: {
         credentialOps: credentials.credentialOps,
         host: HOST,
@@ -2242,7 +2676,7 @@ describe("resolveRemoteRef", () => {
     });
 
     // assert
-    await assert.rejects(resolution, crossOriginChallengeFrom(`https://${HOST}`));
+    await assert.rejects(fetching, crossOriginChallengeFrom(`https://${HOST}`));
     assert.deepStrictEqual(wireCredentials(requests), [
       { url: BOUND_INFO_URL, authorization: null },
       { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
@@ -2255,6 +2689,7 @@ describe("resolveRemoteRef", () => {
 
   test("WR-03: keeps only protocol headers on a hop to another origin", async (t) => {
     // arrange
+    const { dir, served } = await wireFetchFixture(t);
     const requests = installWireTransport(t, (request) => {
       if (request.url === BOUND_INFO_URL) {
         return request.headers.authorization === undefined
@@ -2263,11 +2698,11 @@ describe("resolveRemoteRef", () => {
       }
 
       if (request.url === OTHER_PORT_INFO_URL) {
-        return advertisementWireResponse();
+        return served.advertisement;
       }
 
       if (request.url === BOUND_UPLOAD_PACK_URL && request.headers.authorization !== undefined) {
-        return refsWireResponse();
+        return served.pack;
       }
 
       throw unplannedWireRequest(request);
@@ -2287,10 +2722,10 @@ describe("resolveRemoteRef", () => {
     });
 
     // act
-    const oid = await resolveRemoteRef({ url: REMOTE_URL, auth: boundAuth(credentials) });
+    await fetch({ dir, auth: boundAuth(credentials) });
 
     // assert
-    assert.strictEqual(oid, OID_MAIN);
+    assert.strictEqual(await fetchedMain(dir), served.oid);
     assert.deepStrictEqual(
       requests.map(({ url, headers }) => ({
         url,
@@ -2315,10 +2750,10 @@ describe("resolveRemoteRef", () => {
         },
       ],
     );
-    assert.deepStrictEqual(Object.keys(requests[2]?.headers ?? {}).sort(), [
-      "accept-encoding",
-      "git-protocol",
-    ]);
+    assert.deepStrictEqual(
+      Object.keys(requests[2]?.headers ?? {}).sort(),
+      CROSS_ORIGIN_DISCOVERY_HEADERS,
+    );
   });
 
   const SAME_ORIGIN_REDIRECTS: readonly RedirectRow[] = [
@@ -2333,14 +2768,15 @@ describe("resolveRemoteRef", () => {
   for (const { kind, location } of SAME_ORIGIN_REDIRECTS) {
     test(`GAUTH-06: forwards the credential on a redirect within its origin (${kind})`, async (t) => {
       // arrange
-      const requests = installWireTransport(t, sameOriginServer(location));
+      const { dir, served } = await wireFetchFixture(t);
+      const requests = installWireTransport(t, sameOriginServer(location, served));
       const credentials = storedCredentials();
 
       // act
-      const oid = await resolveRemoteRef({ url: REMOTE_URL, auth: boundAuth(credentials) });
+      await fetch({ dir, auth: boundAuth(credentials) });
 
       // assert
-      assert.strictEqual(oid, OID_MAIN);
+      assert.strictEqual(await fetchedMain(dir), served.oid);
       assert.deepStrictEqual(wireCredentials(requests), [
         { url: BOUND_INFO_URL, authorization: null },
         { url: RENAMED_INFO_URL, authorization: null },
@@ -2356,28 +2792,29 @@ describe("resolveRemoteRef", () => {
       title: "re-sends a POST answered with 302 as a GET without its body",
       statusCode: 302,
       finalMethod: "GET",
-      finalBody: Buffer.alloc(0),
+      keepsBody: false,
       finalContentHeaders: [],
     },
     {
       title: "re-sends a POST answered with 307 with its body",
       statusCode: 307,
       finalMethod: "POST",
-      finalBody: expectedListRefsBody(),
+      keepsBody: true,
       finalContentHeaders: ["content-length", "content-type"],
     },
   ];
 
-  for (const { title, statusCode, finalMethod, finalBody, finalContentHeaders } of POST_REDIRECTS) {
+  for (const { title, statusCode, finalMethod, keepsBody, finalContentHeaders } of POST_REDIRECTS) {
     test(title, async (t) => {
       // arrange
-      const requests = installWireTransport(t, postRedirectServer(statusCode));
+      const { dir, served } = await wireFetchFixture(t);
+      const requests = installWireTransport(t, postRedirectServer(statusCode, served));
 
       // act
-      const oid = await resolveRemoteRef({ url: REMOTE_URL });
+      await fetch({ dir });
 
       // assert
-      assert.strictEqual(oid, OID_MAIN);
+      assert.strictEqual(await fetchedMain(dir), served.oid);
       assert.deepStrictEqual(
         requests.map(({ method, url }) => `${method} ${url}`),
         [
@@ -2388,12 +2825,17 @@ describe("resolveRemoteRef", () => {
       );
       assert.deepStrictEqual(
         requests.slice(-1).map(({ headers, body }) => ({
-          body: withoutAgentPacket(body),
+          body,
           contentHeaders: Object.keys(headers)
             .filter((name) => name.startsWith("content-"))
             .sort(),
         })),
-        [{ body: finalBody, contentHeaders: finalContentHeaders }],
+        [
+          {
+            body: keepsBody ? requests[1]?.body : Buffer.alloc(0),
+            contentHeaders: finalContentHeaders,
+          },
+        ],
       );
     });
   }
@@ -2423,17 +2865,18 @@ describe("resolveRemoteRef", () => {
   for (const { kind, location, origin } of CROSS_ORIGIN_POST_REDIRECTS) {
     test(`GAUTH-06: does not forward the credential on a git-upload-pack POST redirect to ${kind}`, async (t) => {
       // arrange
+      const { dir, served } = await wireFetchFixture(t);
       const requests = installWireTransport(
         t,
-        authenticatedPostRedirectServer(307, location, () => unauthorizedWireResponse()),
+        authenticatedPostRedirectServer(307, location, served, () => unauthorizedWireResponse()),
       );
       const credentials = storedCredentials();
 
       // act
-      const resolution = resolveRemoteRef({ url: REMOTE_URL, auth: boundAuth(credentials) });
+      const fetching = fetch({ dir, auth: boundAuth(credentials) });
 
       // assert
-      await assert.rejects(resolution, crossOriginChallengeFrom(origin));
+      await assert.rejects(fetching, crossOriginChallengeFrom(origin));
       assert.deepStrictEqual(wireCredentials(requests), [
         { url: BOUND_INFO_URL, authorization: null },
         { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
@@ -2445,19 +2888,20 @@ describe("resolveRemoteRef", () => {
 
   test("GAUTH-06: does not forward the credential on a git-upload-pack POST redirect to another port (302, POST->GET)", async (t) => {
     // arrange
+    const { dir, served } = await wireFetchFixture(t);
     const requests = installWireTransport(
       t,
-      authenticatedPostRedirectServer(302, OTHER_PORT_UPLOAD_PACK_URL, () =>
+      authenticatedPostRedirectServer(302, OTHER_PORT_UPLOAD_PACK_URL, served, () =>
         unauthorizedWireResponse(),
       ),
     );
     const credentials = storedCredentials();
 
     // act
-    const resolution = resolveRemoteRef({ url: REMOTE_URL, auth: boundAuth(credentials) });
+    const fetching = fetch({ dir, auth: boundAuth(credentials) });
 
     // assert
-    await assert.rejects(resolution, crossOriginChallengeFrom(`https://${HOST}:8443`));
+    await assert.rejects(fetching, crossOriginChallengeFrom(`https://${HOST}:8443`));
     assert.deepStrictEqual(wireCredentials(requests), [
       { url: BOUND_INFO_URL, authorization: null },
       { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
@@ -2468,21 +2912,20 @@ describe("resolveRemoteRef", () => {
 
   test("GAUTH-06: forwards the credential on a git-upload-pack POST redirect within its origin (307)", async (t) => {
     // arrange
+    const { dir, served } = await wireFetchFixture(t);
     const requests = installWireTransport(
       t,
-      authenticatedPostRedirectServer(307, RENAMED_UPLOAD_PACK_URL, (request) =>
-        request.headers.authorization === undefined
-          ? unauthorizedWireResponse()
-          : refsWireResponse(),
+      authenticatedPostRedirectServer(307, RENAMED_UPLOAD_PACK_URL, served, (request) =>
+        request.headers.authorization === undefined ? unauthorizedWireResponse() : served.pack,
       ),
     );
     const credentials = storedCredentials();
 
     // act
-    const oid = await resolveRemoteRef({ url: REMOTE_URL, auth: boundAuth(credentials) });
+    await fetch({ dir, auth: boundAuth(credentials) });
 
     // assert
-    assert.strictEqual(oid, OID_MAIN);
+    assert.strictEqual(await fetchedMain(dir), served.oid);
     assert.deepStrictEqual(wireCredentials(requests), [
       { url: BOUND_INFO_URL, authorization: null },
       { url: BOUND_INFO_URL, authorization: BASIC_CREDENTIAL },
@@ -2509,12 +2952,13 @@ describe("resolveRemoteRef", () => {
         headers,
         body: Buffer.alloc(0),
       }));
+      const { dir } = await wireFetchFixture(t);
 
       // act
-      const resolution = resolveRemoteRef({ url: REMOTE_URL });
+      const fetching = fetch({ dir });
 
       // assert
-      await assert.rejects(resolution, (error: unknown) => {
+      await assert.rejects(fetching, (error: unknown) => {
         assert.ok(error instanceof git.Errors.HttpError);
         assert.deepStrictEqual(error.data, {
           statusCode: 302,
@@ -2533,12 +2977,13 @@ describe("resolveRemoteRef", () => {
   test("IN-03: rejects an eleventh consecutive redirect with TooManyRedirectsError", async (t) => {
     // arrange
     const requests = installWireTransport(t, () => redirectWireResponse(302, BOUND_INFO_URL));
+    const { dir } = await wireFetchFixture(t);
 
     // act
-    const resolution = resolveRemoteRef({ url: REMOTE_URL });
+    const fetching = fetch({ dir });
 
     // assert
-    await assert.rejects(resolution, (error: unknown) => {
+    await assert.rejects(fetching, (error: unknown) => {
       assert.ok(error instanceof TooManyRedirectsError);
       return true;
     });
@@ -2728,167 +3173,166 @@ describe("listRemotes", () => {
   }
 });
 
+/**
+ * RESV-03, SG-TRN-01: a repository served at a `file://` URL with the
+ * lightweight tag `light` on the initial commit, and the annotated tag `v2`
+ * and the tag of a tag `tot` on the second commit.
+ */
+async function taggedRemote(t: TestContext): Promise<{
+  readonly url: string;
+  readonly initialOid: string;
+  readonly secondOid: string;
+}> {
+  const repository = await createGitTestRepository(t, { boundary: "local" });
+  await repository.run("tag", "light");
+  const secondOid = await repository.commit([{ filepath: "two.txt", contents: "two\n" }], "two");
+  await repository.run("tag", "-a", "-m", "v2", "v2");
+  await repository.run("tag", "-a", "-m", "tot", "tot", "v2");
+  return { url: `file://${repository.dir}`, initialOid: repository.initialOid, secondOid };
+}
+
+/** A git process whose remote runs print `stdout` and succeed. */
+function printingGitProcess(stdout: string): GitProcess {
+  return {
+    locate: () => Promise.resolve("/usr/bin/git"),
+    run: () => Promise.resolve({ exitCode: 0, stdout, stderr: "" }),
+  };
+}
+
 describe("listRemoteTags", () => {
-  test("RESV-03: queries the tag namespace and returns every advertised tag in order", async (t) => {
+  test("RESV-03, SG-TRN-01: lists each tag once with the commit it names, a peeled line winning", async (t) => {
     // arrange
-    const requests = installRemoteTransport(t, [
-      `${OID_LIGHTWEIGHT} refs/tags/v1.0.0`,
-      `${OID_MAIN} refs/tags/v1.1.0`,
-      `${OID_TAG} refs/tags/v2.0.0 peeled:${OID_PEELED}`,
-    ]);
+    const remote = await taggedRemote(t);
+    const systemGit = await hermeticGitProcess(t);
 
     // act
-    const tags = await listRemoteTags({ url: REMOTE_URL });
+    const tags = await listRemoteTags({ url: remote.url }, systemGit);
 
     // assert
     assert.deepStrictEqual(tags, [
-      { name: "v1.0.0", oid: OID_LIGHTWEIGHT },
-      { name: "v1.1.0", oid: OID_MAIN },
-      { name: "v2.0.0", oid: OID_PEELED },
+      { name: "light", oid: remote.initialOid },
+      { name: "tot", oid: remote.secondOid },
+      { name: "v2", oid: remote.secondOid },
     ]);
-    assert.deepStrictEqual(requests, expectedTagRequests());
   });
 
-  test("GHB-01: lists the tags of a github.com URL from the base", async (t) => {
+  test("RESV-03: a remote with no tags answers an empty list", async (t) => {
     // arrange
-    const requests = installRemoteTransport(t, [
-      `${OID_LIGHTWEIGHT} refs/tags/v1.0.0`,
-      `${OID_TAG} refs/tags/v2.0.0 peeled:${OID_PEELED}`,
-    ]);
-    setGitHubBaseUrl(t, `https://${HOST}`);
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    const systemGit = await hermeticGitProcess(t);
 
     // act
-    const tags = await listRemoteTags({ url: GITHUB_REMOTE_URL });
-
-    // assert
-    assert.deepStrictEqual(tags, [
-      { name: "v1.0.0", oid: OID_LIGHTWEIGHT },
-      { name: "v2.0.0", oid: OID_PEELED },
-    ]);
-    assert.deepStrictEqual(requests, expectedTagRequests());
-  });
-
-  test("D-10: a failed listing from the base names the fetched URL", async (t) => {
-    // arrange
-    const requests = installFailedDiscoveryTransport(t);
-    setGitHubBaseUrl(t, `https://${HOST}`);
-
-    // act
-    const listing = listRemoteTags({ url: GITHUB_REMOTE_URL });
-
-    // assert
-    await assert.rejects(listing, (error: unknown) =>
-      isFetchedUrlDiscoveryError(error, "git.listServerRefs"),
-    );
-    assert.deepStrictEqual(requests, [expectedDiscoveryRequest({ "Git-Protocol": "version=2" })]);
-  });
-
-  test("D-03-02.2: an entry naming an annotated tag's peel is not a second tag", async (t) => {
-    // arrange
-    const requests = installRemoteTransport(t, [
-      `${OID_TAG} refs/tags/v2.0.0 peeled:${OID_PEELED}`,
-      `${OID_PEELED} refs/tags/v2.0.0^{}`,
-    ]);
-
-    // act
-    const tags = await listRemoteTags({ url: REMOTE_URL });
-
-    // assert
-    assert.deepStrictEqual(tags, [{ name: "v2.0.0", oid: OID_PEELED }]);
-    assert.deepStrictEqual(requests, expectedTagRequests());
-  });
-
-  test("a ref advertised outside the tag namespace is not returned as a tag", async (t) => {
-    // arrange
-    const requests = installRemoteTransport(t, [
-      `${OID_MAIN} refs/heads/main`,
-      `${OID_DEV} refs/tags/v1.1.0`,
-    ]);
-
-    // act
-    const tags = await listRemoteTags({ url: REMOTE_URL });
-
-    // assert
-    assert.deepStrictEqual(tags, [{ name: "v1.1.0", oid: OID_DEV }]);
-    assert.deepStrictEqual(requests, expectedTagRequests());
-  });
-
-  test("a remote advertising no tags yields an empty list rather than throwing", async (t) => {
-    // arrange
-    const requests = installRemoteTransport(t, []);
-
-    // act
-    const tags = await listRemoteTags({ url: REMOTE_URL });
+    const tags = await listRemoteTags({ url: `file://${repository.dir}` }, systemGit);
 
     // assert
     assert.deepStrictEqual(tags, []);
-    assert.deepStrictEqual(requests, expectedTagRequests());
   });
 
-  test("RESV-03: no credential callback answers a challenge when no bundle is supplied", async (t) => {
+  test("SG-TRN-01: pairs a peeled line with its tag whatever order git prints them in", async () => {
     // arrange
-    const requests = installRemoteTransport(t, [`${OID_MAIN} refs/tags/v1.0.0`], {
-      challengeOnce: true,
-    });
+    const stdout = [
+      `${OID_PEELED}\trefs/tags/v1^{}`,
+      `${OID_TAG}\trefs/tags/v1`,
+      `${OID_LIGHTWEIGHT}\trefs/tags/light`,
+      "",
+    ].join("\n");
 
     // act
-    const listing = listRemoteTags({ url: REMOTE_URL });
+    const tags = await listRemoteTags({ url: REMOTE_URL }, printingGitProcess(stdout));
 
     // assert
-    await assert.rejects(listing, { name: "HttpError", message: "HTTP Error: 401 Unauthorized" });
-    assert.deepStrictEqual(requests, [expectedTagRequests()[0]]);
+    assert.deepStrictEqual(tags, [
+      { name: "v1", oid: OID_PEELED },
+      { name: "light", oid: OID_LIGHTWEIGHT },
+    ]);
   });
 
-  test("RESV-03: the supplied credential bundle is what the tag query authenticates with", async (t) => {
+  test("D-SG-13 / D-PL8-24: sends one ls-remote --tags with the limit and the scope's signal", async (t) => {
     // arrange
-    const requests = installRemoteTransport(
-      t,
-      [`${OID_TAG} refs/tags/v2.0.0 peeled:${OID_PEELED}`],
-      { challengeOnce: true },
+    setGitTimeoutVariable(t, "4321");
+    const remote = await taggedRemote(t);
+    const recorded = recordingGitProcess(await hermeticGitProcess(t));
+    const signal = new AbortController().signal;
+
+    // act
+    await runWithGitAbortSignal(signal, () =>
+      listRemoteTags({ url: remote.url }, recorded.gitProcess),
     );
-    const credentials = createCredentialOpsFake({
-      boundary: "memory",
-      credentials: [[HOST, { username: "user", password: "secret" }]],
-    });
-    const onAuthRequired: OnAuthRequiredFn = () => {
-      throw new Error("interactive auth is forbidden on a stored-credential hit");
-    };
-
-    // act
-    const tags = await listRemoteTags({
-      url: REMOTE_URL,
-      auth: {
-        credentialOps: credentials.credentialOps,
-        host: HOST,
-        kind: "device-flow",
-        onAuthRequired,
-      },
-    });
 
     // assert
-    assert.deepStrictEqual(tags, [{ name: "v2.0.0", oid: OID_PEELED }]);
-    assert.deepStrictEqual(credentials.calls, {
-      fill: [{ host: HOST }],
-      approve: [],
-      reject: [],
-    });
-    assert.deepStrictEqual(requests, [
-      expectedTagRequests()[0],
+    assert.deepStrictEqual(recorded.requests, [
       {
-        ...expectedTagRequests()[0],
-        headers: {
-          "Git-Protocol": "version=2",
-          Authorization: "Basic dXNlcjpzZWNyZXQ=",
-        },
-      },
-      {
-        ...expectedTagRequests()[1],
-        headers: {
-          ...expectedTagRequests()[1].headers,
-          Authorization: "Basic dXNlcjpzZWNyZXQ=",
-        },
+        subcommand: "ls-remote",
+        lane: "network",
+        options: ["--tags"],
+        operands: [remote.url],
+        config: [],
+        timeoutMs: 4321,
+        signal,
       },
     ]);
+  });
+
+  test("D-SG-16, GHB-01: lists the tags of a github.com URL at the base through its insteadOf pair", async (t) => {
+    // arrange
+    const standIn = await gitHubBaseStandIn(t);
+    await gitTestCheckout(standIn.host.repositoryPath("tools")).run("tag", "v1.0.0");
+    const recorded = recordingGitProcess(standIn.gitProcess);
+
+    // act
+    const tags = await listRemoteTags({ url: GITHUB_TOOLS_URL }, recorded.gitProcess);
+
+    // assert
+    assert.deepStrictEqual(tags, [{ name: "v1.0.0", oid: standIn.oid }]);
+    assert.deepStrictEqual(
+      recorded.requests.map((request) => request.config),
+      [[`url.https://${standIn.host.address}/.insteadOf=https://github.com/`]],
+    );
+  });
+
+  test("GHB-01: a failed listing at the base names the URL git fetched", async (t) => {
+    // arrange
+    const standIn = await gitHubBaseStandIn(t);
+
+    // act
+    const listing = listRemoteTags(
+      { url: "https://github.com/acme/missing.git" },
+      standIn.gitProcess,
+    );
+
+    // assert
+    await assert.rejects(listing, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.ok(error.cause instanceof FetchedUrlCause);
+      assert.deepStrictEqual(
+        { kind: error.kind, operation: error.operation, url: error.cause.url },
+        {
+          kind: "repository-not-found",
+          operation: "ls-remote --tags",
+          url: standIn.host.repositoryUrl("missing"),
+        },
+      );
+      return true;
+    });
+  });
+
+  test("RESV-03, GAUTH-04: the supplied bundle maps an auth failure of the listing", async () => {
+    // arrange
+    const failing = failingAuthGitProcess("rejected");
+    const credentials = storedCredentials();
+
+    // act
+    const listing = listRemoteTags(
+      { url: REMOTE_URL, auth: boundAuth(credentials) },
+      failing.gitProcess,
+    );
+
+    // assert
+    await assert.rejects(listing, (error: unknown) => {
+      assert.ok(error instanceof StoredCredentialRejectedError);
+      assert.strictEqual(error.cause, failing.failures[0]);
+      return true;
+    });
   });
 });
 
@@ -3066,23 +3510,99 @@ function countedBody(chunks: readonly Uint8Array[]): {
 }
 
 /**
- * A tag listing whose ls-refs body yields its first tag, then holds its next
- * read; `onHeldRead` runs when that read starts.
+ * Serves `served` to isomorphic-git: its advertisement, then its pack. The
+ * pack body runs `onPackRead` when its last read settles. Returns each
+ * request as `METHOD url`.
  */
-function installCutOffTagListing(
+function installServedTransport(
   t: TestContext,
-  onHeldRead: () => void,
-): { readonly returns: () => number } {
-  let returned = 0;
+  served: ServedCommit,
+  onPackRead: () => void = () => undefined,
+): string[] {
+  const requests: string[] = [];
   t.mock.method(http, "request", async (request: GitHttpRequest): Promise<GitHttpResponse> => {
     await collectBody(request.body);
-    if (request.method === "GET") {
+    requests.push(`${request.method ?? "GET"} ${request.url}`);
+    if (request.method !== "POST") {
       return response(
         request.url,
         200,
         "OK",
         "application/x-git-upload-pack-advertisement",
-        advertisementBody(),
+        served.advertisement.body,
+      );
+    }
+
+    const source = [Uint8Array.from(served.pack.body)][Symbol.iterator]();
+    const body: AsyncIterableIterator<Uint8Array> = {
+      next: () => {
+        const chunk = source.next();
+        if (chunk.done === true) {
+          onPackRead();
+        }
+
+        return Promise.resolve(chunk);
+      },
+      [Symbol.asyncIterator]: () => body,
+    };
+    return {
+      url: request.url,
+      statusCode: 200,
+      statusMessage: "OK",
+      headers: { "content-type": "application/x-git-upload-pack-result" },
+      body,
+    };
+  });
+  return requests;
+}
+
+/** Which answer of a fetch is cut off, and the bytes it yields before its held read. */
+interface CutOffBody {
+  readonly method: "GET" | "POST";
+  readonly first: Buffer;
+}
+
+/**
+ * The `info/refs` answer of an empty repository with no flush after its
+ * service line: isomorphic-git reads a failed read of it as the end of an
+ * empty advertisement, and a fetch of an empty remote succeeds.
+ */
+const CUT_OFF_ADVERTISEMENT: CutOffBody = {
+  method: "GET",
+  first: Buffer.concat([packet("# service=git-upload-pack\n"), FLUSH]),
+};
+
+/** The whole pack with no flush after it, so the next read is the held one. */
+function cutOffPack(served: ServedCommit): CutOffBody {
+  return {
+    method: "POST",
+    first: Buffer.concat([
+      packet("NAK\n"),
+      packetBytes(Buffer.concat([Buffer.from([1]), served.packfile])),
+    ]),
+  };
+}
+
+/**
+ * Serves `served`, except that the answer to `cut.method` yields `cut.first`
+ * and holds its next read; `onHeldRead` runs when that read starts.
+ */
+function installCutOffBody(
+  t: TestContext,
+  served: ServedCommit,
+  cut: CutOffBody,
+  onHeldRead: () => void,
+): { readonly returns: () => number } {
+  let returned = 0;
+  t.mock.method(http, "request", async (request: GitHttpRequest): Promise<GitHttpResponse> => {
+    await collectBody(request.body);
+    if (request.method !== cut.method) {
+      return response(
+        request.url,
+        200,
+        "OK",
+        "application/x-git-upload-pack-advertisement",
+        served.advertisement.body,
       );
     }
 
@@ -3091,10 +3611,7 @@ function installCutOffTagListing(
       next: () => {
         reads += 1;
         if (reads === 1) {
-          return Promise.resolve({
-            done: false,
-            value: Uint8Array.from(packet(`${OID_LIGHTWEIGHT} refs/tags/v1.0.0\n`)),
-          });
+          return Promise.resolve({ done: false, value: Uint8Array.from(cut.first) });
         }
 
         onHeldRead();
@@ -3110,7 +3627,12 @@ function installCutOffTagListing(
       url: request.url,
       statusCode: 200,
       statusMessage: "OK",
-      headers: { "content-type": "application/x-git-upload-pack-result" },
+      headers: {
+        "content-type":
+          cut.method === "GET"
+            ? "application/x-git-upload-pack-advertisement"
+            : "application/x-git-upload-pack-result",
+      },
       body,
     };
   });
@@ -3118,6 +3640,7 @@ function installCutOffTagListing(
 }
 
 /**
+ * Answers `info/refs` with a protocol version 1 advertisement/**
  * Answers `info/refs` with a protocol version 1 advertisement of `OID_MAIN`,
  * then answers `git-upload-pack` with a NAK and a pack stream that stays open.
  */
@@ -3243,30 +3766,28 @@ describe("runWithGitAbortSignal", () => {
 
   test("D-PL8-24: an already-aborted signal rejects before any request is sent", async (t) => {
     // arrange
+    const dir = await cloneOfRemote(t);
     const transport = installHeldTransport(t);
     const reason = new Error("background step stopped");
 
     // act
-    const listing = runWithGitAbortSignal(AbortSignal.abort(reason), () =>
-      listRemoteTags({ url: REMOTE_URL }),
-    );
+    const fetching = runWithGitAbortSignal(AbortSignal.abort(reason), () => fetch({ dir }));
 
     // assert
-    await assert.rejects(listing, isAbortReason(reason));
+    await assert.rejects(fetching, isAbortReason(reason));
     assert.deepStrictEqual(transport.requests, []);
   });
 
   test("D-PL8-24: a response that arrives after its request was aborted has its body ended", async (t) => {
     // arrange
+    const dir = await cloneOfRemote(t);
     const transport = installHeldTransport(t);
     const controller = new AbortController();
     const reason = new Error("background step stopped");
-    const listing = runWithGitAbortSignal(controller.signal, () =>
-      listRemoteTags({ url: REMOTE_URL }),
-    );
+    const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir }));
     await transport.arrived;
     controller.abort(reason);
-    await assert.rejects(listing, isAbortReason(reason));
+    await assert.rejects(fetching, isAbortReason(reason));
     const late = countedBody([advertisementBody()]);
 
     // act
@@ -3287,15 +3808,14 @@ describe("runWithGitAbortSignal", () => {
 
   test("D-PL8-24: a late response whose body fails to end raises no unhandled rejection", async (t) => {
     // arrange
+    const dir = await cloneOfRemote(t);
     const transport = installHeldTransport(t);
     const controller = new AbortController();
     const reason = new Error("background step stopped");
-    const listing = runWithGitAbortSignal(controller.signal, () =>
-      listRemoteTags({ url: REMOTE_URL }),
-    );
+    const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir }));
     await transport.arrived;
     controller.abort(reason);
-    await assert.rejects(listing, isAbortReason(reason));
+    await assert.rejects(fetching, isAbortReason(reason));
     let returned = 0;
     const body: AsyncIterableIterator<Uint8Array> = {
       next: () => Promise.resolve({ done: true, value: undefined }),
@@ -3333,12 +3853,11 @@ describe("runWithGitAbortSignal", () => {
 
   test("D-PL8-24: a request that fails after its abort still rejects with the abort reason", async (t) => {
     // arrange
+    const dir = await cloneOfRemote(t);
     const transport = installHeldTransport(t);
     const controller = new AbortController();
     const reason = new Error("background step stopped");
-    const listing = runWithGitAbortSignal(controller.signal, () =>
-      listRemoteTags({ url: REMOTE_URL }),
-    );
+    const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir }));
     await transport.arrived;
     controller.abort(reason);
 
@@ -3346,11 +3865,12 @@ describe("runWithGitAbortSignal", () => {
     transport.answer.reject(new Error("socket closed"));
 
     // assert
-    await assert.rejects(listing, isAbortReason(reason));
+    await assert.rejects(fetching, isAbortReason(reason));
   });
 
   test("D-PL8-24: a call that already failed for another reason rejects with that error when the abort lands afterwards", async (t) => {
     // arrange
+    const dir = await cloneOfRemote(t);
     const controller = new AbortController();
     const failure = new Error("socket closed");
     t.mock.method(http, "request", (): Promise<GitHttpResponse> => {
@@ -3361,125 +3881,81 @@ describe("runWithGitAbortSignal", () => {
     });
 
     // act
-    const listing = runWithGitAbortSignal(controller.signal, () =>
-      listRemoteTags({ url: REMOTE_URL }),
-    );
+    const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir }));
 
     // assert
-    await assert.rejects(listing, (error: unknown) => error === failure);
+    await assert.rejects(fetching, (error: unknown) => error === failure);
   });
 
   test("D-PL8-24: a call that already completed returns its result when the abort lands afterwards", async (t) => {
     // arrange
+    const { dir, served } = await wireFetchFixture(t);
     const controller = new AbortController();
-    t.mock.method(http, "request", async (request: GitHttpRequest): Promise<GitHttpResponse> => {
-      await collectBody(request.body);
-      const answer = response(
-        request.url,
-        200,
-        "OK",
-        request.method === "GET"
-          ? "application/x-git-upload-pack-advertisement"
-          : "application/x-git-upload-pack-result",
-        request.method === "GET"
-          ? advertisementBody()
-          : refsBody([`${OID_LIGHTWEIGHT} refs/tags/v1.0.0`]),
-      );
-      const { body } = answer;
-      if (request.method !== "POST" || body === undefined) {
-        return answer;
-      }
-
-      const source = body[Symbol.asyncIterator]();
-      return {
-        ...answer,
-        body: {
-          next: async () => {
-            const chunk = await source.next();
-            if (chunk.done === true) {
-              afterSettlement(() => {
-                controller.abort(new Error("background step stopped"));
-              });
-            }
-
-            return chunk;
-          },
-          [Symbol.asyncIterator]() {
-            return this;
-          },
-        },
-      };
+    installServedTransport(t, served, () => {
+      afterSettlement(() => {
+        controller.abort(new Error("background step stopped"));
+      });
     });
 
     // act
-    const tags = await runWithGitAbortSignal(controller.signal, () =>
-      listRemoteTags({ url: REMOTE_URL }),
-    );
+    await runWithGitAbortSignal(controller.signal, () => fetch({ dir }));
 
     // assert
-    assert.deepStrictEqual(tags, [{ name: "v1.0.0", oid: OID_LIGHTWEIGHT }]);
+    assert.strictEqual(await fetchedMain(dir), served.oid);
   });
 
-  test("D-PL8-24: a tag listing whose tag list is cut off by the abort rejects instead of returning part of it", async (t) => {
+  test("D-PL8-24: a fetch whose advertisement is cut off by the abort rejects instead of reporting an empty remote", async (t) => {
     // arrange
+    const { dir, served } = await wireFetchFixture(t);
     const controller = new AbortController();
     const reason = new Error("background step stopped");
-    const listing = installCutOffTagListing(t, () => {
+    const advertisement = installCutOffBody(t, served, CUT_OFF_ADVERTISEMENT, () => {
       queueMicrotask(() => {
         controller.abort(reason);
       });
     });
 
     // act
-    const tags = runWithGitAbortSignal(controller.signal, () =>
-      listRemoteTags({ url: REMOTE_URL }),
-    );
+    const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir }));
 
     // assert
-    await assert.rejects(tags, isAbortReason(reason));
-    assert.strictEqual(listing.returns(), 1);
+    await assert.rejects(fetching, isAbortReason(reason));
+    assert.strictEqual(advertisement.returns(), 1);
   });
 
-  test("D-PL8-24: a body read that starts after the abort ends the body and rejects", async (t) => {
+  test("D-PL8-24: a pack read that starts after the abort ends the body and rejects", async (t) => {
     // arrange
+    const { dir, served } = await wireFetchFixture(t);
     const controller = new AbortController();
     const reason = new Error("background step stopped");
-    const listing = installCutOffTagListing(t, () => {
+    const pack = installCutOffBody(t, served, cutOffPack(served), () => {
       controller.abort(reason);
     });
 
     // act
-    const tags = runWithGitAbortSignal(controller.signal, () =>
-      listRemoteTags({ url: REMOTE_URL }),
-    );
+    const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir }));
 
     // assert
-    await assert.rejects(tags, isAbortReason(reason));
-    assert.strictEqual(listing.returns(), 1);
+    await assert.rejects(fetching, isAbortReason(reason));
+    assert.strictEqual(pack.returns(), 1);
   });
 
-  test("D-PL8-24: a scope whose signal never aborts lists every tag with the same requests", async (t) => {
+  test("D-PL8-24: a scope whose signal never aborts fetches with the same requests", async (t) => {
     // arrange
-    const requests = installRemoteTransport(t, [
-      `${OID_LIGHTWEIGHT} refs/tags/v1.0.0`,
-      `${OID_TAG} refs/tags/v2.0.0 peeled:${OID_PEELED}`,
-    ]);
+    const { dir, served } = await wireFetchFixture(t);
+    const requests = installServedTransport(t, served);
 
     // act
-    const tags = await runWithGitAbortSignal(new AbortController().signal, () =>
-      listRemoteTags({ url: REMOTE_URL }),
-    );
+    await runWithGitAbortSignal(new AbortController().signal, () => fetch({ dir }));
 
     // assert
-    assert.deepStrictEqual(tags, [
-      { name: "v1.0.0", oid: OID_LIGHTWEIGHT },
-      { name: "v2.0.0", oid: OID_PEELED },
-    ]);
-    assert.deepStrictEqual(requests, expectedTagRequests());
+    assert.strictEqual(await fetchedMain(dir), served.oid);
+    assert.deepStrictEqual(requests, [`GET ${BOUND_INFO_URL}`, `POST ${BOUND_UPLOAD_PACK_URL}`]);
   });
 
   test("D-PL8-24: a response without a body reaches isomorphic-git unchanged inside a scope", async (t) => {
     // arrange
+    const dir = await cloneOfRemote(t);
     t.mock.method(http, "request", (request: GitHttpRequest): Promise<GitHttpResponse> =>
       Promise.resolve({
         url: request.url,
@@ -3490,12 +3966,10 @@ describe("runWithGitAbortSignal", () => {
     );
 
     // act
-    const listing = runWithGitAbortSignal(new AbortController().signal, () =>
-      listRemoteTags({ url: REMOTE_URL }),
-    );
+    const fetching = runWithGitAbortSignal(new AbortController().signal, () => fetch({ dir }));
 
     // assert
-    await assert.rejects(listing, (error: unknown) => {
+    await assert.rejects(fetching, (error: unknown) => {
       assert.ok(error instanceof git.Errors.HttpError);
       assert.deepStrictEqual(error.data, {
         statusCode: 500,

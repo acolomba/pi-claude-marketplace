@@ -571,6 +571,37 @@ describe("rpcChildEnvironment", () => {
     });
   });
 
+  test("D-SG-14: adds the Device Flow profile's https_proxy and no_proxy, not the shell's", (t) => {
+    // arrange
+    inheritVariables(t);
+    const git = {
+      NODE_EXTRA_CA_CERTS: "/run/cert.pem",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      GIT_SSL_CAINFO: "/run/cert.pem",
+      PATH: "/run/ssh-host/bin:/usr/bin",
+      https_proxy: "http://127.0.0.1:8080",
+      no_proxy: "127.0.0.1",
+    } satisfies RpcGitEnvironment;
+
+    // act
+    const environment = rpcChildEnvironment(sandbox, git);
+
+    // assert
+    assert.deepStrictEqual(environment, {
+      HOME: "/sandbox/home",
+      PI_CODING_AGENT_DIR: "/sandbox/agent",
+      PI_OFFLINE: "1",
+      PATH: "/run/ssh-host/bin:/usr/bin",
+      NODE_EXTRA_CA_CERTS: "/run/cert.pem",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      GIT_SSL_CAINFO: "/run/cert.pem",
+      https_proxy: "http://127.0.0.1:8080",
+      no_proxy: "127.0.0.1",
+    });
+  });
+
   test("returns only the allowlist, with the worker's PATH, without a git environment", (t) => {
     // arrange
     inheritVariables(t);
