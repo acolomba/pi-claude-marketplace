@@ -46,6 +46,8 @@ const LOCATION_KEYS = [
   "sourceCloneDir",
   "pluginCloneDir",
   "sourcesStagingDir",
+  "sourceBackupDir",
+  "pluginCloneBackupDir",
   "pluginCacheFile",
   "workflowArtifactPath",
   "formerWorkflowArtifactPath",
@@ -276,6 +278,12 @@ test("returns every safe derived path inside its exact scope root", async () => 
       "sources-staging",
       "123e4567-e89b-12d3-a456-426614174000",
     ),
+    sourceBackup: path.join(extensionRoot, "sources-backup", "market.eta"),
+    pluginCloneBackup: path.join(
+      extensionRoot,
+      "plugin-clones-backup",
+      "0123456789ab-abcdef012345",
+    ),
     pluginCache: path.join(extensionRoot, "cache", "plugins", "market-zeta.json"),
   };
   const expectedRelativePaths = {
@@ -284,6 +292,8 @@ test("returns every safe derived path inside its exact scope root", async () => 
     sourceClone: "market-gamma",
     pluginClone: "0123456789ab-abcdef012345",
     sourcesStaging: "123e4567-e89b-12d3-a456-426614174000",
+    sourceBackup: "market.eta",
+    pluginCloneBackup: "0123456789ab-abcdef012345",
     pluginCache: path.join("plugins", "market-zeta.json"),
   };
 
@@ -294,6 +304,8 @@ test("returns every safe derived path inside its exact scope root", async () => 
     sourceClone: await locations.sourceCloneDir("market-gamma"),
     pluginClone: await locations.pluginCloneDir("0123456789ab-abcdef012345"),
     sourcesStaging: await locations.sourcesStagingDir("123e4567-e89b-12d3-a456-426614174000"),
+    sourceBackup: await locations.sourceBackupDir("market.eta"),
+    pluginCloneBackup: await locations.pluginCloneBackupDir("0123456789ab-abcdef012345"),
     pluginCache: await locations.pluginCacheFile("market-zeta"),
   };
   const relativePaths = {
@@ -304,6 +316,11 @@ test("returns every safe derived path inside its exact scope root", async () => 
     sourcesStaging: path.relative(
       path.join(extensionRoot, "sources-staging"),
       paths.sourcesStaging,
+    ),
+    sourceBackup: path.relative(path.join(extensionRoot, "sources-backup"), paths.sourceBackup),
+    pluginCloneBackup: path.relative(
+      path.join(extensionRoot, "plugin-clones-backup"),
+      paths.pluginCloneBackup,
     ),
     pluginCache: path.relative(locations.cacheDir, paths.pluginCache),
   };
@@ -354,6 +371,23 @@ for (const { title, parentFor, linkSegments, childSegments, invoke, label } of [
     childSegments: ["stage-id"],
     invoke: (locations: ScopedLocations) => locations.sourcesStagingDir("stage-id"),
     label: "sourcesStagingDir(stage-id)",
+  },
+  {
+    title: "source backups refuse a symlinked marketplace component",
+    parentFor: (locations: ScopedLocations) => path.join(locations.extensionRoot, "sources-backup"),
+    linkSegments: ["market"],
+    childSegments: ["market"],
+    invoke: (locations: ScopedLocations) => locations.sourceBackupDir("market"),
+    label: "sourceBackupDir(market)",
+  },
+  {
+    title: "plugin clone backups refuse a symlinked clone-key component",
+    parentFor: (locations: ScopedLocations) =>
+      path.join(locations.extensionRoot, "plugin-clones-backup"),
+    linkSegments: ["clone-key"],
+    childSegments: ["clone-key"],
+    invoke: (locations: ScopedLocations) => locations.pluginCloneBackupDir("clone-key"),
+    label: "pluginCloneBackupDir(clone-key)",
   },
   {
     title: "plugin cache refuses a symlinked intermediate directory",
@@ -462,6 +496,37 @@ for (const {
       path.join(extensionRoot, "sources", name),
     expectedErrorName: "Error",
     expectedErrorMessage: () => 'sourceCloneDir marketplace name ".." must not be "." or "..".',
+  },
+  {
+    title: "rejects a parent marketplace beside a dotted safe backup path",
+    safeName: "market.bak",
+    unsafeName: "..",
+    invoke: (locations: ScopedLocations, name: string) => locations.sourceBackupDir(name),
+    expectedSafePath: (extensionRoot: string, name: string) =>
+      path.join(extensionRoot, "sources-backup", name),
+    expectedErrorName: "Error",
+    expectedErrorMessage: () => 'sourceBackupDir marketplace name ".." must not be "." or "..".',
+  },
+  {
+    title: "rejects the active platform separator beside a safe backup path",
+    safeName: "active-separator",
+    unsafeName: activeSeparatorName,
+    invoke: (locations: ScopedLocations, name: string) => locations.sourceBackupDir(name),
+    expectedSafePath: (extensionRoot: string, name: string) =>
+      path.join(extensionRoot, "sources-backup", name),
+    expectedErrorName: "Error",
+    expectedErrorMessage: (_extensionRoot: string, name: string) =>
+      `sourceBackupDir marketplace name "${name}" "${name}" must not contain path separators.`,
+  },
+  {
+    title: "rejects a parent clone key beside a safe clone backup path",
+    safeName: "0123456789ab",
+    unsafeName: "..",
+    invoke: (locations: ScopedLocations, name: string) => locations.pluginCloneBackupDir(name),
+    expectedSafePath: (extensionRoot: string, name: string) =>
+      path.join(extensionRoot, "plugin-clones-backup", name),
+    expectedErrorName: "Error",
+    expectedErrorMessage: () => 'pluginCloneBackupDir clone key ".." must not be "." or "..".',
   },
   {
     title: "rejects the active platform separator beside a safe clone key",

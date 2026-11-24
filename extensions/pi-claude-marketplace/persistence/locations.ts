@@ -176,6 +176,22 @@ export interface ScopedLocations {
   /** Returns `<extensionRoot>/sources-staging/<uuid>/` after SC-7 / NFR-10 containment check (D-09 same-FS sibling of `sourcesDir`). */
   sourcesStagingDir(uuid: string): Promise<string>;
   /**
+   * D-SG-10 / NFR-10: returns `<extensionRoot>/sources-backup/<mp>/` after
+   * `assertSafeName` + `assertPathInside`, where a refresh sets the live
+   * checkout aside while the new clone moves in. It sits outside `sourcesDir`
+   * because a marketplace name may hold a dot, so `sources/<mp>.bak` could be
+   * another marketplace's checkout. It shares the filesystem of `sourcesDir`,
+   * so both renames stay atomic (NFR-1).
+   */
+  sourceBackupDir(mp: string): Promise<string>;
+  /**
+   * D-SG-10 / NFR-10: returns `<extensionRoot>/plugin-clones-backup/<key>/`
+   * after `assertSafeName` + `assertPathInside`, where a mirror refresh sets
+   * the live mirror aside. It sits outside `pluginClonesDir` because the clone
+   * sweep deletes every entry there that is not a live key.
+   */
+  pluginCloneBackupDir(key: string): Promise<string>;
+  /**
    * D-03: returns `<cacheDir>/plugins/<marketplace>.json` after
    * `assertSafeName` + `assertPathInside` containment checks. Consumed
    * by `getPluginIndex(scope, marketplace)` in `shared/completion-cache.ts`.
@@ -383,6 +399,24 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
       const sourcesStagingRoot = path.join(extensionRoot, "sources-staging");
       const candidate = path.join(sourcesStagingRoot, uuid);
       await assertPathInside(sourcesStagingRoot, candidate, `sourcesStagingDir(${uuid})`);
+      return candidate;
+    },
+
+    async sourceBackupDir(mp: string): Promise<string> {
+      // D-SG-10: the sourceCloneDir chokepoint under the backup root.
+      assertSafeName(mp, `sourceBackupDir marketplace name "${mp}"`);
+      const backupRoot = path.join(extensionRoot, "sources-backup");
+      const candidate = path.join(backupRoot, mp);
+      await assertPathInside(backupRoot, candidate, `sourceBackupDir(${mp})`);
+      return candidate;
+    },
+
+    async pluginCloneBackupDir(key: string): Promise<string> {
+      // D-SG-10: the pluginCloneDir chokepoint under the backup root.
+      assertSafeName(key, `pluginCloneBackupDir clone key "${key}"`);
+      const backupRoot = path.join(extensionRoot, "plugin-clones-backup");
+      const candidate = path.join(backupRoot, key);
+      await assertPathInside(backupRoot, candidate, `pluginCloneBackupDir(${key})`);
       return candidate;
     },
 

@@ -687,6 +687,12 @@ export interface PluginSkippedMessage extends MessageBase {
  */
 export interface PluginUpdateSkippedMessage extends PluginSkippedMessage {
   readonly cause?: Error;
+  /**
+   * D-PL5-12 / D-SG-10: the row stands for the marketplace whose checkout a
+   * `marketplace update` kept, so its JSON id is its name alone, as on the
+   * failed row of a refresh.
+   */
+  readonly marketplaceSubject?: true;
 }
 
 /**
