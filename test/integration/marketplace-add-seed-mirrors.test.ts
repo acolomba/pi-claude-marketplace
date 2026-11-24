@@ -22,7 +22,7 @@ import { loadState } from "../../extensions/pi-claude-marketplace/persistence/st
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { pathExists } from "../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
-import { checkoutFailure, createGitOpsFake } from "../platform/git-ops-fake.ts";
+import { checkoutFailure, createGitOpsFake, recordedCalls } from "../platform/git-ops-fake.ts";
 import { gitTestCheckout, initGitTestCheckout } from "../platform/git-test-repository.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
@@ -219,16 +219,7 @@ test("seeds a matching path marketplace without network operations", async () =>
     // assert
     const mirror = await locations.pluginCloneDir(pluginMirrorKey(REPO_URL));
     const { entry, marketplaceRoot } = await firstEntry(locations);
-    assert.deepStrictEqual(gitBoundary.state.calls, {
-      checkout: [],
-      clone: [],
-      currentBranch: [],
-      fetch: [],
-      fetchCommit: [],
-      forceUpdateRef: [],
-      resolveRef: [],
-      resolveRemoteRef: [],
-    });
+    assert.deepStrictEqual(recordedCalls(gitBoundary.state.calls), {});
     assert.strictEqual(await pathExists(mirror), true);
     assert.strictEqual(
       await probeManifestEntry(

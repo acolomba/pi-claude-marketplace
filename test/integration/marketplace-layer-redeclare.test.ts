@@ -17,7 +17,7 @@ import { createCompletionCache } from "../../extensions/pi-claude-marketplace/sh
 import { pathExists } from "../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createNotificationBoundary } from "../edge/notification-boundary.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
-import { createGitOpsFake } from "../platform/git-ops-fake.ts";
+import { createGitOpsFake, recordedCalls } from "../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
@@ -83,17 +83,6 @@ async function addRepo(
   return { git, credentials };
 }
 
-const NO_GIT_CALLS = {
-  checkout: [],
-  clone: [],
-  currentBranch: [],
-  fetch: [],
-  fetchCommit: [],
-  forceUpdateRef: [],
-  resolveRef: [],
-  resolveRemoteRef: [],
-};
-
 test("declares a url marketplace in the local layer with one clone in total", async (t) => {
   // arrange
   const scope = await projectScope(t, "mp-layer-redeclare-");
@@ -116,7 +105,7 @@ test("declares a url marketplace in the local layer with one clone in total", as
     first.git.state.calls.clone.map(({ url }) => url),
     [REPO_URL],
   );
-  assert.deepStrictEqual(second.git.state.calls, NO_GIT_CALLS);
+  assert.deepStrictEqual(recordedCalls(second.git.state.calls), {});
   assert.deepStrictEqual(second.credentials.calls, { approve: [], fill: [], reject: [] });
   boundary.verifyBoundary();
 });
@@ -144,7 +133,7 @@ test("declares again a url marketplace the scope records but no layer declares",
   assert.strictEqual(await readFile(scope.locations.baseConfigJsonPath, "utf8"), MP_DECLARED);
   assert.strictEqual(await pathExists(scope.locations.localConfigJsonPath), false);
   assert.strictEqual(await readFile(scope.locations.stateJsonPath, "utf8"), stateBefore);
-  assert.deepStrictEqual(second.git.state.calls, NO_GIT_CALLS);
+  assert.deepStrictEqual(recordedCalls(second.git.state.calls), {});
   assert.deepStrictEqual(second.credentials.calls, { approve: [], fill: [], reject: [] });
   boundary.verifyBoundary();
 });
