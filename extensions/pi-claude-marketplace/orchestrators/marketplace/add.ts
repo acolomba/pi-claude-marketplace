@@ -66,7 +66,6 @@ import { parsePluginSource, samePlannedSource } from "../../domain/source.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeMarketplaceConfigEntry } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   FetchedUrlCause,
@@ -110,7 +109,6 @@ import {
   type Single,
 } from "../../shared/notify-context.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
-import { assertPathInside } from "../../shared/path-safety.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import {
@@ -124,6 +122,7 @@ import { seedSameRepoPluginMirrors } from "../plugin/clone-cache.ts";
 import { surfaceCascadeStagingDiagnostics } from "../plugin/staging-diagnostics.ts";
 
 import { ADD_CONTEXT } from "./add.messaging.ts";
+import { ownershipMarkerPath, writeOwnershipMarker } from "./clone-swap.ts";
 import {
   DEFAULT_HOSTED_MANIFEST_FETCH,
   downloadHostedCatalog,
@@ -1659,30 +1658,6 @@ async function notifyAdded(opts: AddMarketplaceOptions, recordedName: string): P
     // AFILE-04: the notices of the step's installs follow the rows they explain.
     notifyMcpConfigNotices(opts.ctx, opts.run, installs.mcpConfigNotices);
   }
-}
-
-/**
- * Q-01: the ownership marker `marketplace add` writes into `.git/` of every
- * clone it creates, before the rename into `sources/<name>`. The name and the
- * `.git/` location are a user contract: renaming either orphans every leftover
- * created before the rename, which then refuses as `{stale clone}`.
- */
-const OWNERSHIP_MARKER_FILE = "pi-claude-marketplace.json";
-
-/** The path of the ownership marker inside the clone at `cloneDir`. */
-function ownershipMarkerPath(cloneDir: string): string {
-  return path.join(cloneDir, ".git", OWNERSHIP_MARKER_FILE);
-}
-
-/**
- * Q-01 / NFR-1 / NFR-10: write the ownership marker into the staging clone.
- * `assertPathInside` refuses a `.git` that is a symlink, so the write stays
- * inside `stagingDir`.
- */
-async function writeOwnershipMarker(stagingDir: string): Promise<void> {
-  const markerPath = ownershipMarkerPath(stagingDir);
-  await assertPathInside(stagingDir, markerPath, "marketplace ownership marker");
-  await atomicWriteJson(markerPath, { generatedBy: "pi-claude-marketplace" });
 }
 
 /**

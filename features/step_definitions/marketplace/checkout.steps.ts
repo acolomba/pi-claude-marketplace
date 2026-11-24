@@ -5,15 +5,17 @@
  * `sources/` once it succeeds (FLR-03). A partial checkout may hold no `.git`
  * directory, so the git clone steps cannot see it; the checkout step reads
  * both directories whole. The record step separately proves a failed add did
- * not retain a marketplace entry in state.json.
+ * not retain a marketplace entry in state.json. An update moves a checkout
+ * aside to `sources-backup/` before its new clone moves in (D-SG-10), so the
+ * read-only folder steps make that move fail and let it succeed again.
  */
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { readFile, readdir, rm, stat } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { Given, Then } from "@cucumber/cucumber";
+import { Given, Then, When } from "@cucumber/cucumber";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -38,6 +40,58 @@ Given(
     assert.equal((await stat(checkout)).isDirectory(), true);
     await rm(checkout, { recursive: true });
     assert.equal(existsSync(checkout), false);
+  },
+);
+
+// The folder that holds the scope's marketplace checkouts. A checkout moves
+// out of it only when the folder is writable.
+function checkoutsFolderOf(world: ScenarioWorld, scope: string): string {
+  return path.join(extensionRootOf(world, scope), "sources");
+}
+
+// The error a call that must fail gave, or a failed step when it succeeded.
+async function failureOf(call: Promise<void>, what: string): Promise<NodeJS.ErrnoException> {
+  return call.then(
+    () => assert.fail(`${what} did not fail`),
+    (reason: unknown) => reason as NodeJS.ErrnoException,
+  );
+}
+
+// D-SG-10: an update moves the checkout to `sources-backup/<name>` before its
+// new clone moves in. With the folder read-only, that rename fails with
+// EACCES. The step makes the same rename and records its message, and a run
+// whose user bypasses permission bits fails here rather than passing.
+Given(
+  "the folder that holds the checkout of the marketplace {string} in the {word} scope is read-only",
+  async function (this: ScenarioWorld, name: string, scope: string) {
+    const folder = checkoutsFolderOf(this, scope);
+    const backupFolder = path.join(extensionRootOf(this, scope), "sources-backup");
+    assert.equal((await stat(path.join(folder, name))).isDirectory(), true);
+    await mkdir(backupFolder, { recursive: true });
+    await chmod(folder, 0o555);
+    this.onRelease(() => chmod(folder, 0o755));
+    assert.strictEqual((await stat(folder)).mode & 0o777, 0o555);
+    const createError = await failureOf(
+      writeFile(path.join(folder, "write-probe"), ""),
+      "creating a file in the read-only checkout folder",
+    );
+    assert.deepStrictEqual([createError.code, createError.syscall], ["EACCES", "open"]);
+    const renameError = await failureOf(
+      rename(path.join(folder, name), path.join(backupFolder, name)),
+      "moving the checkout out of the read-only checkout folder",
+    );
+    assert.deepStrictEqual([renameError.code, renameError.syscall], ["EACCES", "rename"]);
+    this.recordErrorMessage("{read-only checkout folder rename error}", renameError.message);
+  },
+);
+
+When(
+  "the folder that holds the checkout of the marketplace {string} in the {word} scope becomes writable again",
+  async function (this: ScenarioWorld, name: string, scope: string) {
+    const folder = checkoutsFolderOf(this, scope);
+    await chmod(folder, 0o755);
+    assert.strictEqual((await stat(folder)).mode & 0o777, 0o755);
+    assert.equal((await stat(path.join(folder, name))).isDirectory(), true);
   },
 );
 

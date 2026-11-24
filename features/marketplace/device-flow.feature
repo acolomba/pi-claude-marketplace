@@ -73,10 +73,8 @@ Feature: Marketplace device flow
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
     Then github's sign-in receives no request
     Then pi routes these github requests:
-      | method | url                                                                 | routed to |
-      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
-      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
-      | POST   | https://github.com/acme/tools.git/git-upload-pack                   | git host  |
+      | method  | url            | routed to |
+      | CONNECT | github.com:443 | git host  |
 
   Scenario Outline: A sign-in that GitHub answers with <outcome> fails as authentication required and leaves nothing behind
     Given the marketplace "tools" is published as a github source
@@ -207,9 +205,8 @@ Feature: Marketplace device flow
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
     Then github's sign-in receives no request
     Then pi routes these github requests:
-      | method | url                                                                 | routed to |
-      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
-      | POST   | https://github.com/acme/tools.git/git-upload-pack                   | git host  |
+      | method  | url            | routed to |
+      | CONNECT | github.com:443 | git host  |
 
   Scenario: The background update of a private GitHub marketplace with no stored credential does not sign in
     Given the marketplace "tools" is published as a github source
@@ -226,10 +223,12 @@ Feature: Marketplace device flow
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
     Then github's sign-in receives no request
     Then pi routes these github requests:
-      | method | url                                                                 | routed to |
-      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
+      | method  | url            | routed to |
+      | CONNECT | github.com:443 | git host  |
+      | CONNECT | github.com:443 | git host  |
 
   Scenario: The background update of a private GitHub marketplace fetches with the stored GitHub credential
     Given the marketplace "tools" is published as a github source
@@ -251,7 +250,5 @@ Feature: Marketplace device flow
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
     Then github's sign-in receives no request
     Then pi routes these github requests:
-      | method | url                                                                 | routed to |
-      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
-      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
-      | POST   | https://github.com/acme/tools.git/git-upload-pack                   | git host  |
+      | method  | url            | routed to |
+      | CONNECT | github.com:443 | git host  |

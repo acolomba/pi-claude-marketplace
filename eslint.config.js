@@ -72,6 +72,8 @@ const NETWORK_SEAMS = [
   "extensions/pi-claude-marketplace/orchestrators/import/execute.ts",
   // NFR-5: adding a git-source marketplace clones it.
   "extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts",
+  // D-SG-10: refreshes a checkout by ls-remote, re-clone, and swap.
+  "extensions/pi-claude-marketplace/orchestrators/marketplace/clone-swap.ts",
   // D-PL5-07: owns the hosted catalog port and its default download.
   "extensions/pi-claude-marketplace/orchestrators/marketplace/hosted-catalog.ts",
   // D-12 / D-13: owns GitOps, DEFAULT_GIT_OPS, and refreshGitHubClone.
@@ -104,7 +106,7 @@ const NETWORK_SEAMS = [
 // download. A network-free module reaches neither through a name the gate
 // does not match.
 const NETWORK_SEAM_NAMES =
-  "gitOps|DEFAULT_GIT_OPS|refreshGitHubClone|hostedManifestFetch|HostedManifestFetch|DEFAULT_HOSTED_MANIFEST_FETCH|downloadHostedCatalog|refreshHostedCatalog|fetchHostedManifest";
+  "gitOps|DEFAULT_GIT_OPS|refreshGitHubClone|refreshCloneBySwap|hostedManifestFetch|HostedManifestFetch|DEFAULT_HOSTED_MANIFEST_FETCH|downloadHostedCatalog|refreshHostedCatalog|fetchHostedManifest";
 
 const NETWORK_FREE_SYNTAX_SELECTORS = [
   {
@@ -120,7 +122,7 @@ const NETWORK_FREE_SYNTAX_SELECTORS = [
   {
     selector: `:matches(Identifier, PrivateIdentifier)[name=/^(?:${NETWORK_SEAM_NAMES})$/]`,
     message:
-      "NFR-5 / D-PL5-07: network-free modules must not name the git seam (gitOps, DEFAULT_GIT_OPS, refreshGitHubClone) or the hosted catalog download (hostedManifestFetch, HostedManifestFetch, DEFAULT_HOSTED_MANIFEST_FETCH, downloadHostedCatalog, refreshHostedCatalog, fetchHostedManifest). Only the NETWORK_SEAMS files in eslint.config.js may name them.",
+      "NFR-5 / D-PL5-07: network-free modules must not name the git seam (gitOps, DEFAULT_GIT_OPS, refreshGitHubClone, refreshCloneBySwap) or the hosted catalog download (hostedManifestFetch, HostedManifestFetch, DEFAULT_HOSTED_MANIFEST_FETCH, downloadHostedCatalog, refreshHostedCatalog, fetchHostedManifest). Only the NETWORK_SEAMS files in eslint.config.js may name them.",
   },
   {
     selector: `Literal[value=/\\b(?:${NETWORK_SEAM_NAMES})\\b/]`,

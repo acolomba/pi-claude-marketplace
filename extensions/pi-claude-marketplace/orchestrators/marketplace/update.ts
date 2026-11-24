@@ -58,17 +58,15 @@
 //  a. OUTER GUARD (wraps refresh + persist, NOT cascade):
 //  withLockedStateTransaction(locations, async (tx) => {
 //  record = state.marketplaces[name]
-//  if (record.source.kind === "github"):
+//  if (record.source.kind is "github" or "url"):
 //  cloneAdvanced = false
 //  try {
-//  refreshGitHubClone(cloneDir, record.source.ref, gitOps,
-//  => { cloneAdvanced = true; });
-// MU-5: the onFetchSucceeded callback flips
-//  // cloneAdvanced to true ONLY after gitOps.fetch returns.
-//  // Pre-fetch throws (DNS/network/auth) leave cloneAdvanced
-//  // at false so the "Retry the command." hint is suppressed.
-//  // Any later step throw (forceUpdateRef/checkout) or
-//  // manifest re-read throw still produces the retry hint.
+//  swapped = refreshCloneBySwap(...) // D-SG-10, clone-swap.ts
+//  // MU-5: onReplaced flips cloneAdvanced to true ONLY once the
+//  // new clone is the live checkout. A failed ls-remote or clone
+//  // leaves it false, so the "Retry the command." hint is
+//  // suppressed; a manifest re-read throw after the swap keeps it.
+//  kept-stale / kept-in-use -> return kept (no stamp, no cascade)
 //  manifest = read+validate recordedManifestPath(record)
 //  record.lastUpdatedAt = now
 //  } catch (err) {
@@ -96,9 +94,11 @@
 //  severity and reload-hint are renderer-computed and MUST NOT be
 //  composed by callers.
 //
-//  D-14 sequence: fetch + (symbolic HEAD) forceUpdateRef + checkout, OR
-//  (detached HEAD) checkout directly. NO `pull`.
+//  D-SG-10 sequence: ls-remote freshness check (none for a full-SHA ref),
+//  then, when stale, a re-clone into sources-staging/ and a swap through
+//  sources-backup/. NO `pull`, NO in-place fetch.
 
+import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
 import { networkCloneUrl } from "../../domain/clone-key.ts";
@@ -133,7 +133,10 @@ import {
 } from "../../shared/git-failure-classifiers.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
-import { type PluginFailedMessage } from "../../shared/notification-types.ts";
+import {
+  type PluginFailedMessage,
+  type PluginUpdateSkippedMessage,
+} from "../../shared/notification-types.ts";
 import {
   notifyWithContext,
   type MarketplaceRows,
@@ -149,10 +152,20 @@ import {
 import {
   DEFAULT_CREDENTIAL_OPS,
   NO_STORED_CREDENTIAL_CAUSE,
+  buildAuthForHost,
   buildGitHubAuth,
+  hostFromCloneUrl,
 } from "../auth-host.ts";
 import { surfaceCascadeStagingDiagnostics } from "../plugin/staging-diagnostics.ts";
 
+import {
+  DEFAULT_RENAME_OPS,
+  KEEP_MARKETPLACE_ON_FAILURE_VARIABLE,
+  keepMarketplaceOnFailure,
+  refreshCloneBySwap,
+  type CloneSwapResult,
+  type RenameOps,
+} from "./clone-swap.ts";
 import {
   DEFAULT_HOSTED_MANIFEST_FETCH,
   refreshHostedCatalog,
@@ -162,8 +175,6 @@ import {
   DEFAULT_GIT_OPS,
   lacksStoredCredential,
   recordedManifestPath,
-  refreshGitHubClone,
-  refreshUrlClone,
   resolveScopeOrNotifyNotAdded,
   type GitAuthBundle,
   type GitOps,
@@ -181,7 +192,7 @@ import {
 } from "./update.messaging.ts";
 
 import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
-import type { ParsedSource } from "../../domain/source.ts";
+import type { GitHubSource, ParsedSource, UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { CredentialOps } from "../../platform/git-credential.ts";
@@ -189,6 +200,7 @@ import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { AuthAttemptResult } from "../auth-host.ts";
 import type {
   PluginUpdateFn,
   PluginUpdateOutcome,
@@ -251,6 +263,13 @@ export interface UpdateMarketplaceOptions {
   readonly hostedManifestFetch?: HostedManifestFetch;
   /** Injection seam for the removal of a hosted refresh's staging directory (MA-9). */
   readonly removalOps?: RemovalOps;
+  /** D-SG-10 injection seam for the renames of a clone swap. */
+  readonly renameOps?: RenameOps;
+  /**
+   * D-SG-15: the environment `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE`
+   * is read from, once per update. Defaults to `process.env`.
+   */
+  readonly environment?: NodeJS.ProcessEnv;
 }
 
 export interface UpdateAllMarketplacesOptions {
@@ -279,6 +298,8 @@ export interface UpdateAllMarketplacesOptions {
   readonly deviceFlowHttp?: DeviceFlowHttp;
   /** See `UpdateMarketplaceOptions.hostedManifestFetch`. */
   readonly hostedManifestFetch?: HostedManifestFetch;
+  /** See `UpdateMarketplaceOptions.environment`. */
+  readonly environment?: NodeJS.ProcessEnv;
 }
 
 /** MU-1 single-name form. */
@@ -316,6 +337,8 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
     }),
     ...(opts.stateTransaction !== undefined && { stateTransaction: opts.stateTransaction }),
     removalOps: opts.removalOps ?? createRemovalOps(),
+    renameOps: opts.renameOps ?? DEFAULT_RENAME_OPS,
+    keepOnFailure: keepMarketplaceOnFailure(opts.environment),
   });
 }
 
@@ -328,6 +351,7 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
   const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
   const hostedManifestFetch = opts.hostedManifestFetch ?? DEFAULT_HOSTED_MANIFEST_FETCH;
   const removalOps = createRemovalOps();
+  const keepOnFailure = keepMarketplaceOnFailure(opts.environment);
   // Iteration order is project-first per MSG-GR-3 so same-name cross-scope
   // stable-sort ties render project-before-user.
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
@@ -373,6 +397,8 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
       credentialOps,
       hostedManifestFetch,
       removalOps,
+      renameOps: DEFAULT_RENAME_OPS,
+      keepOnFailure,
       reportedDependencies,
       ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
       ...(opts.pluginUpdate !== undefined && { pluginUpdate: opts.pluginUpdate }),
@@ -406,6 +432,9 @@ interface RefreshOneArgs {
   readonly stateTransaction?: LockedStateTransactionDeps;
   readonly hostedManifestFetch: HostedManifestFetch;
   readonly removalOps: RemovalOps;
+  readonly renameOps: RenameOps;
+  /** D-SG-15: whether a valid checkout whose remote cannot be reached is kept. */
+  readonly keepOnFailure: boolean;
 }
 
 /** A dependency row's key in `reportedDependencies`: the same key in two scopes is two installs. */
@@ -455,29 +484,126 @@ function parseBaseline(name: string, text: string | undefined): unknown {
   }
 }
 
-/**
- * UPD-12 / GAUTH-04 / GHB-01: refresh a github clone. Under
- * `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` the bundle is a stored credential
- * bound to the override's host, so a failed credential lookup gains the line
- * that names how to store one. The line goes before the fetched-URL link, which
- * stays the last link, and the code-bearing error stays at depth 0. With the
- * override unset the bundle is the github.com Device Flow and nothing changes
- * (GHB-04).
- */
-async function refreshGitHubSource(
-  cloneDir: string,
-  ref: string | undefined,
-  gitOps: GitOps,
-  onFetchSucceeded: () => void,
-  auth: GitAuthBundle,
-): Promise<void> {
-  try {
-    await refreshGitHubClone(cloneDir, ref, gitOps, onFetchSucceeded, auth);
-  } catch (err) {
-    if (lacksStoredCredential(err, auth)) {
-      err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(auth.host), { cause: err.cause });
-    }
+/** D-SG-10: the file whose presence makes a marketplace checkout valid. */
+const MARKETPLACE_MANIFEST_MARKER = path.join(".claude-plugin", "marketplace.json");
 
+/**
+ * D-SG-10: the URL a refresh clones from: the live checkout's recorded
+ * `origin`, which is the URL the checkout was cloned from, or the source's
+ * clone URL when the checkout records none. An earlier version recorded some
+ * url sources under a URL that is not their clone URL.
+ */
+async function swapCloneUrl(
+  liveDir: string,
+  source: GitHubSource | UrlSource,
+  gitOps: GitOps,
+): Promise<string> {
+  const remotes = await gitOps.listRemotes({ dir: liveDir });
+  return remotes.kind === "origin" ? remotes.url : networkCloneUrl(source);
+}
+
+/**
+ * The auth bundle a refresh of `source` asks and clones with. github: AUTH-02
+ * / D-79-05: buildGitHubAuth binds github.com with the GitHub provider's
+ * Device Flow, or the override host with a stored credential and no Device
+ * Flow when PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL is set (GHB-02). url:
+ * MURL-03 / GAUTH-03: the bundle is keyed by the source's host, and a registry
+ * host adds that provider's Device Flow on a helper miss (PROV-03). A stored
+ * credential answers first, so Device Flow runs only on a miss (AUTH-02), and
+ * only the user code and the verification URI cross its onDeviceCode callback
+ * (AUTH-09). D-79-02: `authMemo` caps the Device Flow at once per host, so
+ * the freshness `ls-remote` and the clone after it ask the user once.
+ */
+function refreshAuthFor(source: GitHubSource | UrlSource, args: RefreshOneArgs): GitAuthBundle {
+  const { ctx, credentialOps, deviceFlowHttp, run } = args;
+  const authArgs = {
+    credentialOps,
+    ctx,
+    run,
+    authMemo: new Map<string, AuthAttemptResult>(),
+    ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
+  };
+  return source.kind === "github"
+    ? buildGitHubAuth(authArgs)
+    : buildAuthForHost({ ...authArgs, host: hostFromCloneUrl(source.url, "url") });
+}
+
+/**
+ * UPD-12 / GAUTH-04 / GHB-01 / D-1-02: an auth failure on a host whose only
+ * auth path is a stored credential gains the line that names how to store one.
+ * For github the line goes before the fetched-URL link, which stays the last
+ * link; for url it is the chain's tail, and only when the failure carries no
+ * cause of its own. The code-bearing error stays at depth 0. GAUTH-05: a
+ * Device Flow bundle gains nothing.
+ */
+function attachStoredCredentialCause(
+  err: unknown,
+  source: GitHubSource | UrlSource,
+  auth: GitAuthBundle,
+): void {
+  if (!lacksStoredCredential(err, auth)) {
+    return;
+  }
+
+  if (source.kind === "github") {
+    err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(auth.host), { cause: err.cause });
+  } else if (err.cause === undefined) {
+    err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(auth.host));
+  }
+}
+
+/**
+ * D-PL9-10 / NFR-10: the roots, relative to `liveDir`, of the scope's installed
+ * plugins whose plugin root lies inside that checkout, so the swap carries
+ * their packages over. A root outside the checkout is not the swap's.
+ */
+function installedRootsIn(
+  liveDir: string,
+  marketplaces: ExtensionState["marketplaces"],
+): readonly string[] {
+  return Object.values(marketplaces)
+    .flatMap((marketplace) => Object.values(marketplace.plugins))
+    .map((plugin) => path.relative(liveDir, plugin.resolvedSource))
+    .filter(
+      (pluginRoot) =>
+        pluginRoot !== ".." &&
+        !pluginRoot.startsWith(`..${path.sep}`) &&
+        !path.isAbsolute(pluginRoot),
+    );
+}
+
+/**
+ * D-SG-10: refresh a github or url checkout by `ls-remote`, re-clone, and swap,
+ * inside the caller's state lock (Q13). D-SG-15: a valid checkout whose remote
+ * cannot be reached is kept when the keep variable is true.
+ */
+async function refreshGitSource(
+  source: GitHubSource | UrlSource,
+  args: RefreshOneArgs,
+  marketplaces: ExtensionState["marketplaces"],
+  onReplaced: () => void,
+): Promise<CloneSwapResult> {
+  const { name, locations, gitOps } = args;
+  const auth = refreshAuthFor(source, args);
+  const liveDir = await locations.sourceCloneDir(name);
+  try {
+    return await refreshCloneBySwap({
+      locations,
+      liveDir,
+      backupDir: await locations.sourceBackupDir(name),
+      url: await swapCloneUrl(liveDir, source, gitOps),
+      ...(source.ref !== undefined && { ref: source.ref }),
+      gitOps,
+      auth,
+      liveMarker: MARKETPLACE_MANIFEST_MARKER,
+      keepOnUnreachable: args.keepOnFailure,
+      carryOver: installedRootsIn(liveDir, marketplaces),
+      onReplaced,
+      removalOps: args.removalOps,
+      renameOps: args.renameOps,
+    });
+  } catch (err) {
+    attachStoredCredentialCause(err, source, auth);
     throw err;
   }
 }
@@ -503,11 +629,56 @@ function refuseReservedRefreshName(
   }
 }
 
+/**
+ * D-SG-10: what a refresh did to the record. `refreshed`: the record was
+ * stamped, and `changed` says whether its manifest content changed (UXG-05).
+ * `kept`: the checkout was kept as it was, and the record was not stamped;
+ * the row reports `reason`, and `cause` says why.
+ */
+type RecordRefresh =
+  | { readonly kind: "refreshed"; readonly changed: boolean }
+  | { readonly kind: "kept"; readonly reason: ContentReason; readonly cause: Error };
+
+/**
+ * D-SG-10: the cause line of a checkout that another process kept from being
+ * moved aside, after Claude Code's text; the rename's error follows it.
+ */
+const KEPT_IN_USE_CAUSE =
+  "Could not replace the marketplace checkout because it is in use; the existing copy was kept and the next update will try again.";
+
+/**
+ * D-SG-15: the cause line of a checkout kept because its remote could not be
+ * reached, after Claude Code's text; the `ls-remote` failure follows it.
+ */
+const KEPT_STALE_CAUSE = `Marketplace remote unreachable, keeping existing clone (${KEEP_MARKETPLACE_ON_FAILURE_VARIABLE})`;
+
+/** D-SG-10: the kept outcome of a swap, or undefined when the checkout is the remote's. */
+function keptRefresh(swapped: CloneSwapResult): RecordRefresh | undefined {
+  switch (swapped.kind) {
+    case "current":
+    case "replaced":
+      return undefined;
+    case "kept-stale":
+      return {
+        kind: "kept",
+        reason: "network unreachable",
+        cause: new Error(KEPT_STALE_CAUSE, { cause: swapped.cause }),
+      };
+    case "kept-in-use":
+      return {
+        kind: "kept",
+        reason: "permission denied",
+        cause: new Error(KEPT_IN_USE_CAUSE, { cause: swapped.cause }),
+      };
+  }
+}
+
 async function refreshRecord(
   record: ExtensionState["marketplaces"][string],
+  marketplaces: ExtensionState["marketplaces"],
   args: RefreshOneArgs,
-): Promise<boolean> {
-  const { name, locations, gitOps } = args;
+): Promise<RecordRefresh> {
+  const { name, locations } = args;
   const source = record.source as ParsedSource;
   const remoteUrl = refreshRemoteUrl(source);
   let cloneAdvanced = false;
@@ -521,49 +692,16 @@ async function refreshRecord(
       record.lastSuccessfulManifest ??
       (source.kind === "path" ? undefined : await manifestContentKey(record));
     const baseline = parseBaseline(name, preKey);
-    if (source.kind === "github") {
-      const cloneDir = await locations.sourceCloneDir(name);
-      // AUTH-02 / D-79-05: buildGitHubAuth binds github.com with the GitHub
-      // provider's Device Flow as the onAuthRequired closure for this fetch,
-      // or the override host with a stored credential and no Device Flow when
-      // PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL is set (GHB-02).
-      // platform/git.ts::buildAuthCallbacks first consults
-      // credentialOps.fill(host); on a hit (the post-add common case) the
-      // stored token is returned and Device Flow does NOT trigger -- this is
-      // the AUTH-02 silent-reuse contract. AUTH-09: only the user code and
-      // the verification URI cross the flow's onDeviceCode callback.
-      const { ctx, credentialOps, deviceFlowHttp } = args;
-      const auth = buildGitHubAuth({
-        credentialOps,
-        ctx,
-        run: args.run,
-        ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
-      });
-
-      await refreshGitHubSource(
-        cloneDir,
-        source.ref,
-        gitOps,
-        () => {
+    if (source.kind === "github" || source.kind === "url") {
+      // MU-5: the retry hint applies once the new clone is the live checkout.
+      const kept = keptRefresh(
+        await refreshGitSource(source, args, marketplaces, () => {
           cloneAdvanced = true;
-        },
-        auth,
+        }),
       );
-    } else if (source.kind === "url") {
-      const cloneDir = await locations.sourceCloneDir(name);
-      const { ctx, credentialOps, deviceFlowHttp } = args;
-      await refreshUrlClone({
-        cloneDir,
-        source,
-        gitOps,
-        ctx,
-        run: args.run,
-        credentialOps,
-        ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
-        onFetchSucceeded: () => {
-          cloneAdvanced = true;
-        },
-      });
+      if (kept !== undefined) {
+        return kept;
+      }
     } else if (source.kind === "hosted") {
       // D-PL5-09: download the catalog again; it replaces the stored one only
       // once it validates. Nothing is cloned, so no retry hint applies.
@@ -591,13 +729,13 @@ async function refreshRecord(
     // lastUpdatedAt is stamped on EVERY refresh (used elsewhere); it is
     // deliberately NOT the change signal.
     record.lastUpdatedAt = new Date().toISOString();
-    return changed;
+    return { kind: "refreshed", changed };
   } catch (err) {
     // An invalid manifest is read from the advanced checkout, so the clone
     // moved, but retrying the same revision cannot repair its content. Keep
     // the clone-advanced retry hint only for failures that can succeed once
     // the post-fetch persistence problem clears.
-    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cloneAdvanced is set via callback inside refreshGitHubClone.
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cloneAdvanced is set via callback inside the refresh.
     const retryable = cloneAdvanced && !(err instanceof InvalidMarketplaceManifestError);
     throw new MarketplaceUpdateError(refreshFailureMessage(name, err, remoteUrl, retryable), {
       cause: err,
@@ -667,6 +805,8 @@ interface RefreshSnapshot {
    * {up-to-date}` emission. Source-kind-uniform (path + github).
    */
   readonly changed: boolean;
+  /** D-SG-10: set when the checkout was kept; the marketplace then runs no cascade. */
+  readonly kept?: { readonly reason: ContentReason; readonly cause: Error };
 }
 
 async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapshot | undefined> {
@@ -702,12 +842,14 @@ async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapsh
         return undefined;
       }
 
-      const changed = await refreshRecord(record, args);
+      const refreshed = await refreshRecord(record, tx.state.marketplaces, args);
       await tx.save();
       return {
         autoupdate,
         plugins: Object.keys(record.plugins),
-        changed,
+        ...(refreshed.kind === "refreshed"
+          ? { changed: refreshed.changed }
+          : { changed: false, kept: { reason: refreshed.reason, cause: refreshed.cause } }),
       };
     },
     args.stateTransaction,
@@ -959,6 +1101,12 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     return;
   }
 
+  if (snapshot.kept !== undefined) {
+    // D-SG-10: a kept checkout is not an update, so no plugin cascade runs.
+    notifyKept(args, snapshot.kept);
+    return;
+  }
+
   // Post-state-commit completion-cache invalidation. Only a changed manifest
   // can change the marketplace's plugin index; an up-to-date refresh retains
   // the exact existing row. The successful target drop completes before any
@@ -985,6 +1133,39 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   await cascadeAutoupdates(snapshot, args, (cascade) => {
     notifyRefreshed(args, snapshot, cascade);
   });
+}
+
+/**
+ * D-SG-10: a kept checkout's row. The marketplace is `skipped` with the kept
+ * reason, at warning severity, and its one child row carries the cause, as a
+ * failed refresh's row does.
+ */
+function notifyKept(
+  args: RefreshOneArgs,
+  kept: { readonly reason: ContentReason; readonly cause: Error },
+): void {
+  const { ctx, cardinality, name, scope, run } = args;
+  const keptRow: PluginUpdateSkippedMessage = {
+    status: "skipped",
+    name,
+    reasons: [kept.reason],
+    cause: kept.cause,
+    marketplaceSubject: true,
+    // D-SG-10: a kept checkout is not up to date, so it warns (SEV-02).
+    severity: "warning",
+    needsReload: false,
+  };
+  const keptRows: Single<MarketplaceRows<UpdateRowMsg>> = [
+    {
+      name,
+      scope,
+      status: "skipped",
+      reasons: [kept.reason],
+      severity: "warning",
+      plugins: [keptRow],
+    },
+  ];
+  notifyWithContext(ctx, run, UPDATE_CONTEXT, keptRows, undefined, cardinality);
 }
 
 /** The refreshed marketplace's notification and the MCP config notices of its cascade. */
