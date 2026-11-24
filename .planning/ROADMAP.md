@@ -272,7 +272,41 @@ Plans:
   3. `marketplace update` follows a moved default branch and a moved tag under the model discuss chose (Q9); an update that fails or is interrupted leaves the previous checkout usable, and the next run succeeds; with the remote unreachable and `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE` set, the existing checkout is kept as upstream keeps it; and version-range resolution still finds the right tag at the clone depth discuss chose (Q10); cucumber scenarios pin each (SG-TRN-03, SG-TRN-04, SG-TRN-06).
   4. A clone or fetch that runs past 120 s, or past the limit that `CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS` sets, fails as a timeout and leaves the scope safe to retry; `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` keeps, changes, or retires its behavior as discuss chose (Q8), and the cucumber harness still reaches its GitHub stand-in (SG-TRN-05, SG-TRN-07).
   5. A user who upgrades with marketplace and plugin clones that `isomorphic-git` made needs no manual step: the next `/reload` succeeds, and after the next operation on such a clone it has real symlinks and a correct checkout (corrected settings or a re-clone, per Q5); a cucumber scenario that starts from a clone with `isomorphic-git`'s settings pins it (SG-MIG-01).
-**Plans**: TBD
+**Plans**: 17 plans in 8 waves
+
+Plans:
+**Wave 1**
+- [ ] 03-01-PLAN.md — Pi-owned `-c` pairs on git requests, `for-each-ref` on the local lane, and the https-auth and v0 SHA-refusal details in the failure classifier (wave 1)
+- [ ] 03-02-PLAN.md — An abbreviated or malformed sha and a ref that starts with `-` refused while the source is parsed, before git runs, for plugins and `marketplace add` (wave 1)
+- [ ] 03-03-PLAN.md — Cucumber stand-ins for system git: the loopback CONNECT proxy for `github.com`, the git host forwarding the backend's refusal, and the hermetic check of the two new variables (wave 1)
+- [ ] 03-04-PLAN.md — Local `GitOps` verbs on system git: an absent ref answers `undefined`, a copy of an old clone drops its three `core.*` keys, the `CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS` reader, and `fetchCommit` with the `--unshallow` fallback (wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 03-05-PLAN.md — Network request path: the D-SG-16 `insteadOf` key on every remote request, the two `ls-remote` verbs on system git, and the D-SG-14 Device Flow retry through a one-shot credential helper, with the Device Flow scenarios run through the CONNECT proxy (wave 2)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 03-06-PLAN.md — Clone on system git in Claude Code's shape (`--depth 1`, `--branch=<ref>`, no submodules), upstream's SHA-pin ladder, and every clone request table and cause chain re-baselined once (wave 3)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 03-07-PLAN.md — D-SG-10 marketplace refresh: the `ls-remote` freshness check, a re-clone into staging, the swap through `sources-backup/`, interrupted-swap recovery, and the D-SG-15 keep variable (wave 4)
+- [ ] 03-08-PLAN.md — D-SG-09 release tags of a git marketplace read from its remote, the tag copy fetching only its commit, and scenarios for a tag present at add and one pushed after it (wave 4)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 03-09-PLAN.md — The plugin mirror refresh and the PUP-2 marketplace sync on the same swap through `plugin-clones-backup/`, the D-14 refresh wrappers deleted, and the refresh tables re-baselined (wave 5)
+- [ ] 03-10-PLAN.md — Scenarios for the `--unshallow` fallback against a git host that refuses SHA fetches, the keep variable on an unreachable marketplace, and a clone that runs past the git timeout (wave 5)
+- [ ] 03-11-PLAN.md — A commit-id marketplace ref refused before git runs (SG-PIN-01 stays with Phase 7), and scenarios for a moved default branch, a moved tag, and an interrupted or dropped update (wave 5)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 03-12-PLAN.md — The Device Flow bundle types moved into the credential module, the orchestrator tests moved off the callback builder and the D-14 members, and the BLOCK F and BLOCK C seam lists updated (wave 6)
+- [ ] 03-13-PLAN.md — `recordedCalls` in the `GitOps` fake, git host failures fabricated as system git reports them, and the edge injection proofs trapped at the git process module (wave 6)
+- [ ] 03-14-PLAN.md — Upgrade scenarios: marketplace clones and plugin mirrors with `isomorphic-git`'s settings keep working and write links on their next copy, a link out of a git marketplace is refused, and `plugin update` keeps an unreachable marketplace only when asked (wave 6)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 03-15-PLAN.md — One transport: the D-14 verbs, the HTTP redirect client, `platform/git-auth-callbacks.ts`, and the `isomorphic-git` dependency removed, with the credential-leak gate re-aimed and the `isomorphic-git` chokepoint made a total ban in the same commits (wave 7)
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 03-16-PLAN.md — What the old transport left: the classifier rungs that read its errors, `CrossOriginChallengeError`, and its comments in the extension and the Device Flow harness (wave 8)
+- [ ] 03-17-PLAN.md — Codebase map update for the system git transport, and the D-SG-09 to D-SG-16 outcomes in PROJECT.md (wave 8)
 
 ### Phase 4: SSH Sources and Transport Selection
 
