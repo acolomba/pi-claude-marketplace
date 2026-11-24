@@ -33,7 +33,6 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import { listRemotes } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
@@ -251,12 +250,6 @@ function createGitOps(initial: GitOpsAdapterOptions = {}) {
     state: {
       get cloneCalls() {
         return git.state.calls.clone;
-      },
-      get fetchCalls() {
-        return git.state.calls.fetch;
-      },
-      get forceUpdateRefCalls() {
-        return git.state.calls.forceUpdateRef;
       },
       get checkoutCalls() {
         return git.state.calls.checkout;
@@ -1914,8 +1907,6 @@ for (const source of [
       assert.deepStrictEqual(state, {
         checkoutCalls: [],
         cloneCalls: [],
-        fetchCalls: [],
-        forceUpdateRefCalls: [],
         resolveRefCalls: [],
       });
       assert.deepStrictEqual(await loadState(locations.extensionRoot), {
@@ -2147,8 +2138,6 @@ test("NFR-5: path-source add never calls gitOps", async () => {
       // Zero gitOps calls (NFR-5).
       // assert
       assert.equal(state.cloneCalls.length, 0);
-      assert.equal(state.fetchCalls.length, 0);
-      assert.equal(state.forceUpdateRefCalls.length, 0);
       assert.equal(state.checkoutCalls.length, 0);
       assert.equal(state.resolveRefCalls.length, 0);
 
@@ -2245,8 +2234,6 @@ test("normalizes a non-Error config-write throw after a path mutation", async (t
     assert.deepStrictEqual(state, {
       checkoutCalls: [],
       cloneCalls: [],
-      fetchCalls: [],
-      forceUpdateRefCalls: [],
       resolveRefCalls: [],
     });
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
@@ -2363,7 +2350,6 @@ test("CR-02 / MA-4: ~/path is expanded against $HOME for the on-disk probe; sour
     // NFR-5: path source MUST NOT touch gitOps.
     // assert
     assert.equal(state.cloneCalls.length, 0);
-    assert.equal(state.fetchCalls.length, 0);
 
     // State updated; success notification emitted.
     const persisted = await loadState(locations.extensionRoot);
@@ -2749,8 +2735,6 @@ test("keeps a committed path add successful when marketplace-name cache cleanup 
     assert.deepStrictEqual(state, {
       checkoutCalls: [],
       cloneCalls: [],
-      fetchCalls: [],
-      forceUpdateRefCalls: [],
       resolveRefCalls: [],
     });
     assert.strictEqual((await readdir(locations.marketplaceNamesCacheFile)).length, 0);
@@ -2795,8 +2779,6 @@ test("keeps a committed path add successful when post-commit mirror seeding cann
     assert.deepStrictEqual(state, {
       checkoutCalls: [],
       cloneCalls: [],
-      fetchCalls: [],
-      forceUpdateRefCalls: [],
       resolveRefCalls: [],
     });
     const persisted = await loadState(locations.extensionRoot);
@@ -3065,12 +3047,11 @@ test("AUTH-01 add: credentialOps.fill HIT bypasses Device Flow and clones with t
       "credentialOps should be reference-equal",
     );
 
-    // Exercise the recorded auth bundle: fill HIT returns the stored credential.
-    const cbs = buildAuthCallbacks(recordedAuth);
-    const credentials = await cbs.onAuth("https://github.com/owner/repo.git");
+    // The recorded bundle's helper surface holds the stored credential.
+    const credentials = await recordedAuth.credentialOps.fill(recordedAuth.host);
     assert.deepStrictEqual(credentials, { username: "x-access-token", password: "stored-token" });
 
-    // fill consulted exactly once via the onAuth call above.
+    // fill consulted exactly once, by the read above.
     assert.equal(credState.fillCalls.length, 1);
     assert.equal(credState.fillCalls[0]?.host, "github.com");
 
@@ -3132,13 +3113,13 @@ test("AUTH-01 add: credentialOps.fill MISS triggers Device Flow which produces a
     const recordedAuth = state.cloneCalls[0]?.auth;
     assert.ok(recordedAuth !== undefined, "auth bundle must be forwarded to gitOps.clone");
 
-    // Exercise the miss path: buildAuthCallbacks -> fill miss -> onAuthRequired
-    // -> initiateDeviceFlow (with the injected http mock) -> success.
-    const cbs = buildAuthCallbacks(recordedAuth);
-    const credentials = await cbs.onAuth("https://github.com/owner/repo.git");
+    // D-SG-14: a run no helper answered calls the bundle's onAuthRequired,
+    // which runs initiateDeviceFlow (with the injected http mock) to success.
+    assert.ok(recordedAuth.kind === "device-flow", "github.com must carry a Device Flow bundle");
+    const authentication = await recordedAuth.onAuthRequired();
     assert.deepStrictEqual(
-      credentials,
-      { username: "x-access-token", password: "gho_test_token_AUTH01" },
+      authentication,
+      { ok: true, cred: { username: "x-access-token", password: "gho_test_token_AUTH01" } },
       "Device Flow must produce the mocked token",
     );
 
@@ -3159,9 +3140,8 @@ test("AUTH-01 add: credentialOps.fill MISS triggers Device Flow which produces a
       "credentialOps.approve must be called on success",
     );
 
-    // fill called once (the onAuth miss that triggered Device Flow).
-    assert.equal(credState.fillCalls.length, 1, "fill called once on the onAuth miss");
-    assert.equal(credState.fillCalls[0]?.host, "github.com");
+    // git asked the helper itself; the sign-in reads no stored credential.
+    assert.deepStrictEqual(credState.fillCalls, [], "the sign-in must not read the helper");
   });
 });
 
@@ -3268,8 +3248,6 @@ test("RECON-03 orchestrated mode -- unsupported source returns { status: 'failed
 const NO_GIT_CALLS = {
   checkoutCalls: [],
   cloneCalls: [],
-  fetchCalls: [],
-  forceUpdateRefCalls: [],
   resolveRefCalls: [],
 };
 
@@ -3452,8 +3430,6 @@ test("orchestrated mode normalizes a non-Error opaque failure without mutation",
     assert.deepStrictEqual(state, {
       checkoutCalls: [],
       cloneCalls: [],
-      fetchCalls: [],
-      forceUpdateRefCalls: [],
       resolveRefCalls: [],
     });
     assert.deepStrictEqual(await loadState(locations.extensionRoot), {
@@ -3584,8 +3560,6 @@ test(
       assert.deepStrictEqual(state, {
         checkoutCalls: [],
         cloneCalls: [],
-        fetchCalls: [],
-        forceUpdateRefCalls: [],
         resolveRefCalls: [],
       });
       assert.deepStrictEqual(await loadState(locations.extensionRoot), {
@@ -4026,15 +4000,7 @@ test("LAYER-01: declares a github marketplace in the local layer with only the c
       gitState.cloneCalls.map((call) => call.url),
       ["https://github.com/anthropics/claude-plugins-official.git"],
     );
-    assert.deepStrictEqual(
-      [
-        gitState.fetchCalls,
-        gitState.forceUpdateRefCalls,
-        gitState.checkoutCalls,
-        gitState.resolveRefCalls,
-      ],
-      [[], [], [], []],
-    );
+    assert.deepStrictEqual([gitState.checkoutCalls, gitState.resolveRefCalls], [[], []]);
   });
 });
 
@@ -5855,10 +5821,11 @@ test("MURL-01 regression: github source is byte-identical -- Device Flow auth st
     assert.ok(cloneCall.auth, "github clone must carry an auth bundle");
     assert.equal(cloneCall.auth.host, "github.com");
     // github.com runs the provider's Device Flow on a helper miss.
-    assert.equal(cloneCall.auth.kind, "device-flow");
-    assert.ok(
-      buildAuthCallbacks(cloneCall.auth),
-      "github auth bundle must be buildAuthCallbacks-compatible",
+    assert.ok(cloneCall.auth.kind === "device-flow");
+    assert.equal(
+      typeof cloneCall.auth.onAuthRequired,
+      "function",
+      "github auth bundle must carry the D-SG-14 sign-in",
     );
   });
 });

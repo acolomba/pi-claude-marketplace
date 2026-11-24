@@ -349,26 +349,24 @@ async function seedFullCascade(
   };
 }
 
-test("DEFAULT_GIT_OPS exposes every platform git function by exact reference", () => {
+test("DEFAULT_GIT_OPS exposes each platform git function the orchestrators call by exact reference", () => {
   // arrange
   const expectedReferences = {
     clone: defaultGit.clone,
-    fetch: defaultGit.fetch,
     fetchCommit: defaultGit.fetchCommit,
-    forceUpdateRef: defaultGit.forceUpdateRef,
     checkout: defaultGit.checkout,
     resolveRef: defaultGit.resolveRef,
-    currentBranch: defaultGit.currentBranch,
     resolveRemoteRef: defaultGit.resolveRemoteRef,
     listRemotes: defaultGit.listRemotes,
   };
 
   // act
-  const references = DEFAULT_GIT_OPS;
+  const references = Object.fromEntries(
+    Object.keys(expectedReferences).map((name) => [name, Reflect.get(DEFAULT_GIT_OPS, name)]),
+  );
 
   // assert
   assert.deepStrictEqual(references, expectedReferences);
-  assert.strictEqual(Reflect.get(references, "fetch"), Reflect.get(defaultGit, "fetch"));
 });
 
 test("AgentsUnstageFailureError preserves its typed failures and standard Error fields", () => {

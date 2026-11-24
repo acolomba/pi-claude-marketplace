@@ -39,7 +39,6 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   CrossOriginChallengeError,
@@ -181,8 +180,6 @@ function createGitOps(options: MarketplaceGitOpsSeed = {}) {
     state: Object.assign(git.state, {
       cloneCalls,
       lsRemoteCalls,
-      fetchCalls: git.state.calls.fetch,
-      forceUpdateRefCalls: git.state.calls.forceUpdateRef,
       checkoutCalls: git.state.calls.checkout,
       resolveRefCalls: git.state.calls.resolveRef,
     }),
@@ -206,6 +203,10 @@ function createCredentialOps(
   };
 }
 
+/**
+ * A port whose every member a marketplace update can call records the call and
+ * rejects. It spreads a memory fake for the rest, which no code calls.
+ */
 function makeForbiddenGitOps(): { readonly calls: Array<keyof GitOps>; readonly gitOps: GitOps } {
   const calls: Array<keyof GitOps> = [];
   const reject = (operation: keyof GitOps): Promise<never> => {
@@ -216,12 +217,10 @@ function makeForbiddenGitOps(): { readonly calls: Array<keyof GitOps>; readonly 
   return {
     calls,
     gitOps: {
+      ...createGitOpsFake({ boundary: "memory" }).gitOps,
       checkout: () => reject("checkout"),
       clone: () => reject("clone"),
-      currentBranch: () => reject("currentBranch"),
-      fetch: () => reject("fetch"),
       fetchCommit: () => reject("fetchCommit"),
-      forceUpdateRef: () => reject("forceUpdateRef"),
       resolveRef: () => reject("resolveRef"),
       resolveRemoteRef: () => reject("resolveRemoteRef"),
       listRemotes: () => reject("listRemotes"),
@@ -886,7 +885,6 @@ test("MU-4 + D-SG-10: a stale github source is re-cloned into staging and swappe
         },
       ],
     );
-    assert.deepStrictEqual(state.fetchCalls, []);
     assert.strictEqual(
       await readFile(path.join(cloneDir, ".git", "pi-claude-marketplace.json"), "utf8"),
       '{\n  "generatedBy": "pi-claude-marketplace"\n}\n',
@@ -1494,7 +1492,6 @@ test("MURL-03 + D-SG-10: a stale url source is re-cloned with its host-keyed aut
       state.cloneCalls.map(({ ref, singleBranch }) => ({ ref, singleBranch })),
       [{ ref: "main", singleBranch: true }],
     );
-    assert.deepStrictEqual(state.fetchCalls, []);
   });
 });
 
@@ -2575,8 +2572,6 @@ test("a pre-persistence manifest failure leaves cache rows intact and calls zero
 
       // Zero gitOps -- the failure path is network-free.
       assert.equal(state.cloneCalls.length, 0);
-      assert.equal(state.fetchCalls.length, 0);
-      assert.equal(state.forceUpdateRefCalls.length, 0);
       assert.equal(state.checkoutCalls.length, 0);
       assert.equal(state.resolveRefCalls.length, 0);
       assert.strictEqual(drop.mock.callCount(), 0);
@@ -4556,8 +4551,6 @@ test("NFR-5: path-source update calls zero gitOps methods", async () => {
       // assert
 
       assert.equal(state.cloneCalls.length, 0);
-      assert.equal(state.fetchCalls.length, 0);
-      assert.equal(state.forceUpdateRefCalls.length, 0);
       assert.equal(state.checkoutCalls.length, 0);
       assert.equal(state.resolveRefCalls.length, 0);
     } finally {
@@ -5688,7 +5681,6 @@ test("CR-01 TOCTOU: refreshOneMarketplace silently no-ops on a removed marketpla
     // NFR-5: the record-absent arm never reaches refreshRecord, so the
     // concurrent-removal no-op touches no network.
     assert.equal(gitState.cloneCalls.length, 0);
-    assert.equal(gitState.fetchCalls.length, 0);
     assert.equal(gitState.checkoutCalls.length, 0);
 
     const composed = notifications.map((n) => n.message).join("\n");
@@ -5753,8 +5745,9 @@ test("updateMarketplace: bare-form missing marketplace -> bracketless {marketpla
 //   (a) When credentialOps.fill hits the keychain (post-add scenario),
 //       Device Flow does NOT trigger and no "Open ..." notification is
 //       emitted.
-//   (b) The GitAuthBundle is forwarded by reference into refreshGitHubClone
-//       (recorded on gitOps.fetch.auth), proving no re-bundling occurs.
+//   (b) The GitAuthBundle is forwarded by reference into the D-SG-10
+//       re-clone (recorded on gitOps.clone's auth), proving no re-bundling
+//       occurs.
 // ───────────────────────────────────────────────────────────────────────────
 
 test("AUTH-02 update: credentialOps.fill HIT yields silent reuse -- NO Device Flow notification emitted", async () => {
@@ -5800,14 +5793,12 @@ test("AUTH-02 update: credentialOps.fill HIT yields silent reuse -- NO Device Fl
     assert.equal(state.cloneCalls[0]?.auth?.host, "github.com");
     assert.strictEqual(state.cloneCalls[0]?.auth?.credentialOps, credentialOps);
 
-    // Exercise the closure end-to-end: buildAuthCallbacks reads the stored
-    // credential via credentialOps.fill and returns it as the onAuth result.
+    // The forwarded bundle's helper surface holds the stored credential.
     const cloneAuth = state.cloneCalls[0]?.auth;
     assert.ok(cloneAuth !== undefined);
-    const cbs = buildAuthCallbacks(cloneAuth);
-    const credentials = await cbs.onAuth("https://github.com/owner/repo.git");
+    const credentials = await cloneAuth.credentialOps.fill(cloneAuth.host);
     assert.deepStrictEqual(credentials, { username: "x-access-token", password: "stored-token" });
-    // fill was called once (from the closure exercised above).
+    // fill was called once, by the read above.
     assert.equal(credState.fillCalls.length, 1);
   });
 });
@@ -6125,7 +6116,7 @@ test("GHB-03: updating a GitHub marketplace on an invalid base fails the command
       },
     );
     assert.deepStrictEqual(notifications, []);
-    assert.deepStrictEqual(state.fetchCalls, []);
+    assert.deepStrictEqual([state.lsRemoteCalls, state.cloneCalls], [[], []]);
     assert.strictEqual(await readFile(stateJsonPath, "utf8"), stateBefore);
   });
 });
