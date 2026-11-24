@@ -772,7 +772,7 @@ for (const { title, keepOnUnreachable, liveMarker } of [
     liveMarker: path.join(".claude-plugin", "absent.json"),
   },
 ]) {
-  test(`D-SG-15: an unreachable remote ${title} is cloned again and the clone's failure thrown`, async (t) => {
+  test(`D-SG-15: an unreachable remote ${title} is cloned again and the check's failure thrown`, async (t) => {
     // arrange
     const swap = await swapRoot(t);
     await writeCheckout(swap.liveDir, MANIFEST_A);
@@ -793,7 +793,7 @@ for (const { title, keepOnUnreachable, liveMarker } of [
     await assert.rejects(
       refreshCloneBySwap(swapArgs(swap, git.gitOps, { keepOnUnreachable, liveMarker })),
       (error: unknown) => {
-        assert.strictEqual(error, cloneError);
+        assert.strictEqual(error, lsRemoteError);
         return true;
       },
     );

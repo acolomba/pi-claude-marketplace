@@ -241,8 +241,11 @@ async function recoverInterruptedSwap(args: CloneSwapArgs): Promise<void> {
  * D-SG-10 / MA-12: clone into a staging directory of this run and mark it as
  * this extension's own. A failed clone removes the staging directory and
  * leaves the live checkout untouched (MA-9: a leak is appended, not masked).
+ * After an unreachable check the clone fails the same way, so the check's
+ * failure is the one thrown: it names the cause before git's own credential
+ * helpers acted on it, as a stored credential the host rejected (GAUTH-04).
  */
-async function cloneIntoStaging(args: CloneSwapArgs): Promise<string> {
+async function cloneIntoStaging(args: CloneSwapArgs, freshness: Freshness): Promise<string> {
   const stagingDir = await args.locations.sourcesStagingDir(randomUUID());
   try {
     await args.gitOps.clone({
@@ -254,12 +257,13 @@ async function cloneIntoStaging(args: CloneSwapArgs): Promise<string> {
     await writeOwnershipMarker(stagingDir);
     return stagingDir;
   } catch (err) {
+    const failure = freshness.kind === "unreachable" ? freshness.cause : err;
     const leak = await cleanupStaging(args.removalOps, stagingDir, "marketplace clone staging");
     if (leak !== undefined) {
-      throw appendLeakToError(err, leak);
+      throw appendLeakToError(failure, leak);
     }
 
-    throw err;
+    throw failure;
   }
 }
 
@@ -358,8 +362,7 @@ export async function refreshCloneBySwap(args: CloneSwapArgs): Promise<CloneSwap
 
   // D-SG-15: only an unreachable remote is kept, and only a valid checkout. A
   // stale checkout, or one without its marker, is cloned again, and without
-  // the variable an unreachable remote is cloned again too, so the clone's
-  // failure is the one reported.
+  // the variable an unreachable remote is cloned again too.
   if (
     freshness.kind === "unreachable" &&
     args.keepOnUnreachable &&
@@ -368,6 +371,6 @@ export async function refreshCloneBySwap(args: CloneSwapArgs): Promise<CloneSwap
     return { kind: "kept-stale", cause: freshness.cause };
   }
 
-  const stagingDir = await cloneIntoStaging(args);
+  const stagingDir = await cloneIntoStaging(args, freshness);
   return swapIn(args, stagingDir);
 }
