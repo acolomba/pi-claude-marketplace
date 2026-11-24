@@ -3,10 +3,11 @@ Feature: Marketplace device flow
   A user with no stored GitHub credential signs in through GitHub's Device Flow when a command
   clones a private GitHub repository. Claude Code runs no Device Flow, and this extension runs git
   with its prompts turned off, so the sign-in is the project's own contract (AUTH-01, D-79-04,
-  D-79-05, GHB-02, D-BG-1101, D-SG-14). A loopback stand-in answers GitHub's sign-in endpoints, the
-  run's git host serves GitHub's repositories, an in-process redirect sends Pi's github.com
-  requests to them, and a proxy tunnels git's github.com connections to the git host. Both refuse
-  every other host.
+  D-79-05, GHB-02, D-BG-1101). When a git command finds no credential for a host with a registered
+  Device Flow, the extension runs the sign-in once and then runs the command again (D-SG-14).
+  A loopback stand-in answers GitHub's sign-in endpoints, the run's git host serves GitHub's
+  repositories, an in-process redirect sends Pi's github.com requests to them, and a proxy tunnels
+  git's github.com connections to the git host. Both refuse every other host.
 
   Scenario: Adding a private GitHub marketplace signs in through Device Flow and clones it
     Given the marketplace "tools" is published as a github source
