@@ -734,10 +734,47 @@ class ConfigInvalidError extends InvalidMarketplaceManifestError {
   }
 }
 
+/** A full commit id in lower case: 40 hex digits (SHA-1) or 64 (SHA-256). */
+const LOWER_CASE_COMMIT_ID_RE = /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/;
+
 /**
- * S5a / S5b (MA-10): parse the raw source and refuse every kind `marketplace
- * add` cannot record, before any lock or disk access. The refusal is an
- * `UnsupportedSourceError`, classified as `unsupported source` (D-48-C A3).
+ * SG-TRN-02: whether `ref` looks like a commit id with capital letters: it is
+ * not a lower-case commit id, but it is one once lower-cased. Claude Code
+ * refuses such a marketplace ref before its clone (`wCn`), because git would
+ * read it as a branch name that can move. A lower-case id is left to git.
+ */
+function isCapitalLetterCommitRef(ref: string | undefined): ref is string {
+  return (
+    ref !== undefined &&
+    !LOWER_CASE_COMMIT_ID_RE.test(ref) &&
+    LOWER_CASE_COMMIT_ID_RE.test(ref.toLowerCase())
+  );
+}
+
+/**
+ * SG-TRN-02: the refusal of a marketplace ref that looks like a commit id with
+ * capital letters. It is an unsupported source, so `classifyAddError` reports
+ * `unsupported source`; its own class lets `showsAddCause` show the cause
+ * line, which names the ref and the fix, as Claude Code's refusal does.
+ */
+class CapitalLetterCommitRefError extends UnsupportedSourceError {
+  readonly ref: string;
+  constructor(rawSource: string, ref: string) {
+    super(
+      `Cannot add marketplace from "${rawSource}": the ref "${ref}" looks like a commit id ` +
+        "with capital letters, which git would read as a branch name that can move; write " +
+        "the id in lower case",
+    );
+    this.name = "CapitalLetterCommitRefError";
+    this.ref = ref;
+  }
+}
+
+/**
+ * S5a / S5b / S5c (MA-10): parse the raw source and refuse every kind or ref
+ * `marketplace add` cannot record, before any lock, disk, or git access. The
+ * refusal is an `UnsupportedSourceError`, classified as `unsupported source`
+ * (D-48-C A3).
  */
 export function parseAddableSource(
   rawSource: string,
@@ -759,6 +796,15 @@ export function parseAddableSource(
     throw new UnsupportedSourceError(
       `Cannot add marketplace from "${rawSource}": unsupported source kind ${source.kind}`,
     );
+  }
+
+  // S5c (SG-TRN-02): a github or url ref that looks like a commit id with
+  // capital letters, refused as Claude Code refuses it (03-EVIDENCE, `wCn`).
+  // A lower-case id still reaches git as `--branch=<ref>` until SG-PIN-01
+  // brings upstream's commit path. The wording's parity is a later concern;
+  // the refusal reuses the `unsupported source` reason.
+  if ((source.kind === "github" || source.kind === "url") && isCapitalLetterCommitRef(source.ref)) {
+    throw new CapitalLetterCommitRefError(rawSource, source.ref);
   }
 
   return source;
@@ -1289,6 +1335,9 @@ function removalAdvisories(err: unknown): readonly string[] | undefined {
  *
  * D-SG-07 / SG-PRC-06: a `git-missing` failure takes it too, so the cause line
  * names the requirement (`showsAddCause`).
+ *
+ * SG-TRN-02: so does a ref that looks like a commit id with capital letters,
+ * so the cause line names the ref and says to write it in lower case.
  */
 function failedAddRow(
   subject: string,
@@ -1328,13 +1377,16 @@ function failedAddRow(
  * Whether the unwrapped failure of an add is one whose cause line the user
  * must read: Claude Code's reserved-name refusal (MKT-01), a hosted download
  * that failed without an HTTP status (D-PL5-10), or a `git-missing` failure,
- * whose cause names the git requirement (D-SG-07, SG-PRC-06). The wording of
- * every other git failure kind is decided later, so those keep the bare row.
+ * whose cause names the git requirement (D-SG-07, SG-PRC-06), and a ref that
+ * looks like a commit id with capital letters, whose cause names the ref and
+ * the fix (SG-TRN-02). The wording of every other git failure kind is decided
+ * later, so those keep the bare row.
  */
 function showsAddCause(unwrapped: unknown): boolean {
   return (
     unwrapped instanceof ReservedMarketplaceNameError ||
     unwrapped instanceof HostedManifestFetchError ||
+    unwrapped instanceof CapitalLetterCommitRefError ||
     (unwrapped instanceof GitCommandError && unwrapped.kind === "git-missing")
   );
 }

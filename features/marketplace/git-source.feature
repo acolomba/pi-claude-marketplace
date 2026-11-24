@@ -357,3 +357,153 @@ Feature: Marketplace git source
       | description             | Tools after the update        |
       | severity                | info                          |
       | needs reload            | false                         |
+
+  Scenario: Updating a git marketplace whose repository changed its default branch follows the new branch
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" has the description "Tools on main"
+    Given the marketplace "tools" is added to the project scope
+    Given the branch "next" of the marketplace "tools" has the description "Tools on next"
+    Given the default branch of the marketplace "tools" is "next"
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status |
+      | tools            | project           | updated            |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+    When the user runs "/claude:plugin marketplace info tools --scope project"
+    Then the marketplace info result has these fields:
+      | kind                    | marketplace-info              |
+      | name                    | tools                         |
+      | scope                   | project                       |
+      | details autoupdate      | false                         |
+      | details last updated at | {scenario time}               |
+      | source kind             | url                           |
+      | source abs path         |                               |
+      | source url              | https://{git host}/acme/tools |
+      | source owner            |                               |
+      | source repo             |                               |
+      | source ref              |                               |
+      | description             | Tools on next                 |
+      | severity                | info                          |
+      | needs reload            | false                         |
+
+  Scenario: Updating a git marketplace added at a tag follows the tag when it moves
+    Given the marketplace "tools" is published as a url source
+    Given the tag "v1" of the marketplace "tools" has the description "Tools at the first v1"
+    Given the user has run "/claude:plugin marketplace add https://{git host}/acme/tools.git#v1 --scope project"
+    Given the tag "v1" of the marketplace "tools" has the description "Tools at the moved v1"
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status |
+      | tools            | project           | updated            |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+    When the user runs "/claude:plugin marketplace info tools --scope project"
+    Then the marketplace info result has these fields:
+      | kind                    | marketplace-info              |
+      | name                    | tools                         |
+      | scope                   | project                       |
+      | details autoupdate      | false                         |
+      | details last updated at | {scenario time}               |
+      | source kind             | url                           |
+      | source abs path         |                               |
+      | source url              | https://{git host}/acme/tools |
+      | source owner            |                               |
+      | source repo             |                               |
+      | source ref              | v1                            |
+      | description             | Tools at the moved v1         |
+      | severity                | info                          |
+      | needs reload            | false                         |
+
+  Scenario: Updating a marketplace after an interrupted update restores its checkout, and its plugins install from it
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins:
+      | name      | version |
+      | formatter | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given an update of the marketplace "tools" in the project scope was interrupted after it moved the checkout aside
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons |
+      | tools            | project           | skipped            | up-to-date          |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+    When the user runs "/claude:plugin install formatter@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id              | name      | status    | reasons | scope   | version |
+      | tools            | project           | formatter@tools | formatter | installed |         | project | 1.0.0   |
+    Then the git host receives no request
+
+  Scenario: A marketplace update that the git host drops keeps the previous checkout, and the next update succeeds
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins:
+      | name      | version |
+      | formatter | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" has the description "Tools after the update"
+    Given the git host drops the connection for the marketplace "tools"
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons             | scope   | leaks | rollback partial | cause chain                                                                         | cause truncated |
+      | tools            | project           | failed             | tools | tools | failed | network unreachable | project |       |                  | Failed to update marketplace "tools"., git ls-remote failed: network, exit code 128 | false           |
+    Then the git host receives these requests:
+      | method | path                                              | status  |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | dropped |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | dropped |
+    When the user runs "/claude:plugin install formatter@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id              | name      | status    | reasons | scope   | version |
+      | tools            | project           | formatter@tools | formatter | installed |         | project | 1.0.0   |
+    When the git host serves the marketplace "tools" again
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status |
+      | tools            | project           | updated            |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |

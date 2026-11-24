@@ -33,6 +33,7 @@ import {
   allowDependenciesOn,
   describeMarketplace,
   describeMarketplaceBranch,
+  describeMarketplaceTag,
   invalidateManifest,
   publishAnthropicsMarketplace,
   publishExternalMarketplace,
@@ -44,6 +45,7 @@ import {
   republishMarketplace,
   requireFreeRoot,
   rewritePublishedManifest,
+  setDefaultBranch,
   writePublishedMarketplaceFiles,
 } from "../../lib/published-marketplace.ts";
 import { expandTokens } from "../../lib/run-tokens.ts";
@@ -240,6 +242,28 @@ Given(
   "the branch {string} of the marketplace {string} has the description {string}",
   async function (this: ScenarioWorld, branch: string, name: string, description: string) {
     await describeMarketplaceBranch(this.requirePublished(name), branch, description);
+  },
+);
+
+// D-SG-10: a tag that does not exist yet is created; a later description
+// moves it to a new commit, as a maintainer who force-moves a release tag.
+Given(
+  "the tag {string} of the marketplace {string} has the description {string}",
+  async function (this: ScenarioWorld, tag: string, name: string, description: string) {
+    const { local, served } = await describeMarketplaceTag(
+      this.requirePublished(name),
+      tag,
+      description,
+    );
+    assert.strictEqual(served, local);
+  },
+);
+
+// D-SG-10: the branch becomes the HEAD the git host advertises.
+Given(
+  "the default branch of the marketplace {string} is {string}",
+  async function (this: ScenarioWorld, name: string, branch: string) {
+    assert.strictEqual(await setDefaultBranch(this.requirePublished(name), branch), branch);
   },
 );
 

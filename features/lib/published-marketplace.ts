@@ -28,6 +28,7 @@ import {
 import path from "node:path";
 
 import { publishGitRepository, pushGitBranch, pushGitRepository } from "./git-marketplace.ts";
+import { runGit } from "./hermetic-git.ts";
 import {
   writeDependencyAllowance,
   writeInvalidManifest,
@@ -895,4 +896,58 @@ export async function describeMarketplaceBranch(
       );
       return;
   }
+}
+
+/** Returns `published` as a git publication, throwing for a local or hosted one. */
+function requireGitPublication(published: PublishedMarketplace, what: string): GitPublication {
+  if (published.kind !== "url" && published.kind !== "github") {
+    throw new Error(`a ${published.kind} publication has no ${what}`);
+  }
+
+  return published;
+}
+
+/**
+ * Makes the branch `branch` the default branch of the git marketplace
+ * `published` records: the `HEAD` its bare repository advertises, as a
+ * maintainer who renames or replaces the default branch (D-SG-10). Returns
+ * the branch `HEAD` names afterwards.
+ */
+export async function setDefaultBranch(
+  published: PublishedMarketplace,
+  branch: string,
+): Promise<string> {
+  const { bareRepository, gitHome } = requireGitPublication(published, "default branch");
+  await runGit(bareRepository, gitHome, "rev-parse", "--verify", "--quiet", `refs/heads/${branch}`);
+  await runGit(bareRepository, gitHome, "symbolic-ref", "HEAD", `refs/heads/${branch}`);
+  return runGit(bareRepository, gitHome, "symbolic-ref", "--short", "HEAD");
+}
+
+/**
+ * Points the tag `tag` of the git marketplace `published` records at a new
+ * commit, started from `main`, whose manifest has the description
+ * `description`, and pushes the tag alone with force, as a maintainer who
+ * moves a release tag (D-SG-10). A tag that does not exist yet is created.
+ * `main` keeps its commit. Returns the commit the tag names in the work tree
+ * and the one it names in the bare repository the git host serves.
+ */
+export async function describeMarketplaceTag(
+  published: PublishedMarketplace,
+  tag: string,
+  description: string,
+): Promise<{ readonly local: string; readonly served: string }> {
+  const { root, gitHome, manifestPath, bareRepository } = requireGitPublication(published, "tag");
+  const branch = `tag-${tag}`;
+  await runGit(root, gitHome, "checkout", "-q", "-B", branch, "main");
+  await writeMarketplaceDescription(manifestPath, description);
+  await runGit(root, gitHome, "add", "-A");
+  await runGit(root, gitHome, "commit", "-q", "--allow-empty", "-m", `publish ${tag}`);
+  await runGit(root, gitHome, "tag", "-f", tag);
+  await runGit(root, gitHome, "push", "-q", "--force", "origin", `refs/tags/${tag}`);
+  await runGit(root, gitHome, "checkout", "-q", "-f", "main");
+  await runGit(root, gitHome, "branch", "-q", "-D", branch);
+  return {
+    local: await runGit(root, gitHome, "rev-parse", `refs/tags/${tag}^{commit}`),
+    served: await runGit(bareRepository, gitHome, "rev-parse", `refs/tags/${tag}^{commit}`),
+  };
 }
