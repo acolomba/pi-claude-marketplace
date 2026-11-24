@@ -15,18 +15,19 @@ provides:
 affects: [03-09, 03-12, 03-13, Phase 6 wording]
 
 plan_head_before: 91ecbeaa9ee08bb4ec2e517b0a839b016b8fbb15
-plan_head_after: 5c1701f98e248825e836acd839d53c368c755075
+plan_head_after: 0d10348f84057fe131a599f0bf727ed07724302a
 
 actuals:
-  tokens: 47000
+  tokens: 49000
   tasks: 3
-  commits: 5
+  commits: 7
 
 tech-stack:
   added: []
   patterns:
     - "A refresh of a cloned checkout is recover, freshness check, clone into sources-staging/<uuid>, move aside to a backup getter, move in, delete the backup"
     - "An update test's GitOps double answers ls-remote with a fixed commit and clones a fixture tree, and its HEAD becomes the remote's after a clone"
+    - "A swap carries each installed plugin's node_modules from the backup into the new checkout before it deletes the backup"
 
 key-files:
   created:
@@ -54,11 +55,12 @@ key-decisions:
   - "The refresh clones from the checkout's recorded origin when it has one, else networkCloneUrl(source)"
   - "One Device Flow memo per refresh, so the ls-remote and the clone ask the user at most once"
   - "Kept rows: marketplace skipped {network unreachable} or {permission denied}, severity warning, one child PluginUpdateSkippedMessage with marketplaceSubject and the cause; no stamp, no cascade"
+  - "Coordinator decision (option A): after the move-in and before the backup is deleted, each installed plugin's node_modules moves from the backup into the same folder of the new checkout, only when that folder exists and has none; a failed move is debug-logged and never fails the update"
 
 patterns-established:
   - "A kept refresh is a RecordRefresh of kind kept that the snapshot carries past the lock, and refreshOneMarketplace reports it instead of cascading"
 
-requirements-completed: []
+requirements-completed: ["SG-TRN-03", "SG-TRN-06"]
 
 coverage:
   - id: D1
@@ -114,29 +116,34 @@ coverage:
     human_judgment: true
     rationale: "Only injected renames prove it; a real Windows open handle needs the deferred manual check."
   - id: D6
-    description: "features/plugin/package-dependencies.feature: an installed path-source plugin keeps its npm packages across a marketplace update"
+    description: "An installed path-source plugin keeps its npm packages across a marketplace update (D-PL9-10 carry-over)"
     verification:
+      - kind: unit
+        ref: "test/orchestrators/marketplace/clone-swap.test.ts#D-PL9-10"
+        status: pass
+      - kind: unit
+        ref: "test/orchestrators/marketplace/update.test.ts#D-PL9-10: an update carries the packages of installed plugins inside the checkout into the new one"
+        status: pass
       - kind: e2e
-        ref: "npm run test:cucumber:profile -- --profile adapter features/plugin/package-dependencies.feature"
-        status: fail
-    human_judgment: true
-    rationale: "Regression this plan introduced; needs a maintainer decision (see CHECKPOINT below)."
+        ref: "npm run test:cucumber:profile -- --profile adapter|builtin features/plugin"
+        status: pass
+    human_judgment: false
 
-duration: 62min
+duration: 75min
 completed: 2026-11-24
-status: halted
+status: complete
 ---
 
 # Phase 3 Plan 07: Marketplace update by re-clone and swap Summary
 
-**`marketplace update` of a github or url marketplace now runs Claude Code's model. It checks freshness with `ls-remote`, or compares a full-SHA ref with `HEAD`. A stale checkout is cloned again into `sources-staging/<uuid>`, marked, and swapped in through `sources-backup/<name>`. An interrupted swap is recovered first. A checkout that cannot be moved aside is kept with a warning. With `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE` set, an unreachable remote keeps the checkout too. The plan halted on one regression it found outside its files: the swap drops the `node_modules` of installed path-source plugins that live inside the checkout. The fix needs a decision.**
+**`marketplace update` of a github or url marketplace now runs Claude Code's model. It checks freshness with `ls-remote`, or compares a full-SHA ref with `HEAD`. A stale checkout is cloned again into `sources-staging/<uuid>`, marked, and swapped in through `sources-backup/<name>`. An interrupted swap is recovered first. A checkout that cannot be moved aside is kept with a warning. With `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE` set, an unreachable remote keeps the checkout too. The swap carries each installed plugin's `node_modules` from the old checkout into the new one, so an update never strips an installed plugin of its packages.**
 
 ## Performance
 
 - **Duration:** about 62 min
 - **Started:** 2026-11-24T06:49:58Z
-- **Completed:** 2026-11-24T07:51:40Z
-- **Tasks:** 3 of 3 executed; status halted on a regression in `features/plugin/package-dependencies.feature`
+- **Completed:** 2026-11-24T08:04:31Z
+- **Tasks:** 3 of 3, plus the coordinator's option A for the package regression
 - **Files modified:** 13 (2 created)
 
 ## Accomplishments
@@ -144,7 +151,8 @@ status: halted
 - `refreshCloneBySwap` puts back an interrupted swap, checks freshness, keeps or clones, and swaps. Every directory it touches comes from a `ScopedLocations` getter, and both renames stay under the extension root.
 - `update.ts` refreshes github and url sources through it. It keeps the GAUTH-04 stored-credential line (before the fetched link for github, as the chain's tail for url). MU-5 flips once the new clone is live. UXG-05 stays a content compare.
 - D-SG-15 reads the variable once per update. A kept checkout is a warning row, writes nothing to the record, and runs no autoupdate cascade, so the background pass raises no notice.
-- `features/marketplace` passes under both profiles (534 scenarios adapter, 0 builtin), the new kept-in-use scenario included. `features/plugin/update.feature` passes unchanged (26 adapter, 1 builtin). `features/mcp-server/verdict-update.feature` and `verdict-markers.feature` pass under both profiles.
+- After the move-in, the swap moves each installed plugin's `node_modules` from the backup into the new checkout (coordinator decision, option A). `update.ts` derives the plugin roots from the scope's installed records whose root lies inside the checkout, and each move checks both paths against their checkout (NFR-10).
+- `features/plugin` passes under both profiles (776/776 adapter, 39/39 builtin). `features/marketplace` passes under both profiles (534 scenarios adapter, 0 builtin), the new kept-in-use scenario included. `features/plugin/update.feature` passes unchanged (26 adapter, 1 builtin). `features/mcp-server/verdict-update.feature` and `verdict-markers.feature` pass under both profiles.
 
 ## Task Commits
 
@@ -153,6 +161,8 @@ status: halted
 3. **Deviation fix: report the check's failure** - `48e170a` (fix)
 4. **Task 3, steps 1-3: re-baseline** - `12ec5f9` (test)
 5. **Task 3, step 4: the kept-in-use scenario** - `5c1701f` (test)
+6. **First SUMMARY (halted on the package regression)** - `9ab72f4` (docs)
+7. **Coordinator decision A: carry installed plugins' packages across a swap** - `0d10348` (fix)
 
 ## Files Created/Modified
 
@@ -209,27 +219,26 @@ See `key-decisions` in the frontmatter. For maintainer review (orchestrator deci
 
 ---
 
-**Total deviations:** 6 (2 bugs, 2 missing-critical, 1 plan accuracy, 1 scope). **Impact:** within the plan's surface except `notification-types.ts`.
+**Total deviations:** 6 (2 bugs, 2 missing-critical, 1 plan accuracy, 1 scope), plus the coordinator's decision A above. **Impact:** within the plan's surface except `notification-types.ts`.
 
-## CHECKPOINT: decision needed (why this plan is halted)
+## Decision taken: packages of installed plugins survive a swap
 
-`features/plugin/package-dependencies.feature` fails 2 of its scenarios under the adapter profile (774/776 in `features/plugin`; the builtin profile passes 39/39):
-- "Apply that moves a plugin whose package install fails reports the warning" (line 313)
-- "A marketplace update with autoupdate on that moves a plugin whose package install fails reports the warning" (line 527)
+The first run of this plan halted. `features/plugin/package-dependencies.feature` failed 2 scenarios under the adapter profile (774/776): "Apply that moves a plugin whose package install fails reports the warning" and "A marketplace update with autoupdate on that moves a plugin whose package install fails reports the warning". Both failed on `ENOENT .../sources/tools/plugins/pkp/node_modules`.
 
-Both fail at `Then the plugin "pkp" installed in the project scope has these npm packages: pkd-dep 1.0.0` with `ENOENT ... sources/tools/plugins/pkp/node_modules`.
+**Cause.** A path-source plugin of a git marketplace runs in place inside `sources/<marketplace>/`, and D-PL9-10 installs its npm packages into `node_modules` there. D-14 fetched in place, so `node_modules` survived. The swap replaced the whole checkout, so the packages were lost. Claude Code keeps installed plugins in a separate cache, so its marketplace refresh never touches them.
 
-**Cause.** A path-source plugin of a git marketplace runs in place inside `sources/<marketplace>/`, and D-PL9-10 installs its npm packages into `node_modules` there. D-14 fetched and checked out in place, so `node_modules` survived. The D-SG-10 swap replaces the whole checkout, so every installed path-source plugin of that marketplace loses `node_modules`. A plugin the update moves gets a new install. If that install fails, nothing is left (these two scenarios). A plugin the update does not move keeps no packages until something reinstalls it. Claude Code keeps installed plugins in a separate cache, so its marketplace refresh never touches them.
+**Decision (coordinator, option A).** Carry each installed plugin's `node_modules` from the backup into the new checkout. This keeps today's user-visible behavior, needs no network (NFR-5 unchanged), and keeps the upstream outcome that a marketplace refresh never strips an installed plugin. Options B (install again after a swap, which needs an NFR-5 amendment) and C (accept the loss) were declined.
 
-**Options.**
+**Implementation (`0d10348`).**
+- `CloneSwapArgs.carryOver` lists the plugin roots relative to the checkout.
+- `swapIn` runs `carryPackages` after the move-in and `onReplaced`, and before it deletes the backup. For each root, `<backup>/<root>/node_modules` is renamed to `<live>/<root>/node_modules` only when the backup holds it, the new checkout has `<root>`, and `<root>` has no `node_modules`.
+- Both paths go through `assertPathInside` against their checkout. A refusal or a failed rename is debug-logged and never fails the update.
+- `update.ts::installedRootsIn` takes every installed record of the scope whose `resolvedSource` lies inside `sources/<marketplace>/`.
+- Known consequence: a stale `node_modules` survives a lockfile change that came with no version move, as under D-14.
 
-| Option | What it does | Pros | Cons |
-|---|---|---|---|
-| A (recommended) | After the move-in, before the backup is deleted, rename `<backup>/<plugin root>/node_modules` to `<live>/<plugin root>/node_modules` for each installed plugin whose root is in the checkout, when the new tree has that root and no `node_modules`. A failed move is debug-logged, and the next package install puts it back. | Keeps today's behavior; no rollback needed (the backup still holds them); no network; small (`update.ts` passes the relative roots, `clone-swap.ts` moves them) | A stale `node_modules` survives a lockfile change that came with no version move, as under D-14 |
-| B | Run the package install again for each installed plugin after a swap | Packages match the new lockfile | `marketplace update` with autoupdate off would reach package registries (NFR-5 amendment); slower |
-| C | Accept the loss and re-baseline the two scenarios | No code | A user's installed plugin silently loses its packages after a plain `marketplace update` |
-
-**Awaiting:** a choice of A, B, or C. With A, the continuation adds a `carryOver` list to `CloneSwapArgs`, moves the directories in `swapIn` after `moveStagingIn`, adds clone-swap and update unit cases, and re-runs `features/plugin` under both profiles.
+**RED and GREEN.**
+- RED: the six `D-PL9-10` cases ran against HEAD's `clone-swap.ts` and `update.ts`: `# tests 6 # pass 4 # fail 2`. The carry case and the update case failed with `ENOENT ... plugins/pkp/node_modules/dep/index.js`. The four guard cases (root missing, packages already there, no packages, failed move) pass on the old code, because they prove that nothing is carried. The out-of-checkout case (NFR-10) also passes as a guard.
+- GREEN: 249/249 across `clone-swap`, `update`, and `background-pass`, and direct coverage of `clone-swap.ts` and `update.ts` is 100%. `features/plugin` passes 776/776 adapter and 39/39 builtin, and `features/marketplace` passes 534/534 adapter.
 
 ## TDD Gate Compliance
 
@@ -269,11 +278,12 @@ Run after the wave merges (the plan asks for it; this executor did not run it):
 
 ## Lines for later plans
 
-- **Signature:** `refreshCloneBySwap(args: CloneSwapArgs): Promise<CloneSwapResult>`, with `CloneSwapArgs = { locations, liveDir, backupDir, url, ref?, gitOps, auth, liveMarker, keepOnUnreachable, onReplaced?, removalOps, renameOps }`. `liveMarker` is relative to the checkout: `.claude-plugin/marketplace.json` for a marketplace, `.git/HEAD` for a mirror. A mirror passes `keepOnUnreachable: false`.
+- **Signature:** `refreshCloneBySwap(args: CloneSwapArgs): Promise<CloneSwapResult>`, with `CloneSwapArgs = { locations, liveDir, backupDir, url, ref?, gitOps, auth, liveMarker, keepOnUnreachable, carryOver, onReplaced?, removalOps, renameOps }`. `liveMarker` is relative to the checkout: `.claude-plugin/marketplace.json` for a marketplace, `.git/HEAD` for a mirror. A mirror passes `keepOnUnreachable: false`.
 - **Result union:** `{ kind: "current" } | { kind: "replaced" } | { kind: "kept-stale"; cause: unknown } | { kind: "kept-in-use"; cause: Error }`.
-- **Order:** recover (backup beside no checkout, or beside one without `liveMarker`: renamed back; beside a valid one: removed), then the freshness check (unreadable `HEAD` is stale; full-SHA ref compares with `HEAD`; else `resolveRemoteRef`), then keep or clone, then `rename(live, backup)` (EBUSY, EPERM, EACCES give kept-in-use), `rename(staging, live)` (a failure renames the backup back), `onReplaced`, and the backup is removed (a leak is debug-logged).
+- **Order:** recover (backup beside no checkout, or beside one without `liveMarker`: renamed back; beside a valid one: removed), then the freshness check (unreadable `HEAD` is stale; full-SHA ref compares with `HEAD`; else `resolveRemoteRef`), then keep or clone, then `rename(live, backup)` (EBUSY, EPERM, EACCES give kept-in-use), `rename(staging, live)` (a failure renames the backup back), `onReplaced`, the carry-over of each installed plugin's `node_modules` from the backup, and the backup is removed (a leak is debug-logged).
 - **Rows:** kept-stale is `{ status: "skipped", reasons: ["network unreachable"], severity: "warning" }` on the marketplace, with one child `PluginUpdateSkippedMessage { status: "skipped", reasons: ["network unreachable"], cause, marketplaceSubject: true, severity: "warning", needsReload: false }`. kept-in-use is the same with `permission denied`. The TUI text is `Some operations need attention.` then `● <mp> [<scope>] (skipped) {<reason>}` and `⊘ <mp> (skipped) {<reason>}` with the cause line.
 - **Requests:** a current update is `GET`, `POST`; a stale one adds the clone's `GET`, `POST`, `POST`; a refused `ls-remote` is followed by the re-clone's refused `GET`; a Device Flow update with a stored token is `GET 401`, `GET 200`, `POST` and one `CONNECT` row.
+- **For 03-09, carry-over:** a plugin mirror swap needs the same carry-over rule. A mirror can hold an installed plugin root, and its packages sit in that root's `node_modules`. Pass the roots of the installed records inside the mirror as `carryOver`, as `update.ts::installedRootsIn` does for a marketplace checkout.
 - **For 03-09:** `pluginCloneBackupDir(key)` is ready. `shared.ts`'s `refreshGitHubClone` and `refreshUrlClone` keep their other callers (the PUP-2 sync and the mirror refresh). `update.ts` no longer imports them.
 
 ## User Setup Required
@@ -282,17 +292,17 @@ None. No external service configuration is required.
 
 ## Next Phase Readiness
 
-- Blocked on the decision above. The wave gate's `npm run check` fails on the two `package-dependencies.feature` scenarios until it is resolved.
-- 03-09 can reuse `refreshCloneBySwap` for mirrors once the decision fixes how a swap carries a plugin's package directory, because mirrors may hold one too.
+- The plan's work is complete. The wave gate runs `npm run check`.
+- 03-09 can reuse `refreshCloneBySwap` for mirrors, with `liveMarker: ".git/HEAD"`, `keepOnUnreachable: false`, and the carry-over roots of the installed plugins inside the mirror.
 
 ## Self-Check: PASSED
 
 - FOUND: extensions/pi-claude-marketplace/orchestrators/marketplace/clone-swap.ts, test/orchestrators/marketplace/clone-swap.test.ts
-- FOUND: 0f869da, 6539b85, 48e170a, 12ec5f9, 5c1701f (each an ancestor of HEAD; `git rev-list --count 91ecbea..HEAD` = 5 before this SUMMARY commit)
+- FOUND: 0f869da, 6539b85, 48e170a, 12ec5f9, 5c1701f, 9ab72f4, 0d10348 (each an ancestor of HEAD; `git rev-list --count 91ecbea..HEAD` = 7 before this SUMMARY commit)
 - Acceptance greps: `refreshCloneBySwap` in `eslint.config.js` = 2; `sources-backup` in `locations.ts` = 2; `refreshUrlClone\|refreshGitHubSource` in `update.ts` = 0; `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE` in `clone-swap.ts` = 3; `cannot be moved aside` in `git-source.feature` = 1.
 - Verify commands: Task 1 unit 407/407, `github-source.feature` 11/11 + 0, typecheck/lint/fallow exit 0. Task 2 unit 242/242, direct coverage exit 0. Task 3 `features/marketplace` 534/534 + 0, `features/plugin/update.feature` 26/26 + 1/1, `check:features` exit 0, ESLint on `checkout.steps.ts` exit 0.
-- Failing outside the plan's verify list: `features/plugin/package-dependencies.feature`, 2 scenarios (see CHECKPOINT).
+- After the carry-over: `features/plugin` 776/776 adapter, 39/39 builtin; `features/marketplace` 534/534 adapter; unit 249/249; direct coverage exit 0; ESLint and fallow exit 0.
 
 ---
 *Phase: 03-system-git-transport-and-clone-shape*
-*Completed: 2026-11-24 (halted)*
+*Completed: 2026-11-24*
