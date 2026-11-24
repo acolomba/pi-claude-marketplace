@@ -414,6 +414,81 @@ const PARSE_CASES: readonly ParseCase[] = [
     source: { kind: "github", raw: "o/r", owner: "o", repo: "r", sha: FULL_SHA_256 },
   },
   {
+    name: "SG-TRN-02: refuses a GitHub object reference that starts with a dash",
+    raw: { source: "github", repo: "o/r", ref: "-x" },
+    source: {
+      kind: "unknown",
+      raw: JSON.stringify({ source: "github", repo: "o/r", ref: "-x" }),
+      reason: 'Invalid ref "-x": cannot start with "-"',
+    },
+  },
+  {
+    name: "SG-TRN-02: refuses a URL object reference that starts with a dash",
+    raw: { source: "url", url: "https://gitlab.com/acme/mp", ref: "-x" },
+    source: {
+      kind: "unknown",
+      raw: JSON.stringify({ source: "url", url: "https://gitlab.com/acme/mp", ref: "-x" }),
+      reason: 'Invalid ref "-x": cannot start with "-"',
+    },
+  },
+  {
+    name: "SG-TRN-02: refuses a Git subdirectory object reference that starts with a dash",
+    raw: { source: "git-subdir", url: "https://example.com/mono", path: "plugins/p", ref: "-x" },
+    source: {
+      kind: "unknown",
+      raw: JSON.stringify({
+        source: "git-subdir",
+        url: "https://example.com/mono",
+        path: "plugins/p",
+        ref: "-x",
+      }),
+      reason: 'Invalid ref "-x": cannot start with "-"',
+    },
+  },
+  {
+    name: "SG-TRN-02: refuses a URL fragment reference that starts with a dash",
+    raw: "https://h.example/r.git#--upload-pack=x",
+    source: {
+      kind: "unknown",
+      raw: "https://h.example/r.git#--upload-pack=x",
+      reason: 'Invalid ref "--upload-pack=x": cannot start with "-"',
+    },
+  },
+  {
+    name: "SG-TRN-02: refuses a GitHub URL fragment reference that starts with a dash",
+    raw: "https://github.com/o/r#-x",
+    source: {
+      kind: "unknown",
+      raw: "https://github.com/o/r#-x",
+      reason: 'Invalid ref "-x": cannot start with "-"',
+    },
+  },
+  {
+    name: "SG-TRN-02: refuses a shorthand fragment reference that starts with a dash",
+    raw: "o/r#-x",
+    source: { kind: "unknown", raw: "o/r#-x", reason: 'Invalid ref "-x": cannot start with "-"' },
+  },
+  {
+    name: "SG-TRN-02: refuses a shorthand at-sign reference that starts with a dash",
+    raw: "o/r@-x",
+    source: { kind: "unknown", raw: "o/r@-x", reason: 'Invalid ref "-x": cannot start with "-"' },
+  },
+  {
+    name: "SG-TRN-02: keeps an object reference with a dash after its first character",
+    raw: { source: "url", url: "https://gitlab.com/acme/mp", ref: "feature/-x" },
+    source: {
+      kind: "url",
+      raw: "https://gitlab.com/acme/mp",
+      url: "https://gitlab.com/acme/mp",
+      ref: "feature/-x",
+    },
+  },
+  {
+    name: "SG-TRN-02: keeps a shorthand reference with a dash after its first character",
+    raw: "o/r#feature/-x",
+    source: { kind: "github", raw: "o/r#feature/-x", owner: "o", repo: "r", ref: "feature/-x" },
+  },
+  {
     name: "parses an https URL to a .json file as a hosted catalog",
     raw: "https://h.example/m.json",
     source: { kind: "hosted", raw: "https://h.example/m.json", url: "https://h.example/m.json" },

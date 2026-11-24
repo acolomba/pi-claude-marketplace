@@ -153,12 +153,29 @@ function shaRefusal(sha: string | undefined): string | undefined {
 }
 
 /**
+ * SG-TRN-02 (T-03-04): Claude Code's reason for refusing a ref that git could
+ * read as an option, such as `--upload-pack=<command>`, or undefined when `ref`
+ * is absent or does not start with `-`. Every path that sets a ref on a github,
+ * url, or git-subdir source checks it here, before any git command runs.
+ */
+function refRefusal(ref: string | undefined): string | undefined {
+  return ref?.startsWith("-") === true ? `Invalid ref "${ref}": cannot start with "-"` : undefined;
+}
+
+/** SG-TRN-02: the `unknown` source for a string form whose `#` or `@` ref is refused. */
+function refusedRefSource(raw: string, ref: string | undefined): UnknownSource | undefined {
+  const reason = refRefusal(ref);
+  return reason === undefined ? undefined : { kind: "unknown", raw, reason };
+}
+
+/**
  * Spread the manifest object's optional `ref` / `sha` onto a git-backed source
  * (the only kinds that carry them -- the constraint keeps path/npm/unknown
  * sources from smuggling the fields through the spread). `ref` is freeform (any
- * branch/tag name). A `sha` that fails FULL_SHA_RE makes the whole source
- * `unknown` (SG-TRN-02). A valid sha is lowercased, because the commit version
- * (GV-01) and the clone key read lowercase hex only.
+ * branch/tag name) that does not start with `-`. A `sha` that fails FULL_SHA_RE
+ * or a ref that starts with `-` makes the whole source `unknown` (SG-TRN-02). A
+ * valid sha is lowercased, because the commit version (GV-01) and the clone key
+ * read lowercase hex only.
  */
 function withOptionalSourceFields(
   source: GitBackedSource,
@@ -166,7 +183,7 @@ function withOptionalSourceFields(
 ): ParsedSource {
   const ref = optionalString(obj, "ref");
   const rawSha = optionalString(obj, "sha");
-  const refusal = shaRefusal(rawSha);
+  const refusal = shaRefusal(rawSha) ?? refRefusal(ref);
   if (refusal !== undefined) {
     return unknownObjectSource(obj, refusal);
   }
@@ -512,7 +529,7 @@ function parseShorthandSourceForm(raw: string): ParsedSource {
   const github = parseOwnerRepo(raw.slice(0, delimIdx), raw);
   const ref = raw.slice(delimIdx + 1);
   if (github.kind === "github" && ref.length > 0) {
-    return { ...github, ref };
+    return refusedRefSource(raw, ref) ?? { ...github, ref };
   }
 
   if (github.kind === "github" && raw[delimIdx] === "#") {
@@ -678,8 +695,13 @@ export function ensureGitSuffix(url: string): string {
  * what makes that identity a fixed point across a persist-and-reload round trip
  * (D-2-05).
  */
-function parseUrlSource(raw: string): UrlSource {
+function parseUrlSource(raw: string): UrlSource | UnknownSource {
   const { base, ref } = stripUrlDecorations(raw);
+  const refused = refusedRefSource(raw, ref);
+  if (refused !== undefined) {
+    return refused;
+  }
+
   return ref === undefined ? { kind: "url", raw, url: base } : { kind: "url", raw, url: base, ref };
 }
 
@@ -752,6 +774,11 @@ function parseGitHubUrl(raw: string, rest: string): GitHubSource | UnknownSource
       // eslint-disable-next-line local/no-github-literal -- GHB-02: a reason names the github.com form the user types
       reason: `${raw} must be https://github.com/<owner>/<repo>[.git][#<ref>]`,
     };
+  }
+
+  const refused = refusedRefSource(raw, ref);
+  if (refused !== undefined) {
+    return refused;
   }
 
   const [owner, repo] = parts;
