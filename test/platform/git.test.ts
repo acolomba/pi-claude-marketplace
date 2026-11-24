@@ -1446,7 +1446,7 @@ describe("D-SG-14 and GAUTH-04: an auth failure of a remote request", () => {
     );
     assert.ok(
       debugLines.includes(
-        `[auth] git ls-remote: signed in to ${standIn.host.address}, running it once more`,
+        `[auth] git ls-remote: has a sign-in for ${standIn.host.address}, running it once more`,
       ),
     );
   });

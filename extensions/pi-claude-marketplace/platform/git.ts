@@ -391,7 +391,10 @@ async function retryAfterSignIn(
   }
 
   // AUTH-09: the line names the host and the operation, never the credential.
-  hookDebugLog(`git ${failure.operation}: signed in to ${auth.host}, running it once more`, "auth");
+  hookDebugLog(
+    `git ${failure.operation}: has a sign-in for ${auth.host}, running it once more`,
+    "auth",
+  );
   return withOneShotCredential(signedIn.cred, origin, (pairs) =>
     gitProcess.run({ ...request, config: [...request.config, ...pairs] }),
   );

@@ -21,6 +21,7 @@ import { openNotificationRun } from "../../extensions/pi-claude-marketplace/shar
 import { createDeviceFlowFake } from "../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../edge/json-capture.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
+import { captureDebugLog } from "../platform/debug-log-capture.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
@@ -238,7 +239,7 @@ describe("buildAuthForHost", () => {
     { ok: true, cred: { username: "memo", password: "secret" } },
     { ok: false, reason: "User cancelled authorization." },
   ] satisfies AuthAttemptResult[]) {
-    test(`reuses a memoized ${authentication.ok ? "success" : "failure"} in print`, async () => {
+    test(`reuses a memoized ${authentication.ok ? "success" : "failure"} in print and logs the reuse`, async (t) => {
       // arrange
       const ui = mock<NotificationContext["ui"]>({ exactParams: true, name: "UI" });
       const deviceFlowHttp = mock<DeviceFlowHttp>({ exactParams: true, name: "device HTTP" });
@@ -255,11 +256,14 @@ describe("buildAuthForHost", () => {
         }),
       );
 
+      const debugLines = captureDebugLog(t);
+
       // act
       const reused = await auth.onAuthRequired();
 
       // assert
       assert.strictEqual(reused, authentication);
+      assert.deepStrictEqual(debugLines, ["[auth] reusing the sign-in for github.com"]);
       assert.deepStrictEqual(authMemo, new Map([["github.com", authentication]]));
       assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
       verify(deviceFlowHttp);

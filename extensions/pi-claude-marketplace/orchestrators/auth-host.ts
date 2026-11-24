@@ -46,6 +46,7 @@
 import { findProviderForHost } from "../domain/auth-registry.ts";
 import { initiateDeviceFlow } from "../domain/github-auth.ts";
 import { NODE_CREDENTIAL_GIT, createCredentialOps } from "../platform/git-credential.ts";
+import { hookDebugLog } from "../shared/debug-log.ts";
 import { DeviceFlowUnavailableError } from "../shared/errors.ts";
 import { GITHUB_HOST, gitHubOverrideHost, gitHubWireUrl } from "../shared/github-base-url.ts";
 import { notifyDeviceFlowPrompt } from "../shared/notification-dispatch.ts";
@@ -198,6 +199,9 @@ export function buildAuthForHost(args: {
     // D-79-02: once-per-host memo short-circuits a repeated flow.
     const memoized = authMemo?.get(host);
     if (memoized !== undefined) {
+      // AUTH-09: the line names the host only, so a debug trace tells a
+      // reused sign-in from a new one.
+      hookDebugLog(`reusing the sign-in for ${host}`, "auth");
       return memoized;
     }
 
