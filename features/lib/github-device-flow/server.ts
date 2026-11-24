@@ -25,6 +25,7 @@ import path from "node:path";
 import type { DataTable } from "@cucumber/cucumber";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Server } from "node:https";
+import type { Server as NetServer } from "node:net";
 
 // The access token the stand-in issues; the run's git host accepts it through a credential arm.
 const ACCESS_TOKEN = "stand-in-access-token";
@@ -100,12 +101,13 @@ export async function readDeviceFlowRequests(harness: string): Promise<DeviceFlo
   });
 }
 
-async function listenOnLoopback(server: Server): Promise<number> {
+/** Listens on `127.0.0.1` at a port the system picks, and returns that port. */
+export async function listenOnLoopback(server: NetServer): Promise<number> {
   server.listen(0, "127.0.0.1");
   await once(server, "listening");
   const address = server.address();
   if (address === null || typeof address === "string") {
-    throw new Error("the Device Flow stand-in has no TCP address");
+    throw new Error("a loopback stand-in has no TCP address");
   }
 
   return address.port;

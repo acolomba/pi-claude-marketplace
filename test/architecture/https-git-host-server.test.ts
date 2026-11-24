@@ -8,6 +8,7 @@
  */
 
 import assert from "node:assert/strict";
+import { X509Certificate } from "node:crypto";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { request } from "node:https";
 import { tmpdir } from "node:os";
@@ -344,6 +345,20 @@ describe("HttpsGitHost", () => {
         arms: ["acme/catalog"],
       },
     );
+  });
+
+  test("names github.com beside 127.0.0.1 in its certificate, so a tunnel for github.com verifies it (D-SG-14)", async (t) => {
+    // arrange
+    const host = await startHost(t);
+
+    // act
+    const certificate = new X509Certificate(await readFile(host.certificatePath));
+
+    // assert
+    assert.deepStrictEqual(certificate.subjectAltName?.split(", ").sort(), [
+      "DNS:github.com",
+      "IP Address:127.0.0.1",
+    ]);
   });
 
   test("forgets every served file on reset", async (t) => {

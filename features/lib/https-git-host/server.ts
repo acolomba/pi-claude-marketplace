@@ -37,7 +37,10 @@ const execFileAsync = promisify(execFile);
 
 const DEFAULT_OWNER = "acme";
 
-// A one-day P-256 certificate for the loopback address the host binds.
+// A one-day P-256 certificate for the loopback address the host binds. It
+// also names `github.com`: a system git that reaches the host through the
+// harness CONNECT proxy keeps `github.com` as its request host inside the
+// tunnel, so it verifies the host under that name (D-SG-14).
 const CERTIFICATE_ARGUMENTS = [
   "req",
   "-x509",
@@ -55,7 +58,7 @@ const CERTIFICATE_ARGUMENTS = [
   "-subj",
   "/CN=127.0.0.1",
   "-addext",
-  "subjectAltName=IP:127.0.0.1",
+  "subjectAltName=IP:127.0.0.1,DNS:github.com",
 ];
 
 const ARMED_STATUSES = [404, 500, 502, 503] as const;
