@@ -550,6 +550,19 @@ Then(
   },
 );
 
+// The skill file of a staged skill records the plugin root, which for a git
+// plugin lies under a clone key that hashes the git host's random port, so the
+// step lists every other file of the one skill. The skills a session offers
+// show the skill file's description.
+Then(
+  "the staged skill {string} of the {word} scope holds these supporting files:",
+  async function (this: ScenarioWorld, skill: string, scope: string, table: DataTable) {
+    const directory = path.join(extensionRoot(this, scope), "resources", "skills", skill);
+    const [header = [], ...rows] = await fileRows(directory);
+    assert.deepStrictEqual([header, ...rows.filter(([file]) => file !== "SKILL.md")], table.raw());
+  },
+);
+
 // D-LOC-01: a project-scope install writes nothing outside its project, so the
 // user's pi directory holds no `pi-claude-marketplace/project-installs/` record.
 Then("the user scope holds no record of project installs", async function (this: ScenarioWorld) {

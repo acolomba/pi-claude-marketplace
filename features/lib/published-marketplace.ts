@@ -34,6 +34,7 @@ import {
   writeInvalidManifest,
   writeMalformedManifest,
   writeManifestText,
+  writeLinkedSkillFile,
   writeMarketplace,
   writeMarketplaceDescription,
 } from "./path-marketplace.ts";
@@ -802,6 +803,25 @@ export async function linkPublishedManifest(
     await symlink(target, manifest);
   });
   return manifest;
+}
+
+/**
+ * Gives the skill of the published plugin `plugin` a file that is a relative
+ * symbolic link to another file of the skill, as `writeLinkedSkillFile`
+ * writes them, and returns the path of the link. A git publication commits
+ * the link as a link and pushes it, so a clone holds a link wherever git
+ * writes links (D-SG-11, SG-MIG-01).
+ */
+export async function linkPublishedSkillFile(
+  published: PublishedMarketplace,
+  plugin: string,
+): Promise<string> {
+  const pluginRoot = ownedTarget(published, path.join(published.root, "plugins", plugin));
+  let link = "";
+  await changePublication(published, async () => {
+    link = await writeLinkedSkillFile(pluginRoot, plugin);
+  });
+  return link;
 }
 
 /**

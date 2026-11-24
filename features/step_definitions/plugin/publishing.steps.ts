@@ -38,8 +38,10 @@ import {
   repositoryPluginRoot,
 } from "../../lib/git-plugin.ts";
 import { runGit } from "../../lib/hermetic-git.ts";
+import { LINKED_SKILL_TARGET } from "../../lib/path-marketplace.ts";
 import {
   linkPublishedManifest,
+  linkPublishedSkillFile,
   publishAgent,
   publishOutputStyle,
   publishReadOnlySkillDirectory,
@@ -126,6 +128,25 @@ Given(
 const LINKED_MANIFESTS_DIRECTORY = "linked-manifests";
 
 /**
+ * Asserts that `file`, inside the work tree of `published`, is a symbolic
+ * link, and that the `main` branch of its bare repository holds it as a link.
+ */
+async function assertPushedLink(
+  published: {
+    readonly workTree: string;
+    readonly bareRepository: string;
+    readonly gitHome: string;
+  },
+  file: string,
+): Promise<void> {
+  const { workTree, bareRepository, gitHome } = published;
+  const relative = path.relative(workTree, file).split(path.sep).join("/");
+  assert.strictEqual((await lstat(file)).isSymbolicLink(), true, `${relative} is not a link`);
+  const entry = await runGit(bareRepository, gitHome, "ls-tree", "main", "--", relative);
+  assert.strictEqual(entry.split(" ")[0], "120000", `${relative} is not a pushed link`);
+}
+
+/**
  * Pushes the manifest of the plugin `plugin` of the git repository `name` as
  * a link to `target`, records the revision, and checks that the work tree and
  * the pushed revision both hold the manifest as a link.
@@ -138,25 +159,10 @@ async function pushLinkedManifestRevision(
 ): Promise<void> {
   const repository = await pushLinkedManifest(world.requireGitRepository(name), plugin, target);
   world.recordGitRepository(repository);
-  const manifest = path.posix.join(
-    path.relative(repository.workTree, repositoryPluginRoot(repository, plugin)),
-    ".claude-plugin",
-    "plugin.json",
+  await assertPushedLink(
+    repository,
+    path.join(repositoryPluginRoot(repository, plugin), ".claude-plugin", "plugin.json"),
   );
-  assert.strictEqual(
-    (await lstat(path.join(repository.workTree, manifest))).isSymbolicLink(),
-    true,
-    `${manifest} of ${name} is not a link`,
-  );
-  const entry = await runGit(
-    repository.bareRepository,
-    repository.gitHome,
-    "ls-tree",
-    "main",
-    "--",
-    manifest,
-  );
-  assert.strictEqual(entry.split(" ")[0], "120000", `${manifest} of ${name} is not a pushed link`);
 }
 
 Given(
@@ -207,6 +213,21 @@ Given(
       await readFile(path.join(published.root, "plugins", plugin, file), "utf8"),
       text,
     );
+  },
+);
+
+// D-SG-11, SG-MIG-01: a git publication commits the link, so its clone holds
+// a link that system git writes as a link, or as a text file in a clone whose
+// settings an earlier version made.
+Given(
+  "the published plugin {string} of the marketplace {string} links a file of its skill to another file of the skill",
+  async function (this: ScenarioWorld, plugin: string, name: string) {
+    const published = this.requirePublished(name);
+    const link = await linkPublishedSkillFile(published, plugin);
+    assert.strictEqual(await readlink(link), LINKED_SKILL_TARGET);
+    if (published.kind === "url" || published.kind === "github") {
+      await assertPushedLink({ ...published, workTree: published.root }, link);
+    }
   },
 );
 
