@@ -41,7 +41,6 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
-  CrossOriginChallengeError,
   FetchedUrlCause,
   HostedManifestFetchError,
   HostedManifestHttpError,
@@ -85,6 +84,7 @@ import type {
   ExtensionContext,
   NotificationContext,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { GitFailure } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
@@ -536,10 +536,7 @@ test("marketplace update transport: classifies a providerless HTTP 403 as authen
     const { cloneDir } = await seedUrlMarketplace({ cwd, name: "urlmp-403", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
     const { credOps: credentialOps } = createCredentialOps();
-    const transportError = Object.assign(new Error("HTTP 403 from fetch"), {
-      code: "HttpError",
-      data: { statusCode: 403 },
-    });
+    const transportError = remoteFailure({ kind: "https-auth", detail: "rejected" });
     const { gitOps, state } = createGitOps({ remoteThrows: transportError });
 
     // act
@@ -558,7 +555,7 @@ test("marketplace update transport: classifies a providerless HTTP 403 as authen
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "Some operations have failed.\n\n⊘ urlmp-403 [project] (failed)\n  ⊘ urlmp-403 (failed) {authentication required}\n    cause: Failed to update marketplace \"urlmp-403\". -> HTTP 403 from fetch -> no credential was obtained for gitlab.example.com; store one with: printf 'protocol=https\\nhost=gitlab.example.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve",
+          "Some operations have failed.\n\n⊘ urlmp-403 [project] (failed)\n  ⊘ urlmp-403 (failed) {authentication required}\n    cause: Failed to update marketplace \"urlmp-403\". -> git ls-remote failed: https-auth, exit code 128 -> no credential was obtained for gitlab.example.com; store one with: printf 'protocol=https\\nhost=gitlab.example.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve",
         severity: "error",
       },
     ]);
@@ -587,10 +584,7 @@ test("marketplace update transport: names the status and URL of a providerless H
     const { cloneDir } = await seedUrlMarketplace({ cwd, name: "urlmp-500", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
     const { credOps: credentialOps } = createCredentialOps();
-    const transportError = Object.assign(new Error("HTTP 500 from fetch"), {
-      code: "HttpError",
-      data: { statusCode: 500 },
-    });
+    const transportError = remoteFailure({ kind: "network", httpStatus: 500 });
     const { gitOps, state } = createGitOps({ remoteThrows: transportError });
 
     // act
@@ -609,7 +603,7 @@ test("marketplace update transport: names the status and URL of a providerless H
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "Some operations have failed.\n\n⊘ urlmp-500 [project] (failed)\n  ⊘ urlmp-500 (failed) {network error}\n    cause: 500 on https://gitlab.example.com/team/urlmp-500 -> HTTP 500 from fetch",
+          "Some operations have failed.\n\n⊘ urlmp-500 [project] (failed)\n  ⊘ urlmp-500 (failed) {network error}\n    cause: 500 on https://gitlab.example.com/team/urlmp-500 -> git ls-remote failed: network, exit code 128",
         severity: "error",
       },
     ]);
@@ -643,10 +637,7 @@ test("marketplace update transport: names a 404 answer as a network error with i
     });
     const { ctx, run, notifications } = makeCtx();
     const { credOps: credentialOps } = createCredentialOps();
-    const transportError = Object.assign(new Error("HTTP 404 from fetch"), {
-      code: "HttpError",
-      data: { statusCode: 404 },
-    });
+    const transportError = remoteFailure({ kind: "repository-not-found", httpStatus: 404 });
     const { gitOps } = createGitOps({ remoteThrows: transportError });
 
     // act
@@ -665,7 +656,7 @@ test("marketplace update transport: names a 404 answer as a network error with i
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "Some operations have failed.\n\n⊘ urlmp-404 [project] (failed)\n  ⊘ urlmp-404 (failed) {network error}\n    cause: 404 on https://***@gitlab.example.com/team/urlmp-404 -> HTTP 404 from fetch",
+          "Some operations have failed.\n\n⊘ urlmp-404 [project] (failed)\n  ⊘ urlmp-404 (failed) {network error}\n    cause: 404 on https://***@gitlab.example.com/team/urlmp-404 -> git ls-remote failed: repository-not-found, exit code 128",
         severity: "error",
       },
     ]);
@@ -1011,6 +1002,15 @@ const KEEP_ENVIRONMENT = { CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE: "1" }
 /** D-SG-15: an `ls-remote` that could not reach its remote. */
 function unreachableRemote(): GitCommandError {
   return new GitCommandError({ kind: "network" }, { operation: "ls-remote", exitCode: 128 });
+}
+
+/** SG-PRC-05: an `ls-remote` that failed as `failure`, with `cause` when one is given. */
+function remoteFailure(failure: GitFailure, cause?: unknown): GitCommandError {
+  return new GitCommandError(
+    failure,
+    { operation: "ls-remote", exitCode: 128 },
+    cause === undefined ? undefined : { cause },
+  );
 }
 
 for (const { kind, seed } of [
@@ -1578,9 +1578,9 @@ test("GAUTH-04: a cancelled credential lookup on a host with no Device Flow rend
     await seedUrlMarketplace({ cwd, name: "urlmp-private", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
     const { credOps: credentialOps } = createCredentialOps();
-    // An empty credential helper makes onAuth return `{ cancel: true }`, which
-    // isomorphic-git throws as UserCanceledError -- NOT an HttpError 401/403.
-    const authError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
+    // D-SG-14: no credential helper answered git, which fails as https-auth
+    // with no credential -- NOT a network failure.
+    const authError = remoteFailure({ kind: "https-auth", detail: "no-credential" });
     const { gitOps, state } = createGitOps({ remoteThrows: authError });
 
     // act
@@ -1605,7 +1605,7 @@ test("GAUTH-04: a cancelled credential lookup on a host with no Device Flow rend
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "Some operations have failed.\n\n⊘ urlmp-private [project] (failed)\n  ⊘ urlmp-private (failed) {authentication required}\n    cause: Failed to update marketplace \"urlmp-private\". -> cancelled -> no credential was obtained for gitlab.example.com; store one with: printf 'protocol=https\\nhost=gitlab.example.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve",
+          "Some operations have failed.\n\n⊘ urlmp-private [project] (failed)\n  ⊘ urlmp-private (failed) {authentication required}\n    cause: Failed to update marketplace \"urlmp-private\". -> git ls-remote failed: https-auth, exit code 128 -> no credential was obtained for gitlab.example.com; store one with: printf 'protocol=https\\nhost=gitlab.example.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve",
         severity: "error",
       },
     ]);
@@ -1618,13 +1618,9 @@ test("GAUTH-04: a 401 challenge on a host with no Device Flow carries the same s
     await seedUrlMarketplace({ cwd, name: "urlmp-401", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
     const { credOps: credentialOps } = createCredentialOps();
-    // Duck-typed isomorphic-git HttpError: code === "HttpError",
-    // data.statusCode carries the HTTP status (mirrors D-76-08). A 403 never
-    // invokes onAuth at all, so both identities must reach the cause line.
-    const httpErr = Object.assign(new Error("HTTP 401 from fetch"), {
-      code: "HttpError",
-      data: { statusCode: 401 },
-    });
+    // git reads a 401 or 403 answer as https-auth (mirrors D-76-08), so both
+    // details must reach the cause line.
+    const httpErr = remoteFailure({ kind: "https-auth", detail: "rejected" });
     const { gitOps } = createGitOps({ remoteThrows: httpErr });
 
     // act
@@ -1643,7 +1639,7 @@ test("GAUTH-04: a 401 challenge on a host with no Device Flow carries the same s
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "Some operations have failed.\n\n⊘ urlmp-401 [project] (failed)\n  ⊘ urlmp-401 (failed) {authentication required}\n    cause: Failed to update marketplace \"urlmp-401\". -> HTTP 401 from fetch -> no credential was obtained for gitlab.example.com; store one with: printf 'protocol=https\\nhost=gitlab.example.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve",
+          "Some operations have failed.\n\n⊘ urlmp-401 [project] (failed)\n  ⊘ urlmp-401 (failed) {authentication required}\n    cause: Failed to update marketplace \"urlmp-401\". -> git ls-remote failed: https-auth, exit code 128 -> no credential was obtained for gitlab.example.com; store one with: printf 'protocol=https\\nhost=gitlab.example.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve",
         severity: "error",
       },
     ]);
@@ -1656,10 +1652,10 @@ test("GAUTH-04: a transport error that already carries a cause keeps its own cha
     await seedUrlMarketplace({ cwd, name: "urlmp-chained", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
     const { credOps: credentialOps } = createCredentialOps();
-    const authError = Object.assign(new Error("cancelled"), {
-      code: "UserCanceledError",
-      cause: new Error("helper exited 128"),
-    });
+    const authError = remoteFailure(
+      { kind: "https-auth", detail: "no-credential" },
+      new Error("helper exited 128"),
+    );
     const { gitOps } = createGitOps({ remoteThrows: authError });
 
     // act
@@ -1678,40 +1674,7 @@ test("GAUTH-04: a transport error that already carries a cause keeps its own cha
     assert.deepStrictEqual(notifications, [
       {
         message:
-          'Some operations have failed.\n\n⊘ urlmp-chained [project] (failed)\n  ⊘ urlmp-chained (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-chained". -> cancelled -> helper exited 128',
-        severity: "error",
-      },
-    ]);
-  });
-});
-
-test("Q-02: a challenge after a cross-origin redirect keeps its own cause without the stored-credential line", async () => {
-  await withHermeticHome(async ({ cwd }) => {
-    // arrange
-    await seedUrlMarketplace({ cwd, name: "urlmp-redirect", ref: "main" });
-    const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
-    const { gitOps } = createGitOps({
-      remoteThrows: new CrossOriginChallengeError("https://sso.example.com"),
-    });
-
-    // act
-    await updateMarketplace({
-      completionCache: createCompletionCache(),
-      ctx,
-      run,
-      name: "urlmp-redirect",
-      scope: "project",
-      cwd,
-      gitOps,
-      credentialOps,
-    });
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          'Some operations have failed.\n\n⊘ urlmp-redirect [project] (failed)\n  ⊘ urlmp-redirect (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-redirect". -> redirected request to https://sso.example.com asked for credentials; a credential is not sent after a redirect to another origin',
+          'Some operations have failed.\n\n⊘ urlmp-chained [project] (failed)\n  ⊘ urlmp-chained (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-chained". -> git ls-remote failed: https-auth, exit code 128 -> helper exited 128',
         severity: "error",
       },
     ]);
@@ -1759,7 +1722,10 @@ test("GAUTH-05: a cancelled Device Flow on a github.com url refresh renders {aut
     await seedUrlMarketplace({ cwd, name: "urlmp-github", ref: "main", host: "GitHub.com" });
     const { ctx, run, notifications } = makeCtx();
     const { credOps: credentialOps } = createCredentialOps();
-    const authError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
+    const authError = remoteFailure(
+      { kind: "https-auth", detail: "no-credential" },
+      new Error("cancelled"),
+    );
     const { gitOps, state } = createGitOps({ remoteThrows: authError });
 
     // act
@@ -1788,23 +1754,25 @@ test("GAUTH-05: a cancelled Device Flow on a github.com url refresh renders {aut
     assert.deepStrictEqual(notifications, [
       {
         message:
-          'Some operations have failed.\n\n⊘ urlmp-github [project] (failed)\n  ⊘ urlmp-github (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-github". -> cancelled',
+          'Some operations have failed.\n\n⊘ urlmp-github [project] (failed)\n  ⊘ urlmp-github (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-github". -> git ls-remote failed: https-auth, exit code 128 -> cancelled',
         severity: "error",
       },
     ]);
   });
 });
 
-test("GAUTH-02: a declined/failed Device Flow (UserCanceledError) on refresh renders {authentication required}, not the lying {network unreachable}", async () => {
+test("GAUTH-02: a declined/failed Device Flow on refresh renders {authentication required}, not the lying {network unreachable}", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedGithubMarketplace({ cwd, name: "declined", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
-    // A denied/expired Device Flow (or a poll network error) makes
-    // platform/git.ts's onAuth return `{ cancel: true }`, which
-    // isomorphic-git throws as `UserCanceledError` -- NOT an HttpError
-    // 401/403 and NOT a network errno.
-    const authError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
+    // D-SG-14: a denied/expired Device Flow (or a poll network error) leaves
+    // the run's own https-auth failure, with the sign-in's reason as its
+    // cause -- NOT a network failure.
+    const authError = remoteFailure(
+      { kind: "https-auth", detail: "no-credential" },
+      new Error("cancelled"),
+    );
     const { gitOps } = createGitOps({ remoteThrows: authError });
 
     // act
@@ -2119,9 +2087,7 @@ test("CR-05 / MU-5: url-source pre-fetch failure (gitOps.fetch throws) does NOT 
     const { credOps: credentialOps } = createCredentialOps();
     // cloneAdvanced stays false because onFetchSucceeded never fires.
     const { gitOps } = createGitOps({
-      remoteThrows: Object.assign(new Error("mock: ENETUNREACH https://gitlab.example.com"), {
-        code: "ENETUNREACH",
-      }),
+      remoteThrows: remoteFailure({ kind: "network", curlCode: 7 }),
     });
 
     // act
@@ -2140,7 +2106,7 @@ test("CR-05 / MU-5: url-source pre-fetch failure (gitOps.fetch throws) does NOT 
     assert.deepStrictEqual(notifications, [
       {
         message:
-          'Some operations have failed.\n\n⊘ urloffline [project] (failed)\n  ⊘ urloffline (failed) {network unreachable}\n    cause: Failed to update marketplace "urloffline". -> mock: ENETUNREACH https://gitlab.example.com',
+          'Some operations have failed.\n\n⊘ urloffline [project] (failed)\n  ⊘ urloffline (failed) {network unreachable}\n    cause: Failed to update marketplace "urloffline". -> git ls-remote failed: network, exit code 128',
         severity: "error",
       },
     ]);
@@ -5883,10 +5849,10 @@ test("UPD-12 / GHB-01: a cancelled credential lookup on a GitHub update under th
     await seedGithubMarketplace({ cwd, name: "mirror-mp", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
     const { credOps: credentialOps } = createCredentialOps();
-    const authError = Object.assign(new Error("cancelled"), {
-      code: "UserCanceledError",
-      cause: new FetchedUrlCause(OVERRIDE_WIRE_URL),
-    });
+    const authError = remoteFailure(
+      { kind: "https-auth", detail: "no-credential" },
+      new FetchedUrlCause(OVERRIDE_WIRE_URL),
+    );
     const { gitOps } = createGitOps({ remoteThrows: authError });
 
     // act
@@ -5904,7 +5870,7 @@ test("UPD-12 / GHB-01: a cancelled credential lookup on a GitHub update under th
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n  ⊘ mirror-mp (failed) {authentication required}\n    cause: Failed to update marketplace "mirror-mp". -> cancelled -> no credential was obtained for mirror.example:8443; store one with: printf 'protocol=https\\nhost=mirror.example:8443\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve -> fetched ${OVERRIDE_WIRE_URL}`,
+        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n  ⊘ mirror-mp (failed) {authentication required}\n    cause: Failed to update marketplace "mirror-mp". -> git ls-remote failed: https-auth, exit code 128 -> no credential was obtained for mirror.example:8443; store one with: printf 'protocol=https\\nhost=mirror.example:8443\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve -> fetched ${OVERRIDE_WIRE_URL}`,
         severity: "error",
       },
     ]);
@@ -5918,11 +5884,10 @@ test("UPD-12 / GHB-01: a GitHub update under the override that the host answers 
     await seedGithubMarketplace({ cwd, name: "mirror-mp", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
     const { credOps: credentialOps } = createCredentialOps();
-    const httpErr = Object.assign(new Error("HTTP Error: 500 Internal Server Error"), {
-      code: "HttpError",
-      data: { statusCode: 500 },
-      cause: new FetchedUrlCause(OVERRIDE_WIRE_URL),
-    });
+    const httpErr = remoteFailure(
+      { kind: "network", httpStatus: 500 },
+      new FetchedUrlCause(OVERRIDE_WIRE_URL),
+    );
     const { gitOps } = createGitOps({ remoteThrows: httpErr });
 
     // act
@@ -5940,40 +5905,7 @@ test("UPD-12 / GHB-01: a GitHub update under the override that the host answers 
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n  ⊘ mirror-mp (failed) {network error}\n    cause: 500 on ${OVERRIDE_WIRE_URL} -> HTTP Error: 500 Internal Server Error -> fetched ${OVERRIDE_WIRE_URL}`,
-        severity: "error",
-      },
-    ]);
-  });
-});
-
-test("UPD-12 / GHB-01: a challenge after a cross-origin redirect on a GitHub update under the override keeps its chain without the stored-credential line", async (t) => {
-  await withHermeticHome(async ({ cwd }) => {
-    // arrange
-    setGitHubBaseUrl(t, "https://mirror.example:8443/git");
-    await seedGithubMarketplace({ cwd, name: "mirror-mp", ref: "main" });
-    const { ctx, run, notifications } = makeCtx();
-    const { credOps: credentialOps } = createCredentialOps();
-    const challenge = new CrossOriginChallengeError("https://sso.example.com");
-    challenge.cause = new FetchedUrlCause(OVERRIDE_WIRE_URL);
-    const { gitOps } = createGitOps({ remoteThrows: challenge });
-
-    // act
-    await updateMarketplace({
-      completionCache: createCompletionCache(),
-      ctx,
-      run,
-      name: "mirror-mp",
-      scope: "project",
-      cwd,
-      gitOps,
-      credentialOps,
-    });
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n  ⊘ mirror-mp (failed) {authentication required}\n    cause: Failed to update marketplace "mirror-mp". -> redirected request to https://sso.example.com asked for credentials; a credential is not sent after a redirect to another origin -> fetched ${OVERRIDE_WIRE_URL}`,
+        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n  ⊘ mirror-mp (failed) {network error}\n    cause: 500 on ${OVERRIDE_WIRE_URL} -> git ls-remote failed: network, exit code 128 -> fetched ${OVERRIDE_WIRE_URL}`,
         severity: "error",
       },
     ]);
@@ -6057,7 +5989,10 @@ test("GHB-04: a declined Device Flow on a GitHub update without the override kee
     await seedGithubMarketplace({ cwd, name: "declined", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
     const { credOps: credentialOps } = createCredentialOps();
-    const authError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
+    const authError = remoteFailure(
+      { kind: "https-auth", detail: "no-credential" },
+      new Error("cancelled"),
+    );
     const { gitOps } = createGitOps({ remoteThrows: authError });
 
     // act
@@ -6076,7 +6011,7 @@ test("GHB-04: a declined Device Flow on a GitHub update without the override kee
     assert.deepStrictEqual(notifications, [
       {
         message:
-          'Some operations have failed.\n\n⊘ declined [project] (failed)\n  ⊘ declined (failed) {authentication required}\n    cause: Failed to update marketplace "declined". -> cancelled',
+          'Some operations have failed.\n\n⊘ declined [project] (failed)\n  ⊘ declined (failed) {authentication required}\n    cause: Failed to update marketplace "declined". -> git ls-remote failed: https-auth, exit code 128 -> cancelled',
         severity: "error",
       },
     ]);

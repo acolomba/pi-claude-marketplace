@@ -23,7 +23,10 @@ import { resolveListCandidate } from "../../../extensions/pi-claude-marketplace/
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { softDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import { InvalidGitHubBaseUrlError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  GitCommandError,
+  InvalidGitHubBaseUrlError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
@@ -53,6 +56,7 @@ import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { GitCredentials } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { GitFailure } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
@@ -140,6 +144,15 @@ function notificationBoundary(
     })
     .times(expectedCalls);
   return { ctx, notifications, run: runWithNothingLoaded(), ui };
+}
+
+/** SG-PRC-05: a system-git clone that failed as `failure`, with `cause` when one is given. */
+function cloneFailure(failure: GitFailure, cause?: unknown): GitCommandError {
+  return new GitCommandError(
+    failure,
+    { operation: "clone", exitCode: 128 },
+    cause === undefined ? undefined : { cause },
+  );
 }
 
 function verifyNotifications(boundary: NotificationBoundary): void {
@@ -1185,7 +1198,7 @@ test("continues a manifest-ordered sweep after a network failure", async () => {
       ...cache.seam,
       async materializePluginClone(args) {
         if (args.cloneUrl === badUrl) {
-          throw Object.assign(new Error("host unreachable"), { code: "ENETUNREACH" });
+          throw cloneFailure({ kind: "network", curlCode: 7 });
         }
 
         return originalClone(args);
@@ -1214,7 +1227,7 @@ test("continues a manifest-ordered sweep after a network failure", async () => {
           "● marketplace [project]",
           "  ○ ok v1.0.0 (available)",
           "  ⊘ bad (failed) {network unreachable}",
-          "    cause: host unreachable",
+          "    cause: git clone failed: network, exit code 128",
           "",
           "Plugin fetch: 1 failure, 1 success",
         ].join("\n"),
@@ -1880,9 +1893,10 @@ test("classifies a denied Device Flow as authentication required", async () => {
           ok: false,
           reason: "User cancelled authorization. Run the command again to retry.",
         });
-        throw Object.assign(new Error("The operation was canceled."), {
-          code: "UserCanceledError",
-        });
+        throw cloneFailure(
+          { kind: "https-auth", detail: "no-credential" },
+          new Error("User cancelled authorization. Run the command again to retry."),
+        );
       },
       resolvePluginPin() {
         return Promise.resolve({ cloneUrl, pin });
@@ -1909,7 +1923,7 @@ test("classifies a denied Device Flow as authentication required", async () => {
       },
       {
         message:
-          "A plugin operation has failed.\n\n● marketplace [project]\n  ⊘ denied (failed) {authentication required}\n    cause: The operation was canceled.",
+          "A plugin operation has failed.\n\n● marketplace [project]\n  ⊘ denied (failed) {authentication required}\n    cause: git clone failed: https-auth, exit code 128 -> User cancelled authorization. Run the command again to retry.",
         severity: "error",
       },
     ]);
@@ -2017,9 +2031,10 @@ test("fails cleanly when Device Flow credential approval rejects", async () => {
           requiredDeviceFlow(args.resolveAuth()).onAuthRequired(),
           new Error("credential approve failed"),
         );
-        throw Object.assign(new Error("The operation was canceled."), {
-          code: "UserCanceledError",
-        });
+        throw cloneFailure(
+          { kind: "https-auth", detail: "no-credential" },
+          new Error("credential approve failed"),
+        );
       },
       resolvePluginPin() {
         return Promise.resolve({ cloneUrl, pin });
@@ -2046,7 +2061,7 @@ test("fails cleanly when Device Flow credential approval rejects", async () => {
       },
       {
         message:
-          "A plugin operation has failed.\n\n● marketplace [project]\n  ⊘ approve-failure (failed) {authentication required}\n    cause: The operation was canceled.",
+          "A plugin operation has failed.\n\n● marketplace [project]\n  ⊘ approve-failure (failed) {authentication required}\n    cause: git clone failed: https-auth, exit code 128 -> credential approve failed",
         severity: "error",
       },
     ]);
@@ -2092,12 +2107,7 @@ test("D-SG-14: keeps a stale credential the host refused", async () => {
       },
       materializePluginClone(args) {
         assert.strictEqual(requiredAuth(args.resolveAuth()).kind, "device-flow");
-        return Promise.reject(
-          Object.assign(new Error("HTTP Error: 401 Unauthorized"), {
-            code: "HttpError",
-            data: { statusCode: 401 },
-          }),
-        );
+        return Promise.reject(cloneFailure({ kind: "https-auth", detail: "rejected" }));
       },
       resolvePluginPin() {
         return Promise.resolve({ cloneUrl, pin });
@@ -2119,7 +2129,7 @@ test("D-SG-14: keeps a stale credential the host refused", async () => {
     assert.deepStrictEqual(boundary.notifications, [
       {
         message:
-          "A plugin operation has failed.\n\n● marketplace [project]\n  ⊘ stale (failed) {authentication required}\n    cause: HTTP Error: 401 Unauthorized",
+          "A plugin operation has failed.\n\n● marketplace [project]\n  ⊘ stale (failed) {authentication required}\n    cause: git clone failed: https-auth, exit code 128",
         severity: "error",
       },
     ]);
@@ -2147,7 +2157,7 @@ test("D-SG-10: retains a warm mirror whose check and re-clone fail and converges
     await writeFile(path.join(mirrorRoot, ".git", "HEAD"), `${head}\n`);
     const treeBefore = await snapshotTree(locations.pluginClonesDir);
     const stateBefore = await readFile(locations.stateJsonPath, "utf8");
-    const unreachable = Object.assign(new Error("network unreachable"), { code: "ENETUNREACH" });
+    const unreachable = cloneFailure({ kind: "network", curlCode: 7 });
     const failedGit = gitBoundary({
       allowedRemoteUrls: [cloneUrl],
       cloneError: unreachable,
@@ -2195,7 +2205,7 @@ test("D-SG-10: retains a warm mirror whose check and re-clone fail and converges
     assert.deepStrictEqual(failedBoundary.notifications, [
       {
         message:
-          "A plugin operation has failed.\n\n● marketplace [project]\n  ⊘ warm-retry (failed) {network unreachable}\n    cause: network unreachable",
+          "A plugin operation has failed.\n\n● marketplace [project]\n  ⊘ warm-retry (failed) {network unreachable}\n    cause: git clone failed: network, exit code 128",
         severity: "error",
       },
     ]);
@@ -2485,38 +2495,39 @@ test("GLK-07: folds a non-Error status read after the locked fetch into list's u
   });
 });
 
-for (const { title, statusCode, statusText, expectedRow } of [
+for (const { title, failure, expectedRow } of [
   {
     title:
       "GLK-01: a host 503 on a mirror refresh fails the row as network error framed by its status and URL",
-    statusCode: 503,
-    statusText: "Service Unavailable",
+    failure: { kind: "network", httpStatus: 503 },
     expectedRow: [
       "  ⊘ refused (failed) {network error}",
-      "    cause: 503 on https://example.com/refused -> HTTP Error: 503 Service Unavailable",
+      "    cause: 503 on https://example.com/refused -> git clone failed: network, exit code 128",
     ],
   },
   {
     title:
       "GLK-01: a host 404 on a mirror refresh fails the row as source missing framed by its status and URL",
-    statusCode: 404,
-    statusText: "Not Found",
+    failure: { kind: "repository-not-found", httpStatus: 404 },
     expectedRow: [
       "  ⊘ refused (failed) {source missing}",
-      "    cause: 404 on https://example.com/refused -> HTTP Error: 404 Not Found",
+      "    cause: 404 on https://example.com/refused -> git clone failed: repository-not-found, exit code 128",
     ],
   },
   {
     title:
       "GLK-01: a host 401 on a mirror refresh fails the row as authentication required with no frame",
-    statusCode: 401,
-    statusText: "Unauthorized",
+    failure: { kind: "https-auth", detail: "rejected" },
     expectedRow: [
       "  ⊘ refused (failed) {authentication required}",
-      "    cause: HTTP Error: 401 Unauthorized",
+      "    cause: git clone failed: https-auth, exit code 128",
     ],
   },
-]) {
+] satisfies ReadonlyArray<{
+  title: string;
+  failure: GitFailure;
+  expectedRow: readonly string[];
+}>) {
   test(title, async () => {
     await withWorkspace(async ({ cwd }) => {
       // arrange
@@ -2529,15 +2540,9 @@ for (const { title, statusCode, statusText, expectedRow } of [
       });
       await saveMarketplaces(cwd, "project", [marketplace]);
       const credentials = createCredentialOpsFake({ boundary: "memory" });
-      const boundary = notificationBoundary(`host ${statusCode}`);
+      const boundary = notificationBoundary(`host ${failure.kind}`);
       const seam: FetchCloneCacheSeam = {
-        materializeOrRefreshPluginMirror: () =>
-          Promise.reject(
-            Object.assign(new Error(`HTTP Error: ${statusCode} ${statusText}`), {
-              code: "HttpError",
-              data: { statusCode },
-            }),
-          ),
+        materializeOrRefreshPluginMirror: () => Promise.reject(cloneFailure(failure)),
         materializePluginClone: () => assert.fail("an unpinned source never clones a pin"),
         resolvePluginPin: () => assert.fail("an unpinned source never resolves a pin"),
       };

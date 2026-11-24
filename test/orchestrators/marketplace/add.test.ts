@@ -92,6 +92,7 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import type { GitFailure } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
@@ -404,11 +405,37 @@ function makeCtx(
   return { ctx, run: runWithNothingLoaded(), notifications };
 }
 
-function httpError(statusCode: number): Error {
-  return Object.assign(new Error(`HTTP Error: ${statusCode}`), {
-    code: "HttpError",
-    data: { statusCode },
-  });
+/**
+ * SG-PRC-05: the system-git failure of a clone the host answered with
+ * `statusCode`, in the kind `platform/git-failure-kind.ts` reads from git's
+ * stderr: a 401 is `https-auth` with no credential, a 403 `https-auth` with a
+ * refused one, a 404 or 410 a missing repository, and any other status a
+ * network failure.
+ */
+function httpError(statusCode: number): GitCommandError {
+  return new GitCommandError(hostAnswer(statusCode), { operation: "clone", exitCode: 128 });
+}
+
+function hostAnswer(statusCode: number): GitFailure {
+  switch (statusCode) {
+    case 401:
+      return { kind: "https-auth", detail: "no-credential" };
+    case 403:
+      return { kind: "https-auth", detail: "rejected" };
+    case 404:
+    case 410:
+      return { kind: "repository-not-found", httpStatus: statusCode };
+    default:
+      return { kind: "network", httpStatus: statusCode };
+  }
+}
+
+/** D-SG-14: a clone whose Device Flow sign-in failed, after git found no credential. */
+function signInFailed(): GitCommandError {
+  return new GitCommandError(
+    { kind: "https-auth", detail: "no-credential" },
+    { operation: "clone", exitCode: 128 },
+  );
 }
 
 /**
@@ -4862,7 +4889,7 @@ test("D-PL6-19: an add whose clone fails puts the replaced clone back and keeps 
       status: "failed",
       reason: "source missing",
       error: cloneFailure,
-      cause: "HTTP Error: 404",
+      cause: "git clone failed: repository-not-found, exit code 128",
     });
     assert.deepStrictEqual(await loadState(locations.extensionRoot), state);
     assert.strictEqual(cloneAtFetch, "old", "the replaced clone stays in place while fetching");
@@ -5216,12 +5243,7 @@ test("D-76-08: a url clone throwing an HttpError with statusCode 401 renders (fa
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, run, notifications } = makeCtx();
-    // Duck-typed isomorphic-git HttpError shape: code === "HttpError",
-    // data.statusCode carries the HTTP status.
-    const httpErr = Object.assign(new Error("HTTP 401 from clone"), {
-      code: "HttpError",
-      data: { statusCode: 401 },
-    });
+    const httpErr = httpError(401);
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       cloneThrows: httpErr,
@@ -5538,7 +5560,7 @@ for (const statusCode of [408, 429, 500, 503]) {
             "Some operations have failed.\n\n" +
             "⊘ https://gitlab.example.com/team/flaky-mp [project] (failed)\n" +
             "  ⊘ https://gitlab.example.com/team/flaky-mp (failed) {network error}\n" +
-            `    cause: ${statusCode} on https://gitlab.example.com/team/flaky-mp -> HTTP Error: ${statusCode}`,
+            `    cause: ${statusCode} on https://gitlab.example.com/team/flaky-mp -> git clone failed: network, exit code 128`,
           severity: "error",
         },
       ]);
@@ -5566,7 +5588,7 @@ test("ADD-10: a GitHub clone the host answers with HTTP 502 names the github.com
           "Some operations have failed.\n\n" +
           "⊘ acme/mp [project] (failed)\n" +
           "  ⊘ acme/mp (failed) {network error}\n" +
-          "    cause: 502 on https://github.com/acme/mp.git -> HTTP Error: 502",
+          "    cause: 502 on https://github.com/acme/mp.git -> git clone failed: network, exit code 128",
         severity: "error",
       },
     ]);
@@ -5640,7 +5662,7 @@ test("ADD-10: a failed git add's JSON child row takes the source as typed as its
                   cause: {
                     causeChain: [
                       "503 on https://gitlab.example.com/team/flaky-mp",
-                      "HTTP Error: 503",
+                      "git clone failed: network, exit code 128",
                     ],
                     truncated: false,
                   },
@@ -5686,7 +5708,7 @@ test("ADD-10 orchestrated mode -- a host HTTP 500 returns the network-error outc
       status: "failed",
       reason: "network error",
       error: cloneThrows,
-      cause: "HTTP Error: 500",
+      cause: "git clone failed: network, exit code 128",
     });
     assert.deepStrictEqual(notifications, []);
   });
@@ -5718,21 +5740,19 @@ test("D-76-09 orchestrated mode -- a gone repository returns the source-missing 
       status: "failed",
       reason: "source missing",
       error: cloneThrows,
-      cause: "HTTP Error: 410",
+      cause: "git clone failed: repository-not-found, exit code 128",
     });
     assert.deepStrictEqual(notifications, []);
   });
 });
 
-test("GAUTH-02: a declined/failed Device Flow (UserCanceledError) renders (failed) {authentication required} via notify(), not a raw throw or {unparseable}", async () => {
+test("GAUTH-02: a declined/failed Device Flow renders (failed) {authentication required} via notify(), not a raw throw or {unparseable}", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, run, notifications } = makeCtx();
-    // A denied/expired Device Flow (or a poll network error) makes
-    // platform/git.ts's onAuth return `{ cancel: true }`, which
-    // isomorphic-git throws as `UserCanceledError` -- NOT an HttpError
-    // 401/403 and NOT a network errno.
-    const authError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
+    // D-SG-14: a denied/expired Device Flow (or a poll network error) leaves
+    // the clone's own https-auth failure, NOT a network failure.
+    const authError = signInFailed();
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       cloneThrows: authError,
@@ -5762,11 +5782,11 @@ test("GAUTH-02: a declined/failed Device Flow (UserCanceledError) renders (faile
   });
 });
 
-test("GAUTH-02 orchestrated mode -- UserCanceledError returns { status: 'failed', reason: 'authentication required' }, not the mislabeled 'unparseable'", async () => {
+test("GAUTH-02 orchestrated mode -- a failed Device Flow returns { status: 'failed', reason: 'authentication required' }, not the mislabeled 'unparseable'", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, run, notifications } = makeCtx();
-    const authError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
+    const authError = signInFailed();
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       cloneThrows: authError,
@@ -5966,7 +5986,7 @@ test("GHB-01: a GitHub add failing under the override names the fetched URL on a
           "Some operations have failed.\n\n" +
           "⊘ anthropics/claude-plugins-official [project] (failed)\n" +
           "  ⊘ anthropics/claude-plugins-official (failed) {source missing}\n" +
-          "    cause: HTTP Error: 404 -> fetched https://mirror.example/git/anthropics/claude-plugins-official.git",
+          "    cause: git clone failed: repository-not-found, exit code 128 -> fetched https://mirror.example/git/anthropics/claude-plugins-official.git",
         severity: "error",
       },
     ]);
@@ -6008,7 +6028,7 @@ test("GHB-01: an orchestrated GitHub add failing under the override still classi
       status: "failed",
       reason: "source missing",
       error: cloneThrows,
-      cause: "HTTP Error: 404",
+      cause: "git clone failed: repository-not-found, exit code 128",
     });
   });
 });
@@ -6022,10 +6042,7 @@ test("D-79-03: a url add that 401s on a host with no Device Flow renders the bar
     // cause line renders ONLY on the update path's cause-carrying child row --
     // the add row stays the bare closed-set token.
     const { credOps: credentialOps } = createCredentialOps();
-    const httpErr = Object.assign(new Error("HTTP 401 from clone"), {
-      code: "HttpError",
-      data: { statusCode: 401 },
-    });
+    const httpErr = httpError(401);
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       cloneThrows: httpErr,
@@ -6202,11 +6219,7 @@ test("MURL-09: a 404 clone failure makes exactly one attempt and keeps its origi
       }),
       (err: unknown) => err === cloneThrows,
     );
-    assert.equal(cloneThrows.message, "HTTP Error: 404");
-    assert.equal((cloneThrows as { code?: string }).code, "HttpError");
-    assert.deepStrictEqual((cloneThrows as { data?: { statusCode: number } }).data, {
-      statusCode: 404,
-    });
+    assert.deepStrictEqual(cloneThrows.failure, { kind: "repository-not-found", httpStatus: 404 });
     assert.equal(state.cloneCalls.length, 1);
     assert.equal(state.cloneCalls[0]?.url, "https://gitlab.example.com/team/missing-mp");
   });
@@ -6235,11 +6248,7 @@ test("MURL-09: a 401 clone failure makes exactly one attempt and keeps its origi
       }),
       (err: unknown) => err === cloneThrows,
     );
-    assert.equal(cloneThrows.message, "HTTP Error: 401");
-    assert.equal((cloneThrows as { code?: string }).code, "HttpError");
-    assert.deepStrictEqual((cloneThrows as { data?: { statusCode: number } }).data, {
-      statusCode: 401,
-    });
+    assert.deepStrictEqual(cloneThrows.failure, { kind: "https-auth", detail: "no-credential" });
     assert.equal(state.cloneCalls.length, 1);
     assert.equal(state.cloneCalls[0]?.url, "https://gitlab.example.com/team/private-mp");
   });

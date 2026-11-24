@@ -31,7 +31,7 @@ import * as defaultGit from "../../../extensions/pi-claude-marketplace/platform/
 import { atomicWriteJson } from "../../../extensions/pi-claude-marketplace/shared/atomic-json.ts";
 import { McpConfigFileError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
-  CrossOriginChallengeError,
+  GitCommandError,
   InvalidMarketplaceManifestError,
   MarketplaceInBaseLayerOnlyError,
   MarketplaceInLocalLayerOnlyError,
@@ -411,11 +411,11 @@ test("WorkflowsUnstageFailureError freezes a defensive copy of its typed failure
   assert.strictEqual(Object.isFrozen(error.failedWorkflows), true);
 });
 
-function unauthorized(): Error {
-  return Object.assign(new Error("HTTP 401 from fetch"), {
-    code: "HttpError",
-    data: { statusCode: 401 },
-  });
+function noCredential(): GitCommandError {
+  return new GitCommandError(
+    { kind: "https-auth", detail: "no-credential" },
+    { operation: "ls-remote", exitCode: 128 },
+  );
 }
 
 function storedCredentialAuth(): GitAuthBundle {
@@ -435,26 +435,24 @@ function deviceFlowAuth(): GitAuthBundle {
 
 for (const { title, makeError, makeAuth, lacks } of [
   {
-    title: "reports an auth failure on a stored-credential host",
-    makeError: (): unknown => unauthorized(),
+    title: "GAUTH-04: reports a no-credential failure on a stored-credential host",
+    makeError: (): unknown => noCredential(),
     makeAuth: storedCredentialAuth,
     lacks: true,
   },
   {
-    title: "does not report a stored credential the host rejected",
+    title: "GAUTH-04: does not report a stored credential the host rejected",
     makeError: (): unknown => new StoredCredentialRejectedError("gitlab.example.com"),
     makeAuth: storedCredentialAuth,
     lacks: false,
   },
   {
-    title: "does not report a cross-origin challenge",
-    makeError: (): unknown => new CrossOriginChallengeError("https://sso.example.com"),
-    makeAuth: storedCredentialAuth,
-    lacks: false,
-  },
-  {
     title: "does not report a network failure",
-    makeError: (): unknown => Object.assign(new Error("getaddrinfo"), { code: "ENOTFOUND" }),
+    makeError: (): unknown =>
+      new GitCommandError(
+        { kind: "network", curlCode: 6 },
+        { operation: "ls-remote", exitCode: 128 },
+      ),
     makeAuth: storedCredentialAuth,
     lacks: false,
   },
@@ -465,8 +463,8 @@ for (const { title, makeError, makeAuth, lacks } of [
     lacks: false,
   },
   {
-    title: "does not report an auth failure on a Device Flow host",
-    makeError: (): unknown => unauthorized(),
+    title: "does not report a no-credential failure on a Device Flow host",
+    makeError: (): unknown => noCredential(),
     makeAuth: deviceFlowAuth,
     lacks: false,
   },

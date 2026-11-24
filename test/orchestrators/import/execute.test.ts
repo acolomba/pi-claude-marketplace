@@ -60,6 +60,7 @@ import {
   ConcurrentInstallError,
   DependencyCascadeError,
   FetchedUrlCause,
+  GitCommandError,
   InstallMarketplaceAddError,
   InvalidGitHubBaseUrlError,
   ManualRecoveryError,
@@ -2453,13 +2454,14 @@ test("names the reason install gives an unclassified install failure", async (t)
   // arrange
   const { cwd } = await createHermeticScopes(t, "install-git-host");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-  const unreachable = Object.assign(new Error("getaddrinfo ENOTFOUND git.example"), {
-    code: "ENOTFOUND",
-  });
-  const refused = Object.assign(new Error("HTTP Error: 401 Unauthorized"), {
-    code: "HttpError",
-    data: { statusCode: 401 },
-  });
+  const unreachable = new GitCommandError(
+    { kind: "network", curlCode: 6 },
+    { operation: "clone", exitCode: 128 },
+  );
+  const refused = new GitCommandError(
+    { kind: "https-auth", detail: "rejected" },
+    { operation: "clone", exitCode: 128 },
+  );
   const addFailure = new InstallMarketplaceAddError("source missing", "mp is gone");
 
   // act

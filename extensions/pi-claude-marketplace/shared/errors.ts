@@ -579,27 +579,6 @@ export class MarketplaceBaselineUnreadableError extends Error {
 }
 
 /**
- * Q-02 / GAUTH-06: a hop reached after a redirect left the original request's
- * origin answered 401 or 203. The HTTP client in `platform/git.ts` throws this
- * before isomorphic-git's auth loop runs, so no credential is looked up,
- * evicted or minted for a server the bound credential never reaches. git would
- * ask the credential helper for the target's own credential, but isomorphic-git
- * calls `onAuth` only with the original URL, so this stays the recorded DD-3
- * capability gap. Classified as `{authentication required}`.
- *
- * AUTH-09: `origin` is a `URL.origin` value, which never carries userinfo, a
- * path or a query.
- */
-export class CrossOriginChallengeError extends Error {
-  constructor(origin: string) {
-    super(
-      `redirected request to ${origin} asked for credentials; a credential is not sent after a redirect to another origin`,
-    );
-    this.name = "CrossOriginChallengeError";
-  }
-}
-
-/**
  * GAUTH-04: the host answered a stored credential with a second challenge, so
  * the credential was found and sent, and the host refused it. The keychain
  * keeps it, because nothing can mint a replacement (D-1-01). Classified as
@@ -618,12 +597,11 @@ export class StoredCredentialRejectedError extends Error {
 
 /**
  * D-PL5-07 / D-PL5-10: the host answered a hosted catalog download with a
- * status that is not 2xx. `code` and `data.statusCode` have the shape of an
- * isomorphic-git `HttpError`, so the git host ladder classifies a hosted
- * status as it classifies a clone's: 401/403, 404/410, or any other status.
+ * status that is not 2xx. `shared/git-failure-classifiers.ts` reads
+ * `data.statusCode` as it reads a git host's status: 401/403, 404/410, or any
+ * other status.
  */
-export class HostedManifestHttpError extends Error implements HttpStatusError {
-  readonly code = "HttpError";
+export class HostedManifestHttpError extends Error {
   readonly data: { readonly statusCode: number };
   constructor(url: string, statusCode: number) {
     super(
@@ -632,16 +610,6 @@ export class HostedManifestHttpError extends Error implements HttpStatusError {
     this.name = "HostedManifestHttpError";
     this.data = { statusCode };
   }
-}
-
-/**
- * The shape of isomorphic-git's `HttpError`, which `shared/git-failure-classifiers.ts`
- * reads without importing the library (D-13). `HostedManifestHttpError`
- * implements it, so a hosted HTTP status takes the same ladder.
- */
-export interface HttpStatusError extends Error {
-  readonly code: "HttpError";
-  readonly data?: { readonly statusCode?: unknown };
 }
 
 /**

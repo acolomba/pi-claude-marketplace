@@ -6,7 +6,10 @@ import {
   type DependencyTagListingSeam,
   type DependencyTagProbeOptions,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts";
-import { InvalidGitHubBaseUrlError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  GitCommandError,
+  InvalidGitHubBaseUrlError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
@@ -368,9 +371,10 @@ test("rethrows an invalid GitHub base URL instead of returning the failure arm",
 test("classifies an unreachable host on the failure arm", async () => {
   // arrange
   const queried: string[] = [];
-  const transportFailure = Object.assign(new Error("getaddrinfo ENOTFOUND example.com"), {
-    code: "ENOTFOUND",
-  });
+  const transportFailure = new GitCommandError(
+    { kind: "network", curlCode: 6 },
+    { operation: "ls-remote", exitCode: 128 },
+  );
   const seam = failingWith(transportFailure, queried);
 
   // act
@@ -390,17 +394,17 @@ test("classifies an unreachable host on the failure arm", async () => {
   });
 });
 
-for (const { statusCode, classification } of [
-  { statusCode: 404, classification: "source missing" },
-  { statusCode: 503, classification: "network error" },
+for (const { statusCode, kind, classification } of [
+  { statusCode: 404, kind: "repository-not-found", classification: "source missing" },
+  { statusCode: 503, kind: "network", classification: "network error" },
 ] as const) {
   test(`classifies a host HTTP ${statusCode} on the listing as ${classification} (GLK-01)`, async () => {
     // arrange
     const queried: string[] = [];
-    const hostFailure = Object.assign(new Error(`HTTP Error: ${statusCode}`), {
-      code: "HttpError",
-      data: { statusCode },
-    });
+    const hostFailure = new GitCommandError(
+      { kind, httpStatus: statusCode },
+      { operation: "ls-remote", exitCode: 128 },
+    );
     const seam = failingWith(hostFailure, queried);
 
     // act
