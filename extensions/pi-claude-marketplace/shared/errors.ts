@@ -1303,7 +1303,8 @@ export class PinnedCommitMissingError extends Error {
  * failure has a kind and the set is total.
  *
  * `git-missing` records how the lookup failed (D-SG-04): no git on PATH, the
- * macOS xcrun shim in its place, or only a batch launcher.
+ * macOS xcrun shim in its place, or only a batch launcher. `https-auth`
+ * records which authentication failure git reported (D-SG-14, GAUTH-04).
  */
 export type GitFailure =
   | {
@@ -1314,10 +1315,18 @@ export type GitFailure =
   | { readonly kind: "network"; readonly httpStatus?: number; readonly curlCode?: number }
   | { readonly kind: "repository-not-found"; readonly httpStatus?: number }
   | {
+      readonly kind: "https-auth";
+      /**
+       * Whether git found no credential to send (`no-credential`, which the
+       * D-SG-14 Device Flow retry reads) or the host refused the one a helper
+       * gave (`rejected`, which GAUTH-04 reads).
+       */
+      readonly detail: "no-credential" | "rejected";
+    }
+  | {
       readonly kind:
         | "git-too-old"
         | "aborted"
-        | "https-auth"
         | "ssh-auth"
         | "ssh-host-key-unknown"
         | "ssh-host-key-changed"

@@ -14,7 +14,10 @@
 // - `fatal: remote error: upload-pack: not our ref` is a missing commit, so
 //   the commit rows come before the remote-error row.
 // - A proxy refusal also prints a 403, so its row comes before the HTTPS
-//   authentication row.
+//   authentication rows.
+// - D-SG-14, GAUTH-04: git prints `Authentication failed for` after a helper
+//   answered and the host refused it, even when a prompt line came first, so
+//   the `rejected` row comes before the `no-credential` row.
 //
 // WR-01: a server's `remote:` lines reach stderr too, so a host could print
 // a phrase that picks the kind. Every row reads git's own lines, with the
@@ -86,8 +89,12 @@ const ROWS: ReadonlyArray<readonly [Trigger, Outcome]> = [
   [{ wholeStderr: /^remote: access denied by the git proxy/m }, { kind: "proxy-refused" }],
   [/^\S+: Permission denied \(publickey/m, { kind: "ssh-auth" }],
   [
-    /^fatal: could not read (?:Username|Password) for '|^fatal: .*terminal prompts disabled|^fatal: Authentication failed for '|^(?:fatal|error): .*The requested URL returned error: 40[13]\b/m,
-    { kind: "https-auth" },
+    /^fatal: Authentication failed for '|^(?:fatal|error): .*The requested URL returned error: 40[13]\b/m,
+    { kind: "https-auth", detail: "rejected" },
+  ],
+  [
+    /^fatal: could not read (?:Username|Password) for '|^fatal: .*terminal prompts disabled/m,
+    { kind: "https-auth", detail: "no-credential" },
   ],
   // git prints this line for an HTTP 404, without the status.
   [
@@ -107,7 +114,11 @@ const ROWS: ReadonlyArray<readonly [Trigger, Outcome]> = [
     { kind: "remote-ref-missing" },
   ],
   [/^fatal: .*not our ref |^fatal: reference is not a tree: /m, { kind: "commit-missing" }],
+  // SG-TRN-02: a protocol v0 server refuses a SHA it did not advertise.
+  [/^error: Server does not allow request for unadvertised object /m, { kind: "commit-missing" }],
   [/^error: pathspec '.*' did not match any file/m, { kind: "local-ref-missing" }],
+  // SG-TRN-01: `checkout <unknown name> --`, the form the operand rule builds.
+  [/^fatal: invalid reference: /m, { kind: "local-ref-missing" }],
   [/^fatal: not a git repository/m, { kind: "not-a-repository" }],
   [NETWORK_TEXT, networkFailure],
   [/^fatal: unable to access '/m, networkFailure],

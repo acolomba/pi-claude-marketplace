@@ -5171,7 +5171,7 @@ test("D-SG-07: a git auth failure keeps the bare failed row with {authentication
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       cloneThrows: new GitCommandError(
-        { kind: "https-auth" },
+        { kind: "https-auth", detail: "rejected" },
         { operation: "clone", exitCode: 128, stderr: "fatal: Authentication failed" },
       ),
     });
