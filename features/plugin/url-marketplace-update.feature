@@ -51,3 +51,35 @@ Feature: Plugin url marketplace update
       | marketplace name | marketplace scope | id          | name  | status | reasons   | scope   | leaks | rollback partial | cause chain                                                                                                                                                                                | cause truncated |
       | tools            | project           | tools@tools | tools | failed | lock held | project |       |                  | Another pi-claude-marketplace operation is in progress for project scope ({project dir}/.pi/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |
     Then the git host receives no request
+
+  Scenario: Updating a plugin keeps its marketplace when the marketplace's git host is unreachable and CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE is set
+    Given pi runs with the environment variable "CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE" set to "1"
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install demo@tools --scope project"
+    Given the git host drops the connection for the marketplace "tools"
+    When the user runs "/claude:plugin update demo@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id         | name | status  | reasons    | scope   |
+      | tools            | project           | demo@tools | demo | skipped | up-to-date | project |
+    Then the git host receives these requests:
+      | method | path                                              | status  |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | dropped |
+    When the user runs "/claude:plugin update demo@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id         | name | status  | reasons    | scope   |
+      | tools            | project           | demo@tools | demo | skipped | up-to-date | project |
+    Then the git host receives these requests:
+      | method | path                                              | status  |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | dropped |

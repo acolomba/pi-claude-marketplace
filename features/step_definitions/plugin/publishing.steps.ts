@@ -9,6 +9,8 @@
  * the repositories hold them. A step that changes a plugin the marketplace
  * already offers, such as giving it a component Pi does not support, an
  * agent, or an executable file, follows the plugins the marketplace offers.
+ * The one `Then` reads the file outside a marketplace that a published
+ * plugin's manifest links to, which only that publishing step writes.
  */
 
 import assert from "node:assert/strict";
@@ -25,7 +27,7 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 
-import { type DataTable, Given } from "@cucumber/cucumber";
+import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
 import {
   gitPluginEntry,
@@ -408,5 +410,15 @@ Given(
     const target = await writePluginText(published, plugin, file, text);
     await chmod(target, 0o755);
     assert.strictEqual((await stat(target)).mode & 0o777, 0o755);
+  },
+);
+
+// D-PL2-17, D-PL2-24: a refused manifest is read through its link only to
+// decide the refusal, so the file outside keeps the text the publication wrote.
+Then(
+  "the file outside the marketplace that the published plugin {string} of the marketplace {string} links its manifest to holds this text:",
+  async function (this: ScenarioWorld, plugin: string, name: string, text: string) {
+    const target = path.join(this.tokens.home, LINKED_MANIFESTS_DIRECTORY, name, `${plugin}.json`);
+    assert.strictEqual(await readFile(target, "utf8"), text);
   },
 );
