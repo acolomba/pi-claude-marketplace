@@ -56,6 +56,7 @@ import { appendMentionedFiles, NODE_MENTION_FILE_READER } from "./mention-attach
 import type { ShellRun } from "../domain/context-injection.ts";
 import type { ExtensionAPI } from "../platform/pi-api.ts";
 import type { PromptShellHost, PromptShellRunner } from "../platform/prompt-shell.ts";
+import type { ReloadCommand } from "../shared/session-host.ts";
 import type { MentionFileReader } from "./mention-attachments.ts";
 
 /** One typed invocation of a slash command, such as `/demo:greet Ada`. */
@@ -74,6 +75,11 @@ export interface CommandInvocationRequest {
   readonly sessionId: string;
   /** Pi's session thinking level, which `${CLAUDE_EFFORT}` follows. */
   readonly thinkingLevel: string | undefined;
+  /**
+   * RELOADCMD-D1: the command the refusals name to reload, from
+   * `reloadCommandFor`; undefined in a one-shot run.
+   */
+  readonly reloadCommand: ReloadCommand | undefined;
 }
 
 /** What to do with the typed text. */
@@ -259,6 +265,27 @@ function refusalFor(error: unknown): CommandInvocationOutcome {
 type PreparedCommand =
   { readonly kind: "ready"; readonly file: CommandFile } | CommandInvocationOutcome;
 
+/**
+ * The refusal for a project command in a project Pi does not trust. It names
+ * the host's reload command, and none in a one-shot run (RELOADCMD-D1).
+ */
+function untrustedCommandMessage(request: CommandInvocationRequest): string {
+  const reload = request.reloadCommand === undefined ? "" : `, then run ${request.reloadCommand}`;
+  return `The command ${request.typed} belongs to the project ${request.cwd}, which Pi does not trust. Trust the project folder${reload} to use it.`;
+}
+
+/**
+ * The refusal for a staged command file that cannot be read. It names the
+ * host's reload command, and none in a one-shot run (RELOADCMD-D1).
+ */
+function unreadableCommandMessage(request: CommandInvocationRequest, error: unknown): string {
+  const reload =
+    request.reloadCommand === undefined
+      ? ""
+      : ` Run ${request.reloadCommand} to load the installed commands again.`;
+  return `Cannot read the command ${request.typed}: ${errorMessage(error)}.${reload}`;
+}
+
 /** Finds the staged command, refuses it in an untrusted project, and reads its file. */
 async function prepareCommand(
   request: CommandInvocationRequest,
@@ -271,24 +298,18 @@ async function prepareCommand(
 
   // D-LOC-01: Claude Code loads no project-scope plugin before the workspace
   // is trusted. A project command Pi still lists was discovered while the
-  // project was trusted, so it refuses until the next `/reload`.
+  // project was trusted, so it refuses until the next reload.
   if (command.scope === "project" && !request.projectTrusted) {
-    return refusal(
-      `The command ${request.typed} belongs to the project ${request.cwd}, which Pi does not trust. Trust the project folder, then run /reload to use it.`,
-    );
+    return refusal(untrustedCommandMessage(request));
   }
 
   // A file that changed after Pi loaded it, such as one an uninstall removed
-  // before `/reload`, refuses the invocation: Pi's own expansion would send
-  // the body it cached, with its `!` commands not run.
+  // before the next reload, refuses the invocation: Pi's own expansion would
+  // send the body it cached, with its `!` commands not run.
   return dependencies
     .readFile(command.file)
     .then((text): PreparedCommand => ({ kind: "ready", file: parseFrontmatter(text) }))
-    .catch((error: unknown) =>
-      refusal(
-        `Cannot read the command ${request.typed}: ${errorMessage(error)}. Run /reload to load the installed commands again.`,
-      ),
-    );
+    .catch((error: unknown) => refusal(unreadableCommandMessage(request, error)));
 }
 
 /**

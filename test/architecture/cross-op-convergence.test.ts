@@ -104,6 +104,7 @@ function makeCtx(): {
   const notifications: NotifyRecord[] = [];
   const ctx = {
     mode: "tui",
+    hasUI: true,
     ui: {
       notify: (m: string, s?: string): void => {
         notifications.push(s === undefined ? { message: m } : { message: m, severity: s });

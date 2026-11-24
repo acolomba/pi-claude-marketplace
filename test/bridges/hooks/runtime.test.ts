@@ -15,7 +15,6 @@ import type {
   CacheEntry,
   PendingFollowUpContext,
   PendingPromptContext,
-  PendingSessionStartContext,
   RoutingEntry,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/routing-state.ts";
 import type {
@@ -167,7 +166,8 @@ test("keeps every state family isolated between runtime instances", () => {
     pluginId: "first-plugin",
     marketplace: "catalog",
     scope: "project",
-  } satisfies PendingSessionStartContext;
+    event: "UserPromptSubmit",
+  } satisfies PendingPromptContext;
   const calls: string[] = [];
   const loc = locationsFor("project", "/workspace");
   const childEntry = runtimeChildEntry("dispatch-first", 1, calls, loc);
@@ -176,8 +176,7 @@ test("keeps every state family isolated between runtime instances", () => {
   firstRuntime.advanceGeneration();
   firstRuntime.setParsedConfig("first-key", firstCacheEntry);
   firstRuntime.setRoutingBucket("PreToolUse", [firstRoutingEntry]);
-  firstRuntime.appendPendingSessionStartContext(firstPendingEntry);
-  firstRuntime.appendPendingPromptContext({ ...firstPendingEntry, event: "UserPromptSubmit" });
+  firstRuntime.appendPendingPromptContext(firstPendingEntry);
   firstRuntime.recordLastAssistant(assistantMessage("first message"));
   firstRuntime.recordStopReentry();
   firstRuntime.holdStopReason("first reason");
@@ -186,7 +185,6 @@ test("keeps every state family isolated between runtime instances", () => {
     generation: secondRuntime.currentGeneration(),
     parsed: Array.from(secondRuntime.parsedConfigEntries()),
     routes: Array.from(secondRuntime.routingTableEntries()),
-    pending: secondRuntime.pendingSessionStartContextEntries(),
     promptPending: secondRuntime.pendingPromptContextEntries(),
     assistant: secondRuntime.takeLastAssistant(),
     stopHookActive: secondRuntime.isStopHookActive(),
@@ -200,7 +198,6 @@ test("keeps every state family isolated between runtime instances", () => {
     generation: 0,
     parsed: [],
     routes: [],
-    pending: [],
     promptPending: [],
     assistant: undefined,
     stopHookActive: false,
@@ -245,40 +242,7 @@ test("preserves replacement order and returns collection snapshots", () => {
   assert.deepStrictEqual(runtime.getRoutingBucket("SessionEnd"), []);
 });
 
-test("appends and drains pending context once in declaration order", () => {
-  // arrange
-  const runtime = createHooksRuntime();
-  const firstEntry = {
-    context: "first context",
-    pluginId: "first-plugin",
-    marketplace: "catalog",
-    scope: "user",
-  } satisfies PendingSessionStartContext;
-  const secondEntry = {
-    context: "second context",
-    pluginId: "second-plugin",
-    marketplace: "catalog",
-    scope: "project",
-  } satisfies PendingSessionStartContext;
-
-  // act
-  runtime.appendPendingSessionStartContext({ ...firstEntry, context: "" });
-  runtime.appendPendingSessionStartContext(firstEntry);
-  runtime.appendPendingSessionStartContext(secondEntry);
-  const readSnapshot = runtime.pendingSessionStartContextEntries();
-  const drainedEntries = runtime.drainPendingSessionStartContext();
-  const secondDrain = runtime.drainPendingSessionStartContext();
-  runtime.appendPendingSessionStartContext(firstEntry);
-  runtime.preparePendingContextForRegistration();
-
-  // assert
-  assert.deepStrictEqual(readSnapshot, [firstEntry, secondEntry]);
-  assert.deepStrictEqual(drainedEntries, [firstEntry, secondEntry]);
-  assert.deepStrictEqual(secondDrain, []);
-  assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
-});
-
-test("appends and drains pending prompt context once in arrival order, apart from the SessionStart buffer (D-CF5-13)", () => {
+test("appends and drains pending prompt context once in arrival order (D-CF5-13)", () => {
   // arrange
   const runtime = createHooksRuntime();
   const firstEntry = {
@@ -301,13 +265,11 @@ test("appends and drains pending prompt context once in arrival order, apart fro
   runtime.appendPendingPromptContext(firstEntry);
   runtime.appendPendingPromptContext(secondEntry);
   const readSnapshot = runtime.pendingPromptContextEntries();
-  const sessionStartSnapshot = runtime.pendingSessionStartContextEntries();
   const drainedEntries = runtime.drainPendingPromptContext();
   const secondDrain = runtime.drainPendingPromptContext();
 
   // assert
   assert.deepStrictEqual(readSnapshot, [firstEntry, secondEntry]);
-  assert.deepStrictEqual(sessionStartSnapshot, []);
   assert.deepStrictEqual(drainedEntries, [firstEntry, secondEntry]);
   assert.deepStrictEqual(secondDrain, []);
 });
@@ -322,7 +284,6 @@ test("empties every pending context buffer at registration (D-CF5-13)", () => {
     marketplace: "catalog",
     scope: "project",
   } satisfies PendingPromptContext;
-  runtime.appendPendingSessionStartContext(entry);
   runtime.appendPendingPromptContext(entry);
   runtime.queueFollowUpContext({ ...entry, prompt: "stale follow-up" });
 
@@ -330,7 +291,6 @@ test("empties every pending context buffer at registration (D-CF5-13)", () => {
   runtime.preparePendingContextForRegistration();
 
   // assert
-  assert.deepStrictEqual(runtime.pendingSessionStartContextEntries(), []);
   assert.deepStrictEqual(runtime.pendingPromptContextEntries(), []);
   assert.deepStrictEqual(runtime.drainPendingPromptContext(), []);
   assert.deepStrictEqual(runtime.drainFollowUpContext(), []);

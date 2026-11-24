@@ -428,14 +428,12 @@ Feature: Marketplace update
       | plugin version                 | 1.0.0       |
       | plugin components resolved     | true        |
       | plugin components skills       | demo-skill  |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
-      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id         | name | status      | reasons | scope   | from  | to     |
-      | tools            | project           | demo@tools | demo | will update |         | project | 1.0.0 | 1.10.0 |
       | tools            | project           | demo@tools | demo | will update |         | project | 1.0.0 | 1.10.0 |
     Then the session offers these skills:
       | command           | description            |
@@ -456,7 +454,7 @@ Feature: Marketplace update
       | source kind |
       | github      |
 
-  Scenario Outline: Autoupdate exposes the offered version in a new session
+  Scenario Outline: Autoupdate exposes the offered version after a reload
     Given the marketplace "tools" is published as a <source kind> source
     Given the marketplace "tools" offers these plugins:
       | name | version |
@@ -504,7 +502,7 @@ Feature: Marketplace update
       | plugin version                 | 1.10.0      |
       | plugin components resolved     | true        |
       | plugin components skills       | demo-skill  |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description             |
       | /skill:demo-skill | A skill of demo 1.10.0. |
@@ -557,7 +555,7 @@ Feature: Marketplace update
     Then the result lists these plugins:
       | marketplace name | marketplace scope | marketplace details autoupdate | id         | name | status    | reasons | scope   | version |
       | tools            | project           | true                           | demo@tools | demo | installed |         | project | 1.10.0  |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description             |
       | /skill:demo-skill | A skill of demo 1.10.0. |
@@ -605,7 +603,7 @@ Feature: Marketplace update
     Then the result lists these plugins:
       | marketplace name | marketplace scope | marketplace details autoupdate | id         | name | status    | reasons | scope   | version |
       | tools            | project           | true                           | demo@tools | demo | installed |         | project | 1.0.0   |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -659,7 +657,7 @@ Feature: Marketplace update
       | marketplace name | marketplace scope | marketplace details autoupdate | id             | name     | status    | reasons | scope   | version |
       | tools            | project           | true                           | existing@tools | existing | installed |         | project | 1.0.0   |
       | tools            | project           | true                           | new@tools      | new      | available |         |         | 1.0.0   |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command               | description                |
       | /skill:existing-skill | A skill of existing 1.0.0. |
@@ -713,14 +711,12 @@ Feature: Marketplace update
       | marketplace name | marketplace scope | marketplace details autoupdate | id          | name  | status    | reasons         | scope   | version |
       | tools            | project           | true                           | demo@tools  | demo  | installed | not in manifest | project | 1.0.0   |
       | tools            | project           | true                           | other@tools | other | available |                 |         | 1.0.0   |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
       | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
-      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id         | name | status | reasons         | scope   | leaks | rollback partial | cause chain                                    | cause truncated |
-      | tools            | project           | demo@tools | demo | failed | not in manifest | project |       |                  | Plugin "demo" not found in marketplace "tools" | false           |
       | tools            | project           | demo@tools | demo | failed | not in manifest | project |       |                  | Plugin "demo" not found in marketplace "tools" | false           |
     Then the session offers these skills:
       | command           | description            |
@@ -780,14 +776,12 @@ Feature: Marketplace update
       | marketplace name | marketplace scope | marketplace details autoupdate | id          | name  | status     | reasons | scope   | version |
       | tools            | <scope>           | true                           | alpha@tools | alpha | installed  |         | <scope> | 1.10.0  |
       | tools            | <scope>           | true                           | zeta@tools  | zeta  | upgradable |         | <scope> | 1.0.0   |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
-      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id         | name | status      | reasons                  | scope   | from  | to     |
-      | tools            | <scope>           | zeta@tools | zeta | will update | components now supported | <scope> | 1.0.0 | 1.10.0 |
       | tools            | <scope>           | zeta@tools | zeta | will update | components now supported | <scope> | 1.0.0 | 1.10.0 |
     Then the session offers these skills:
       | command            | description              |
@@ -828,14 +822,12 @@ Feature: Marketplace update
     Then the "claude-plugins.json" file of the <scope> scope declares these plugins:
       | id         |
       | demo@tools |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
       | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
-      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id         | name | status | reasons           | scope   | leaks | rollback partial | cause chain                                                                     | cause truncated |
-      | tools            | <scope>           | demo@tools | demo | failed | <reason>          | <scope> |       |                  | cannot read the dependencies of demo@tools: its marketplace manifest is invalid | false           |
       | tools            | <scope>           | demo@tools | demo | failed | <reason>          | <scope> |       |                  | cannot read the dependencies of demo@tools: its marketplace manifest is invalid | false           |
     Then the session offers these skills:
       | command           | description            |

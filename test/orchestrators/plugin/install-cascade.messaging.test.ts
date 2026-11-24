@@ -68,6 +68,7 @@ function emit(rows: readonly CascadeMsg[], softDeps: SoftDepStatus): Emission {
   const captured: Emission[] = [];
   const ctx: NotificationContext = {
     mode: "tui",
+    hasUI: true,
     ui: {
       notify: (message: string, severity?: "info" | "warning" | "error"): void => {
         captured.push({ message, severity: severity ?? "info" });

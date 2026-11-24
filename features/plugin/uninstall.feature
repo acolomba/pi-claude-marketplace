@@ -22,10 +22,10 @@ Feature: Plugin uninstall
       | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | uninstalled |         | project | 1.0.0   |
 
-  Scenario: A new session no longer offers the skills of the uninstalled plugin
+  Scenario: A reload no longer offers the skills of the uninstalled plugin
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has run "/claude:plugin uninstall demo@fixtures --scope project"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
 
   Scenario: The plugin list shows the uninstalled plugin as available
@@ -70,7 +70,7 @@ Feature: Plugin uninstall
       | id            |
       | demo@fixtures |
     Then the "claude-plugins.json" file of the project scope declares no plugins
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -90,10 +90,62 @@ Feature: Plugin uninstall
       | id            |
       | demo@fixtures |
     Then the "claude-plugins.local.json" file of the project scope does not exist
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: Uninstalling a plugin fails as an invalid manifest and changes nothing while the local config cannot be read (LAYER-04, CFG-03)
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given a config in scope project and layer local, with this text:
+      """
+      { not json
+      """
+    Given the config and installation record bytes of the project scope are remembered
+    When the user runs "/claude:plugin uninstall demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons          | scope   | cause chain                                                       | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | invalid manifest | project | Config file "claude-plugins.local.json" failed schema validation. | false           |       |                  |
+    Then the config and installation record bytes of the project scope are unchanged
+    Then the "claude-plugins.local.json" file of the project scope holds this text:
+      """
+      { not json
+      """
+    Then the project scope stages these skills and prompts:
+      | kind  | name       |
+      | skill | demo-skill |
+
+  Scenario: Uninstalling a plugin with --local fails as an invalid manifest and changes nothing while the base config cannot be read (LAYER-04, CFG-03)
+    Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
+    Given a config in scope project and layer base, with this text:
+      """
+      { not json
+      """
+    Given the config and installation record bytes of the project scope are remembered
+    When the user runs "/claude:plugin uninstall demo@fixtures --scope project --local"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons          | scope   | cause chain                                                 | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | invalid manifest | project | Config file "claude-plugins.json" failed schema validation. | false           |       |                  |
+    Then the config and installation record bytes of the project scope are unchanged
+    Then the "claude-plugins.local.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+    Then the project scope stages these skills and prompts:
+      | kind  | name       |
+      | skill | demo-skill |
 
   Scenario: Uninstalling with --local a plugin both layers declare keeps it installed and drops only the local declaration
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
@@ -111,7 +163,7 @@ Feature: Plugin uninstall
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id            |
       | demo@fixtures |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -132,7 +184,7 @@ Feature: Plugin uninstall
     Then the "claude-plugins.local.json" file of the project scope declares these plugins:
       | id            |
       | demo@fixtures |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -157,7 +209,7 @@ Feature: Plugin uninstall
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id        |
       | app@tools |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command          | description           |
       | /skill:app-skill | A skill of app 1.0.0. |
@@ -184,7 +236,7 @@ Feature: Plugin uninstall
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id        |
       | app@tools |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command          | description           |
       | /skill:app-skill | A skill of app 1.0.0. |
@@ -210,7 +262,7 @@ Feature: Plugin uninstall
     Then the installation record of the project scope holds these plugins:
       | id        | version | enabled |
       | app@tools | 1.0.0   | false   |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
 
   Scenario: Uninstalling a dependency that nothing needs uninstalls it
@@ -230,7 +282,7 @@ Feature: Plugin uninstall
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id        | name | status      | reasons | scope   | version |
       | tools            | project           | lib@tools | lib  | uninstalled |         | project | 1.0.0   |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
 
   Scenario: Uninstalling a plugin whose dependency's declarations cannot be read fails and changes nothing
@@ -254,14 +306,12 @@ Feature: Plugin uninstall
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id        |
       | app@tools |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
       | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
-      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id        | name | status | reasons          | scope   | leaks | rollback partial | cause chain                                                                    | cause truncated |
-      | tools            | project           | lib@tools | lib  | failed | invalid manifest | project |       |                  | cannot read the dependencies of lib@tools: its marketplace manifest is invalid | false           |
       | tools            | project           | lib@tools | lib  | failed | invalid manifest | project |       |                  | cannot read the dependencies of lib@tools: its marketplace manifest is invalid | false           |
     Then the session offers these skills:
       | command          | description           |
@@ -315,7 +365,7 @@ Feature: Plugin uninstall
       | tools            | project           | lib@tools | lib  | uninstalled | dependency pruned | project | 1.0.0   |
     Then the project scope has no installed plugins
     Then the "claude-plugins.json" file of the project scope declares no plugins
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
 
   Scenario: Uninstalling with --prune keeps the dependency that another installed plugin still needs
@@ -340,7 +390,7 @@ Feature: Plugin uninstall
       | id          | version | enabled |
       | lib@tools   | 1.0.0   | true    |
       | other@tools | 1.0.0   | true    |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command            | description             |
       | /skill:lib-skill   | A skill of lib 1.0.0.   |

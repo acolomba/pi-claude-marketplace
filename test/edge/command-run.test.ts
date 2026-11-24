@@ -42,6 +42,7 @@ for (const mode of ["json", "rpc"]) {
     };
     const ctx = {
       mode,
+      hasUI: mode === "tui" || mode === "rpc",
       get ui(): never {
         throw new Error("Unexpected UI");
       },
@@ -91,6 +92,7 @@ test("retains committed local state and earlier output after a command throws", 
   const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
   const ctx = {
     mode: "json",
+    hasUI: false,
     get ui() {
       return capture.ui;
     },
@@ -138,6 +140,7 @@ for (const { start, finish } of [
     const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
     const ctx = {
       mode: start,
+      hasUI: start === "tui" || start === "rpc",
       get ui() {
         return capture.ui;
       },
@@ -171,6 +174,7 @@ for (const { start, finish } of [
     const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
     const ctx = {
       mode: start,
+      hasUI: start === "tui" || start === "rpc",
       get ui() {
         return capture.ui;
       },
@@ -225,6 +229,7 @@ for (const directoryName of [
       const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
       const ctx = {
         mode,
+        hasUI: mode === "tui" || mode === "rpc",
         get ui() {
           return capture.ui;
         },
@@ -320,6 +325,7 @@ for (const { message, safeMessage, disclosure } of [
       const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
       const ctx = {
         mode,
+        hasUI: mode === "tui" || mode === "rpc",
         get ui() {
           return capture.ui;
         },
@@ -351,6 +357,7 @@ for (const mode of ["json", "rpc"]) {
     const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
     const ctx = {
       mode,
+      hasUI: mode === "tui" || mode === "rpc",
       get ui() {
         return capture.ui;
       },
@@ -380,6 +387,7 @@ for (const { title, cause, message } of [
       const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
       const ctx = {
         mode,
+        hasUI: mode === "tui" || mode === "rpc",
         get ui() {
           return capture.ui;
         },
@@ -402,6 +410,7 @@ for (const { title, cause, message } of [
       const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
       const ctx = {
         mode,
+        hasUI: mode === "tui" || mode === "rpc",
         get ui() {
           return capture.ui;
         },
@@ -522,6 +531,7 @@ for (const { failsTwice, expected } of [
     });
     const ctx = {
       mode: "json",
+      hasUI: false,
       get ui(): never {
         throw new Error("Unexpected UI access");
       },
@@ -582,6 +592,7 @@ test("does not retry or roll back committed work when its notification fails", a
   };
   const ctx = {
     mode: "json",
+    hasUI: false,
     get ui(): never {
       throw new Error("Unexpected UI access");
     },
@@ -668,6 +679,7 @@ for (const { name, emit, earlier } of [
     const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
     const ctx = {
       mode: "json",
+      hasUI: false,
       get ui() {
         return capture.ui;
       },
@@ -717,6 +729,7 @@ test("retains reload knowledge after a later false outcome and an escaped throw"
   const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
   const ctx = {
     mode: "json",
+    hasUI: false,
     get ui() {
       return capture.ui;
     },
@@ -781,6 +794,7 @@ for (const mode of ["tui", "print"]) {
     const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
     const ctx = {
       mode,
+      hasUI: mode === "tui" || mode === "rpc",
       get ui() {
         return capture.ui;
       },
@@ -801,6 +815,9 @@ test("does not finalize delivery that was already closed", async () => {
   const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
   const ctx = {
     get mode(): string {
+      throw new Error("Unexpected mode access");
+    },
+    get hasUI(): boolean {
       throw new Error("Unexpected mode access");
     },
     get ui() {
@@ -858,6 +875,7 @@ for (const mode of ["json", "rpc"]) {
     };
     const ctx = {
       mode,
+      hasUI: mode === "tui" || mode === "rpc",
       get ui() {
         return capture.ui;
       },
@@ -917,6 +935,7 @@ for (const mode of ["json", "rpc"]) {
     };
     const ctx = {
       mode,
+      hasUI: mode === "tui" || mode === "rpc",
       get ui() {
         return capture.ui;
       },
@@ -955,6 +974,7 @@ for (const mode of ["json", "rpc"]) {
     };
     const ctx = {
       mode,
+      hasUI: mode === "tui" || mode === "rpc",
       get ui() {
         return capture.ui;
       },
@@ -1003,6 +1023,7 @@ for (const mode of ["tui", "print"]) {
 
       const ctx = {
         mode,
+        hasUI: mode === "tui" || mode === "rpc",
         get ui() {
           return capture.ui;
         },
@@ -1034,6 +1055,7 @@ for (const mode of ["tui", "print"]) {
     const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
     const ctx = {
       mode,
+      hasUI: mode === "tui" || mode === "rpc",
       get ui() {
         return capture.ui;
       },
@@ -1064,6 +1086,7 @@ test("surfaces a broken recovery allocator as its original synchronous failure",
   };
   const ctx = {
     mode: "json",
+    hasUI: false,
     get ui() {
       return capture.ui;
     },
@@ -1102,6 +1125,7 @@ test("surfaces an unsupported live mode after the handler fails", async () => {
   const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
   const ctx = {
     mode: "json",
+    hasUI: false,
     get ui() {
       return capture.ui;
     },
@@ -1138,6 +1162,9 @@ test("surfaces the original stale mode getter failure after handler work", async
     get mode(): string {
       throw failure;
     },
+    get hasUI(): boolean {
+      throw failure;
+    },
     get ui() {
       return capture.ui;
     },
@@ -1164,6 +1191,7 @@ test("awaits deferred handler output before fulfilling", async () => {
   const pi = { ...capture.entrySink, getAllTools: () => [], getCommands: () => [] };
   const ctx = {
     mode: "json",
+    hasUI: false,
     get ui() {
       return capture.ui;
     },

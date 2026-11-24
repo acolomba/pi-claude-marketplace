@@ -383,8 +383,8 @@ test("same-runtime reload makes every retained registration inert before argumen
   const projectRoot = path.join(root, "project");
   await hydration.registerHooksBridge(pi, { cwd: factoryRoot });
   await hydration.registerHooksBridge(pi, { cwd: factoryRoot });
-  const staleRegistrations = registrations.slice(0, 14);
-  const liveRegistrations = registrations.slice(14);
+  const staleRegistrations = registrations.slice(0, 15);
+  const liveRegistrations = registrations.slice(15);
   const registrationOrder = [
     "session_start",
     "session_shutdown",
@@ -395,6 +395,7 @@ test("same-runtime reload makes every retained registration inert before argumen
     "tool_call",
     "tool_result",
     "before_agent_start",
+    "turn_start",
     "turn_end",
     "agent_end",
     "agent_before_settle",
@@ -405,7 +406,6 @@ test("same-runtime reload makes every retained registration inert before argumen
     generation: runtime.currentGeneration(),
     cache: Array.from(runtime.parsedConfigEntries()),
     routes: Array.from(runtime.routingTableEntries()),
-    pending: runtime.pendingSessionStartContextEntries(),
     promptPending: runtime.pendingPromptContextEntries(),
   });
   const readsBefore = [...readRoots];
@@ -433,7 +433,6 @@ test("same-runtime reload makes every retained registration inert before argumen
     generation: runtime.currentGeneration(),
     cache: Array.from(runtime.parsedConfigEntries()),
     routes: Array.from(runtime.routingTableEntries()),
-    pending: runtime.pendingSessionStartContextEntries(),
     promptPending: runtime.pendingPromptContextEntries(),
   });
   const liveSessionStart = liveRegistrations[0]?.handler;

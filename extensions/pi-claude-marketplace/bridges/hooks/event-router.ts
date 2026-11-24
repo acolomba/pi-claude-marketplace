@@ -28,11 +28,12 @@
 //     pluginId); within-plugin entries preserve declaration order via the
 //     monotonic `declarationIndex` carried on RoutingEntry (DISP-04).
 //
-//   - the pending context buffers: each SessionStart and UserPromptSubmit
-//     hook's `additionalContext` waits there until the `before_agent_start`
-//     closure drains both into one message after the prompt (D-CF5-13).
-//     Cleared at every factory entry so a `/reload` cannot leak the prior
-//     session's context.
+//   - the pending prompt context buffers: each prompt hook's
+//     `additionalContext` waits there until the `before_agent_start` closure
+//     drains it into one message after the prompt (D-CF5-13). Cleared at
+//     every factory entry so a `/reload` cannot leak the prior session's
+//     context. A SessionStart context waits in no buffer: the adapter sends
+//     it into the session at once, so it is already there (HKRL-01).
 //
 // DISP-01 / DISP-02 / DISP-03 / DISP-04 / OBS-01 anchor the contracts this
 // module enforces; D-59-01 / D-59-02 / D-59-03 anchor the decisions.
@@ -78,14 +79,20 @@ import {
   shutdownInMemoryChildren,
 } from "./async-rewake/registry.ts";
 import { resolveChildRootSession } from "./child-root-session.ts";
-import { compositeHandlerFor, toolResultCompositeHandler } from "./dispatch.ts";
 import {
-  HOOK_CONTEXT_MESSAGE_TYPE,
+  compositeHandlerFor,
+  TOOL_CONTEXT_CUSTOM_TYPE,
+  toolResultCompositeHandler,
+} from "./dispatch.ts";
+import {
+  endsTheWork,
   hookContextPart,
   sendDueFollowUpContext,
+  userMessageText,
 } from "./event-adapters.ts";
 import { FILE_SYSTEM_SWEEP_OPS, sweepHookOutput } from "./hook-output-files.ts";
 import { compileIfPredicate, MATCH_ALL_IF } from "./if-field/index.ts";
+import { createLateSessionStartLedger, type LateSessionStartLedger } from "./late-session-start.ts";
 import {
   mcpServerEntries,
   type McpServerEntry,
@@ -103,6 +110,7 @@ import {
   type RoutingEntry,
   type RoutingStateOperations,
 } from "./routing-state.ts";
+import { HOOK_CONTEXT_MESSAGE_TYPE } from "./session-start-context.ts";
 import {
   agentEndCacheHandler,
   beforeSettleHandlerFor,
@@ -113,6 +121,8 @@ import {
 
 import type { ResolvedOptions } from "../../domain/user-config.ts";
 import type {
+  AgentEndEvent,
+  AgentMessage,
   BeforeAgentStartEvent,
   BeforeAgentStartEventResult,
   ExtensionAPI,
@@ -120,6 +130,7 @@ import type {
   ExtensionMode,
   InputEvent,
   InputEventResult,
+  ResourcesDiscoverEvent,
   SessionCompactEvent,
   SessionShutdownEvent,
 } from "../../platform/pi-api.ts";
@@ -132,7 +143,7 @@ import type {
   HookExecutor,
 } from "./dispatch.ts";
 import type { FollowUpTurnEnd } from "./event-adapters.ts";
-import type { SessionLaunchFacts } from "./payloads/session-start.ts";
+import type { ClaudeSessionStartEvent, SessionLaunchFacts } from "./payloads/session-start.ts";
 import type { HooksRuntime } from "./runtime.ts";
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -190,6 +201,14 @@ function dispatchesInCurrentSession(event: BucketAEvent): boolean {
 }
 
 const NO_LAUNCH_FACTS: SessionLaunchFacts = { holdsMessages: false, forkedByThisLaunch: false };
+
+// HOOKLATESS-D1: the modes of Claude Code's headless runner, the only one
+// that runs a late SessionStart.
+const LATE_SESSION_START_MODES: ReadonlySet<ExtensionMode> = new Set(["print", "json", "rpc"]);
+
+// HOOKLATESS-D1: how long Claude Code waits for the late hooks before its turn
+// goes ahead (`S5()`).
+const LATE_SESSION_START_WAIT_MS = 10_000;
 
 // D-PG6-13..15: read from Pi's session manager only, never from a file or
 // the command line. A new session already holds setting entries, so only a
@@ -295,14 +314,13 @@ async function readAndCachePluginHooksWith(
  * captured generation and live mode before invoking this closure. A stale
  * registration or rejected mode leaves the live context buffers intact.
  *
- * D-CF5-13: the handler drains both context buffers into one custom message
- * with a text part per event, `SessionStart hook additional context: <values>`
- * first, then one part for each event of `PROMPT_CONTEXT_EVENTS` that
+ * D-CF5-13: the handler drains the prompt context buffer into one custom
+ * message with one text part for each event of `PROMPT_CONTEXT_EVENTS` that
  * buffered a context, labeled with that event (D-PG6-20). Pi places the
- * message after the prompt, persists
- * it in the session, and sends it to the model as a user message, so the
- * SessionStart context stays in the history of every later turn, as Claude
- * Code's does. The prompt and the system prompt are not changed.
+ * message after the prompt, persists it in the session, and sends it to the
+ * model as a user message. The SessionStart context is already in the
+ * session, before the prompt (HKRL-01). The prompt and the system prompt are
+ * not changed.
  * `display: false` keeps the message out of the transcript the user reads.
  *
  * With nothing to send, the handler returns undefined. Pi's runner emits
@@ -379,7 +397,7 @@ function promptContextParts(
   );
 }
 
-// Records how the run started and drains both context buffers into one message.
+// Records how the run started and drains the prompt context buffer into one message.
 function startRun(
   runtime: HooksRuntime,
   event: BeforeAgentStartEvent,
@@ -387,11 +405,9 @@ function startRun(
   runtime.recordRunStart(
     event.messageType === "custom" && event.message.customType === REWAKE_CUSTOM_TYPE,
   );
-  const sessionStart = runtime.drainPendingSessionStartContext().map((entry) => entry.context);
-  const content = [
-    hookContextPart("SessionStart", sessionStart),
-    ...promptContextParts(runtime.drainPendingPromptContext()),
-  ].filter((part) => part !== undefined);
+  const content = promptContextParts(runtime.drainPendingPromptContext()).filter(
+    (part) => part !== undefined,
+  );
   if (content.length === 0) {
     return undefined;
   }
@@ -625,6 +641,115 @@ interface HydratedScope {
 type GenerationGuard = () => boolean;
 
 /**
+ * Where Pi's agent loop is (HKRL-03): idle, inside a model turn, or between
+ * two turns of a run, where the run's next model call is still to come. A
+ * turn that ends the work with a message queued counts as `turn`: Pi gives
+ * that message the next model call and reads a steer only after it.
+ */
+type RunPhase = "idle" | "turn" | "between";
+
+/**
+ * HKRL-03: whether the next model call of the run reads a context steered at
+ * a compaction now, moved by Pi's run events. Pi 1.5.1's `runLoop` reads its
+ * steering queue after a turn ends and, when that read finds nothing, again
+ * after the preparation that compacts; the retry after an overflow reads it
+ * first. So the next call reads the steer when no steer waits ahead of it and,
+ * between two turns, no follow-up takes the call.
+ */
+interface RunPhaseTracker {
+  readonly turnStarted: () => void;
+  readonly turnEnded: (turn: FollowUpTurnEnd) => void;
+  readonly inputQueued: (event: InputEvent) => void;
+  readonly runEnded: (stillQueued: boolean) => void;
+  readonly nextCallReadsSteer: (willRetry: boolean) => boolean;
+}
+
+// HKRL-03: the bridge's tool and prompt context, which waits for the turn
+// end; Pi appends it to the session there, so it takes no model call. A
+// steered SessionStart context of the same type is read by the next poll
+// before any turn end.
+function isHeldHookContext(message: AgentMessage): boolean {
+  return (
+    message.role === "custom" &&
+    (message.customType === TOOL_CONTEXT_CUSTOM_TYPE ||
+      message.customType === HOOK_CONTEXT_MESSAGE_TYPE)
+  );
+}
+
+// HKRL-03: the follow-up texts left once each queued message takes one, or
+// undefined when a queued message is not a follow-up that an input queued.
+// Pi's `pendingMessages` holds the queued steers, else the queued follow-ups,
+// with nothing that tells the two apart; a queued text that no follow-up
+// input gave, as a steer's or an expanded template's, counts as a steer.
+function remainingFollowUps(
+  followUps: readonly string[],
+  queued: readonly AgentMessage[],
+): readonly string[] | undefined {
+  let rest = followUps;
+  for (const message of queued) {
+    const text = userMessageText(message);
+    const index = text === undefined ? -1 : rest.indexOf(text);
+    if (index < 0) {
+      return undefined;
+    }
+
+    rest = [...rest.slice(0, index), ...rest.slice(index + 1)];
+  }
+
+  return rest;
+}
+
+/**
+ * HKRL-03: one registration's run phase. At a turn end, a queued message
+ * that is not a follow-up waits ahead of a steer, and queued follow-ups take
+ * the next call when the turn ends the work, which also reads them; after a
+ * tool call the call for its results comes first and reads the steer. A
+ * steer input waits ahead of a steer sent after it. A follow-up input keeps
+ * its text until the run reads that follow-up or a run ends with no user
+ * input queued. A model call that ends in `error` or `aborted` ends the run
+ * without reading the follow-up queue, and Pi's retry of that call reads it.
+ * The tracker sees only the input that passes the `input` handlers: a typed
+ * steer or follow-up, or one that an extension sends with `sendUserMessage`.
+ * A custom message that an extension steers with `sendMessage` is hidden
+ * from it, and a steer that another extension's `input` handler still holds
+ * when a turn ends is not in `pendingMessages` yet.
+ */
+function createRunPhaseTracker(): RunPhaseTracker {
+  let phase: RunPhase = "idle";
+  let steerWaits = false;
+  let followUps: readonly string[] = [];
+  return {
+    turnStarted: () => {
+      phase = "turn";
+    },
+    turnEnded: (turn) => {
+      const queued = turn.context.pendingMessages.filter((message) => !isHeldHookContext(message));
+      const rest = remainingFollowUps(followUps, queued);
+      const readsQueued = queued.length > 0 && endsTheWork(turn.message);
+      steerWaits = rest === undefined;
+      phase = readsQueued ? "turn" : "between";
+      if (readsQueued && rest !== undefined) {
+        followUps = rest;
+      }
+    },
+    inputQueued: (event) => {
+      if (event.streamingBehavior === "followUp") {
+        followUps = [...followUps, event.text];
+      }
+
+      steerWaits ||= event.streamingBehavior === "steer";
+    },
+    runEnded: (stillQueued) => {
+      phase = "idle";
+      if (!stillQueued) {
+        followUps = [];
+      }
+    },
+    nextCallReadsSteer: (willRetry) => !steerWaits && (willRetry || phase === "between"),
+  };
+}
+
+/**
  * The hooks bridge's read port: the one filesystem read both the routing and
  * the hydration chain perform, behind one substitutable object.
  *
@@ -711,9 +836,27 @@ export interface HooksHydration {
    * state and reaches no network.
    */
   readonly refreshMcpServers: (cwd: string, projectTrusted: boolean) => Promise<void>;
+  /** Registers the bridge and resolves to what it gives the extension's load (HOOKLATESS-D1). */
   readonly registerHooksBridge: (
     pi: ExtensionAPI,
     opts: RegisterHooksBridgeOptions,
+  ) => Promise<HooksBridge>;
+}
+
+/**
+ * What a registered bridge gives the extension's load (HOOKLATESS-D1). After a
+ * load with Pi's `startup` resources reason, in print, json, or rpc mode,
+ * `runLateSessionStart` runs SessionStart once for the plugins that gained a
+ * SessionStart route since the session's own SessionStart, with that run's
+ * source, as Claude Code's headless runner does for a plugin that loads after
+ * the session started. The load waits at most 10 seconds for that run; a run
+ * that takes longer goes on, and its context waits for the next prompt. It
+ * never throws (NFR-2).
+ */
+export interface HooksBridge {
+  readonly runLateSessionStart: (
+    reason: ResourcesDiscoverEvent["reason"],
+    ctx: ExtensionContext,
   ) => Promise<void>;
 }
 
@@ -1197,6 +1340,71 @@ async function prepareSessionStartDataDirs(
   return true;
 }
 
+// Whether `promise` settles within `ms`. The timer never outlives the race.
+async function settlesWithin(promise: Promise<unknown>, ms: number): Promise<boolean> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const elapsed = new Promise<boolean>((resolve) => {
+    timer = setTimeout(() => {
+      resolve(false);
+    }, ms);
+  });
+  try {
+    return await Promise.race([promise.then(() => true), elapsed]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * HOOKLATESS-D1: the late SessionStart run of one bridge generation. It takes
+ * the ledger first, so the first load takes it whatever follows. It runs only
+ * after a load with Pi's `startup` resources reason, because a reload runs no
+ * SessionStart (D-CF5-03), and only in print, json, or rpc mode, because
+ * Claude Code runs the late hooks only in its headless runner. The mode is
+ * read last, so a load with nothing owed reads nothing of `ctx`. The shared
+ * data directories are prepared as for every SessionStart dispatch, and the
+ * dispatch runs only the hooks of the owed plugins, with the source of the
+ * session's own SessionStart. The load waits at most 10 seconds for the
+ * hooks, as Claude Code races them before its first turn. A run that takes
+ * longer goes on, and its context waits for the next prompt. A failure before
+ * the hooks start, and a failure of the hooks, are debug-logged, and the load
+ * goes on (NFR-2).
+ */
+function lateSessionStartRun(
+  ledger: LateSessionStartLedger,
+  sessionStartHandler: CompositeHandler<"SessionStart">,
+  routingState: EventRouterRoutingState,
+  generationIsCurrent: GenerationGuard,
+): HooksBridge["runLateSessionStart"] {
+  return async (reason, ctx) => {
+    try {
+      const late = ledger.takeLateRun(routingState.getRoutingBucket("SessionStart"));
+      if (
+        late === undefined ||
+        reason !== "startup" ||
+        !LATE_SESSION_START_MODES.has(requireNotificationMode(ctx.mode))
+      ) {
+        return;
+      }
+
+      // The handler checks the generation itself.
+      await prepareSessionStartDataDirs(routingState, ctx, generationIsCurrent);
+      let wentAhead = false;
+      const event: ClaudeSessionStartEvent = {
+        source: late.source,
+        newPluginsOnly: late.plugins,
+        heldForNextPrompt: () => wentAhead,
+      };
+      const run = sessionStartHandler(event, ctx).catch((err: unknown) => {
+        hookDebugLog(`late SessionStart failed: ${errorMessage(err)}`);
+      });
+      wentAhead = !(await settlesWithin(run, LATE_SESSION_START_WAIT_MS));
+    } catch (err: unknown) {
+      hookDebugLog(`late SessionStart skipped: ${errorMessage(err)}`);
+    }
+  };
+}
+
 /**
  * The `session_shutdown` callback: it maps Pi's reason once, with the live
  * session mode, and dispatches the Claude-side SessionEnd event (D-CF5-02).
@@ -1241,15 +1449,19 @@ function sessionShutdownCallback(
  * The SessionStart leg of a compaction (D-CF5-04): it prepares the shared
  * data directories, as the `session_start` path does, so the compaction
  * SessionStart gets its `CLAUDE_ENV_FILE` too, then runs the SessionStart
- * composite with `source: "compact"` to completion. A failure is debug-logged
- * and never thrown out of Pi's event (NFR-2). Returns whether the generation
- * is still current, so a stale one stops the compaction's dispatch.
+ * composite with `source: "compact"` to completion. `nextCallReadsSteer`
+ * says, when the hooks finish, whether the running agent's next model call
+ * reads a steer; the adapter then steers the context in, so that call reads
+ * it (HKRL-03). A failure is debug-logged and never thrown
+ * out of Pi's event (NFR-2). Returns whether the generation is still
+ * current, so a stale one stops the compaction's dispatch.
  */
 async function runCompactionSessionStart(
   sessionStartHandler: CompositeHandler<"SessionStart">,
   routingState: EventRouterRoutingState,
   ctx: ExtensionContext,
   generationIsCurrent: GenerationGuard,
+  nextCallReadsSteer: () => boolean,
 ): Promise<boolean> {
   try {
     if (!(await prepareSessionStartDataDirs(routingState, ctx, generationIsCurrent))) {
@@ -1257,7 +1469,7 @@ async function runCompactionSessionStart(
     }
 
     requireNotificationMode(ctx.mode);
-    await sessionStartHandler({ source: "compact" }, ctx);
+    await sessionStartHandler({ source: "compact", nextCallReadsSteer }, ctx);
   } catch (err) {
     hookDebugLog(`session_compact SessionStart skipped: ${errorMessage(err)}`);
   }
@@ -1270,7 +1482,11 @@ async function runCompactionSessionStart(
  * SessionStart with `source: "compact"` to completion and then PostCompact,
  * as upstream in main sessions. Child sessions dispatch neither event. The
  * compaction SessionStart never passes the SSDEDUP-01 guard of
- * `session_start`, so each main-session compaction runs it again. A context
+ * `session_start`, so each main-session compaction runs it again. The
+ * SessionStart context is steered into the run when the retry after an
+ * overflow compaction (`willRetry`) or the next model call after a
+ * compaction between two turns reads the steer first, as
+ * `nextCallReadsSteer` decides when the hooks finish (HKRL-03). A context
  * whose mode is not a notification mode is skipped with a debug line before
  * the event is read.
  */
@@ -1281,6 +1497,7 @@ function sessionCompactCallback(
   },
   routingState: EventRouterRoutingState,
   generationIsCurrent: GenerationGuard,
+  nextCallReadsSteer: (willRetry: boolean) => boolean,
 ): (event: SessionCompactEvent, ctx: ExtensionContext) => Promise<undefined> {
   return async (event, ctx) => {
     try {
@@ -1300,6 +1517,7 @@ function sessionCompactCallback(
         routingState,
         ctx,
         generationIsCurrent,
+        () => nextCallReadsSteer(event.willRetry),
       ))
     ) {
       return undefined;
@@ -1321,25 +1539,31 @@ function sessionCompactCallback(
  *   4. Hydrate the parsed-config cache from disk, then rebuild routing tables.
  *   5. Reap persisted orphans per scope (D-62-05), then remove the scope's
  *      saved hook output older than 30 days (D-PG5-15).
- *   6. Register exactly 14 pi.on call sites -- 7 Bucket-A dispatch surfaces
+ *   6. Register exactly 15 pi.on call sites -- 7 Bucket-A dispatch surfaces
  *      (DISP-01) plus `before_agent_start` (the drain point for the
- *      SessionStart `additionalContext` capture buffer) plus `turn_end` (sends
- *      the context of a queued follow-up, D-CF5-13) plus the three
- *      turn-boundary surfaces `agent_end` (caches the run's last-assistant
- *      message), `agent_before_settle` (runs the Stop bucket on a `stop`
+ *      prompt `additionalContext` buffer) plus `turn_start` (marks a model
+ *      turn, HKRL-03) plus `turn_end` (sends the context of a queued
+ *      follow-up, D-CF5-13, and marks the run between two turns unless a
+ *      queued message takes the next model call) plus the
+ *      three turn-boundary surfaces `agent_end` (caches the run's
+ *      last-assistant message and marks the agent idle),
+ *      `agent_before_settle` (runs the Stop bucket on a `stop`
  *      ending and continues the run on a block; D-PG5-01), and
  *      `agent_settled` (runs the StopFailure bucket on an `error` or
  *      `length` ending; STOP-01, D-PG5-03) plus a SECOND `input`
  *      subscription right after the UserPromptSubmit one (the
  *      UserPromptExpansion dispatch for a line `opts.resolveTypedExpansion`
  *      names, D-PG6-18) plus a THIRD `input` subscription (the STOP-07
- *      loop-protection reset, distinct from both dispatch handlers). The eight
+ *      loop-protection reset, distinct from both dispatch handlers, which
+ *      also tells the run phase of a queued steer or follow-up). The eight
  *      per-Pi-event Claude buckets fan out from 7 Pi event surfaces because
  *      `tool_result` splits on `event.isError` between the PostToolUse and
  *      PostToolUseFailure buckets (D-59-01); the Stop / StopFailure buckets
  *      are driven off the turn-boundary surfaces rather than a per-Pi-event
- *      surface. The Pi event-name set has 12 names (`input` appears three
- *      times), so 14 calls.
+ *      surface. The Pi event-name set has 13 names (`input` appears three
+ *      times), so 15 calls.
+ *   7. Return the late SessionStart run of this generation, which the
+ *      extension's load calls (HOOKLATESS-D1).
  *
  * `opts.executor` is the hook-execution injection point, forwarded verbatim
  * to every `compositeHandlerFor` / `toolResultCompositeHandler` /
@@ -1357,10 +1581,13 @@ async function registerHooksBridgeWith(
   reader: HooksHydrationDeps,
   pi: ExtensionAPI,
   opts: RegisterHooksBridgeOptions,
-): Promise<void> {
+): Promise<HooksBridge> {
   const routingState = createRoutingStateOperations(runtime);
   const capturedGeneration = runtime.advanceGeneration();
   const generationIsCurrent = (): boolean => runtime.currentGeneration() === capturedGeneration;
+  // What this generation's SessionStart dispatch saw, for the load after it
+  // (HOOKLATESS-D1).
+  const lateSessionStart = createLateSessionStartLedger();
   function bind<Args extends readonly unknown[], Result>(
     callbackForGeneration: RegistrationCallbackFactory<Args, Result>,
   ): (...args: Args) => Result | undefined {
@@ -1391,8 +1618,9 @@ async function registerHooksBridgeWith(
   // /reload re-enters this factory and must not leak a stale
   // additionalContext entry from the prior session into the new buffers.
   // Clearing here makes the invariant explicit: each bridge load starts
-  // with both pending buffers empty, which only the SessionStart and
-  // UserPromptSubmit adapters can subsequently populate (D-CF5-13).
+  // with the pending prompt buffers empty, which only the prompt adapters
+  // can subsequently populate (D-CF5-13). A SessionStart context is already
+  // in the session, so a `/reload` keeps it (HKRL-01).
   runtime.preparePendingContextForRegistration();
   runtime.resetChildIdentity();
 
@@ -1506,10 +1734,9 @@ async function registerHooksBridgeWith(
               event.reason === "startup"
                 ? readSessionLaunchFacts(ctx.sessionManager, processStartedAt)
                 : NO_LAUNCH_FACTS;
-            await sessionStartHandler(
-              { source: claudeSessionStartSource(event.reason, launch) },
-              ctx,
-            );
+            const source = claudeSessionStartSource(event.reason, launch);
+            lateSessionStart.recordDispatch(source, routingState.getRoutingBucket("SessionStart"));
+            await sessionStartHandler({ source }, ctx);
           }
 
           if (!generationIsCurrent()) {
@@ -1538,6 +1765,10 @@ async function registerHooksBridgeWith(
         dispatchesInCurrentSession("PreCompact") ? handler(event, ctx) : undefined;
     }),
   );
+  // HKRL-03: where Pi's agent loop is, so a compaction knows whether the
+  // run's next model call reads a steer. `turn_start`, `turn_end`,
+  // `agent_end`, and the last `input` subscription below move it.
+  const runPhase = createRunPhaseTracker();
   pi.on(
     "session_compact",
     bind((generation) =>
@@ -1548,6 +1779,7 @@ async function registerHooksBridgeWith(
         },
         routingState,
         generationIsCurrent,
+        runPhase.nextCallReadsSteer,
       ),
     ),
   );
@@ -1598,11 +1830,26 @@ async function registerHooksBridgeWith(
     "before_agent_start",
     bindWithMode((generation) => createBeforeAgentStartHandler(runtime, generation)),
   );
+  // HKRL-03: a model turn has started, so its request may already be built;
+  // a compaction inside it (Pi compacts in `prepareRequest` for a virtual
+  // model, after the turn's steering poll) holds its context to the turn end.
+  pi.on(
+    "turn_start",
+    bindWithMode(() => () => {
+      runPhase.turnStarted();
+      return undefined;
+    }),
+  );
   // The context of a queued follow-up goes out at the turn end after which
-  // the agent reads that follow-up (D-CF5-13).
+  // the agent reads that follow-up (D-CF5-13). The run now sits between two
+  // turns until the next `turn_start` or `agent_end`, unless a queued
+  // message takes the next model call (HKRL-03): Pi reads a steer only after
+  // that call, so a context steered now would force one more call, and the
+  // context is held to that turn's end instead.
   pi.on(
     "turn_end",
     bindWithMode(() => (event: FollowUpTurnEnd) => {
+      runPhase.turnEnded(event);
       sendDueFollowUpContext(event, runtime, pi);
       return Promise.resolve(undefined);
     }),
@@ -1612,9 +1859,18 @@ async function registerHooksBridgeWith(
   // agent_settled the StopFailure bucket on an `error` or `length` ending
   // (STOP-01, D-PG5-01, D-PG5-03). A pi-subagents child runs no Stop hook
   // (D-PG3-04), and its boundary handler leaves the cache for agent_settled.
+  // agent_end also marks the agent idle, so a compaction after the run ends
+  // holds its context for the next prompt, and keeps the follow-up texts
+  // while Pi still queues user input for a retried run (HKRL-03).
   pi.on(
     "agent_end",
-    bindWithMode((generation) => agentEndCacheHandler(runtime, generation)),
+    bindWithMode((generation) => {
+      const cacheLastAssistant = agentEndCacheHandler(runtime, generation);
+      return (event: AgentEndEvent, ctx: ExtensionContext) => {
+        cacheLastAssistant(event);
+        runPhase.runEnded(ctx.hasPendingMessages());
+      };
+    }),
   );
   pi.on(
     "agent_before_settle",
@@ -1643,11 +1899,28 @@ async function registerHooksBridgeWith(
   // Stop re-entry flag and resets the consecutive-block counter + one-shot cap
   // latch on a genuine user input. A Stop continuation does NOT pass through
   // `input`, so the flag never self-clears. The woken mark of
-  // an async rewake ends at the next run start instead (D-BG-210).
+  // an async rewake ends at the next run start instead (D-BG-210). The
+  // subscription also tells the run phase which steer or follow-up Pi
+  // queues next (HKRL-03); it runs last of the bridge's `input` handlers,
+  // after the ones that can stop the input.
   pi.on(
     "input",
-    bindWithMode((generation) => inputResetHandlerFor(runtime, generation)),
+    bindWithMode((generation) => {
+      const resetLoopProtection = inputResetHandlerFor(runtime, generation);
+      return (event: InputEvent) => {
+        runPhase.inputQueued(event);
+        resetLoopProtection();
+      };
+    }),
   );
+  return {
+    runLateSessionStart: lateSessionStartRun(
+      lateSessionStart,
+      compositeHandlerFor(runtime, "SessionStart", capturedGeneration, pi, opts.executor),
+      routingState,
+      generationIsCurrent,
+    ),
+  };
 }
 
 /**
@@ -1697,8 +1970,8 @@ export function createHooksHydration(
       const generationIsCurrent = (): boolean => runtime.currentGeneration() === capturedGeneration;
       await refreshMcpServersWith(reader, cwd, projectTrusted, routingState, generationIsCurrent);
     },
-    async registerHooksBridge(pi: ExtensionAPI, opts: RegisterHooksBridgeOptions): Promise<void> {
-      await registerHooksBridgeWith(runtime, reader, pi, opts);
+    registerHooksBridge(pi: ExtensionAPI, opts: RegisterHooksBridgeOptions): Promise<HooksBridge> {
+      return registerHooksBridgeWith(runtime, reader, pi, opts);
     },
   };
 }

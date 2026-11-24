@@ -27,7 +27,7 @@ Feature: Plugin enable
       | id            | enabled |
       | demo@fixtures | false   |
     Then the "claude-plugins.json" file of the project scope declares no plugins
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
 
   Scenario: Enabling without --local a plugin the local layer disables fails as disabled in local layer
@@ -49,8 +49,72 @@ Feature: Plugin enable
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id            |
       | demo@fixtures |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
+
+  Scenario: Enabling a plugin fails as an invalid manifest and changes nothing while the local config cannot be read (LAYER-04, CFG-03)
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+      | pp   | 1.0.0   |
+    Given the user has run "/claude:plugin install pp@fixtures --scope project"
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin disable demo@fixtures --scope project"
+    Given a config in scope project and layer local, with this text:
+      """
+      { not json
+      """
+    Given the config and installation record bytes of the project scope are remembered
+    When the user runs "/claude:plugin enable demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons          | scope   | cause chain                                                       | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | invalid manifest | project | Config file "claude-plugins.local.json" failed schema validation. | false           |       |                  |
+    Then the config and installation record bytes of the project scope are unchanged
+    Then the "claude-plugins.local.json" file of the project scope holds this text:
+      """
+      { not json
+      """
+    Then the project scope stages these skills and prompts:
+      | kind  | name     |
+      | skill | pp-skill |
+
+  Scenario: Enabling a plugin with --local fails as an invalid manifest and changes nothing while the base config cannot be read (LAYER-04, CFG-03)
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+      | pp   | 1.0.0   |
+    Given the user has run "/claude:plugin install pp@fixtures --scope project"
+    Given the user has run "/claude:plugin install demo@fixtures --scope project --local"
+    Given the user has run "/claude:plugin disable demo@fixtures --scope project --local"
+    Given a config in scope project and layer base, with this text:
+      """
+      { not json
+      """
+    Given the config and installation record bytes of the project scope are remembered
+    When the user runs "/claude:plugin enable demo@fixtures --scope project --local"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons          | scope   | cause chain                                                 | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | invalid manifest | project | Config file "claude-plugins.json" failed schema validation. | false           |       |                  |
+    Then the config and installation record bytes of the project scope are unchanged
+    Then the "claude-plugins.local.json" file of the project scope declares these plugins:
+      | id            | enabled |
+      | demo@fixtures | false   |
+    Then the "claude-plugins.local.json" file of the project scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+    Then the project scope stages these skills and prompts:
+      | kind  | name     |
+      | skill | pp-skill |
 
   Scenario: Enabling a disabled plugin offers its skills again and keeps one installation record
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
@@ -66,7 +130,7 @@ Feature: Plugin enable
     Then the installation record of the project scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -99,7 +163,7 @@ Feature: Plugin enable
       | marketplace name | marketplace scope | id            | name | status  | reasons       | scope   |
       | fixtures         | project           | demo@fixtures | demo | skipped | not installed | project |
     Then the "claude-plugins.json" file of the project scope declares no plugins
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
 
   Scenario: Enabling in the user scope leaves the project scope unchanged
@@ -159,7 +223,7 @@ Feature: Plugin enable
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id            | enabled |
       | demo@fixtures | true    |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -193,7 +257,7 @@ Feature: Plugin enable
       | id        | enabled |
       | app@tools | true    |
       | lib@tools | true    |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command          | description           |
       | /skill:app-skill | A skill of app 1.0.0. |
@@ -336,7 +400,7 @@ Feature: Plugin enable
     Then the "claude-plugins.json" file of the project scope declares these plugins:
       | id        | enabled |
       | app@tools | false   |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
 
   Scenario: Enabling a plugin whose dependency its marketplace no longer lists reads that dependency's own dependencies and enables it

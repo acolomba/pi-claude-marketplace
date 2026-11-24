@@ -1,42 +1,67 @@
 ---
 gsd_state_version: "1.0"
-milestone: parity-gaps
+milestone: integration-rescope
 status: Awaiting next milestone
-stopped_at: Milestone parity-gaps completed and archived (override_closeout)
-last_updated: "2026-11-20T19:06:10.866Z"
-last_activity: 2026-11-19
-last_activity_desc: Completed quick tasks 261119-59e (--map-model alias table, Pi floor 1.5.1), 261119-h5n (fallow 3.44.0 pin), and 261119-jmd (e2e helpers split)
-state_head: dff44ec92799b3437456e329014e5975f8228105
-milestone_name: Claude Code Parity Gaps and Defects
-current_phase: null
-current_phase_name: null
+stopped_at: Phase 08 complete — all phases complete
+last_updated: "2026-11-23T15:58:47.743Z"
+last_activity: 2026-11-23
+last_activity_desc: Milestone integration-rescope completed and archived
+state_head: 4df8c22948e869a61d0d7eec5706d5f49eec7f5d
 progress:
-  total_phases: 11
-  completed_phases: 11
-  total_plans: 102
-  completed_plans: 102
+  total_phases: 9
+  completed_phases: 9
+  total_plans: 26
+  completed_plans: 26
   percent: 100
+milestone_name: Integration Test Rescope
+current_phase: 08
+current_phase_name: Integration Suite Rescope
 ---
 
 # Project State
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-11-17 when the parity-gaps milestone closed)
+See: `.planning/PROJECT.md` (updated 2026-11-23 after the integration-rescope milestone)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Planning the next milestone; parity-gaps waits for a PR from `features/gaps`
+**Current focus:** Planning the next milestone; the integration-rescope PR (CHANGELOG lines below, version bump offer) is the user's call
 
 ## Current Position
 
-Phase: Milestone parity-gaps complete
+Phase: Milestone integration-rescope complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-11-19 -- Completed quick tasks 261119-59e (--map-model alias table to Claude Code 2.1.328, Pi floor 1.5.1), 261119-h5n (pin fallow 3.44.0, move shared harness files out of test/), and 261119-jmd (split test/e2e/_helpers.ts by function)
+Last activity: 2026-11-23 - Completed quick batch 261123-qrt: `/claude:plugin reload` (261123-qru) and the RPC reload migration (261123-qrv)
 
-### parity-gaps closeout: `override_closeout`
+
+### integration-rescope closeout: `override_closeout`
+
+Completed 2026-11-23 on `claude/stoic-shannon-la9q7o` (pushed, no PR or npm
+release; version stays 0.23.0). 9/9 phases (Phase 6.1 inserted), 26 plans,
+22/22 requirements. The audit reads `tech_debt` with no blockers (integration
+4/4, flows 3/3), and `npm run check` passed at `b9c0a04` (adapter 2285/2285,
+builtin 260/260, 376 direct-coverage records). The archive is
+`.planning/milestones/integration-rescope-*`, with phase records under
+`milestones/integration-rescope-phases/`.
+
+- Override: seven phase reports (01 to 06.1) read `stale` only because later
+  phases edited files they cover; the gate above ran after those edits.
+  Known verification overrides: 7 newly acknowledged (stale only), 18 carried
+  forward. The open-artifact audit was clear.
+- For the PR: the three Phase 6.1 CHANGELOG parent lines (Blockers/Concerns),
+  the version bump offer, and the accepted fallow `weakened-tests` finding on
+  `standalone-prune`.
+- Nyquist validation: all nine phases validated on 2026-11-24 (no gaps in 01
+  to 07 and 06.1; Phase 08 filled three with
+  `test/architecture/integration-suite-charter.test.ts`). Closed after the
+  close by quick batch 261123-gtf: the `dispatch-exec.test.ts` fragility
+  (261123-gtg), DIRGITTAG-01 (261123-gth), and HOOKASYNCRESUME-01
+  (261123-gti); by quick task 261123-jdc: HOOKLATESS-01 (HOOKLATESS-D1);
+  and by quick batch 261123-qrt: `/claude:plugin reload` (261123-qru,
+  RELOADCMD-D1) and the RPC scenarios reloading through it (261123-qrv).
 
 Completed 2026-11-17 on `features/gaps` (not yet pushed, no PR or npm
 release; version stays 0.23.0). 11/11 phases, 102 plans, 42/42 requirements.
@@ -376,6 +401,7 @@ Items acknowledged and deferred at milestone close, most recent first.
 
 | Category       | Item                                                                                                                                                                                          | Status          | Deferred At          | Milestone |
 | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | -------------------- | --------- |
+| verification_gaps | 01, 02, 03, 04, 05, 06, 06.1 VERIFICATION.md: `stale` digests only (later phases edited covered files); combined-tree gate passed at `b9c0a04` | acknowledged | 2026-11-23 | integration-rescope |
 | verification_gaps | 05/05-VERIFICATION.md: `human_needed`, A9 (start-failure notice not run on Node 24; closes with the PR's CI `behavioral` job) | acknowledged | 2026-11-17 | parity-gaps |
 | seeds | SEED-261107-kax: review the structure of skills, injected skills, and GSD capabilities | dormant -- pending upstream open-gsd/gsd-core#4649 | 2026-11-17 | parity-gaps |
 | verification_override | Phase 01 (foundation): verification `stale`; the flake fix `d04a5106` changed `features/lib/pi-process.ts` and `layout.md` after it; combined tree `npm run check` exit 0 | acknowledged | 2026-11-08 | behavioral-gaps |
@@ -476,6 +502,12 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261119-h5n | Pin fallow 3.44.0 and move shared harness files out of test/ to fix the degraded fallow audit | 2026-11-19 | fa449db | — | [261119-h5n-fallow-3-44-pin-and-audit-degraded-fix](./quick/261119-h5n-fallow-3-44-pin-and-audit-degraded-fix/) |
 | 261119-jmd | Split test/e2e/_helpers.ts into modules named by function | 2026-11-19 | bcbea72 | — | [261119-jmd-split-test-e2e-helpers-ts-by-function](./quick/261119-jmd-split-test-e2e-helpers-ts-by-function/) |
 | 47 | Make PluginBrowser.render() typecheck against pi-tui 1.6.0 (copy rendered lines); CHANGELOG line | 2026-11-20 | dff44ec | — | — |
+| 261123-gtg | Make the dispatch-exec portable boundary test independent of environment size | 2026-11-23 | c8df983 | — | .planning/quick/261123-gtg-fix-the-dispatch-exec-portable-boundary-unit-test-test-bridg |
+| 261123-gth | DIRGITTAG-01: install a dependency from a tag of a local git marketplace | 2026-11-23 | 87446bd | — | .planning/quick/261123-gth-dirgittag-01-planning-backlog-md-add-a-publication-kind-for |
+| 261123-gti | HOOKASYNCRESUME-01: stop repeating an unchanged async SessionStart answer on resume or fork | 2026-11-23 | c099652 | — | .planning/quick/261123-gti-hookasyncresume-01-planning-backlog-md-an-async-sessionstart |
+| 261123-jdc | HOOKLATESS-01: run SessionStart for plugins that autoapply adds in headless modes | 2026-11-23 | 4df8c22 | passed | [261123-jdc-hooklatess-01-late-sessionstart-for-plug](./quick/261123-jdc-hooklatess-01-late-sessionstart-for-plug/) |
+| 261123-qru | Add /claude:plugin reload and word reload hints for the host that shows them | 2026-11-23 | 5ec2fdf | passed | .planning/quick/261123-qru-add-claude-plugin-reload-and-the-sessionful-predicate-planni |
+| 261123-qrv | Reload pi over RPC with /claude:plugin reload instead of starting a new session | 2026-11-23 | 6e06697 | passed | .planning/quick/261123-qrv-rpc-tests-reload-instead-of-starting-a-new-session-planning |
 **Stopped at:** Completed 11-13-PLAN.md
 **Resume file:** None
 
@@ -558,7 +590,7 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- Offer the version bump, then open the PR for `features/gaps`; its CI `behavioral` job on Node 24 closes Phase 5 A9
+
 - Start the next milestone with /gsd-new-milestone
 
 
@@ -1108,6 +1140,16 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ### Roadmap Evolution
 
+- integration-rescope roadmap created 2026-11-20 (phase numbers reset to 1),
+  from the overlap audit `research/INTEGRATION-OVERLAP.md`: Phase 1
+  (Duplicate Integration Files, ITDUP), then one migration phase per feature
+  area (2 plugin layers, names, and list fold; 3 marketplace layers and
+  cross-scope install; 4 prune; 5 MCP install, legacy move, and overrides; 6
+  hooks and auth; 7 path-source dependency tags), then Phase 8 (Integration
+  Suite Rescope, ITSCOPE-01..04, alone after the last merge). Phases 1 to 6
+  depend on no other phase; Phase 7 follows Phase 3 because both change the
+  marketplace publishing harness. ITMIG-04 (list fold) sits in Phase 2
+  because its scenarios land in `plugin/list.feature`.
 - behavioral-gaps roadmap created 2026-11-07 (phase numbers reset to 1), with
   the phase structure the user fixed for maximum concurrency: Phase 1
   (Foundation, serial in the parent session; builds every stand-in and shared
@@ -1185,6 +1227,63 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ### Blockers/Concerns
 
+- [integration-rescope] CHANGELOG parent line for the milestone PR (Phase 6.1, HKRL-03, `c93f75f`/`996f933`): "A plugin's `SessionStart` context now reaches the next model call after a compaction in the middle of a run or after a context overflow."
+- [integration-rescope] CHANGELOG parent line for the milestone PR (Phase 6.1, HKRL-02, `66219fb`): "A resumed or forked session no longer shows a plugin's `SessionStart` context twice; only context that changed is added."
+- [integration-rescope] Phase 8 planned and checked (5 plans, 2 waves); decision-coverage gate overridden after the plan checker confirmed coverage. Wave 1 runs beside Phase 6.1's gap planning on disjoint files; 08-05 waits for Phase 6.1 to complete.
+- [integration-rescope] CHANGELOG parent line for the milestone PR (quick task 261123-jdc, HOOKLATESS-01, `962e8a5`/`efeb21e`): "In print, JSON, and RPC mode, a plugin that `autoapply` installs or enables as Pi starts now runs its `SessionStart` hooks in that session."
+- [integration-rescope] CHANGELOG parent line for the milestone PR (quick task 261123-gti, HOOKASYNCRESUME-01, `c099652`): "An `async` `SessionStart` hook's unchanged answer no longer reaches the model again each time you resume or fork the session."
+- [integration-rescope] CHANGELOG parent line for the milestone PR (quick task 261123-qru, RELOADCMD-D1, `5ec2fdf`/`9b7efc1`/`0fa3804`): "`/claude:plugin reload` now reloads Pi, also over RPC, where Pi has no `/reload`. Reload hints and refusals name the command your host offers, and a one-shot run shows none."
+- [integration-rescope] CHANGELOG parent line for the milestone PR (Phase 6.1, HKRL-01, `b116f4f`): "A Pi `/reload` before your first prompt no longer drops the context that a plugin's `SessionStart` hook added at startup."
+- [integration-rescope] Parity question for the user at milestone end: HOOKLATESS-01 (BACKLOG) — Claude Code 2.1.296 runs SessionStart in headless mode for a plugin that loads after the session starts; the bridge does not.
+- [integration-rescope] Phase 6.1 (inserted, HKRL-01, user decision 2026-11-22: fix the /reload parity gap in this milestone) planned and checked: design A (SessionStart context sent as a hidden session message); runs beside Phase 7's review loop on disjoint files. Assumption-delta fired on "another"/"additional" (false positives). Decision-coverage gate overridden after the plan checker confirmed coverage, as in earlier phases.
+- [integration-rescope] Phase 7 planning: decision-coverage gate `could-not-parse` (bracket-named decisions); proceeded by override after the plan checker confirmed coverage. Assumption-delta fired on "fallback" (false positive, `no-change`). Phase 6.1 (inserted, HKRL-01) is planned beside it on disjoint files.
+- [integration-rescope] HOOK-E2E-04 parity (user decision 2026-11-22: research upstream first): the integration case `hooks-additionalcontext-end-to-end.test.ts` HOOK-E2E-04 is restored until Claude Code's `/reload-plugins` behavior for buffered SessionStart context is known; the scenario at `features/hook/additional-context.feature:230` pins today's documented drop meanwhile.
+- [integration-rescope] Phase 6 planning: decision-coverage gate `could-not-parse` (bracket-named decisions); proceeded by override after the plan checker confirmed coverage. Assumption-delta fired on "additional" (file name, false positive, `no-change`). Research found the async.feature:261 flake cause (ESRCH in `features/lib/hook-files.ts`, a zombie hook under PID 1) and a partial-line race in `features/lib/turn-records.ts`; plan 06-01 fixes both. Open parity question for the user at milestone end: whether Claude Code keeps SessionStart context across `/reload-plugins` (HOOK-E2E-04 pins today's documented drop). A planning commit title (`965c0ec`) names the milestone, against the committing skill; history is not rewritten.
+- [integration-rescope] Phase 5 gate: `features/hook/async.feature:261` ("A plain async hook runs past its declared timeout") failed in its After hook (`scenario releases failed`, `features/support/world.ts:1053`) in 2 of 4 full adapter runs on 8f1a87b, and passed alone (4/4), with its feature (3/3), and in an instrumented full run. Cause not captured; candidates: `pi.stop()` or the scenario cwd removal while the timed-out hook still runs. Input for Phase 6 (Hooks). The gate verdict on 8f1a87b is composed: check:static and direct coverage (p5d), test:unpaired and test:integration (p5e), adapter 2259/2259 (instrumented run, release message only), builtin 260/260.
+- [integration-rescope] Harness race fixed in 2c7d42d: `features/lib/subagent-hook-session.ts` read an exited child's `/proc/<pid>/environ` and failed with ESRCH (`subagent-hook-ownership.test.ts:232`).
+- [integration-rescope] Phase 5 planning: decision-coverage gate `could-not-parse` (bracket-named decisions); proceeded by override after the plan checker confirmed coverage. Research measured the legacy-move and override scenarios byte-identical under both profiles, so they are tagged `@mcp` (CONTEXT [Tags, after research]) where the ROADMAP note said `@adapter-only`. The planner run was lost once to a container restart and re-run. A planning commit body (`b935623`) names a phase, against the committing skill; history is not rewritten.
+- [integration-rescope] CHANGELOG parent line for the milestone PR (Phase 4,
+  prune backup fix `d24f937`): "A prune that cannot remove a plugin's read-only
+  directory no longer leaves its `prune-backup-` folder behind in the scope's
+  `pi-claude-marketplace` folder."
+- [integration-rescope] Phase 4 planning: decision-coverage gate `could-not-parse` (bracket-named decisions); proceeded by override after the plan checker confirmed coverage. Research found a prune backup leak (a failed member with a read-only directory leaves `prune-backup-*`); plan 04-02 fixes it under rule 4.
+- [integration-rescope] CHANGELOG parent line for the milestone PR (Phase 3,
+  D-SEED-01 fix `cd728de`): "A plugin that a marketplace offers from its own
+  repository, through a `git-subdir` URL that ends in `.git` or `/`, now shows as
+  available right after `marketplace add`, and a pinned install of it makes no
+  new clone."
+- [integration-rescope] Phase 3 planning: decision-coverage gate `could-not-parse` (bracket-named decisions); proceeded by override after the plan checker confirmed coverage. Assumption-delta fired on "second clone" (false positive, recorded `no-change`).
+- [integration-rescope] Phase 2 planning: the decision-coverage gate returned
+  `could-not-parse` (bracket-named smart-discuss decisions); proceeded by
+  override after the plan checker confirmed coverage of every CONTEXT decision.
+- [integration-rescope] Container facts measured 2026-11-21 (Phase 1 gate):
+  (1) Pi's `find` tool needs `fd` on `PATH`; without it the Glob scenarios of
+  `hook/tool-use.feature` fail ("fd is not available and could not be
+  downloaded"). Fix per container: `apt-get install -y fd-find`. (2) Fixed by quick task 261123-gtg
+  (c8df983): the case "executes a blocking hook through the portable process
+  boundary" compares the hook child's environment through a capture file, so
+  it passes at any environment size, and direct coverage runs without
+  `env -i`.
+- [integration-rescope] Phase 1 planning: the decision-coverage gate returned
+  `could-not-parse` (smart-discuss decisions carry no `D-NN` IDs; cited IDs such
+  as `D-PG3-01` trip the parser). Proceeded by override: the plan checker
+  confirmed every CONTEXT decision is covered by 01-01 or 01-02.
+- [integration-rescope] User decision 2026-11-21: no `.fallowrc.json` change
+  for fallow's `weakened-tests` rule. Each deleted integration file gives one
+  `warn` in `fallow audit`, so the milestone PR's `fallow-audit` CI job fails
+  and a reviewer accepts it once. Measured: an `overrides` entry turning the
+  rule off is itself a `rule-severity` warn with no suppression, so it would
+  not make the audit pass. Each phase records its findings in its SUMMARY.
+- [integration-rescope] The audit's verdicts come from reading code; every
+  phase checks a verdict again with a deliberate break before it deletes an
+  integration case (REQUIREMENTS.md rule 2).
+- [integration-rescope] Open for Phase 8: the audit lists user-visible cases
+  that no ITMIG requirement names (ROADMAP.md, Milestone rules), and
+  ITSCOPE-01 offers only a unit test or deletion for them. A case kept under
+  rule 4 (a BACKLOG bug) also falls outside ITSCOPE-01's three classes.
+- [integration-rescope] ITMIG-13 needs a print-mode Pi driver, which the
+  harness lacks (D-BG-601), and ITMIG-07 needs a marketplace tag step; both
+  are shared harness additions.
 - [behavioral-gaps] Phase 1 must settle how Pi reaches the Device Flow
   stand-in: GHB-02 turns Device Flow off while
   `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` points GitHub sources at the
@@ -1241,8 +1340,8 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 
 ## Session Continuity
 
-Last session: 2026-11-17T12:15:00.000Z
-Stopped at: Milestone parity-gaps completed and archived (override_closeout); next is the PR for `features/gaps`
+Last session: 2026-11-22T15:00:00.000Z
+Stopped at: Phase 08 complete — all phases complete
 Resume file: None
 
 ### Phase 2 completion-helper notes

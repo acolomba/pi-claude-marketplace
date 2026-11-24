@@ -1,7 +1,7 @@
 Feature: Slash command lifecycle
 
-  Each plugin verb changes what a new session offers for a bridged command and what the model
-  receives when the user invokes it. Changes apply at a new session, as Pi's /reload does.
+  Each plugin verb changes what a reload offers for a bridged command and what the model
+  receives when the user invokes it. Changes apply at the next reload.
   A local marketplace stands in for a published one, and a scripted model for a real one.
 
   Background:
@@ -17,15 +17,15 @@ Feature: Slash command lifecycle
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
 
-  Scenario: Disabling a plugin removes its slash commands from a new session
+  Scenario: Disabling a plugin removes its slash commands at the next reload
     Given the user has run "/claude:plugin disable demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user lists the slash commands pi offers
     Then pi offers no slash commands from prompt templates
 
   Scenario: A disabled plugin's slash command reaches the model as the typed text
     Given the user has run "/claude:plugin disable demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Hello. |
@@ -37,15 +37,15 @@ Feature: Slash command lifecycle
   Scenario: Enabling a disabled plugin offers its slash commands again
     Given the user has run "/claude:plugin disable demo@fixtures --scope project"
     Given the user has run "/claude:plugin enable demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user lists the slash commands pi offers
     Then pi offers these slash commands from prompt templates:
       | command     | description              |
       | /demo:greet | Greets a person by name. |
 
-  Scenario: Uninstalling a plugin removes its slash commands from a new session
+  Scenario: Uninstalling a plugin removes its slash commands at the next reload
     Given the user has run "/claude:plugin uninstall demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user lists the slash commands pi offers
     Then pi offers no slash commands from prompt templates
 
@@ -61,7 +61,7 @@ Feature: Slash command lifecycle
       Greet the person warmly.
       """
     Given the user has run "/claude:plugin update demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user lists the slash commands pi offers
     Then pi offers these slash commands from prompt templates:
       | command     | description            |
@@ -79,7 +79,7 @@ Feature: Slash command lifecycle
       Greet the person warmly.
       """
     Given the user has run "/claude:plugin update demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply          |
       | Hello, warmly. |

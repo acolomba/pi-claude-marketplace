@@ -1,12 +1,13 @@
 // bridges/hooks/index.ts
 //
-// Public surface barrel for the hooks bridge. The four module-internal
-// pieces of state owned by routing-state.ts -- the liveEpoch cell (D-59-03),
-// the parsedConfigCache Map (D-59-02), the routingTable Map, and the
-// SessionStart additionalContext buffer -- are NOT re-exported from this
-// module; callers (the extension factory, install/uninstall, the reconcile
-// apply path) interact with the bridge through the named exports below and
-// never touch the cells directly (D-01 opaque-handle discipline). The
+// Public surface barrel for the hooks bridge. The state of one hooks
+// runtime -- its generation counter (D-59-03), the parsed-config cache
+// (D-59-02), the routing table, and the pending prompt context buffers --
+// lives in createHooksRuntime (runtime.ts), and routing-state.ts holds only
+// their types. None of it is re-exported from this module; callers (the
+// extension factory, install/uninstall, the reconcile apply path) interact
+// with the bridge through the named exports below and never touch that
+// state directly (D-01 opaque-handle discipline). The
 // dispatch-exec layer is bridge-internal and intentionally absent here -- it
 // is reached through the injected `HookExecutor` parameter, not this barrel.
 

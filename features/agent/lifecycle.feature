@@ -1,7 +1,7 @@
 Feature: Agent lifecycle
 
-  Each plugin verb changes what pi-subagents lists for a bridged agent, seen in a
-  new session as Pi's /reload gives it. A scripted model asks pi-subagents for its
+  Each plugin verb changes what pi-subagents lists for a bridged agent, seen after a
+  reload. A scripted model asks pi-subagents for its
   list, and a local marketplace stands in for a published one.
 
   Background:
@@ -22,7 +22,7 @@ Feature: Agent lifecycle
 
   Scenario: Disabling a plugin removes its agent from pi-subagents' list
     Given the user has run "/claude:plugin disable demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply               | tool     | arguments         |
       |                     | subagent | {"action":"list"} |
@@ -38,7 +38,7 @@ Feature: Agent lifecycle
   Scenario: Enabling a disabled plugin lists its agent again
     Given the user has run "/claude:plugin disable demo@fixtures --scope user"
     Given the user has run "/claude:plugin enable demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                | tool     | arguments         |
       |                      | subagent | {"action":"list"} |
@@ -53,7 +53,7 @@ Feature: Agent lifecycle
 
   Scenario: Uninstalling a plugin removes its agent from the list
     Given the user has run "/claude:plugin uninstall demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply               | tool     | arguments         |
       |                     | subagent | {"action":"list"} |
@@ -74,7 +74,7 @@ Feature: Agent lifecycle
       | file        | name     | description                 | body                                                         |
       | reviewer.md | reviewer | Reviews every changed file. | Review every changed file and report every problem you find. |
     Given the user has run "/claude:plugin update demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                | tool     | arguments         |
       |                      | subagent | {"action":"list"} |
@@ -98,7 +98,7 @@ Feature: Agent lifecycle
       """
     Given the user has run "/claude:plugin install tools@fixtures --scope user"
     Given the user has run "/claude:plugin disable demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                | tool     | arguments         |
       |                      | subagent | {"action":"list"} |
@@ -124,7 +124,7 @@ Feature: Agent lifecycle
     Given the published plugin "tools" of the marketplace "fixtures" declares the mcp server "search"
     Given a directory blocks the mcp-adapter.json file of the user scope
     Given the user has run "/claude:plugin install tools@fixtures --scope user", which failed
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                | tool     | arguments         |
       |                      | subagent | {"action":"list"} |

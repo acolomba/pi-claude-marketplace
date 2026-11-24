@@ -28,7 +28,7 @@ Feature: Plugin update dependencies
       | id           | version | enabled |
       | widget@tools | 1.1.0   | true    |
       | zcore@tools  | 1.0.0   | true    |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command             | description              |
       | /skill:widget-skill | A skill of widget 1.1.0. |
@@ -140,7 +140,7 @@ Feature: Plugin update dependencies
       | id           | version | enabled |
       | widget@tools | 1.1.0   | true    |
       | zcore@tools  | 1.0.0   | true    |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command             | description              |
       | /skill:widget-skill | A skill of widget 1.1.0. |
@@ -171,7 +171,7 @@ Feature: Plugin update dependencies
       | id           | version | enabled |
       | widget@tools | 1.1.0   | true    |
       | zcore@tools  | 2.0.0   | true    |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command             | description              |
       | /skill:widget-skill | A skill of widget 1.1.0. |

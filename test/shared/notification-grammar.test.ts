@@ -16,6 +16,7 @@ import {
   renderPruneEmpty,
   renderReconcilePendingEmpty,
 } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
+import { composeMcpMigrationText } from "../../extensions/pi-claude-marketplace/shared/notification-mcp.ts";
 import { shouldEmitReloadHint } from "../../extensions/pi-claude-marketplace/shared/notification-summary.ts";
 
 import type { NotifyArguments } from "../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
@@ -1757,6 +1758,105 @@ for (const { name, row, expected } of [
   });
 }
 
+for (const { reload, expectedTrailer } of [
+  { reload: "/reload", expectedTrailer: "\n\n/reload to pick up changes" },
+  {
+    reload: "/claude:plugin reload",
+    expectedTrailer: "\n\n/claude:plugin reload to pick up changes",
+  },
+  { reload: undefined, expectedTrailer: "" },
+] as const) {
+  test(`formatEnvelopeArguments ends an envelope that needs a reload with ${String(reload)}'s trailer (RELOADCMD-D1)`, () => {
+    // act
+    const notifyArguments = formatEnvelopeArguments(
+      { severity: "info", needsReload: true, needsApply: false, noOp: false },
+      "body",
+      reload,
+    );
+
+    // assert
+    assert.deepStrictEqual(notifyArguments, [`body${expectedTrailer}`]);
+  });
+}
+
+for (const { reload, expectedText } of [
+  {
+    reload: "/claude:plugin reload",
+    expectedText: "Plugin updated: demo · Run /claude:plugin reload to apply",
+  },
+  { reload: undefined, expectedText: "Plugin updated: demo" },
+] as const) {
+  test(`formatRawSurface ends the background update for ${String(reload)} (RELOADCMD-D1)`, () => {
+    // act
+    const notifyArguments = formatRawSurface(
+      {
+        kind: "background-update",
+        plugins: [
+          {
+            name: "demo",
+            marketplace: "tools",
+            scope: "user",
+            fromVersion: "1.0.0",
+            toVersion: "1.10.0",
+          },
+        ],
+      },
+      reload,
+    );
+
+    // assert
+    assert.deepStrictEqual(notifyArguments, [expectedText, "info"]);
+  });
+}
+
+for (const { reload, expectedTail } of [
+  { reload: "/reload", expectedTail: "\n/reload to pick up changes" },
+  { reload: "/claude:plugin reload", expectedTail: "\n/claude:plugin reload to pick up changes" },
+  { reload: undefined, expectedTail: "" },
+] as const) {
+  test(`formatRawSurface ends a migration notice that needs a reload for ${String(reload)} (RELOADCMD-D1)`, () => {
+    // act
+    const notifyArguments = formatRawSurface(
+      {
+        kind: "mcp-migration",
+        rows: [
+          {
+            kind: "moved",
+            scope: "user",
+            plugin: "acme",
+            marketplace: "mp",
+            from: "srv",
+            to: "plugin_acme_srv_",
+          },
+        ],
+        notices: [],
+        severity: "info",
+        needsReload: true,
+      },
+      reload,
+    );
+
+    // assert
+    assert.deepStrictEqual(notifyArguments, [
+      `${composeMcpMigrationText(
+        [
+          {
+            kind: "moved",
+            scope: "user",
+            plugin: "acme",
+            marketplace: "mp",
+            from: "srv",
+            to: "plugin_acme_srv_",
+          },
+        ],
+        [],
+        reload,
+      )}${expectedTail}`,
+      "info",
+    ]);
+  });
+}
+
 test("formatEnvelopeArguments returns an info body byte for byte as its only argument", () => {
   // arrange
   const body = "● official [user]\n  alpha (installed)";
@@ -1765,6 +1865,7 @@ test("formatEnvelopeArguments returns an info body byte for byte as its only arg
   const notifyArguments = formatEnvelopeArguments(
     { severity: "info", needsReload: false, needsApply: false, noOp: false },
     body,
+    "/reload",
   );
 
   // assert
@@ -1786,6 +1887,7 @@ for (const severity of ["warning", "error"] as const) {
     const notifyArguments = formatEnvelopeArguments(
       envelope,
       "● official [user]\n  alpha (failed)",
+      "/reload",
     );
 
     // assert
@@ -1867,7 +1969,7 @@ for (const { name, envelope, expectedText } of [
     const expectedArguments = [expectedText];
 
     // act
-    const notifyArguments = formatEnvelopeArguments(envelope, "body");
+    const notifyArguments = formatEnvelopeArguments(envelope, "body", "/reload");
 
     // assert
     assert.deepStrictEqual(notifyArguments, expectedArguments);
@@ -1954,7 +2056,7 @@ for (const { name, envelope, body, expectedArguments } of [
     const expectedNotifyArguments = expectedArguments;
 
     // act
-    const notifyArguments = formatEnvelopeArguments(envelope, body);
+    const notifyArguments = formatEnvelopeArguments(envelope, body, "/reload");
 
     // assert
     assert.deepStrictEqual(notifyArguments, expectedNotifyArguments);
@@ -1964,10 +2066,11 @@ for (const { name, envelope, body, expectedArguments } of [
 /**
  * D-15: every raw kind passes its severity explicitly, so each formats to two
  * arguments. The mapped type requires one row per resolved kind, so a kind
- * without a row fails typecheck.
+ * without a row fails typecheck. RELOADCMD-D1: `reload-started` renders no
+ * text, so its row is in the table below.
  */
 const RAW_SURFACE_ROWS: {
-  readonly [K in ResolvedRawSurface["kind"]]: {
+  readonly [K in Exclude<ResolvedRawSurface["kind"], "reload-started">]: {
     readonly surface: Extract<ResolvedRawSurface, { kind: K }>;
     readonly expectedArguments: NotifyArguments;
   };
@@ -2095,7 +2198,7 @@ for (const [kind, { surface, expectedArguments }] of Object.entries(RAW_SURFACE_
     const expectedNotifyArguments = expectedArguments;
 
     // act
-    const notifyArguments = formatRawSurface(surface);
+    const notifyArguments = formatRawSurface(surface, "/reload");
 
     // assert
     assert.deepStrictEqual(notifyArguments, expectedNotifyArguments);
@@ -2150,7 +2253,7 @@ for (const { title, plugins, text } of [
     const surface = { kind: "background-update", plugins } as const;
 
     // act
-    const notifyArguments = formatRawSurface(surface);
+    const notifyArguments = formatRawSurface(surface, "/reload");
 
     // assert
     assert.deepStrictEqual(notifyArguments, [text, "info"]);
@@ -2170,7 +2273,7 @@ test("AAP-04: formatRawSurface shows the default autoapply and every listed file
   } as const satisfies ResolvedRawSurface;
 
   // act
-  const notifyArguments = formatRawSurface(surface);
+  const notifyArguments = formatRawSurface(surface, "/reload");
 
   // assert
   assert.deepStrictEqual(notifyArguments, [
@@ -2303,6 +2406,11 @@ for (const { title, surface, expectedArguments } of [
     ],
   },
   {
+    title: "emits nothing for reload-started, because Pi shows its own reload (RELOADCMD-D1)",
+    surface: { kind: "reload-started" },
+    expectedArguments: undefined,
+  },
+  {
     title: "passes a backtick in the stop-override plugin id through unescaped",
     surface: { kind: "stop-override-cap", pluginId: "a`b", cap: 8 },
     expectedArguments: [
@@ -2320,7 +2428,7 @@ for (const { title, surface, expectedArguments } of [
     const expectedNotifyArguments = expectedArguments;
 
     // act
-    const notifyArguments = formatRawSurface(surface);
+    const notifyArguments = formatRawSurface(surface, "/reload");
 
     // assert
     assert.deepStrictEqual(notifyArguments, expectedNotifyArguments);

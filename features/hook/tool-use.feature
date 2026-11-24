@@ -273,7 +273,7 @@ Feature: Hook tool use
       | legacy | PostToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedMCPToolOutput":[{"type":"text","text":"MALICIOUS"}]}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "visible.txt" with the text "ORIGINAL" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments              |
@@ -304,7 +304,7 @@ Feature: Hook tool use
       | replace | PostToolUse | Glob    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"filenames":["SAFE_PATH"]}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "secret.md" with the text "OLD_SECRET" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments            |
@@ -332,7 +332,7 @@ Feature: Hook tool use
       | after | PostToolUse | Grep    |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "notice.txt" with the text "[2 matches limit reached]" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments                                         |
@@ -363,7 +363,7 @@ Feature: Hook tool use
       | after | PostToolUse | Glob    |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "No files found matching pattern" with the text "present" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments                                     |
@@ -395,7 +395,7 @@ Feature: Hook tool use
       | redact  | PostToolUse | *       | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"content":[{"type":"text","text":"redacted"}]}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments         |
       |       | Bash | {"query":"hello"} |
@@ -424,7 +424,7 @@ Feature: Hook tool use
       | replace | PostToolUse | Bash    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"structuredContent":[{"type":"image","data":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12NgYPj/HwADAgH/HXJk1AAAAABJRU5ErkJggg==","mimeType":"image/png"}],"persistedOutputPath":"/tmp/DO_NOT_READ"}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                        |
       |       | bash | {"command":"printf OLD_SECRET"} |
@@ -451,7 +451,7 @@ Feature: Hook tool use
       | replace | PostToolUse | Glob    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"filenames":[]}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "secret.md" with the text "OLD_SECRET" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments          |
@@ -479,7 +479,7 @@ Feature: Hook tool use
       | replace | PostToolUse | Bash    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"stdout":""}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "secret.md" with the text "OLD_SECRET" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments                       |
@@ -507,7 +507,7 @@ Feature: Hook tool use
       | replace | PostToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"type":"text","file":{"content":"safe"}}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "secret.txt" with the text "OLD_SECRET" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments             |
@@ -533,7 +533,7 @@ Feature: Hook tool use
       | replace | PostToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"type":"text","file":{"content":"safe"}}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "secret.txt" with the text "OLD_TEXT_SECRET" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments             |
@@ -561,7 +561,7 @@ Feature: Hook tool use
       | replace | PostToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"type":"image","file":{"base64":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQI12NgYPj/HwADAgH/HXJk1AAAAABJRU5ErkJggg==","type":"image/png"}}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the tiny red image "original.png" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments               |
@@ -590,7 +590,7 @@ Feature: Hook tool use
       | replace | PostToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"type":"text","file":{"content":""}}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "secret.txt" with the text "OLD_SECRET" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments             |
@@ -616,7 +616,7 @@ Feature: Hook tool use
       | after | PostToolUse | Edit    |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "document.txt" with the text "first\nmiddle\nsecond\n" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                                                                        |
@@ -647,7 +647,7 @@ Feature: Hook tool use
       | observe | PostToolUse | Edit    |        |                                                                                                                            |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "document.txt" with the text "first\nmiddle\nsecond\n" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                                                                        |
@@ -679,7 +679,7 @@ Feature: Hook tool use
       | guard | PreToolUse | Edit    |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "document.txt" with the text "first\nmiddle\nsecond\n" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                                                                        |
@@ -709,7 +709,7 @@ Feature: Hook tool use
       | rewrite | PreToolUse | Edit    | script | first           | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"file_path":"document.txt","old_string":"first","new_string":"ONE"}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "document.txt" with the text "first\nmiddle\nsecond\n" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                                                                        |
@@ -733,7 +733,7 @@ Feature: Hook tool use
       | guard | PreToolUse | Edit    | script | second          | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"file_path":"document.txt","old_string":"first","new_string":"ONE"}}} | {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"second denied"}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "document.txt" with the text "first\nmiddle\nsecond\n" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                                                                        |
@@ -757,7 +757,7 @@ Feature: Hook tool use
       | guard | PreToolUse | Edit    | script | second          | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"file_path":"document.txt","old_string":"first","new_string":"ONE"}}} | {"continue":false,"stopReason":"later stop"} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "document.txt" with the text "first\nmiddle\nsecond\n" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                                                                        |
@@ -780,7 +780,7 @@ Feature: Hook tool use
       | guard | PreToolUse | Edit    | script | second          | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"file_path":"document.txt","old_string":"first","new_string":"ONE"}}} | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"file_path":"document.txt","old_string":"second","new_string":"TWO","replace_all":true}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "document.txt" with the text "first\nmiddle\nsecond\n" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                                                                        |
@@ -807,7 +807,7 @@ Feature: Hook tool use
       | guard | PreToolUse | Edit    | script | second          | <first output> | <second output> |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "document.txt" with the text "first\nmiddle\nsecond\n" for a tool hook
     Given the project holds the file "other.txt" with the text "other\n" for a tool hook
     Given the scripted model plays these steps:
@@ -845,7 +845,7 @@ Feature: Hook tool use
       | bash-guard | PreToolUse | Bash    |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -873,7 +873,7 @@ Feature: Hook tool use
       | post | PostToolUse | Bash    |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments               |
       |       | bash | {"command": "echo one"} |
@@ -909,7 +909,7 @@ Feature: Hook tool use
       | guard | PreToolUse | Bash    | script | 1         | {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"no echo"}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -936,7 +936,7 @@ Feature: Hook tool use
       | guard | PreToolUse | Bash    | script | 2         | blocked by policy |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -963,7 +963,7 @@ Feature: Hook tool use
       | guard | PreToolUse | Bash    | script | 1         | boom   | block      |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -990,7 +990,7 @@ Feature: Hook tool use
       | guard | PreToolUse | Bash    | script | 1048577      | 1         | block      |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -1017,7 +1017,7 @@ Feature: Hook tool use
       | guard | PreToolUse | Bash    | script | blocked by policy | 1048577      | 2         |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -1044,7 +1044,7 @@ Feature: Hook tool use
       | guard | PreToolUse | Bash    | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"too large to skip"},"padding":" | 1048577      | "}              |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -1071,7 +1071,7 @@ Feature: Hook tool use
       | guard | PreToolUse | Bash    | script | 1         | boom   | {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"no echo"}} | block      |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -1098,7 +1098,7 @@ Feature: Hook tool use
       | guard | PreToolUse | Bash    | script | {not json | block      |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -1126,7 +1126,7 @@ Feature: Hook tool use
       | right | PreToolUse | Bash    | script | left  |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -1149,7 +1149,7 @@ Feature: Hook tool use
       | guard | PreToolUse | *       |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -1175,7 +1175,7 @@ Feature: Hook tool use
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install alpha@fixtures --scope project"
     Given the user has run "/claude:plugin install beta@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -1315,7 +1315,7 @@ Feature: Hook tool use
       | guard | PreToolUse | Bash    | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"ask","permissionDecisionReason":"please confirm"}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -1342,7 +1342,7 @@ Feature: Hook tool use
       | rewrite | PreToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"file_path":"replacement.txt","offset":2,"limit":1}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "original.txt" with the text "original" for a tool hook
     Given the project holds the file "replacement.txt" with the text "first\nsecond" for a tool hook
     Given the scripted model plays these steps:
@@ -1371,7 +1371,7 @@ Feature: Hook tool use
       | rewrite | PreToolUse | Write   | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"file_path":"written.txt","content":"after"}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool  | arguments                                    |
       |       | write | {"path":"before.txt","content":"before"} |
@@ -1400,7 +1400,7 @@ Feature: Hook tool use
       | rewrite | PreToolUse | Bash    | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"command":"printf replacement > replacement.txt; echo rewritten","timeout":2000}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                  |
       |       | bash | {"command":"echo original","timeout":1.5}              |
@@ -1428,7 +1428,7 @@ Feature: Hook tool use
       | rewrite | PreToolUse | Bash    | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"command":"printf replacement > replacement.txt","timeout":2000,"run_in_background":true}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                         |
       |       | bash | {"command":"printf original > original.txt; echo original","timeout":1} |
@@ -1460,7 +1460,7 @@ Feature: Hook tool use
       | rewrite | PreToolUse | Read    | Read(original.txt) | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"file_path":"replacement.txt"}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "original.txt" with the text "original" for a tool hook
     Given the project holds the file "replacement.txt" with the text "replacement" for a tool hook
     Given the scripted model plays these steps:
@@ -1489,7 +1489,7 @@ Feature: Hook tool use
       | rewrite | PreToolUse | Read    | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"file_path":"file:///tmp/%ZZ"}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "original.txt" with the text "original" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments                 |
@@ -1521,7 +1521,7 @@ Feature: Hook tool use
       | observer | PostToolUse | Bash    |        |                                                                                                                                |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                                     |
       |       | bash | {"command": "echo from-model", "timeout": 30} |
@@ -1549,7 +1549,7 @@ Feature: Hook tool use
       | guard | PreToolUse | Bash    | script | {"continue":false,"stopReason":"halt"} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -1572,7 +1572,7 @@ Feature: Hook tool use
       | post | PostToolUse | Bash    | script | {"decision":"block","reason":"check the output"} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -1599,7 +1599,7 @@ Feature: Hook tool use
       | replace | PostToolUse | Bash    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","updatedToolOutput":{"stdout":"replaced"}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -1626,7 +1626,7 @@ Feature: Hook tool use
       | ctx  | PostToolUse | Bash    | script | {"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":"checked by hook"}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -1654,7 +1654,7 @@ Feature: Hook tool use
       | guard | PreToolUse | Bash    | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":"no echo","additionalContext":"denied by hook"}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -1683,7 +1683,7 @@ Feature: Hook tool use
       | failure | PostToolUseFailure | Bash    |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments             |
       |       | bash | {"command": "exit 3"} |
@@ -1704,7 +1704,7 @@ Feature: Hook tool use
       | rewrite | PreToolUse | Glob    | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"pattern":"found*.md"}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "found.ts" with the text "source" for a tool hook
     Given the project holds the file "found.md" with the text "notes" for a tool hook
     Given the scripted model plays these steps:
@@ -1733,7 +1733,7 @@ Feature: Hook tool use
       | rewrite | PreToolUse | Grep    | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"pattern":"NEEDLE","output_mode":"content","-n":true,"-i":true,"head_limit":2}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "search.txt" with the text "needle\nother" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments                                   |
@@ -1761,7 +1761,7 @@ Feature: Hook tool use
       | rewrite | PreToolUse | Grep    | script | {"hookSpecificOutput":{"hookEventName":"PreToolUse","updatedInput":{"pattern":"replacement","output_mode":"content","-n":true,"context":1,"head_limit":1}}} |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "search.txt" with the text "original\nreplacement" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool | arguments                                   |
@@ -1793,7 +1793,7 @@ Feature: Hook tool use
       | after  | PostToolUse | *       |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "search.txt" with the text "needle\nother" for a tool hook
     Given the project holds the file "found.md" with the text "found" for a tool hook
     Given the scripted model plays these steps:
@@ -1818,7 +1818,7 @@ Feature: Hook tool use
       | after  | PostToolUse | *       |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "search.txt" with the text "needle\nother" for a tool hook
     Given the project holds the file "found.md" with the text "found" for a tool hook
     Given the scripted model plays these steps:
@@ -1843,7 +1843,7 @@ Feature: Hook tool use
       | after  | PostToolUse | *       |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "search.txt" with the text "needle\nother" for a tool hook
     Given the project holds the file "found.md" with the text "found" for a tool hook
     Given the scripted model plays these steps:
@@ -1868,7 +1868,7 @@ Feature: Hook tool use
       | after  | PostToolUse | *       |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "search.txt" with the text "needle\nother" for a tool hook
     Given the project holds the file "found.md" with the text "found" for a tool hook
     Given the scripted model plays these steps:
@@ -1893,7 +1893,7 @@ Feature: Hook tool use
       | after  | PostToolUse | *       |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "search.txt" with the text "needle\nother" for a tool hook
     Given the project holds the file "found.md" with the text "found" for a tool hook
     Given the scripted model plays these steps:
@@ -1919,7 +1919,7 @@ Feature: Hook tool use
       | post   | PostToolUse      | Bash    |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the user has set the thinking level "<level>"
     Given the scripted model plays these steps:
       | reply | tool | arguments               |
@@ -1957,7 +1957,7 @@ Feature: Hook tool use
       | post   | PostToolUse      | Bash    |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the user has set the thinking level "minimal"
     Given the scripted model plays these steps:
       | reply | tool | arguments               |

@@ -6,13 +6,45 @@
  * A later change to the work tree reaches the host as a new pushed commit.
  * The url and github kinds both publish this way. Every published repository
  * also carries a `stable` branch at the commit of `main`, so a scenario can add
- * a git marketplace at a ref that is not its default branch (HOST-01).
+ * a git marketplace at a ref that is not its default branch (HOST-01). A
+ * release tag names the commit the work tree has checked out and reaches the
+ * host alone, so a later push moves `main` past it and the tag stays (TAGS-01).
+ * The git-folder kind commits the same work tree with no `origin`, so a change
+ * is a new local commit and a release tag stays in the folder (TAGS-01).
  */
 
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 
 import { runGit } from "./hermetic-git.ts";
+
+/**
+ * Makes `workTree` a git work tree with no remote and commits every file in
+ * it. Every git runs with the HOME `home`.
+ */
+export async function initGitWorkTree(workTree: string, home: string): Promise<void> {
+  await runGit(workTree, home, "init", "-q");
+  await commitGitWorkTree(workTree, home);
+}
+
+/**
+ * Commits every change in the work tree `workTree`. The commit is new even
+ * when no file changed. Every git runs with the HOME `home`.
+ */
+export async function commitGitWorkTree(workTree: string, home: string): Promise<void> {
+  await runGit(workTree, home, "add", "-A");
+  await runGit(workTree, home, "commit", "-q", "--allow-empty", "-m", "publish");
+}
+
+/**
+ * Tags the commit the work tree `workTree` has checked out as `tag` and
+ * returns that commit. The tag is lightweight and never forced, so an existing
+ * tag makes it fail. Every git runs with the HOME `home`.
+ */
+export async function tagGitCommit(workTree: string, home: string, tag: string): Promise<string> {
+  await runGit(workTree, home, "tag", tag);
+  return runGit(workTree, home, "rev-parse", "HEAD");
+}
 
 /**
  * Commits every file of `workTree` and publishes the commit as the bare
@@ -24,9 +56,7 @@ export async function publishGitRepository(
   bareRepository: string,
   home: string,
 ): Promise<void> {
-  await runGit(workTree, home, "init", "-q");
-  await runGit(workTree, home, "add", "-A");
-  await runGit(workTree, home, "commit", "-q", "--allow-empty", "-m", "publish");
+  await initGitWorkTree(workTree, home);
   const parent = path.dirname(bareRepository);
   await mkdir(parent, { recursive: true });
   await runGit(parent, home, "clone", "-q", "--bare", workTree, bareRepository);
@@ -43,8 +73,7 @@ export async function publishGitRepository(
  * git runs with the HOME `home`.
  */
 export async function pushGitRepository(workTree: string, home: string): Promise<void> {
-  await runGit(workTree, home, "add", "-A");
-  await runGit(workTree, home, "commit", "-q", "--allow-empty", "-m", "publish");
+  await commitGitWorkTree(workTree, home);
   await runGit(workTree, home, "push", "-q", "--atomic", "origin", "main", "main:stable");
 }
 
@@ -63,8 +92,19 @@ export async function pushGitBranch(
 ): Promise<void> {
   await runGit(workTree, home, "checkout", "-q", "-B", branch, "main");
   await write();
-  await runGit(workTree, home, "add", "-A");
-  await runGit(workTree, home, "commit", "-q", "--allow-empty", "-m", "publish");
+  await commitGitWorkTree(workTree, home);
   await runGit(workTree, home, "push", "-q", "origin", branch);
   await runGit(workTree, home, "checkout", "-q", "main");
+}
+
+/**
+ * Tags the commit the published work tree `workTree` has checked out as
+ * `tag`, pushes the tag alone to its bare repository, and returns the tagged
+ * commit. Every git runs with the HOME `home`. The tag is lightweight and
+ * never forced: an existing tag, local or remote, makes it fail.
+ */
+export async function pushGitTag(workTree: string, home: string, tag: string): Promise<string> {
+  const commit = await tagGitCommit(workTree, home, tag);
+  await runGit(workTree, home, "push", "-q", "origin", `refs/tags/${tag}`);
+  return commit;
 }

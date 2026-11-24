@@ -9,7 +9,7 @@
 import { errorMessage } from "../../../shared/errors.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
-import { parseArgs } from "../../args.ts";
+import { parseArgs, tokenizeArgs } from "../../args.ts";
 import { passThroughFlagNames } from "../../flag-catalog.ts";
 
 import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
@@ -217,6 +217,33 @@ export function rejectUnknownFlag(
   }
 
   notifyUsageError(ctx, run, { message: `Unknown flag: "${flag}".`, usage });
+  return true;
+}
+
+/**
+ * The prelude of a verb that takes no argument (`browse`, `reload`): a token
+ * that opens with `--` is an unknown flag, named first, and any other token is
+ * `surplus`. Returns whether it rejected the arguments.
+ */
+export function rejectArguments(
+  args: string,
+  {
+    ctx,
+    run,
+    usage,
+    surplus,
+  }: { ctx: ExtensionCommandContext; run: NotificationRun; usage: string; surplus: string },
+): boolean {
+  const tokens = tokenizeArgs(args).map((token) => token.value);
+  if (rejectUnknownFlag(tokens, { ctx, run, usage })) {
+    return true;
+  }
+
+  if (tokens.length === 0) {
+    return false;
+  }
+
+  notifyUsageError(ctx, run, { message: surplus, usage });
   return true;
 }
 

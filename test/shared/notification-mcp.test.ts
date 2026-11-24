@@ -392,6 +392,7 @@ describe("composeMcpMigrationText", () => {
           server: "srv",
         },
       ],
+      "/reload",
     );
 
     // assert
@@ -424,6 +425,7 @@ describe("composeMcpMigrationText", () => {
         { kind: "stopped", scope: "project", detail: "line\nbreak\u007f\u009f\u00a0" },
       ],
       [],
+      "/reload",
     );
 
     // assert
@@ -455,6 +457,7 @@ describe("composeMcpMigrationText", () => {
         },
       ],
       [],
+      "/reload",
     );
 
     // assert
@@ -500,6 +503,7 @@ describe("composeMcpMigrationText", () => {
         },
       ],
       [],
+      "/reload",
     );
 
     // assert
@@ -578,6 +582,7 @@ describe("composeMcpMigrationText", () => {
           row,
         ],
         [],
+        "/reload",
       );
 
       // assert
@@ -616,6 +621,7 @@ describe("composeMcpMigrationText", () => {
         },
       ],
       [],
+      "/reload",
     );
 
     // assert
@@ -657,6 +663,7 @@ describe("composeMcpMigrationText", () => {
         },
       ],
       [],
+      "/reload",
     );
 
     // assert
@@ -727,6 +734,7 @@ describe("composeMcpMigrationText", () => {
         },
       ],
       [],
+      "/reload",
     );
 
     // assert
@@ -763,6 +771,7 @@ describe("composeMcpMigrationText", () => {
         },
       ],
       [],
+      "/reload",
     );
 
     // assert
@@ -792,6 +801,7 @@ describe("composeMcpMigrationText", () => {
         },
       ],
       [],
+      "/reload",
     );
 
     // assert
@@ -821,6 +831,7 @@ describe("composeMcpMigrationText", () => {
         },
       ],
       [],
+      "/reload",
     );
 
     // assert
@@ -867,6 +878,7 @@ describe("composeMcpMigrationText", () => {
         },
       ],
       [],
+      "/reload",
     );
 
     // assert
@@ -884,3 +896,86 @@ describe("composeMcpMigrationText", () => {
     );
   });
 });
+
+// RELOADCMD-D1: each left row that tells the user to reload names the host's
+// reload command; with `/reload` it keeps its bytes, and with none it drops
+// the reload sentence or ends the instruction with a full stop.
+for (const { row, lines } of [
+  {
+    row: { kind: "stopped", scope: "user", detail: "state.json is locked" },
+    lines: {
+      "/reload":
+        "  The user-scope move stopped: state.json is locked. The next /reload tries again.",
+      "/claude:plugin reload":
+        "  The user-scope move stopped: state.json is locked. The next /claude:plugin reload tries again.",
+      none: "  The user-scope move stopped: state.json is locked.",
+    },
+  },
+  {
+    row: { kind: "file-unreadable", scope: "user", file: "mcp.json" },
+    lines: {
+      "/reload":
+        "  The user-scope mcp.json is not a valid MCP config, so nothing in this scope moved. Fix it, then run /reload.",
+      "/claude:plugin reload":
+        "  The user-scope mcp.json is not a valid MCP config, so nothing in this scope moved. Fix it, then run /claude:plugin reload.",
+      none: "  The user-scope mcp.json is not a valid MCP config, so nothing in this scope moved. Fix it.",
+    },
+  },
+  {
+    row: {
+      kind: "collision",
+      scope: "user",
+      plugin: "p",
+      marketplace: "m",
+      servers: ["s"],
+      key: "plugin_p_s_",
+      source: "~/.config/mcp/mcp.json",
+    },
+    lines: {
+      "/reload":
+        "  s (p) [user] plugin_p_s_ is already defined in ~/.config/mcp/mcp.json, so no server of p moved. Remove or rename that server, then run /reload.",
+      "/claude:plugin reload":
+        "  s (p) [user] plugin_p_s_ is already defined in ~/.config/mcp/mcp.json, so no server of p moved. Remove or rename that server, then run /claude:plugin reload.",
+      none: "  s (p) [user] plugin_p_s_ is already defined in ~/.config/mcp/mcp.json, so no server of p moved. Remove or rename that server.",
+    },
+  },
+  {
+    row: {
+      kind: "unfinished",
+      scope: "project",
+      plugin: "hello",
+      marketplace: "mp",
+      servers: ["srv"],
+      file: "mcp.json",
+      detail: "permission denied",
+    },
+    lines: {
+      "/reload":
+        "  srv (hello) [project] The new entries are written, but mcp.json could not be updated: permission denied. The next /reload finishes the move.",
+      "/claude:plugin reload":
+        "  srv (hello) [project] The new entries are written, but mcp.json could not be updated: permission denied. The next /claude:plugin reload finishes the move.",
+      none: "  srv (hello) [project] The new entries are written, but mcp.json could not be updated: permission denied.",
+    },
+  },
+] satisfies ReadonlyArray<{
+  row: McpMigrationRow;
+  lines: Readonly<Record<"/reload" | "/claude:plugin reload" | "none", string>>;
+}>) {
+  for (const reload of ["/reload", "/claude:plugin reload", undefined] as const) {
+    test(`a ${row.kind} row words its reload for ${String(reload)} (RELOADCMD-D1)`, () => {
+      // act
+      const text = composeMcpMigrationText([row], [], reload);
+
+      // assert
+      assert.strictEqual(
+        text,
+        [
+          "Plugin MCP servers in mcp.json need attention.",
+          "",
+          "Left in mcp.json:",
+          lines[reload ?? "none"],
+        ].join("\n"),
+      );
+    });
+  }
+}

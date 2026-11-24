@@ -59,7 +59,7 @@ Feature: Plugin apply
     Then the installation record of the project scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -83,7 +83,7 @@ Feature: Plugin apply
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | marketplace status | id            | name | status    | reasons | scope   | version |
       | fixtures         | project           | added              | demo@fixtures | demo | installed |         | project | 1.0.0   |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -108,14 +108,12 @@ Feature: Plugin apply
     Then the result lists these marketplaces:
       | name  | scope   | status   |
       | tools | project | will add |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
-      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | marketplace status |
-      | tools            | project           | will add           |
       | tools            | project           | will add           |
     When the user runs "/claude:plugin apply --scope project"
     Then the result has these fields:
@@ -204,7 +202,7 @@ Feature: Plugin apply
       | kind         | reconcile-pending-empty |
       | severity     | info                    |
       | needs reload | false                   |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports no results
     When the user runs "/claude:plugin apply --scope project"
     Then the result has these fields:
@@ -234,7 +232,7 @@ Feature: Plugin apply
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | uninstalled |         | project | 1.0.0   |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command            | description             |
       | /skill:alpha-skill | A skill of alpha 1.0.0. |
@@ -257,7 +255,7 @@ Feature: Plugin apply
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status   | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | disabled |         | project | 1.0.0   |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers no skills
 
   Scenario: Apply enables a plugin set to enabled in a config by hand
@@ -279,7 +277,7 @@ Feature: Plugin apply
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -309,14 +307,12 @@ Feature: Plugin apply
       | fixtures         | project           | ghost@fixtures | ghost | failed    | not in manifest | project |         |       |                  |
       | fixtures         | project           | demo@fixtures  | demo  | installed |                 | project | 1.0.0   |       |                  |
       | fixtures         | project           | beta@fixtures  | beta  | disabled  |                 | project | 1.0.0   |       |                  |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
       | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
-      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id             | name  | status       | reasons | scope   |
-      | fixtures         | project           | ghost@fixtures | ghost | will install |         | project |
       | fixtures         | project           | ghost@fixtures | ghost | will install |         | project |
     Then the session offers these skills:
       | command           | description            |
@@ -518,7 +514,7 @@ Feature: Plugin apply
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id        | name | status   | reasons                        | scope   | version | cause chain                                                    | cause truncated | leaks | rollback partial |
       | tools            | project           | app@tools | app  | disabled | dependency version unsatisfied | project | 1.0.0   | Update "lib@tools" to satisfy ^2.0.0, or uninstall "app@tools" | false           |       |                  |
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command          | description           |
       | /skill:lib-skill | A skill of lib 1.0.0. |

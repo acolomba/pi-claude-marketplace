@@ -216,6 +216,7 @@ function createPassUnderTest(options: {
 function sessionContext(cwd: string, mode = "tui", trusted = true): BackgroundContext {
   return {
     mode,
+    hasUI: mode === "tui" || mode === "rpc",
     cwd,
     isProjectTrusted: () => trusted,
     get ui(): NotificationUi {

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { existsSync } from "node:fs";
 import {
   chmod,
   link,
@@ -22,6 +23,8 @@ import { preparePruneRollback } from "../../../extensions/pi-claude-marketplace/
 import { saveAgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
+import { CHMOD_DENIAL_HINT, chmodDeniesThisProcess } from "../../chmod-denial.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 
 import type { IndexedRecord } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-index.ts";
@@ -110,6 +113,55 @@ async function seed(locations: ScopedLocations): Promise<{
   });
   await writeFile(locations.mcpJsonPath, '{ "mcpServers": { "orphan": 1 } }\n');
   return { member: orphan, skill, command, agent, hook };
+}
+
+// Gives the member one agent whose target lies outside the scope, which the
+// snapshot refuses, and returns that target.
+async function saveOutsideAgentIndex(locations: ScopedLocations, cwd: string): Promise<string> {
+  const outside = path.join(cwd, "outside.md");
+  await saveAgentsIndex(locations, {
+    schemaVersion: 1,
+    agents: [
+      {
+        plugin: "orphan",
+        marketplace: "mp",
+        sourceAgent: "orphan",
+        generatedName: "orphan-agent",
+        sourcePath: "/unused",
+        targetPath: outside,
+        sourceHash: "unused",
+        droppedFields: [],
+        droppedTools: [],
+        warnings: [],
+      },
+    ],
+  });
+  return outside;
+}
+
+// Adds a read-only directory beside the skill's SKILL.md, as a plugin's skill
+// may ship one, and returns it. As plain root a mode denies nothing, so the
+// case would prove nothing there.
+async function addReadOnlySkillDirectory(skill: string): Promise<string> {
+  if (!(await chmodDeniesThisProcess())) {
+    throw new Error(`A 0o555 skill directory does not deny this process. ${CHMOD_DENIAL_HINT}`);
+  }
+
+  const readOnly = path.join(path.dirname(skill), "read-only");
+  await mkdir(readOnly);
+  await writeFile(path.join(readOnly, "data.txt"), "data.txt original\n");
+  await chmod(readOnly, 0o555);
+  return readOnly;
+}
+
+// Makes the read-only directory and its copy in the backup writable again, so
+// the hermetic cleanup can remove the case root. The skill is the first
+// snapshot target, so its copy is entry 0 of the backup.
+async function restoreReadOnlyWrites(locations: ScopedLocations, readOnly: string): Promise<void> {
+  const backupCopy = path.join(locations.extensionRoot, "prune-backup-ABC123", "0", "read-only");
+  for (const directory of [readOnly, backupCopy].filter((candidate) => existsSync(candidate))) {
+    await chmod(directory, 0o755);
+  }
 }
 
 test("missing directories retain recovery backups while files and state restore", async () => {
@@ -472,23 +524,7 @@ test("snapshot preparation refuses an agent path outside the scope", async () =>
     // arrange
     const locations = locationsFor("project", cwd);
     const fixture = await seed(locations);
-    await saveAgentsIndex(locations, {
-      schemaVersion: 1,
-      agents: [
-        {
-          plugin: "orphan",
-          marketplace: "mp",
-          sourceAgent: "orphan",
-          generatedName: "orphan-agent",
-          sourcePath: "/unused",
-          targetPath: path.join(cwd, "outside.md"),
-          sourceHash: "unused",
-          droppedFields: [],
-          droppedTools: [],
-          warnings: [],
-        },
-      ],
-    });
+    await saveOutsideAgentIndex(locations, cwd);
     const stateBefore = await readFile(locations.stateJsonPath);
 
     // act & assert
@@ -1678,6 +1714,171 @@ test("failed committed cleanup stays silent and retains the backup", async () =>
       (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-"))
         .length,
       1,
+    );
+  });
+});
+
+test("NFR-3: discard removes a backup that holds a read-only directory", async () => {
+  await withHermeticEnvironment("prune-rollback-read-only-discard-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const readOnly = await addReadOnlySkillDirectory(fixture.skill);
+    try {
+      const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
+
+      // act
+      await rollback.discard();
+
+      // assert
+      assert.deepStrictEqual(
+        (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-")),
+        [],
+      );
+    } finally {
+      await restoreReadOnlyWrites(locations, readOnly);
+    }
+  });
+});
+
+test("NFR-3: discard changes no mode behind a backup symlink or in the live tree", async () => {
+  await withHermeticEnvironment("prune-rollback-read-only-symlink-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const readOnly = await addReadOnlySkillDirectory(fixture.skill);
+    const outside = path.join(cwd, "outside-dir");
+    await mkdir(outside);
+    await chmod(outside, 0o555);
+    await symlink(outside, path.join(path.dirname(fixture.skill), "linked"));
+    try {
+      const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
+
+      // act
+      await rollback.discard();
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          outside: (await lstat(outside)).mode & 0o777,
+          live: (await lstat(readOnly)).mode & 0o777,
+          backups: (await readdir(locations.extensionRoot)).filter((name) =>
+            name.startsWith("prune-backup-"),
+          ),
+        },
+        { outside: 0o555, live: 0o555, backups: [] },
+      );
+    } finally {
+      await restoreReadOnlyWrites(locations, readOnly);
+    }
+  });
+});
+
+test("NFR-3: a rollback that restores everything removes a backup that holds a read-only directory", async () => {
+  await withHermeticEnvironment("prune-rollback-read-only-rollback-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const readOnly = await addReadOnlySkillDirectory(fixture.skill);
+    try {
+      const rollback = await preparePruneRollback(locations, [fixture.member], restoreOps);
+
+      // act
+      const failures = await rollback.rollback();
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          phases: failures.map(({ phase }) => phase),
+          backups: (await readdir(locations.extensionRoot)).filter((name) =>
+            name.startsWith("prune-backup-"),
+          ),
+        },
+        { phases: [], backups: [] },
+      );
+    } finally {
+      await restoreReadOnlyWrites(locations, readOnly);
+    }
+  });
+});
+
+test("NFR-3: a refused snapshot removes a backup that already holds a read-only directory and rethrows the refusal", async () => {
+  await withHermeticEnvironment("prune-rollback-read-only-refusal-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const readOnly = await addReadOnlySkillDirectory(fixture.skill);
+    const outside = await saveOutsideAgentIndex(locations, cwd);
+    try {
+      // act & assert
+      await assert.rejects(
+        preparePruneRollback(locations, [fixture.member], restoreOps),
+        (error: unknown) => {
+          assert.ok(error instanceof PathContainmentError);
+          assert.strictEqual(error.child, outside);
+          return true;
+        },
+      );
+      assert.deepStrictEqual(
+        (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-")),
+        [],
+      );
+    } finally {
+      await restoreReadOnlyWrites(locations, readOnly);
+    }
+  });
+});
+
+test("NFR-3: a refused snapshot with an absent backup root rethrows the refusal", async () => {
+  await withHermeticEnvironment("prune-rollback-absent-root-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const orphan = member(locations);
+    await saveState(locations.extensionRoot, {
+      schemaVersion: 3,
+      marketplaces: { mp: orphan.marketplace },
+    });
+    const outside = await saveOutsideAgentIndex(locations, cwd);
+    const absentRootOps = {
+      ...restoreOps,
+      createBackupRoot: (prefix: string): Promise<string> => Promise.resolve(`${prefix}ABC123`),
+    } satisfies PruneRestoreOps;
+
+    // act & assert
+    await assert.rejects(
+      preparePruneRollback(locations, [orphan], absentRootOps),
+      (error: unknown) => {
+        assert.ok(error instanceof PathContainmentError);
+        assert.strictEqual(error.child, outside);
+        return true;
+      },
+    );
+    assert.deepStrictEqual(
+      (await readdir(locations.extensionRoot)).filter((name) => name.startsWith("prune-backup-")),
+      [],
+    );
+  });
+});
+
+test("NFR-3: a refused snapshot whose backup cleanup fails rethrows the refusal", async () => {
+  await withHermeticEnvironment("prune-rollback-refusal-cleanup-", async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const fixture = await seed(locations);
+    const outside = await saveOutsideAgentIndex(locations, cwd);
+    const failingCleanupOps = {
+      ...restoreOps,
+      removeBackup: () => Promise.reject(new Error("backup cleanup refused")),
+    } satisfies PruneRestoreOps;
+
+    // act & assert
+    await assert.rejects(
+      preparePruneRollback(locations, [fixture.member], failingCleanupOps),
+      (error: unknown) => {
+        assert.ok(error instanceof PathContainmentError);
+        assert.strictEqual(error.child, outside);
+        return true;
+      },
     );
   });
 });

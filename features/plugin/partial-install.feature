@@ -47,7 +47,7 @@ Feature: Plugin partial install
       | kind  | name       |
       | skill | demo-skill |
 
-  Scenario: A new session offers the skills of a plugin installed with --partial
+  Scenario: A reload offers the skills of a plugin installed with --partial
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -55,7 +55,7 @@ Feature: Plugin partial install
     Given the published plugin "demo" of the marketplace "fixtures" has an output style
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project --partial"
-    When the user starts a new pi session
+    When the user reloads pi
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |

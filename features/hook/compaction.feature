@@ -16,7 +16,7 @@ Feature: Hook compaction
       | post | PostCompact | *       |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply      | context tokens |
       | Hello.     | 120000         |
@@ -45,7 +45,7 @@ Feature: Hook compaction
       | tagged  | PostCompact | *       | exec script | ["note"]  |                                                |           |           |         |       |            |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply      |
       | Hello.     |
@@ -68,7 +68,7 @@ Feature: Hook compaction
       | refused | PostCompact | *       | script | not now | 2         |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply      | context tokens |
       | Hello.     | 120000         |
@@ -91,7 +91,7 @@ Feature: Hook compaction
       | post | PostCompact | *       |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply      | error                                              |
       | Hello.     |                                                    |
@@ -118,7 +118,7 @@ Feature: Hook compaction
       | post-auto   | PostCompact | auto    |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply      | context tokens |
       | Hello.     | 120000         |
@@ -142,7 +142,7 @@ Feature: Hook compaction
       | refused | PostCompact | *       | script |                                                | not now   | 2         |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply      |
       | Hello.     |

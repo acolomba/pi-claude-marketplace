@@ -19,7 +19,7 @@ Feature: Agent listing
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                | tool     | arguments         |
       |                      | subagent | {"action":"list"} |
@@ -46,7 +46,7 @@ Feature: Agent listing
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                  | tool     | arguments         |
       |                        | subagent | {"action":"list"} |
@@ -75,7 +75,7 @@ Feature: Agent listing
       | dashed.md | dashed |                        | Use it for audits. | Audit the build.     |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                  | tool     | arguments         |
       |                        | subagent | {"action":"list"} |
@@ -109,7 +109,7 @@ Feature: Agent listing
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
     Given the user has run "/claude:plugin install tools@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                  | tool     | arguments         |
       |                        | subagent | {"action":"list"} |
@@ -138,7 +138,7 @@ Feature: Agent listing
       | reviewer.md           | reviewer | Reviews the files it is given.         | Review the files named in the task.   |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                  | tool     | arguments         |
       |                        | subagent | {"action":"list"} |
@@ -167,7 +167,7 @@ Feature: Agent listing
       | UPPER.MD             | Works in an upper-case file. | Work in an upper-case file. |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                  | tool     | arguments         |
       |                        | subagent | {"action":"list"} |
@@ -195,7 +195,7 @@ Feature: Agent listing
       | notes.txt   | notes    | Holds notes.                   | Keep notes.                         |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                | tool     | arguments         |
       |                      | subagent | {"action":"list"} |
@@ -231,7 +231,7 @@ Feature: Agent listing
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                | tool     | arguments         |
       |                      | subagent | {"action":"list"} |
@@ -263,7 +263,7 @@ Feature: Agent listing
       | marketplace name | marketplace scope | id            | name | status    | reasons               | scope | version |
       | fixtures         | user              | demo@fixtures | demo | installed | requires pi-subagents | user  | 1.0.0   |
 
-  Scenario: A new session advertises each bridged agent to the parent model
+  Scenario: A reload advertises each bridged agent to the parent model
     Given pi runs with the scripted model and these companions:
       | companion    |
       | pi-subagents |
@@ -278,7 +278,7 @@ Feature: Agent listing
       | auditor.md  | auditor  | Audits the build.              | Audit the build.                    |
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply                                   |
       | I can use the auditor and the reviewer. |

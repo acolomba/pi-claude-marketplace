@@ -1,12 +1,16 @@
 // test/integration/mcp-status-conformance.test.ts
 //
-// ASTAT-01 / ASTAT-02: the MCP status tracker reads pi-mcp-adapter's own
-// status contract. The tracker subscribes to the adapter's own channel and
-// accepts its own snapshot version, and `/claude:plugin info` joins the
-// snapshot on the keys a real install wrote to `mcp-adapter.json`, in both
-// scopes, through Pi's real event bus. The adapter's empty shutdown snapshot
-// reads as no usable snapshot. A drift guard pins the channel, the version and
-// the status union in the adapter's `dist/types.d.ts`.
+// Peer conformance (ITSCOPE-01) against pi-mcp-adapter's own status contract.
+// ASTAT-02: the adapter's empty shutdown snapshot, sent on the adapter's own
+// channel with the adapter's own snapshot version, over Pi's real event bus
+// (`createEventBus`), leaves the MCP status tracker with no usable snapshot;
+// the unit test `test/platform/mcp-status.test.ts` covers the same tracker rule
+// with a fake bus, so this case adds the adapter's constants and Pi's bus.
+// ASTAT-01: a drift guard pins the channel, the version and the status union in
+// the adapter's `dist/types.d.ts`, which info maps. What info shows from the adapter's reports is
+// in the scenarios of `features/mcp-server/`: `companion-missing.feature` and
+// `project-scope.feature` show a server's status, and `project-scope.feature`
+// also shows a user row that reads `(overridden by project scope)`.
 //
 // pi-mcp-adapter is an optional peer. The test imports its compiled
 // `dist/types.js` constants in place from the declared floor that
@@ -15,38 +19,21 @@
 //
 // The adapter ships its snapshot builder only as TypeScript source under
 // `node_modules`, which Node does not type-strip, so the test builds the
-// snapshot by hand in the adapter's shape. The adapter names each server by
-// its config key, so the snapshot lists the keys the install wrote.
+// snapshot by hand in the adapter's shape.
 
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 import { createEventBus } from "@earendil-works/pi-coding-agent";
 
-import {
-  createHooksRouting,
-  createHooksRuntime,
-  readHooksJson,
-} from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
-import {
-  createInstallOperation,
-  getPluginInfo,
-} from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
-import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createMcpStatusTracker } from "../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
-import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
-import { statusReaders } from "../platform/mcp-status-seed.ts";
 
-import { makeCtx, seedMcpPlugin } from "./mcp-plugin-seed.ts";
 import {
   findPiMcpAdapterPackage,
   loadPiMcpAdapterModule,
   readPiMcpAdapterDist,
 } from "./pi-mcp-adapter-peer.ts";
 
-import type { Scope } from "../../extensions/pi-claude-marketplace/shared/types.ts";
 import type { PiMcpAdapterTypes } from "./pi-mcp-adapter-peer.ts";
 
 const CONTRACT_LINE_PREFIXES = [
@@ -59,83 +46,6 @@ async function loadAdapterTypes(): Promise<PiMcpAdapterTypes> {
   const peer = await findPiMcpAdapterPackage();
   return loadPiMcpAdapterModule<PiMcpAdapterTypes>(peer, "types");
 }
-
-async function installHello(cwd: string, scope: Scope): Promise<void> {
-  const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
-  await createInstallOperation(
-    hooksRouting,
-    createCompletionCache(),
-  )({ ...makeCtx().session, scope, cwd, marketplace: "mp", plugin: "hello" });
-}
-
-async function readAdapterKeys(cwd: string, scope: Scope): Promise<string[]> {
-  const config = JSON.parse(
-    await readFile(locationsFor(scope, cwd).mcpAdapterJsonPath, "utf8"),
-  ) as {
-    readonly mcpServers: Readonly<Record<string, unknown>>;
-  };
-  return Object.keys(config.mcpServers);
-}
-
-test("ASTAT-01: a snapshot on pi-mcp-adapter's own channel, for the keys install wrote, reaches info through Pi's event bus", async () => {
-  const types = await loadAdapterTypes();
-  await withHermeticEnvironment("mcp-status-conformance-", async ({ cwd }) => {
-    // arrange
-    await seedMcpPlugin(cwd, ["project", "user"]);
-    await installHello(cwd, "user");
-    await installHello(cwd, "project");
-    const userKeys = await readAdapterKeys(cwd, "user");
-    const projectKeys = await readAdapterKeys(cwd, "project");
-    const events = createEventBus();
-    const mcpStatus = createMcpStatusTracker(events);
-    const info = makeCtx();
-
-    // act
-    events.emit(types.MCP_STATUS_EVENT, {
-      version: types.MCP_STATUS_SNAPSHOT_VERSION,
-      servers: projectKeys.map((name) => ({
-        name,
-        status: "connected",
-        toolCount: 1,
-        directToolCount: 0,
-        disabled: false,
-        listenState: "active",
-      })),
-      totalTools: 1,
-      totalResources: 0,
-      connectedCount: 1,
-      disabledCount: 0,
-    });
-    await getPluginInfo({
-      ...info.session,
-      mcpStatus: statusReaders({ adapter: mcpStatus }),
-      projectTrusted: true,
-      marketplace: "mp",
-      plugin: "hello",
-      cwd,
-    });
-
-    // assert
-    assert.deepStrictEqual(userKeys, ["plugin_hello_srv_"]);
-    assert.deepStrictEqual(projectKeys, ["plugin_hello_srv_"]);
-    assert.deepStrictEqual(info.notifications, [
-      {
-        message: [
-          "● mp [project] <no autoupdate>",
-          "  ● hello v1.0.0 (installed)",
-          "    mcp: plugin:hello:srv (connected)",
-          "    requires: mcp (missing)",
-          "",
-          "● mp [user] <no autoupdate>",
-          "  ● hello v1.0.0 (installed)",
-          "    mcp: plugin:hello:srv (overridden by project scope)",
-          "    requires: mcp (missing)",
-        ].join("\n"),
-        severity: undefined,
-      },
-    ]);
-  });
-});
 
 test("ASTAT-02: pi-mcp-adapter's shutdown snapshot leaves the tracker with no usable snapshot", async () => {
   // arrange

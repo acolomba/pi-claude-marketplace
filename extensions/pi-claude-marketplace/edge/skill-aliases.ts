@@ -6,6 +6,7 @@ import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
 import { notifyUsageError } from "../shared/notification-dispatch.ts";
 import { openNotificationRun } from "../shared/notification-run.ts";
+import { reloadCommandFor } from "../shared/session-host.ts";
 
 import { finishedTransform } from "./input-transform.ts";
 
@@ -200,6 +201,7 @@ export function registerSkillAliases(
         projectTrusted: ctx.isProjectTrusted(),
         sessionId: ctx.sessionManager.getSessionId(),
         thinkingLevel: pi.getThinkingLevel(),
+        reloadCommand: reloadCommandFor(ctx.mode, ctx),
       });
     } catch (error) {
       outcome = { kind: "abort", message: errorMessage(error) };

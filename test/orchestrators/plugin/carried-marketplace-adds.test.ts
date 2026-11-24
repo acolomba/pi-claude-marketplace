@@ -74,7 +74,7 @@ function addArgs(
     locations,
     source: pathSource(raw),
     cwd: "/work",
-    ctx: { mode: "tui", ui: { notify: () => undefined } },
+    ctx: { mode: "tui", hasUI: true, ui: { notify: () => undefined } },
     run: runWithNothingLoaded(),
     removalOps: createRemovalOps(),
   };

@@ -1,7 +1,8 @@
 /**
  * @fileoverview Steps about the project directory of the session, the folder
- * Pi runs in. A git repository in it is made with the suite's hermetic git,
- * so the developer's git configuration never reaches it.
+ * Pi runs in: a git repository in it, and whether it holds anything. A git
+ * repository in it is made with the suite's hermetic git, so the developer's
+ * git configuration never reaches it.
  *
  * The release removes the repository data the step made. The reset of the
  * next scenario empties the project as well, which also removes what a
@@ -10,10 +11,10 @@
  */
 
 import assert from "node:assert/strict";
-import { rm } from "node:fs/promises";
+import { readdir, rm } from "node:fs/promises";
 import path from "node:path";
 
-import { Given } from "@cucumber/cucumber";
+import { Given, Then } from "@cucumber/cucumber";
 
 import { runGit } from "../lib/hermetic-git.ts";
 
@@ -25,4 +26,10 @@ Given("the project is a git repository with one commit", async function (this: S
   this.onRelease(() => rm(path.join(projectDir, ".git"), { recursive: true, force: true }));
   await runGit(projectDir, home, "commit", "-q", "--allow-empty", "-m", "start");
   assert.strictEqual(await runGit(projectDir, home, "rev-list", "--count", "HEAD"), "1");
+});
+
+// WR-05: each scenario's reset empties the project, so a project that is
+// empty after a command shows that the command left nothing in it.
+Then("the project directory is empty", async function (this: ScenarioWorld) {
+  assert.deepStrictEqual(await readdir(this.tokens.projectDir), []);
 });

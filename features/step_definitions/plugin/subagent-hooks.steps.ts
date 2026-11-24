@@ -1,15 +1,17 @@
 /**
  * @fileoverview Steps about the hooks of an installed plugin in a pi-subagents
- * background child and in the main session beside it: a child profile Pi with
- * the profile's MCP implementation, a prompt whose turn keeps every hook run
- * since Pi started, a sibling child and a child that run beside the profile Pi,
- * the release of their waiting hooks, and the hook processes still waiting.
+ * child, background or foreground, and in the main session beside it: a child
+ * profile Pi with the profile's MCP implementation, a prompt whose turn keeps
+ * every hook run since Pi started, a sibling child and a child that run beside
+ * the profile Pi, the release of their waiting hooks, and the hook processes
+ * still waiting.
  *
- * A child runs a plugin's tool hooks and none of the main session's lifecycle
- * hooks (D-PG3-08). Pi runs a session's SessionStart hooks while it starts,
- * before any prompt, so the startup-session prompt keeps every stand-in log
- * line since the profile Pi started as the turn, and the runs step states the
- * startup run of a main session and its absence in a child.
+ * A background child runs a plugin's tool hooks and none of the main session's
+ * lifecycle hooks (D-PG3-08). A foreground child runs inside the main Pi's
+ * turn and runs no plugin hook. Pi runs a session's SessionStart hooks while
+ * it starts, before any prompt, so the startup-session prompt keeps every
+ * stand-in log line since the profile Pi started as the turn, and the runs
+ * step states the startup run of a main session and its absence in a child.
  *
  * The sibling and the child are Pis of their own in the run's sandbox, with
  * the profile Pi's scripted model and MCP implementation and pi-subagents'
@@ -37,7 +39,9 @@
  * so the runs step states which session a child's hook names in `session`,
  * `transcript path`, and `CLAUDE_CODE_SESSION_ID`: an ordinal or `main` for
  * an id, `session file of <ordinal>` or `session file of main` for a session
- * file (D-PG6-01, D-PG6-24).
+ * file (D-PG6-01, D-PG6-24). The in-order runs step states every hook run of
+ * the run, so it shows a hook that a foreground child's tool call runs in any
+ * session.
  */
 
 import assert from "node:assert/strict";
@@ -126,10 +130,12 @@ interface RealChildSession {
   readonly pid: number | undefined;
 }
 
-// The main session as a run of real children records it in the turn.
+// The main session as a run of real children records it in the turn, and
+// the session Pi started with, which the install's new session ended.
 interface RealMainSession {
   readonly sessionId: string;
   readonly sessionFile: string;
+  readonly startupSessionId: string;
 }
 
 // The stdin members and the variable a real child's run states, in the
@@ -306,6 +312,13 @@ function realSessionNames(
   ]);
 }
 
+// Whether a run names a child agent or session in its stdin.
+function childIdentityCell(run: HookRun): string {
+  return Object.hasOwn(run.stdin, "agent_type") || Object.hasOwn(run.stdin, "agent_id")
+    ? "named"
+    : "none";
+}
+
 function stdinCell(value: unknown, ordinals: ReadonlyMap<string, string>): string {
   if (value === undefined) {
     return "";
@@ -455,6 +468,7 @@ When(
     recordRealChildren(this, "real children", observed.hookRuns, sessions, {
       sessionId: observed.mainSessionId,
       sessionFile: observed.mainSessionFile,
+      startupSessionId: observed.startupSessionId,
     });
   },
 );
@@ -483,6 +497,7 @@ When(
     recordRealChildren(this, "concurrent children", observed.hookRuns, sessions, {
       sessionId: observed.mainSessionId,
       sessionFile: observed.mainSessionFile,
+      startupSessionId: observed.startupSessionId,
     });
   },
 );
@@ -655,13 +670,36 @@ Then(
     const rows = runs
       .filter((run) => run.stdin.session_id === sessionId && !Object.hasOwn(run.stdin, "agent_id"))
       .slice(0, MAIN_CONTROL_RUNS)
-      .map((run) => [
-        run.event,
-        stdinCell(run.stdin.tool_name, new Map()),
-        Object.hasOwn(run.stdin, "agent_type") || Object.hasOwn(run.stdin, "agent_id")
-          ? "named"
-          : "none",
-      ]);
+      .map((run) => [run.event, stdinCell(run.stdin.tool_name, new Map()), childIdentityCell(run)]);
     assert.deepStrictEqual([["event", "tool name", "child identity"], ...rows], table.raw());
+  },
+);
+
+// Every hook run of a run of real children, in the order the hooks appended
+// them, so a run that a child's tool call adds to any session is a row of
+// its own. `startup` is the session Pi started with, which the install's new
+// session ended, and `main` is that new session.
+Then(
+  "the plugin's hooks record these runs in order:",
+  function (this: ScenarioWorld, table: DataTable) {
+    const turn = this.requireTurn();
+    const runs = (turn.logs.get(HOOK_RUNS_LOG) ?? []) as readonly HookRun[];
+    const sessions = realChildSessions(this);
+    const main = realMainSession(this);
+    const names = new Map([
+      ...realSessionNames(sessions, main),
+      [main.startupSessionId, "startup"],
+    ]);
+    const rows = runs.map((run) => [
+      stdinCell(run.stdin.session_id, names),
+      run.event,
+      stdinCell(run.stdin.tool_name, new Map()),
+      childIdentityCell(run),
+    ]);
+    assert.deepStrictEqual(
+      [["session", "event", "tool name", "child identity"], ...rows],
+      table.raw(),
+    );
+    this.markTurnCompared();
   },
 );

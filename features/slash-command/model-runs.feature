@@ -43,7 +43,7 @@ Feature: Slash command model runs
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Hello. |
@@ -63,7 +63,7 @@ Feature: Slash command model runs
   Scenario: The model runs a command through the tool and gets its filled body with its context command not run
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply     | tool               | arguments                                     |
       |           | run_plugin_command | {"command":"demo:deploy","args":"production"} |
@@ -87,7 +87,7 @@ Feature: Slash command model runs
       """
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  | tool               | arguments                |
       |        | run_plugin_command | {"command":"demo:where"} |
@@ -112,7 +112,7 @@ Feature: Slash command model runs
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply    | tool               | arguments                 |
       |          | run_plugin_command | {"command":"demo:manual"} |
@@ -128,7 +128,7 @@ Feature: Slash command model runs
   Scenario: A new session after the plugin's commands are gone no longer offers the tool
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply  |
       | Hello. |

@@ -204,6 +204,84 @@ Feature: Plugin list
       | extras           | user              | lima@extras | lima | installed |         | user  | 1.0.0   |
       | extras           | user              | mike@extras | mike | available |         |       | 1.0.0   |
 
+  Scenario: The unfiltered list shows a plugin the project installed from a user marketplace under that marketplace (CMC-21, D-13-17)
+    Given the marketplace "official" is published as a dir source
+    Given the marketplace "official" offers these plugins:
+      | name  | version |
+      | alpha | 1.0.0   |
+      | beta  | 1.0.0   |
+    Given the marketplace "official" is added to the user scope
+    Given the user has run "/claude:plugin install alpha@official --scope project"
+    When the user runs "/claude:plugin list"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 2           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id             | name  | status    | reasons | scope   | version |
+      | official         | user              | alpha@official | alpha | installed |         | project | 1.0.0   |
+      | official         | user              | beta@official  | beta  | available |         |         | 1.0.0   |
+
+  Scenario: The unfiltered list keeps a plugin the project installed from a user marketplace under that marketplace beside a project marketplace that offers a plugin of the same name (CMC-21, D-13-17)
+    Given the marketplace "official" is published as a dir source
+    Given the marketplace "official" offers these plugins:
+      | name  | version |
+      | alpha | 1.0.0   |
+    Given the marketplace "team" is published as a dir source
+    Given the marketplace "team" offers these plugins:
+      | name  | version |
+      | alpha | 0.9.0   |
+    Given the marketplace "official" is added to the user scope
+    Given the user has run "/claude:plugin install alpha@official --scope project"
+    Given the marketplace "team" is added to the project scope
+    When the user runs "/claude:plugin list"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 2           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id             | name  | status    | reasons | scope   | version |
+      | official         | user              | alpha@official | alpha | installed |         | project | 1.0.0   |
+      | team             | project           | alpha@team     | alpha | available |         |         | 0.9.0   |
+
+  Scenario: The unfiltered list shows a plugin installed from a project marketplace that shares a user marketplace's name but not its source under the project header, and offers the user marketplace's copy as available (CMC-21, D-13-17)
+    Given the marketplace "official" is published as a dir source
+    Given the marketplace "official" offers these plugins:
+      | name  | version |
+      | alpha | 1.0.0   |
+    Given the marketplace "team" is published as a dir source
+    Given the marketplace "team" offers these plugins:
+      | name  | version |
+      | alpha | 0.9.0   |
+    Given the marketplace "team" publishes this manifest:
+      """
+      {"name":"official","owner":{"name":"features"},"plugins":[{"name":"alpha","source":"./plugins/alpha","version":"0.9.0"}]}
+      """
+    Given the marketplace "official" is added to the user scope
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/team --scope project"
+    Given the user has run "/claude:plugin install alpha@official --scope project"
+    When the user runs "/claude:plugin list"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 2           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id             | name  | status    | reasons | scope   | version |
+      | official         | project           | alpha@official | alpha | installed |         | project | 0.9.0   |
+      | official         | user              | alpha@official | alpha | available |         |         | 1.0.0   |
+
   Scenario: The list shows the version a path-source plugin's plugin.json declares over its entry's
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins:

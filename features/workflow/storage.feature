@@ -28,9 +28,9 @@ Feature: Workflow storage
       | demo:hello.json |
     Then the user's workflow directory holds no saved or staged workflows
 
-  Scenario: A new session offers the workflow of a project install and runs it
+  Scenario: A reload offers the workflow of a project install and runs it
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     When the user runs the workflow command "/demo:hello"
     Then the workflow run ends with the status "completed" and the result "Hello from demo."
     Then the workflow engine shows these notices:

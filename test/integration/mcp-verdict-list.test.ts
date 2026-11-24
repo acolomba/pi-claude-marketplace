@@ -1,8 +1,12 @@
-// MREC-03 / D-P3-01 / D-P3-02 / D-P3-04: an install stores the neutral MCP
-// verdict with `compatibilityBasis: "neutral"`, and `list` reads each
-// installed record's verdict for the active MCP implementation at read time,
-// offline and without writing. Each case drives the real install in a
-// hermetic home and reads the saved state.json or the list payload.
+// test/integration/mcp-verdict-list.test.ts
+//
+// MREC-03 / D-P3-01 / D-P3-02 / D-P3-04: two internal cases (ITSCOPE-01).
+// One reads the neutral MCP verdict and its `compatibilityBasis: "neutral"`
+// that an install stores in state.json. The other reads the list rows of one
+// sse install under each MCP implementation, and under none, and checks that
+// the list leaves the bytes of state.json as they were. Each case drives the
+// real install in a hermetic home. The list rows a user sees are in
+// `features/mcp-server/verdict-list.feature`.
 
 import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
@@ -17,10 +21,7 @@ import {
 import { loadPluginListPayload } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts";
 import { createInstallOperation } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import {
-  loadState,
-  saveState,
-} from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
@@ -133,40 +134,5 @@ test("MREC-03 / D-P3-04: list shows one sse install per implementation and write
       none: [installedRow],
     });
     assert.deepStrictEqual(await readFile(stateJsonPath), stateBytes);
-  });
-});
-
-test("MREC-02: a legacy record with no MCP trace reads as no servers and re-resolves nothing", async () => {
-  await withHermeticEnvironment("mcp-verdict-list-legacy-", async ({ cwd }) => {
-    // arrange
-    await seedMcpPlugin(cwd, ["project"], EVENTS);
-    await installHello(cwd, false);
-    const { extensionRoot } = locationsFor("project", cwd);
-    const state = await loadState(extensionRoot);
-    const record = state.marketplaces.mp?.plugins.hello;
-    assert.ok(record !== undefined);
-    // A record that left no MCP trace: no recorded servers, no basis, no
-    // staged server, and no `mcpServers` kind. Its plugin still declares the
-    // sse server, so a re-resolution would read it as blocked under Pi's
-    // built-in MCP and list the plugin as partially installed.
-    delete record.mcpServerConfigs;
-    delete record.compatibilityBasis;
-    record.resources.mcpServers = [];
-    await saveState(extensionRoot, state);
-
-    // act
-    const rows = await listedRows(cwd, "builtin");
-
-    // assert
-    assert.deepStrictEqual(rows, [
-      {
-        status: "installed",
-        name: "hello",
-        dependencies: [],
-        version: "1.0.0",
-        severity: "info",
-        needsReload: false,
-      },
-    ]);
   });
 });

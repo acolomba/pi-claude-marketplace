@@ -14,7 +14,7 @@ Feature: Hook matchers
       | listed | PreToolUse | Edit, Write \| Read \| Bash |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the project holds the file "original.txt" with the text "before" for a tool hook
     Given the scripted model plays these steps:
       | reply | tool  | arguments                                                   |
@@ -59,7 +59,7 @@ Feature: Hook matchers
       | spaced | PreToolUse | Read Write |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project --partial"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -78,7 +78,7 @@ Feature: Hook matchers
       | regex | PreToolUse | ^Ba.*   |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -117,7 +117,7 @@ Feature: Hook matchers
       | wrongcase | PreToolUse | ^ba.*   |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -139,7 +139,7 @@ Feature: Hook matchers
       | valid   | PreToolUse | ^Ba.*   |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project --partial"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                      |
       |       | bash | {"command": "echo from-model"} |
@@ -178,7 +178,7 @@ Feature: Hook matchers
       | stop   | Stop             | [       |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply |
       | Hi.   |
