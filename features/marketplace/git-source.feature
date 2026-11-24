@@ -1,7 +1,7 @@
 Feature: Marketplace git source
 
-  A git marketplace is cloned when it is added and fetched when it is updated, with the user's stored
-  credential if the host asks for one, and fails without it. Listing, inspecting, and removing it read
+  A git marketplace is cloned when it is added and cloned again when an update finds its remote moved,
+  with the user's stored credential if the host asks for one, and fails without it. Listing, inspecting, and removing it read
   only local state. The scenarios run a headless Pi against a loopback https git host.
 
   Scenario Outline: A removed git marketplace can be added again from the same source
@@ -300,3 +300,60 @@ Feature: Marketplace git source
       | source kind | source                        | cause chain                                                                                                                 |
       | github      | acme/tools                    | Failed to update marketplace "tools"., {git host} rejected the stored credential, git ls-remote failed: https-auth, exit code 128 |
       | github      | https://github.com/acme/tools | Failed to update marketplace "tools"., {git host} rejected the stored credential, git ls-remote failed: https-auth, exit code 128 |
+
+  Scenario: Updating a marketplace whose checkout cannot be moved aside keeps it and warns, and the next update replaces it
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" has the description "Tools before the update"
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" has the description "Tools after the update"
+    Given the folder that holds the checkout of the marketplace "tools" in the project scope is read-only
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                         |
+      | severity     | warning                         |
+      | needs reload | false                           |
+      | summary      | Some operations need attention. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status  | reasons           | scope   | leaks | rollback partial | cause chain                                                                                                                                                                   | cause truncated | marketplace reasons |
+      | tools            | project           | skipped            | tools | tools | skipped | permission denied | project |       |                  | Could not replace the marketplace checkout because it is in use; the existing copy was kept and the next update will try again., {read-only checkout folder rename error} | false           | permission denied   |
+    When the user runs "/claude:plugin marketplace info tools --scope project"
+    Then the marketplace info result has these fields:
+      | kind                    | marketplace-info              |
+      | name                    | tools                         |
+      | scope                   | project                       |
+      | details autoupdate      | false                         |
+      | details last updated at | {scenario time}               |
+      | source kind             | url                           |
+      | source abs path         |                               |
+      | source url              | https://{git host}/acme/tools |
+      | source owner            |                               |
+      | source repo             |                               |
+      | source ref              |                               |
+      | description             | Tools before the update       |
+      | severity                | info                          |
+      | needs reload            | false                         |
+    When the folder that holds the checkout of the marketplace "tools" in the project scope becomes writable again
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status |
+      | tools            | project           | updated            |
+    When the user runs "/claude:plugin marketplace info tools --scope project"
+    Then the marketplace info result has these fields:
+      | kind                    | marketplace-info              |
+      | name                    | tools                         |
+      | scope                   | project                       |
+      | details autoupdate      | false                         |
+      | details last updated at | {scenario time}               |
+      | source kind             | url                           |
+      | source abs path         |                               |
+      | source url              | https://{git host}/acme/tools |
+      | source owner            |                               |
+      | source repo             |                               |
+      | source ref              |                               |
+      | description             | Tools after the update        |
+      | severity                | info                          |
+      | needs reload            | false                         |
