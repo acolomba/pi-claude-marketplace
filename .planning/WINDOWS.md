@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 23
+open_count: 24
 waived_count: 52
 fixed_count: 48
-total_count: 123
-last_updated: 2026-11-24T05:05:07.972Z
+total_count: 124
+last_updated: 2026-11-24T08:44:49.906Z
 ---
 
 # Broken Windows Ledger
@@ -138,6 +138,7 @@ last_updated: 2026-11-24T05:05:07.972Z
 | 121 | 2 | unrun-verify | extensions/pi-claude-marketplace/platform/git-neutral-directory.ts |  | [system-git] the Windows branches added by the code-review fixes (neutral directory without owner/mode checks, GIT_ALLOW_PROTOCOL spelling intersection, lookup with unreadable real paths) have fake-host unit cases only; the manual Windows check covers them | open |  | 2026-11-23T20:17:06.190Z |  |
 | 122 | 3 | unrun-verify | extensions/pi-claude-marketplace/platform/git.ts |  | [system-git] a copy of an old clone checks out with core.symlinks unset, so Git for Windows' system config decides symlinks; the manual Windows check covers it (A9) | open |  | 2026-11-24T03:43:08.597Z |  |
 | 123 | 3 | unrun-verify | extensions/pi-claude-marketplace/platform/git-one-shot-credential.ts |  | [system-git] the Device Flow retry's '!'-prefixed one-shot credential helper runs through Git for Windows' sh with a Windows path in single quotes; the manual Windows check covers it (A4) | open |  | 2026-11-24T05:05:07.972Z |  |
+| 124 | 3 | unrun-verify | extensions/pi-claude-marketplace/orchestrators/marketplace/clone-swap.ts |  | [system-git] a marketplace checkout held open by another process (EBUSY/EPERM on rename) is kept and retried on the next update; only injected renames prove it, and the manual Windows check covers it | open |  | 2026-11-24T08:44:49.906Z |  |
 
 ````json
 [
@@ -1681,6 +1682,19 @@ last_updated: 2026-11-24T05:05:07.972Z
     "status": "open",
     "reason": "",
     "recorded_at": "2026-11-24T05:05:07.972Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 124,
+    "kind": "unrun-verify",
+    "phase": "3",
+    "file": "extensions/pi-claude-marketplace/orchestrators/marketplace/clone-swap.ts",
+    "line": null,
+    "description": "[system-git] a marketplace checkout held open by another process (EBUSY/EPERM on rename) is kept and retried on the next update; only injected renames prove it, and the manual Windows check covers it",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-11-24T08:44:49.906Z",
     "resolved_at": null,
     "milestone": null
   }
