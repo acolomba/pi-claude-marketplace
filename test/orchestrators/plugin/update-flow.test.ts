@@ -16,8 +16,6 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
-import http from "isomorphic-git/http/node";
-
 import {
   createHooksRouting,
   createHooksRuntime,
@@ -101,7 +99,6 @@ import type {
   SoftDepStatus,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
-import type { GitHttpRequest, GitHttpResponse } from "isomorphic-git/http/node";
 
 function createUpdateOperations() {
   return createPluginUpdateOperations(
@@ -9349,114 +9346,62 @@ test("ENBL-09 / PURL-09: refreshing a DISABLED git-source record moves resolvedS
 // target's constraint-gate evaluation, so a repository or marketplace clone
 // shared by several constrained targets is listed once per run.
 //
-// The git arm's tag listing (`platform/git.ts::listRemoteTags`) reaches the
-// network through `isomorphic-git`'s own `http` transport object, not
-// through the `GitOps` seam `cloneCacheSeam` fakes -- the CLONE step and the
-// TAG-LISTING step are two separate git surfaces. `installTagListingTransport`
-// below is a trimmed copy of `test/platform/git.test.ts`'s own protocol v2
-// wire fixture (info/refs GET negotiation, then a `git-upload-pack` POST
-// answering the ls-refs `command=ls-refs` request), pared down to what
-// listing a fixed tag set needs -- request counting, not response-body
-// assertions, which `test/platform/git.test.ts` already owns.
+// The git arm's tag listing (`platform/git.ts::listRemoteTags`) runs
+// `git ls-remote --tags` through the system-git process, not through the
+// `GitOps` seam `cloneCacheSeam` fakes -- the CLONE step and the TAG-LISTING
+// step are two separate git surfaces. `installTagListingGit` below counts
+// the listings at the process boundary.
 // ───────────────────────────────────────────────────────────────────────────
 
-function tagListingPacket(payload: string): Buffer {
-  const body = Buffer.from(payload, "utf8");
-  return Buffer.concat([
-    Buffer.from((body.length + 4).toString(16).padStart(4, "0"), "utf8"),
-    body,
-  ]);
-}
-
-const TAG_LISTING_FLUSH = Buffer.from("0000", "utf8");
-
-function tagListingAdvertisementBody(): Buffer {
-  return Buffer.concat([
-    tagListingPacket("# service=git-upload-pack\n"),
-    TAG_LISTING_FLUSH,
-    tagListingPacket("version 2\n"),
-    tagListingPacket("ls-refs\n"),
-    tagListingPacket("fetch\n"),
-    TAG_LISTING_FLUSH,
-  ]);
-}
-
-function tagListingRefsBody(refs: readonly string[]): Buffer {
-  return Buffer.concat([...refs.map((ref) => tagListingPacket(`${ref}\n`)), TAG_LISTING_FLUSH]);
-}
-
-function tagListingHttpResponse(
-  url: string,
-  statusCode: number,
-  contentType: string,
-  bytes: Buffer,
-): GitHttpResponse {
-  async function* body(): AsyncIterableIterator<Uint8Array> {
-    await Promise.resolve();
-    yield Uint8Array.from(bytes);
-  }
-
-  return {
-    url,
-    statusCode,
-    statusMessage: statusCode === 200 ? "OK" : "Error",
-    headers: { "content-type": contentType },
-    body: body(),
-  };
-}
-
 /**
- * Installs a minimal git protocol v2 tag-listing transport for one remote
- * URL, answering every `info/refs` negotiation and `git-upload-pack` ls-refs
- * POST with the SAME fixed `refs` set, and counting the negotiations (one
- * per `listRemoteTags` call) so a test can assert how many times the
- * repository was actually queried. `options.failFirstInfoRefs` makes the
- * FIRST `info/refs` negotiation answer 503 (proving a failed listing writes
- * no memo entry, per D-10-18) before every later one succeeds.
+ * Puts a `git` first on PATH for one case. It answers every `ls-remote` with
+ * the SAME fixed `tags` lines and records one line per listing, so a test can
+ * assert how many times the repository was actually queried; every other
+ * command runs the real git found on the PATH the case started with.
+ * `options.failFirstListing` makes the FIRST listing fail as an unreachable
+ * host (proving a failed listing writes no memo entry, per D-10-18) before
+ * every later one succeeds. No listing leaves the machine.
  */
-function installTagListingTransport(
+async function installTagListingGit(
   t: TestContext,
-  remoteUrl: string,
-  refs: readonly string[],
-  options: { readonly failFirstInfoRefs?: boolean } = {},
-): { readonly infoRefsCalls: number[] } {
-  const calls: number[] = [];
-  const infoUrl = `${remoteUrl}/info/refs?service=git-upload-pack`;
-
-  t.mock.method(http, "request", (request: GitHttpRequest): Promise<GitHttpResponse> => {
-    if (request.url === infoUrl && request.method === "GET") {
-      calls.push(calls.length + 1);
-      if (options.failFirstInfoRefs === true && calls.length === 1) {
-        return Promise.resolve(
-          tagListingHttpResponse(request.url, 503, "text/plain", Buffer.alloc(0)),
-        );
-      }
-
-      return Promise.resolve(
-        tagListingHttpResponse(
-          request.url,
-          200,
-          "application/x-git-upload-pack-advertisement",
-          tagListingAdvertisementBody(),
-        ),
-      );
-    }
-
-    if (request.url === `${remoteUrl}/git-upload-pack` && request.method === "POST") {
-      return Promise.resolve(
-        tagListingHttpResponse(
-          request.url,
-          200,
-          "application/x-git-upload-pack-result",
-          tagListingRefsBody(refs),
-        ),
-      );
-    }
-
-    throw new Error(`unplanned Git HTTP request: ${request.method ?? "undefined"} ${request.url}`);
+  tags: readonly string[],
+  options: { readonly failFirstListing?: boolean } = {},
+): Promise<{ readonly listings: () => Promise<number> }> {
+  const directory = await mkdtemp(path.join(tmpdir(), "tag-listing-git-"));
+  const record = path.join(directory, "listings");
+  const previousPath = process.env.PATH ?? "";
+  t.after(async () => {
+    process.env.PATH = previousPath;
+    await rm(directory, { recursive: true, force: true });
   });
-
-  return { infoRefsCalls: calls };
+  const failFirst = options.failFirstListing === true ? "yes" : "no";
+  await writeFile(
+    path.join(directory, "git"),
+    `#!/bin/sh
+case " $* " in
+  *" ls-remote "*)
+    echo listing >> '${record}'
+    if [ ${failFirst} = yes ] && [ "$(wc -l < '${record}')" -eq 1 ]; then
+      echo "fatal: unable to access 'https://example.com/org/repo/': The requested URL returned error: 503" >&2
+      exit 128
+    fi
+    cat <<'TAGS'
+${tags.join("\n")}
+TAGS
+    exit 0
+    ;;
+esac
+PATH='${previousPath}' exec git "$@"
+`,
+    { mode: 0o755 },
+  );
+  process.env.PATH = `${directory}${path.delimiter}${previousPath}`;
+  return {
+    listings: async () => {
+      const lines = await readFile(record, "utf8").catch(() => "");
+      return lines.split("\n").filter((line) => line !== "").length;
+    },
+  };
 }
 
 /**
@@ -9542,9 +9487,9 @@ test("D-10-18: one bulk run lists the same repository's tags once", async (t) =>
       const cloneUrl = "https://example.com/org/repo";
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
       await seedConstrainedGitSiblings(cwd, cloneUrl, fixtureRepoDir);
-      const { infoRefsCalls } = installTagListingTransport(t, cloneUrl, [
-        `${SHA_OLD} refs/tags/gitfoo--v1.2.0`,
-        `${SHA_NEW} refs/tags/gitbar--v1.2.0`,
+      const git = await installTagListingGit(t, [
+        `${SHA_OLD}\trefs/tags/gitfoo--v1.2.0`,
+        `${SHA_NEW}\trefs/tags/gitbar--v1.2.0`,
       ]);
       const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, run } = makeCtx();
@@ -9562,7 +9507,7 @@ test("D-10-18: one bulk run lists the same repository's tags once", async (t) =>
       // assert -- both gitfoo and gitbar are constrained by "app" and share
       // one repository URL; the SAME memo across the whole bulk run means
       // the second plugin's probe reuses the first's listing.
-      assert.strictEqual(infoRefsCalls.length, 1);
+      assert.strictEqual(await git.listings(), 1);
       const locations = locationsFor("project", cwd);
       const after = await loadState(locations.extensionRoot);
       assert.strictEqual(after.marketplaces.mp?.plugins.gitfoo?.resolvedSha, SHA_OLD);
@@ -9574,10 +9519,8 @@ test("D-10-18: one bulk run lists the same repository's tags once", async (t) =>
 });
 
 test("D-10-18: one bulk run resolves two path-source siblings from the same marketplace clone", async () => {
-  // arrange -- `isomorphic-git`'s own package exports are non-configurable
-  // (`t.mock.method` on it throws `Cannot redefine property`, unlike the
-  // mutable `isomorphic-git/http/node` transport object the git-arm cases
-  // above intercept), so a local `listTags` call count is not observable
+  // arrange -- a path-source marketplace reads its tags in process, so no
+  // git listing runs and a local `listTags` call count is not observable
   // from this orchestration layer. What IS observable, and asserted below,
   // is that BOTH path-source siblings correctly pin against the SAME
   // marketplace clone's tags in one bulk run -- the memo's own "list once"
@@ -9691,11 +9634,10 @@ test("D-10-18: a failed listing is re-queried for the next plugin in the same ru
       const cloneUrl = "https://example.com/org/repo";
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
       await seedConstrainedGitSiblings(cwd, cloneUrl, fixtureRepoDir);
-      const { infoRefsCalls } = installTagListingTransport(
+      const git = await installTagListingGit(
         t,
-        cloneUrl,
-        [`${SHA_OLD} refs/tags/gitfoo--v1.2.0`, `${SHA_NEW} refs/tags/gitbar--v1.2.0`],
-        { failFirstInfoRefs: true },
+        [`${SHA_OLD}\trefs/tags/gitfoo--v1.2.0`, `${SHA_NEW}\trefs/tags/gitbar--v1.2.0`],
+        { failFirstListing: true },
       );
       const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, run } = makeCtx();
@@ -9712,7 +9654,7 @@ test("D-10-18: a failed listing is re-queried for the next plugin in the same ru
 
       // assert -- the failed attempt wrote no memo entry, so the SECOND
       // plugin re-queries and succeeds instead of inheriting the failure.
-      assert.strictEqual(infoRefsCalls.length, 2);
+      assert.strictEqual(await git.listings(), 2);
       const locations = locationsFor("project", cwd);
       const after = await loadState(locations.extensionRoot);
       assert.strictEqual(after.marketplaces.mp?.plugins.gitfoo?.version, "0.9.0");
@@ -9732,9 +9674,9 @@ test("D-10-18: two updatePlugins runs through one binding do not share a memo", 
       const cloneUrl = "https://example.com/org/repo";
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
       await seedConstrainedGitSiblings(cwd, cloneUrl, fixtureRepoDir);
-      const { infoRefsCalls } = installTagListingTransport(t, cloneUrl, [
-        `${SHA_OLD} refs/tags/gitfoo--v1.2.0`,
-        `${SHA_NEW} refs/tags/gitbar--v1.2.0`,
+      const git = await installTagListingGit(t, [
+        `${SHA_OLD}\trefs/tags/gitfoo--v1.2.0`,
+        `${SHA_NEW}\trefs/tags/gitbar--v1.2.0`,
       ]);
       const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, run } = makeCtx();
@@ -9762,7 +9704,7 @@ test("D-10-18: two updatePlugins runs through one binding do not share a memo", 
 
       // assert -- `updatePluginsWith` allocates the memo pair per call, so
       // gitbar's probe re-queries instead of reading gitfoo's listing.
-      assert.strictEqual(infoRefsCalls.length, 2);
+      assert.strictEqual(await git.listings(), 2);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

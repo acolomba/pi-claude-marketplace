@@ -172,6 +172,13 @@ export interface PiProfile {
    */
   readonly withoutGitHubBaseOverride?: true;
   /**
+   * The `https_proxy` of a profile Pi without the GitHub base override and of
+   * its terminal session: the harness CONNECT proxy that keeps every system
+   * git request of that Pi on this machine (D-SG-14). `usePiWithProfile()`
+   * refuses it on a profile that keeps the override.
+   */
+  readonly httpsProxy?: string;
+  /**
    * The profile Pi saves its session in the sandbox's sessions folder instead
    * of starting with `--no-session`, so a restart can start a new session or
    * continue, open, or fork a saved one (D-PG6-16). The scenario's release
@@ -751,6 +758,8 @@ export class ScenarioWorld extends World {
 
     if (profile.withoutGitHubBaseOverride === true) {
       this.keepTerminalSessionLocal(profile);
+    } else if (profile.httpsProxy !== undefined) {
+      throw new Error("only a profile Pi without the GitHub base override takes a proxy");
     }
 
     const harness = harnessDirectory(currentRun().sandbox.home);
@@ -1262,9 +1271,10 @@ async function savedPayloads(pi: PiProcess): Promise<readonly NotificationPayloa
 }
 
 // The run's git environment for a profile Pi, without the GitHub base
-// override when the profile asks for that (D-BG-01).
+// override and with the profile's proxy when the profile asks for that
+// (D-BG-01, D-SG-14).
 function profileGitEnvironment(
-  profile: Pick<PiProfile, "withoutGitHubBaseOverride">,
+  profile: Pick<PiProfile, "withoutGitHubBaseOverride" | "httpsProxy">,
 ): RpcGitEnvironment {
   const { piEnvironment } = currentRun();
   if (profile.withoutGitHubBaseOverride !== true) {
@@ -1272,7 +1282,9 @@ function profileGitEnvironment(
   }
 
   const { PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: _override, ...environment } = piEnvironment;
-  return environment;
+  return profile.httpsProxy === undefined
+    ? environment
+    : { ...environment, https_proxy: profile.httpsProxy, no_proxy: "127.0.0.1" };
 }
 
 // The launch of a profile Pi after `restart` changes `launch`. An open or a

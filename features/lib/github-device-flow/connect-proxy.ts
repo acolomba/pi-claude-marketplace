@@ -141,7 +141,6 @@ class ConnectProxy {
  * `http://<address>`, and `close()`, which ends every open tunnel and
  * connection and stops listening; a second call waits for the first.
  */
-// fallow-ignore-next-line unused-export -- test/architecture/github-device-flow-connect-proxy.test.ts runs it; the Device Flow profile adopts it with the system git transport (D-SG-14).
 export async function startGitHubConnectProxy(options: {
   readonly gitHost: string;
   readonly logPath: string;

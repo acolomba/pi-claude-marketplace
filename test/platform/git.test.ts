@@ -107,10 +107,6 @@ const OID_TAG = "3333333333333333333333333333333333333333";
 const OID_PEELED = "4444444444444444444444444444444444444444";
 const OID_LIGHTWEIGHT = "5555555555555555555555555555555555555555";
 const FLUSH = Buffer.from("0000", "utf8");
-const DELIM = Buffer.from("0001", "utf8");
-// Hand-authored rather than imported from the module under test: feeding the
-// module's own literal back in could not fail.
-const TAG_REF_PREFIX = "refs/tags/";
 
 const FULL_ADVERTISEMENT = [
   `${OID_MAIN} HEAD symref-target:refs/heads/main`,
@@ -196,30 +192,6 @@ function packResultBody(packfile: Buffer): Buffer {
   return Buffer.concat([
     packet("NAK\n"),
     packetBytes(Buffer.concat([Buffer.from([1]), packfile])),
-    FLUSH,
-  ]);
-}
-
-function expectedListRefsBody(): Buffer {
-  return Buffer.concat([
-    packet("command=ls-refs\n"),
-    DELIM,
-    packet("peel"),
-    packet("symrefs"),
-    FLUSH,
-  ]);
-}
-
-/**
- * The ls-refs command a tag listing sends: peeling on, no symrefs, and the
- * server-side ref-prefix that makes the advertisement the `--tags` equivalent.
- */
-function expectedListTagsBody(): Buffer {
-  return Buffer.concat([
-    packet("command=ls-refs\n"),
-    DELIM,
-    packet("peel"),
-    packet(`ref-prefix ${TAG_REF_PREFIX}`),
     FLUSH,
   ]);
 }
@@ -609,10 +581,7 @@ async function withoutGitOnPath(t: TestContext): Promise<() => void> {
   return restore;
 }
 
-function isExpectedDiscoveryError(
-  error: unknown,
-  caller: "git.clone" | "git.fetch" | "git.listServerRefs",
-): boolean {
+function isExpectedDiscoveryError(error: unknown, caller: "git.clone" | "git.fetch"): boolean {
   assert.ok(error instanceof git.Errors.HttpError);
   assert.strictEqual(error.caller, caller);
   assert.deepStrictEqual(error.data, {
@@ -627,10 +596,7 @@ function isExpectedDiscoveryError(
  * D-10: the discovery failure stays the error itself, so the classifiers still
  * read its code at depth 0, and its cause names the URL actually fetched.
  */
-function isFetchedUrlDiscoveryError(
-  error: unknown,
-  caller: "git.clone" | "git.listServerRefs",
-): boolean {
+function isFetchedUrlDiscoveryError(error: unknown, caller: "git.clone"): boolean {
   assert.ok(isExpectedDiscoveryError(error, caller));
   assert.ok(error instanceof Error && error.cause instanceof FetchedUrlCause);
   assert.deepStrictEqual(
@@ -642,36 +608,6 @@ function isFetchedUrlDiscoveryError(
     { message: `fetched ${REMOTE_URL}`, url: REMOTE_URL, cause: undefined },
   );
   return true;
-}
-
-function expectedPublicRequests(): readonly [RecordedHttpRequest, RecordedHttpRequest] {
-  return [
-    {
-      url: `${REMOTE_URL}/info/refs?service=git-upload-pack`,
-      method: "GET",
-      headers: { "Git-Protocol": "version=2" },
-      body: Buffer.alloc(0),
-    },
-    {
-      url: `${REMOTE_URL}/git-upload-pack`,
-      method: "POST",
-      headers: {
-        "Git-Protocol": "version=2",
-        "content-type": "application/x-git-upload-pack-request",
-        accept: "application/x-git-upload-pack-result",
-      },
-      body: expectedListRefsBody(),
-    },
-  ];
-}
-
-/**
- * The same two-request envelope a ref resolution sends, carrying the tag
- * listing's own ls-refs command instead.
- */
-function expectedTagRequests(): readonly [RecordedHttpRequest, RecordedHttpRequest] {
-  const [discovery, listRefs] = expectedPublicRequests();
-  return [discovery, { ...listRefs, body: expectedListTagsBody() }];
 }
 
 function expectedDiscoveryRequest(
@@ -2557,6 +2493,7 @@ describe("D-SG-14 and GAUTH-04: an auth failure of a remote request", () => {
 /** A commit the wire doubles serve over protocol version 1: its advertisement and its pack. */
 interface ServedCommit {
   readonly oid: string;
+  readonly packfile: Buffer;
   readonly advertisement: WireResponse;
   readonly pack: WireResponse;
 }
@@ -2571,12 +2508,11 @@ async function wireFetchFixture(
   const remote = await createGitTestRepository(t, { boundary: "local" });
   await remote.commit([{ filepath: "next.txt", contents: "next\n" }], "next");
   const { oid, packfile } = await remote.pack();
-  const local = await createGitTestRepository(t, { boundary: "local" });
-  await local.run("remote", "add", "origin", REMOTE_URL);
   return {
-    dir: local.dir,
+    dir: await cloneOfRemote(t),
     served: {
       oid,
+      packfile,
       advertisement: {
         statusCode: 200,
         statusMessage: "OK",
@@ -2598,6 +2534,13 @@ async function wireFetchFixture(
  * origin: protocol headers only, never a credential or a cookie (WR-03).
  */
 const CROSS_ORIGIN_DISCOVERY_HEADERS = ["accept-encoding"];
+
+/** A repository whose origin is `REMOTE_URL`, which a fetch fills. */
+async function cloneOfRemote(t: TestContext): Promise<string> {
+  const local = await createGitTestRepository(t, { boundary: "local" });
+  await local.run("remote", "add", "origin", REMOTE_URL);
+  return local.dir;
+}
 
 /** The commit `refs/remotes/origin/main` names in `dir` after a fetch. */
 function fetchedMain(dir: string): Promise<string | undefined> {
@@ -3230,167 +3173,166 @@ describe("listRemotes", () => {
   }
 });
 
+/**
+ * RESV-03, SG-TRN-01: a repository served at a `file://` URL with the
+ * lightweight tag `light` on the initial commit, and the annotated tag `v2`
+ * and the tag of a tag `tot` on the second commit.
+ */
+async function taggedRemote(t: TestContext): Promise<{
+  readonly url: string;
+  readonly initialOid: string;
+  readonly secondOid: string;
+}> {
+  const repository = await createGitTestRepository(t, { boundary: "local" });
+  await repository.run("tag", "light");
+  const secondOid = await repository.commit([{ filepath: "two.txt", contents: "two\n" }], "two");
+  await repository.run("tag", "-a", "-m", "v2", "v2");
+  await repository.run("tag", "-a", "-m", "tot", "tot", "v2");
+  return { url: `file://${repository.dir}`, initialOid: repository.initialOid, secondOid };
+}
+
+/** A git process whose remote runs print `stdout` and succeed. */
+function printingGitProcess(stdout: string): GitProcess {
+  return {
+    locate: () => Promise.resolve("/usr/bin/git"),
+    run: () => Promise.resolve({ exitCode: 0, stdout, stderr: "" }),
+  };
+}
+
 describe("listRemoteTags", () => {
-  test("RESV-03: queries the tag namespace and returns every advertised tag in order", async (t) => {
+  test("RESV-03, SG-TRN-01: lists each tag once with the commit it names, a peeled line winning", async (t) => {
     // arrange
-    const requests = installRemoteTransport(t, [
-      `${OID_LIGHTWEIGHT} refs/tags/v1.0.0`,
-      `${OID_MAIN} refs/tags/v1.1.0`,
-      `${OID_TAG} refs/tags/v2.0.0 peeled:${OID_PEELED}`,
-    ]);
+    const remote = await taggedRemote(t);
+    const systemGit = await hermeticGitProcess(t);
 
     // act
-    const tags = await listRemoteTags({ url: REMOTE_URL });
+    const tags = await listRemoteTags({ url: remote.url }, systemGit);
 
     // assert
     assert.deepStrictEqual(tags, [
-      { name: "v1.0.0", oid: OID_LIGHTWEIGHT },
-      { name: "v1.1.0", oid: OID_MAIN },
-      { name: "v2.0.0", oid: OID_PEELED },
+      { name: "light", oid: remote.initialOid },
+      { name: "tot", oid: remote.secondOid },
+      { name: "v2", oid: remote.secondOid },
     ]);
-    assert.deepStrictEqual(requests, expectedTagRequests());
   });
 
-  test("GHB-01: lists the tags of a github.com URL from the base", async (t) => {
+  test("RESV-03: a remote with no tags answers an empty list", async (t) => {
     // arrange
-    const requests = installRemoteTransport(t, [
-      `${OID_LIGHTWEIGHT} refs/tags/v1.0.0`,
-      `${OID_TAG} refs/tags/v2.0.0 peeled:${OID_PEELED}`,
-    ]);
-    setGitHubBaseUrl(t, `https://${HOST}`);
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    const systemGit = await hermeticGitProcess(t);
 
     // act
-    const tags = await listRemoteTags({ url: GITHUB_REMOTE_URL });
-
-    // assert
-    assert.deepStrictEqual(tags, [
-      { name: "v1.0.0", oid: OID_LIGHTWEIGHT },
-      { name: "v2.0.0", oid: OID_PEELED },
-    ]);
-    assert.deepStrictEqual(requests, expectedTagRequests());
-  });
-
-  test("D-10: a failed listing from the base names the fetched URL", async (t) => {
-    // arrange
-    const requests = installFailedDiscoveryTransport(t);
-    setGitHubBaseUrl(t, `https://${HOST}`);
-
-    // act
-    const listing = listRemoteTags({ url: GITHUB_REMOTE_URL });
-
-    // assert
-    await assert.rejects(listing, (error: unknown) =>
-      isFetchedUrlDiscoveryError(error, "git.listServerRefs"),
-    );
-    assert.deepStrictEqual(requests, [expectedDiscoveryRequest({ "Git-Protocol": "version=2" })]);
-  });
-
-  test("D-03-02.2: an entry naming an annotated tag's peel is not a second tag", async (t) => {
-    // arrange
-    const requests = installRemoteTransport(t, [
-      `${OID_TAG} refs/tags/v2.0.0 peeled:${OID_PEELED}`,
-      `${OID_PEELED} refs/tags/v2.0.0^{}`,
-    ]);
-
-    // act
-    const tags = await listRemoteTags({ url: REMOTE_URL });
-
-    // assert
-    assert.deepStrictEqual(tags, [{ name: "v2.0.0", oid: OID_PEELED }]);
-    assert.deepStrictEqual(requests, expectedTagRequests());
-  });
-
-  test("a ref advertised outside the tag namespace is not returned as a tag", async (t) => {
-    // arrange
-    const requests = installRemoteTransport(t, [
-      `${OID_MAIN} refs/heads/main`,
-      `${OID_DEV} refs/tags/v1.1.0`,
-    ]);
-
-    // act
-    const tags = await listRemoteTags({ url: REMOTE_URL });
-
-    // assert
-    assert.deepStrictEqual(tags, [{ name: "v1.1.0", oid: OID_DEV }]);
-    assert.deepStrictEqual(requests, expectedTagRequests());
-  });
-
-  test("a remote advertising no tags yields an empty list rather than throwing", async (t) => {
-    // arrange
-    const requests = installRemoteTransport(t, []);
-
-    // act
-    const tags = await listRemoteTags({ url: REMOTE_URL });
+    const tags = await listRemoteTags({ url: `file://${repository.dir}` }, systemGit);
 
     // assert
     assert.deepStrictEqual(tags, []);
-    assert.deepStrictEqual(requests, expectedTagRequests());
   });
 
-  test("RESV-03: no credential callback answers a challenge when no bundle is supplied", async (t) => {
+  test("SG-TRN-01: pairs a peeled line with its tag whatever order git prints them in", async () => {
     // arrange
-    const requests = installRemoteTransport(t, [`${OID_MAIN} refs/tags/v1.0.0`], {
-      challengeOnce: true,
-    });
+    const stdout = [
+      `${OID_PEELED}\trefs/tags/v1^{}`,
+      `${OID_TAG}\trefs/tags/v1`,
+      `${OID_LIGHTWEIGHT}\trefs/tags/light`,
+      "",
+    ].join("\n");
 
     // act
-    const listing = listRemoteTags({ url: REMOTE_URL });
+    const tags = await listRemoteTags({ url: REMOTE_URL }, printingGitProcess(stdout));
 
     // assert
-    await assert.rejects(listing, { name: "HttpError", message: "HTTP Error: 401 Unauthorized" });
-    assert.deepStrictEqual(requests, [expectedTagRequests()[0]]);
+    assert.deepStrictEqual(tags, [
+      { name: "v1", oid: OID_PEELED },
+      { name: "light", oid: OID_LIGHTWEIGHT },
+    ]);
   });
 
-  test("RESV-03: the supplied credential bundle is what the tag query authenticates with", async (t) => {
+  test("D-SG-13 / D-PL8-24: sends one ls-remote --tags with the limit and the scope's signal", async (t) => {
     // arrange
-    const requests = installRemoteTransport(
-      t,
-      [`${OID_TAG} refs/tags/v2.0.0 peeled:${OID_PEELED}`],
-      { challengeOnce: true },
+    setGitTimeoutVariable(t, "4321");
+    const remote = await taggedRemote(t);
+    const recorded = recordingGitProcess(await hermeticGitProcess(t));
+    const signal = new AbortController().signal;
+
+    // act
+    await runWithGitAbortSignal(signal, () =>
+      listRemoteTags({ url: remote.url }, recorded.gitProcess),
     );
-    const credentials = createCredentialOpsFake({
-      boundary: "memory",
-      credentials: [[HOST, { username: "user", password: "secret" }]],
-    });
-    const onAuthRequired: OnAuthRequiredFn = () => {
-      throw new Error("interactive auth is forbidden on a stored-credential hit");
-    };
-
-    // act
-    const tags = await listRemoteTags({
-      url: REMOTE_URL,
-      auth: {
-        credentialOps: credentials.credentialOps,
-        host: HOST,
-        kind: "device-flow",
-        onAuthRequired,
-      },
-    });
 
     // assert
-    assert.deepStrictEqual(tags, [{ name: "v2.0.0", oid: OID_PEELED }]);
-    assert.deepStrictEqual(credentials.calls, {
-      fill: [{ host: HOST }],
-      approve: [],
-      reject: [],
-    });
-    assert.deepStrictEqual(requests, [
-      expectedTagRequests()[0],
+    assert.deepStrictEqual(recorded.requests, [
       {
-        ...expectedTagRequests()[0],
-        headers: {
-          "Git-Protocol": "version=2",
-          Authorization: "Basic dXNlcjpzZWNyZXQ=",
-        },
-      },
-      {
-        ...expectedTagRequests()[1],
-        headers: {
-          ...expectedTagRequests()[1].headers,
-          Authorization: "Basic dXNlcjpzZWNyZXQ=",
-        },
+        subcommand: "ls-remote",
+        lane: "network",
+        options: ["--tags"],
+        operands: [remote.url],
+        config: [],
+        timeoutMs: 4321,
+        signal,
       },
     ]);
+  });
+
+  test("D-SG-16, GHB-01: lists the tags of a github.com URL at the base through its insteadOf pair", async (t) => {
+    // arrange
+    const standIn = await gitHubBaseStandIn(t);
+    await gitTestCheckout(standIn.host.repositoryPath("tools")).run("tag", "v1.0.0");
+    const recorded = recordingGitProcess(standIn.gitProcess);
+
+    // act
+    const tags = await listRemoteTags({ url: GITHUB_TOOLS_URL }, recorded.gitProcess);
+
+    // assert
+    assert.deepStrictEqual(tags, [{ name: "v1.0.0", oid: standIn.oid }]);
+    assert.deepStrictEqual(
+      recorded.requests.map((request) => request.config),
+      [[`url.https://${standIn.host.address}/.insteadOf=https://github.com/`]],
+    );
+  });
+
+  test("GHB-01: a failed listing at the base names the URL git fetched", async (t) => {
+    // arrange
+    const standIn = await gitHubBaseStandIn(t);
+
+    // act
+    const listing = listRemoteTags(
+      { url: "https://github.com/acme/missing.git" },
+      standIn.gitProcess,
+    );
+
+    // assert
+    await assert.rejects(listing, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.ok(error.cause instanceof FetchedUrlCause);
+      assert.deepStrictEqual(
+        { kind: error.kind, operation: error.operation, url: error.cause.url },
+        {
+          kind: "repository-not-found",
+          operation: "ls-remote --tags",
+          url: standIn.host.repositoryUrl("missing"),
+        },
+      );
+      return true;
+    });
+  });
+
+  test("RESV-03, GAUTH-04: the supplied bundle maps an auth failure of the listing", async () => {
+    // arrange
+    const failing = failingAuthGitProcess("rejected");
+    const credentials = storedCredentials();
+
+    // act
+    const listing = listRemoteTags(
+      { url: REMOTE_URL, auth: boundAuth(credentials) },
+      failing.gitProcess,
+    );
+
+    // assert
+    await assert.rejects(listing, (error: unknown) => {
+      assert.ok(error instanceof StoredCredentialRejectedError);
+      assert.strictEqual(error.cause, failing.failures[0]);
+      return true;
+    });
   });
 });
 
@@ -3568,23 +3510,99 @@ function countedBody(chunks: readonly Uint8Array[]): {
 }
 
 /**
- * A tag listing whose ls-refs body yields its first tag, then holds its next
- * read; `onHeldRead` runs when that read starts.
+ * Serves `served` to isomorphic-git: its advertisement, then its pack. The
+ * pack body runs `onPackRead` when its last read settles. Returns each
+ * request as `METHOD url`.
  */
-function installCutOffTagListing(
+function installServedTransport(
   t: TestContext,
-  onHeldRead: () => void,
-): { readonly returns: () => number } {
-  let returned = 0;
+  served: ServedCommit,
+  onPackRead: () => void = () => undefined,
+): string[] {
+  const requests: string[] = [];
   t.mock.method(http, "request", async (request: GitHttpRequest): Promise<GitHttpResponse> => {
     await collectBody(request.body);
-    if (request.method === "GET") {
+    requests.push(`${request.method ?? "GET"} ${request.url}`);
+    if (request.method !== "POST") {
       return response(
         request.url,
         200,
         "OK",
         "application/x-git-upload-pack-advertisement",
-        advertisementBody(),
+        served.advertisement.body,
+      );
+    }
+
+    const source = [Uint8Array.from(served.pack.body)][Symbol.iterator]();
+    const body: AsyncIterableIterator<Uint8Array> = {
+      next: () => {
+        const chunk = source.next();
+        if (chunk.done === true) {
+          onPackRead();
+        }
+
+        return Promise.resolve(chunk);
+      },
+      [Symbol.asyncIterator]: () => body,
+    };
+    return {
+      url: request.url,
+      statusCode: 200,
+      statusMessage: "OK",
+      headers: { "content-type": "application/x-git-upload-pack-result" },
+      body,
+    };
+  });
+  return requests;
+}
+
+/** Which answer of a fetch is cut off, and the bytes it yields before its held read. */
+interface CutOffBody {
+  readonly method: "GET" | "POST";
+  readonly first: Buffer;
+}
+
+/**
+ * The `info/refs` answer of an empty repository with no flush after its
+ * service line: isomorphic-git reads a failed read of it as the end of an
+ * empty advertisement, and a fetch of an empty remote succeeds.
+ */
+const CUT_OFF_ADVERTISEMENT: CutOffBody = {
+  method: "GET",
+  first: Buffer.concat([packet("# service=git-upload-pack\n"), FLUSH]),
+};
+
+/** The whole pack with no flush after it, so the next read is the held one. */
+function cutOffPack(served: ServedCommit): CutOffBody {
+  return {
+    method: "POST",
+    first: Buffer.concat([
+      packet("NAK\n"),
+      packetBytes(Buffer.concat([Buffer.from([1]), served.packfile])),
+    ]),
+  };
+}
+
+/**
+ * Serves `served`, except that the answer to `cut.method` yields `cut.first`
+ * and holds its next read; `onHeldRead` runs when that read starts.
+ */
+function installCutOffBody(
+  t: TestContext,
+  served: ServedCommit,
+  cut: CutOffBody,
+  onHeldRead: () => void,
+): { readonly returns: () => number } {
+  let returned = 0;
+  t.mock.method(http, "request", async (request: GitHttpRequest): Promise<GitHttpResponse> => {
+    await collectBody(request.body);
+    if (request.method !== cut.method) {
+      return response(
+        request.url,
+        200,
+        "OK",
+        "application/x-git-upload-pack-advertisement",
+        served.advertisement.body,
       );
     }
 
@@ -3593,10 +3611,7 @@ function installCutOffTagListing(
       next: () => {
         reads += 1;
         if (reads === 1) {
-          return Promise.resolve({
-            done: false,
-            value: Uint8Array.from(packet(`${OID_LIGHTWEIGHT} refs/tags/v1.0.0\n`)),
-          });
+          return Promise.resolve({ done: false, value: Uint8Array.from(cut.first) });
         }
 
         onHeldRead();
@@ -3612,7 +3627,12 @@ function installCutOffTagListing(
       url: request.url,
       statusCode: 200,
       statusMessage: "OK",
-      headers: { "content-type": "application/x-git-upload-pack-result" },
+      headers: {
+        "content-type":
+          cut.method === "GET"
+            ? "application/x-git-upload-pack-advertisement"
+            : "application/x-git-upload-pack-result",
+      },
       body,
     };
   });
@@ -3620,6 +3640,7 @@ function installCutOffTagListing(
 }
 
 /**
+ * Answers `info/refs` with a protocol version 1 advertisement/**
  * Answers `info/refs` with a protocol version 1 advertisement of `OID_MAIN`,
  * then answers `git-upload-pack` with a NAK and a pack stream that stays open.
  */
@@ -3745,30 +3766,28 @@ describe("runWithGitAbortSignal", () => {
 
   test("D-PL8-24: an already-aborted signal rejects before any request is sent", async (t) => {
     // arrange
+    const dir = await cloneOfRemote(t);
     const transport = installHeldTransport(t);
     const reason = new Error("background step stopped");
 
     // act
-    const listing = runWithGitAbortSignal(AbortSignal.abort(reason), () =>
-      listRemoteTags({ url: REMOTE_URL }),
-    );
+    const fetching = runWithGitAbortSignal(AbortSignal.abort(reason), () => fetch({ dir }));
 
     // assert
-    await assert.rejects(listing, isAbortReason(reason));
+    await assert.rejects(fetching, isAbortReason(reason));
     assert.deepStrictEqual(transport.requests, []);
   });
 
   test("D-PL8-24: a response that arrives after its request was aborted has its body ended", async (t) => {
     // arrange
+    const dir = await cloneOfRemote(t);
     const transport = installHeldTransport(t);
     const controller = new AbortController();
     const reason = new Error("background step stopped");
-    const listing = runWithGitAbortSignal(controller.signal, () =>
-      listRemoteTags({ url: REMOTE_URL }),
-    );
+    const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir }));
     await transport.arrived;
     controller.abort(reason);
-    await assert.rejects(listing, isAbortReason(reason));
+    await assert.rejects(fetching, isAbortReason(reason));
     const late = countedBody([advertisementBody()]);
 
     // act
@@ -3789,15 +3808,14 @@ describe("runWithGitAbortSignal", () => {
 
   test("D-PL8-24: a late response whose body fails to end raises no unhandled rejection", async (t) => {
     // arrange
+    const dir = await cloneOfRemote(t);
     const transport = installHeldTransport(t);
     const controller = new AbortController();
     const reason = new Error("background step stopped");
-    const listing = runWithGitAbortSignal(controller.signal, () =>
-      listRemoteTags({ url: REMOTE_URL }),
-    );
+    const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir }));
     await transport.arrived;
     controller.abort(reason);
-    await assert.rejects(listing, isAbortReason(reason));
+    await assert.rejects(fetching, isAbortReason(reason));
     let returned = 0;
     const body: AsyncIterableIterator<Uint8Array> = {
       next: () => Promise.resolve({ done: true, value: undefined }),
@@ -3835,12 +3853,11 @@ describe("runWithGitAbortSignal", () => {
 
   test("D-PL8-24: a request that fails after its abort still rejects with the abort reason", async (t) => {
     // arrange
+    const dir = await cloneOfRemote(t);
     const transport = installHeldTransport(t);
     const controller = new AbortController();
     const reason = new Error("background step stopped");
-    const listing = runWithGitAbortSignal(controller.signal, () =>
-      listRemoteTags({ url: REMOTE_URL }),
-    );
+    const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir }));
     await transport.arrived;
     controller.abort(reason);
 
@@ -3848,11 +3865,12 @@ describe("runWithGitAbortSignal", () => {
     transport.answer.reject(new Error("socket closed"));
 
     // assert
-    await assert.rejects(listing, isAbortReason(reason));
+    await assert.rejects(fetching, isAbortReason(reason));
   });
 
   test("D-PL8-24: a call that already failed for another reason rejects with that error when the abort lands afterwards", async (t) => {
     // arrange
+    const dir = await cloneOfRemote(t);
     const controller = new AbortController();
     const failure = new Error("socket closed");
     t.mock.method(http, "request", (): Promise<GitHttpResponse> => {
@@ -3863,125 +3881,81 @@ describe("runWithGitAbortSignal", () => {
     });
 
     // act
-    const listing = runWithGitAbortSignal(controller.signal, () =>
-      listRemoteTags({ url: REMOTE_URL }),
-    );
+    const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir }));
 
     // assert
-    await assert.rejects(listing, (error: unknown) => error === failure);
+    await assert.rejects(fetching, (error: unknown) => error === failure);
   });
 
   test("D-PL8-24: a call that already completed returns its result when the abort lands afterwards", async (t) => {
     // arrange
+    const { dir, served } = await wireFetchFixture(t);
     const controller = new AbortController();
-    t.mock.method(http, "request", async (request: GitHttpRequest): Promise<GitHttpResponse> => {
-      await collectBody(request.body);
-      const answer = response(
-        request.url,
-        200,
-        "OK",
-        request.method === "GET"
-          ? "application/x-git-upload-pack-advertisement"
-          : "application/x-git-upload-pack-result",
-        request.method === "GET"
-          ? advertisementBody()
-          : refsBody([`${OID_LIGHTWEIGHT} refs/tags/v1.0.0`]),
-      );
-      const { body } = answer;
-      if (request.method !== "POST" || body === undefined) {
-        return answer;
-      }
-
-      const source = body[Symbol.asyncIterator]();
-      return {
-        ...answer,
-        body: {
-          next: async () => {
-            const chunk = await source.next();
-            if (chunk.done === true) {
-              afterSettlement(() => {
-                controller.abort(new Error("background step stopped"));
-              });
-            }
-
-            return chunk;
-          },
-          [Symbol.asyncIterator]() {
-            return this;
-          },
-        },
-      };
+    installServedTransport(t, served, () => {
+      afterSettlement(() => {
+        controller.abort(new Error("background step stopped"));
+      });
     });
 
     // act
-    const tags = await runWithGitAbortSignal(controller.signal, () =>
-      listRemoteTags({ url: REMOTE_URL }),
-    );
+    await runWithGitAbortSignal(controller.signal, () => fetch({ dir }));
 
     // assert
-    assert.deepStrictEqual(tags, [{ name: "v1.0.0", oid: OID_LIGHTWEIGHT }]);
+    assert.strictEqual(await fetchedMain(dir), served.oid);
   });
 
-  test("D-PL8-24: a tag listing whose tag list is cut off by the abort rejects instead of returning part of it", async (t) => {
+  test("D-PL8-24: a fetch whose advertisement is cut off by the abort rejects instead of reporting an empty remote", async (t) => {
     // arrange
+    const { dir, served } = await wireFetchFixture(t);
     const controller = new AbortController();
     const reason = new Error("background step stopped");
-    const listing = installCutOffTagListing(t, () => {
+    const advertisement = installCutOffBody(t, served, CUT_OFF_ADVERTISEMENT, () => {
       queueMicrotask(() => {
         controller.abort(reason);
       });
     });
 
     // act
-    const tags = runWithGitAbortSignal(controller.signal, () =>
-      listRemoteTags({ url: REMOTE_URL }),
-    );
+    const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir }));
 
     // assert
-    await assert.rejects(tags, isAbortReason(reason));
-    assert.strictEqual(listing.returns(), 1);
+    await assert.rejects(fetching, isAbortReason(reason));
+    assert.strictEqual(advertisement.returns(), 1);
   });
 
-  test("D-PL8-24: a body read that starts after the abort ends the body and rejects", async (t) => {
+  test("D-PL8-24: a pack read that starts after the abort ends the body and rejects", async (t) => {
     // arrange
+    const { dir, served } = await wireFetchFixture(t);
     const controller = new AbortController();
     const reason = new Error("background step stopped");
-    const listing = installCutOffTagListing(t, () => {
+    const pack = installCutOffBody(t, served, cutOffPack(served), () => {
       controller.abort(reason);
     });
 
     // act
-    const tags = runWithGitAbortSignal(controller.signal, () =>
-      listRemoteTags({ url: REMOTE_URL }),
-    );
+    const fetching = runWithGitAbortSignal(controller.signal, () => fetch({ dir }));
 
     // assert
-    await assert.rejects(tags, isAbortReason(reason));
-    assert.strictEqual(listing.returns(), 1);
+    await assert.rejects(fetching, isAbortReason(reason));
+    assert.strictEqual(pack.returns(), 1);
   });
 
-  test("D-PL8-24: a scope whose signal never aborts lists every tag with the same requests", async (t) => {
+  test("D-PL8-24: a scope whose signal never aborts fetches with the same requests", async (t) => {
     // arrange
-    const requests = installRemoteTransport(t, [
-      `${OID_LIGHTWEIGHT} refs/tags/v1.0.0`,
-      `${OID_TAG} refs/tags/v2.0.0 peeled:${OID_PEELED}`,
-    ]);
+    const { dir, served } = await wireFetchFixture(t);
+    const requests = installServedTransport(t, served);
 
     // act
-    const tags = await runWithGitAbortSignal(new AbortController().signal, () =>
-      listRemoteTags({ url: REMOTE_URL }),
-    );
+    await runWithGitAbortSignal(new AbortController().signal, () => fetch({ dir }));
 
     // assert
-    assert.deepStrictEqual(tags, [
-      { name: "v1.0.0", oid: OID_LIGHTWEIGHT },
-      { name: "v2.0.0", oid: OID_PEELED },
-    ]);
-    assert.deepStrictEqual(requests, expectedTagRequests());
+    assert.strictEqual(await fetchedMain(dir), served.oid);
+    assert.deepStrictEqual(requests, [`GET ${BOUND_INFO_URL}`, `POST ${BOUND_UPLOAD_PACK_URL}`]);
   });
 
   test("D-PL8-24: a response without a body reaches isomorphic-git unchanged inside a scope", async (t) => {
     // arrange
+    const dir = await cloneOfRemote(t);
     t.mock.method(http, "request", (request: GitHttpRequest): Promise<GitHttpResponse> =>
       Promise.resolve({
         url: request.url,
@@ -3992,12 +3966,10 @@ describe("runWithGitAbortSignal", () => {
     );
 
     // act
-    const listing = runWithGitAbortSignal(new AbortController().signal, () =>
-      listRemoteTags({ url: REMOTE_URL }),
-    );
+    const fetching = runWithGitAbortSignal(new AbortController().signal, () => fetch({ dir }));
 
     // assert
-    await assert.rejects(listing, (error: unknown) => {
+    await assert.rejects(fetching, (error: unknown) => {
       assert.ok(error instanceof git.Errors.HttpError);
       assert.deepStrictEqual(error.data, {
         statusCode: 500,

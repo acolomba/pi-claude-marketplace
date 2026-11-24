@@ -33,8 +33,8 @@ import type { GitHttpRequest, GitHttpResponse, HttpClient } from "isomorphic-git
  * PATH they reject with that module's `git-missing` GitCommandError before
  * isomorphic-git runs or a request goes out (SG-PRC-06).
  *
- * SG-TRN-01: `fetchCommit` and `resolveRemoteRef` send their requests with
- * system git through `runRemote`, the one network request path of this
+ * SG-TRN-01: `fetchCommit`, `resolveRemoteRef`, and `listRemoteTags` send
+ * their requests with system git through `runRemote`, the one network request path of this
  * module: the network lane, the D-SG-13 limit, the D-PL8-24 abort signal, and
  * the D-SG-16 `insteadOf` pair. `checkout`, `resolveRef`, and `listRemotes`
  * run system git through `NODE_GIT_PROCESS` on the local lane, which reaches
@@ -177,12 +177,8 @@ export interface ListRemoteTagsOptions {
   /** Remote URL. */
   url: string;
   /**
-   * Optional auth bundle. Same shape as `CloneOptions.auth`; when present,
-   * listRemoteTags builds isomorphic-git `onAuth`/`onAuthFailure` callbacks via
-   * `buildAuthCallbacks` and threads them into `listServerRefs`, so a private
-   * source repository's tags are readable through the one credential path the
-   * remote-ref resolution above already uses (RESV-03). When omitted, the
-   * listing behaves identically to the public-only path.
+   * Optional auth bundle. Same shape as `CloneOptions.auth`; it maps an auth
+   * failure of the listing as it does for `resolveRemoteRef` (RESV-03).
    */
   auth?: BuildAuthCallbacksOpts;
 }
@@ -712,36 +708,6 @@ function advertisedRefs(stdout: string): Map<string, string> {
   return refs;
 }
 
-/**
- * The protocol version 2 ref advertisement that `listRemoteTags` reads, with
- * annotated tags peeled. `extra` carries the ref prefix it adds.
- *
- * Same conditional-spread + AuthFailureCallback cast idiom as `clone()`: the
- * callbacks are built only when `opts.auth` is defined, so the public-only
- * listing stays byte-identical.
- */
-async function listServerRefsAt(
-  opts: { readonly url: string; readonly auth?: BuildAuthCallbacksOpts | undefined },
-  extra: { readonly prefix: string },
-): Promise<{ readonly wireUrl: string; readonly refs: git.ServerRef[] }> {
-  const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
-  const wireUrl = gitHubWireUrl(opts.url);
-  const refs = await networkCall(wireUrl, opts.url, () =>
-    git.listServerRefs({
-      http,
-      url: wireUrl,
-      protocolVersion: 2,
-      peelTags: true,
-      ...extra,
-      ...(authCbs !== undefined && {
-        onAuth: authCbs.onAuth,
-        onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
-      }),
-    }),
-  );
-  return { wireUrl, refs };
-}
-
 export async function clone(opts: CloneOptions): Promise<void> {
   await NODE_GIT_PROCESS.locate();
   // When opts.auth is provided, build the isomorphic-git callbacks
@@ -1018,71 +984,67 @@ export async function resolveRemoteRef(
   return names.map((name) => refs.get(name)).find((oid) => oid !== undefined);
 }
 
-/** Ref namespace a tag advertisement is filtered to -- the `--tags` equivalent. */
+/** The ref namespace of a tag. */
 const TAG_REF_PREFIX = "refs/tags/";
 
-/**
- * Suffix an advertisement uses when it names the peel of an annotated tag as a
- * ref of its own. That peel already rides on the tag's own entry, so an entry
- * spelled this way duplicates one the listing has already returned.
- */
+/** The suffix of the line that names the commit an annotated tag peels to. */
 const PEELED_REF_SUFFIX = "^{}";
 
 /**
- * RESV-03 / D-03-02.2: read a remote's tag list WITHOUT a clone, so a
- * dependency carrying a version constraint can be pinned to whichever release
- * tag satisfies it. Wraps isomorphic-git's `listServerRefs` (protocol version 2
- * ref advertisement), the same call `resolveRemoteRef` above makes, with the
- * ref-prefix option supplied and no head-ref branch.
+ * RESV-03 / D-03-02.2, SG-TRN-01: reads a remote's tag list WITHOUT a clone,
+ * so a dependency carrying a version constraint can be pinned to whichever
+ * release tag satisfies it. It runs `ls-remote --tags <url>` through
+ * `runRemote`, which sends the same `GET info/refs` and one
+ * `POST git-upload-pack` as a protocol version 2 listing with a
+ * `refs/tags/` prefix.
  *
  * D-03-03 amends NFR-5 for exactly this read: resolving a constrained
  * dependency may query its source repository's tags even when a cached or
  * otherwise resolvable copy of that dependency already exists, because the
  * constraint can demand a different tag than the cached one.
  *
- * `prefix: "refs/tags/"` filters the advertisement server-side and is the
- * `git ls-remote --tags` equivalent; `peelTags: true` makes an annotated tag's
- * entry carry the commit it points at in `peeled`. Each entry prefers `peeled`
- * over its own `oid`, the same preference `resolveRemoteRef` states, so an
- * annotated tag resolves to a commit rather than to the tag object. An entry
- * naming a peel as a ref of its own is dropped as a duplicate, and an entry
- * outside the tag namespace is dropped because this function returns tags only.
+ * git prints a lightweight tag as one `refs/tags/<name>` line, and an
+ * annotated tag as that line, naming the tag object, plus a
+ * `refs/tags/<name>^{}` line naming the commit it peels to, a tag of a tag
+ * peeled all the way. Each tag is one entry, in the order git first prints
+ * it, and the peeled line wins, so an annotated tag resolves to a commit
+ * rather than to the tag object.
  *
- * A remote advertising no matching refs yields an empty array rather than
- * throwing. A transport failure propagates as isomorphic-git threw it:
- * classifying what a failed listing means belongs to the caller that knows
- * which operation it was serving.
+ * A remote that advertises no tags yields an empty array rather than
+ * throwing. A failed listing propagates as the git process threw it:
+ * classifying what it means belongs to the caller that knows which operation
+ * it was serving.
  *
- * Auth is threaded through the optional `opts.auth` bundle -- the same bundle
- * `resolveRemoteRef` takes, so a private source repository needs no second
- * credential path; omitted = the public-only path.
- *
- * GHB-01: the URL sent is `shared/github-base-url.ts::gitHubWireUrl` of
- * `opts.url`.
- *
- * Source: node_modules/isomorphic-git/index.d.ts -- listServerRefs({ http,
- * url, onAuth, onAuthFailure, protocolVersion, prefix, peelTags }) =>
- * Promise<ServerRef[]>, where each ServerRef is { ref, oid, target?, peeled? }.
+ * The optional `opts.auth` bundle maps an auth failure as `resolveRemoteRef`'s
+ * does, so a private source repository needs no second credential path.
+ * GHB-01: under the base override, a failure names the URL fetched.
  */
-export async function listRemoteTags(opts: ListRemoteTagsOptions): Promise<RemoteTag[]> {
-  await NODE_GIT_PROCESS.locate();
-  const { refs } = await listServerRefsAt(opts, { prefix: TAG_REF_PREFIX });
+export async function listRemoteTags(
+  opts: ListRemoteTagsOptions,
+  gitProcess: GitProcess = NODE_GIT_PROCESS,
+): Promise<RemoteTag[]> {
+  const listed = await runRemote(
+    {
+      subcommand: "ls-remote",
+      options: ["--tags"],
+      operands: [opts.url],
+      url: opts.url,
+      auth: opts.auth,
+    },
+    gitProcess,
+  );
 
-  const tags: RemoteTag[] = [];
-  for (const advertised of refs) {
-    if (!advertised.ref.startsWith(TAG_REF_PREFIX)) {
-      continue;
+  const tags = new Map<string, string>();
+  for (const [ref, oid] of advertisedRefs(listed.stdout)) {
+    const peeled = ref.endsWith(PEELED_REF_SUFFIX);
+    const tagRef = peeled ? ref.slice(0, -PEELED_REF_SUFFIX.length) : ref;
+    const name = tagRef.slice(TAG_REF_PREFIX.length);
+    if (peeled || !tags.has(name)) {
+      tags.set(name, oid);
     }
-
-    const name = advertised.ref.slice(TAG_REF_PREFIX.length);
-    if (name.endsWith(PEELED_REF_SUFFIX)) {
-      continue;
-    }
-
-    tags.push({ name, oid: advertised.peeled ?? advertised.oid });
   }
 
-  return tags;
+  return [...tags].map(([name, oid]) => ({ name, oid }));
 }
 
 /**
