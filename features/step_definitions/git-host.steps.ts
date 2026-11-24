@@ -232,6 +232,16 @@ Given(
   },
 );
 
+// D-SG-15, SG-TRN-06: upstream's variable keeps a marketplace's checkout when
+// its remote is unreachable. A Pi reads its environment when it starts, and
+// the run's Pi never sets the variable, so the scenario gets a Pi of its own.
+Given(
+  'pi runs with the environment variable "CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE" set to {string}',
+  async function (this: ScenarioWorld, value: string): Promise<void> {
+    await this.usePiWithKeptMarketplaceOnFailure(value);
+  },
+);
+
 // SG-PRC-06: the scenario's Pi finds no git on its PATH. Pi itself starts
 // from an absolute Node path, so only the extension's git lookup changes.
 Given("pi runs without git on its path", async function (this: ScenarioWorld): Promise<void> {

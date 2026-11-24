@@ -10,8 +10,9 @@
 // The child environment is an allowlist built from scratch. A prompt that is
 // not an extension command falls through to Pi's model path, and inherited
 // provider credentials would let it reach a real provider over the network.
-// The cucumber run adds a typed git and trust environment, plus the background
-// update delay for a scenario's own Pi, and nothing else. That environment
+// The cucumber run adds a typed git and trust environment, plus, for a
+// scenario's own Pi, the background update delay or one of upstream's git
+// timeout and keep variables, and nothing else. That environment
 // names the CA file for Node and for system git, and the `PATH` Pi runs with,
 // which replaces the worker's, so a stand-in can go first on it (SG-HRN-02).
 // A scenario's profile
@@ -73,6 +74,20 @@ export interface RpcGitEnvironment {
    * keeps the ten-minute maximum and a new session cancels it.
    */
   readonly PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS?: string;
+  /**
+   * The time limit of one git command, upstream's variable, set only for a
+   * scenario's own Pi (D-SG-13). The run's shared Pi never sets it, so its
+   * git keeps the 120-second default, and the shell's value never reaches a
+   * child.
+   */
+  readonly CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS?: string;
+  /**
+   * Upstream's switch that keeps a marketplace's checkout when its remote is
+   * unreachable, set only for a scenario's own Pi (D-SG-15). The run's shared
+   * Pi never sets it, so its update of an unreachable marketplace fails, and
+   * the shell's value never reaches a child.
+   */
+  readonly CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE?: string;
   /**
    * The harness CONNECT proxy, set only for the Device Flow profile, so a
    * system git request of that Pi reaches `github.com` through the git host
@@ -210,6 +225,16 @@ export async function resolveRpcSandbox(sandbox: RpcSandbox): Promise<RpcSandbox
   };
 }
 
+/** The members of `RpcGitEnvironment` that a child gets only when they are set. */
+const OPTIONAL_GIT_VARIABLES = [
+  "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
+  "PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS",
+  "CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS",
+  "CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE",
+  "https_proxy",
+  "no_proxy",
+] as const satisfies ReadonlyArray<keyof RpcGitEnvironment>;
+
 /**
  * Returns the allowlist environment of every Pi child, plus `git` and the
  * profile's `TMPDIR`, background-child marker, and hook gate when given. The
@@ -232,21 +257,11 @@ export function rpcChildEnvironment(
     environment.GIT_CONFIG_GLOBAL = git.GIT_CONFIG_GLOBAL;
     environment.GIT_SSL_CAINFO = git.GIT_SSL_CAINFO;
     environment.PATH = git.PATH;
-    if (git.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL !== undefined) {
-      environment.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL = git.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL;
-    }
-
-    if (git.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS !== undefined) {
-      environment.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS =
-        git.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS;
-    }
-
-    if (git.https_proxy !== undefined) {
-      environment.https_proxy = git.https_proxy;
-    }
-
-    if (git.no_proxy !== undefined) {
-      environment.no_proxy = git.no_proxy;
+    for (const name of OPTIONAL_GIT_VARIABLES) {
+      const value = git[name];
+      if (value !== undefined) {
+        environment[name] = value;
+      }
     }
   }
 

@@ -231,6 +231,16 @@ const SESSION_KEEPING_RESTARTS: ReadonlySet<PiRestart> = new Set([
   "fork-session",
 ]);
 
+// The variables a scenario's own Pi may add to the run's git environment, one
+// at a time: the background update delay (D-PL8-09) and upstream's git
+// timeout and keep variables (D-SG-13, D-SG-15).
+type ScenarioPiVariables = Pick<
+  RpcGitEnvironment,
+  | "PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS"
+  | "CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS"
+  | "CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE"
+>;
+
 // What a profile Pi starts with: its profile, whether it starts with
 // `--no-mcp`, and its session flags.
 interface ProfileLaunch extends Omit<PiProfile, "session"> {
@@ -328,7 +338,8 @@ export class ScenarioWorld extends World {
 
   /**
    * The Pi the steps talk to: the one this scenario started with
-   * `usePiWithGitHubBaseUrl()`, `usePiWithBackgroundUpdateDelay()`, or
+   * `usePiWithGitHubBaseUrl()`, `usePiWithBackgroundUpdateDelay()`,
+   * `usePiWithGitTimeout()`, `usePiWithKeptMarketplaceOnFailure()`, or
    * `usePiWithProfile()`, or else the run's Pi, which the `Before()` hook has
    * reset for this scenario.
    */
@@ -722,12 +733,28 @@ export class ScenarioWorld extends World {
    * ten-minute maximum.
    */
   async usePiWithBackgroundUpdateDelay(value: string): Promise<void> {
-    const environment = {
-      ...currentRun().piEnvironment,
-      PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS: value,
-    } satisfies RpcGitEnvironment;
-    this.tuiEnvironment = environment;
-    await this.usePiWith(environment);
+    await this.usePiWithVariables({ PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS: value });
+  }
+
+  /**
+   * Starts a second Pi as `usePiWithBackgroundUpdateDelay()` does, except
+   * that upstream's `CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS` is `value` (D-SG-13).
+   * The run's Pi never sets that variable, so its git commands keep the
+   * 120-second default, and no other scenario's Pi sees the value.
+   */
+  async usePiWithGitTimeout(value: string): Promise<void> {
+    await this.usePiWithVariables({ CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS: value });
+  }
+
+  /**
+   * Starts a second Pi as `usePiWithBackgroundUpdateDelay()` does, except
+   * that upstream's `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE` is
+   * `value` (D-SG-15). The run's Pi never sets that variable, so its update
+   * of an unreachable marketplace fails, and no other scenario's Pi sees the
+   * value.
+   */
+  async usePiWithKeptMarketplaceOnFailure(value: string): Promise<void> {
+    await this.usePiWithVariables({ CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE: value });
   }
 
   /**
@@ -1177,6 +1204,18 @@ export class ScenarioWorld extends World {
     if (restart === "builtin-on") {
       await turnOnBuiltinMcp(agentDir);
     }
+  }
+
+  // Starts a Pi with the run's git environment plus `variables`, as
+  // `usePiWith()` does, and gives a terminal session of the scenario the same
+  // environment.
+  private async usePiWithVariables(variables: ScenarioPiVariables): Promise<void> {
+    const environment = {
+      ...currentRun().piEnvironment,
+      ...variables,
+    } satisfies RpcGitEnvironment;
+    this.tuiEnvironment = environment;
+    await this.usePiWith(environment);
   }
 
   // Starts a Pi in the run's sandbox with `environment`, stops it with the
