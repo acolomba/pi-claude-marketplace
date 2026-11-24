@@ -19,18 +19,19 @@ Feature: Plugin url marketplace update
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id          | name  | status | reasons       | scope   | leaks | rollback partial | cause chain                                                                  | cause truncated |
-      | tools            | project           | tools@tools | tools | failed | network error | project |       |                  | <status> on https://{git host}/acme/tools.git, HTTP Error: <status> <phrase> | false           |
+      | marketplace name | marketplace scope | id          | name  | status | reasons       | scope   | leaks | rollback partial | cause chain                                                                                | cause truncated |
+      | tools            | project           | tools@tools | tools | failed | network error | project |       |                  | <status> on https://{git host}/acme/tools.git, git ls-remote failed: <kind>, exit code 128 | false           |
     Then the git host receives these requests:
       | method | path                                              | status   |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | <status> |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | <status> |
 
     Examples:
-      | status | phrase                |
-      | 500    | Internal Server Error |
-      | 502    | Bad Gateway           |
-      | 503    | Service Unavailable   |
-      | 404    | Not Found             |
+      | status | kind                 |
+      | 500    | network              |
+      | 502    | network              |
+      | 503    | network              |
+      | 404    | repository-not-found |
 
   Scenario: Updating a plugin while another process holds the state lock fails as lock held and does not refresh its url marketplace
     Given the marketplace "tools" is published as a url source

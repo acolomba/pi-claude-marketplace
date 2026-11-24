@@ -32,6 +32,9 @@ Feature: MCP server verdict fetch
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
 
   @adapter-only
   Scenario: Fetching a plugin whose new revision declares an sse server reports it available, under pi-mcp-adapter (P3-DC-25)
@@ -59,4 +62,7 @@ Feature: MCP server verdict fetch
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |

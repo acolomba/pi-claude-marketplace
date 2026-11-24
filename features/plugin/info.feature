@@ -179,6 +179,9 @@ Feature: Plugin info
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
 
   Scenario: Info without --fetch shows the revision fetched last and makes no request
     Given the git repository "ghp" holds these plugins:
@@ -242,6 +245,9 @@ Feature: Plugin info
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
 
   Scenario: Info on a plugin the marketplace does not offer fails as not in manifest

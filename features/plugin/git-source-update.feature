@@ -30,6 +30,9 @@ Feature: Plugin git source update
       | POST   | /acme/gits.git/git-upload-pack                   | 200    |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack  | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                    | 200    |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack  | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                    | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                    | 200    |
     Then the project scope holds these git clones:
       | clone       | origin                           | revision         |
       | marketplace | https://{git host}/acme/gits.git |                  |
@@ -331,10 +334,11 @@ Feature: Plugin git source update
     Then the git host receives these requests:
       | method | path                                            | status   |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | <status> |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | <status> |
     Then the git-source plugin "ghp" installed in the project scope runs revision 1 of its repository
 
     Examples:
-      | refusal              | reason              | status  | cause chain                                                                                                          |
-      | answers 404          | source missing      | 404     | 404 on https://{git host}/acme/ghp.git, HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git           |
-      | drops the connection | network unreachable | dropped | socket hang up, fetched https://{git host}/acme/ghp.git                                                              |
-      | answers 503          | network error       | 503     | 503 on https://{git host}/acme/ghp.git, HTTP Error: 503 Service Unavailable, fetched https://{git host}/acme/ghp.git |
+      | refusal              | reason              | status  | cause chain                                                                                                                                |
+      | answers 404          | source missing      | 404     | 404 on https://{git host}/acme/ghp.git, git ls-remote failed: repository-not-found, exit code 128, fetched https://{git host}/acme/ghp.git |
+      | drops the connection | network unreachable | dropped | git ls-remote failed: network, exit code 128, fetched https://{git host}/acme/ghp.git                                                      |
+      | answers 503          | network error       | 503     | 503 on https://{git host}/acme/ghp.git, git ls-remote failed: network, exit code 128, fetched https://{git host}/acme/ghp.git              |
