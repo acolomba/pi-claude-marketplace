@@ -248,6 +248,7 @@ Feature: Marketplace hosted source
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
 
   Scenario: Listing marketplaces reads a hosted marketplace without a request
     Given the marketplace "tools" is published as a hosted source

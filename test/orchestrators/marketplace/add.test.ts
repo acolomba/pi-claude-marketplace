@@ -418,11 +418,20 @@ function httpError(statusCode: number): Error {
   });
 }
 
-function refNotFoundError(ref: string): Error {
-  return Object.assign(new Error(`Could not find ${ref}.`), {
-    code: "NotFoundError",
-    name: "NotFoundError",
-  });
+/**
+ * SG-TRN-02: the failure of a system-git `clone --depth 1 --branch=<ref>` of a
+ * branch the remote lacks; git prints `fatal: Remote branch <ref> not found
+ * in upstream origin`.
+ */
+function remoteRefMissingError(ref: string): GitCommandError {
+  return new GitCommandError(
+    { kind: "remote-ref-missing" },
+    {
+      operation: "clone --depth",
+      exitCode: 128,
+      stderr: `fatal: Remote branch ${ref} not found in upstream origin\n`,
+    },
+  );
 }
 
 async function withTmpScope<T>(
@@ -5276,7 +5285,7 @@ test("ADD-09: a clone of a ref the remote lacks renders (failed) {source missing
     const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
-      cloneThrows: refNotFoundError("stable"),
+      cloneThrows: remoteRefMissingError("stable"),
     });
 
     // act
@@ -5306,7 +5315,7 @@ test("ADD-09 orchestrated mode -- a clone of a ref the remote lacks returns the 
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, run, notifications } = makeCtx(0);
-    const cloneThrows = refNotFoundError("stable");
+    const cloneThrows = remoteRefMissingError("stable");
     const { gitOps } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       cloneThrows,
@@ -5328,7 +5337,7 @@ test("ADD-09 orchestrated mode -- a clone of a ref the remote lacks returns the 
       status: "failed",
       reason: "source missing",
       error: cloneThrows,
-      cause: "Could not find stable.",
+      cause: "git clone --depth failed: remote-ref-missing, exit code 128",
     });
     assert.deepStrictEqual(notifications, []);
   });

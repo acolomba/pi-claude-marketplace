@@ -18,6 +18,7 @@ Feature: Plugin bootstrap
       | method | path                                                                      | status |
       | GET    | /anthropics/claude-plugins-official.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /anthropics/claude-plugins-official.git/git-upload-pack                   | 200    |
+      | POST   | /anthropics/claude-plugins-official.git/git-upload-pack                   | 200    |
     Then the "claude-plugins.json" file of the user scope declares these marketplaces:
       | name                    | source                             |
       | claude-plugins-official | anthropics/claude-plugins-official |
@@ -36,6 +37,7 @@ Feature: Plugin bootstrap
       | method | path                                                                      | status |
       | GET    | /anthropics/claude-plugins-official.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /anthropics/claude-plugins-official.git/git-upload-pack                   | 200    |
+      | POST   | /anthropics/claude-plugins-official.git/git-upload-pack                   | 200    |
     Then the "claude-plugins.json" file of the user scope declares these marketplaces:
       | name                    | source                             |
       | claude-plugins-official | anthropics/claude-plugins-official |
@@ -51,6 +53,7 @@ Feature: Plugin bootstrap
     Then the git host receives these requests:
       | method | path                                                                      | status |
       | GET    | /anthropics/claude-plugins-official.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /anthropics/claude-plugins-official.git/git-upload-pack                   | 200    |
       | POST   | /anthropics/claude-plugins-official.git/git-upload-pack                   | 200    |
 
   Scenario: Bootstrapping a second time leaves the official marketplace as it is
@@ -121,8 +124,8 @@ Feature: Plugin bootstrap
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name                   | marketplace scope | marketplace status | id                                 | name                               | status | reasons        | scope | cause chain                                                                                  | cause truncated | leaks | rollback partial |
-      | anthropics/claude-plugins-official | user              | failed             | anthropics/claude-plugins-official | anthropics/claude-plugins-official | failed | source missing | user  | HTTP Error: 404 Not Found, fetched https://{git host}/anthropics/claude-plugins-official.git | false           |       |                  |
+      | marketplace name                   | marketplace scope | marketplace status | id                                 | name                               | status | reasons        | scope | cause chain                                                                                                                      | cause truncated | leaks | rollback partial |
+      | anthropics/claude-plugins-official | user              | failed             | anthropics/claude-plugins-official | anthropics/claude-plugins-official | failed | source missing | user  | git clone --depth failed: repository-not-found, exit code 128, fetched https://{git host}/anthropics/claude-plugins-official.git | false           |       |                  |
     Then the "claude-plugins.json" file of the user scope does not exist
     Then the user scope holds no git clones
 

@@ -33,8 +33,18 @@ import {
   PinnedCommitMissingError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { MISSING_OID } from "../../platform/git-ops-contract.ts";
 import { checkoutFailure, createGitOpsFake } from "../../platform/git-ops-fake.ts";
-import { gitTestCheckout, initGitTestCheckout } from "../../platform/git-test-repository.ts";
+import {
+  createGitTestRepository,
+  gitTestCheckout,
+  initGitTestCheckout,
+} from "../../platform/git-test-repository.ts";
+import {
+  hermeticGitProcess,
+  recordingGitProcess,
+  systemGitOps,
+} from "../../platform/system-git-ops.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 
 import type {
@@ -255,6 +265,11 @@ void test("PURL-02/04: materializePluginClone clones into staging, checks out th
   );
   assert.equal(state.cloneCalls.length, 1, "MURL-09: exactly one clone attempt");
   assert.equal(state.cloneCalls[0]?.url, "https://example.com/repo");
+  assert.equal(
+    state.cloneCalls[0]?.noCheckout,
+    true,
+    "SG-TRN-02: the pinned clone checks nothing out",
+  );
   assert.equal(state.checkoutCalls.length, 1, "exactly one checkout");
   assert.equal(state.checkoutCalls[0]!.ref, PIN_40, "checkout pins the sha");
   assert.deepStrictEqual(created, [pluginCloneKey("https://example.com/repo", PIN_40)]);
@@ -360,7 +375,7 @@ void test("a cold key whose auth bundle cannot be built fails before any clone",
   assert.deepStrictEqual(state.cloneCalls, []);
 });
 
-void test("Pitfall: sha wins over ref -- checkout pins the sha, clone singleBranch uses the ref", async (t) => {
+void test("C5: sha wins over ref -- the clone names no branch, the commit fetch takes the ref, and the checkout pins the sha", async (t) => {
   const locations = await freshLocations(t);
   const { gitOps, state } = createGitOps();
 
@@ -374,198 +389,234 @@ void test("Pitfall: sha wins over ref -- checkout pins the sha, clone singleBran
     gitOps,
   });
 
-  assert.equal(state.checkoutCalls[0]!.ref, PIN_40, "checkout uses the sha pin, not the ref");
-  assert.equal(state.cloneCalls[0]!.ref, "v2.0.0", "clone ref-hint uses the ref");
-  assert.equal(state.cloneCalls[0]!.singleBranch, true, "singleBranch set when ref given");
+  assert.deepStrictEqual(
+    {
+      clone: state.cloneCalls.map(({ ref, singleBranch, noCheckout }) => ({
+        ref,
+        singleBranch,
+        noCheckout,
+      })),
+      fetchCommit: state.calls.fetchCommit.map(({ sha, ref }) => ({ sha, ref })),
+      checkout: state.checkoutCalls.map(({ ref }) => ref),
+    },
+    {
+      clone: [{ ref: undefined, singleBranch: undefined, noCheckout: true }],
+      fetchCommit: [{ sha: PIN_40, ref: "v2.0.0" }],
+      checkout: [PIN_40],
+    },
+  );
 });
-
-// A 40-hex pin the singleBranch ref-hint clone never fetched: checkout throws
-// `commit-missing` until a full (all-heads) fetch pulls the commit local.
-// This is the shape where a manifest's sha field moved ahead of a stale ref
-// hint, so the pinned commit sits outside the ref hint's history.
-const PIN_OUTSIDE_CLOSURE = "30287f5e3f122a646d1ac5ca3ab96e130c52a3ad";
 
 /** INR-03 / INR-06: the typed missing-pin error, with no library advice chained under it. */
 function isPinnedCommitMissing(err: unknown, pin: string): boolean {
   return err instanceof PinnedCommitMissingError && err.sha === pin && err.cause === undefined;
 }
 
-void test("PURL-04: a pin outside the ref-hint closure triggers ONE full fetch then retries the checkout to success", async (t) => {
-  const locations = await freshLocations(t);
-  const base = createGitOps();
-  let fullyFetched = false;
-  const checkouts: string[] = [];
-  const gitOps = {
-    ...base.gitOps,
-    async fetch(opts: Parameters<typeof base.gitOps.fetch>[0]): Promise<void> {
-      await base.gitOps.fetch(opts);
-      // A full fetch (no ref) rides the clone's wildcard refspec and pulls
-      // every head, so the previously-absent pinned commit is now local.
-      if (opts.ref === undefined) {
-        fullyFetched = true;
-      }
-    },
-    async checkout(opts: Parameters<typeof base.gitOps.checkout>[0]): Promise<void> {
-      checkouts.push(opts.ref);
-      if (opts.ref === PIN_OUTSIDE_CLOSURE && !fullyFetched) {
-        throw checkoutFailure(opts.ref);
-      }
-
-      await Promise.resolve();
+/** The ladder's git calls of one pinned clone, in the order they ran. */
+function orderedGitOps(gitOps: GitOps): { readonly gitOps: GitOps; readonly order: string[] } {
+  const order: string[] = [];
+  return {
+    order,
+    gitOps: {
+      ...gitOps,
+      clone: (options) => {
+        order.push(`clone noCheckout=${String(options.noCheckout)} ref=${String(options.ref)}`);
+        return gitOps.clone(options);
+      },
+      fetchCommit: (options) => {
+        order.push(`fetchCommit ${options.sha} ref=${String(options.ref)}`);
+        return gitOps.fetchCommit(options);
+      },
+      checkout: (options) => {
+        order.push(`checkout ${options.ref}`);
+        return gitOps.checkout(options);
+      },
+      resolveRef: (options) => {
+        order.push(`resolveRef ${options.ref}`);
+        return gitOps.resolveRef(options);
+      },
     },
   };
+}
 
-  const cloneRoot = await materializePluginClone({
+/** Materializes `pin` of `https://example.com/repo` with `gitOps`, `ref` as the source's ref. */
+function materializeExamplePin(
+  locations: ScopedLocations,
+  gitOps: GitOps,
+  pin: string,
+  ref?: string,
+): Promise<string> {
+  return materializePluginClone({
     resolveAuth: publicCloneAuth,
     locations,
     cloneUrl: "https://example.com/repo",
     networkUrl: "https://example.com/repo",
-    pin: PIN_OUTSIDE_CLOSURE,
-    ref: "v1.5.5",
+    pin,
+    ...(ref !== undefined && { ref }),
     gitOps,
   });
+}
 
-  assert.ok(
-    cloneRoot.includes(`${path.sep}plugin-clones${path.sep}`),
-    `expected cloneRoot under plugin-clones/, got ${cloneRoot}`,
+/** The staging directory of the first clone, which must be gone after a failure (MA-9). */
+async function assertStagingRemoved(state: { readonly cloneCalls: readonly { dir: string }[] }) {
+  const stagingDir = state.cloneCalls[0]!.dir;
+  await assert.rejects(() => stat(stagingDir), { code: "ENOENT" });
+}
+
+void test("SG-TRN-02, C5: a pinned clone runs the ladder: a no-checkout clone, the commit fetch with the ref, the checkout, then the HEAD check", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const base = createGitOps();
+  const { gitOps, order } = orderedGitOps(base.gitOps);
+
+  // act
+  await materializeExamplePin(locations, gitOps, PIN_40, "v2.0.0");
+
+  // assert
+  assert.deepStrictEqual(order, [
+    "clone noCheckout=true ref=undefined",
+    `fetchCommit ${PIN_40} ref=v2.0.0`,
+    `checkout ${PIN_40}`,
+    "resolveRef HEAD",
+  ]);
+});
+
+void test("SG-TRN-02: a pin the remote holds is fetched before its checkout", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const { gitOps, state } = createGitOps({ remoteRefs: { "refs/remotes/origin/main": PIN_40 } });
+
+  // act
+  await materializeExamplePin(locations, gitOps, PIN_40);
+
+  // assert
+  assert.deepStrictEqual(
+    { fetched: state.localRefs[PIN_40], checkouts: state.checkoutCalls.map(({ ref }) => ref) },
+    { fetched: PIN_40, checkouts: [PIN_40] },
   );
-  assert.equal(base.state.fetchCalls.length, 1, "exactly one recovery fetch");
+});
+
+void test("SG-TRN-02: a mixed-case pin is fetched, checked out, and compared lower-cased", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const base = createGitOps();
+  const { gitOps, order } = orderedGitOps(base.gitOps);
+  const mixedCase = `${PIN_40.slice(0, 20).toUpperCase()}${PIN_40.slice(20)}`;
+
+  // act
+  const cloneRoot = await materializeExamplePin(locations, gitOps, mixedCase);
+
+  // assert
+  assert.deepStrictEqual(
+    { order, cloneRoot },
+    {
+      order: [
+        "clone noCheckout=true ref=undefined",
+        `fetchCommit ${PIN_40} ref=undefined`,
+        `checkout ${PIN_40}`,
+        "resolveRef HEAD",
+      ],
+      cloneRoot: await locations.pluginCloneDir(
+        pluginCloneKey("https://example.com/repo", mixedCase),
+      ),
+    },
+  );
+});
+
+void test("SG-TRN-02: a HEAD other than the pin fails as pin-mismatch and leaves no staging directory", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const base = createGitOps();
+  const gitOps: GitOps = {
+    ...base.gitOps,
+    resolveRef: () => Promise.resolve(PIN2_40),
+  };
+
+  // act
+  const materializing = materializeExamplePin(locations, gitOps, PIN_40);
+
+  // assert
+  await assert.rejects(materializing, (error: unknown) => {
+    assert.ok(error instanceof GitCommandError);
+    assert.deepStrictEqual(
+      { kind: error.kind, operation: error.operation },
+      { kind: "pin-mismatch", operation: "rev-parse --verify" },
+    );
+    return true;
+  });
+  await assertStagingRemoved(base.state);
   assert.equal(
-    base.state.fetchCalls[0]!.ref,
-    undefined,
-    "recovery fetch pulls every head (no ref -> wildcard refspec)",
-  );
-  assert.equal(base.state.fetchCalls[0]!.tags, true, "INR-06: the recovery fetch pulls tags too");
-  assert.deepEqual(
-    checkouts,
-    [PIN_OUTSIDE_CLOSURE, PIN_OUTSIDE_CLOSURE],
-    "checkout attempted, failed, then retried once after the fetch",
+    await pathExists(
+      await locations.pluginCloneDir(pluginCloneKey("https://example.com/repo", PIN_40)),
+    ),
+    false,
   );
 });
 
-void test("PURL-04: a pin reachable within the ref-hint closure stays on the fast path with no recovery fetch", async (t) => {
-  const locations = await freshLocations(t);
-  const { gitOps, state } = createGitOps();
-
-  await materializePluginClone({
-    resolveAuth: publicCloneAuth,
-    locations,
-    cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
-    pin: PIN_40,
-    ref: "v2.0.0",
-    gitOps,
-  });
-
-  assert.equal(state.checkoutCalls.length, 1, "single checkout, no retry");
-  assert.equal(state.fetchCalls.length, 0, "no recovery fetch when the pin is already present");
-});
-
-void test("PURL-04 / INR-03: a still-unreachable pin fails clean after the retry as a commit the host lacks", async (t) => {
+void test("INR-03: a checkout that finds no commit after the ladder is a commit the host lacks", async (t) => {
+  // arrange
   const locations = await freshLocations(t);
   const base = createGitOps();
-  const gitOps = {
+  const gitOps: GitOps = {
     ...base.gitOps,
-    async checkout(opts: Parameters<typeof base.gitOps.checkout>[0]): Promise<void> {
-      // The commit is genuinely absent from the remote: the recovery fetch
-      // cannot make it appear, so both attempts fail as `commit-missing`.
-      if (opts.ref === PIN_OUTSIDE_CLOSURE) {
-        throw checkoutFailure(opts.ref);
-      }
-
+    async checkout(options): Promise<void> {
       await Promise.resolve();
+      throw checkoutFailure(options.ref);
     },
   };
 
-  await assert.rejects(
-    () =>
-      materializePluginClone({
-        resolveAuth: publicCloneAuth,
-        locations,
-        cloneUrl: "https://example.com/repo",
-        networkUrl: "https://example.com/repo",
-        pin: PIN_OUTSIDE_CLOSURE,
-        ref: "v1.5.5",
-        gitOps,
-      }),
-    (err: unknown) => isPinnedCommitMissing(err, PIN_OUTSIDE_CLOSURE),
-    "INR-03: the unreachable pin reads as a commit the git host does not have",
-  );
-  assert.equal(base.state.fetchCalls.length, 1, "exactly one recovery fetch was attempted");
+  // act
+  const materializing = materializeExamplePin(locations, gitOps, PIN_40, "v1.5.5");
+
+  // assert
+  await assert.rejects(materializing, (err: unknown) => isPinnedCommitMissing(err, PIN_40));
+  await assertStagingRemoved(base.state);
 });
 
-void test("PURL-04 / INR-03: a NO-ref clone whose checkout fails as commit-missing fails immediately as a commit the host lacks", async (t) => {
+void test("SG-TRN-02: a commit fetch that fails other than by a missing commit propagates with no checkout", async (t) => {
+  // arrange
   const locations = await freshLocations(t);
   const base = createGitOps();
-  const gitOps = {
+  const failure = new GitCommandError(
+    { kind: "network" },
+    { operation: "fetch --depth", exitCode: 128 },
+  );
+  const gitOps: GitOps = {
     ...base.gitOps,
-    async checkout(opts: Parameters<typeof base.gitOps.checkout>[0]): Promise<void> {
-      // A no-ref clone already fetched every head, so an absent commit is
-      // genuinely unreachable -- the recovery guard must not fire.
-      await Promise.resolve();
-      throw checkoutFailure(opts.ref);
-    },
+    fetchCommit: () => Promise.reject(failure),
   };
 
-  await assert.rejects(
-    () =>
-      materializePluginClone({
-        resolveAuth: publicCloneAuth,
-        locations,
-        cloneUrl: "https://example.com/repo",
-        networkUrl: "https://example.com/repo",
-        pin: PIN_OUTSIDE_CLOSURE,
-        gitOps,
-      }),
-    (err: unknown) => isPinnedCommitMissing(err, PIN_OUTSIDE_CLOSURE),
-    "INR-03: the unreachable pin reads as a commit the git host does not have",
-  );
-  assert.equal(base.state.fetchCalls.length, 0, "the no-ref arm never attempts a recovery fetch");
-  const stagingDir = base.state.cloneCalls[0]!.dir;
-  await assert.rejects(
-    () => stat(stagingDir),
-    { code: "ENOENT" },
-    "staging dir no longer exists after rejection (MA-9)",
-  );
+  // act
+  const materializing = materializeExamplePin(locations, gitOps, PIN_40);
+
+  // assert
+  await assert.rejects(materializing, (error: unknown) => error === failure);
+  assert.deepStrictEqual(base.state.checkoutCalls, []);
+  await assertStagingRemoved(base.state);
 });
 
-void test("PURL-04: a ref-hint clone whose checkout fails another way does NOT trigger the recovery fetch", async (t) => {
+void test("SG-TRN-02: a checkout that fails another way rethrows unchanged", async (t) => {
+  // arrange
   const locations = await freshLocations(t);
   const base = createGitOps();
-  const gitOps = {
+  const gitOps: GitOps = {
     ...base.gitOps,
     async checkout(): Promise<void> {
-      // EACCES-shaped failure: no GitCommandError, so the recovery guard must
-      // not read it as a pin outside the ref-hint closure.
       await Promise.resolve();
       throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
     },
   };
 
-  await assert.rejects(
-    () =>
-      materializePluginClone({
-        resolveAuth: publicCloneAuth,
-        locations,
-        cloneUrl: "https://example.com/repo",
-        networkUrl: "https://example.com/repo",
-        pin: PIN_40,
-        ref: "v1.5.5",
-        gitOps,
-      }),
-    /EACCES/,
-    "the original failure rethrows unchanged",
-  );
-  assert.equal(base.state.fetchCalls.length, 0, "a checkout that fails another way never fetches");
-  const stagingDir = base.state.cloneCalls[0]!.dir;
-  await assert.rejects(
-    () => stat(stagingDir),
-    { code: "ENOENT" },
-    "staging dir no longer exists after rejection (MA-9)",
-  );
+  // act
+  const materializing = materializeExamplePin(locations, gitOps, PIN_40, "v1.5.5");
+
+  // assert
+  await assert.rejects(materializing, /EACCES/);
+  await assertStagingRemoved(base.state);
 });
 
-void test("PROV-03: the recovery fetch threads the auth bundle so a private pin outside the ref-hint closure authenticates", async (t) => {
+void test("PROV-03: the commit fetch threads the auth bundle so a private pin authenticates", async (t) => {
+  // arrange
   const locations = await freshLocations(t);
   const auth: GitAuthBundle = {
     credentialOps: {
@@ -576,41 +627,164 @@ void test("PROV-03: the recovery fetch threads the auth bundle so a private pin 
     host: "gitlab.example.com",
     kind: "stored-credential",
   };
-  const base = createGitOps();
-  let fullyFetched = false;
-  const gitOps = {
-    ...base.gitOps,
-    async fetch(opts: Parameters<typeof base.gitOps.fetch>[0]): Promise<void> {
-      await base.gitOps.fetch(opts);
-      if (opts.ref === undefined) {
-        fullyFetched = true;
-      }
-    },
-    async checkout(opts: Parameters<typeof base.gitOps.checkout>[0]): Promise<void> {
-      if (opts.ref === PIN_OUTSIDE_CLOSURE && !fullyFetched) {
-        throw checkoutFailure(opts.ref);
-      }
+  const { gitOps, state } = createGitOps();
 
-      await Promise.resolve();
-    },
-  };
-
+  // act
   await materializePluginClone({
     locations,
     cloneUrl: "https://gitlab.example.com/o/r",
     networkUrl: "https://gitlab.example.com/o/r",
-    pin: PIN_OUTSIDE_CLOSURE,
-    ref: "v1.5.5",
+    pin: PIN_40,
     gitOps,
     resolveAuth: () => auth,
   });
 
-  assert.equal(base.state.fetchCalls.length, 1, "exactly one recovery fetch");
-  assert.equal(
-    base.state.fetchCalls[0]!.auth,
-    auth,
-    "auth bundle threaded into the recovery fetch by reference",
+  // assert
+  assert.strictEqual(state.calls.fetchCommit[0]?.auth, auth);
+});
+
+/**
+ * SG-TRN-02: a `file://` repository whose default branch `main` holds three
+ * commits, and whose branch `dev`, forked at `main`'s last commit, holds two
+ * more. `devOnly` is the first `dev` commit, which no ref advertises.
+ */
+async function ladderRemote(t: TestContext): Promise<{
+  readonly url: string;
+  readonly second: string;
+  readonly devOnly: string;
+}> {
+  const repository = await createGitTestRepository(t, { boundary: "local" });
+  const second = await repository.commit([{ filepath: "two.txt", contents: "two\n" }], "two");
+  await repository.commit([{ filepath: "three.txt", contents: "three\n" }], "three");
+  await repository.run("checkout", "-q", "-b", "dev");
+  const devOnly = await repository.commit([{ filepath: "dev.txt", contents: "dev\n" }], "dev");
+  await repository.commit([{ filepath: "dev2.txt", contents: "dev2\n" }], "dev2");
+  await repository.run("checkout", "-q", "main");
+  return { url: `file://${repository.dir}`, second, devOnly };
+}
+
+/** Materializes `pin` of `url` on system git, recording each git operation. */
+async function materializeOnSystemGit(
+  t: TestContext,
+  args: { readonly url: string; readonly pin: string; readonly ref?: string },
+  variables: NodeJS.ProcessEnv = {},
+): Promise<{ readonly materializing: Promise<string>; readonly operations: () => string[] }> {
+  const locations = await freshLocations(t);
+  const recorded = recordingGitProcess(await hermeticGitProcess(t, variables));
+  return {
+    materializing: materializePluginClone({
+      resolveAuth: publicCloneAuth,
+      locations,
+      cloneUrl: args.url,
+      networkUrl: args.url,
+      pin: args.pin,
+      ...(args.ref !== undefined && { ref: args.ref }),
+      gitOps: systemGitOps(recorded.gitProcess),
+    }),
+    operations: () =>
+      recorded.requests.map((request) =>
+        [request.subcommand, ...(request.options ?? []).slice(0, 1)].join(" "),
+      ),
+  };
+}
+
+/** The operations of the ladder up to the commit fetch's first rung. */
+const LADDER_START = ["clone --depth", "config --local", "fetch --depth"] as const;
+
+void test("SG-TRN-02: real git reaches an older default-branch pin with the SHA fetch alone", async (t) => {
+  // arrange
+  const remote = await ladderRemote(t);
+  const run = await materializeOnSystemGit(t, { url: remote.url, pin: remote.second });
+
+  // act
+  const cloneRoot = await run.materializing;
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      operations: run.operations(),
+      head: await gitTestCheckout(cloneRoot).run("rev-parse", "HEAD"),
+      two: await readFile(path.join(cloneRoot, "two.txt"), "utf8"),
+    },
+    {
+      operations: [...LADDER_START, "checkout -f", "rev-parse --verify"],
+      head: remote.second,
+      two: "two\n",
+    },
   );
+});
+
+void test("SG-TRN-02: real git reaches a pin only on the source's ref after the unshallow rung", async (t) => {
+  // arrange
+  const remote = await ladderRemote(t);
+  const run = await materializeOnSystemGit(
+    t,
+    { url: remote.url, pin: remote.devOnly, ref: "dev" },
+    // Protocol v0 refuses a want of a commit no ref advertises, as such a host does.
+    { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "protocol.version", GIT_CONFIG_VALUE_0: "0" },
+  );
+
+  // act
+  const cloneRoot = await run.materializing;
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      operations: run.operations(),
+      head: await gitTestCheckout(cloneRoot).run("rev-parse", "HEAD"),
+    },
+    {
+      operations: [
+        ...LADDER_START,
+        "rev-parse --is-shallow-repository",
+        "fetch --unshallow",
+        "checkout -f",
+        "rev-parse --verify",
+      ],
+      head: remote.devOnly,
+    },
+  );
+});
+
+void test("INR-03: real git ends an unknown pin in a commit the host lacks after the rungs", async (t) => {
+  // arrange
+  const remote = await ladderRemote(t);
+  const run = await materializeOnSystemGit(t, { url: remote.url, pin: MISSING_OID });
+
+  // act & assert
+  await assert.rejects(run.materializing, (err: unknown) =>
+    isPinnedCommitMissing(err, MISSING_OID),
+  );
+  assert.deepStrictEqual(run.operations(), [
+    ...LADDER_START,
+    "rev-parse --is-shallow-repository",
+    "fetch --unshallow",
+    "checkout -f",
+  ]);
+});
+
+// Measured on git 2.43.0: a depth-1 clone of a one-commit repository still
+// writes `.git/shallow`, so the ladder runs the unshallow rung, which succeeds,
+// and only then reads the missing commit. A complete clone, which skips the
+// rung, comes only from a clone without `--depth`.
+void test("INR-03: a depth-1 clone of a one-commit repository is shallow, so real git runs the unshallow rung and ends the same way", async (t) => {
+  // arrange
+  const repository = await createGitTestRepository(t, { boundary: "local" });
+  const run = await materializeOnSystemGit(t, {
+    url: `file://${repository.dir}`,
+    pin: MISSING_OID,
+  });
+
+  // act & assert
+  await assert.rejects(run.materializing, (err: unknown) =>
+    isPinnedCommitMissing(err, MISSING_OID),
+  );
+  assert.deepStrictEqual(run.operations(), [
+    ...LADDER_START,
+    "rev-parse --is-shallow-repository",
+    "fetch --unshallow",
+    "checkout -f",
+  ]);
 });
 
 void test("PROV-03: materializePluginClone with an auth bundle threads it to gitOps.clone", async (t) => {

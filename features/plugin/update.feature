@@ -42,8 +42,8 @@ Feature: Plugin update
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id           | name    | status | reasons       | cause chain                                             | cause truncated | leaks | rollback partial | scope   |
-      | gits             | project           | unknown@gits | unknown | failed | network error | Empty response from git server.                         | false           |       |                  | project |
+      | marketplace name | marketplace scope | id           | name    | status | reasons       | cause chain                                     | cause truncated | leaks | rollback partial | scope   |
+      | gits             | project           | unknown@gits | unknown | failed | network error | git clone --depth failed: failed, exit code 128 | false           |       |                  | project |
     When the git host serves the plugin "unknown" again
     When the git host sends an invalid response for the marketplace "gits"
     When the user runs "/claude:plugin update unknown@gits --scope project"

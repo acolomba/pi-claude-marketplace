@@ -1096,6 +1096,7 @@ Feature: Plugin install dependencies
       | method | path                                           | status |
       | GET    | /acme/up.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/up.git/git-upload-pack                   | 200    |
+      | POST   | /acme/up.git/git-upload-pack                   | 200    |
     Then the installation record of the project scope holds these plugins:
       | id        | version | enabled |
       | app@tools | 1.0.0   | true    |
@@ -1132,6 +1133,7 @@ Feature: Plugin install dependencies
     Then the git host receives these requests:
       | method | path                                             | status |
       | GET    | /acme/util.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/util.git/git-upload-pack                   | 200    |
       | POST   | /acme/util.git/git-upload-pack                   | 200    |
     Then the installation record of the project scope holds these plugins:
       | id         | version | enabled |

@@ -23,6 +23,7 @@ Feature: Marketplace git source
       | method | path                                                | status |
       | GET    | <repository path>/info/refs?service=git-upload-pack | 200    |
       | POST   | <repository path>/git-upload-pack                   | 200    |
+      | POST   | <repository path>/git-upload-pack                   | 200    |
 
     @url
     Examples:
@@ -187,8 +188,8 @@ Feature: Marketplace git source
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id       | name     | status | reasons                 | scope   | leaks | rollback partial | cause chain                                                            | cause truncated |
-      | <source>         | project           | failed             | <source> | <source> | failed | authentication required | project |       |                  | The operation was canceled., fetched https://{git host}/acme/tools.git | false           |
+      | marketplace name | marketplace scope | marketplace status | id       | name     | status | reasons                 | scope   | leaks | rollback partial | cause chain                                                                                   | cause truncated |
+      | <source>         | project           | failed             | <source> | <source> | failed | authentication required | project |       |                  | git clone --depth failed: https-auth, exit code 128, fetched https://{git host}/acme/tools.git | false           |
     Then the "claude-plugins.json" file of the project scope does not exist
     Then the git host receives these requests:
       | method | path                                              | status |
@@ -220,6 +221,7 @@ Feature: Marketplace git source
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
 
     @url

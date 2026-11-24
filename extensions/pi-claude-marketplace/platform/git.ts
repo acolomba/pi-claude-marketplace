@@ -31,12 +31,13 @@ import type { GitHttpRequest, GitHttpResponse, HttpClient } from "isomorphic-git
  * `fetchCommit`, `resolveRemoteRef`, and `listRemoteTags` need system git.
  * Each first asks `platform/git-process.ts` for it, so with no usable git on
  * PATH they reject with that module's `git-missing` GitCommandError before
- * isomorphic-git runs or a request goes out (SG-PRC-06).
+ * a request goes out (SG-PRC-06).
  *
- * SG-TRN-01: `fetchCommit`, `resolveRemoteRef`, and `listRemoteTags` send
- * their requests with system git through `runRemote`, the one network request path of this
- * module: the network lane, the D-SG-13 limit, the D-PL8-24 abort signal, and
- * the D-SG-16 `insteadOf` pair. `checkout`, `resolveRef`, and `listRemotes`
+ * SG-TRN-01: `clone`, `fetchCommit`, `resolveRemoteRef`, and `listRemoteTags`
+ * send their requests with system git through `runRemote`, the one network
+ * request path of this module: the network lane, the D-SG-13 limit, the
+ * D-PL8-24 abort signal, and the D-SG-16 `insteadOf` pair. `fetch` still runs
+ * in-process with `isomorphic-git` until the re-clone swap replaces D-14. `checkout`, `resolveRef`, and `listRemotes`
  * run system git through `NODE_GIT_PROCESS` on the local lane, which reaches
  * no transport. `resolveRef` answers undefined for a ref that names no commit, and
  * `resolveRemoteRef` for a ref the remote does not advertise. The other local
@@ -52,14 +53,13 @@ import type { GitHttpRequest, GitHttpResponse, HttpClient } from "isomorphic-git
  * redirects itself, so a credential never reaches another origin (GAUTH-06).
  *
  * NOT exposed:
- *   - sparse checkout (PRD §11 deferred; isomorphic-git also doesn't support it)
- *   - shallow clones / depth (deferred until needed; full history is kept)
- *   - submodules (git submodules are not followed)
+ *   - sparse checkout (PRD §11 deferred)
+ *   - submodules (a clone passes `--no-recurse-submodules`, C5)
  *   - custom auth surface beyond the optional `opts.auth` bundle
  *     (`platform/git-auth-callbacks.ts::buildAuthCallbacks` + the
- *     `CloneOptions.auth?` / `FetchOptions.auth?` ledge; the GitHub Device
- *     Flow orchestrator wires it at the call sites). When `opts.auth` is
- *     omitted, clone and fetch behave as the public-only path.
+ *     `FetchOptions.auth?` ledge; the GitHub Device Flow orchestrator wires
+ *     it at the call sites). When `opts.auth` is omitted, fetch behaves as
+ *     the public-only path.
  *
  * The wrapper is the canonical platform-git surface; the optional-auth
  * callbacks are consumed by isomorphic-git's onAuth / onAuthFailure hooks.
@@ -85,21 +85,28 @@ export interface CloneOptions {
    * pass a host-keyed `opts.auth` bundle (GAUTH-03); a public clone never
    * challenges, so the bundle is not consulted.
    *
-   * The URL actually sent is `shared/github-base-url.ts::gitHubWireUrl` of
-   * this value; the clone's recorded origin stays this value.
+   * Under the GitHub base override git fetches from the base through the
+   * D-SG-16 `insteadOf` pair; the clone's recorded origin stays this value.
    */
   url: string;
-  /** Optional ref (branch/tag/SHA) to check out. If omitted, the default branch. */
+  /**
+   * Optional branch or tag to clone (`--branch=<ref>`). If omitted, the
+   * default branch. A commit id is no branch name: a pinned clone passes no
+   * ref and fetches its commit afterwards (C5).
+   */
   ref?: string;
-  /** If a specific ref is given, fetch only that branch -- saves bandwidth. */
+  /** Pass `--single-branch`; a depth-1 clone fetches one branch either way. */
   singleBranch?: boolean;
   /**
-   * Optional auth bundle. When provided, clone() builds
-   * isomorphic-git `onAuth` / `onAuthFailure` callbacks via
-   * `buildAuthCallbacks` and threads them into the underlying `git.clone`
-   * call. When omitted, clone() behaves identically to the
-   * public-only path (no network policy change for public clones; NFR-5
-   * surfaces untouched).
+   * SG-TRN-02: pass `--no-checkout`, so the clone writes no work tree file and
+   * the pin ladder checks its commit out afterwards.
+   */
+  noCheckout?: boolean;
+  /**
+   * Optional auth bundle. git asks the user's credential helpers itself; the
+   * bundle decides what an auth failure of the clone leads to (D-SG-14,
+   * GAUTH-04). A public clone never fails on auth, so the bundle is not
+   * consulted.
    */
   auth?: BuildAuthCallbacksOpts;
 }
@@ -576,7 +583,7 @@ type RemoteGitRequest = GitRequest & { readonly config: readonly string[] };
 
 /** One remote request that `runRemote` sends with system git. */
 interface RemoteRequest {
-  readonly subcommand: "fetch" | "ls-remote";
+  readonly subcommand: "clone" | "fetch" | "ls-remote";
   /** Pi-owned flags; the first one names the operation in a failure (`operationOf`). */
   readonly options: readonly string[];
   readonly operands: readonly string[];
@@ -708,43 +715,43 @@ function advertisedRefs(stdout: string): Map<string, string> {
   return refs;
 }
 
-export async function clone(opts: CloneOptions): Promise<void> {
-  await NODE_GIT_PROCESS.locate();
-  // When opts.auth is provided, build the isomorphic-git callbacks
-  // up-front and conditionally spread them. When omitted, the public-only
-  // path stays byte-identical.
-  //
-  // The `onAuthFailure as git.AuthFailureCallback` cast bridges to
-  // isomorphic-git's AuthFailureCallback, whose `auth: GitAuth` parameter
-  // declares optional fields as `string | undefined` (explicit-undefined)
-  // while our `GitCredentials` uses `string?` (optional, no `| undefined`).
-  // Under `exactOptionalPropertyTypes: true` the function-parameter
-  // contravariance makes the assignment fail without a structural cast;
-  // runtime shapes are identical. `onAuth` does not need the cast because
-  // it only takes the `url: string` parameter -- no contravariant
-  // GitAuth-typed slot.
-  const authCbs = opts.auth === undefined ? undefined : buildAuthCallbacks(opts.auth);
-  const wireUrl = gitHubWireUrl(opts.url);
-  await networkCall(wireUrl, opts.url, () =>
-    git.clone({
-      fs,
-      http,
-      dir: opts.dir,
-      url: wireUrl,
-      ...(opts.ref !== undefined && { ref: opts.ref }),
-      ...(opts.singleBranch !== undefined && { singleBranch: opts.singleBranch }),
-      ...(authCbs !== undefined && {
-        onAuth: authCbs.onAuth,
-        onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,
-      }),
-      // No depth (full history is kept). No corsProxy (Node only).
-    }),
+/**
+ * SG-TRN-01, SG-TRN-02, C5: clones `opts.url` into `opts.dir` with system git
+ * in Claude Code's shape, `clone --depth 1 --no-recurse-submodules
+ * [--no-checkout] [--branch=<ref>] [--single-branch] --end-of-options <url>
+ * <dir>`, through `runRemote`, so the clone has the D-SG-13 limit, the
+ * scope's abort signal, the D-SG-16 `insteadOf` pair, and the D-SG-14 retry.
+ * `--depth` comes first, so a failure names the operation `clone --depth`.
+ * `--branch=<ref>` is one argv word, so git never reads the ref as an option
+ * of its own (SG-PRC-01).
+ *
+ * D-SG-16: git records the URL it was given as the clone's origin, so a
+ * github.com clone keeps its canonical identity under the base override and
+ * needs no second config write. A clone that fails removes the directory git
+ * made, or empties one that already existed, so the D-SG-14 retry starts
+ * from an empty target (03-RESEARCH A10, measured on git 2.43.0).
+ */
+export async function clone(
+  opts: CloneOptions,
+  gitProcess: GitProcess = NODE_GIT_PROCESS,
+): Promise<void> {
+  await runRemote(
+    {
+      subcommand: "clone",
+      options: [
+        "--depth",
+        "1",
+        "--no-recurse-submodules",
+        ...(opts.noCheckout === true ? ["--no-checkout"] : []),
+        ...(opts.ref === undefined ? [] : [`--branch=${opts.ref}`]),
+        ...(opts.singleBranch === true ? ["--single-branch"] : []),
+      ],
+      operands: [opts.url, opts.dir],
+      url: opts.url,
+      auth: opts.auth,
+    },
+    gitProcess,
   );
-  if (wireUrl !== opts.url) {
-    // GHB-01: isomorphic-git records the URL it fetched as origin. The clone
-    // keeps its canonical identity; only the bytes came from the base.
-    await git.setConfig({ fs, dir: opts.dir, path: "remote.origin.url", value: opts.url });
-  }
 }
 
 /**
@@ -788,6 +795,9 @@ export async function fetch(opts: FetchOptions): Promise<void> {
 /** `git config --get` and `--get-all` exit 1 when the key has no value. */
 const CONFIG_VALUE_ABSENT = 1;
 
+/** The config key of the url the `origin` remote records. */
+const ORIGIN_URL_KEY = "remote.origin.url";
+
 /**
  * SG-TRN-02, C5: fetches the commit `opts.sha` into the clone `opts.dir`, as
  * Claude Code's pin ladder does. The first rung is `fetch --depth 1 origin
@@ -800,7 +810,7 @@ const CONFIG_VALUE_ABSENT = 1;
  *
  * D-SG-16: the clone records its canonical origin, so a `fetch origin` with no
  * pair would go to the real github.com. The recorded origin is read first,
- * with `config --local --get remote.origin.url` on the local lane, and decides
+ * with `config --local --get` of `ORIGIN_URL_KEY` on the local lane, and decides
  * the pair of both rungs. A clone with no origin url sends no pair, and git
  * then refuses the fetch itself.
  */
@@ -840,7 +850,7 @@ async function recordedOriginUrl(dir: string, gitProcess: GitProcess): Promise<s
     lane: "local",
     cwd: dir,
     options: ["--local", "--get"],
-    operands: ["remote.origin.url"],
+    operands: [ORIGIN_URL_KEY],
     allowExit: [CONFIG_VALUE_ABSENT],
     timeoutMs: gitTimeoutMs(),
   });
@@ -1191,7 +1201,7 @@ export async function currentBranch(opts: CurrentBranchOptions): Promise<string 
  * `unreadable` arm of a filesystem error. The probe read doubles as the
  * existence check, so no separate `stat` is needed.
  *
- * SG-TRN-01: system git then reads every `remote.origin.url` value, in file
+ * SG-TRN-01: system git then reads every origin url value, in file
  * order, across every `[remote "origin"]` section, with `config --local
  * --null --get-all` on the local lane. git folds the section name's case, so
  * a capitalized `Remote` section names the origin remote. git fetches from
@@ -1233,7 +1243,7 @@ export async function listRemotes(
       lane: "local",
       cwd: opts.dir,
       options: ["--local", "--null", "--get-all"],
-      operands: ["remote.origin.url"],
+      operands: [ORIGIN_URL_KEY],
       allowExit: [CONFIG_VALUE_ABSENT],
       timeoutMs: gitTimeoutMs(),
     });

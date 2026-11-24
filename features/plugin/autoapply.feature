@@ -58,6 +58,7 @@ Feature: Plugin autoapply
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
     Then the session offers these skills:
       | command          | description           |
       | /skill:ghp-skill | A skill of ghp 1.0.0. |

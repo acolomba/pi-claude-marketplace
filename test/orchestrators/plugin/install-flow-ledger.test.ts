@@ -7873,8 +7873,11 @@ test("Orchestrated-PI-3: plugin not found -> outcome.status 'failed' with not-fo
   });
 });
 
-test("Orchestrated-PI-4: non-installable plugin -> outcome.status 'uninstallable', no notification", async () => {
+test("Orchestrated-PI-4: non-installable plugin -> outcome.status 'uninstallable', no notification", async (t) => {
   // Gap: classifyInstallFailure path for 'is not installable' branch.
+  // SG-TRN-07: the github source clones with system git, so the base points
+  // it at a closed loopback port and no request leaves the machine.
+  setGitHubBaseUrl(t, "https://127.0.0.1:9");
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-pi4-"));
     try {
@@ -13707,8 +13710,9 @@ test("plugin install authentication: threads a host-keyed bundle for a host the 
         ],
       );
       assert.deepStrictEqual(
-        git.state.cloneCalls.map(({ auth, ref, singleBranch, url }) => ({
+        git.state.cloneCalls.map(({ auth, noCheckout, ref, singleBranch, url }) => ({
           authHost: auth?.host,
+          noCheckout,
           ref,
           singleBranch,
           url,
@@ -13716,6 +13720,8 @@ test("plugin install authentication: threads a host-keyed bundle for a host the 
         [
           {
             authHost: "gitlab.example.com",
+            // SG-TRN-02: the first rung of the pin ladder checks nothing out.
+            noCheckout: true,
             ref: undefined,
             singleBranch: undefined,
             url: cloneUrl,

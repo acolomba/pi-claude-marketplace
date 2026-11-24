@@ -350,6 +350,7 @@ Feature: Plugin info
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
 
   Scenario: Info with --fetch on a plugin the git host answers with 404 names it source missing
     Given the git repository "ghp" holds these plugins:

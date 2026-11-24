@@ -273,8 +273,8 @@ Feature: Plugin reinstall
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status | reasons        | scope   | version | cause chain                                                                                                  | cause truncated | leaks | rollback partial |
-      | gits             | project           | ghp@gits | ghp  | failed | source missing | project | 1.0.0   | 404 on https://{git host}/acme/ghp.git, HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git | false           |       |                  |
+      | marketplace name | marketplace scope | id       | name | status | reasons        | scope   | version | cause chain                                                                                                                                    | cause truncated | leaks | rollback partial |
+      | gits             | project           | ghp@gits | ghp  | failed | source missing | project | 1.0.0   | 404 on https://{git host}/acme/ghp.git, git clone --depth failed: repository-not-found, exit code 128, fetched https://{git host}/acme/ghp.git | false           |       |                  |
 
   Scenario: A new session offers the skills of the reinstalled plugin
     Given the user has run "/claude:plugin reinstall demo@fixtures --scope project"

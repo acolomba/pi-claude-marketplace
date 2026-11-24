@@ -22,11 +22,7 @@ import * as git from "isomorphic-git";
 import http from "isomorphic-git/http/node";
 import { mock, verify } from "strong-mock";
 
-import {
-  createGitProcess,
-  NODE_GIT_HOST,
-  NODE_GIT_SPAWN,
-} from "../../extensions/pi-claude-marketplace/platform/git-process.ts";
+import { refreshGitHubClone } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import {
   checkout,
   clone,
@@ -52,7 +48,12 @@ import {
   StoredCredentialRejectedError,
   TooManyRedirectsError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { hermeticGitEnvironment } from "../../features/lib/hermetic-git.ts";
+import {
+  cgiEnvironment,
+  httpBackendArguments,
+  parseCgiResponse,
+  runHttpBackend,
+} from "../../features/lib/https-git-host/cgi.ts";
 import { HttpsGitHost } from "../../features/lib/https-git-host/server.ts";
 import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
 
@@ -63,8 +64,8 @@ import {
   createGitTestRepository,
   gitTestCheckout,
 } from "./git-test-repository.ts";
+import { hermeticGitProcess, recordingGitProcess, systemGitOps } from "./system-git-ops.ts";
 
-import type { GitOps } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { OnAuthRequiredFn } from "../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import type {
   GitProcess,
@@ -355,39 +356,6 @@ async function installRepositoryTransport(
 }
 
 /**
- * A git process over real system git with a scratch HOME, no system or global
- * config, and the case's own neutral directory, so no git variable or config
- * of the shell that runs the suite reaches it (SG-HRN-01).
- */
-async function hermeticGitProcess(
-  t: TestContext,
-  variables: NodeJS.ProcessEnv = {},
-): Promise<GitProcess> {
-  const root = await realpath(await createGitTestDirectory(t, { boundary: "local" }));
-  return createGitProcess({
-    spawn: NODE_GIT_SPAWN,
-    host: { ...NODE_GIT_HOST, neutralDirectory: () => Promise.resolve(root) },
-    env: { ...hermeticGitEnvironment(root), ...variables },
-    killGraceMs: 1_000,
-  });
-}
-
-/** The production GitOps, its system-git verbs bound to `systemGit`. */
-function productionGitOps(systemGit: GitProcess): GitOps {
-  return {
-    clone,
-    fetch,
-    fetchCommit: (options) => fetchCommit(options, systemGit),
-    forceUpdateRef,
-    checkout: (options) => checkout(options, systemGit),
-    resolveRef: (options) => resolveRef(options, systemGit),
-    currentBranch,
-    resolveRemoteRef: (options) => resolveRemoteRef(options, systemGit),
-    listRemotes: (options) => listRemotes(options, systemGit),
-  };
-}
-
-/**
  * Copies the `.git` of `dir` into a new directory, without its index, as the
  * clone cache's copy step does, and returns the new directory.
  */
@@ -450,10 +418,10 @@ function setGitTimeoutVariable(t: TestContext, value: string): void {
 }
 
 /**
- * The real participant serves one repository two ways: isomorphic-git's
- * requests to `REMOTE_URL` reach it through the transport double, and system
- * git reaches it through a user config `insteadOf` whose base is its local
- * path (D-SG-16), so no request leaves the machine.
+ * The real participant serves one repository two ways: system git, the clone
+ * included, reaches it through a user config `insteadOf` whose base is its
+ * local path (D-SG-16), and the in-process `fetch` reaches it through the
+ * transport double, so no request leaves the machine.
  */
 async function createProductionGitOps(t: TestContext): Promise<GitOpsContractParticipant> {
   const remote = await createGitTestRepository(t, { boundary: "local" });
@@ -481,7 +449,7 @@ async function createProductionGitOps(t: TestContext): Promise<GitOpsContractPar
   await installRepositoryTransport(t, remote);
 
   return {
-    gitOps: productionGitOps(systemGit),
+    gitOps: systemGitOps(systemGit),
     worktreeDir: worktree.dir,
     cloneDir,
     remoteUrl: REMOTE_URL,
@@ -523,30 +491,6 @@ async function shallowFileClone(t: TestContext): Promise<{
   return { dir, olderOids: [origin.initialOid, secondOid] };
 }
 
-/** A git process that runs `systemGit` and records each request, and each as one line. */
-function recordingGitProcess(systemGit: GitProcess): {
-  readonly gitProcess: GitProcess;
-  readonly commands: string[];
-  readonly requests: GitRequest[];
-} {
-  const commands: string[] = [];
-  const requests: GitRequest[] = [];
-  return {
-    commands,
-    requests,
-    gitProcess: {
-      locate: systemGit.locate,
-      run: (request) => {
-        requests.push(request);
-        commands.push(
-          [request.subcommand, ...(request.options ?? []), ...(request.operands ?? [])].join(" "),
-        );
-        return systemGit.run(request);
-      },
-    },
-  };
-}
-
 /**
  * SG-PRC-06: the lookup's own failure, unwrapped, so a missing git gets no
  * fetched-URL cause even when the GitHub base override rewrote the URL.
@@ -581,7 +525,7 @@ async function withoutGitOnPath(t: TestContext): Promise<() => void> {
   return restore;
 }
 
-function isExpectedDiscoveryError(error: unknown, caller: "git.clone" | "git.fetch"): boolean {
+function isExpectedDiscoveryError(error: unknown, caller: "git.fetch"): boolean {
   assert.ok(error instanceof git.Errors.HttpError);
   assert.strictEqual(error.caller, caller);
   assert.deepStrictEqual(error.data, {
@@ -589,24 +533,6 @@ function isExpectedDiscoveryError(error: unknown, caller: "git.clone" | "git.fet
     statusMessage: "Unavailable",
     response: "offline",
   });
-  return true;
-}
-
-/**
- * D-10: the discovery failure stays the error itself, so the classifiers still
- * read its code at depth 0, and its cause names the URL actually fetched.
- */
-function isFetchedUrlDiscoveryError(error: unknown, caller: "git.clone"): boolean {
-  assert.ok(isExpectedDiscoveryError(error, caller));
-  assert.ok(error instanceof Error && error.cause instanceof FetchedUrlCause);
-  assert.deepStrictEqual(
-    {
-      message: error.cause.message,
-      url: error.cause.url,
-      cause: error.cause.cause,
-    },
-    { message: `fetched ${REMOTE_URL}`, url: REMOTE_URL, cause: undefined },
-  );
   return true;
 }
 
@@ -1174,210 +1100,307 @@ describe("SG-PRC-06: the git-required gate", () => {
   test("D-SG-04: a clone succeeds once git is back on the path", async (t) => {
     // arrange
     const repository = await createGitTestRepository(t, { boundary: "local" });
+    const url = `file://${repository.dir}`;
     const refused = await createGitTestDirectory(t, { boundary: "local" });
     const dir = await createGitTestDirectory(t, { boundary: "local" });
-    await installRepositoryTransport(t, repository);
     const restorePath = await withoutGitOnPath(t);
-    await assert.rejects(clone({ dir: refused, url: REMOTE_URL }), isGitMissingWithoutCause);
+    await assert.rejects(clone({ dir: refused, url }), isGitMissingWithoutCause);
     restorePath();
 
     // act
-    await clone({ dir, url: REMOTE_URL });
+    await clone({ dir, url });
 
     // assert
     assert.strictEqual(await resolveRef({ dir, ref: "HEAD" }), repository.initialOid);
   });
 });
 
+/** Whether `dir` is a depth-1 clone: git wrote its `shallow` file. */
+async function isShallowCheckout(dir: string): Promise<boolean> {
+  return (await gitTestCheckout(dir).run("rev-parse", "--is-shallow-repository")) === "true";
+}
+
+/** A path inside a fresh test directory, where git makes the clone's own directory. */
+async function cloneTarget(t: TestContext): Promise<string> {
+  return path.join(await createGitTestDirectory(t, { boundary: "local" }), "clone");
+}
+
+/** Whether `target` exists. */
+async function exists(target: string): Promise<boolean> {
+  return lstat(target).then(
+    () => true,
+    () => false,
+  );
+}
+
 describe("clone", () => {
-  test("clones a public repository without consulting its auth bundle", async (t) => {
+  test("SG-TRN-02, C5: clones a branch at depth 1 and records the URL it was given", async (t) => {
     // arrange
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    const dir = await createGitTestDirectory(t, { boundary: "local" });
-    await installRepositoryTransport(t, repository);
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const remote = await advertisingRemote(t);
+    const systemGit = await hermeticGitProcess(t);
+    const dir = await cloneTarget(t);
 
     // act
-    await clone({
-      dir,
-      url: REMOTE_URL,
-      auth: {
-        kind: "device-flow",
-        host: HOST,
-        credentialOps: credentials.credentialOps,
-        onAuthRequired: () => Promise.reject(new DeviceFlowUnavailableError()),
-      },
-    });
+    await clone({ dir, url: remote.url, ref: "dev", singleBranch: true }, systemGit);
 
     // assert
-    assert.strictEqual(await resolveRef({ dir, ref: "HEAD" }), repository.initialOid);
-    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
-  });
-
-  test("preserves a typed auth refusal from the real clone operation", async (t) => {
-    // arrange
-    const requests = installFailedDiscoveryTransport(t, { challengeOnce: true });
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
-    const refusal = new DeviceFlowUnavailableError();
-
-    // act & assert
-    await assert.rejects(
-      clone({
-        dir: repository.dir,
-        url: REMOTE_URL,
-        auth: {
-          kind: "device-flow",
-          host: HOST,
-          credentialOps: credentials.credentialOps,
-          onAuthRequired: () => Promise.reject(refusal),
-        },
-      }),
-      (error: unknown) => {
-        assert.strictEqual(error, refusal);
-        return true;
+    assert.deepStrictEqual(
+      {
+        head: await resolveRef({ dir, ref: "HEAD" }, systemGit),
+        shallow: await isShallowCheckout(dir),
+        devFile: await readFile(path.join(dir, "dev.txt"), "utf8"),
+        origin: await listRemotes({ dir }, systemGit),
+      },
+      {
+        head: remote.devOid,
+        shallow: true,
+        devFile: "dev\n",
+        origin: { kind: "origin", url: remote.url },
       },
     );
-    assert.deepStrictEqual(requests, [expectedDiscoveryRequest()]);
-    assert.deepStrictEqual(credentials.calls, { fill: [{ host: HOST }], approve: [], reject: [] });
   });
 
-  test("forwards an explicit ref and single-branch option without auth", async (t) => {
+  test("SG-TRN-02: a no-checkout clone writes no work tree file", async (t) => {
     // arrange
-    const requests = installFailedDiscoveryTransport(t);
-    const repository = await createGitTestRepository(t, { boundary: "local" });
+    const remote = await advertisingRemote(t);
+    const systemGit = await hermeticGitProcess(t);
+    const dir = await cloneTarget(t);
 
     // act
-    const cloning = clone({
-      dir: repository.dir,
-      url: REMOTE_URL,
-      ref: "main",
-      singleBranch: true,
-    });
+    await clone({ dir, url: remote.url, noCheckout: true }, systemGit);
 
     // assert
-    await assert.rejects(cloning, (error: unknown) => isExpectedDiscoveryError(error, "git.clone"));
-    assert.deepStrictEqual(requests, [expectedDiscoveryRequest()]);
-  });
-
-  test("retries an auth challenge with callbacks built from the supplied bundle", async (t) => {
-    // arrange
-    const requests = installFailedDiscoveryTransport(t, { challengeOnce: true });
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    const credentials = createCredentialOpsFake({
-      boundary: "memory",
-      credentials: [[HOST, { username: "user", password: "secret" }]],
-    });
-
-    // act
-    const cloning = clone({
-      dir: repository.dir,
-      url: REMOTE_URL,
-      auth: {
-        credentialOps: credentials.credentialOps,
-        host: HOST,
-        kind: "device-flow",
-        onAuthRequired: () => {
-          throw new Error("interactive auth is forbidden on a stored-credential hit");
-        },
+    assert.deepStrictEqual(
+      {
+        head: await resolveRef({ dir, ref: "HEAD" }, systemGit),
+        entries: await readdir(dir),
       },
-    });
+      { head: remote.initialOid, entries: [".git"] },
+    );
+  });
+
+  test("SG-TRN-02: a clone of a branch the remote lacks fails as remote-ref-missing and leaves no target", async (t) => {
+    // arrange
+    const remote = await advertisingRemote(t);
+    const systemGit = await hermeticGitProcess(t);
+    const dir = await cloneTarget(t);
+
+    // act
+    const cloning = clone({ dir, url: remote.url, ref: "nosuch", singleBranch: true }, systemGit);
 
     // assert
-    await assert.rejects(cloning, (error: unknown) => isExpectedDiscoveryError(error, "git.clone"));
-    assert.deepStrictEqual(credentials.calls, {
-      fill: [{ host: HOST }],
-      approve: [],
-      reject: [],
+    await assert.rejects(cloning, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.deepStrictEqual(
+        { kind: error.kind, operation: error.operation },
+        { kind: "remote-ref-missing", operation: "clone --depth" },
+      );
+      return true;
     });
+    assert.strictEqual(await exists(dir), false);
+  });
+
+  test("C5, D-SG-13, D-PL8-24: the argv puts --depth first and the ref in one word, with the limit and the scope's signal", async (t) => {
+    // arrange
+    setGitTimeoutVariable(t, "4321");
+    const signal = new AbortController().signal;
+    const requests: GitRequest[] = [];
+    const stubGit: GitProcess = {
+      locate: () => Promise.resolve("/usr/bin/git"),
+      run: (request) => {
+        requests.push(request);
+        return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+      },
+    };
+
+    // act
+    await runWithGitAbortSignal(signal, () =>
+      clone(
+        { dir: "/staging", url: REMOTE_URL, ref: "dev", singleBranch: true, noCheckout: true },
+        stubGit,
+      ),
+    );
+
+    // assert
     assert.deepStrictEqual(requests, [
-      expectedDiscoveryRequest(),
-      expectedDiscoveryRequest({ Authorization: "Basic dXNlcjpzZWNyZXQ=" }),
+      {
+        subcommand: "clone",
+        lane: "network",
+        options: [
+          "--depth",
+          "1",
+          "--no-recurse-submodules",
+          "--no-checkout",
+          "--branch=dev",
+          "--single-branch",
+        ],
+        operands: [REMOTE_URL, "/staging"],
+        config: [],
+        timeoutMs: 4321,
+        signal,
+      },
     ]);
   });
 
-  test("Q-02: fails a challenge from another port of the same host without a credential lookup", async (t) => {
+  test("D-SG-16, GHB-01: clones a github.com URL from the base and records the canonical origin", async (t) => {
     // arrange
-    const requests = installWireTransport(t, crossOriginServer(OTHER_PORT_INFO_URL));
-    const directory = await createGitTestDirectory(t, { boundary: "local" });
-    const credentials = storedCredentials();
+    const standIn = await gitHubBaseStandIn(t);
+    const recorded = recordingGitProcess(standIn.gitProcess);
+    const dir = await cloneTarget(t);
 
     // act
-    const cloning = clone({ dir: directory, url: REMOTE_URL, auth: boundAuth(credentials) });
+    await clone({ dir, url: GITHUB_TOOLS_URL }, recorded.gitProcess);
 
     // assert
-    await assert.rejects(cloning, crossOriginChallengeFrom(`https://${HOST}:8443`));
     assert.deepStrictEqual(
-      wireCredentials(requests),
-      expectedCrossOriginWireLog(OTHER_PORT_INFO_URL),
+      {
+        commands: recorded.commands,
+        config: recorded.requests[0]?.config,
+        head: await resolveRef({ dir, ref: "HEAD" }, standIn.gitProcess),
+        origin: await listRemotes({ dir }, standIn.gitProcess),
+      },
+      {
+        commands: [`clone --depth 1 --no-recurse-submodules ${GITHUB_TOOLS_URL} ${dir}`],
+        config: [`url.https://${standIn.host.address}/.insteadOf=https://github.com/`],
+        head: standIn.oid,
+        origin: { kind: "origin", url: GITHUB_TOOLS_URL },
+      },
     );
-    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
-  });
-
-  test("GHB-01: clones a github.com URL from the base and records the canonical origin", async (t) => {
-    // arrange
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    const dir = await createGitTestDirectory(t, { boundary: "local" });
-    await installRepositoryTransport(t, repository);
-    setGitHubBaseUrl(t, `https://${HOST}`);
-
-    // act
-    await clone({ dir, url: GITHUB_REMOTE_URL });
-
-    // assert
-    assert.strictEqual(await resolveRef({ dir, ref: "HEAD" }), repository.initialOid);
-    assert.deepStrictEqual(await listRemotes({ dir }), { kind: "origin", url: GITHUB_REMOTE_URL });
   });
 
   test("GHB-04: a clone of a non-GitHub URL ignores an invalid base", async (t) => {
     // arrange
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    const dir = await createGitTestDirectory(t, { boundary: "local" });
-    await installRepositoryTransport(t, repository);
+    const remote = await advertisingRemote(t);
+    const systemGit = await hermeticGitProcess(t);
+    const dir = await cloneTarget(t);
     setGitHubBaseUrl(t, "http://mirror.example");
 
     // act
-    await clone({ dir, url: REMOTE_URL });
+    await clone({ dir, url: remote.url }, systemGit);
 
     // assert
-    assert.strictEqual(await resolveRef({ dir, ref: "HEAD" }), repository.initialOid);
-    assert.deepStrictEqual(await listRemotes({ dir }), { kind: "origin", url: REMOTE_URL });
+    assert.strictEqual(await resolveRef({ dir, ref: "HEAD" }, systemGit), remote.initialOid);
   });
 
-  test("D-10: a failed clone from the base names the fetched URL", async (t) => {
+  test("GHB-01: a failed clone from the base names the URL git fetched", async (t) => {
     // arrange
-    const requests = installFailedDiscoveryTransport(t);
-    const dir = await createGitTestDirectory(t, { boundary: "local" });
-    setGitHubBaseUrl(t, `https://${HOST}`);
+    const standIn = await gitHubBaseStandIn(t);
+    const dir = await cloneTarget(t);
 
     // act
-    const cloning = clone({ dir, url: GITHUB_REMOTE_URL });
-
-    // assert
-    await assert.rejects(cloning, (error: unknown) =>
-      isFetchedUrlDiscoveryError(error, "git.clone"),
-    );
-    assert.deepStrictEqual(requests, [expectedDiscoveryRequest()]);
-  });
-
-  test("D-10: a rewritten failure keeps a cause it already carries", async (t) => {
-    // arrange
-    const firstCause = new Error("connection reset");
-    const failure = new Error("socket hang up", { cause: firstCause });
-    t.mock.method(http, "request", () => Promise.reject(failure));
-    const dir = await createGitTestDirectory(t, { boundary: "local" });
-    setGitHubBaseUrl(t, `https://${HOST}`);
-
-    // act
-    const cloning = clone({ dir, url: GITHUB_REMOTE_URL });
+    const cloning = clone({ dir, url: "https://github.com/acme/missing.git" }, standIn.gitProcess);
 
     // assert
     await assert.rejects(cloning, (error: unknown) => {
-      assert.strictEqual(error, failure);
-      assert.strictEqual(failure.cause, firstCause);
+      assert.ok(error instanceof GitCommandError && error.cause instanceof FetchedUrlCause);
+      assert.deepStrictEqual(
+        { operation: error.operation, url: error.cause.url },
+        {
+          operation: "clone --depth",
+          url: `https://${standIn.host.address}/acme/missing.git`,
+        },
+      );
       return true;
     });
   });
+});
+
+/** Header names in lower case, as the CGI environment reads them. */
+function lowerCaseHeaders(headers: Iterable<readonly [string, string]>): Record<string, string> {
+  return Object.fromEntries([...headers].map(([name, value]) => [name.toLowerCase(), value]));
+}
+
+/**
+ * Answers every isomorphic-git request with `git http-backend` over the bare
+ * repositories under `projectRoot`, so the in-process fetch reads what real
+ * git serves, never a canned pack. A request for `REMOTE_URL` reads the bare
+ * repository `<projectRoot>/owner/repo.git`.
+ */
+async function installHttpBackendTransport(t: TestContext, projectRoot: string): Promise<void> {
+  const home = await realpath(await createGitTestDirectory(t, { boundary: "local" }));
+  t.mock.method(http, "request", async (request: GitHttpRequest): Promise<GitHttpResponse> => {
+    const cgiRequest = {
+      method: request.method ?? "GET",
+      url: new URL(request.url),
+      headers: lowerCaseHeaders(Object.entries(request.headers ?? {})),
+      body: await collectBody(request.body),
+    };
+    const output = await runHttpBackend(
+      httpBackendArguments("allow-reachable"),
+      cgiEnvironment(cgiRequest, projectRoot, home),
+      cgiRequest.body,
+      () => undefined,
+    );
+    const served = parseCgiResponse(output);
+    async function* body(): AsyncIterableIterator<Uint8Array> {
+      await Promise.resolve();
+      yield Uint8Array.from(served.body);
+    }
+
+    return {
+      url: request.url,
+      method: cgiRequest.method,
+      statusCode: served.status,
+      statusMessage: "",
+      headers: lowerCaseHeaders(served.headers),
+      body: body(),
+    };
+  });
+}
+
+/**
+ * Interim until the re-clone swap replaces D-14 (`marketplace update`, the
+ * mirror refresh, and the PUP-2 sync): the D-14 verbs, the in-process `fetch`
+ * included, must still bring a depth-1 system-git clone to its remote's new
+ * commit.
+ */
+describe("D-14 on a depth-1 system-git clone", () => {
+  const SHAPES: ReadonlyArray<{ readonly title: string; readonly ref?: string }> = [
+    { title: "a default-branch clone" },
+    { title: "a --branch clone", ref: "dev" },
+  ];
+
+  for (const { title, ref } of SHAPES) {
+    test(`D-14, SG-TRN-02: the refresh brings ${title} to the remote's new commit`, async (t) => {
+      // arrange
+      const origin = await createGitTestRepository(t, { boundary: "local" });
+      await origin.commit([{ filepath: "two.txt", contents: "two\n" }], "two");
+      await origin.run("branch", "dev");
+      const projectRoot = await realpath(await createGitTestDirectory(t, { boundary: "local" }));
+      const bare = path.join(projectRoot, "owner", "repo.git");
+      await origin.cloneBare(bare);
+      const systemGit = await hermeticGitProcess(t, {
+        GIT_CONFIG_COUNT: "1",
+        GIT_CONFIG_KEY_0: `url.file://${bare}.insteadOf`,
+        GIT_CONFIG_VALUE_0: REMOTE_URL,
+      });
+      const dir = await cloneTarget(t);
+      await clone(
+        { dir, url: REMOTE_URL, ...(ref !== undefined && { ref, singleBranch: true }) },
+        systemGit,
+      );
+      const shallowBefore = await isShallowCheckout(dir);
+      const branch = ref ?? "main";
+      await origin.run("checkout", "-q", branch);
+      const newOid = await origin.commit([{ filepath: "next.txt", contents: "next\n" }], "next");
+      await origin.run("push", "-q", bare, branch);
+      await installHttpBackendTransport(t, projectRoot);
+
+      // act
+      await refreshGitHubClone(dir, ref, systemGitOps(systemGit));
+
+      // assert
+      assert.deepStrictEqual(
+        {
+          shallowBefore,
+          head: await resolveRef({ dir, ref: "HEAD" }, systemGit),
+          next: await readFile(path.join(dir, "next.txt"), "utf8"),
+          status: await gitTestCheckout(dir).run("status", "--porcelain"),
+        },
+        { shallowBefore: true, head: newOid, next: "next\n", status: "" },
+      );
+    });
+  }
 });
 
 describe("fetch", () => {
@@ -1553,6 +1576,26 @@ describe("fetch", () => {
       return true;
     });
     assert.deepStrictEqual(requests, []);
+  });
+
+  test("D-10: a rewritten fetch failure keeps a cause it already carries", async (t) => {
+    // arrange
+    const firstCause = new Error("connection reset");
+    const failure = new Error("socket hang up", { cause: firstCause });
+    t.mock.method(http, "request", () => Promise.reject(failure));
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    await repository.run("remote", "add", "origin", GITHUB_REMOTE_URL);
+    setGitHubBaseUrl(t, `https://${HOST}`);
+
+    // act
+    const fetching = fetch({ dir: repository.dir });
+
+    // assert
+    await assert.rejects(fetching, (error: unknown) => {
+      assert.strictEqual(error, failure);
+      assert.strictEqual(failure.cause, firstCause);
+      return true;
+    });
   });
 
   test("GHB-04: an unrewritten failed fetch carries no fetched cause", async (t) => {
@@ -2264,6 +2307,31 @@ describe("D-SG-14 and GAUTH-04: an auth failure of a remote request", () => {
         `[auth] git ls-remote: signed in to ${standIn.host.address}, running it once more`,
       ),
     );
+  });
+
+  test("D-SG-14: a clone that needs a credential signs in once and the retry clones into the same target", async (t) => {
+    // arrange
+    const standIn = await credentialStandIn(t);
+    const traced = tracingGitProcess(standIn.gitProcess);
+    const bundle = deviceFlowBundle(standIn.host.address, {
+      ok: true,
+      cred: { username: "acme", password: RETRY_TOKEN },
+    });
+    const dir = await cloneTarget(t);
+
+    // act
+    await clone({ dir, url: standIn.url, auth: bundle.auth }, traced.gitProcess);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        signIns: bundle.signIns(),
+        runs: traced.requests.length,
+        head: await resolveRef({ dir, ref: "HEAD" }, standIn.gitProcess),
+      },
+      { signIns: 1, runs: 2, head: standIn.oid },
+    );
+    assertOneShotPairs(traced.requests[1]?.config);
   });
 
   test("D-SG-14: a request that succeeds signs in no time", async (t) => {

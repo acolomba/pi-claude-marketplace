@@ -196,6 +196,12 @@ function gitBoundary(options: GitBoundaryOptions): GitBoundary {
       );
       await git.gitOps.fetch(options);
     },
+    async fetchCommit(options) {
+      schedule.push(
+        `fetch-commit ${options.sha} ref=${options.ref ?? "-"} auth=${options.auth?.host ?? "-"}`,
+      );
+      await git.gitOps.fetchCommit(options);
+    },
     async forceUpdateRef(options) {
       schedule.push(`force-update ${options.ref}=${options.value}`);
       await git.gitOps.forceUpdateRef(options);
@@ -530,9 +536,13 @@ test("materializes a cold pinned URL clone at its recorded SHA", async () => {
       `resolve url ${cloneUrl} sha=${pin} ref=v2`,
       `clone ${cloneUrl} pin=${pin} ref=v2 auth=example.com`,
     ]);
+    // SG-TRN-02, C5: the pin ladder clones no branch, fetches the pin with
+    // the ref, checks it out, and reads HEAD back.
     assert.deepStrictEqual(git.schedule, [
-      `clone ${networkUrl} ref=v2 single=true auth=example.com`,
+      `clone ${networkUrl} ref=- single=false auth=example.com`,
+      `fetch-commit ${pin} ref=v2 auth=example.com`,
       `checkout ${pin}`,
+      "resolve-local HEAD",
     ]);
     assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
     assert.deepStrictEqual(await snapshotTree(locations.pluginClonesDir), [

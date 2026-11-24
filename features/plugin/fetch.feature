@@ -149,14 +149,18 @@ Feature: Plugin fetch
       | tally warnings      | 0                              |
       | tally success count | 2                              |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name | status    | reasons        | scope   | version | cause chain                                                                                                 | cause truncated | leaks | rollback partial |
-      | gits             | project           | demo@gits | demo | skipped   | up-to-date     | project | 1.0.0   |                                                                                                             |                 |       |                  |
-      | gits             | project           | ghp@gits  | ghp  | failed    | source missing | project |         | 404 on https://{git host}/acme/ghp.git, HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git  | false           |       |                  |
-      | gits             | project           | urlp@gits | urlp | available |                |         | 1.0.0   |                                                                                                             |                 |       |                  |
+      | marketplace name | marketplace scope | id        | name | status    | reasons        | scope   | version | cause chain                                                                                                                                    | cause truncated | leaks | rollback partial |
+      | gits             | project           | demo@gits | demo | skipped   | up-to-date     | project | 1.0.0   |                                                                                                                                                |                 |       |                  |
+      | gits             | project           | ghp@gits  | ghp  | failed    | source missing | project |         | 404 on https://{git host}/acme/ghp.git, git clone --depth failed: repository-not-found, exit code 128, fetched https://{git host}/acme/ghp.git | false           |       |                  |
+      | gits             | project           | urlp@gits | urlp | available |                |         | 1.0.0   |                                                                                                                                                |                 |       |                  |
     Then the git host receives these requests:
       | method | path                                             | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack  | 404    |
       | GET    | /acme/urlp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/urlp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/urlp.git/git-upload-pack                   | 200    |
+      | GET    | /acme/urlp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/urlp.git/git-upload-pack                   | 200    |
       | POST   | /acme/urlp.git/git-upload-pack                   | 200    |
     Then the project scope holds these git clones:
       | clone  | origin                           | revision          |
@@ -179,8 +183,8 @@ Feature: Plugin fetch
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name | status | reasons       | scope   | cause chain                                                                  | cause truncated | leaks | rollback partial |
-      | gits             | project           | urlp@gits | urlp | failed | network error | project | 503 on https://{git host}/acme/urlp.git, HTTP Error: 503 Service Unavailable | false           |       |                  |
+      | marketplace name | marketplace scope | id        | name | status | reasons       | scope   | cause chain                                                                               | cause truncated | leaks | rollback partial |
+      | gits             | project           | urlp@gits | urlp | failed | network error | project | 503 on https://{git host}/acme/urlp.git, git clone --depth failed: network, exit code 128 | false           |       |                  |
     Then the git host receives these requests:
       | method | path                                             | status |
       | GET    | /acme/urlp.git/info/refs?service=git-upload-pack | 503    |
@@ -223,15 +227,16 @@ Feature: Plugin fetch
       | tally warnings      | 0                              |
       | tally success count | 1                              |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name | status    | reasons        | scope   | version | cause chain                                                                                                | cause truncated | leaks | rollback partial |
-      | gits             | project           | ghp@gits  | ghp  | failed    | source missing | project |         | 404 on https://{git host}/acme/ghp.git, HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git | false           |       |                  |
-      | more             | project           | urlp@more | urlp | available |                |         | 1.0.0   |                                                                                                            |                 |       |                  |
+      | marketplace name | marketplace scope | id        | name | status    | reasons        | scope   | version | cause chain                                                                                                                                    | cause truncated | leaks | rollback partial |
+      | gits             | project           | ghp@gits  | ghp  | failed    | source missing | project |         | 404 on https://{git host}/acme/ghp.git, git clone --depth failed: repository-not-found, exit code 128, fetched https://{git host}/acme/ghp.git | false           |       |                  |
+      | more             | project           | urlp@more | urlp | available |                |         | 1.0.0   |                                                                                                                                                |                 |       |                  |
     # A new copy of an unpinned plugin is cloned once, so each repository
     # answers one round.
     Then the git host receives these requests:
       | method | path                                             | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack  | 404    |
       | GET    | /acme/urlp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/urlp.git/git-upload-pack                   | 200    |
       | POST   | /acme/urlp.git/git-upload-pack                   | 200    |
 
   Scenario: Fetching a path-source plugin makes no request and reports it up to date
