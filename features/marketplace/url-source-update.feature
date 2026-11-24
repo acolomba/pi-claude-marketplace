@@ -1,6 +1,7 @@
 Feature: Marketplace url source update
 
-  A url marketplace updates by fetching from its git host.
+  A url marketplace updates by asking its git host for the current commit
+  and, when the checkout is behind, cloning it again.
   The scenarios run the real extension in a headless Pi against a loopback
   https git host, arm one repository to fail, and read the update result.
 
@@ -16,17 +17,18 @@ Feature: Marketplace url source update
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
       | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons       | scope   | leaks | rollback partial | cause chain                                                                  | cause truncated |
-      | tools            | project           | failed             | tools | tools | failed | network error | project |       |                  | <status> on https://{git host}/acme/tools.git, HTTP Error: <status> <phrase> | false           |
+      | tools            | project           | failed             | tools | tools | failed | network error | project |       |                  | <status> on https://{git host}/acme/tools.git, git ls-remote failed: <kind>, exit code 128 | false           |
     Then the git host receives these requests:
       | method | path                                              | status   |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | <status> |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | <status> |
 
     Examples:
-      | status | phrase                |
-      | 500    | Internal Server Error |
-      | 502    | Bad Gateway           |
-      | 503    | Service Unavailable   |
-      | 404    | Not Found             |
+      | status | kind                 |
+      | 500    | network              |
+      | 502    | network              |
+      | 503    | network              |
+      | 404    | repository-not-found |
 
   Scenario: A bare update continues past a url marketplace whose connection drops
     Given the marketplace "tools" is published as a url source
@@ -41,7 +43,7 @@ Feature: Marketplace url source update
       | cascade | info     | false        |                              | Marketplace update | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | marketplace status | marketplace reasons | id    | name  | status | reasons             | scope   | leaks | rollback partial | cause chain                                           | cause truncated |
-      | tools            | project           | failed             |                     | tools | tools | failed | network unreachable | project |       |                  | Failed to update marketplace "tools"., socket hang up | false           |
+      | tools            | project           | failed             |                     | tools | tools | failed | network unreachable | project |       |                  | Failed to update marketplace "tools"., git ls-remote failed: network, exit code 128 | false           |
       | extras           | project           | skipped            | up-to-date          |       |       |        |                     |         |       |                  |                                                       |                 |
 
   Scenario: Updating a url marketplace an earlier version recorded with a clone url ending in .json still fetches from its git host

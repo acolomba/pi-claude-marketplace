@@ -254,17 +254,18 @@ Feature: Marketplace git source
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
 
     @url
     Examples:
       | source kind | source                            | cause chain                                                                                                                                                                                                                                   |
-      | url         | https://{git host}/acme/tools.git | Failed to update marketplace "tools"., The operation was canceled., no credential was obtained for {git host}; store one with: printf 'protocol=https\\nhost={git host}\\nusername=<user>\\npassword=<token>\\n\\n' \| git credential approve |
+      | url         | https://{git host}/acme/tools.git | Failed to update marketplace "tools"., git ls-remote failed: https-auth, exit code 128, no credential was obtained for {git host}; store one with: printf 'protocol=https\\nhost={git host}\\nusername=<user>\\npassword=<token>\\n\\n' \| git credential approve |
 
     @github
     Examples:
       | source kind | source                        | cause chain                                                                                                                                                                                                                                                                              |
-      | github      | acme/tools                    | Failed to update marketplace "tools"., The operation was canceled., no credential was obtained for {git host}; store one with: printf 'protocol=https\\nhost={git host}\\nusername=<user>\\npassword=<token>\\n\\n' \| git credential approve, fetched https://{git host}/acme/tools.git |
-      | github      | https://github.com/acme/tools | Failed to update marketplace "tools"., The operation was canceled., no credential was obtained for {git host}; store one with: printf 'protocol=https\\nhost={git host}\\nusername=<user>\\npassword=<token>\\n\\n' \| git credential approve, fetched https://{git host}/acme/tools.git |
+      | github      | acme/tools                    | Failed to update marketplace "tools"., git ls-remote failed: https-auth, exit code 128, no credential was obtained for {git host}; store one with: printf 'protocol=https\\nhost={git host}\\nusername=<user>\\npassword=<token>\\n\\n' \| git credential approve, fetched https://{git host}/acme/tools.git |
+      | github      | https://github.com/acme/tools | Failed to update marketplace "tools"., git ls-remote failed: https-auth, exit code 128, no credential was obtained for {git host}; store one with: printf 'protocol=https\\nhost={git host}\\nusername=<user>\\npassword=<token>\\n\\n' \| git credential approve, fetched https://{git host}/acme/tools.git |
 
   Scenario Outline: Updating a git marketplace whose host rejects the stored credential names the rejection
     Given the marketplace "tools" is published as a <source kind> source
@@ -287,14 +288,15 @@ Feature: Marketplace git source
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
 
     @url
     Examples:
       | source kind | source                            | cause chain                                                                      |
-      | url         | https://{git host}/acme/tools.git | Failed to update marketplace "tools"., {git host} rejected the stored credential |
+      | url         | https://{git host}/acme/tools.git | Failed to update marketplace "tools"., {git host} rejected the stored credential, git ls-remote failed: https-auth, exit code 128 |
 
     @github
     Examples:
       | source kind | source                        | cause chain                                                                                                                 |
-      | github      | acme/tools                    | Failed to update marketplace "tools"., {git host} rejected the stored credential, fetched https://{git host}/acme/tools.git |
-      | github      | https://github.com/acme/tools | Failed to update marketplace "tools"., {git host} rejected the stored credential, fetched https://{git host}/acme/tools.git |
+      | github      | acme/tools                    | Failed to update marketplace "tools"., {git host} rejected the stored credential, git ls-remote failed: https-auth, exit code 128 |
+      | github      | https://github.com/acme/tools | Failed to update marketplace "tools"., {git host} rejected the stored credential, git ls-remote failed: https-auth, exit code 128 |
