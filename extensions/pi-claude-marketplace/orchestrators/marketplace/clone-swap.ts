@@ -30,8 +30,8 @@ import {
   appendLeakToError,
   errorMessage,
   GitCommandError,
-  InvalidGitHubBaseUrlError,
   isErrnoException,
+  StoredCredentialRejectedError,
 } from "../../shared/errors.ts";
 import { cleanupStaging, pathExists, type RemovalOps } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
@@ -208,13 +208,18 @@ const NOT_REMOTE_FAILURES: ReadonlySet<GitCommandError["kind"]> = new Set([
   "aborted",
 ]);
 
-/** D-SG-15: whether a failed `ls-remote` means the remote could not be reached. */
+/**
+ * D-SG-15: whether a failed `ls-remote` means the remote could not be reached:
+ * a git failure other than `NOT_REMOTE_FAILURES`, or a stored credential the
+ * host refused. Any other error, such as an invalid GitHub base or a Device
+ * Flow that Pi cannot show, says nothing about the remote and is thrown.
+ */
 function isUnreachable(err: unknown): boolean {
-  if (err instanceof InvalidGitHubBaseUrlError) {
-    return false;
+  if (err instanceof StoredCredentialRejectedError) {
+    return true;
   }
 
-  return !(err instanceof GitCommandError && NOT_REMOTE_FAILURES.has(err.kind));
+  return err instanceof GitCommandError && !NOT_REMOTE_FAILURES.has(err.kind);
 }
 
 /**
