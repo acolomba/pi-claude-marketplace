@@ -1,5 +1,7 @@
 import { cp, mkdir } from "node:fs/promises";
 
+import { GitCommandError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+
 import type {
   GitAuthBundle,
   GitOps,
@@ -24,6 +26,11 @@ export interface GitOpsFakeOptions {
   readonly checkoutError?: Error;
   readonly resolveRemoteRefError?: Error;
   readonly listRemotesResult?: ListRemotesResult;
+  /**
+   * Commit ids the fake's clones do not hold. A checkout of one fails as
+   * `commit-missing`; a checkout of any other 40-hex SHA succeeds.
+   */
+  readonly absentCommits?: readonly string[];
 }
 
 export interface GitOpsFakeCalls {
@@ -74,10 +81,19 @@ export interface GitOpsFake {
   readFile(dir: string, filepath: string): Promise<string | null>;
 }
 
-function notFound(ref: string): Error & { code: string } {
-  const error = new Error(`Could not find ${ref}.`);
-  error.name = "NotFoundError";
-  return Object.assign(error, { code: "NotFoundError" });
+const FULL_SHA = /^[a-f0-9]{40}$/i;
+
+/**
+ * The rejection of a system-git checkout that cannot check `ref` out: a 40-hex
+ * SHA the clone does not hold is `commit-missing`, and any other name it does
+ * not hold is `local-ref-missing` (SG-PRC-05). git prints `fatal: reference is
+ * not a tree:` for the first and `fatal: invalid reference:` for the second.
+ */
+export function checkoutFailure(ref: string): GitCommandError {
+  return new GitCommandError(
+    { kind: FULL_SHA.test(ref) ? "commit-missing" : "local-ref-missing" },
+    { operation: "checkout -f", exitCode: 128 },
+  );
 }
 
 function snapshotCloneCall(
@@ -151,6 +167,8 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
     }
   }
 
+  const absentCommits = new Set(options.absentCommits ?? []);
+
   function updateWorktree(dir: string, oid: string): void {
     files.set(`${dir}/README.md`, oid === updatedOid ? "# updated\n" : "# local\n");
   }
@@ -201,9 +219,11 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
         state.localRefs[`refs/heads/${checkoutOptions.ref}`];
       const oid =
         branchOid ??
-        (/^[a-f0-9]{40}$/i.test(checkoutOptions.ref) ? checkoutOptions.ref : undefined);
+        (FULL_SHA.test(checkoutOptions.ref) && !absentCommits.has(checkoutOptions.ref)
+          ? checkoutOptions.ref
+          : undefined);
       if (oid === undefined) {
-        throw notFound(checkoutOptions.ref);
+        throw checkoutFailure(checkoutOptions.ref);
       }
 
       state.head = oid;
@@ -218,12 +238,7 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
         return state.head;
       }
 
-      const oid = state.localRefs[resolveOptions.ref];
-      if (oid === undefined) {
-        throw notFound(resolveOptions.ref);
-      }
-
-      return oid;
+      return state.localRefs[resolveOptions.ref];
     },
     async currentBranch(branchOptions) {
       calls.currentBranch.push(structuredClone(branchOptions));
@@ -238,16 +253,7 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
       }
 
       await Promise.resolve();
-      if (resolveOptions.ref === undefined) {
-        return remoteHead;
-      }
-
-      const oid = state.remoteRefs[resolveOptions.ref];
-      if (oid === undefined) {
-        throw new Error(`remote ${resolveOptions.url} has no ref "${resolveOptions.ref}"`);
-      }
-
-      return oid;
+      return resolveOptions.ref === undefined ? remoteHead : state.remoteRefs[resolveOptions.ref];
     },
     // D-3-03: no call ledger. `git-ops-fake.test.ts` deep-equals the whole
     // `state.calls` object, and the guard calls this member at most once per

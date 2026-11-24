@@ -395,10 +395,10 @@ function productionGitOps(systemGit: GitProcess): GitOps {
     fetch,
     forceUpdateRef,
     checkout: (options) => checkout(options, systemGit),
-    resolveRef,
+    resolveRef: (options) => resolveRef(options, systemGit),
     currentBranch,
     resolveRemoteRef,
-    listRemotes,
+    listRemotes: (options) => listRemotes(options, systemGit),
   };
 }
 
@@ -920,13 +920,56 @@ describe("local Git operations", () => {
 
   test("resolves HEAD to the initial commit", async (t) => {
     // arrange
+    const systemGit = await hermeticGitProcess(t);
     const repository = await createGitTestRepository(t, { boundary: "local" });
 
     // act
-    const oid = await resolveRef({ dir: repository.dir, ref: "HEAD" });
+    const oid = await resolveRef({ dir: repository.dir, ref: "HEAD" }, systemGit);
 
     // assert
     assert.strictEqual(oid, repository.initialOid);
+  });
+
+  test("SG-TRN-01: answers undefined for a ref the repository does not hold", async (t) => {
+    // arrange
+    const systemGit = await hermeticGitProcess(t);
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+
+    // act
+    const oid = await resolveRef(
+      { dir: repository.dir, ref: "refs/remotes/origin/nosuch" },
+      systemGit,
+    );
+
+    // assert
+    assert.strictEqual(oid, undefined);
+  });
+
+  test("SG-TRN-01: resolves an annotated tag to the commit it tags", async (t) => {
+    // arrange
+    const systemGit = await hermeticGitProcess(t);
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    await repository.run("tag", "-a", "-m", "release", "v1", repository.initialOid);
+
+    // act
+    const oid = await resolveRef({ dir: repository.dir, ref: "refs/tags/v1" }, systemGit);
+
+    // assert
+    assert.strictEqual(oid, repository.initialOid);
+  });
+
+  test("SG-TRN-01: answers undefined for a tag that names a tree", async (t) => {
+    // arrange
+    const systemGit = await hermeticGitProcess(t);
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    const tree = await repository.run("rev-parse", `${repository.initialOid}^{tree}`);
+    await repository.run("tag", "tree-tag", tree);
+
+    // act
+    const oid = await resolveRef({ dir: repository.dir, ref: "refs/tags/tree-tag" }, systemGit);
+
+    // assert
+    assert.strictEqual(oid, undefined);
   });
 
   test("force-updates the requested local ref", async (t) => {
@@ -1118,12 +1161,11 @@ describe("SG-PRC-06: the git-required gate", () => {
     });
   }
 
-  test("TAGS-01: the local verbs read and write a clone with no git on the path", async (t) => {
+  test("TAGS-01: the in-process local verbs read and write a clone with no git on the path", async (t) => {
     // arrange
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    await repository.run("remote", "add", "origin", REMOTE_URL);
     await repository.run("tag", "v1.0.0", repository.initialOid);
-    const nextOid = await repository.commit([{ filepath: "next.txt", contents: "next\n" }], "next");
+    await repository.commit([{ filepath: "next.txt", contents: "next\n" }], "next");
     await withoutGitOnPath(t);
     const { dir } = repository;
 
@@ -1134,19 +1176,15 @@ describe("SG-PRC-06: the git-required gate", () => {
     assert.deepStrictEqual(
       {
         branch: await currentBranch({ dir }),
-        head: await resolveRef({ dir, ref: "HEAD" }),
-        feature: await resolveRef({ dir, ref: "refs/heads/feature" }),
+        feature: await readFile(path.join(dir, ".git", "refs", "heads", "feature"), "utf8"),
         tags: await listTags({ dir }),
         tag: await resolveTagOid({ dir, name: "v1.0.0", cache: {} }),
-        remotes: await listRemotes({ dir }),
       },
       {
         branch: "main",
-        head: nextOid,
-        feature: repository.initialOid,
+        feature: `${repository.initialOid}\n`,
         tags: ["v1.0.0"],
         tag: repository.initialOid,
-        remotes: { kind: "origin", url: REMOTE_URL },
       },
     );
   });
@@ -1624,33 +1662,27 @@ describe("resolveRemoteRef", () => {
     assert.deepStrictEqual(requests, expectedPublicRequests());
   });
 
-  test("rejects a remote without an advertised HEAD", async (t) => {
+  test("answers undefined for a remote without an advertised HEAD", async (t) => {
     // arrange
     const requests = installRemoteTransport(t, [`${OID_DEV} refs/heads/dev`]);
 
     // act
-    const resolution = resolveRemoteRef({ url: REMOTE_URL });
+    const oid = await resolveRemoteRef({ url: REMOTE_URL });
 
     // assert
-    await assert.rejects(resolution, {
-      name: "Error",
-      message: `remote ${REMOTE_URL} advertised no HEAD ref`,
-    });
+    assert.strictEqual(oid, undefined);
     assert.deepStrictEqual(requests, expectedPublicRequests());
   });
 
-  test("rejects an unadvertised remote ref", async (t) => {
+  test("answers undefined for an unadvertised remote ref", async (t) => {
     // arrange
     const requests = installRemoteTransport(t, FULL_ADVERTISEMENT);
 
     // act
-    const resolution = resolveRemoteRef({ url: REMOTE_URL, ref: "missing" });
+    const oid = await resolveRemoteRef({ url: REMOTE_URL, ref: "missing" });
 
     // assert
-    await assert.rejects(resolution, {
-      name: "Error",
-      message: `remote ${REMOTE_URL} has no ref "missing"`,
-    });
+    assert.strictEqual(oid, undefined);
     assert.deepStrictEqual(requests, expectedPublicRequests());
   });
 
@@ -1667,19 +1699,16 @@ describe("resolveRemoteRef", () => {
     assert.deepStrictEqual(requests, expectedPublicRequests());
   });
 
-  test("names the wire URL when the base advertises no HEAD", async (t) => {
+  test("GHB-01: answers undefined when the base advertises no HEAD", async (t) => {
     // arrange
     const requests = installRemoteTransport(t, [`${OID_DEV} refs/heads/dev`]);
     setGitHubBaseUrl(t, `https://${HOST}`);
 
     // act
-    const resolution = resolveRemoteRef({ url: GITHUB_REMOTE_URL });
+    const oid = await resolveRemoteRef({ url: GITHUB_REMOTE_URL });
 
     // assert
-    await assert.rejects(resolution, {
-      name: "Error",
-      message: `remote ${REMOTE_URL} advertised no HEAD ref`,
-    });
+    assert.strictEqual(oid, undefined);
     assert.deepStrictEqual(requests, expectedPublicRequests());
   });
 
@@ -2310,6 +2339,19 @@ describe("listRemotes", () => {
 
     // assert
     assert.deepStrictEqual(remotes, { kind: "no-origin" });
+  });
+
+  test("SG-TRN-01: reports unreadable for a .git/config that git cannot parse", async (t) => {
+    // arrange
+    const systemGit = await hermeticGitProcess(t);
+    const repository = await createGitTestRepository(t, { boundary: "local" });
+    await writeFile(path.join(repository.dir, ".git", "config"), "[core\n");
+
+    // act
+    const remotes = await listRemotes({ dir: repository.dir }, systemGit);
+
+    // assert
+    assert.deepStrictEqual(remotes, { kind: "unreadable" });
   });
 
   test("reports unreadable for a .git/config that cannot be read as a file", async (t) => {

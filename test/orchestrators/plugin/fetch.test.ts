@@ -202,20 +202,13 @@ function gitBoundary(options: GitBoundaryOptions): GitBoundary {
     },
     async resolveRef(options) {
       schedule.push(`resolve-local ${options.ref}`);
-      try {
-        return await git.gitOps.resolveRef(options);
-      } catch (error) {
-        const oid =
-          git.state.remoteRefs[options.ref] ??
-          (options.ref === "refs/remotes/origin/HEAD"
-            ? git.state.remoteRefs["refs/remotes/origin/main"]
-            : undefined);
-        if (oid !== undefined) {
-          return oid;
-        }
-
-        throw error;
-      }
+      return (
+        (await git.gitOps.resolveRef(options)) ??
+        git.state.remoteRefs[options.ref] ??
+        (options.ref === "refs/remotes/origin/HEAD"
+          ? git.state.remoteRefs["refs/remotes/origin/main"]
+          : undefined)
+      );
     },
     async resolveRemoteRef(options) {
       schedule.push(

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 
+import { GitCommandError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+
 import type { GitOps } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 
 export interface GitOpsContractParticipant {
@@ -33,14 +35,15 @@ export const GIT_OPS_CASE_NAMES = [
   "force-updates a ref to the requested commit",
   "checks out the requested branch and worktree",
   "checks out a commit into a copied git directory",
+  "rejects a checkout of a commit the clone does not hold",
   "resolves a local ref to its commit",
-  "rejects a missing local ref",
+  "answers undefined for a missing local ref",
   "returns the attached current branch",
   "returns undefined for a detached HEAD",
   "resolves the remote HEAD commit",
   "resolves a named remote branch",
   "resolves a remote annotated tag to its peeled commit",
-  "rejects a missing remote ref",
+  "answers undefined for an unadvertised remote ref",
   "reports the origin remote url",
 ] as const;
 
@@ -48,6 +51,9 @@ export const GIT_OPS_CASE_NAMES = [
 // Global ordering is caller-owned; the port exposes per-operation effects rather than a workflow API.
 // Deletion is inapplicable because GitOps has no delete operation.
 // Raw HTTP, auth, filesystem cleanup, and option forwarding are production-owner mechanics.
+
+/** A commit id that neither participant's repositories hold; the fake names it absent. */
+export const MISSING_OID = "0123456789abcdef0123456789abcdef01234567";
 
 function observeVoid(promise: Promise<void>): Promise<unknown> {
   return promise;
@@ -194,6 +200,29 @@ export const gitOpsContractCases = [
     },
   },
   {
+    name: "rejects a checkout of a commit the clone does not hold",
+    run: async (createGitOps, t) => {
+      // arrange
+      const participant = await createGitOps(t);
+
+      // act
+      const checkout = participant.gitOps.checkout({
+        dir: participant.worktreeDir,
+        ref: MISSING_OID,
+      });
+
+      // assert
+      await assert.rejects(checkout, (error: unknown) => {
+        assert.ok(error instanceof GitCommandError);
+        assert.deepStrictEqual(
+          { kind: error.kind, operation: error.operation },
+          { kind: "commit-missing", operation: "checkout -f" },
+        );
+        return true;
+      });
+    },
+  },
+  {
     name: "resolves a local ref to its commit",
     run: async (createGitOps, t) => {
       // arrange
@@ -210,24 +239,19 @@ export const gitOpsContractCases = [
     },
   },
   {
-    name: "rejects a missing local ref",
+    name: "answers undefined for a missing local ref",
     run: async (createGitOps, t) => {
       // arrange
       const participant = await createGitOps(t);
 
       // act
-      const resolution = participant.gitOps.resolveRef({
+      const oid = await participant.gitOps.resolveRef({
         dir: participant.worktreeDir,
         ref: "refs/heads/missing",
       });
 
       // assert
-      await assert.rejects(resolution, (error: unknown) => {
-        assert.ok(error instanceof Error);
-        assert.strictEqual(error.name, "NotFoundError");
-        assert.strictEqual((error as Error & { code?: string }).code, "NotFoundError");
-        return true;
-      });
+      assert.strictEqual(oid, undefined);
     },
   },
   {
@@ -306,22 +330,19 @@ export const gitOpsContractCases = [
     },
   },
   {
-    name: "rejects a missing remote ref",
+    name: "answers undefined for an unadvertised remote ref",
     run: async (createGitOps, t) => {
       // arrange
       const participant = await createGitOps(t);
 
       // act
-      const resolution = participant.gitOps.resolveRemoteRef({
+      const oid = await participant.gitOps.resolveRemoteRef({
         url: participant.remoteUrl,
         ref: "missing",
       });
 
       // assert
-      await assert.rejects(resolution, {
-        name: "Error",
-        message: `remote ${participant.remoteUrl} has no ref "missing"`,
-      });
+      assert.strictEqual(oid, undefined);
     },
   },
   {

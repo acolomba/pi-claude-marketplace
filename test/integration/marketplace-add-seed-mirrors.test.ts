@@ -22,7 +22,7 @@ import { loadState } from "../../extensions/pi-claude-marketplace/persistence/st
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { pathExists } from "../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createCredentialOpsFake } from "../platform/credential-ops-fake.ts";
-import { createGitOpsFake } from "../platform/git-ops-fake.ts";
+import { checkoutFailure, createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { gitTestCheckout, initGitTestCheckout } from "../platform/git-test-repository.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
@@ -292,8 +292,7 @@ test("leaves a different-repository plugin remote and unseeded", async () => {
 
 test("seeds a reachable pin and leaves an unreachable pin unseeded", async () => {
   // arrange
-  const unreachable = new Error("commit not fetched");
-  unreachable.name = "CommitNotFetchedError";
+  const unreachable = checkoutFailure(PIN_40);
 
   // act
   const observations = await Promise.all(

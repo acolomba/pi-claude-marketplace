@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, test, type TestContext } from "node:test";
 
+import { GitCommandError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+
 import { createCredentialOpsFake } from "./credential-ops-fake.ts";
 import {
   GIT_OPS_CASE_NAMES,
+  MISSING_OID,
   gitOpsContractCases,
   registerGitOpsContract,
   type GitOpsContractParticipant,
@@ -26,6 +29,7 @@ function createFakeParticipant(): GitOpsContractParticipant {
     remoteHead: UPDATED_OID,
     worktreeDir: "/memory/worktree",
     listRemotesResult: { kind: "origin", url: REMOTE_URL },
+    absentCommits: [MISSING_OID],
   });
 
   return {
@@ -76,6 +80,24 @@ describe("createGitOpsFake", () => {
       name: "Error",
       message:
         "createGitOpsFake blocked unplanned remote https://unplanned.example.invalid/repo.git",
+    });
+  });
+
+  test("rejects a checkout of a name the clone does not hold as a missing local ref", async () => {
+    // arrange
+    const git = createGitOpsFake({ boundary: "memory" });
+
+    // act
+    const checkout = git.gitOps.checkout({ dir: "/memory/worktree", ref: "nosuch" });
+
+    // assert
+    await assert.rejects(checkout, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.deepStrictEqual(
+        { failure: error.failure, operation: error.operation, exitCode: error.exitCode },
+        { failure: { kind: "local-ref-missing" }, operation: "checkout -f", exitCode: 128 },
+      );
+      return true;
     });
   });
 

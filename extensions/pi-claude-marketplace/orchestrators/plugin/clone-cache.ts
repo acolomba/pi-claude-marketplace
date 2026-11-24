@@ -32,8 +32,12 @@ import {
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { resolveTagOid } from "../../platform/git.ts";
-import { appendLeakToError, PinnedCommitMissingError } from "../../shared/errors.ts";
+import {
+  appendLeakToError,
+  GitCommandError,
+  PinnedCommitMissingError,
+  type GitFailure,
+} from "../../shared/errors.ts";
 import {
   cleanupStaging,
   createRemovalOps,
@@ -41,6 +45,7 @@ import {
   resolveGitSubdirRoot,
   type RemovalOps,
 } from "../../shared/fs-utils.ts";
+import { gitHubWireUrl } from "../../shared/github-base-url.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import {
   DEFAULT_GIT_OPS,
@@ -60,23 +65,12 @@ import type {
 import type { ScopedLocations } from "../../persistence/locations.ts";
 
 /**
- * Recognize isomorphic-git's `CommitNotFetchedError` without importing the
- * library into the orchestrator tier (D-13). The class sets both `name` and
- * `code` to the string `"CommitNotFetchedError"` (see
- * `node_modules/isomorphic-git` `index.cjs` --
- * `CommitNotFetchedError.code = 'CommitNotFetchedError'` and
- * `this.code = this.name = CommitNotFetchedError.code`); `checkout` throws it
- * when the target commit's objects are absent locally. Matching on the name
- * keeps the isomorphic-git boundary in `platform/git.ts` intact (mirrors
- * `shared.ts::isGitNotFoundError`).
+ * SG-PRC-05: whether `err` is a failed git command of one of `kinds`. A
+ * checkout of a commit the clone does not hold fails as `commit-missing`, and
+ * one of a name it does not hold as `local-ref-missing`.
  */
-function isGitCommitNotFetchedError(err: unknown): boolean {
-  return err instanceof Error && err.name === "CommitNotFetchedError";
-}
-
-/** isomorphic-git's `NotFoundError`: the object a checkout names is absent. */
-function isGitNotFoundError(err: unknown): boolean {
-  return err instanceof Error && err.name === "NotFoundError";
+function isGitFailureOf(err: unknown, kinds: readonly GitFailure["kind"][]): boolean {
+  return err instanceof GitCommandError && kinds.includes(err.kind);
 }
 
 /**
@@ -137,7 +131,7 @@ async function cloneIntoStaging(
  *
  * PURL-04: a `singleBranch` ref-hint clone fetches only that ref's closure.
  * When the pinned sha moved ahead of a stale hint it sits outside the closure,
- * so checkout throws `CommitNotFetchedError`. The recovery applies ONLY after
+ * so checkout fails as `commit-missing`. The recovery applies ONLY after
  * a ref-hint clone -- a no-ref clone already fetched every head, so the same
  * error there is a genuinely unreachable sha that must fail clean. The clone
  * left the wildcard fetch refspec, so one full fetch pulls every head and
@@ -153,7 +147,7 @@ async function checkoutPinWithRefetch(
   try {
     await gitOps.checkout({ dir: stagingDir, ref: args.pin });
   } catch (checkoutErr) {
-    if (args.ref === undefined || !isGitCommitNotFetchedError(checkoutErr)) {
+    if (args.ref === undefined || !isGitFailureOf(checkoutErr, ["commit-missing"])) {
       throw asPinnedCommitMissing(checkoutErr, args.pin);
     }
 
@@ -168,12 +162,11 @@ async function checkoutPinWithRefetch(
 
 /**
  * INR-03: a fresh clone that still lacks the pin means the git host does not
- * have it. Any other checkout throw passes through unchanged. INR-06: the
- * library's error is not chained, because its only addition is advice ("Do a
- * git fetch") a Pi user cannot act on.
+ * have it. Any other checkout throw passes through unchanged. INR-06: git's
+ * error is not chained, because its stderr names nothing a Pi user can act on.
  */
 function asPinnedCommitMissing(err: unknown, pin: string): unknown {
-  return isGitCommitNotFetchedError(err) ? new PinnedCommitMissingError(pin) : err;
+  return isGitFailureOf(err, ["commit-missing"]) ? new PinnedCommitMissingError(pin) : err;
 }
 
 /**
@@ -187,7 +180,7 @@ function asPinnedCommitMissing(err: unknown, pin: string): unknown {
  *   3. Clone into a staging dir (ref-hint singleBranch fetch when a ref is
  *      given), then checkout the exact `pin` (sha over ref). When the pin is
  *      outside the ref hint's history the singleBranch fetch never pulled the
- *      pinned commit, so the checkout throws `CommitNotFetchedError`; the
+ *      pinned commit, so the checkout fails as `commit-missing`; the
  *      clone left a wildcard fetch refspec, so one full fetch widens the
  *      staging clone to every head and tag (INR-06) and the checkout is
  *      retried ONCE. A genuinely unreachable pin throws
@@ -319,7 +312,7 @@ async function copyMirrorAtCommit(
     await checkoutGitDirCopy(args.gitOps, path.join(mirrorRoot, ".git"), staging, args.sha);
   } catch (err) {
     const leak = await cleanupStaging(ops, staging, "plugin commit copy staging");
-    if (isGitCommitNotFetchedError(err) || isGitNotFoundError(err)) {
+    if (isGitFailureOf(err, ["commit-missing", "local-ref-missing"])) {
       return undefined;
     }
 
@@ -453,6 +446,7 @@ export async function materializeUnpinnedSource(
  *      ref the mirror holds neither way, is the NFR-5 cache miss and still
  *      reaches it.
  *   4. Read the pin: resolvedSha = resolveRef({ dir: mirrorRoot, ref: "HEAD" }).
+ *      A mirror whose HEAD names no commit fails as `local-ref-missing`.
  *
  * `auth` threads into the clone and the refresh fetch the way
  * `materializePluginClone`'s bundle does (no mirror-specific auth path). Either
@@ -472,7 +466,6 @@ export async function materializeOrRefreshPluginMirror(args: {
   networkUrl: string;
   ref?: string;
   gitOps?: GitOps;
-  resolveTagOid?: typeof resolveTagOid;
   auth: GitAuthBundle;
   refresh?: boolean;
   onCloneCreated?: (key: string) => void;
@@ -527,12 +520,7 @@ export async function materializeOrRefreshPluginMirror(args: {
   if (promotion !== "renamed") {
     const fetchedSha =
       args.refresh === false
-        ? await resolveFetchedRefOffline(
-            gitOps,
-            args.resolveTagOid ?? resolveTagOid,
-            mirrorRoot,
-            args.ref,
-          )
+        ? await resolveFetchedRefOffline(gitOps, mirrorRoot, args.ref)
         : undefined;
     if (fetchedSha !== undefined) {
       return { pluginRoot: mirrorRoot, resolvedSha: fetchedSha };
@@ -542,6 +530,10 @@ export async function materializeOrRefreshPluginMirror(args: {
   }
 
   const resolvedSha = await gitOps.resolveRef({ dir: mirrorRoot, ref: "HEAD" });
+  if (resolvedSha === undefined) {
+    throw new GitCommandError({ kind: "local-ref-missing" }, { operation: "rev-parse --verify" });
+  }
+
   return { pluginRoot: mirrorRoot, resolvedSha };
 }
 
@@ -556,46 +548,25 @@ export async function materializeOrRefreshPluginMirror(args: {
  *
  * A declared ref with no tracking ref falls back to the local tag of that
  * name (D-PL7-10, GLK-08): a clone for a tag writes `refs/tags/<ref>` and no
- * tracking ref, because the fetch refspec maps branches only.
- * `resolveTagOid` peels an annotated tag to its commit.
+ * tracking ref, because the fetch refspec maps branches only. `resolveRef`
+ * peels an annotated tag to its commit.
  *
  * Returns undefined when the mirror holds no such ref, for example a branch
  * no fetch brought in yet, or a tag that names no commit. The caller then
- * refreshes.
+ * refreshes. A read that fails propagates.
  */
 async function resolveFetchedRefOffline(
   gitOps: GitOps,
-  resolveTag: typeof resolveTagOid,
   mirrorRoot: string,
   ref: string | undefined,
 ): Promise<string | undefined> {
   const trackingRef = ref === undefined ? "refs/remotes/origin/HEAD" : `refs/remotes/origin/${ref}`;
-  try {
-    return await gitOps.resolveRef({ dir: mirrorRoot, ref: trackingRef });
-  } catch (err) {
-    if (!isGitNotFoundError(err)) {
-      throw err;
-    }
+  const trackedSha = await gitOps.resolveRef({ dir: mirrorRoot, ref: trackingRef });
+  if (trackedSha !== undefined || ref === undefined) {
+    return trackedSha;
   }
 
-  return ref === undefined ? undefined : resolveLocalTagOffline(resolveTag, mirrorRoot, ref);
-}
-
-/** The commit the mirror's local tag `ref` names, or undefined when it has none. */
-async function resolveLocalTagOffline(
-  resolveTag: typeof resolveTagOid,
-  mirrorRoot: string,
-  ref: string,
-): Promise<string | undefined> {
-  try {
-    return await resolveTag({ dir: mirrorRoot, name: ref, cache: {} });
-  } catch (err) {
-    if (isGitNotFoundError(err)) {
-      return undefined;
-    }
-
-    throw err;
-  }
+  return gitOps.resolveRef({ dir: mirrorRoot, ref: `refs/tags/${ref}` });
 }
 
 /**
@@ -855,19 +826,37 @@ export async function resolvePluginPin(args: {
   if (source.sha !== undefined) {
     pin = source.sha;
   } else if (source.ref !== undefined) {
-    pin = await gitOps.resolveRemoteRef({
-      url: networkUrl,
-      ref: source.ref,
-      ...(auth !== undefined && { auth }),
-    });
+    pin = requireRemotePin(
+      await gitOps.resolveRemoteRef({
+        url: networkUrl,
+        ref: source.ref,
+        ...(auth !== undefined && { auth }),
+      }),
+      `remote ${gitHubWireUrl(networkUrl)} has no ref "${source.ref}"`,
+    );
   } else {
-    pin = await gitOps.resolveRemoteRef({
-      url: networkUrl,
-      ...(auth !== undefined && { auth }),
-    });
+    pin = requireRemotePin(
+      await gitOps.resolveRemoteRef({
+        url: networkUrl,
+        ...(auth !== undefined && { auth }),
+      }),
+      `remote ${gitHubWireUrl(networkUrl)} advertised no HEAD ref`,
+    );
   }
 
   return source.ref === undefined ? { cloneUrl, pin } : { cloneUrl, pin, ref: source.ref };
+}
+
+/**
+ * The commit a remote advertised, or a refusal with `message` when it
+ * advertised none. The message names the URL the request sent (GHB-01).
+ */
+function requireRemotePin(advertised: string | undefined, message: string): string {
+  if (advertised === undefined) {
+    throw new Error(message);
+  }
+
+  return advertised;
 }
 
 // PURL-03 / NFR-10 / D-77-03: `resolveGitSubdirRoot` lives in shared/fs-utils.ts

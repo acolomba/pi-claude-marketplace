@@ -301,16 +301,7 @@ function createGitOps(initial: GitOpsAdapterOptions = {}) {
       await git.gitOps.fetch(options);
     },
     async resolveRef(options) {
-      try {
-        return await git.gitOps.resolveRef(options);
-      } catch (error) {
-        const remoteOid = git.state.remoteRefs[options.ref];
-        if (remoteOid !== undefined) {
-          return remoteOid;
-        }
-
-        throw error;
-      }
+      return (await git.gitOps.resolveRef(options)) ?? git.state.remoteRefs[options.ref];
     },
     async resolveRemoteRef(options) {
       return git.gitOps.resolveRemoteRef(options);

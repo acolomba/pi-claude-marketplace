@@ -60,6 +60,7 @@ import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
+import { initGitTestCheckout } from "../../platform/git-test-repository.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
@@ -954,15 +955,17 @@ const ORIGIN_WITH_TWO_URLS_CONFIG =
 // The fake's canned `listRemotesResult` cannot express a url-less origin
 // section and skips the config read that decides a multi-url origin (WR-11).
 // This helper composes the real `listRemotes` so it reads the given
-// `.git/config` in the destination. The destination carries the ownership
-// marker, so each refusal comes from the config shape alone.
+// `.git/config` in the destination, a repository system git can open. The
+// destination carries the ownership marker, so each refusal comes from the
+// config shape alone.
 async function arrangeLeftoverWithOriginConfig(
   locations: ScopedLocations,
   config: string,
 ): Promise<{ finalDir: string; configPath: string; gitOps: GitOps }> {
   const finalDir = await locations.sourceCloneDir("valid-marketplace");
   const configPath = path.join(finalDir, ".git", "config");
-  await mkdir(path.join(finalDir, ".git"), { recursive: true });
+  await mkdir(finalDir, { recursive: true });
+  await initGitTestCheckout(finalDir);
   await writeFile(configPath, config);
   await writeFile(path.join(finalDir, OWNERSHIP_MARKER), OWNERSHIP_MARKER_BYTES);
   const gitOps: GitOps = {

@@ -46,6 +46,7 @@ import {
 import {
   CrossOriginChallengeError,
   errorMessage,
+  GitCommandError,
   InvalidMarketplaceManifestError,
   isErrnoException,
   MarketplaceInBaseLayerOnlyError,
@@ -190,8 +191,11 @@ export interface GitOps {
    * before the checkout.
    */
   checkout(opts: { dir: string; ref: string; fromCopiedGitDir?: boolean }): Promise<void>;
-  /** Resolve a ref name to its SHA (used to read remote SHA after fetch). */
-  resolveRef(opts: { dir: string; ref: string }): Promise<string>;
+  /**
+   * Resolve a ref name to the commit it names (used to read the remote SHA
+   * after a fetch), or undefined when it names no commit.
+   */
+  resolveRef(opts: { dir: string; ref: string }): Promise<string | undefined>;
   /**
    * CR-01: return the symbolic name of the currently checked-out branch
    * (e.g. "main"), or undefined when HEAD is detached. Required by the
@@ -202,11 +206,16 @@ export interface GitOps {
   /**
    * D-77-05 / PURL-09: resolve a remote ref (or the default-branch HEAD) to
    * its full commit SHA WITHOUT a full clone. Used by the plugin clone-cache
-   * seam to pin an unpinned source at install time. An optional `auth` bundle
+   * seam to pin an unpinned source at install time, or undefined when the
+   * remote advertises no such ref, or no HEAD. An optional `auth` bundle
    * threads through to `listServerRefs` so an unpinned PRIVATE-repo HEAD
    * resolution can authenticate (PROV-03); omitted = public-only.
    */
-  resolveRemoteRef(opts: { url: string; ref?: string; auth?: GitAuthBundle }): Promise<string>;
+  resolveRemoteRef(opts: {
+    url: string;
+    ref?: string;
+    auth?: GitAuthBundle;
+  }): Promise<string | undefined>;
   /**
    * D-3-03 / MA-12 / MA-13: report whether `dir` is a readable git clone and,
    * if so, what its `origin` remote names. Used by the `marketplace add`
@@ -247,27 +256,17 @@ export const DEFAULT_GIT_OPS: GitOps = {
 export { runWithGitAbortSignal } from "../../platform/git.ts";
 
 /**
- * Recognize isomorphic-git's `NotFoundError` without importing the library
- * into the orchestrator tier (D-13). The class sets both `name` and `code`
- * to the string `"NotFoundError"` (see `node_modules/isomorphic-git`
- * `index.cjs` -- `NotFoundError.code = 'NotFoundError'` and
- * `this.code = this.name = NotFoundError.code`), and `Errors.NotFoundError`
- * is the documented surface used by `git.resolveRef` when a ref is absent.
- * Matching on the name keeps the boundary in `platform/git.ts` intact.
- */
-function isGitNotFoundError(err: unknown): boolean {
-  return err instanceof Error && err.name === "NotFoundError";
-}
-
-/**
  * D-14 follow-upstream-blindly sequence. Three forms:
  *   - storedRef === undefined (default-branch tracking):
  *       fetch + resolveRef('refs/remotes/origin/HEAD') + forceUpdateRef + checkout
  *   - storedRef is a branch on origin (symbolic HEAD):
  *       fetch + resolveRef('refs/remotes/origin/<ref>') + forceUpdateRef + checkout
  *   - storedRef is a tag/SHA (detached HEAD):
- *       fetch + checkout (resolveRef of refs/remotes/origin/<ref> fails, then
- *       checkout throws if the SHA no longer exists).
+ *       fetch + checkout (resolveRef of refs/remotes/origin/<ref> answers
+ *       undefined, then checkout throws if the SHA no longer exists).
+ *
+ * A clone with no `refs/remotes/origin/HEAD` fails the default-branch form
+ * with the `local-ref-missing` GitCommandError that names the read.
  *
  * The optional `auth` parameter is forwarded to `gitOps.fetch` so a
  * private-repository refresh reaches the user's credential helper, and on a
@@ -296,6 +295,10 @@ export async function refreshGitHubClone(
       dir: cloneDir,
       ref: "refs/remotes/origin/HEAD",
     });
+    if (remoteSha === undefined) {
+      throw new GitCommandError({ kind: "local-ref-missing" }, { operation: "rev-parse --verify" });
+    }
+
     const localBranch = await gitOps.currentBranch({ dir: cloneDir });
     if (localBranch === undefined) {
       await gitOps.checkout({ dir: cloneDir, ref: remoteSha });
@@ -311,30 +314,15 @@ export async function refreshGitHubClone(
     return;
   }
 
-  let remoteSha: string | undefined;
-  try {
-    remoteSha = await gitOps.resolveRef({
-      dir: cloneDir,
-      ref: `refs/remotes/origin/${storedRef}`,
-    });
-  } catch (err) {
-    // isomorphic-git's `resolveRef` throws `NotFoundError` (with
-    // `name === "NotFoundError"` and `code === "NotFoundError"`) when the
-    // requested ref does not exist on the remote -- the documented case
-    // where falling back to a detached-HEAD checkout of the stored ref is
-    // the right behavior (D-14 third form). Every OTHER kind of throw
-    // (corrupted git dir, EACCES on .git, EIO, OOM, programming bugs in
-    // a `GitOps` stub) is a real failure: rethrow it so the caller
-    // surfaces the actual cause instead of silently falling back to
-    // stale local state. Name-check rather than `instanceof` keeps the
-    // orchestrator tier free of a direct `isomorphic-git` import (D-13).
-    if (isGitNotFoundError(err)) {
-      remoteSha = undefined;
-    } else {
-      throw err;
-    }
-  }
-
+  // An undefined answer means the fetch brought no branch of that name: the
+  // stored ref is a tag or a SHA, checked out detached (D-14 third form). A
+  // throw (a corrupted git dir, EACCES on .git, a missing git) is a real
+  // failure and propagates, so the caller surfaces the actual cause instead
+  // of falling back to stale local state.
+  const remoteSha = await gitOps.resolveRef({
+    dir: cloneDir,
+    ref: `refs/remotes/origin/${storedRef}`,
+  });
   if (remoteSha === undefined) {
     await gitOps.checkout({ dir: cloneDir, ref: storedRef });
   } else {

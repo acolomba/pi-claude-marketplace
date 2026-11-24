@@ -28,10 +28,14 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { PinnedCommitMissingError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  GitCommandError,
+  PinnedCommitMissingError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
-import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
+import { checkoutFailure, createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { gitTestCheckout, initGitTestCheckout } from "../../platform/git-test-repository.ts";
+import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 
 import type {
   GitBackedSource,
@@ -141,20 +145,13 @@ function createGitOps(initial: GitOpsAdapterOptions = {}) {
       }
     },
     async resolveRef(options) {
-      try {
-        return await git.gitOps.resolveRef(options);
-      } catch (error) {
-        const remoteOid =
-          git.state.remoteRefs[options.ref] ??
-          (options.ref === "refs/remotes/origin/HEAD"
-            ? git.state.remoteRefs["refs/remotes/origin/main"]
-            : undefined);
-        if (remoteOid !== undefined) {
-          return remoteOid;
-        }
-
-        throw error;
-      }
+      return (
+        (await git.gitOps.resolveRef(options)) ??
+        git.state.remoteRefs[options.ref] ??
+        (options.ref === "refs/remotes/origin/HEAD"
+          ? git.state.remoteRefs["refs/remotes/origin/main"]
+          : undefined)
+      );
     },
     async resolveRemoteRef(options) {
       return git.gitOps.resolveRemoteRef(options);
@@ -186,13 +183,6 @@ function publicCloneAuth(): GitAuthBundle {
     },
     host: "example.com",
   };
-}
-
-/** The error isomorphic-git throws when the mirror holds no `ref`. */
-function gitNotFound(ref: string): Error {
-  const error = new Error(`Could not find ${ref}.`);
-  error.name = "NotFoundError";
-  return error;
 }
 
 async function freshLocations(t: TestContext): Promise<ScopedLocations> {
@@ -390,18 +380,10 @@ void test("Pitfall: sha wins over ref -- checkout pins the sha, clone singleBran
 });
 
 // A 40-hex pin the singleBranch ref-hint clone never fetched: checkout throws
-// CommitNotFetchedError until a full (all-heads) fetch pulls the commit local.
+// `commit-missing` until a full (all-heads) fetch pulls the commit local.
 // This is the shape where a manifest's sha field moved ahead of a stale ref
 // hint, so the pinned commit sits outside the ref hint's history.
 const PIN_OUTSIDE_CLOSURE = "30287f5e3f122a646d1ac5ca3ab96e130c52a3ad";
-
-function commitNotFetchedError(ref: string): Error {
-  const err = new Error(
-    `Failed to checkout "${ref}" because commit ${ref} is not available locally.`,
-  );
-  err.name = "CommitNotFetchedError";
-  return err;
-}
 
 /** INR-03 / INR-06: the typed missing-pin error, with no library advice chained under it. */
 function isPinnedCommitMissing(err: unknown, pin: string): boolean {
@@ -426,7 +408,7 @@ void test("PURL-04: a pin outside the ref-hint closure triggers ONE full fetch t
     async checkout(opts: Parameters<typeof base.gitOps.checkout>[0]): Promise<void> {
       checkouts.push(opts.ref);
       if (opts.ref === PIN_OUTSIDE_CLOSURE && !fullyFetched) {
-        throw commitNotFetchedError(opts.ref);
+        throw checkoutFailure(opts.ref);
       }
 
       await Promise.resolve();
@@ -486,9 +468,9 @@ void test("PURL-04 / INR-03: a still-unreachable pin fails clean after the retry
     ...base.gitOps,
     async checkout(opts: Parameters<typeof base.gitOps.checkout>[0]): Promise<void> {
       // The commit is genuinely absent from the remote: the recovery fetch
-      // cannot make it appear, so both attempts throw CommitNotFetchedError.
+      // cannot make it appear, so both attempts fail as `commit-missing`.
       if (opts.ref === PIN_OUTSIDE_CLOSURE) {
-        throw commitNotFetchedError(opts.ref);
+        throw checkoutFailure(opts.ref);
       }
 
       await Promise.resolve();
@@ -512,7 +494,7 @@ void test("PURL-04 / INR-03: a still-unreachable pin fails clean after the retry
   assert.equal(base.state.fetchCalls.length, 1, "exactly one recovery fetch was attempted");
 });
 
-void test("PURL-04 / INR-03: a NO-ref clone whose checkout throws CommitNotFetchedError fails immediately as a commit the host lacks", async (t) => {
+void test("PURL-04 / INR-03: a NO-ref clone whose checkout fails as commit-missing fails immediately as a commit the host lacks", async (t) => {
   const locations = await freshLocations(t);
   const base = createGitOps();
   const gitOps = {
@@ -521,7 +503,7 @@ void test("PURL-04 / INR-03: a NO-ref clone whose checkout throws CommitNotFetch
       // A no-ref clone already fetched every head, so an absent commit is
       // genuinely unreachable -- the recovery guard must not fire.
       await Promise.resolve();
-      throw commitNotFetchedError(opts.ref);
+      throw checkoutFailure(opts.ref);
     },
   };
 
@@ -547,13 +529,13 @@ void test("PURL-04 / INR-03: a NO-ref clone whose checkout throws CommitNotFetch
   );
 });
 
-void test("PURL-04: a ref-hint clone whose checkout throws a NON-CommitNotFetchedError does NOT trigger the recovery fetch", async (t) => {
+void test("PURL-04: a ref-hint clone whose checkout fails another way does NOT trigger the recovery fetch", async (t) => {
   const locations = await freshLocations(t);
   const base = createGitOps();
   const gitOps = {
     ...base.gitOps,
     async checkout(): Promise<void> {
-      // EACCES-shaped failure: a plain Error name, so the recovery guard must
+      // EACCES-shaped failure: no GitCommandError, so the recovery guard must
       // not read it as a pin outside the ref-hint closure.
       await Promise.resolve();
       throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
@@ -572,13 +554,9 @@ void test("PURL-04: a ref-hint clone whose checkout throws a NON-CommitNotFetche
         gitOps,
       }),
     /EACCES/,
-    "the original non-CommitNotFetchedError rethrows unchanged",
+    "the original failure rethrows unchanged",
   );
-  assert.equal(
-    base.state.fetchCalls.length,
-    0,
-    "a non-CommitNotFetchedError checkout throw never fetches",
-  );
+  assert.equal(base.state.fetchCalls.length, 0, "a checkout that fails another way never fetches");
   const stagingDir = base.state.cloneCalls[0]!.dir;
   await assert.rejects(
     () => stat(stagingDir),
@@ -610,7 +588,7 @@ void test("PROV-03: the recovery fetch threads the auth bundle so a private pin 
     },
     async checkout(opts: Parameters<typeof base.gitOps.checkout>[0]): Promise<void> {
       if (opts.ref === PIN_OUTSIDE_CLOSURE && !fullyFetched) {
-        throw commitNotFetchedError(opts.ref);
+        throw checkoutFailure(opts.ref);
       }
 
       await Promise.resolve();
@@ -986,6 +964,53 @@ void test("MURL-09: resolvePluginPin makes exactly one resolveRemoteRef attempt 
   assert.equal(state.resolveRemoteRefCalls[0]?.url, "https://example.com/repo");
 });
 
+void test("D-77-05: resolvePluginPin refuses a ref the remote does not advertise", async () => {
+  // arrange
+  const { gitOps } = createGitOps({ remoteHead: PIN_40 });
+  const source: UrlSource = {
+    kind: "url",
+    raw: "https://example.com/repo#dev",
+    url: "https://example.com/repo",
+    ref: "dev",
+  };
+
+  // act & assert
+  await assert.rejects(() => resolvePluginPin({ source, gitOps }), {
+    name: "Error",
+    message: 'remote https://example.com/repo has no ref "dev"',
+  });
+});
+
+void test("D-77-05: resolvePluginPin refuses a remote that advertises no HEAD", async () => {
+  // arrange
+  const { gitOps: baseGitOps } = createGitOps();
+  const gitOps: GitOps = { ...baseGitOps, resolveRemoteRef: () => Promise.resolve(undefined) };
+  const source: UrlSource = {
+    kind: "url",
+    raw: "https://example.com/repo",
+    url: "https://example.com/repo",
+  };
+
+  // act & assert
+  await assert.rejects(() => resolvePluginPin({ source, gitOps }), {
+    name: "Error",
+    message: "remote https://example.com/repo advertised no HEAD ref",
+  });
+});
+
+void test("GHB-01: resolvePluginPin names the base URL when the base advertises no HEAD", async (t) => {
+  // arrange
+  setGitHubBaseUrl(t, "https://git.example.invalid");
+  const { gitOps: baseGitOps } = createGitOps();
+  const gitOps: GitOps = { ...baseGitOps, resolveRemoteRef: () => Promise.resolve(undefined) };
+
+  // act & assert
+  await assert.rejects(() => resolvePluginPin({ source: githubSource("owner/repo"), gitOps }), {
+    name: "Error",
+    message: "remote https://git.example.invalid/owner/repo.git advertised no HEAD ref",
+  });
+});
+
 void test("MURL-08 / PURL-04: materializePluginClone forwards the caller's wire url and keys the dir off the identity url", async (t) => {
   const locations = await freshLocations(t);
   const { gitOps, state } = createGitOps();
@@ -1260,7 +1285,6 @@ void test("D-18-04: refresh: false refreshes a declared ref the mirror never fet
     networkUrl: "https://example.com/repo",
     ref: "dev",
     gitOps,
-    resolveTagOid: () => Promise.reject(gitNotFound("refs/tags/dev")),
     refresh: false,
   });
 
@@ -1283,9 +1307,8 @@ void test("GLK-08 / D-PL7-10: refresh: false answers a declared tag from the mir
   await mkdir(mirrorRoot, { recursive: true });
   const { gitOps, state } = createGitOps({
     head: MIRROR_HEAD,
-    localRefs: { "refs/heads/main": MIRROR_HEAD },
+    localRefs: { "refs/heads/main": MIRROR_HEAD, "refs/tags/v2.0.0": tagSha },
   });
-  const tagReads: unknown[] = [];
 
   // act
   const mirror = await materializeOrRefreshPluginMirror({
@@ -1295,71 +1318,63 @@ void test("GLK-08 / D-PL7-10: refresh: false answers a declared tag from the mir
     networkUrl: "https://example.com/repo",
     ref: "v2.0.0",
     gitOps,
-    resolveTagOid: (opts) => {
-      tagReads.push(opts);
-      return Promise.resolve(tagSha);
-    },
     refresh: false,
   });
 
   // assert
   assert.deepStrictEqual(
-    { mirror, tagReads, clones: state.cloneCalls, fetches: state.fetchCalls },
+    {
+      mirror,
+      refReads: state.resolveRefCalls,
+      clones: state.cloneCalls,
+      fetches: state.fetchCalls,
+    },
     {
       mirror: { pluginRoot: mirrorRoot, resolvedSha: tagSha },
-      tagReads: [{ dir: mirrorRoot, name: "v2.0.0", cache: {} }],
+      refReads: [
+        { dir: mirrorRoot, ref: "refs/remotes/origin/v2.0.0" },
+        { dir: mirrorRoot, ref: "refs/tags/v2.0.0" },
+      ],
       clones: [],
       fetches: [],
     },
   );
 });
 
-for (const { title, resolveTagOid } of [
-  {
-    title: "a declared ref the mirror holds no tag for",
-    resolveTagOid: () => Promise.reject(gitNotFound("refs/tags/v2.0.0")),
-  },
-  {
-    title: "a declared tag that names no commit",
-    resolveTagOid: () => Promise.resolve(undefined),
-  },
-]) {
-  void test(`GLK-08 / D-PL7-10: refresh: false refreshes ${title}, as a cache miss`, async (t) => {
-    // arrange
-    const tagSha = "fedcba9876543210fedcba9876543210fedcba98";
-    const auth = publicCloneAuth();
-    const locations = await freshLocations(t);
-    const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
-    await mkdir(mirrorRoot, { recursive: true });
-    const { gitOps, state } = createGitOps({
-      head: MIRROR_HEAD,
-      localRefs: { "refs/heads/main": MIRROR_HEAD },
-      remoteRefs: { "v2.0.0": tagSha },
-    });
-
-    // act
-    const mirror = await materializeOrRefreshPluginMirror({
-      auth,
-      locations,
-      cloneUrl: "https://example.com/repo",
-      networkUrl: "https://example.com/repo",
-      ref: "v2.0.0",
-      gitOps,
-      resolveTagOid,
-      refresh: false,
-    });
-
-    // assert
-    assert.deepStrictEqual(
-      { mirror, clones: state.cloneCalls, fetches: state.fetchCalls },
-      {
-        mirror: { pluginRoot: mirrorRoot, resolvedSha: tagSha },
-        clones: [],
-        fetches: [{ dir: mirrorRoot, remote: "origin", ref: "v2.0.0", auth }],
-      },
-    );
+void test("GLK-08 / D-PL7-10: refresh: false refreshes a declared ref the mirror holds no commit tag for, as a cache miss", async (t) => {
+  // arrange
+  const tagSha = "fedcba9876543210fedcba9876543210fedcba98";
+  const auth = publicCloneAuth();
+  const locations = await freshLocations(t);
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
+  await mkdir(mirrorRoot, { recursive: true });
+  const { gitOps, state } = createGitOps({
+    head: MIRROR_HEAD,
+    localRefs: { "refs/heads/main": MIRROR_HEAD },
+    remoteRefs: { "v2.0.0": tagSha },
   });
-}
+
+  // act
+  const mirror = await materializeOrRefreshPluginMirror({
+    auth,
+    locations,
+    cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
+    ref: "v2.0.0",
+    gitOps,
+    refresh: false,
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    { mirror, clones: state.cloneCalls, fetches: state.fetchCalls },
+    {
+      mirror: { pluginRoot: mirrorRoot, resolvedSha: tagSha },
+      clones: [],
+      fetches: [{ dir: mirrorRoot, remote: "origin", ref: "v2.0.0", auth }],
+    },
+  );
+});
 
 void test("GLK-08 / D-PL7-10: refresh: false propagates a local tag read that fails for a reason other than a missing tag", async (t) => {
   // arrange
@@ -1367,10 +1382,17 @@ void test("GLK-08 / D-PL7-10: refresh: false propagates a local tag read that fa
   const locations = await freshLocations(t);
   const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
   await mkdir(mirrorRoot, { recursive: true });
-  const { gitOps, state } = createGitOps({
+  const { gitOps: baseGitOps, state } = createGitOps({
     head: MIRROR_HEAD,
     localRefs: { "refs/heads/main": MIRROR_HEAD },
   });
+  const gitOps: GitOps = {
+    ...baseGitOps,
+    resolveRef: (options) =>
+      options.ref === "refs/tags/v2.0.0"
+        ? Promise.reject(readFailure)
+        : baseGitOps.resolveRef(options),
+  };
 
   // act & assert
   await assert.rejects(
@@ -1381,7 +1403,6 @@ void test("GLK-08 / D-PL7-10: refresh: false propagates a local tag read that fa
       networkUrl: "https://example.com/repo",
       ref: "v2.0.0",
       gitOps,
-      resolveTagOid: () => Promise.reject(readFailure),
       refresh: false,
     }),
     (error: unknown) => error === readFailure,
@@ -1404,14 +1425,16 @@ void test("GLK-08 / D-PL7-10: refresh: false with no declared ref and no default
     remoteRefs: { "refs/remotes/origin/main": MIRROR_HEAD },
   });
   // The mirror has no default-branch tracking ref until the refresh fetch writes one.
+  const refReads: string[] = [];
   const gitOps: GitOps = {
     ...baseGitOps,
-    resolveRef: (options) =>
-      state.fetchCalls.length === 0 && options.ref === "refs/remotes/origin/HEAD"
-        ? Promise.reject(gitNotFound("refs/remotes/origin/HEAD"))
-        : baseGitOps.resolveRef(options),
+    resolveRef: (options) => {
+      refReads.push(options.ref);
+      return state.fetchCalls.length === 0 && options.ref === "refs/remotes/origin/HEAD"
+        ? Promise.resolve(undefined)
+        : baseGitOps.resolveRef(options);
+    },
   };
-  const tagReads: unknown[] = [];
 
   // act
   const mirror = await materializeOrRefreshPluginMirror({
@@ -1420,19 +1443,15 @@ void test("GLK-08 / D-PL7-10: refresh: false with no declared ref and no default
     cloneUrl: "https://example.com/repo",
     networkUrl: "https://example.com/repo",
     gitOps,
-    resolveTagOid: (opts) => {
-      tagReads.push(opts);
-      return Promise.resolve(undefined);
-    },
     refresh: false,
   });
 
   // assert
   assert.deepStrictEqual(
-    { mirror, tagReads, clones: state.cloneCalls, fetches: state.fetchCalls },
+    { mirror, refReads, clones: state.cloneCalls, fetches: state.fetchCalls },
     {
       mirror: { pluginRoot: mirrorRoot, resolvedSha: MIRROR_HEAD },
-      tagReads: [],
+      refReads: ["refs/remotes/origin/HEAD", "refs/remotes/origin/HEAD", "HEAD"],
       clones: [],
       fetches: [{ dir: mirrorRoot, remote: "origin", auth }],
     },
@@ -1465,6 +1484,36 @@ void test("D-18-04: refresh: false propagates a mirror ref read that fails for a
     {
       clones: [],
       fetches: [],
+    },
+  );
+});
+
+void test("SG-TRN-01: a mirror whose HEAD names no commit fails as a missing local ref", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const { gitOps: baseGitOps } = mirrorGitOps();
+  const gitOps: GitOps = {
+    ...baseGitOps,
+    resolveRef: (options) =>
+      options.ref === "HEAD" ? Promise.resolve(undefined) : baseGitOps.resolveRef(options),
+  };
+
+  // act & assert
+  await assert.rejects(
+    materializeOrRefreshPluginMirror({
+      auth: publicCloneAuth(),
+      locations,
+      cloneUrl: "https://example.com/repo",
+      networkUrl: "https://example.com/repo",
+      gitOps,
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.deepStrictEqual(
+        { failure: error.failure, operation: error.operation },
+        { failure: { kind: "local-ref-missing" }, operation: "rev-parse --verify" },
+      );
+      return true;
     },
   );
 });
@@ -1929,7 +1978,7 @@ void test("SEED-04: an unreachable pin is cleaned and a later unpinned entry sti
     ],
   });
   await saveMarketplace(locations, marketplaceRoot, GITHUB_REPO_URL);
-  const checkoutError = commitNotFetchedError(PIN_40);
+  const checkoutError = checkoutFailure(PIN_40);
   const { gitOps } = createGitOps({ checkoutThrows: checkoutError });
 
   // act
@@ -2376,12 +2425,6 @@ function failingFirstCheckout(failure: Error): {
   };
 }
 
-function namedError(name: string, message: string): Error {
-  const error = new Error(message);
-  error.name = name;
-  return error;
-}
-
 void test("GIT-01: a present per-commit copy uses the default git surface without a git call", async (t) => {
   // arrange
   const locations = await freshLocations(t);
@@ -2552,12 +2595,12 @@ void test("SG-MIG-01: a per-commit copy of a clone without the clone keys checks
   });
 });
 
-void test("GIT-01: a mirror that lacks the commit falls back to a clone of it", async (t) => {
+void test("GIT-01: a mirror that lacks the named ref falls back to a clone of it", async (t) => {
   // arrange
   const locations = await freshLocations(t);
   const cloneUrl = "https://example.com/repo";
   await seedMirror(locations, cloneUrl);
-  const { gitOps, state } = failingFirstCheckout(namedError("NotFoundError", "no such commit"));
+  const { gitOps, state } = failingFirstCheckout(checkoutFailure("release"));
 
   // act
   const result = await materializePluginCommitCopy({
@@ -2575,14 +2618,12 @@ void test("GIT-01: a mirror that lacks the commit falls back to a clone of it", 
   assert.deepStrictEqual(await readdir(path.join(locations.extensionRoot, "sources-staging")), []);
 });
 
-void test("GIT-01: a mirror whose commit was not fetched falls back to a clone of it", async (t) => {
+void test("GIT-01: a mirror that lacks the commit falls back to a clone of it", async (t) => {
   // arrange
   const locations = await freshLocations(t);
   const cloneUrl = "https://example.com/repo";
   await seedMirror(locations, cloneUrl);
-  const { gitOps, state } = failingFirstCheckout(
-    namedError("CommitNotFetchedError", "commit not fetched"),
-  );
+  const { gitOps, state } = failingFirstCheckout(checkoutFailure(PIN_40));
 
   // act
   await materializePluginCommitCopy({
