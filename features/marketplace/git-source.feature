@@ -357,3 +357,78 @@ Feature: Marketplace git source
       | description             | Tools after the update        |
       | severity                | info                          |
       | needs reload            | false                         |
+
+  Scenario: Updating a git marketplace whose repository changed its default branch follows the new branch
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" has the description "Tools on main"
+    Given the marketplace "tools" is added to the project scope
+    Given the branch "next" of the marketplace "tools" has the description "Tools on next"
+    Given the default branch of the marketplace "tools" is "next"
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status |
+      | tools            | project           | updated            |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+    When the user runs "/claude:plugin marketplace info tools --scope project"
+    Then the marketplace info result has these fields:
+      | kind                    | marketplace-info              |
+      | name                    | tools                         |
+      | scope                   | project                       |
+      | details autoupdate      | false                         |
+      | details last updated at | {scenario time}               |
+      | source kind             | url                           |
+      | source abs path         |                               |
+      | source url              | https://{git host}/acme/tools |
+      | source owner            |                               |
+      | source repo             |                               |
+      | source ref              |                               |
+      | description             | Tools on next                 |
+      | severity                | info                          |
+      | needs reload            | false                         |
+
+  Scenario: Updating a git marketplace added at a tag follows the tag when it moves
+    Given the marketplace "tools" is published as a url source
+    Given the tag "v1" of the marketplace "tools" has the description "Tools at the first v1"
+    Given the user has run "/claude:plugin marketplace add https://{git host}/acme/tools.git#v1 --scope project"
+    Given the tag "v1" of the marketplace "tools" has the description "Tools at the moved v1"
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status |
+      | tools            | project           | updated            |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+    When the user runs "/claude:plugin marketplace info tools --scope project"
+    Then the marketplace info result has these fields:
+      | kind                    | marketplace-info              |
+      | name                    | tools                         |
+      | scope                   | project                       |
+      | details autoupdate      | false                         |
+      | details last updated at | {scenario time}               |
+      | source kind             | url                           |
+      | source abs path         |                               |
+      | source url              | https://{git host}/acme/tools |
+      | source owner            |                               |
+      | source repo             |                               |
+      | source ref              | v1                            |
+      | description             | Tools at the moved v1         |
+      | severity                | info                          |
+      | needs reload            | false                         |
