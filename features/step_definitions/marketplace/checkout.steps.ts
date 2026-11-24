@@ -7,7 +7,8 @@
  * both directories whole. The record step separately proves a failed add did
  * not retain a marketplace entry in state.json. An update moves a checkout
  * aside to `sources-backup/` before its new clone moves in (D-SG-10), so the
- * read-only folder steps make that move fail and let it succeed again.
+ * read-only folder steps make that move fail and let it succeed again, and the
+ * interrupted-update step leaves a checkout there with no live checkout.
  */
 
 import assert from "node:assert/strict";
@@ -40,6 +41,27 @@ Given(
     assert.equal((await stat(checkout)).isDirectory(), true);
     await rm(checkout, { recursive: true });
     assert.equal(existsSync(checkout), false);
+  },
+);
+
+// D-SG-10 / NFR-3: an update moves the checkout to `sources-backup/<name>`
+// before its new clone moves in. An update interrupted between the two moves
+// leaves the checkout there and no live checkout.
+Given(
+  "an update of the marketplace {string} in the {word} scope was interrupted after it moved the checkout aside",
+  async function (this: ScenarioWorld, name: string, scope: string) {
+    const checkout = path.join(extensionRootOf(this, scope), "sources", name);
+    const backup = path.join(extensionRootOf(this, scope), "sources-backup", name);
+    assert.equal(existsSync(backup), false);
+    await mkdir(path.dirname(backup), { recursive: true });
+    await rename(checkout, backup);
+    assert.deepStrictEqual(
+      {
+        checkout: existsSync(checkout),
+        backupManifest: existsSync(path.join(backup, ".claude-plugin", "marketplace.json")),
+      },
+      { checkout: false, backupManifest: true },
+    );
   },
 );
 
