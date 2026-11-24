@@ -5,9 +5,10 @@
 // selects `updateMarketplace`. Both arms forward the same two injected ports,
 // so every delegating case seeds THREE marketplaces -- `alpha` and `beta` in the
 // project scope and a second `alpha` in the user scope -- and compares the git
-// port's whole fetch recorder. A single-marketplace run records one fetch and an
-// all-marketplaces run records three, so the recorder discriminates the two arms
-// rather than merely showing that one of them ran.
+// port's whole freshness recorder: the checkouts whose `HEAD` it read and the
+// `ls-remote` calls it ran (D-SG-10). A single-marketplace run records one of
+// each and an all-marketplaces run records three, so the recorder discriminates
+// the two arms rather than merely showing that one of them ran.
 //
 // D-05: every emission renders from the run the handler receives, so no case
 // builds the handler with a tool inventory.
@@ -31,18 +32,19 @@
 // the only one carrying an installed plugin, so the cascade -- and therefore the
 // plugin update port -- fires on exactly the two selection cases and on no other.
 //
-// The refresh leaves each manifest byte-identical, so every row is the
-// `(skipped) {up-to-date}` no-op. That keeps each delegation a minimal effect
-// rather than a re-derivation of the update workflow's own detail tokens, which
-// belong to test/orchestrators/marketplace/update.test.ts.
+// Each checkout's `HEAD` is the commit its remote advertises, so every refresh
+// finds it current, clones nothing, and leaves each manifest byte-identical:
+// every row is the `(skipped) {up-to-date}` no-op. That keeps each delegation a
+// minimal effect rather than a re-derivation of the update workflow's own
+// detail tokens, which belong to test/orchestrators/marketplace/update.test.ts.
 //
 // NFR-5: every case also asserts that the door the git transport opens --
 // `https.request`, replaced by a counting fail-fast throw -- recorded ZERO
 // calls. That zero is a REGRESSION GUARD WITH NO POSITIVE CONTROL, measured to
 // be one rather than assumed to be one: no reachable input moves this counter,
 // because the refresh path dies inside `isomorphic-git` before the transport.
-// The fetch RECORDER, not the zero, is what carries the delegation claim. See
-// `installNetworkCounter` for the measurement.
+// The freshness RECORDER, not the zero, is what carries the delegation claim.
+// See `installNetworkCounter` for the measurement.
 //
 // Arity: the positional schema declares ONE optional entry, so zero and one
 // positional are both accepted and there is no count below the accepted range.
@@ -85,25 +87,36 @@ import { mergeMarketplaceIntoState, seedAutoupdateConfig } from "../marketplace-
 
 import type { EdgeDeps } from "../../../../extensions/pi-claude-marketplace/edge/types.ts";
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
+import type { GitOpsFake } from "../../../platform/git-ops-fake.ts";
 
 // Both port shapes are derived from the handler's own dependency object, so a
 // change to either injection seam is a compile error in this suite rather than a
 // silently stale hand-copied type.
 type PluginUpdate = ReturnType<EdgeDeps["beginPluginUpdateRun"]>;
 type PluginUpdateOutcome = Awaited<ReturnType<PluginUpdate>>;
-type GitFetchCall = ReturnType<typeof createGitOpsFake>["state"]["calls"]["fetch"][number];
+type GitCalls = GitOpsFake["state"]["calls"];
+type GitLsRemoteCall = GitCalls["resolveRemoteRef"][number];
 
 /**
- * A recorded fetch with its auth bundle reduced to the one comparable field.
- * The bundle carries three closures, so a literal expectation cannot spell it;
- * the bound host is what a wrong binding would get wrong.
+ * A recorded `ls-remote` with its auth bundle reduced to the one comparable
+ * field. The bundle carries three closures, so a literal expectation cannot
+ * spell it; the bound host is what a wrong binding would get wrong.
  */
-type DescribedFetchCall = Omit<GitFetchCall, "auth"> & {
+type DescribedLsRemoteCall = Omit<GitLsRemoteCall, "auth"> & {
   readonly auth?: { readonly host: string };
 };
 
+/** D-SG-10: what the freshness checks of a command recorded on the git port. */
+interface FreshnessCalls {
+  readonly headReads: GitCalls["resolveRef"];
+  readonly lsRemotes: readonly DescribedLsRemoteCall[];
+}
+
 /** The host every seeded url source sits on. The provider registry does not claim it. */
 const SOURCE_HOST = "gitlab.example.com";
+
+/** The commit each seeded checkout's `HEAD` names and its remote advertises for `main`. */
+const CURRENT_COMMIT = "0000000000000000000000000000000000000001";
 
 /** Written out by hand; never read back off the module under test. */
 const USAGE = "Usage: /claude:plugin marketplace update [<name>] [--scope user|project]";
@@ -131,10 +144,16 @@ interface HermeticScope {
   readonly networkCallCount: () => number;
 }
 
+/** A seeded marketplace: its name and the directory of its checkout. */
+interface SeededCheckout {
+  readonly name: string;
+  readonly dir: string;
+}
+
 interface SeededClones {
-  readonly projectAlpha: string;
-  readonly projectBeta: string;
-  readonly userAlpha: string;
+  readonly projectAlpha: SeededCheckout;
+  readonly projectBeta: SeededCheckout;
+  readonly userAlpha: SeededCheckout;
 }
 
 /**
@@ -154,8 +173,8 @@ interface SeededClones {
  * configured remote, one step before the transport. Having the git door in the
  * import graph is not the same as having a route that opens it.
  *
- * What carries the delegation claim here is therefore the fetch RECORDER beside
- * this zero, never the zero itself.
+ * What carries the delegation claim here is therefore the freshness RECORDER
+ * beside this zero, never the zero itself.
  *
  * The door is `https.request` because that is the one the git transport opens:
  * `isomorphic-git/http/node` reaches the wire through `simple-get`, which calls
@@ -171,20 +190,55 @@ function installNetworkCounter(t: TestContext): () => number {
   return (): number => networkSpy.mock.callCount();
 }
 
-/**
- * The single fetch a clone pinned to `main` produces on the refresh path. The
- * refresh carries a bundle bound to the source's host even though the provider
- * registry does not claim it, so a credential already in the user's helper is
- * reachable (GAUTH-03).
- */
-function fetchOf(cloneDir: string): DescribedFetchCall {
-  return { dir: cloneDir, remote: "origin", ref: "main", auth: { host: SOURCE_HOST } };
+/** The remote URL of the seeded marketplace `name`. */
+function sourceUrl(name: string): string {
+  return `https://${SOURCE_HOST}/team/${name}`;
 }
 
-/** Reduce a recorded fetch to the fields an expectation can spell. */
-function describeFetch(call: GitFetchCall): DescribedFetchCall {
-  const { auth, ...dataCall } = call;
-  return { ...dataCall, ...(auth === undefined ? {} : { auth: { host: auth.host } }) };
+/**
+ * D-SG-10: a git port whose remotes are the seeded `alpha` and `beta` sources
+ * and advertise `CURRENT_COMMIT`, the commit each checkout's `HEAD` names, so
+ * every refresh is current and clones nothing. Any other remote is refused.
+ */
+function createCurrentGitOps(): GitOpsFake {
+  return createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: [sourceUrl("alpha"), sourceUrl("beta")],
+    initialOid: CURRENT_COMMIT,
+    remoteHead: CURRENT_COMMIT,
+  });
+}
+
+/**
+ * D-SG-10: the freshness checks that refreshing `checkouts` in order records:
+ * one `HEAD` read of each checkout and one `ls-remote` of its remote's `main`.
+ * The `ls-remote` carries a bundle bound to the source's host even though the
+ * provider registry does not claim it, so a credential already in the user's
+ * helper is reachable (GAUTH-03).
+ */
+function refreshesOf(...checkouts: readonly SeededCheckout[]): FreshnessCalls {
+  return {
+    headReads: checkouts.map(({ dir }) => ({ dir, ref: "HEAD" })),
+    lsRemotes: checkouts.map(({ name }) => ({
+      url: sourceUrl(name),
+      ref: "main",
+      auth: { host: SOURCE_HOST },
+    })),
+  };
+}
+
+/**
+ * The freshness checks `git` recorded, each `ls-remote` reduced to the fields
+ * an expectation can spell.
+ */
+function freshnessCalls(git: GitOpsFake): FreshnessCalls {
+  return {
+    headReads: git.state.calls.resolveRef,
+    lsRemotes: git.state.calls.resolveRemoteRef.map(({ auth, ...dataCall }) => ({
+      ...dataCall,
+      ...(auth === undefined ? {} : { auth: { host: auth.host } }),
+    })),
+  };
 }
 
 /** The cascade outcome the injected plugin update port promises. */
@@ -238,9 +292,9 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
 }
 
 /**
- * Seed one url-source marketplace pinned to `main` and return its clone
- * directory. The refresh threads a bundle bound to `SOURCE_HOST`, so the git
- * port receives a fetch carrying that bundle. The provider registry does not
+ * Seed one url-source marketplace pinned to `main` and return its checkout.
+ * The refresh threads a bundle bound to `SOURCE_HOST`, so the git port
+ * receives an `ls-remote` carrying that bundle. The provider registry does not
  * claim the host, so the bundle's interactive half resolves without a device
  * flow and the credential helper is the only auth path.
  */
@@ -249,7 +303,7 @@ async function seedMarketplace(opts: {
   readonly scope: Scope;
   readonly name: string;
   readonly cascades?: readonly string[];
-}): Promise<string> {
+}): Promise<SeededCheckout> {
   const locations = locationsFor(opts.scope, opts.cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
   const cloneDir = await locations.sourceCloneDir(opts.name);
@@ -288,7 +342,7 @@ async function seedMarketplace(opts: {
     await seedAutoupdateConfig(locations, opts.name, true);
   }
 
-  return cloneDir;
+  return { name: opts.name, dir: cloneDir };
 }
 
 /**
@@ -316,7 +370,7 @@ test("updates every recorded marketplace in both scopes when no name is supplied
     value: cwd,
     reads: 1,
   });
-  const git = createGitOpsFake({ boundary: "memory" });
+  const git = createCurrentGitOps();
   const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
   when(() => pluginUpdate("hello", "alpha", "project")).thenResolve(unchangedHello());
   const dependencyStep = createDependencyStep();
@@ -336,11 +390,10 @@ test("updates every recorded marketplace in both scopes when no name is supplied
     { message: pluralUpdateMessage(PROJECT_BETA_ROW) },
     { message: pluralUpdateMessage(USER_ALPHA_ROW) },
   ]);
-  assert.deepStrictEqual(git.state.calls.fetch.map(describeFetch), [
-    fetchOf(clones.projectAlpha),
-    fetchOf(clones.projectBeta),
-    fetchOf(clones.userAlpha),
-  ]);
+  assert.deepStrictEqual(
+    freshnessCalls(git),
+    refreshesOf(clones.projectAlpha, clones.projectBeta, clones.userAlpha),
+  );
   // D-PL2-10: only the project `alpha` cascades, so the step runs once, there.
   assert.deepStrictEqual(dependencyStep.requests, [{ scope: "project", cwd }]);
   assert.strictEqual(networkCallCount(), 0);
@@ -356,7 +409,7 @@ test("updates the named marketplace alone and leaves its siblings untouched", as
     value: cwd,
     reads: 1,
   });
-  const git = createGitOpsFake({ boundary: "memory" });
+  const git = createCurrentGitOps();
   const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
   when(() => pluginUpdate("hello", "alpha", "project")).thenResolve(unchangedHello());
   const dependencyStep = createDependencyStep();
@@ -372,7 +425,7 @@ test("updates the named marketplace alone and leaves its siblings untouched", as
 
   // assert
   assert.deepStrictEqual(notifications, [{ message: PROJECT_ALPHA_ROW }]);
-  assert.deepStrictEqual(git.state.calls.fetch.map(describeFetch), [fetchOf(clones.projectAlpha)]);
+  assert.deepStrictEqual(freshnessCalls(git), refreshesOf(clones.projectAlpha));
   // D-PL2-10: only the project `alpha` cascades, so the step runs once, there.
   assert.deepStrictEqual(dependencyStep.requests, [{ scope: "project", cwd }]);
   assert.strictEqual(networkCallCount(), 0);
@@ -393,7 +446,7 @@ test("D-10-18: begins one cascade run per command and none when the handler is b
     value: cwd,
     reads: 2,
   });
-  const git = createGitOpsFake({ boundary: "memory" });
+  const git = createCurrentGitOps();
   const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
   when(() => pluginUpdate("hello", "alpha", "project"))
     .thenResolve(unchangedHello())
@@ -421,10 +474,10 @@ test("D-10-18: begins one cascade run per command and none when the handler is b
     { message: PROJECT_ALPHA_ROW },
     { message: PROJECT_ALPHA_ROW },
   ]);
-  assert.deepStrictEqual(git.state.calls.fetch.map(describeFetch), [
-    fetchOf(clones.projectAlpha),
-    fetchOf(clones.projectAlpha),
-  ]);
+  assert.deepStrictEqual(
+    freshnessCalls(git),
+    refreshesOf(clones.projectAlpha, clones.projectAlpha),
+  );
   assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
   verify(pluginUpdate);
@@ -436,7 +489,7 @@ for (const { emissions, expectCascade, rows, scope, touched } of [
     expectCascade: (): void => undefined,
     rows: [USER_ALPHA_ROW],
     scope: "user",
-    touched: (clones: SeededClones): readonly string[] => [clones.userAlpha],
+    touched: (clones: SeededClones): readonly SeededCheckout[] => [clones.userAlpha],
   },
   {
     emissions: 2,
@@ -445,14 +498,17 @@ for (const { emissions, expectCascade, rows, scope, touched } of [
     },
     rows: [PROJECT_ALPHA_ROW, PROJECT_BETA_ROW],
     scope: "project",
-    touched: (clones: SeededClones): readonly string[] => [clones.projectAlpha, clones.projectBeta],
+    touched: (clones: SeededClones): readonly SeededCheckout[] => [
+      clones.projectAlpha,
+      clones.projectBeta,
+    ],
   },
 ] satisfies readonly {
   readonly emissions: number;
   readonly expectCascade: (pluginUpdate: PluginUpdate) => void;
   readonly rows: readonly string[];
   readonly scope: Scope;
-  readonly touched: (clones: SeededClones) => readonly string[];
+  readonly touched: (clones: SeededClones) => readonly SeededCheckout[];
 }[]) {
   test(`updates the ${scope} scope alone when --scope ${scope} narrows the command`, async (t) => {
     // arrange
@@ -462,7 +518,7 @@ for (const { emissions, expectCascade, rows, scope, touched } of [
       value: cwd,
       reads: 1,
     });
-    const git = createGitOpsFake({ boundary: "memory" });
+    const git = createCurrentGitOps();
     const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
     expectCascade(pluginUpdate);
     const marketplaceUpdateHandler = makeMarketplaceUpdateHandler({
@@ -480,7 +536,7 @@ for (const { emissions, expectCascade, rows, scope, touched } of [
       notifications,
       rows.map((row) => ({ message: pluralUpdateMessage(row) })),
     );
-    assert.deepStrictEqual(git.state.calls.fetch.map(describeFetch), touched(clones).map(fetchOf));
+    assert.deepStrictEqual(freshnessCalls(git), refreshesOf(...touched(clones)));
     assert.strictEqual(networkCallCount(), 0);
     verifyBoundary();
     verify(pluginUpdate);
@@ -512,7 +568,7 @@ test("reports an unrecognised scope value with the update usage block and never 
       severity: "error",
     },
   ]);
-  assert.deepStrictEqual(git.state.calls.fetch, []);
+  assert.deepStrictEqual(freshnessCalls(git), refreshesOf());
   assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
   verify(pluginUpdate);
@@ -548,7 +604,7 @@ for (const { args, diagnostic } of [
     assert.deepStrictEqual(notifications, [
       { message: `${diagnostic}\n\n${USAGE}`, severity: "error" },
     ]);
-    assert.deepStrictEqual(git.state.calls.fetch, []);
+    assert.deepStrictEqual(freshnessCalls(git), refreshesOf());
     assert.strictEqual(networkCallCount(), 0);
     verifyBoundary();
     verify(pluginUpdate);
@@ -568,13 +624,13 @@ for (const { args, tally } of [
     });
     process.chdir(cwd);
     t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-02-03T04:05:06.000Z") });
-    const cloneDir = await seedMarketplace({
+    const alpha = await seedMarketplace({
       cwd,
       scope: "project",
       name: "alpha",
       cascades: ["hello"],
     });
-    const pluginRoot = path.join(cloneDir, "plugins", "hello");
+    const pluginRoot = path.join(alpha.dir, "plugins", "hello");
     await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
     await writeFile(
       path.join(pluginRoot, ".claude-plugin", "plugin.json"),
@@ -601,7 +657,7 @@ for (const { args, tally } of [
       createHooksRouting(createHooksRuntime(), { readHooksJson }),
       completionCache,
     );
-    const git = createGitOpsFake({ boundary: "memory" });
+    const git = createCurrentGitOps();
     const handler = makeMarketplaceUpdateHandler({
       completionCache,
       gitOps: git.gitOps,
@@ -636,7 +692,7 @@ for (const { args, tally } of [
       ],
       [baseBytes, localBytes],
     );
-    assert.deepStrictEqual(git.state.calls.fetch.map(describeFetch), [fetchOf(cloneDir)]);
+    assert.deepStrictEqual(freshnessCalls(git), refreshesOf(alpha));
     verifyBoundary();
   });
 }
