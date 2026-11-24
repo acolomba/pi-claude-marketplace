@@ -511,6 +511,13 @@ Measured: `git rev-list --count 20ff36e..HEAD` = 4. Every commit ran the full ho
 
 None.
 
+## Follow-up (maintainer, 2026-11-24)
+
+The maintainer switched the two project-trust keeps that were kept only for their "trusted
+project" wording, `features/plugin/executables.feature:7` and `features/plugin/options.feature:152`,
+to `Given the user has reloaded pi`. Neither writes a Pi trust input. Both pass under the adapter
+profile. The project-trust keeps are now 34, and the switched uses 535.
+
 ## Threat Flags
 
 None -- no security-relevant surface outside the plan's `<threat_model>` was introduced.

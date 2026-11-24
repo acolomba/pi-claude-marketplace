@@ -163,7 +163,7 @@ Feature: Plugin options
       """
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
-    Given the user has started a new pi session
+    Given the user has reloaded pi
     Given the scripted model plays these steps:
       | reply | tool | arguments                                                                    |
       |       | bash | {"command": "printf %s \"$PI_CLAUDE_MARKETPLACE_OPTIONS\""}                  |
