@@ -8,6 +8,7 @@ import nodeHttpClient from "isomorphic-git/http/node";
 import {
   CrossOriginChallengeError,
   FetchedUrlCause,
+  GitCommandError,
   TooManyRedirectsError,
 } from "../shared/errors.ts";
 import { gitHubWireUrl } from "../shared/github-base-url.ts";
@@ -17,7 +18,7 @@ import { NODE_GIT_PROCESS } from "./git-process.ts";
 import { gitTimeoutMs } from "./git-timeout.ts";
 
 import type { BuildAuthCallbacksOpts } from "./git-auth-callbacks.ts";
-import type { GitProcess, GitResult } from "./git-process.ts";
+import type { GitProcess, GitRequest, GitResult } from "./git-process.ts";
 import type { GitHttpRequest, GitHttpResponse, HttpClient } from "isomorphic-git/http/node";
 
 /**
@@ -112,6 +113,23 @@ export interface FetchOptions {
   ref?: string;
   /** INR-06: also fetch tags (isomorphic-git fetches only branches by default). */
   tags?: boolean;
+}
+
+export interface FetchCommitOptions {
+  /** The clone to fetch into. */
+  dir: string;
+  /** The full id of the commit to fetch. */
+  sha: string;
+  /**
+   * The ref the source names. The `--unshallow` rung fetches it as well,
+   * because a depth-1 clone's fetch refspec names only the branch it cloned.
+   */
+  ref?: string;
+  /**
+   * Accepted for the callers; the credential path of the network requests
+   * reads it once that path lands.
+   */
+  auth?: BuildAuthCallbacksOpts;
 }
 
 export interface CheckoutOptions {
@@ -661,6 +679,63 @@ export async function fetch(opts: FetchOptions): Promise<void> {
       }),
     }),
   );
+}
+
+/**
+ * SG-TRN-02, C5: fetches the commit `opts.sha` into the clone `opts.dir`, as
+ * Claude Code's pin ladder does. The first rung is `fetch --depth 1 origin
+ * <sha>` on the network lane. When it fails for a reason other than an abort,
+ * and only when `rev-parse --is-shallow-repository` prints `true`, the second
+ * rung is `fetch --unshallow origin [<ref>]`, and its failure is the one
+ * thrown. A complete clone skips that rung, because git refuses
+ * `--unshallow` on one, and the first rung's error is thrown. Each rung reads
+ * its own limit from `gitTimeoutMs()` and carries the abort signal of the
+ * scope it runs in (D-PL8-24).
+ */
+export async function fetchCommit(
+  opts: FetchCommitOptions,
+  gitProcess: GitProcess = NODE_GIT_PROCESS,
+): Promise<void> {
+  const signal = gitAbortScope.getStore();
+  const fetchRung = (options: readonly string[], operands: readonly string[]): GitRequest => ({
+    subcommand: "fetch",
+    lane: "network",
+    cwd: opts.dir,
+    options,
+    operands,
+    timeoutMs: gitTimeoutMs(),
+    ...(signal !== undefined && { signal }),
+  });
+  try {
+    await gitProcess.run(fetchRung(["--depth", "1"], ["origin", opts.sha]));
+    return;
+  } catch (error: unknown) {
+    const aborted = error instanceof GitCommandError && error.kind === "aborted";
+    if (aborted || !(await isShallowClone(opts.dir, gitProcess))) {
+      throw error;
+    }
+  }
+
+  await gitProcess.run(
+    fetchRung(["--unshallow"], opts.ref === undefined ? ["origin"] : ["origin", opts.ref]),
+  );
+}
+
+/**
+ * Whether the clone in `dir` is shallow. A read that fails counts as a
+ * complete clone, so the caller throws the error it already holds.
+ */
+async function isShallowClone(dir: string, gitProcess: GitProcess): Promise<boolean> {
+  const read = await gitProcess
+    .run({
+      subcommand: "rev-parse",
+      lane: "local",
+      cwd: dir,
+      options: ["--is-shallow-repository"],
+      timeoutMs: gitTimeoutMs(),
+    })
+    .catch(() => undefined);
+  return read?.stdout.trim() === "true";
 }
 
 /**

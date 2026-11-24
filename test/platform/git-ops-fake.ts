@@ -48,6 +48,12 @@ export interface GitOpsFakeCalls {
     readonly tags?: boolean;
     readonly auth?: GitAuthBundle;
   }>;
+  readonly fetchCommit: Array<{
+    readonly dir: string;
+    readonly sha: string;
+    readonly ref?: string;
+    readonly auth?: GitAuthBundle;
+  }>;
   readonly forceUpdateRef: Array<{
     readonly dir: string;
     readonly ref: string;
@@ -112,6 +118,14 @@ function snapshotFetchCall(
   return auth === undefined ? snapshot : { ...snapshot, auth };
 }
 
+function snapshotFetchCommitCall(
+  options: Parameters<GitOps["fetchCommit"]>[0],
+): GitOpsFakeCalls["fetchCommit"][number] {
+  const { auth, ...dataOptions } = options;
+  const snapshot = structuredClone(dataOptions);
+  return auth === undefined ? snapshot : { ...snapshot, auth };
+}
+
 function snapshotRemoteRefCall(
   options: Parameters<GitOps["resolveRemoteRef"]>[0],
 ): GitOpsFakeCalls["resolveRemoteRef"][number] {
@@ -139,6 +153,7 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
   const calls: GitOpsFakeCalls = {
     clone: [],
     fetch: [],
+    fetchCommit: [],
     forceUpdateRef: [],
     checkout: [],
     resolveRef: [],
@@ -201,6 +216,21 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
       const remote = fetchOptions.remote ?? "origin";
       const ref = fetchOptions.ref ?? "main";
       state.localRefs[`refs/remotes/${remote}/${ref}`] = state.remoteRefs[ref] ?? remoteHead;
+    },
+    // SG-TRN-02: a commit the fake remote holds becomes a local ref of the
+    // clone; any other commit fails the fetch as `commit-missing`.
+    async fetchCommit(fetchOptions) {
+      calls.fetchCommit.push(snapshotFetchCommitCall(fetchOptions));
+      await Promise.resolve();
+      const remoteCommits = new Set([remoteHead, ...Object.values(state.remoteRefs)]);
+      if (!remoteCommits.has(fetchOptions.sha)) {
+        throw new GitCommandError(
+          { kind: "commit-missing" },
+          { operation: "fetch --depth", exitCode: 128 },
+        );
+      }
+
+      state.localRefs[fetchOptions.sha] = fetchOptions.sha;
     },
     async forceUpdateRef(updateOptions) {
       calls.forceUpdateRef.push(structuredClone(updateOptions));

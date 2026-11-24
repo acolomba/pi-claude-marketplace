@@ -18,6 +18,11 @@ export interface GitOpsContractParticipant {
    * index or work-tree file, as the clone cache's copy step makes one.
    */
   copyGitDir(): Promise<string>;
+  /**
+   * Returns a clone whose `origin` holds the commit `sha` and which does not
+   * hold it yet. The real participant's origin is a `file://` repository.
+   */
+  unfetchedCommit(): Promise<{ readonly dir: string; readonly sha: string }>;
 }
 
 export type GitOpsFactory = (
@@ -32,6 +37,7 @@ interface GitOpsContractCase {
 export const GIT_OPS_CASE_NAMES = [
   "clones the requested branch into the requested directory",
   "fetches updated remote state without moving the worktree",
+  "fetches one commit the remote holds",
   "force-updates a ref to the requested commit",
   "checks out the requested branch and worktree",
   "checks out a commit into a copied git directory",
@@ -124,6 +130,22 @@ export const gitOpsContractCases = [
       assert.strictEqual(remoteOid, participant.updatedOid);
       assert.strictEqual(headOid, participant.initialOid);
       assert.strictEqual(contents, "# local\n");
+    },
+  },
+  {
+    name: "fetches one commit the remote holds",
+    run: async (createGitOps, t) => {
+      // arrange
+      const participant = await createGitOps(t);
+      const { dir, sha } = await participant.unfetchedCommit();
+
+      // act
+      const fetching = await observeVoid(participant.gitOps.fetchCommit({ dir, sha }));
+      const oid = await participant.gitOps.resolveRef({ dir, ref: sha });
+
+      // assert
+      assert.strictEqual(fetching, undefined);
+      assert.strictEqual(oid, sha);
     },
   },
   {

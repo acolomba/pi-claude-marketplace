@@ -44,6 +44,10 @@ function createFakeParticipant(): GitOpsContractParticipant {
       await Promise.resolve();
       return "/memory/copy";
     },
+    unfetchedCommit: async () => {
+      await Promise.resolve();
+      return { dir: "/memory/worktree", sha: UPDATED_OID };
+    },
   };
 }
 
@@ -101,6 +105,24 @@ describe("createGitOpsFake", () => {
     });
   });
 
+  test("SG-TRN-02: rejects a fetch of a commit the remote does not hold as commit-missing", async () => {
+    // arrange
+    const git = createGitOpsFake({ boundary: "memory" });
+
+    // act
+    const fetching = git.gitOps.fetchCommit({ dir: "/memory/worktree", sha: MISSING_OID });
+
+    // assert
+    await assert.rejects(fetching, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.deepStrictEqual(
+        { failure: error.failure, operation: error.operation },
+        { failure: { kind: "commit-missing" }, operation: "fetch --depth" },
+      );
+      return true;
+    });
+  });
+
   test("records complete public operation calls", async () => {
     // arrange
     const git = createGitOpsFake({
@@ -117,6 +139,7 @@ describe("createGitOpsFake", () => {
     assert.deepStrictEqual(git.state.calls, {
       clone: [],
       fetch: [{ dir: "/memory/worktree", remote: "upstream", ref: "main" }],
+      fetchCommit: [],
       forceUpdateRef: [],
       checkout: [{ dir: "/memory/copy", ref: "feature", fromCopiedGitDir: true }],
       resolveRef: [],
@@ -144,6 +167,12 @@ describe("createGitOpsFake", () => {
     // act
     await git.gitOps.clone({ dir: "/memory/clone", url: REMOTE_URL, ref: "main", auth });
     await git.gitOps.fetch({ dir: "/memory/clone", remote: "origin", ref: "main", auth });
+    await git.gitOps.fetchCommit({
+      dir: "/memory/clone",
+      sha: "0000000000000000000000000000000000000002",
+      ref: "main",
+      auth,
+    });
     const remoteOid = await git.gitOps.resolveRemoteRef({ url: REMOTE_URL, ref: "main", auth });
 
     // assert
@@ -151,6 +180,14 @@ describe("createGitOpsFake", () => {
     assert.deepStrictEqual(git.state.calls, {
       clone: [{ dir: "/memory/clone", url: REMOTE_URL, ref: "main", auth }],
       fetch: [{ dir: "/memory/clone", remote: "origin", ref: "main", auth }],
+      fetchCommit: [
+        {
+          dir: "/memory/clone",
+          sha: "0000000000000000000000000000000000000002",
+          ref: "main",
+          auth,
+        },
+      ],
       forceUpdateRef: [],
       checkout: [],
       resolveRef: [],
@@ -159,6 +196,7 @@ describe("createGitOpsFake", () => {
     });
     assert.strictEqual(git.state.calls.clone[0]?.auth, auth);
     assert.strictEqual(git.state.calls.fetch[0]?.auth, auth);
+    assert.strictEqual(git.state.calls.fetchCommit[0]?.auth, auth);
     assert.strictEqual(git.state.calls.resolveRemoteRef[0]?.auth, auth);
     await assert.rejects(git.state.calls.clone[0]?.auth?.onAuthRequired(), (error: unknown) => {
       assert.strictEqual(error, authenticationError);

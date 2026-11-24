@@ -2,8 +2,8 @@
 //
 // Cross-subcommand helpers (D-01 -- shared.ts cap ~300 LOC).
 //
-//   - GitOps interface + DEFAULT_GIT_OPS (D-12, D-13). Eight primitives:
-//     clone + fetch + forceUpdateRef + checkout + resolveRef +
+//   - GitOps interface + DEFAULT_GIT_OPS (D-12, D-13). Nine primitives:
+//     clone + fetch + fetchCommit + forceUpdateRef + checkout + resolveRef +
 //     currentBranch + resolveRemoteRef + listRemotes.
 //     NO `pull` -- D-14 follow-upstream-blindly semantics require the
 //     three-step force-overwrite path that `pull --ff-only` cannot
@@ -142,8 +142,9 @@ export type GitAuthBundle = Readonly<BuildAuthCallbacksOpts>;
 /**
  * D-12, D-13: marketplace orchestrator git surface.
  *
- * Eight primitives. The 5 base primitives (clone / fetch / forceUpdateRef
- * / checkout / resolveRef) cover the standard D-14 sequence.
+ * Nine primitives. The 5 base primitives (clone / fetch / forceUpdateRef
+ * / checkout / resolveRef) cover the standard D-14 sequence. `fetchCommit`
+ * (SG-TRN-02) fetches one pinned commit.
  * `currentBranch` (CR-01) exists because the D-14 default-branch tracking
  * path needs to distinguish "what is the symbolic name of the local branch"
  * from "what SHA does HEAD point at". `resolveRef('HEAD')` returns a SHA;
@@ -180,6 +181,18 @@ export interface GitOps {
     remote?: string;
     ref?: string;
     tags?: boolean;
+    auth?: GitAuthBundle;
+  }): Promise<void>;
+  /**
+   * SG-TRN-02, C5: fetch the commit `sha` into the clone `dir` with `fetch
+   * --depth 1 origin <sha>`. When that fails other than by an abort, a
+   * shallow clone falls back to `fetch --unshallow origin [<ref>]`, whose
+   * failure is the one thrown; a complete clone throws the first failure.
+   */
+  fetchCommit(opts: {
+    dir: string;
+    sha: string;
+    ref?: string;
     auth?: GitAuthBundle;
   }): Promise<void>;
   /** D-14 step 2 (symbolic HEAD): force-set local branch ref to remote SHA. */
@@ -241,6 +254,7 @@ export const DEFAULT_GIT_OPS: GitOps = {
   // the widened opts shape.
   clone: defaultGit.clone,
   fetch: defaultGit.fetch,
+  fetchCommit: defaultGit.fetchCommit,
   forceUpdateRef: defaultGit.forceUpdateRef,
   checkout: defaultGit.checkout,
   resolveRef: defaultGit.resolveRef,

@@ -145,6 +145,9 @@ function createGitOps(scenario: GitScenario): {
 
       return Promise.resolve();
     },
+    fetchCommit(): Promise<void> {
+      return Promise.reject(new Error("unexpected commit fetch"));
+    },
     resolveRef(args): Promise<string | undefined> {
       calls.push({ operation: "resolveRef", args: { ...args } });
       if (scenario.resolveRefError !== undefined) {
@@ -452,6 +455,7 @@ test("DEFAULT_GIT_OPS exposes every platform git function by exact reference", (
   const expectedReferences = {
     clone: defaultGit.clone,
     fetch: defaultGit.fetch,
+    fetchCommit: defaultGit.fetchCommit,
     forceUpdateRef: defaultGit.forceUpdateRef,
     checkout: defaultGit.checkout,
     resolveRef: defaultGit.resolveRef,

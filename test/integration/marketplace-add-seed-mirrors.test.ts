@@ -224,6 +224,7 @@ test("seeds a matching path marketplace without network operations", async () =>
       clone: [],
       currentBranch: [],
       fetch: [],
+      fetchCommit: [],
       forceUpdateRef: [],
       resolveRef: [],
       resolveRemoteRef: [],

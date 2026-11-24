@@ -32,6 +32,7 @@ import {
   clone,
   currentBranch,
   fetch,
+  fetchCommit,
   forceUpdateRef,
   listRemotes,
   listRemoteTags,
@@ -393,6 +394,7 @@ function productionGitOps(systemGit: GitProcess): GitOps {
   return {
     clone,
     fetch,
+    fetchCommit: (options) => fetchCommit(options, systemGit),
     forceUpdateRef,
     checkout: (options) => checkout(options, systemGit),
     resolveRef: (options) => resolveRef(options, systemGit),
@@ -503,6 +505,47 @@ async function createProductionGitOps(t: TestContext): Promise<GitOpsContractPar
       }
     },
     copyGitDir: () => copyOfGitDir(t, worktree.dir),
+    unfetchedCommit: async () => {
+      const { dir, olderOids } = await shallowFileClone(t);
+      return { dir, sha: olderOids[0] };
+    },
+  };
+}
+
+/**
+ * SG-TRN-02: a repository with three commits and a depth-1 clone of it over
+ * `file://`, so the clone holds only the last commit. `olderOids` are the two
+ * commits the clone lacks, oldest first.
+ */
+async function shallowFileClone(t: TestContext): Promise<{
+  readonly dir: string;
+  readonly olderOids: readonly [string, string];
+}> {
+  const origin = await createGitTestRepository(t, { boundary: "local" });
+  const secondOid = await origin.commit([{ filepath: "two.txt", contents: "two\n" }], "two");
+  await origin.commit([{ filepath: "three.txt", contents: "three\n" }], "three");
+  const dir = path.join(await createGitTestDirectory(t, { boundary: "local" }), "clone");
+  await origin.run("clone", "-q", "--depth", "1", `file://${origin.dir}`, dir);
+  return { dir, olderOids: [origin.initialOid, secondOid] };
+}
+
+/** A git process that runs `systemGit` and records each request as one line. */
+function recordingGitProcess(systemGit: GitProcess): {
+  readonly gitProcess: GitProcess;
+  readonly commands: string[];
+} {
+  const commands: string[] = [];
+  return {
+    commands,
+    gitProcess: {
+      locate: systemGit.locate,
+      run: (request) => {
+        commands.push(
+          [request.subcommand, ...(request.options ?? []), ...(request.operands ?? [])].join(" "),
+        );
+        return systemGit.run(request);
+      },
+    },
   };
 }
 
@@ -1610,6 +1653,209 @@ describe("fetch", () => {
       return true;
     });
     assert.deepStrictEqual(requests, [expectedDiscoveryRequest()]);
+  });
+});
+
+describe("fetchCommit", () => {
+  test("SG-TRN-02: fetches an older commit into a depth-1 clone with one depth-1 fetch", async (t) => {
+    // arrange
+    const systemGit = await hermeticGitProcess(t);
+    const { dir, olderOids } = await shallowFileClone(t);
+    const recorded = recordingGitProcess(systemGit);
+
+    // act
+    await fetchCommit({ dir, sha: olderOids[0] }, recorded.gitProcess);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        commands: recorded.commands,
+        oid: await resolveRef({ dir, ref: olderOids[0] }, systemGit),
+      },
+      { commands: [`fetch --depth 1 origin ${olderOids[0]}`], oid: olderOids[0] },
+    );
+  });
+
+  test("SG-TRN-02: a commit the remote lacks makes a shallow clone fetch its whole history", async (t) => {
+    // arrange
+    const systemGit = await hermeticGitProcess(t);
+    const { dir, olderOids } = await shallowFileClone(t);
+    const recorded = recordingGitProcess(systemGit);
+
+    // act
+    await fetchCommit({ dir, sha: OID_MAIN }, recorded.gitProcess);
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        commands: recorded.commands,
+        shallow: await gitTestCheckout(dir).run("rev-parse", "--is-shallow-repository"),
+        oid: await resolveRef({ dir, ref: olderOids[1] }, systemGit),
+      },
+      {
+        commands: [
+          `fetch --depth 1 origin ${OID_MAIN}`,
+          "rev-parse --is-shallow-repository",
+          "fetch --unshallow origin",
+        ],
+        shallow: "false",
+        oid: olderOids[1],
+      },
+    );
+  });
+
+  test("SG-TRN-02: the unshallow rung fetches the source's ref, and its failure is the one thrown", async (t) => {
+    // arrange
+    const systemGit = await hermeticGitProcess(t);
+    const { dir } = await shallowFileClone(t);
+    const recorded = recordingGitProcess(systemGit);
+
+    // act
+    const fetching = fetchCommit({ dir, sha: OID_MAIN, ref: "nosuch" }, recorded.gitProcess);
+
+    // assert
+    await assert.rejects(fetching, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.deepStrictEqual(
+        { kind: error.kind, operation: error.operation },
+        { kind: "remote-ref-missing", operation: "fetch --unshallow" },
+      );
+      return true;
+    });
+    assert.deepStrictEqual(recorded.commands, [
+      `fetch --depth 1 origin ${OID_MAIN}`,
+      "rev-parse --is-shallow-repository",
+      "fetch --unshallow origin nosuch",
+    ]);
+  });
+
+  test("SG-TRN-02: a complete clone skips the unshallow rung and throws the first failure", async (t) => {
+    // arrange
+    const systemGit = await hermeticGitProcess(t);
+    const origin = await createGitTestRepository(t, { boundary: "local" });
+    const dir = path.join(await createGitTestDirectory(t, { boundary: "local" }), "clone");
+    await origin.run("clone", "-q", `file://${origin.dir}`, dir);
+    const recorded = recordingGitProcess(systemGit);
+
+    // act
+    const fetching = fetchCommit({ dir, sha: OID_MAIN }, recorded.gitProcess);
+
+    // assert
+    await assert.rejects(fetching, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.deepStrictEqual(
+        { kind: error.kind, operation: error.operation },
+        { kind: "commit-missing", operation: "fetch --depth" },
+      );
+      return true;
+    });
+    assert.deepStrictEqual(recorded.commands, [
+      `fetch --depth 1 origin ${OID_MAIN}`,
+      "rev-parse --is-shallow-repository",
+    ]);
+  });
+
+  test("D-PL8-24: an aborted first rung is thrown at once, with no second rung", async (t) => {
+    // arrange
+    const systemGit = await hermeticGitProcess(t);
+    const { dir, olderOids } = await shallowFileClone(t);
+    const recorded = recordingGitProcess(systemGit);
+    const controller = new AbortController();
+    controller.abort(new Error("cancelled"));
+
+    // act
+    const fetching = runWithGitAbortSignal(controller.signal, () =>
+      fetchCommit({ dir, sha: olderOids[0] }, recorded.gitProcess),
+    );
+
+    // assert
+    await assert.rejects(fetching, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.strictEqual(error.kind, "aborted");
+      return true;
+    });
+    assert.deepStrictEqual(recorded.commands, [`fetch --depth 1 origin ${olderOids[0]}`]);
+  });
+
+  test("D-SG-13 / D-PL8-24: each rung reads its own limit and carries the scope's signal", async (t) => {
+    // arrange
+    setGitTimeoutVariable(t, "4321");
+    const signal = new AbortController().signal;
+    const requests: GitRequest[] = [];
+    const stubGit: GitProcess = {
+      locate: () => Promise.resolve("/usr/bin/git"),
+      run: (request) => {
+        requests.push(request);
+        if (requests.length === 1) {
+          return Promise.reject(
+            new GitCommandError({ kind: "commit-missing" }, { operation: "fetch --depth" }),
+          );
+        }
+
+        return Promise.resolve({ exitCode: 0, stdout: "true\n", stderr: "" });
+      },
+    };
+
+    // act
+    await runWithGitAbortSignal(signal, () =>
+      fetchCommit({ dir: "/clone", sha: OID_MAIN, ref: "dev" }, stubGit),
+    );
+
+    // assert
+    assert.deepStrictEqual(requests, [
+      {
+        subcommand: "fetch",
+        lane: "network",
+        cwd: "/clone",
+        options: ["--depth", "1"],
+        operands: ["origin", OID_MAIN],
+        timeoutMs: 4321,
+        signal,
+      },
+      {
+        subcommand: "rev-parse",
+        lane: "local",
+        cwd: "/clone",
+        options: ["--is-shallow-repository"],
+        timeoutMs: 4321,
+      },
+      {
+        subcommand: "fetch",
+        lane: "network",
+        cwd: "/clone",
+        options: ["--unshallow"],
+        operands: ["origin", "dev"],
+        timeoutMs: 4321,
+        signal,
+      },
+    ]);
+  });
+
+  test("SG-TRN-02: a shallow check that fails throws the first rung's failure", async () => {
+    // arrange
+    const firstFailure = new GitCommandError(
+      { kind: "commit-missing" },
+      { operation: "fetch --depth" },
+    );
+    const subcommands: string[] = [];
+    const stubGit: GitProcess = {
+      locate: () => Promise.resolve("/usr/bin/git"),
+      run: (request) => {
+        subcommands.push(request.subcommand);
+        return Promise.reject(
+          request.subcommand === "fetch"
+            ? firstFailure
+            : new GitCommandError({ kind: "not-a-repository" }, { operation: "rev-parse" }),
+        );
+      },
+    };
+
+    // act
+    const fetching = fetchCommit({ dir: "/clone", sha: OID_MAIN }, stubGit);
+
+    // assert
+    await assert.rejects(fetching, (error: unknown) => error === firstFailure);
+    assert.deepStrictEqual(subcommands, ["fetch", "rev-parse"]);
   });
 });
 

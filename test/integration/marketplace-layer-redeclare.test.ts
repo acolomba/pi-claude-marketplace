@@ -88,6 +88,7 @@ const NO_GIT_CALLS = {
   clone: [],
   currentBranch: [],
   fetch: [],
+  fetchCommit: [],
   forceUpdateRef: [],
   resolveRef: [],
   resolveRemoteRef: [],
