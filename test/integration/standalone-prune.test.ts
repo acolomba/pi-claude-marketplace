@@ -310,7 +310,7 @@ test("prune removes an orphan dependency through the registered command", async 
       },
     ]);
     assert.deepStrictEqual(gitCalls.clone, []);
-    assert.deepStrictEqual(gitCalls.fetch, []);
+    assert.deepStrictEqual(gitCalls.fetchCommit, []);
   });
 });
 
@@ -344,7 +344,7 @@ test("prune --dry-run previews the orphan without writing current state", async 
     assert.deepStrictEqual(await scopeTree("user", cwd), treeBefore);
     await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
     assert.deepStrictEqual(gitCalls.clone, []);
-    assert.deepStrictEqual(gitCalls.fetch, []);
+    assert.deepStrictEqual(gitCalls.fetchCommit, []);
   });
 });
 
@@ -482,7 +482,7 @@ test("preview and actual preserve alternating marketplaces and held neighbors", 
 
     await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
     assert.deepStrictEqual(gitCalls.clone, []);
-    assert.deepStrictEqual(gitCalls.fetch, []);
+    assert.deepStrictEqual(gitCalls.fetchCommit, []);
   });
 });
 
@@ -526,7 +526,7 @@ test("actual prune reselects after a stale preview changes on disk", async () =>
       code: "ENOENT",
     });
     assert.deepStrictEqual(gitCalls.clone, []);
-    assert.deepStrictEqual(gitCalls.fetch, []);
+    assert.deepStrictEqual(gitCalls.fetchCommit, []);
   });
 });
 
@@ -578,7 +578,7 @@ test("failed actual member holds its dependency until a later retry", async () =
     });
     await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
     assert.deepStrictEqual(gitCalls.clone, []);
-    assert.deepStrictEqual(gitCalls.fetch, []);
+    assert.deepStrictEqual(gitCalls.fetchCommit, []);
 
     const state = await loadState(locations.extensionRoot);
     const alpha = state.marketplaces.alpha;
@@ -663,7 +663,7 @@ test("repeated legacy previews normalize in memory without writing the scope", a
     assert.deepStrictEqual(await scopeTree("user", cwd), treeBefore);
     await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
     assert.deepStrictEqual(gitCalls.clone, []);
-    assert.deepStrictEqual(gitCalls.fetch, []);
+    assert.deepStrictEqual(gitCalls.fetchCommit, []);
   });
 });
 
@@ -695,7 +695,7 @@ test("preview of a missing project state leaves both scope trees unchanged", asy
       { message: "Nothing to prune in project scope: no orphaned dependency installs were found." },
     ]);
     assert.deepStrictEqual(gitCalls.clone, []);
-    assert.deepStrictEqual(gitCalls.fetch, []);
+    assert.deepStrictEqual(gitCalls.fetchCommit, []);
   });
 });
 
@@ -758,7 +758,7 @@ for (const { scope, args } of [
       assert.deepStrictEqual(await scopeTree(scope, cwd), treeBefore);
       await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
       assert.deepStrictEqual(gitCalls.clone, []);
-      assert.deepStrictEqual(gitCalls.fetch, []);
+      assert.deepStrictEqual(gitCalls.fetchCommit, []);
     });
   });
 }
@@ -795,7 +795,7 @@ test("project prune removes only the project orphan", async () => {
       },
     ]);
     assert.deepStrictEqual(gitCalls.clone, []);
-    assert.deepStrictEqual(gitCalls.fetch, []);
+    assert.deepStrictEqual(gitCalls.fetchCommit, []);
   });
 });
 
@@ -838,7 +838,7 @@ test("an unreadable declarer refuses prune without changing either scope", async
       },
     ]);
     assert.deepStrictEqual(gitCalls.clone, []);
-    assert.deepStrictEqual(gitCalls.fetch, []);
+    assert.deepStrictEqual(gitCalls.fetchCommit, []);
   });
 });
 
@@ -871,7 +871,7 @@ for (const { args, error } of [
       assert.deepStrictEqual(await scopeTree("user", cwd), userBefore);
       assert.deepStrictEqual(await scopeTree("project", cwd), projectBefore);
       assert.deepStrictEqual(gitCalls.clone, []);
-      assert.deepStrictEqual(gitCalls.fetch, []);
+      assert.deepStrictEqual(gitCalls.fetchCommit, []);
     });
   });
 }

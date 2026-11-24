@@ -2,11 +2,11 @@
 //
 // Cross-subcommand helpers (D-01 -- shared.ts cap ~300 LOC).
 //
-//   - GitOps interface + DEFAULT_GIT_OPS (D-12, D-13). Seven primitives:
-//     clone + fetch + fetchCommit + checkout + resolveRef + resolveRemoteRef +
-//     listRemotes. A marketplace checkout and a plugin mirror refresh by
-//     D-SG-10's freshness check, re-clone, and swap (`clone-swap.ts`), never
-//     by a fetch and checkout in place, so `fetch` has no refresh caller.
+//   - GitOps interface + DEFAULT_GIT_OPS (D-12, D-13). Six primitives:
+//     clone + fetchCommit + checkout + resolveRef + resolveRemoteRef +
+//     listRemotes, each on system git (SG-TRN-01). A marketplace checkout and
+//     a plugin mirror refresh by D-SG-10's freshness check, re-clone, and swap
+//     (`clone-swap.ts`), never by a fetch and checkout in place.
 //
 //   - lacksStoredCredential (GAUTH-04): whether an auth failure gains the
 //     line that names how to store a credential.
@@ -133,24 +133,23 @@ export type { GitAuthBundle };
 /**
  * D-12, D-13: marketplace orchestrator git surface.
  *
- * Seven primitives. `clone` and `resolveRemoteRef` carry D-SG-10's refresh:
+ * Six primitives. `clone` and `resolveRemoteRef` carry D-SG-10's refresh:
  * the freshness check asks `resolveRemoteRef`, and a stale checkout is cloned
  * again and swapped in. `fetchCommit` (SG-TRN-02) fetches one pinned commit,
- * `checkout` checks it out, and `resolveRef` reads a local commit. `fetch`
- * stays bound but no refresh calls it. D-SG-10 removed the D-14 in-place ref
- * update and branch read with the refresh that used them.
+ * `checkout` checks it out, and `resolveRef` reads a local commit. D-SG-10
+ * removed the D-14 fetch, ref update, and branch read with the in-place
+ * refresh that used them.
  * `resolveRemoteRef` (D-77-05) also lets the plugin clone-cache seam pin an
  * unpinned source's remote HEAD to a SHA without a full clone at install
  * time. `listRemotes` (D-3-03; MA-12, MA-13) lets the `marketplace add`
  * leftover-clone guard tell its own leftover clone apart from a foreign or
  * unreadable tree.
  *
- * `clone` and `fetch` each accept an optional `auth` bundle. When
- * provided, `DEFAULT_GIT_OPS` forwards it to `platform/git.ts`: a system-git
- * clone maps an auth failure by it (D-SG-14, GAUTH-04), and `fetch` builds
- * the isomorphic-git `onAuth`/`onAuthFailure` callbacks via
- * `buildAuthCallbacks`. When omitted, both primitives behave identically
- * to the public-only path (NFR-5 surfaces untouched).
+ * `clone`, `fetchCommit`, and `resolveRemoteRef` each accept an optional
+ * `auth` bundle. When provided, `DEFAULT_GIT_OPS` forwards it to
+ * `platform/git.ts`, which maps an auth failure of the git run by it (D-SG-14,
+ * GAUTH-04). When omitted, each behaves identically to the public-only path
+ * (NFR-5 surfaces untouched).
  */
 export interface GitOps {
   /**
@@ -164,14 +163,6 @@ export interface GitOps {
     ref?: string;
     singleBranch?: boolean;
     noCheckout?: boolean;
-    auth?: GitAuthBundle;
-  }): Promise<void>;
-  /** D-14 step 1: refresh remote refs (no merge, no working-tree changes). */
-  fetch(opts: {
-    dir: string;
-    remote?: string;
-    ref?: string;
-    tags?: boolean;
     auth?: GitAuthBundle;
   }): Promise<void>;
   /**
@@ -189,13 +180,13 @@ export interface GitOps {
   /**
    * Move HEAD to ref/SHA and write its tree. D-SG-11: set
    * `fromCopiedGitDir` when `dir/.git` is a copy of another clone's git
-   * directory, so the clone keys an `isomorphic-git` clone carries are unset
-   * before the checkout.
+   * directory, so the clone keys a clone made by an earlier version of this
+   * extension carries are unset before the checkout.
    */
   checkout(opts: { dir: string; ref: string; fromCopiedGitDir?: boolean }): Promise<void>;
   /**
-   * Resolve a ref name to the commit it names (used to read the remote SHA
-   * after a fetch), or undefined when it names no commit.
+   * Resolve a ref name to the commit it names, or undefined when it names no
+   * commit.
    */
   resolveRef(opts: { dir: string; ref: string }): Promise<string | undefined>;
   /**
@@ -225,17 +216,14 @@ export interface GitOps {
 
 /**
  * D-13 default implementation. All primitives delegate to
- * `platform/git.ts`, which is the only file that imports isomorphic-git.
- * No dynamic imports -- D-13's "no orchestrator-tier isomorphic-git
- * dependency" boundary is now enforced statically.
+ * `platform/git.ts`, which runs system git through the git process module
+ * (D-SG-01). No dynamic imports.
  */
 export const DEFAULT_GIT_OPS: GitOps = {
-  // The `auth?` field on GitOps.clone / .fetch is structurally compatible
-  // with platform/git.ts CloneOptions.auth? / FetchOptions.auth?. No wrapper
-  // code change is required -- the bound function references already accept
-  // the widened opts shape.
+  // The `auth?` field of each GitOps member is the `auth?` field of the
+  // matching platform/git.ts options, so the bound functions take the opts
+  // shape as it is.
   clone: defaultGit.clone,
-  fetch: defaultGit.fetch,
   fetchCommit: defaultGit.fetchCommit,
   checkout: defaultGit.checkout,
   resolveRef: defaultGit.resolveRef,

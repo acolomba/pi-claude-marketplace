@@ -19,6 +19,8 @@ import type { GitAuthBundle } from "../../extensions/pi-claude-marketplace/orche
 const REMOTE_URL = "https://git.example.invalid/owner/repo.git";
 const INITIAL_OID = "1111111111111111111111111111111111111111";
 const UPDATED_OID = "2222222222222222222222222222222222222222";
+/** The commit a fake made with no `updatedOid` holds as its remote HEAD. */
+const UPDATED_OID_OF_FAKE = "0000000000000000000000000000000000000002";
 
 function createFakeParticipant(): GitOpsContractParticipant {
   const git = createGitOpsFake({
@@ -131,15 +133,14 @@ describe("createGitOpsFake", () => {
     });
 
     // act
-    await git.gitOps.fetch({ dir: "/memory/worktree", remote: "upstream", ref: "main" });
+    await git.gitOps.fetchCommit({ dir: "/memory/worktree", sha: UPDATED_OID_OF_FAKE });
     await git.gitOps.checkout({ dir: "/memory/copy", ref: "feature", fromCopiedGitDir: true });
     await git.gitOps.resolveRemoteRef({ url: REMOTE_URL, ref: "main" });
 
     // assert
     assert.deepStrictEqual(git.state.calls, {
       clone: [],
-      fetch: [{ dir: "/memory/worktree", remote: "upstream", ref: "main" }],
-      fetchCommit: [],
+      fetchCommit: [{ dir: "/memory/worktree", sha: UPDATED_OID_OF_FAKE }],
       checkout: [{ dir: "/memory/copy", ref: "feature", fromCopiedGitDir: true }],
       resolveRef: [],
       resolveRemoteRef: [{ url: REMOTE_URL, ref: "main" }],
@@ -164,24 +165,22 @@ describe("createGitOpsFake", () => {
 
     // act
     await git.gitOps.clone({ dir: "/memory/clone", url: REMOTE_URL, ref: "main", auth });
-    await git.gitOps.fetch({ dir: "/memory/clone", remote: "origin", ref: "main", auth });
     await git.gitOps.fetchCommit({
       dir: "/memory/clone",
-      sha: "0000000000000000000000000000000000000002",
+      sha: UPDATED_OID_OF_FAKE,
       ref: "main",
       auth,
     });
     const remoteOid = await git.gitOps.resolveRemoteRef({ url: REMOTE_URL, ref: "main", auth });
 
     // assert
-    assert.strictEqual(remoteOid, "0000000000000000000000000000000000000002");
+    assert.strictEqual(remoteOid, UPDATED_OID_OF_FAKE);
     assert.deepStrictEqual(git.state.calls, {
       clone: [{ dir: "/memory/clone", url: REMOTE_URL, ref: "main", auth }],
-      fetch: [{ dir: "/memory/clone", remote: "origin", ref: "main", auth }],
       fetchCommit: [
         {
           dir: "/memory/clone",
-          sha: "0000000000000000000000000000000000000002",
+          sha: UPDATED_OID_OF_FAKE,
           ref: "main",
           auth,
         },
@@ -191,7 +190,6 @@ describe("createGitOpsFake", () => {
       resolveRemoteRef: [{ url: REMOTE_URL, ref: "main", auth }],
     });
     assert.strictEqual(git.state.calls.clone[0]?.auth, auth);
-    assert.strictEqual(git.state.calls.fetch[0]?.auth, auth);
     assert.strictEqual(git.state.calls.fetchCommit[0]?.auth, auth);
     assert.strictEqual(git.state.calls.resolveRemoteRef[0]?.auth, auth);
     await assert.rejects(git.state.calls.clone[0]?.auth?.onAuthRequired(), (error: unknown) => {

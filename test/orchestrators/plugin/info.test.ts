@@ -297,9 +297,6 @@ function createGitOps(initial: GitOpsAdapterOptions = {}) {
     async clone(options) {
       await git.gitOps.clone(options);
     },
-    async fetch(options) {
-      await git.gitOps.fetch(options);
-    },
     async resolveRef(options) {
       return (await git.gitOps.resolveRef(options)) ?? git.state.remoteRefs[options.ref];
     },

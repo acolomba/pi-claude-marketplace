@@ -37,7 +37,6 @@ interface GitOpsContractCase {
 export const GIT_OPS_CASE_NAMES = [
   "clones the requested branch into the requested directory",
   "clones with no checkout and leaves the work tree empty",
-  "fetches updated remote state without moving the worktree",
   "fetches one commit the remote holds",
   "checks out the requested branch and worktree",
   "checks out a commit into a copied git directory",
@@ -113,45 +112,6 @@ export const gitOpsContractCases = [
         oid: participant.updatedOid,
         contents: null,
       });
-    },
-  },
-  {
-    name: "fetches updated remote state without moving the worktree",
-    run: async (createGitOps, t) => {
-      // arrange
-      const participant = await createGitOps(t);
-
-      // act
-      const firstFetch = await observeVoid(
-        participant.gitOps.fetch({
-          dir: participant.worktreeDir,
-          remote: "origin",
-          ref: "main",
-        }),
-      );
-      const secondFetch = await observeVoid(
-        participant.gitOps.fetch({
-          dir: participant.worktreeDir,
-          remote: "origin",
-          ref: "main",
-        }),
-      );
-      const remoteOid = await participant.gitOps.resolveRef({
-        dir: participant.worktreeDir,
-        ref: "refs/remotes/origin/main",
-      });
-      const headOid = await participant.gitOps.resolveRef({
-        dir: participant.worktreeDir,
-        ref: "HEAD",
-      });
-      const contents = await participant.readFile(participant.worktreeDir, "README.md");
-
-      // assert
-      assert.strictEqual(firstFetch, undefined);
-      assert.strictEqual(secondFetch, undefined);
-      assert.strictEqual(remoteOid, participant.updatedOid);
-      assert.strictEqual(headOid, participant.initialOid);
-      assert.strictEqual(contents, "# local\n");
     },
   },
   {

@@ -4641,7 +4641,7 @@ function createGitOps(
   readonly gitOps: ReturnType<typeof createGitOpsFake>["gitOps"];
   readonly state: {
     readonly cloneCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["clone"];
-    readonly fetchCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["fetch"];
+    readonly fetchCommitCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["fetchCommit"];
     readonly checkoutCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["checkout"];
     readonly resolveRemoteRefCalls: ReturnType<
       typeof createGitOpsFake
@@ -4687,7 +4687,7 @@ function createGitOps(
     gitOps,
     state: {
       cloneCalls: fake.state.calls.clone,
-      fetchCalls: fake.state.calls.fetch,
+      fetchCommitCalls: fake.state.calls.fetchCommit,
       checkoutCalls: fake.state.calls.checkout,
       resolveRemoteRefCalls: fake.state.calls.resolveRemoteRef,
     },
@@ -5635,10 +5635,10 @@ test("GIT-01 / D-18-04 / D-18-11: an unpinned reinstall of a record on the mirro
       assert.deepStrictEqual(
         {
           clone: gitState.cloneCalls,
-          fetch: gitState.fetchCalls,
+          fetchCommit: gitState.fetchCommitCalls,
           resolveRemoteRef: gitState.resolveRemoteRefCalls,
         },
-        { clone: [], fetch: [], resolveRemoteRef: [] },
+        { clone: [], fetchCommit: [], resolveRemoteRef: [] },
       );
       // D-18-11: a record on the mirror moves onto its own copy of the commit.
       const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"];
@@ -5718,10 +5718,10 @@ test("REI-04 / D-18-04: an unpinned reinstall copies the commit the mirror last 
       assert.deepStrictEqual(
         {
           clone: gitState.cloneCalls,
-          fetch: gitState.fetchCalls,
+          fetchCommit: gitState.fetchCommitCalls,
           resolveRemoteRef: gitState.resolveRemoteRefCalls,
         },
-        { clone: [], fetch: [], resolveRemoteRef: [] },
+        { clone: [], fetchCommit: [], resolveRemoteRef: [] },
       );
       const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"];
       assert.deepStrictEqual(
@@ -7809,10 +7809,10 @@ test("an unpinned git-subdir reinstall copies the default branch the mirror last
       assert.deepStrictEqual(
         {
           clone: gitState.cloneCalls,
-          fetch: gitState.fetchCalls,
+          fetchCommit: gitState.fetchCommitCalls,
           resolveRemoteRef: gitState.resolveRemoteRefCalls,
         },
-        { clone: [], fetch: [], resolveRemoteRef: [] },
+        { clone: [], fetchCommit: [], resolveRemoteRef: [] },
       );
       const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"];
       assert.deepStrictEqual(

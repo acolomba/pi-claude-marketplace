@@ -86,7 +86,7 @@ const [
   AUTH_HOST_FILE,
   MARKETPLACE_ADD_FILE,
   MARKETPLACE_UPDATE_FILE,
-  GIT_AUTH_CALLBACKS_FILE,
+  GIT_ONE_SHOT_CREDENTIAL_FILE,
   HOSTED_MANIFEST_FETCH_FILE,
   GIT_PROCESS_FILE,
 ] = CREDENTIAL_LEAK_TARGETS;
@@ -106,7 +106,7 @@ const DECLARED_MODULE_ORDER: ReadonlyArray<string> = [
   "orchestrators/auth-host.ts",
   "orchestrators/marketplace/add.ts",
   "orchestrators/marketplace/update.ts",
-  "platform/git-auth-callbacks.ts",
+  "platform/git-one-shot-credential.ts",
   "platform/hosted-manifest-fetch.ts",
   "platform/git-process.ts",
 ];
@@ -560,29 +560,30 @@ test("AUTH-09: domain/github-auth.ts reason: fields never interpolate a token", 
 });
 
 test("AUTH-09: the git hookDebugLog calls never interpolate a credential field", async () => {
-  // buildAuthCallbacks routes onAuth/onAuthFailure failure reasons through
-  // hookDebugLog (see the CP-10 discussion above buildAuthCallbacks). That
-  // call form is not `new Error(...)` or the device-code prompt, so it falls
-  // outside every other gate in this file; this test closes that gap.
+  // The git modules that hold a credential log near it with hookDebugLog:
+  // the D-SG-14 retry in git.ts after a sign-in, and the keychain approve and
+  // reject failures in git-credential.ts. That call form is not `new
+  // Error(...)` or the device-code prompt, so it falls outside every other
+  // gate in this file; this test closes that gap.
   //
   // Two checks combine here (mirroring the twin `reason:` gate above). The
   // first is the original bounded-prefix scan, kept unchanged so it still
   // catches every case it already covers. The second closes a proven bypass:
   // `[^)]*` does not allow a literal `)` before the interpolation it is
-  // scanning for, and onAuthFailure's own message text contains one
-  // (`` `onAuthFailure: reject() threw for ${opts.host}: ...` `` -- the
-  // literal `)` in "reject()" stops the scan before it ever reaches EITHER
-  // `${...}`). The second check captures the COMPLETE template literal
+  // scanning for, and a message text may contain one (such as
+  // `` `reject() threw for ${host}: ...` `` -- the literal `)` in "reject()"
+  // stops the scan before it ever reaches EITHER `${...}`). The second check captures the COMPLETE template literal
   // following each `hookDebugLog(` as one token and scans it in full, so a
   // leak appended after a nested function call's closing paren (e.g. after
   // `${errorMessage(err)}`) is caught too.
-  // Both git modules are scanned as one subject: `git-auth-callbacks.ts` carries
-  // the calls, and `git.ts` is covered so a call added there is caught rather
-  // than landing outside the gate.
+  // The three git modules that hold a credential are scanned as one subject:
+  // `git.ts` and `git-credential.ts` carry the calls, and the one-shot helper
+  // module is covered so a call added there is caught rather than landing
+  // outside the gate.
   const hookDebugLogWithToken =
     /hookDebugLog\s*\((?:[^)]*\$\{[^}]*(access_?token|cred\.[a-z]+|r\.accessToken)|[^)]*\+\s*(access_?token|cred\.[a-z]+|r\.accessToken))/i;
   const hookDebugLogCall = /hookDebugLog\s*\(/g;
-  const SCANNED = [GIT_PLATFORM_FILE, GIT_AUTH_CALLBACKS_FILE];
+  const SCANNED = [GIT_PLATFORM_FILE, GIT_CREDENTIAL_FILE, GIT_ONE_SHOT_CREDENTIAL_FILE];
 
   const sources = new Map<string, string>();
   let scannedCallSites = 0;
@@ -596,7 +597,7 @@ test("AUTH-09: the git hookDebugLog calls never interpolate a credential field",
   // D-07-03: the subject is counted BEFORE either check runs, because both
   // checks are satisfied by a file that holds no `hookDebugLog(` at all --
   // which is how an AUTH-09 scan aimed at a module the calls no longer live in
-  // reports success over nothing. Either file may be empty of them on its own;
+  // reports success over nothing. Any one file may be empty of them on its own;
   // the SET may not.
   assert.ok(
     scannedCallSites > 0,
