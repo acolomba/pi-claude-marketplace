@@ -25,19 +25,20 @@
 // substituted for a stable token, and any other directory is compared verbatim,
 // so a wrong scope fails on the directory rather than passing silently.
 //
-// NFR-5: every case also asserts that the door the git transport opens --
-// `https.request`, replaced by a counting fail-fast throw -- recorded ZERO
-// calls. On the clone-carrying rows that zero CAN rise, which is what
-// separates it from a regression guard: deleting the handler's single
-// `gitOps: deps.gitOps` forward drops the add workflow onto `DEFAULT_GIT_OPS`,
-// and the url source is then dialled for real -- measured, the fail-fast fires
-// from `simple-get` inside `isomorphic-git/http/node` and exactly those rows
-// go red. What the zero states there is that the clone was carried out by
-// the injected port and never by the real transport. On the path-source row and
-// the rejecting rows the same plant leaves the zero GREEN, because
-// neither ever clones; there it is a regression guard, not a measurement.
-// `globalThis.fetch` is deliberately NOT the door watched; see
-// `installNetworkCounter`.
+// NFR-5 / SG-TRN-01: every case also traps the door every git process of the
+// default port starts through -- `NODE_GIT_PROCESS.run`, replaced by a
+// counting fail-fast throw -- and asserts that it counted ZERO runs. On the
+// clone-carrying rows that zero CAN rise, which is what separates it from a
+// regression guard: deleting the handler's single `gitOps: deps.gitOps`
+// forward drops the add workflow onto `DEFAULT_GIT_OPS`, whose clone starts
+// system git -- measured, the trap counts one run on each of the seven
+// clone-carrying rows, before any git process starts, and exactly those rows
+// go red. What the zero states there, beside the clone recorder, is that the
+// clone was carried out by the injected port and never by system git. On the
+// path-source row and the rejecting rows the same plant leaves the zero
+// GREEN, because neither ever clones; there it is a regression guard, not a
+// measurement. See `trapGitProcess` for why neither `https.request` nor
+// `globalThis.fetch` is the door watched.
 //
 // What this owner proves about scope is where the command LANDED, not an
 // argument list it has no injection point against: the scope member reaches the
@@ -70,7 +71,6 @@
 
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, stat, writeFile } from "node:fs/promises";
-import https from "node:https";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
@@ -79,6 +79,7 @@ import { mock, verify } from "strong-mock";
 
 import { makeAddHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/add.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { NODE_GIT_PROCESS } from "../../../../extensions/pi-claude-marketplace/platform/git-process.ts";
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
@@ -173,34 +174,38 @@ interface HermeticScope {
   readonly cwd: string;
   /** A directory carrying a valid marketplace manifest. */
   readonly sourceTree: string;
-  /** How many times the case reached the replaced git transport door. */
-  readonly networkCallCount: () => number;
+  /** How many times the case tried to start a git process itself. */
+  readonly gitProcessRuns: () => number;
 }
 
 /**
- * Replace the door the git transport opens with a counting fail-fast throw
- * owned by the test context, which restores it after the case.
+ * SG-TRN-01 / NFR-5: replace `run` of the default git process with a
+ * counting fail-fast throw owned by the test context, which restores it after
+ * the case. `NODE_GIT_PROCESS.run` is the door because `platform/git.ts`
+ * binds the default port's git commands to `NODE_GIT_PROCESS` and reads `run`
+ * when one of them starts, so the trap refuses each git process the default
+ * port would start before it starts, and no request leaves the machine.
  *
  * Unlike the read-only siblings in this tier, the zero asserted against this
  * counter CAN rise, and that is what makes it a measurement rather than a
- * regression guard: every delegating case drives a URL source the workflow MUST
- * clone, so the git work really happens -- what the zero says is that it was
- * carried out by the INJECTED port and never by the real transport. Measured:
+ * regression guard: every delegating case drives a URL source the workflow
+ * MUST clone, so the git work really happens -- what the zero says is that it
+ * was carried out by the INJECTED port and never by system git. Measured:
  * with the handler's single `gitOps: deps.gitOps` forward deleted, the add
- * workflow falls back to `DEFAULT_GIT_OPS` and this counter moves off zero.
+ * workflow falls back to `DEFAULT_GIT_OPS` and this counter reads 1.
  *
- * The door is `https.request` because that is the one the git transport opens:
- * `isomorphic-git/http/node` reaches the wire through `simple-get`, which calls
- * `https.request` and never `globalThis.fetch`. A global-fetch spy would record
- * zero here whatever the handler did -- this repository's only `fetch` caller
- * is the device flow in `domain/github-auth.ts`, and every seeded source is a
- * host with no registered auth provider, so no case reaches it.
+ * The door is not `https.request`: system git is a child process that opens
+ * its own connections, so a spy on Node's HTTP client records zero whatever
+ * the handler does. Nor is it `globalThis.fetch`, whose callers here are the
+ * device flow in `domain/github-auth.ts` and the hosted catalog download:
+ * every seeded source is a git url on a host with no registered auth
+ * provider, so no case reaches either.
  */
-function installNetworkCounter(t: TestContext): () => number {
-  const networkSpy = t.mock.method(https, "request", (): never => {
-    throw new Error("the marketplace add must reach git through the injected port");
-  });
-  return (): number => networkSpy.mock.callCount();
+function trapGitProcess(t: TestContext): () => number {
+  const runSpy = t.mock.method(NODE_GIT_PROCESS, "run", (): Promise<never> =>
+    Promise.reject(new Error("the marketplace add must reach git through the injected port")),
+  );
+  return (): number => runSpy.mock.callCount();
 }
 
 async function exists(target: string): Promise<boolean> {
@@ -267,8 +272,8 @@ async function createHermeticScope(t: TestContext, label: string): Promise<Herme
     MARKETPLACE_MANIFEST,
     "utf8",
   );
-  const networkCallCount = installNetworkCounter(t);
-  return { cwd, sourceTree, networkCallCount };
+  const gitProcessRuns = trapGitProcess(t);
+  return { cwd, sourceTree, gitProcessRuns };
 }
 
 /** The git port, which only ever admits the one remote a case may reach. */
@@ -290,7 +295,7 @@ function createAddDeps(
 
 test("clones through the injected port into the user scope when no scope flag narrows the command", async (t) => {
   // arrange
-  const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "default-scope");
+  const { cwd, sourceTree, gitProcessRuns } = await createHermeticScope(t, "default-scope");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: cwd,
     reads: 1,
@@ -308,13 +313,13 @@ test("clones through the injected port into the user scope when no scope flag na
     git.state.calls.clone.map((call) => describeClone(call, stagingRootFor("user", cwd))),
     [ALPHA_CLONE],
   );
-  assert.strictEqual(networkCallCount(), 0);
+  assert.strictEqual(gitProcessRuns(), 0);
   verifyBoundary();
 });
 
 test("forwards the missing-dependency step and renders its rows under the added marketplace (D-PL2-09)", async (t) => {
   // arrange
-  const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "dependencies");
+  const { cwd, sourceTree, gitProcessRuns } = await createHermeticScope(t, "dependencies");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: cwd,
     reads: 1,
@@ -355,7 +360,7 @@ test("forwards the missing-dependency step and renders its rows under the added 
         "/reload to pick up changes",
     },
   ]);
-  assert.strictEqual(networkCallCount(), 0);
+  assert.strictEqual(gitProcessRuns(), 0);
   verifyBoundary();
 });
 
@@ -380,7 +385,7 @@ for (const { footprint, row, scope } of [
 }[]) {
   test(`clones into the ${scope} scope when --scope ${scope} selects it`, async (t) => {
     // arrange
-    const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, `scope-${scope}`);
+    const { cwd, sourceTree, gitProcessRuns } = await createHermeticScope(t, `scope-${scope}`);
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: cwd,
       reads: 1,
@@ -398,7 +403,7 @@ for (const { footprint, row, scope } of [
       git.state.calls.clone.map((call) => describeClone(call, stagingRootFor(scope, cwd))),
       [ALPHA_CLONE],
     );
-    assert.strictEqual(networkCallCount(), 0);
+    assert.strictEqual(gitProcessRuns(), 0);
     verifyBoundary();
   });
 }
@@ -409,7 +414,7 @@ for (const { args, position } of [
 ]) {
   test(`records the marketplace in the per-machine config when the scope-target flag is supplied ${position} the source`, async (t) => {
     // arrange
-    const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, `local-${position}`);
+    const { cwd, sourceTree, gitProcessRuns } = await createHermeticScope(t, `local-${position}`);
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: cwd,
       reads: 1,
@@ -427,14 +432,14 @@ for (const { args, position } of [
       git.state.calls.clone.map((call) => describeClone(call, stagingRootFor("user", cwd))),
       [ALPHA_CLONE],
     );
-    assert.strictEqual(networkCallCount(), 0);
+    assert.strictEqual(gitProcessRuns(), 0);
     verifyBoundary();
   });
 }
 
 test("carries a scope flag and the scope-target flag through together rather than rejecting the pair", async (t) => {
   // arrange
-  const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "scope-and-target");
+  const { cwd, sourceTree, gitProcessRuns } = await createHermeticScope(t, "scope-and-target");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: cwd,
     reads: 1,
@@ -455,13 +460,13 @@ test("carries a scope flag and the scope-target flag through together rather tha
     git.state.calls.clone.map((call) => describeClone(call, stagingRootFor("project", cwd))),
     [ALPHA_CLONE],
   );
-  assert.strictEqual(networkCallCount(), 0);
+  assert.strictEqual(gitProcessRuns(), 0);
   verifyBoundary();
 });
 
 test("adds a path source without ever reaching the git port it was handed (NFR-5)", async (t) => {
   // arrange
-  const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "path-source");
+  const { cwd, sourceTree, gitProcessRuns } = await createHermeticScope(t, "path-source");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: cwd,
     reads: 1,
@@ -476,13 +481,13 @@ test("adds a path source without ever reaching the git port it was handed (NFR-5
   assert.deepStrictEqual(notifications, [{ message: USER_ADDED_ROW }]);
   assert.deepStrictEqual(await readAddFootprint(cwd), USER_BASE_CONFIG);
   assert.deepStrictEqual(git.state.calls.clone, []);
-  assert.strictEqual(networkCallCount(), 0);
+  assert.strictEqual(gitProcessRuns(), 0);
   verifyBoundary();
 });
 
 test("collapses the duplicated usage block to one sentence when no source is supplied and adds nothing", async (t) => {
   // arrange
-  const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "no-source");
+  const { cwd, sourceTree, gitProcessRuns } = await createHermeticScope(t, "no-source");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const git = createGitPort(sourceTree);
   const addHandler = makeAddHandler(createAddDeps(git.gitOps));
@@ -496,13 +501,13 @@ test("collapses the duplicated usage block to one sentence when no source is sup
   ]);
   assert.deepStrictEqual(await readAddFootprint(cwd), NOTHING_WRITTEN);
   assert.deepStrictEqual(git.state.calls.clone, []);
-  assert.strictEqual(networkCallCount(), 0);
+  assert.strictEqual(gitProcessRuns(), 0);
   verifyBoundary();
 });
 
 test("reports an unknown long flag against the add usage block and adds nothing", async (t) => {
   // arrange
-  const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "unknown-flag");
+  const { cwd, sourceTree, gitProcessRuns } = await createHermeticScope(t, "unknown-flag");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const git = createGitPort(sourceTree);
   const addHandler = makeAddHandler(createAddDeps(git.gitOps));
@@ -516,13 +521,13 @@ test("reports an unknown long flag against the add usage block and adds nothing"
   ]);
   assert.deepStrictEqual(await readAddFootprint(cwd), NOTHING_WRITTEN);
   assert.deepStrictEqual(git.state.calls.clone, []);
-  assert.strictEqual(networkCallCount(), 0);
+  assert.strictEqual(gitProcessRuns(), 0);
   verifyBoundary();
 });
 
 test("shows an unrecognised scope value verbatim against the add usage block and adds nothing", async (t) => {
   // arrange
-  const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "invalid-scope");
+  const { cwd, sourceTree, gitProcessRuns } = await createHermeticScope(t, "invalid-scope");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const git = createGitPort(sourceTree);
   const addHandler = makeAddHandler(createAddDeps(git.gitOps));
@@ -539,13 +544,13 @@ test("shows an unrecognised scope value verbatim against the add usage block and
   ]);
   assert.deepStrictEqual(await readAddFootprint(cwd), NOTHING_WRITTEN);
   assert.deepStrictEqual(git.state.calls.clone, []);
-  assert.strictEqual(networkCallCount(), 0);
+  assert.strictEqual(gitProcessRuns(), 0);
   verifyBoundary();
 });
 
 test("rejects surplus input before cloning or writing config", async (t) => {
   // arrange
-  const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "surplus");
+  const { cwd, sourceTree, gitProcessRuns } = await createHermeticScope(t, "surplus");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const git = createGitPort(sourceTree);
   const addHandler = makeAddHandler(createAddDeps(git.gitOps));
@@ -559,7 +564,7 @@ test("rejects surplus input before cloning or writing config", async (t) => {
   ]);
   assert.deepStrictEqual(await readAddFootprint(cwd), NOTHING_WRITTEN);
   assert.deepStrictEqual(git.state.calls.clone, []);
-  assert.strictEqual(networkCallCount(), 0);
+  assert.strictEqual(gitProcessRuns(), 0);
   verifyBoundary();
 });
 
