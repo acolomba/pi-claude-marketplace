@@ -4,7 +4,8 @@
  * marketplaces: arming one repository or catalog to fail, to redirect, to
  * refuse fetches by SHA, or to require a credential, serving a catalog of a
  * given size, letting it serve again, the GitHub base address pi runs with, a
- * pi with no git on its path, the credential a user stores for the host, and
+ * pi with no git on its path, a pi with upstream's git timeout or keep
+ * variable, the credential a user stores for the host, and
  * the requests the host receives. A step names a repository
  * through the `git repository` parameter type, by the marketplace or the
  * plugin it serves; a hosted marketplace names the directory its catalog is
@@ -22,7 +23,7 @@ import assert from "node:assert/strict";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { type DataTable, Given, Then } from "@cucumber/cucumber";
+import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
 import { startGitHubConnectProxy } from "../lib/github-device-flow/connect-proxy.ts";
 import {
@@ -126,6 +127,19 @@ async function armRepository(
   });
 }
 
+/**
+ * Disarms the repository `reference` names, so the git host serves it again,
+ * and fails when the host had not armed it.
+ */
+function disarmRepository(world: ScenarioWorld, reference: GitRepositoryReference): void {
+  const { owner, directory } = servedRepository(world, reference);
+  assert.strictEqual(
+    world.gitHost.disarm(directory, owner),
+    true,
+    `the git host has not armed the repository ${owner}/${directory}.git`,
+  );
+}
+
 Given(
   "the git host answers {int} for the {git repository}",
   async function (
@@ -214,12 +228,7 @@ Given(
 Given(
   "the git host serves the {git repository} again",
   function (this: ScenarioWorld, reference: GitRepositoryReference): void {
-    const { owner, directory } = servedRepository(this, reference);
-    assert.strictEqual(
-      this.gitHost.disarm(directory, owner),
-      true,
-      `the git host has not armed the repository ${owner}/${directory}.git`,
-    );
+    disarmRepository(this, reference);
   },
 );
 
@@ -239,6 +248,16 @@ Given(
   'pi runs with the environment variable "CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE" set to {string}',
   async function (this: ScenarioWorld, value: string): Promise<void> {
     await this.usePiWithKeptMarketplaceOnFailure(value);
+  },
+);
+
+// D-SG-13, SG-TRN-05: upstream's variable bounds every git command. A Pi reads
+// its environment when it starts, and the run's Pi never sets the variable,
+// so the scenario gets a Pi of its own.
+Given(
+  'pi runs with the environment variable "CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS" set to {string}',
+  async function (this: ScenarioWorld, value: string): Promise<void> {
+    await this.usePiWithGitTimeout(value);
   },
 );
 
@@ -363,6 +382,15 @@ Given(
       loads.map((line) => ({ configured: line.configured, ownProcess: line.pid === process.pid })),
       [{ configured: true, ownProcess: false }],
     );
+  },
+);
+
+// A retry after a held request: the host answers the repository again, so the
+// next command reaches it (HOST-03).
+When(
+  "the git host stops holding the response body for the {git repository}",
+  function (this: ScenarioWorld, reference: GitRepositoryReference): void {
+    disarmRepository(this, reference);
   },
 );
 
