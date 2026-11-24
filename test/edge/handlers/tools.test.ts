@@ -11,20 +11,20 @@
 // written-out literal, never a value this suite derives by re-running the
 // production classification it is checking.
 //
-// D-02 / SC-4: both tools are read-only, so every case replaces `https.request`
-// -- the door the git transport opens -- with a counting fail-fast stub and
-// asserts its call count is zero. That zero is an NFR-5 regression guard, NOT a
-// discriminated proof: the fixture can reach the transport (`remote-mp`
-// declares a git source with no clone) but no parameter either tool exposes
-// turns materialization on, so no positive control exists. See
-// `installNetworkCounter`. The Pi boundary states no `ctx.ui` expectation,
+// D-02 / SC-4: both tools are read-only, so every case replaces
+// `NODE_GIT_PROCESS.run` -- the door every git process of the default port
+// starts through -- with a counting fail-fast stub and asserts its call count
+// is zero. That zero is an NFR-5 regression guard, NOT a discriminated proof:
+// the fixture could need git (`remote-mp` declares a git source with no
+// clone) but no parameter either tool exposes turns materialization on, so no
+// positive control exists. See `trapGitProcess`. The Pi boundary states no
+// `ctx.ui` expectation,
 // which is what proves the tools never notify. Each tool's non-empty path
 // promises exactly one soft-dependency probe -- the snapshot of its
 // notification run (LLMT-01) -- and every other path promises none.
 
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
-import https from "node:https";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
@@ -36,6 +36,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/edge/handlers/tools.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { NODE_GIT_PROCESS } from "../../../extensions/pi-claude-marketplace/platform/git-process.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { adapterCommand, builtinMcpCommand } from "../../platform/pi-inventory-seed.ts";
 import { expectSoftDepProbes } from "../notification-boundary.ts";
@@ -92,8 +93,8 @@ type PluginRecord = MarketplaceRecord["plugins"][string];
 
 interface HermeticScope {
   readonly cwd: string;
-  /** How many times the case reached the replaced git transport door. */
-  networkCallCount(): number;
+  /** How many times the case tried to start a git process itself. */
+  gitProcessRuns(): number;
 }
 
 interface SeededInstall {
@@ -157,32 +158,35 @@ interface ExpectedMarketplaceBlock {
 }
 
 /**
- * Replace the door the git transport opens with a counting fail-fast throw
- * owned by the test context, which restores it after the case.
+ * SG-TRN-01 / NFR-5: replace `run` of the default git process with a
+ * counting fail-fast throw owned by the test context, which restores it after
+ * the case. `NODE_GIT_PROCESS.run` is the door because `platform/git.ts`
+ * binds the default port's git commands to `NODE_GIT_PROCESS` and reads `run`
+ * when one of them starts, so the trap refuses each git process the default
+ * port would start before it starts.
  *
  * The zero asserted against this counter is an NFR-5 REGRESSION GUARD WITH NO
  * POSITIVE CONTROL, and the two halves of that are separate facts. The fixture
  * is NOT vacuous: `remote-mp` declares `https://127.0.0.1:9/alpha.git`, a git
- * source with no clone on disk, which is an input that would need the network
- * to resolve any further -- the row is projected offline instead. But no
+ * source with no clone on disk, which is an input that would need git to
+ * resolve any further -- the row is projected offline instead. But no
  * parameter either tool exposes turns materialization on, so there is no 0
  * versus non-0 pair to assert, and this zero is not presented as a
  * discriminated proof.
  *
- * The door is `https.request` because that is the one the git transport opens:
- * `isomorphic-git/http/node` reaches the wire through `simple-get`, which calls
- * `https.request` and never `globalThis.fetch`. A global-fetch spy would record
- * zero here whatever the tools did. The instrument itself is known to fire: a
- * live `https.request` call planted in `loadToolPluginPayload` turns 28 of this
- * suite's 53 cases red -- every case that routes through the plugin-list tool
- * body -- so the absence of a positive control is a fact about the tool's
- * parameter space, not about the detector.
+ * The door is not `https.request`: system git is a child process that opens
+ * its own connections, so a spy on Node's HTTP client records zero whatever
+ * the tools do, as a global-fetch spy would. The instrument itself is known
+ * to fire: a default-port `ls-remote` planted in `loadToolPluginPayload`
+ * turns 34 of this suite's 49 cases red -- the cases that route through the
+ * plugin-list tool body -- so the absence of a positive control is a fact
+ * about the tool's parameter space, not about the detector.
  */
-function installNetworkCounter(t: TestContext): () => number {
-  const networkSpy = t.mock.method(https, "request", (): never => {
-    throw new Error("the read-only tool surface must not open a network connection");
-  });
-  return (): number => networkSpy.mock.callCount();
+function trapGitProcess(t: TestContext): () => number {
+  const runSpy = t.mock.method(NODE_GIT_PROCESS, "run", (): Promise<never> =>
+    Promise.reject(new Error("the read-only tool surface must not start git")),
+  );
+  return (): number => runSpy.mock.callCount();
 }
 
 /**
@@ -193,8 +197,8 @@ function installNetworkCounter(t: TestContext): () => number {
  */
 async function createHermeticScope(t: TestContext, label: string): Promise<HermeticScope> {
   const { cwd } = await createHermeticEnvironment(t, `tools-${label}-`);
-  const networkCallCount = installNetworkCounter(t);
-  return { cwd, networkCallCount };
+  const gitProcessRuns = trapGitProcess(t);
+  return { cwd, gitProcessRuns };
 }
 
 function marketplaceRootIn(cwd: string, marketplaceName: string): string {
@@ -460,7 +464,7 @@ describe("registerListMarketplacesTool", () => {
       })),
       [expectedDefinition],
     );
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -484,7 +488,7 @@ describe("registerListMarketplacesTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -528,7 +532,7 @@ describe("registerListMarketplacesTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -583,7 +587,7 @@ describe("registerListMarketplacesTool", () => {
 
       // assert
       assert.deepStrictEqual(listed, expectedResult);
-      assert.strictEqual(scope.networkCallCount(), 0);
+      assert.strictEqual(scope.gitProcessRuns(), 0);
       verifyBoundary();
     });
   }
@@ -617,7 +621,7 @@ describe("registerListMarketplacesTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -655,7 +659,7 @@ describe("registerListMarketplacesTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -687,7 +691,7 @@ describe("registerListMarketplacesTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -717,7 +721,7 @@ describe("registerListMarketplacesTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -745,7 +749,7 @@ describe("registerListMarketplacesTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 });
@@ -1183,7 +1187,7 @@ describe("registerListPluginsTool", () => {
       })),
       [expectedDefinition],
     );
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -1212,7 +1216,7 @@ describe("registerListPluginsTool", () => {
 
       // assert
       assert.deepStrictEqual(listed, expectedResult);
-      assert.strictEqual(scope.networkCallCount(), 0);
+      assert.strictEqual(scope.gitProcessRuns(), 0);
       verifyBoundary();
     });
   }
@@ -1242,7 +1246,7 @@ describe("registerListPluginsTool", () => {
 
       // assert
       assert.deepStrictEqual(listed, expectedResult);
-      assert.strictEqual(scope.networkCallCount(), 0);
+      assert.strictEqual(scope.gitProcessRuns(), 0);
       verifyBoundary();
     });
   }
@@ -1306,7 +1310,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -1359,7 +1363,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -1418,7 +1422,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -1475,7 +1479,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -1531,7 +1535,7 @@ describe("registerListPluginsTool", () => {
 
       // assert
       assert.deepStrictEqual(listed, expectedResult);
-      assert.strictEqual(scope.networkCallCount(), 0);
+      assert.strictEqual(scope.gitProcessRuns(), 0);
       verifyBoundary();
     });
   }
@@ -1581,7 +1585,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -1607,7 +1611,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -1632,7 +1636,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -1692,7 +1696,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -1752,7 +1756,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -1786,7 +1790,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -1814,7 +1818,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -1865,7 +1869,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -1899,7 +1903,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -1931,7 +1935,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -1959,7 +1963,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -1993,7 +1997,7 @@ describe("registerListPluginsTool", () => {
 
     // assert
     assert.deepStrictEqual(listed, expectedResult);
-    assert.strictEqual(scope.networkCallCount(), 0);
+    assert.strictEqual(scope.gitProcessRuns(), 0);
     verifyBoundary();
   });
 
@@ -2060,7 +2064,7 @@ describe("registerListPluginsTool", () => {
 
       // assert
       assert.deepStrictEqual(listed, expectedResult);
-      assert.strictEqual(scope.networkCallCount(), 0);
+      assert.strictEqual(scope.gitProcessRuns(), 0);
       verifyBoundary();
     });
   }

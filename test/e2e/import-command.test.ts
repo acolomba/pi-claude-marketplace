@@ -14,11 +14,15 @@ import { createScopeDependencyInstall } from "../../extensions/pi-claude-marketp
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { noStatusReaders } from "../platform/mcp-status-seed.ts";
 import { makeCtx, makeMockPi } from "../platform/mock-pi.ts";
 
 import type { GitOps } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+
+/** The commit every fixture clone's `HEAD` and remote name. */
+const FIXTURE_COMMIT = "0000000000000000000000000000000000000001";
 
 const FIXTURE_ROOT = path.resolve(
   path.dirname(new URL(import.meta.url).pathname),
@@ -62,6 +66,11 @@ async function withImportFixture<T>(
   });
 }
 
+/**
+ * The shared git fake's port with its clone replaced: each github marketplace
+ * URL the import adds is cloned from its fixture tree. Every other member is
+ * the fake's own, so this suite names none of them (SG-TRN-01).
+ */
 function fixtureGitOps(): GitOps {
   const cloneFixtures = new Map<string, string>([
     [
@@ -73,8 +82,15 @@ function fixtureGitOps(): GitOps {
       path.join(FIXTURE_ROOT, "github-marketplace"),
     ],
   ]);
+  const git = createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: [...cloneFixtures.keys()],
+    initialOid: FIXTURE_COMMIT,
+    remoteHead: FIXTURE_COMMIT,
+  });
 
   return {
+    ...git.gitOps,
     async clone(opts): Promise<void> {
       const source = cloneFixtures.get(opts.url);
       if (source === undefined) {
@@ -82,30 +98,6 @@ function fixtureGitOps(): GitOps {
       }
 
       await cp(source, opts.dir, { recursive: true });
-    },
-    async fetch(): Promise<void> {
-      await Promise.resolve();
-    },
-    async fetchCommit(): Promise<void> {
-      await Promise.resolve();
-    },
-    async forceUpdateRef(): Promise<void> {
-      await Promise.resolve();
-    },
-    async checkout(): Promise<void> {
-      await Promise.resolve();
-    },
-    resolveRef(): Promise<string> {
-      return Promise.resolve("0000000000000000000000000000000000000001");
-    },
-    currentBranch(): Promise<string> {
-      return Promise.resolve("main");
-    },
-    resolveRemoteRef(): Promise<string> {
-      return Promise.resolve("0000000000000000000000000000000000000001");
-    },
-    listRemotes(): ReturnType<GitOps["listRemotes"]> {
-      return Promise.resolve({ kind: "not-a-repo" });
     },
   };
 }

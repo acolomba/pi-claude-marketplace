@@ -103,6 +103,19 @@ export function checkoutFailure(ref: string): GitCommandError {
   );
 }
 
+/**
+ * SG-TRN-01: the members of `calls` with at least one recorded call, each
+ * with its own record. A case compares this with the members its command
+ * uses, so it names no member the command never calls, and an extra call of
+ * any member still fails the comparison.
+ */
+export function recordedCalls(calls: GitOpsFakeCalls): Partial<GitOpsFakeCalls> {
+  const members = Object.keys(calls) as Array<keyof GitOpsFakeCalls>;
+  return Object.fromEntries(
+    members.filter((member) => calls[member].length > 0).map((member) => [member, calls[member]]),
+  );
+}
+
 function snapshotCloneCall(
   options: Parameters<GitOps["clone"]>[0],
 ): GitOpsFakeCalls["clone"][number] {

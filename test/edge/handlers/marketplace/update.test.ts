@@ -38,13 +38,16 @@
 // minimal effect rather than a re-derivation of the update workflow's own
 // detail tokens, which belong to test/orchestrators/marketplace/update.test.ts.
 //
-// NFR-5: every case also asserts that the door the git transport opens --
-// `https.request`, replaced by a counting fail-fast throw -- recorded ZERO
-// calls. That zero is a REGRESSION GUARD WITH NO POSITIVE CONTROL, measured to
-// be one rather than assumed to be one: no reachable input moves this counter,
-// because the refresh path dies inside `isomorphic-git` before the transport.
-// The freshness RECORDER, not the zero, is what carries the delegation claim.
-// See `installNetworkCounter` for the measurement.
+// NFR-5 / SG-TRN-01: every case also traps the door every git process of the
+// default port starts through -- `NODE_GIT_PROCESS.run`, replaced by a
+// counting fail-fast throw -- and asserts that it counted ZERO runs. On the
+// refreshing rows that zero CAN rise: with both `gitOps: deps.gitOps`
+// forwards deleted, the workflow falls back to `DEFAULT_GIT_OPS`, whose
+// freshness checks start system git, and exactly the seven refreshing rows go
+// red. Beside the freshness RECORDER, which carries the delegation claim, the
+// zero states that no check ran as a git process of its own. On the
+// rejecting rows it is a regression guard. See `trapGitProcess` for the
+// measurement.
 //
 // Arity: the positional schema declares ONE optional entry, so zero and one
 // positional are both accepted and there is no count below the accepted range.
@@ -60,7 +63,6 @@
 
 import assert from "node:assert/strict";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import https from "node:https";
 import path from "node:path";
 import { test, type TestContext } from "node:test";
 
@@ -75,6 +77,7 @@ import { makeMarketplaceUpdateHandler } from "../../../../extensions/pi-claude-m
 import { createPluginUpdateOperations } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { NODE_GIT_PROCESS } from "../../../../extensions/pi-claude-marketplace/platform/git-process.ts";
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
@@ -140,8 +143,8 @@ const MARKETPLACE_MANIFEST = `{
 
 interface HermeticScope {
   readonly cwd: string;
-  /** How many times the case reached the replaced git transport door. */
-  readonly networkCallCount: () => number;
+  /** How many times the case tried to start a git process itself. */
+  readonly gitProcessRuns: () => number;
 }
 
 /** A seeded marketplace: its name and the directory of its checkout. */
@@ -157,37 +160,33 @@ interface SeededClones {
 }
 
 /**
- * Replace the door the git transport opens with a counting fail-fast throw
- * owned by the test context, which restores it after the case.
+ * SG-TRN-01 / NFR-5: replace `run` of the default git process with a
+ * counting fail-fast throw owned by the test context, which restores it after
+ * the case. `NODE_GIT_PROCESS.run` is the door because `platform/git.ts`
+ * binds the default port's git commands to `NODE_GIT_PROCESS` and reads `run`
+ * when one of them starts, so the trap refuses each git process the default
+ * port would start before it starts, and no request leaves the machine.
  *
- * The zero asserted against this counter is an NFR-5 REGRESSION GUARD WITH NO
- * POSITIVE CONTROL, not a discriminated proof, and that limit was measured
- * rather than assumed. The fixture is not vacuous -- every seeded marketplace
- * is a url source the workflow really refreshes -- but no reachable input opens
- * the door. With both `gitOps: deps.gitOps` forwards deleted, so the workflow
- * falls back to `DEFAULT_GIT_OPS`, five of the seven cases go red on their
- * MESSAGE (a failed row with no reason whose cause reads `The function
- * requires a "remote OR url" parameter but none was provided`) while this
- * counter stays at exactly
- * ZERO: the refresh path dies inside `isomorphic-git` on a staged clone with no
- * configured remote, one step before the transport. Having the git door in the
- * import graph is not the same as having a route that opens it.
+ * On the refreshing rows the zero asserted against this counter is a
+ * measurement, not only a regression guard, and that was measured rather than
+ * assumed: every seeded marketplace is a url source the workflow really
+ * refreshes, and with both `gitOps: deps.gitOps` forwards deleted the trap
+ * counts two runs per refreshed checkout, six on the all-marketplaces row,
+ * and the seven refreshing rows go red. The freshness RECORDER beside the
+ * zero carries the delegation claim.
  *
- * What carries the delegation claim here is therefore the freshness RECORDER
- * beside this zero, never the zero itself.
- *
- * The door is `https.request` because that is the one the git transport opens:
- * `isomorphic-git/http/node` reaches the wire through `simple-get`, which calls
- * `https.request` and never `globalThis.fetch`. A global-fetch spy would record
- * zero here whatever the handler did -- this repository's only `fetch` caller
- * is the device flow in `domain/github-auth.ts`, and no seeded source sits on a
- * host the provider registry claims, so no case reaches it.
+ * The door is not `https.request`: system git is a child process that opens
+ * its own connections, so a spy on Node's HTTP client records zero whatever
+ * the handler does. Nor is it `globalThis.fetch`, whose callers here are the
+ * device flow in `domain/github-auth.ts` and the hosted catalog download: no
+ * seeded source sits on a host the provider registry claims or names a hosted
+ * catalog, so no case reaches either.
  */
-function installNetworkCounter(t: TestContext): () => number {
-  const networkSpy = t.mock.method(https, "request", (): never => {
-    throw new Error("the marketplace update must reach git through the injected port");
-  });
-  return (): number => networkSpy.mock.callCount();
+function trapGitProcess(t: TestContext): () => number {
+  const runSpy = t.mock.method(NODE_GIT_PROCESS, "run", (): Promise<never> =>
+    Promise.reject(new Error("the marketplace update must reach git through the injected port")),
+  );
+  return (): number => runSpy.mock.callCount();
 }
 
 /** The remote URL of the seeded marketplace `name`. */
@@ -287,8 +286,8 @@ function createDependencyStep(): {
  */
 async function createHermeticScope(t: TestContext, label: string): Promise<HermeticScope> {
   const { cwd } = await createHermeticEnvironment(t, `mp-update-${label}-`);
-  const networkCallCount = installNetworkCounter(t);
-  return { cwd, networkCallCount };
+  const gitProcessRuns = trapGitProcess(t);
+  return { cwd, gitProcessRuns };
 }
 
 /**
@@ -364,7 +363,7 @@ async function seedThreeMarketplaces(cwd: string): Promise<SeededClones> {
 
 test("updates every recorded marketplace in both scopes when no name is supplied", async (t) => {
   // arrange
-  const { cwd, networkCallCount } = await createHermeticScope(t, "all");
+  const { cwd, gitProcessRuns } = await createHermeticScope(t, "all");
   const clones = await seedThreeMarketplaces(cwd);
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(3, {
     value: cwd,
@@ -396,14 +395,14 @@ test("updates every recorded marketplace in both scopes when no name is supplied
   );
   // D-PL2-10: only the project `alpha` cascades, so the step runs once, there.
   assert.deepStrictEqual(dependencyStep.requests, [{ scope: "project", cwd }]);
-  assert.strictEqual(networkCallCount(), 0);
+  assert.strictEqual(gitProcessRuns(), 0);
   verifyBoundary();
   verify(pluginUpdate);
 });
 
 test("updates the named marketplace alone and leaves its siblings untouched", async (t) => {
   // arrange
-  const { cwd, networkCallCount } = await createHermeticScope(t, "named");
+  const { cwd, gitProcessRuns } = await createHermeticScope(t, "named");
   const clones = await seedThreeMarketplaces(cwd);
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: cwd,
@@ -428,7 +427,7 @@ test("updates the named marketplace alone and leaves its siblings untouched", as
   assert.deepStrictEqual(freshnessCalls(git), refreshesOf(clones.projectAlpha));
   // D-PL2-10: only the project `alpha` cascades, so the step runs once, there.
   assert.deepStrictEqual(dependencyStep.requests, [{ scope: "project", cwd }]);
-  assert.strictEqual(networkCallCount(), 0);
+  assert.strictEqual(gitProcessRuns(), 0);
   verifyBoundary();
   verify(pluginUpdate);
 });
@@ -440,7 +439,7 @@ test("D-10-18: begins one cascade run per command and none when the handler is b
   // the command: an allocation in `makeMarketplaceUpdateHandler`'s body
   // instead of the returned closure scores 1 before either command runs, and
   // 1 after both.
-  const { cwd, networkCallCount } = await createHermeticScope(t, "run-boundary");
+  const { cwd, gitProcessRuns } = await createHermeticScope(t, "run-boundary");
   const clones = await seedThreeMarketplaces(cwd);
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2, {
     value: cwd,
@@ -478,7 +477,7 @@ test("D-10-18: begins one cascade run per command and none when the handler is b
     freshnessCalls(git),
     refreshesOf(clones.projectAlpha, clones.projectAlpha),
   );
-  assert.strictEqual(networkCallCount(), 0);
+  assert.strictEqual(gitProcessRuns(), 0);
   verifyBoundary();
   verify(pluginUpdate);
 });
@@ -512,7 +511,7 @@ for (const { emissions, expectCascade, rows, scope, touched } of [
 }[]) {
   test(`updates the ${scope} scope alone when --scope ${scope} narrows the command`, async (t) => {
     // arrange
-    const { cwd, networkCallCount } = await createHermeticScope(t, `scope-${scope}`);
+    const { cwd, gitProcessRuns } = await createHermeticScope(t, `scope-${scope}`);
     const clones = await seedThreeMarketplaces(cwd);
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(emissions, {
       value: cwd,
@@ -537,7 +536,7 @@ for (const { emissions, expectCascade, rows, scope, touched } of [
       rows.map((row) => ({ message: pluralUpdateMessage(row) })),
     );
     assert.deepStrictEqual(freshnessCalls(git), refreshesOf(...touched(clones)));
-    assert.strictEqual(networkCallCount(), 0);
+    assert.strictEqual(gitProcessRuns(), 0);
     verifyBoundary();
     verify(pluginUpdate);
   });
@@ -545,7 +544,7 @@ for (const { emissions, expectCascade, rows, scope, touched } of [
 
 test("reports an unrecognised scope value with the update usage block and never updates", async (t) => {
   // arrange
-  const { cwd, networkCallCount } = await createHermeticScope(t, "invalid-scope");
+  const { cwd, gitProcessRuns } = await createHermeticScope(t, "invalid-scope");
   await seedThreeMarketplaces(cwd);
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
   const git = createGitOpsFake({ boundary: "memory" });
@@ -569,7 +568,7 @@ test("reports an unrecognised scope value with the update usage block and never 
     },
   ]);
   assert.deepStrictEqual(freshnessCalls(git), refreshesOf());
-  assert.strictEqual(networkCallCount(), 0);
+  assert.strictEqual(gitProcessRuns(), 0);
   verifyBoundary();
   verify(pluginUpdate);
 });
@@ -584,7 +583,7 @@ for (const { args, diagnostic } of [
 ]) {
   test(`rejects ${args} before refreshing or cascading`, async (t) => {
     // arrange
-    const { cwd, networkCallCount } = await createHermeticScope(t, "invalid-arguments");
+    const { cwd, gitProcessRuns } = await createHermeticScope(t, "invalid-arguments");
     await seedThreeMarketplaces(cwd);
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const git = createGitOpsFake({ boundary: "memory" });
@@ -605,7 +604,7 @@ for (const { args, diagnostic } of [
       { message: `${diagnostic}\n\n${USAGE}`, severity: "error" },
     ]);
     assert.deepStrictEqual(freshnessCalls(git), refreshesOf());
-    assert.strictEqual(networkCallCount(), 0);
+    assert.strictEqual(gitProcessRuns(), 0);
     verifyBoundary();
     verify(pluginUpdate);
   });

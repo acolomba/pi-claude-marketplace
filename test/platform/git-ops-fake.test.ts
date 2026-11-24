@@ -12,7 +12,7 @@ import {
   type GitOpsContractParticipant,
   type GitOpsFactory,
 } from "./git-ops-contract.ts";
-import { createGitOpsFake } from "./git-ops-fake.ts";
+import { createGitOpsFake, recordedCalls } from "./git-ops-fake.ts";
 
 import type { GitAuthBundle } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 
@@ -201,6 +201,49 @@ describe("createGitOpsFake", () => {
     await assert.rejects(git.state.calls.clone[0]?.auth?.onAuthRequired(), (error: unknown) => {
       assert.strictEqual(error, authenticationError);
       return true;
+    });
+  });
+});
+
+describe("recordedCalls", () => {
+  test("SG-TRN-01: reports nothing for a fake that recorded no call", () => {
+    // arrange
+    const git = createGitOpsFake({ boundary: "memory" });
+
+    // act
+    const recorded = recordedCalls(git.state.calls);
+
+    // assert
+    assert.deepStrictEqual(recorded, {});
+  });
+
+  test("SG-TRN-01: reports only the member a fake recorded a call for", async () => {
+    // arrange
+    const git = createGitOpsFake({ boundary: "memory", allowedRemoteUrls: [REMOTE_URL] });
+    await git.gitOps.clone({ dir: "/memory/clone", url: REMOTE_URL, ref: "main" });
+
+    // act
+    const recorded = recordedCalls(git.state.calls);
+
+    // assert
+    assert.deepStrictEqual(recorded, {
+      clone: [{ dir: "/memory/clone", url: REMOTE_URL, ref: "main" }],
+    });
+  });
+
+  test("SG-TRN-01: reports each member a fake recorded a call for", async () => {
+    // arrange
+    const git = createGitOpsFake({ boundary: "memory", allowedRemoteUrls: [REMOTE_URL] });
+    await git.gitOps.clone({ dir: "/memory/clone", url: REMOTE_URL, ref: "main" });
+    await git.gitOps.resolveRef({ dir: "/memory/clone", ref: "HEAD" });
+
+    // act
+    const recorded = recordedCalls(git.state.calls);
+
+    // assert
+    assert.deepStrictEqual(recorded, {
+      clone: [{ dir: "/memory/clone", url: REMOTE_URL, ref: "main" }],
+      resolveRef: [{ dir: "/memory/clone", ref: "HEAD" }],
     });
   });
 });

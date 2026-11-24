@@ -18,8 +18,10 @@
 //
 // The stub member types are imported from the same modules edge/types.ts
 // imports them from, so a change to an injected seam is a compile error here
-// rather than a silently stale hand-copy. The collaborator contracts are not
-// re-pinned; their own source-test pairs own those details.
+// rather than a silently stale hand-copy. The git port is the shared
+// `createGitOpsFake` port, so this owner names none of its members
+// (SG-TRN-01). The collaborator contracts are not re-pinned; their own
+// source-test pairs own those details.
 //
 // D-116-13: every negative sits on the line its diagnostic actually lands on. A
 // multi-line `satisfies` reports on its CLOSING line, so those markers sit after
@@ -29,6 +31,8 @@
 //
 // No exhaustiveness claim: the module declares one interface and holds no
 // switch, so a missing-arm plant has no target here.
+
+import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 
 import type { EdgeDeps } from "../../extensions/pi-claude-marketplace/edge/types.ts";
 import type {
@@ -47,17 +51,7 @@ import type {
 } from "../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
 import type { CompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
-const gitOps = {
-  checkout: () => Promise.resolve(),
-  clone: () => Promise.resolve(),
-  currentBranch: () => Promise.resolve("main"),
-  fetch: () => Promise.resolve(),
-  fetchCommit: () => Promise.resolve(),
-  forceUpdateRef: () => Promise.resolve(),
-  resolveRef: () => Promise.resolve("a1b2c3d"),
-  resolveRemoteRef: () => Promise.resolve("a1b2c3d"),
-  listRemotes: () => Promise.resolve({ kind: "not-a-repo" }),
-} satisfies GitOps;
+const gitOps = createGitOpsFake({ boundary: "memory" }).gitOps satisfies GitOps;
 
 const pluginUpdate = (() =>
   Promise.resolve({
