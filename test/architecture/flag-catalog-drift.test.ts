@@ -150,7 +150,7 @@ for (const { head, verb } of COMPLETION_HEADS) {
     const expectedLabels = sorted(completionFlagEntries(verb).map((entry) => entry.name));
 
     // act
-    const items = await getArgumentCompletions(`${head} -`, EMPTY_RESOLVER, completionCache, true);
+    const items = await getArgumentCompletions(`${head} -`, EMPTY_RESOLVER, completionCache);
 
     // assert
     assert.ok(items !== null, `expected flag completions for "${head} -"`);

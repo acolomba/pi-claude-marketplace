@@ -56,7 +56,6 @@ import {
   openNotificationSnapshot,
   requireNotificationMode,
 } from "../shared/notification-run.ts";
-import { acceptsLaterCommands } from "../shared/session-host.ts";
 
 import { runCommand } from "./command-run.ts";
 import {
@@ -154,11 +153,8 @@ export function registerClaudePluginCommand(
   const browse = makeBrowseHandler({ install, uninstall, pluginInfo, enable, disable });
   // RELOADCMD-D1: Pi makes a fresh command context for each invocation
   // (`core/agent-session.js:1791`), so a context names one invocation, and the
-  // set holds the invocations that asked for a reload. `laterCommands` is the
-  // last session start's answer, which completions read because Pi gives the
-  // completion callback no context; it is false until a session starts.
+  // set holds the invocations that asked for a reload.
   const reloadRequests = new WeakSet<ExtensionCommandContext>();
-  let laterCommands = false;
 
   const handlers: SubcommandHandlers = {
     bootstrap: makeBootstrapHandler(deps),
@@ -231,7 +227,6 @@ export function registerClaudePluginCommand(
           openNotificationSnapshot(pi).softDeps.mcpImplementation,
         ),
         deps.completionCache,
-        laterCommands,
       ),
   });
 
@@ -243,7 +238,6 @@ export function registerClaudePluginCommand(
   pi.on("session_start", (_event, ctx) => {
     try {
       requireNotificationMode(ctx.mode);
-      laterCommands = acceptsLaterCommands(ctx);
       ctx.ui.addAutocompleteProvider((current) => ({
         getSuggestions: (lines, line, col, options) =>
           current.getSuggestions(lines, line, col, options),

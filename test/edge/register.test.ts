@@ -1973,36 +1973,20 @@ test("RELOADCMD-D1: a registered reload in a busy session refuses and never runs
   verifyRegistrar();
 });
 
-/** RELOADCMD-D1: a plain session context whose host has a UI or none. */
-function sessionContext(hasUI: boolean): object {
-  return {
-    mode: hasUI ? "rpc" : "json",
-    hasUI,
-    ui: {
-      addAutocompleteProvider: (): void => {},
-    },
-  };
-}
-
-test("RELOADCMD-D1: completions offer reload only after a session start whose host takes later commands", async (t) => {
+test("RELOADCMD-D1: completions offer reload before any session starts", async (t) => {
   // arrange
   await createHermeticScope(t, "reload-completions");
   // MSEL-01: each lookup takes one inventory snapshot.
-  const { registration, sessionStart, verifyRegistrar } = registerCommandUnderTest({ runs: 3 });
-  const reinstall = { label: "reinstall", value: "reinstall " };
-  const reload = { label: "reload", value: "reload " };
+  const { registration, verifyRegistrar } = registerCommandUnderTest({ runs: 1 });
 
   // act
-  const beforeStart = await registration.getArgumentCompletions?.("re");
-  Reflect.apply(sessionStart, undefined, [SESSION_START, sessionContext(false)]);
-  const oneShot = await registration.getArgumentCompletions?.("re");
-  Reflect.apply(sessionStart, undefined, [SESSION_START, sessionContext(true)]);
-  const sessionful = await registration.getArgumentCompletions?.("re");
+  const suggestions = await registration.getArgumentCompletions?.("re");
 
   // assert
-  assert.deepStrictEqual(beforeStart, [reinstall]);
-  assert.deepStrictEqual(oneShot, [reinstall]);
-  assert.deepStrictEqual(sessionful, [reinstall, reload]);
+  assert.deepStrictEqual(suggestions, [
+    { label: "reinstall", value: "reinstall " },
+    { label: "reload", value: "reload " },
+  ]);
   verifyRegistrar();
 });
 
@@ -2072,9 +2056,6 @@ function installAutocompleteWrapper(): WrapperUnderTest {
 
   when(() => ctx.mode)
     .thenReturn("tui")
-    .times(1);
-  when(() => ctx.hasUI)
-    .thenReturn(true)
     .times(1);
   sessionStart(SESSION_START, ctx);
 

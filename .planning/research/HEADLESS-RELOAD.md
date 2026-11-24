@@ -74,7 +74,8 @@ The decisions at the end were agreed with the maintainer in the session that wro
    this.
 2. **Add `/claude:plugin reload`.** It is available only when `acceptsLaterCommands(ctx)` is true,
    so in the TUI and RPC. It runs `ctx.reload()`. In a one-shot host it refuses with a short usage
-   message, and help and completions leave it out there. It is not named `reload` at the top level
+   message, and help leaves it out there. (Completions always offer it: Pi asks for them only in
+   its terminal. Changed at PR review, 2026-11-24.) It is not named `reload` at the top level
    (the TUI built-in wins).
 3. **The reload hint follows the same predicate.** In a one-shot host there is no reload hint text:
    the next invocation loads the change. The JSON and RPC payload keeps `needsReload` in every

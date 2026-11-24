@@ -219,7 +219,7 @@ for (const { prefix, expected } of [
     const { completionCache, resolver } = await seedResolver(t, "autoapply-value");
 
     // act
-    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache, true);
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
@@ -231,12 +231,7 @@ test("AAP-04 offers nothing after the autoapply value", async (t) => {
   const { completionCache, resolver } = await seedResolver(t, "autoapply-done");
 
   // act
-  const suggestions = await getArgumentCompletions(
-    "autoapply on ",
-    resolver,
-    completionCache,
-    true,
-  );
+  const suggestions = await getArgumentCompletions("autoapply on ", resolver, completionCache);
 
   // assert
   assert.strictEqual(suggestions, null);
@@ -251,7 +246,7 @@ test("TC-1 offers the whole top-level vocabulary at an empty prefix, in declarat
   const { completionCache, resolver } = await seedResolver(t, "top-level-empty");
 
   // act
-  const suggestions = await getArgumentCompletions("", resolver, completionCache, true);
+  const suggestions = await getArgumentCompletions("", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [
@@ -279,23 +274,12 @@ test("TC-1 offers the whole top-level vocabulary at an empty prefix, in declarat
   ]);
 });
 
-test("TC-1 leaves reload out of the top-level vocabulary of a host that takes no later commands (RELOADCMD-D1)", async (t) => {
+test("TC-1 offers reload beside reinstall (RELOADCMD-D1)", async (t) => {
   // arrange
-  const { completionCache, resolver } = await seedResolver(t, "top-level-one-shot");
+  const { completionCache, resolver } = await seedResolver(t, "top-level-reload");
 
   // act
-  const suggestions = await getArgumentCompletions("re", resolver, completionCache, false);
-
-  // assert
-  assert.deepStrictEqual(suggestions, [{ label: "reinstall", value: "reinstall " }]);
-});
-
-test("TC-1 offers reload beside reinstall to a host that takes later commands (RELOADCMD-D1)", async (t) => {
-  // arrange
-  const { completionCache, resolver } = await seedResolver(t, "top-level-sessionful");
-
-  // act
-  const suggestions = await getArgumentCompletions("re", resolver, completionCache, true);
+  const suggestions = await getArgumentCompletions("re", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [
@@ -309,7 +293,7 @@ test("offers no flag after reload (RELOADCMD-D1)", async (t) => {
   const { completionCache, resolver } = await seedResolver(t, "reload-flags");
 
   // act
-  const suggestions = await getArgumentCompletions("reload -", resolver, completionCache, true);
+  const suggestions = await getArgumentCompletions("reload -", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, []);
@@ -339,7 +323,7 @@ for (const { prefix, expected } of [
     const { completionCache, resolver } = await seedResolver(t, `top-level-${prefix}`);
 
     // act
-    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache, true);
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
@@ -357,7 +341,7 @@ test("a top-level token one character short still offers the subcommand vocabula
   const { completionCache, resolver } = await seedResolver(t, "promote-short");
 
   // act
-  const suggestions = await getArgumentCompletions("marketplac", resolver, completionCache, true);
+  const suggestions = await getArgumentCompletions("marketplac", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [{ label: "marketplace", value: "marketplace " }]);
@@ -368,7 +352,7 @@ test("TC-2 promotes an exact top-level token with no trailing space to the next 
   const { completionCache, resolver } = await seedResolver(t, "promote-exact");
 
   // act
-  const suggestions = await getArgumentCompletions("marketplace", resolver, completionCache, true);
+  const suggestions = await getArgumentCompletions("marketplace", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [
@@ -390,7 +374,7 @@ test("TC-2 offers the marketplace vocabulary after the marketplace token and a s
   const { completionCache, resolver } = await seedResolver(t, "marketplace-space");
 
   // act
-  const suggestions = await getArgumentCompletions("marketplace ", resolver, completionCache, true);
+  const suggestions = await getArgumentCompletions("marketplace ", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [
@@ -424,7 +408,7 @@ for (const { prefix, expected } of [
     const { completionCache, resolver } = await seedResolver(t, "marketplace-narrow");
 
     // act
-    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache, true);
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
@@ -436,12 +420,7 @@ test("TC-2 promotes an exact marketplace subcommand token to the name argument",
   const { completionCache, resolver } = await seedResolver(t, "promote-nested");
 
   // act
-  const suggestions = await getArgumentCompletions(
-    "marketplace remove",
-    resolver,
-    completionCache,
-    true,
-  );
+  const suggestions = await getArgumentCompletions("marketplace remove", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [
@@ -486,7 +465,7 @@ for (const { prefix, expected } of [
     const { completionCache, resolver } = await seedResolver(t, "marketplace-names");
 
     // act
-    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache, true);
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
@@ -498,12 +477,7 @@ test("TC-5 offers no name argument for a marketplace verb that takes none", asyn
   const { completionCache, resolver } = await seedResolver(t, "marketplace-add");
 
   // act
-  const suggestions = await getArgumentCompletions(
-    "marketplace add ",
-    resolver,
-    completionCache,
-    true,
-  );
+  const suggestions = await getArgumentCompletions("marketplace add ", resolver, completionCache);
 
   // assert
   assert.strictEqual(suggestions, null);
@@ -514,7 +488,7 @@ test("TC-5 offers nothing past the single marketplace name a list head accepts",
   const { completionCache, resolver } = await seedResolver(t, "list-surplus");
 
   // act
-  const suggestions = await getArgumentCompletions("list hub ", resolver, completionCache, true);
+  const suggestions = await getArgumentCompletions("list hub ", resolver, completionCache);
 
   // assert
   assert.strictEqual(suggestions, null);
@@ -548,7 +522,7 @@ for (const { prefix, expected } of [
     const { completionCache, resolver } = await seedResolver(t, "scope-values");
 
     // act
-    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache, true);
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
@@ -560,12 +534,7 @@ test("TC-4 offers nothing for a scope flag pair that carries no subcommand", asy
   const { completionCache, resolver } = await seedResolver(t, "scope-only");
 
   // act
-  const suggestions = await getArgumentCompletions(
-    "--scope user ",
-    resolver,
-    completionCache,
-    true,
-  );
+  const suggestions = await getArgumentCompletions("--scope user ", resolver, completionCache);
 
   // assert
   assert.strictEqual(suggestions, null);
@@ -582,7 +551,7 @@ test("TC-3 prepends the global scope flag before a verb's own completable flags"
   const { completionCache, resolver } = await seedResolver(t, "flags-install");
 
   // act
-  const suggestions = await getArgumentCompletions("install -", resolver, completionCache, true);
+  const suggestions = await getArgumentCompletions("install -", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [
@@ -611,7 +580,7 @@ test("TC-3 offers only scope and preview flags for standalone prune", async (t) 
   const { completionCache, resolver } = await seedResolver(t, "flags-prune");
 
   // act
-  const suggestions = await getArgumentCompletions("prune -", resolver, completionCache, true);
+  const suggestions = await getArgumentCompletions("prune -", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [
@@ -629,7 +598,7 @@ test("TC-3 offers only the scope flag for apply (APL-04)", async (t) => {
   const { completionCache, resolver } = await seedResolver(t, "flags-apply");
 
   // act
-  const suggestions = await getArgumentCompletions("apply --", resolver, completionCache, true);
+  const suggestions = await getArgumentCompletions("apply --", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [
@@ -642,7 +611,7 @@ test("TC-3 resolves the ls alias to the list flag entries", async (t) => {
   const { completionCache, resolver } = await seedResolver(t, "flags-ls");
 
   // act
-  const suggestions = await getArgumentCompletions("ls -", resolver, completionCache, true);
+  const suggestions = await getArgumentCompletions("ls -", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [
@@ -664,12 +633,7 @@ test("TC-3 offers the global scope flag alone for a head the catalog does not ca
   const { completionCache, resolver } = await seedResolver(t, "flags-marketplace");
 
   // act
-  const suggestions = await getArgumentCompletions(
-    "marketplace -",
-    resolver,
-    completionCache,
-    true,
-  );
+  const suggestions = await getArgumentCompletions("marketplace -", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [
@@ -682,7 +646,7 @@ test("TC-3 narrows the flag entries by the typed long-flag prefix", async (t) =>
   const { completionCache, resolver } = await seedResolver(t, "flags-narrow");
 
   // act
-  const suggestions = await getArgumentCompletions("install --m", resolver, completionCache, true);
+  const suggestions = await getArgumentCompletions("install --m", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [
@@ -785,7 +749,7 @@ for (const { prefix, mode, expected } of [
     const { completionCache, resolver } = await seedResolver(t, `ref-${mode}`);
 
     // act
-    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache, true);
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
@@ -831,7 +795,7 @@ for (const { prefix, mode, expected } of [
     const { completionCache, resolver } = await seedResolver(t, `bare-${mode}`);
 
     // act
-    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache, true);
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
@@ -922,7 +886,7 @@ for (const { prefix, mode, expected } of [
     const { completionCache, resolver } = await seedResolver(t, `ref-scoped-${mode}`);
 
     // act
-    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache, true);
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
@@ -949,7 +913,7 @@ for (const { prefix, mode, expected } of [
     const { completionCache, resolver } = await seedResolver(t, `ref-partial-${mode}`);
 
     // act
-    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache, true);
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
 
     // assert
     assert.deepStrictEqual(suggestions, expected);
@@ -965,7 +929,6 @@ test("TC-6 treats the partial flag as a positional for a head that does not acce
     "reinstall --partial ",
     resolver,
     completionCache,
-    true,
   );
 
   // assert
@@ -990,7 +953,7 @@ for (const prefix of [
     const { completionCache, resolver } = await seedResolver(t, "no-completion");
 
     // act
-    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache, true);
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
 
     // assert
     assert.strictEqual(suggestions, null);
@@ -1012,12 +975,7 @@ test("TC-6 routes plugin references through the required completion cache", asyn
   await rm(cachePath);
 
   // act
-  const suggestions = await getArgumentCompletions(
-    "uninstall --scope user ",
-    resolver,
-    cache,
-    true,
-  );
+  const suggestions = await getArgumentCompletions("uninstall --scope user ", resolver, cache);
 
   // assert
   assert.deepStrictEqual(suggestions, [
@@ -1036,7 +994,7 @@ for (const prefix of ["market", "market "]) {
     const { completionCache, resolver } = await seedResolver(t, "market-vocabulary");
 
     // act
-    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache, true);
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
 
     // assert
     assert.deepStrictEqual(suggestions, [
@@ -1059,7 +1017,7 @@ test("narrows the marketplace vocabulary under the market alias", async (t) => {
   const { completionCache, resolver } = await seedResolver(t, "market-narrow");
 
   // act
-  const suggestions = await getArgumentCompletions("market ad", resolver, completionCache, true);
+  const suggestions = await getArgumentCompletions("market ad", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [{ label: "add", value: "market add " }]);
@@ -1070,7 +1028,7 @@ test("offers the marketplace add flags under the market alias", async (t) => {
   const { completionCache, resolver } = await seedResolver(t, "market-flags");
 
   // act
-  const suggestions = await getArgumentCompletions("market add -", resolver, completionCache, true);
+  const suggestions = await getArgumentCompletions("market add -", resolver, completionCache);
 
   // assert
   assert.deepStrictEqual(suggestions, [
@@ -1091,7 +1049,7 @@ for (const verb of ["remove", "rm", "info", "update"]) {
       const { completionCache, resolver } = await seedResolver(t, "market-names");
 
       // act
-      const suggestions = await getArgumentCompletions(prefix, resolver, completionCache, true);
+      const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
 
       // assert
       assert.deepStrictEqual(suggestions, [
@@ -1114,7 +1072,6 @@ for (const verb of ["add", "remove", "rm", "autoupdate", "noautoupdate"]) {
       `marketplace ${verb} --l`,
       resolver,
       completionCache,
-      true,
     );
 
     // assert
@@ -1134,7 +1091,6 @@ for (const verb of ["remove", "rm", "autoupdate", "noautoupdate"]) {
       `marketplace ${verb} --local `,
       resolver,
       completionCache,
-      true,
     );
 
     // assert
@@ -1151,7 +1107,7 @@ for (const prefix of ["bootstrap -", "bootstrap --scope "]) {
     const { resolver, completionCache } = await seedResolver(t, "bootstrap-flags");
 
     // act
-    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache, true);
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
 
     // assert
     assert.deepStrictEqual(suggestions, []);
@@ -1168,7 +1124,6 @@ for (const verb of ["info", "list", "update"]) {
       `marketplace ${verb} --l`,
       resolver,
       completionCache,
-      true,
     );
 
     // assert
