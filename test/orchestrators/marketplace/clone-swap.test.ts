@@ -6,6 +6,7 @@ import { test, type TestContext } from "node:test";
 
 import {
   DEFAULT_RENAME_OPS,
+  installedRootsInside,
   KEEP_MARKETPLACE_ON_FAILURE_VARIABLE,
   keepMarketplaceOnFailure,
   ownershipMarkerPath,
@@ -127,6 +128,7 @@ function swapArgs(
       | "renameOps"
       | "keepOnUnreachable"
       | "liveMarker"
+      | "ownershipMarker"
       | "carryOver"
     >
   > = {},
@@ -140,6 +142,7 @@ function swapArgs(
     auth: AUTH,
     liveMarker: path.join(".claude-plugin", "marketplace.json"),
     keepOnUnreachable: false,
+    ownershipMarker: true,
     carryOver: [],
     removalOps: createRemovalOps(),
     renameOps: DEFAULT_RENAME_OPS,
@@ -191,6 +194,32 @@ test("D-SG-10: a stale checkout is cloned into staging and swapped in with the o
     { ...clone, dir: path.dirname(clone?.dir ?? "") },
     { dir: swap.stagingRoot, url: REMOTE_URL, auth: AUTH },
   );
+  assert.deepStrictEqual(await entriesOf(swap.stagingRoot), []);
+  assert.deepStrictEqual(await entriesOf(path.dirname(swap.backupDir)), []);
+});
+
+test("MA-12 / D-SG-10: a mirror swap writes no ownership marker into its new clone", async (t) => {
+  // arrange
+  const swap = await swapRoot(t);
+  await writeCheckout(swap.liveDir, MANIFEST_A);
+  const git = gitAt({
+    localHead: COMMIT_A,
+    remoteHead: COMMIT_B,
+    cloneFrom: await remoteTree(t, MANIFEST_B),
+  });
+
+  // act
+  const swapped = await refreshCloneBySwap(
+    swapArgs(swap, git.gitOps, {
+      liveMarker: path.join(".git", "HEAD"),
+      ownershipMarker: false,
+    }),
+  );
+
+  // assert
+  assert.deepStrictEqual(swapped, { kind: "replaced" });
+  assert.strictEqual(await manifestOf(swap.liveDir), MANIFEST_B);
+  assert.deepStrictEqual(await entriesOf(path.join(swap.liveDir, ".git")), ["HEAD"]);
   assert.deepStrictEqual(await entriesOf(swap.stagingRoot), []);
   assert.deepStrictEqual(await entriesOf(path.dirname(swap.backupDir)), []);
 });
@@ -1003,4 +1032,35 @@ test("NFR-10: a plugin root outside the checkout carries nothing", async (t) => 
   assert.deepStrictEqual(swapped, { kind: "replaced" });
   assert.strictEqual(await packagesOf(outside), "outside packages\n");
   assert.deepStrictEqual(await entriesOf(swap.liveDir), [".claude-plugin", ".git"]);
+});
+
+/** A record of the scope whose plugin root is `resolvedSource`. */
+function marketplacesWithRoots(
+  ...resolvedSources: readonly string[]
+): Parameters<typeof installedRootsInside>[1] {
+  return {
+    tools: {
+      source: { source: "url", url: REMOTE_URL },
+      plugins: Object.fromEntries(
+        resolvedSources.map((resolvedSource, index) => [`p${String(index)}`, { resolvedSource }]),
+      ),
+    },
+  } as unknown as Parameters<typeof installedRootsInside>[1];
+}
+
+test("D-PL9-10 / NFR-10: the installed roots inside a checkout are its records' roots relative to it", () => {
+  // arrange
+  const liveDir = path.join(os.tmpdir(), "scope", "sources", "tools");
+  const marketplaces = marketplacesWithRoots(
+    path.join(liveDir, "plugins", "pkp"),
+    liveDir,
+    path.dirname(liveDir),
+    path.join(path.dirname(liveDir), "other", "plugin"),
+  );
+
+  // act
+  const roots = installedRootsInside(liveDir, marketplaces);
+
+  // assert
+  assert.deepStrictEqual(roots, [path.join("plugins", "pkp"), ""]);
 });

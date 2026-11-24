@@ -32,10 +32,13 @@ import {
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { loadState } from "../../persistence/state-io.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   appendLeakToError,
+  errorMessage,
   GitCommandError,
   PinnedCommitMissingError,
+  PluginMirrorInUseError,
   type GitFailure,
 } from "../../shared/errors.ts";
 import {
@@ -48,11 +51,12 @@ import {
 import { gitHubWireUrl } from "../../shared/github-base-url.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import {
-  DEFAULT_GIT_OPS,
-  refreshGitHubClone,
-  type GitAuthBundle,
-  type GitOps,
-} from "../marketplace/shared.ts";
+  DEFAULT_RENAME_OPS,
+  installedRootsInside,
+  refreshCloneBySwap,
+  type RenameOps,
+} from "../marketplace/clone-swap.ts";
+import { DEFAULT_GIT_OPS, type GitAuthBundle, type GitOps } from "../marketplace/shared.ts";
 
 import type { GitPluginRootResult } from "../../domain/resolver-types.ts";
 import type {
@@ -439,8 +443,8 @@ export async function materializeUnpinnedSource(
  * `materializePluginCommitCopy` and never records the mirror itself.
  *
  * This is the marketplace clone lifecycle applied to a URL-keyed directory
- * (D-79.1-01): one mirror per canonical URL, refreshed in place on mutating
- * verbs, so multi-clone ambiguity is impossible by construction.
+ * (D-79.1-01): one mirror per canonical URL, refreshed on mutating verbs, so
+ * multi-clone ambiguity is impossible by construction.
  *
  * Flow:
  *   1. mirrorRoot = pluginCloneDir(pluginMirrorKey(cloneUrl)) (SC-7 chokepoint).
@@ -453,31 +457,44 @@ export async function materializeUnpinnedSource(
  *      through to the refresh path -- the winner's tree still needs a HEAD read
  *      (D-79.1-03).
  *   3. When the mirror was already present, or a concurrent create won the
- *      rename race, refresh it in place via `refreshGitHubClone` -- fetch +
- *      force-update ref + checkout, the SAME function marketplace update uses
- *      (refresh-on-warm, D-79.1-02). A mirror this call just cloned is not
- *      refreshed: the clone already fetched the remote, and `marketplace add`
- *      and Claude Code both clone a source once. Reads (list/info) never call
- *      this seam, so NFR-5 is untouched. With `refresh: false` a present
- *      mirror answers the commit its last fetch recorded for the declared ref,
- *      with no network (reinstall, D-18-04): the ref's tracking ref, or else
- *      the local tag of that name (D-PL7-10, GLK-08). A missing mirror, or a
- *      ref the mirror holds neither way, is the NFR-5 cache miss and still
- *      reaches it.
+ *      rename race, refresh it by D-SG-10's re-clone and swap, the swap
+ *      `marketplace update` runs (refresh-on-warm, D-79.1-02): a backup that an
+ *      interrupted swap left in `plugin-clones-backup/<key>` is put back or
+ *      removed, then `ls-remote` of the source's ref (`HEAD` with none) decides.
+ *      A current mirror is left as it is. A stale mirror, or one whose HEAD
+ *      cannot be read, is cloned again into `sources-staging/` and swapped in
+ *      through `plugin-clones-backup/<key>`, carrying the packages of any
+ *      installed plugin root inside it (D-PL9-10). A failed clone leaves the
+ *      mirror untouched. A mirror is never kept on failure: an unreachable
+ *      remote is cloned again, and that clone's failure is the refresh's; a
+ *      mirror that cannot be moved aside fails as `PluginMirrorInUseError`
+ *      (`permission denied`), so no stale revision installs. A mirror gets no
+ *      MA-12 ownership marker. A mirror this call just cloned is not
+ *      refreshed: the clone already read the remote, and `marketplace add` and
+ *      Claude Code both clone a source once. Reads (list/info) never call this
+ *      seam, so NFR-5 is untouched. With `refresh: false` a present mirror
+ *      answers the commit its last clone recorded for the declared ref, with
+ *      no network (reinstall, D-18-04): the ref's tracking ref, or else the
+ *      local tag of that name (D-PL7-10, GLK-08). A missing mirror, or a ref
+ *      the mirror holds neither way, is the NFR-5 cache miss and still reaches
+ *      it.
  *   4. Read the pin: resolvedSha = resolveRef({ dir: mirrorRoot, ref: "HEAD" }).
  *      A mirror whose HEAD names no commit fails as `local-ref-missing`.
  *
- * `auth` threads into the clone and the refresh fetch the way
- * `materializePluginClone`'s bundle does (no mirror-specific auth path). Either
- * the clone or the refresh reaches the network, so the caller builds the bundle
- * up front. Derive-not-persist: mirror-dir existence IS the fetched-state -- no
- * migration stamp, no refcount.
- * All git surface (refreshGitHubClone, gitOps, resolveRef, DEFAULT_GIT_OPS)
- * stays confined to this file, never surfaced to install/list/info.
+ * `auth` threads into the clone, the freshness check, and the re-clone the way
+ * `materializePluginClone`'s bundle does (no mirror-specific auth path). Each
+ * of them reaches the network, so the caller builds the bundle up front.
+ * Derive-not-persist: mirror-dir existence IS the fetched-state -- no
+ * migration stamp, no refcount. The caller holds the scope's state lock around
+ * the whole refresh (GIT-03), so a second Pi on the scope never sees a
+ * half-swapped mirror. All git surface (the swap, gitOps, resolveRef,
+ * DEFAULT_GIT_OPS) stays confined to this file, never surfaced to
+ * install/list/info.
  *
  * `networkUrl` is caller-computed (D-2-03): the `url` arm of the derivation
  * needs `source.raw`, which is not recoverable from `cloneUrl` once the
- * parse-time strip has run.
+ * parse-time strip has run. A cold clone, the freshness check, and a re-clone
+ * all send it.
  */
 export async function materializeOrRefreshPluginMirror(args: {
   locations: ScopedLocations;
@@ -485,6 +502,7 @@ export async function materializeOrRefreshPluginMirror(args: {
   networkUrl: string;
   ref?: string;
   gitOps?: GitOps;
+  renameOps?: RenameOps;
   auth: GitAuthBundle;
   refresh?: boolean;
   onCloneCreated?: (key: string) => void;
@@ -498,10 +516,8 @@ export async function materializeOrRefreshPluginMirror(args: {
   const key = pluginMirrorKey(args.cloneUrl);
   const mirrorRoot = await args.locations.pluginCloneDir(key);
   // D-2-03: same split as `materializePluginClone` -- the mirror key hashes the
-  // canonical identity url, and the caller-supplied wire url is what a COLD
-  // clone sends. The refresh below fetches the `origin` remote isomorphic-git
-  // recorded at that first clone, so two sources sharing one identity share the
-  // first writer's wire url on every warm refresh.
+  // canonical identity url, and the caller-supplied wire url is what a clone
+  // and the freshness check send.
   const networkUrl = args.networkUrl;
 
   // MIRR-01: materialize the mirror on a cold key (no fixed-pin checkout; the
@@ -518,8 +534,8 @@ export async function materializeOrRefreshPluginMirror(args: {
     }
 
     // MIRR-03 / D-79.1-03: a `raced` promotion falls through to the refresh
-    // path -- the winner's byte-equivalent tree still needs an in-place refresh
-    // plus a HEAD read.
+    // path -- the winner's byte-equivalent tree still needs a refresh plus a
+    // HEAD read.
     promotion = await promoteStagingToClone(
       removalOps,
       stagingDir,
@@ -531,11 +547,12 @@ export async function materializeOrRefreshPluginMirror(args: {
     }
   }
 
-  // MIRR-02 / D-79.1-02: refresh a warm mirror in place (marketplace parity).
-  // The HEAD sha read below is the fetched-state; no separate advance flag is
-  // consumed here. D-18-04: with `refresh: false` the declared ref is read
-  // from the mirror's last fetch instead, and only a ref the mirror never
-  // fetched falls back to the refresh, as a cache miss would.
+  // MIRR-02 / D-79.1-02 / D-SG-10: refresh a warm mirror by re-clone and swap
+  // (marketplace parity). The HEAD sha read below is the fetched-state; no
+  // separate advance flag is consumed here. D-18-04: with `refresh: false` the
+  // declared ref is read from the mirror's last clone instead, and only a ref
+  // the mirror never received falls back to the refresh, as a cache miss
+  // would.
   if (promotion !== "renamed") {
     const fetchedSha =
       args.refresh === false
@@ -545,7 +562,7 @@ export async function materializeOrRefreshPluginMirror(args: {
       return { pluginRoot: mirrorRoot, resolvedSha: fetchedSha };
     }
 
-    await refreshGitHubClone(mirrorRoot, args.ref, gitOps, undefined, args.auth);
+    await refreshMirrorBySwap({ ...args, gitOps, removalOps, key, mirrorRoot });
   }
 
   const resolvedSha = await gitOps.resolveRef({ dir: mirrorRoot, ref: "HEAD" });
@@ -556,14 +573,75 @@ export async function materializeOrRefreshPluginMirror(args: {
   return { pluginRoot: mirrorRoot, resolvedSha };
 }
 
+/** D-SG-10: the file whose presence makes a plugin mirror a valid checkout. */
+const MIRROR_LIVE_MARKER = path.join(".git", "HEAD");
+
 /**
- * D-18-04 / REI-04: the commit a present mirror last fetched for the ref a
+ * D-PL9-10: the roots inside `mirrorRoot` of the scope's installed plugins. A
+ * record from before the per-commit copies (GIT-01) may still run from the
+ * mirror, so the swap carries its packages over. The carry is best effort, as
+ * in the swap itself: a state file that cannot be read carries nothing, and a
+ * debug-log line says so.
+ */
+async function installedRootsInMirror(
+  locations: ScopedLocations,
+  mirrorRoot: string,
+): Promise<readonly string[]> {
+  try {
+    const state = await loadState(locations.extensionRoot);
+    return installedRootsInside(mirrorRoot, state.marketplaces);
+  } catch (err) {
+    hookDebugLog(`mirror ${mirrorRoot} carries no packages: ${errorMessage(err)}`, "git");
+    return [];
+  }
+}
+
+/**
+ * D-SG-10 / SG-TRN-03: refresh the present mirror at `mirrorRoot` by re-clone
+ * and swap. The keep variable of D-SG-15 is for marketplaces only, so an
+ * unreachable remote is cloned again, and a mirror that cannot be moved aside
+ * fails as `PluginMirrorInUseError`.
+ */
+async function refreshMirrorBySwap(args: {
+  readonly locations: ScopedLocations;
+  readonly networkUrl: string;
+  readonly ref?: string;
+  readonly gitOps: GitOps;
+  readonly renameOps?: RenameOps;
+  readonly auth: GitAuthBundle;
+  readonly removalOps: RemovalOps;
+  readonly key: string;
+  readonly mirrorRoot: string;
+}): Promise<void> {
+  const swapped = await refreshCloneBySwap({
+    locations: args.locations,
+    liveDir: args.mirrorRoot,
+    backupDir: await args.locations.pluginCloneBackupDir(args.key),
+    url: args.networkUrl,
+    ...(args.ref !== undefined && { ref: args.ref }),
+    gitOps: args.gitOps,
+    auth: args.auth,
+    liveMarker: MIRROR_LIVE_MARKER,
+    keepOnUnreachable: false,
+    ownershipMarker: false,
+    carryOver: await installedRootsInMirror(args.locations, args.mirrorRoot),
+    removalOps: args.removalOps,
+    renameOps: args.renameOps ?? DEFAULT_RENAME_OPS,
+  });
+  if (swapped.kind === "kept-in-use") {
+    throw new PluginMirrorInUseError(swapped.cause);
+  }
+}
+
+/**
+ * D-18-04 / REI-04: the commit a present mirror last received for the ref a
  * source declares, read with no network. The mirror is keyed by URL only, so
  * its checked-out HEAD belongs to whichever source refreshed it last, which
  * can be another plugin with a different `ref`, or this entry before its
  * `ref` changed. The remote-tracking ref is this source's own: the default
  * branch (`refs/remotes/origin/HEAD`) when no ref is declared, otherwise
- * `refs/remotes/origin/<ref>`.
+ * `refs/remotes/origin/<ref>`. A depth-1 clone writes the first for the
+ * default branch and the second for `--branch=<branch>` (D-SG-10).
  *
  * A declared ref with no tracking ref falls back to the local tag of that
  * name (D-PL7-10, GLK-08): a clone for a tag writes `refs/tags/<ref>` and no

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHook } from "node:async_hooks";
-import { chmod, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -40,6 +40,7 @@ import { whileStateLockHeld } from "../state-lock.ts";
 
 import type { MarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import type { RenameOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/clone-swap.ts";
 import type {
   GitAuthBundle,
   GitOps,
@@ -101,12 +102,12 @@ interface TreeEntry {
 interface GitBoundaryOptions {
   readonly allowedRemoteUrls: readonly string[];
   readonly cloneError?: Error;
-  readonly fetchError?: Error;
   readonly fixtureSourceDir?: string;
   readonly head?: string;
   readonly localRefs?: Readonly<Record<string, string>>;
   readonly remoteHead?: string;
   readonly remoteRefs?: Readonly<Record<string, string>>;
+  readonly resolveRemoteRefError?: Error;
   readonly writeHead?: boolean;
 }
 
@@ -160,7 +161,6 @@ function gitBoundary(options: GitBoundaryOptions): GitBoundary {
     boundary: "memory",
     allowedRemoteUrls: options.allowedRemoteUrls,
     ...(options.cloneError === undefined ? {} : { cloneError: options.cloneError }),
-    ...(options.fetchError === undefined ? {} : { fetchError: options.fetchError }),
     ...(options.fixtureSourceDir === undefined
       ? {}
       : { cloneFixture: { boundary: "local", sourceDir: options.fixtureSourceDir } }),
@@ -168,6 +168,9 @@ function gitBoundary(options: GitBoundaryOptions): GitBoundary {
     ...(options.localRefs === undefined ? {} : { localRefs: options.localRefs }),
     ...(options.remoteHead === undefined ? {} : { remoteHead: options.remoteHead }),
     ...(options.remoteRefs === undefined ? {} : { remoteRefs: options.remoteRefs }),
+    ...(options.resolveRemoteRefError === undefined
+      ? {}
+      : { resolveRemoteRefError: options.resolveRemoteRefError }),
   });
   const schedule: string[] = [];
   const gitOps: GitOps = {
@@ -234,12 +237,16 @@ function sourceIdentity(source: GitBackedSource): string {
   return source.url;
 }
 
-function cacheBoundary(gitOps: GitOps): CacheBoundary {
+function cacheBoundary(gitOps: GitOps, renameOps?: RenameOps): CacheBoundary {
   const calls: string[] = [];
   const seam: FetchCloneCacheSeam = {
     async materializeOrRefreshPluginMirror(args) {
       calls.push(`mirror ${args.cloneUrl} ref=${args.ref ?? "-"} auth=${args.auth?.host ?? "-"}`);
-      return materializeOrRefreshPluginMirror({ ...args, gitOps });
+      return materializeOrRefreshPluginMirror({
+        ...args,
+        gitOps,
+        ...(renameOps === undefined ? {} : { renameOps }),
+      });
     },
     async materializePluginClone(args) {
       calls.push(
@@ -567,7 +574,7 @@ test("materializes a cold pinned URL clone at its recorded SHA", async () => {
   });
 });
 
-test("refreshes an unpinned warm mirror with its ref and leaves state immutable", async () => {
+test("D-SG-10: checks an unpinned warm mirror's ref with ls-remote, keeps a current mirror, and leaves state immutable", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://example.com/plugin";
@@ -614,10 +621,8 @@ test("refreshes an unpinned warm mirror with its ref and leaves state immutable"
     ]);
     assert.deepStrictEqual(cache.calls, [`mirror ${cloneUrl} ref=main auth=example.com`]);
     assert.deepStrictEqual(git.schedule, [
-      "fetch remote=origin ref=main auth=example.com",
-      "resolve-local refs/remotes/origin/main",
-      `force-update refs/heads/main=${head}`,
-      "checkout main",
+      "resolve-local HEAD",
+      `resolve-remote ${networkUrl} ref=main auth=example.com`,
       "resolve-local HEAD",
     ]);
     assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
@@ -2129,7 +2134,7 @@ test("rejects a stale credential and contains a reject failure", async () => {
   });
 });
 
-test("retains a warm mirror after refresh failure and converges on retry", async () => {
+test("D-SG-10: retains a warm mirror whose check and re-clone fail and converges on retry", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
     const cloneUrl = "https://example.com/warm-retry";
@@ -2147,9 +2152,11 @@ test("retains a warm mirror after refresh failure and converges on retry", async
     await writeFile(path.join(mirrorRoot, ".git", "HEAD"), `${head}\n`);
     const treeBefore = await snapshotTree(locations.pluginClonesDir);
     const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+    const unreachable = Object.assign(new Error("network unreachable"), { code: "ENETUNREACH" });
     const failedGit = gitBoundary({
-      allowedRemoteUrls: [],
-      fetchError: Object.assign(new Error("network unreachable"), { code: "ENETUNREACH" }),
+      allowedRemoteUrls: [cloneUrl],
+      cloneError: unreachable,
+      resolveRemoteRefError: unreachable,
       head,
       localRefs: { "refs/heads/main": head },
       remoteHead: head,
@@ -2158,7 +2165,7 @@ test("retains a warm mirror after refresh failure and converges on retry", async
     const failedCache = cacheBoundary(failedGit.gitOps);
     const failedBoundary = notificationBoundary("mirror refresh failure");
     const retryGit = gitBoundary({
-      allowedRemoteUrls: [],
+      allowedRemoteUrls: [cloneUrl],
       head,
       localRefs: { "refs/heads/main": head },
       remoteHead: head,
@@ -2198,13 +2205,89 @@ test("retains a warm mirror after refresh failure and converges on retry", async
       },
     ]);
     assert.deepStrictEqual(treeAfterFailure, treeBefore);
+    assert.deepStrictEqual(failedGit.schedule, [
+      "resolve-local HEAD",
+      `resolve-remote ${cloneUrl} ref=- auth=example.com`,
+      `clone ${cloneUrl} ref=- single=false auth=example.com`,
+    ]);
     assert.deepStrictEqual(retryBoundary.notifications, [
       { message: "● marketplace [project]\n  ○ warm-retry v1.0.0 (available)" },
+    ]);
+    assert.deepStrictEqual(retryGit.schedule, [
+      "resolve-local HEAD",
+      `resolve-remote ${cloneUrl} ref=- auth=example.com`,
+      "resolve-local HEAD",
     ]);
     assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
     assert.deepStrictEqual(await stagingEntries(locations), []);
     verifyNotifications(failedBoundary);
     verifyNotifications(retryBoundary);
+  });
+});
+
+test("D-SG-10 / SG-TRN-03: a moved warm mirror that cannot be moved aside fails as permission denied and is never used", async () => {
+  await withWorkspace(async ({ cwd }) => {
+    // arrange
+    const cloneUrl = "https://example.com/in-use";
+    const head = "4567890abcdef1234567890abcdef12345678901";
+    const moved = "567890abcdef1234567890abcdef123456789012";
+    const fixture = path.join(cwd, "fixture");
+    await writePluginTree(fixture, "in-use", "2.0.0");
+    const marketplace = await marketplaceRecord({
+      cwd,
+      entries: [{ name: "in-use", source: { source: "url", url: cloneUrl } }],
+      name: "marketplace",
+      scope: "project",
+    });
+    const locations = await saveMarketplaces(cwd, "project", [marketplace]);
+    const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+    await writePluginTree(mirrorRoot, "in-use", "1.0.0");
+    await mkdir(path.join(mirrorRoot, ".git"), { recursive: true });
+    await writeFile(path.join(mirrorRoot, ".git", "HEAD"), `${head}\n`);
+    const treeBefore = await snapshotTree(locations.pluginClonesDir);
+    const git = gitBoundary({
+      allowedRemoteUrls: [cloneUrl],
+      fixtureSourceDir: fixture,
+      head,
+      remoteHead: moved,
+    });
+    const renameError = Object.assign(new Error("EBUSY: resource busy or locked, rename"), {
+      code: "EBUSY",
+      syscall: "rename",
+    });
+    const cache = cacheBoundary(git.gitOps, {
+      rename: (from, to) => (from === mirrorRoot ? Promise.reject(renameError) : rename(from, to)),
+    });
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const boundary = notificationBoundary("mirror in use");
+
+    // act
+    await fetchPlugins({
+      cloneCacheSeam: cache.seam,
+      credentialOps: credentials.credentialOps,
+      ctx: boundary.ctx,
+      cwd,
+      run: boundary.run,
+      scope: "project",
+      target: { kind: "plugin", marketplace: "marketplace", plugin: "in-use" },
+    });
+
+    // assert
+    assert.deepStrictEqual(boundary.notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n● marketplace [project]\n  ⊘ in-use (failed) {permission denied}\n    cause: Could not replace the plugin mirror because it is in use; the existing copy was kept and the next command will try again. -> EBUSY: resource busy or locked, rename",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(git.schedule, [
+      "resolve-local HEAD",
+      `resolve-remote ${cloneUrl} ref=- auth=example.com`,
+      `clone ${cloneUrl} ref=- single=false auth=example.com`,
+    ]);
+    assert.deepStrictEqual(await snapshotTree(locations.pluginClonesDir), treeBefore);
+    assert.deepStrictEqual(await stagingEntries(locations), []);
+    verifyNotifications(boundary);
   });
 });
 

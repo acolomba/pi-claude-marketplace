@@ -43,6 +43,7 @@ import {
   PinnedCommitMissingError,
   PluginInBaseLayerOnlyError,
   PluginInLocalLayerOnlyError,
+  PluginMirrorInUseError,
   PluginShapeError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
@@ -703,6 +704,44 @@ describe("PinnedCommitMissingError", () => {
         cause: undefined,
       },
     );
+  });
+});
+
+describe("PluginMirrorInUseError", () => {
+  for (const { renameCode, code } of [
+    { renameCode: "EACCES", code: "EACCES" },
+    { renameCode: "EPERM", code: "EPERM" },
+    { renameCode: "EBUSY", code: "EPERM" },
+  ] as const) {
+    test(`D-SG-10: a mirror rename refused with ${renameCode} carries ${code} and the rename's error`, () => {
+      // arrange
+      const renameError = Object.assign(new Error(`${renameCode}: rename refused`), {
+        code: renameCode,
+      });
+
+      // act
+      const error = new PluginMirrorInUseError(renameError);
+
+      // assert
+      assert.deepStrictEqual(
+        { name: error.name, message: error.message, code: error.code, cause: error.cause },
+        {
+          name: "PluginMirrorInUseError",
+          message:
+            "Could not replace the plugin mirror because it is in use; the existing copy was kept and the next command will try again.",
+          code,
+          cause: renameError,
+        },
+      );
+    });
+  }
+
+  test("D-SG-10: a mirror rename refused with no errno code carries EPERM", () => {
+    // act
+    const error = new PluginMirrorInUseError(new Error("rename refused"));
+
+    // assert
+    assert.strictEqual(error.code, "EPERM");
   });
 });
 

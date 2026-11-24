@@ -10,8 +10,12 @@
 // D-SG-15: with `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE` true, a
 // checkout whose remote cannot be reached is kept as it is.
 //
-// This module is not a ledger: `update.ts` and `add.ts` import it, and it
-// imports no ledger. Every directory it renames or removes comes from a
+// The same swap refreshes a marketplace checkout and a plugin mirror. A
+// marketplace swap writes the MA-12 ownership marker into staging; a mirror
+// swap writes none and never keeps a checkout on failure.
+//
+// This module is not a ledger: `update.ts`, `add.ts`, `plugin/clone-cache.ts`,
+// and `plugin/update-flow.ts` import it, and it imports no ledger. Every directory it renames or removes comes from a
 // `ScopedLocations` getter (NFR-10), and both renames stay under the extension
 // root, on one filesystem.
 
@@ -32,6 +36,7 @@ import { cleanupStaging, pathExists, type RemovalOps } from "../../shared/fs-uti
 import { assertPathInside } from "../../shared/path-safety.ts";
 
 import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { GitAuthBundle, GitOps } from "./shared.ts";
 
 /**
@@ -117,6 +122,12 @@ export interface CloneSwapArgs {
   readonly liveMarker: string;
   /** D-SG-15: keep a valid checkout whose remote cannot be reached. */
   readonly keepOnUnreachable: boolean;
+  /**
+   * MA-12: write the marketplace ownership marker into the staging clone
+   * before the swap. A marketplace checkout carries it; a plugin mirror does
+   * not, because no `marketplace add` guard reads a mirror.
+   */
+  readonly ownershipMarker: boolean;
   /**
    * D-PL9-10: the roots, relative to the checkout, of the installed plugins
    * that run inside it. Their `node_modules` move from the old checkout into
@@ -260,7 +271,10 @@ async function cloneIntoStaging(args: CloneSwapArgs, freshness: Freshness): Prom
       ...(args.ref !== undefined && { ref: args.ref, singleBranch: true }),
       auth: args.auth,
     });
-    await writeOwnershipMarker(stagingDir);
+    if (args.ownershipMarker) {
+      await writeOwnershipMarker(stagingDir);
+    }
+
     return stagingDir;
   } catch (err) {
     const failure = freshness.kind === "unreachable" ? freshness.cause : err;
@@ -354,6 +368,26 @@ async function carryPackagesOf(args: CloneSwapArgs, pluginRoot: string): Promise
   } catch (err) {
     hookDebugLog(`could not carry ${from} to ${to}: ${errorMessage(err)}`, "git");
   }
+}
+
+/**
+ * D-PL9-10 / NFR-10: the roots, relative to `liveDir`, of the scope's installed
+ * plugins whose plugin root lies inside that checkout, so the swap carries
+ * their packages over. A root outside the checkout is not the swap's.
+ */
+export function installedRootsInside(
+  liveDir: string,
+  marketplaces: ExtensionState["marketplaces"],
+): readonly string[] {
+  return Object.values(marketplaces)
+    .flatMap((marketplace) => Object.values(marketplace.plugins))
+    .map((plugin) => path.relative(liveDir, plugin.resolvedSource))
+    .filter(
+      (pluginRoot) =>
+        pluginRoot !== ".." &&
+        !pluginRoot.startsWith(`..${path.sep}`) &&
+        !path.isAbsolute(pluginRoot),
+    );
 }
 
 /** D-PL9-10: carry the packages of every installed plugin root into the new checkout. */

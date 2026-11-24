@@ -160,6 +160,7 @@ import { surfaceCascadeStagingDiagnostics } from "../plugin/staging-diagnostics.
 
 import {
   DEFAULT_RENAME_OPS,
+  installedRootsInside,
   KEEP_MARKETPLACE_ON_FAILURE_VARIABLE,
   keepMarketplaceOnFailure,
   refreshCloneBySwap,
@@ -553,26 +554,6 @@ function attachStoredCredentialCause(
 }
 
 /**
- * D-PL9-10 / NFR-10: the roots, relative to `liveDir`, of the scope's installed
- * plugins whose plugin root lies inside that checkout, so the swap carries
- * their packages over. A root outside the checkout is not the swap's.
- */
-function installedRootsIn(
-  liveDir: string,
-  marketplaces: ExtensionState["marketplaces"],
-): readonly string[] {
-  return Object.values(marketplaces)
-    .flatMap((marketplace) => Object.values(marketplace.plugins))
-    .map((plugin) => path.relative(liveDir, plugin.resolvedSource))
-    .filter(
-      (pluginRoot) =>
-        pluginRoot !== ".." &&
-        !pluginRoot.startsWith(`..${path.sep}`) &&
-        !path.isAbsolute(pluginRoot),
-    );
-}
-
-/**
  * D-SG-10: refresh a github or url checkout by `ls-remote`, re-clone, and swap,
  * inside the caller's state lock (Q13). D-SG-15: a valid checkout whose remote
  * cannot be reached is kept when the keep variable is true.
@@ -597,7 +578,8 @@ async function refreshGitSource(
       auth,
       liveMarker: MARKETPLACE_MANIFEST_MARKER,
       keepOnUnreachable: args.keepOnFailure,
-      carryOver: installedRootsIn(liveDir, marketplaces),
+      ownershipMarker: true,
+      carryOver: installedRootsInside(liveDir, marketplaces),
       onReplaced,
       removalOps: args.removalOps,
       renameOps: args.renameOps,

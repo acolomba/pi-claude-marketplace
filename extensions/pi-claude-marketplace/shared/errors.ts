@@ -1296,6 +1296,27 @@ export class PinnedCommitMissingError extends Error {
 }
 
 /**
+ * D-SG-10 / SG-TRN-03: a plugin mirror whose new clone could not be swapped
+ * in, because the live mirror could not be moved aside. A mirror is never kept
+ * on failure, so no stale revision installs: the plugin's row fails as
+ * `permission denied`, and the next command tries again. `code` is the errno
+ * every plugin row reads for that reason: the rename's own `EACCES` or
+ * `EPERM`, and `EPERM` for `EBUSY`, which Windows reports for a folder another
+ * process holds open. The rename's error is the cause.
+ */
+export class PluginMirrorInUseError extends Error {
+  readonly code: "EACCES" | "EPERM";
+  constructor(cause: Error) {
+    super(
+      "Could not replace the plugin mirror because it is in use; the existing copy was kept and the next command will try again.",
+      { cause },
+    );
+    this.name = "PluginMirrorInUseError";
+    this.code = isErrnoException(cause) && cause.code === "EACCES" ? "EACCES" : "EPERM";
+  }
+}
+
+/**
  * SG-PRC-05: the closed set of git failure kinds a `GitCommandError` carries,
  * read from git's exit status and its stderr under `LC_MESSAGES=C`. It holds
  * Claude Code's classes (timeout with its limit, the host key and auth
