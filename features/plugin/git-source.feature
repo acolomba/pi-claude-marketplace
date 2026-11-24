@@ -347,6 +347,43 @@ Feature: Plugin git source
     Then the project scope has no installed plugins
     Then the project scope holds no git clones
 
+  Scenario: A pinned plugin whose git host refuses fetches by SHA installs through the unshallow fallback
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 2.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" pins the plugin "ghp" to the commit "{ghp commit 1}"
+    Given the git host refuses fetches by sha for the plugin "ghp"
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin install ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   |
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+    Then the git-source plugin "ghp" installed in the project scope runs revision 1 of its repository
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command          | description           |
+      | /skill:ghp-skill | A skill of ghp 1.0.0. |
+
   Scenario: Installing a plugin pinned to an abbreviated commit is refused before git runs
     Given the git repository "urlp" holds these plugins:
       | name | version | path |

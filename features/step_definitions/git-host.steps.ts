@@ -1,11 +1,11 @@
 /**
  * @fileoverview Steps about the https git host that serves the repositories
  * of git marketplaces and git plugins, and the catalog files of hosted
- * marketplaces: arming one repository or catalog to fail, to redirect, or to
- * require a credential, serving a catalog of a given size, letting it serve
- * again, the GitHub base address pi runs with, a pi with no git on its path,
- * the credential a user stores
- * for the host, and the requests the host receives. A step names a repository
+ * marketplaces: arming one repository or catalog to fail, to redirect, to
+ * refuse fetches by SHA, or to require a credential, serving a catalog of a
+ * given size, letting it serve again, the GitHub base address pi runs with, a
+ * pi with no git on its path, the credential a user stores for the host, and
+ * the requests the host receives. A step names a repository
  * through the `git repository` parameter type, by the marketplace or the
  * plugin it serves; a hosted marketplace names the directory its catalog is
  * served under. Every arm is released with its scenario (HOST-03).
@@ -155,6 +155,16 @@ Given(
   "the git host sends an invalid response for the {git repository}",
   async function (this: ScenarioWorld, reference: GitRepositoryReference): Promise<void> {
     await armRepository(this, reference, { kind: "invalid-response" });
+  },
+);
+
+// SG-TRN-02, E3-PIN: the repository serves protocol v0 with no SHA wants, so a
+// fetch of a commit by its SHA is refused while a clone and a fetch of a ref
+// still serve.
+Given(
+  "the git host refuses fetches by sha for the {git repository}",
+  async function (this: ScenarioWorld, reference: GitRepositoryReference): Promise<void> {
+    await armRepository(this, reference, { kind: "refuse-sha-want" });
   },
 );
 
