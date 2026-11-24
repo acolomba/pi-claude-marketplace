@@ -609,8 +609,8 @@ export class CrossOriginChallengeError extends Error {
  */
 export class StoredCredentialRejectedError extends Error {
   readonly host: string;
-  constructor(host: string) {
-    super(`${host} rejected the stored credential`);
+  constructor(host: string, opts?: { cause?: unknown }) {
+    super(`${host} rejected the stored credential`, opts);
     this.name = "StoredCredentialRejectedError";
     this.host = host;
   }

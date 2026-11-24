@@ -5,15 +5,18 @@ import * as path from "node:path";
 import * as git from "isomorphic-git";
 import nodeHttpClient from "isomorphic-git/http/node";
 
+import { hookDebugLog } from "../shared/debug-log.ts";
 import {
   CrossOriginChallengeError,
   FetchedUrlCause,
   GitCommandError,
+  StoredCredentialRejectedError,
   TooManyRedirectsError,
 } from "../shared/errors.ts";
 import { gitHubInsteadOfPairs, gitHubWireUrl } from "../shared/github-base-url.ts";
 
 import { buildAuthCallbacks } from "./git-auth-callbacks.ts";
+import { withOneShotCredential } from "./git-one-shot-credential.ts";
 import { NODE_GIT_PROCESS } from "./git-process.ts";
 import { gitTimeoutMs } from "./git-timeout.ts";
 
@@ -128,8 +131,8 @@ export interface FetchCommitOptions {
    */
   ref?: string;
   /**
-   * Accepted for the callers; the credential path of the network requests
-   * reads it once that path lands.
+   * Optional auth bundle. git asks the user's credential helpers itself; the
+   * bundle decides what an auth failure of a rung leads to (D-SG-14, GAUTH-04).
    */
   auth?: BuildAuthCallbacksOpts;
 }
@@ -572,6 +575,9 @@ async function networkCall<T>(wireUrl: string, url: string, call: () => Promise<
   return result;
 }
 
+/** A remote request as `runRemote` built it: its config pairs are always present. */
+type RemoteGitRequest = GitRequest & { readonly config: readonly string[] };
+
 /** One remote request that `runRemote` sends with system git. */
 interface RemoteRequest {
   readonly subcommand: "fetch" | "ls-remote";
@@ -585,6 +591,8 @@ interface RemoteRequest {
    * recorded origin. It alone decides the D-SG-16 pair and the GHB-01 cause.
    */
   readonly url: string;
+  /** The caller's auth bundle, which decides what an auth failure leads to. */
+  readonly auth?: BuildAuthCallbacksOpts | undefined;
 }
 
 /**
@@ -594,14 +602,15 @@ interface RemoteRequest {
  * `gitTimeoutMs()` read for this command (D-SG-13), the signal of the abort
  * scope it runs in (D-PL8-24), and the D-SG-16 pair of
  * `gitHubInsteadOfPairs(remote.url)`, which throws `InvalidGitHubBaseUrlError`
- * before anything starts. A failure of a request the base rewrote gains the
- * `FetchedUrlCause` of the URL git fetched (GHB-01).
+ * before anything starts. An auth failure goes to `runWithAuthBundle`. A
+ * failure of a request the base rewrote gains the `FetchedUrlCause` of the URL
+ * git fetched (GHB-01).
  */
 async function runRemote(remote: RemoteRequest, gitProcess: GitProcess): Promise<GitResult> {
   await gitProcess.locate();
   const config = gitHubInsteadOfPairs(remote.url);
   const signal = gitAbortScope.getStore();
-  const request: GitRequest = {
+  const request: RemoteGitRequest = {
     subcommand: remote.subcommand,
     lane: "network",
     options: remote.options,
@@ -611,7 +620,79 @@ async function runRemote(remote: RemoteRequest, gitProcess: GitProcess): Promise
     timeoutMs: gitTimeoutMs(),
     ...(signal !== undefined && { signal }),
   };
-  return withFetchedUrlCause(gitHubWireUrl(remote.url), remote.url, () => gitProcess.run(request));
+  return withFetchedUrlCause(gitHubWireUrl(remote.url), remote.url, () =>
+    runWithAuthBundle(request, remote.auth, gitProcess),
+  );
+}
+
+/**
+ * Runs `request` once and maps an `https-auth` failure by the bundle, reading
+ * only the failure's kind and detail (SG-PRC-05). git asked the user's
+ * credential helpers itself, so the bundle never answers a challenge here:
+ *   - `no-credential` under a `device-flow` bundle: no helper answered, so the
+ *     sign-in runs once and the request runs once more (D-SG-14).
+ *   - `rejected` under a `stored-credential` bundle: the host refused the
+ *     credential a helper gave, the GAUTH-04 `StoredCredentialRejectedError`
+ *     with the git failure as its cause.
+ *   - anything else, a missing bundle included, is thrown as it failed. A
+ *     refused Device Flow token signs in no second time, and the extension
+ *     erases no stored credential (git's own helpers may, as under Claude Code).
+ */
+async function runWithAuthBundle(
+  request: RemoteGitRequest,
+  auth: BuildAuthCallbacksOpts | undefined,
+  gitProcess: GitProcess,
+): Promise<GitResult> {
+  try {
+    return await gitProcess.run(request);
+  } catch (error: unknown) {
+    if (
+      auth === undefined ||
+      !(error instanceof GitCommandError) ||
+      error.failure.kind !== "https-auth"
+    ) {
+      throw error;
+    }
+
+    const { detail } = error.failure;
+    if (detail === "rejected" && auth.kind === "stored-credential") {
+      throw new StoredCredentialRejectedError(auth.host, { cause: error });
+    }
+
+    if (detail === "rejected" || auth.kind === "stored-credential") {
+      throw error;
+    }
+
+    return retryAfterSignIn(request, auth, error, gitProcess);
+  }
+}
+
+/**
+ * D-SG-14: runs the Device Flow sign-in of `auth`, which stores the token with
+ * `git credential approve` (D-BG-1102), then `request` once more with the
+ * token in a one-shot helper only. The command's auth memo keeps the sign-in
+ * to once per host. A failed sign-in throws `failure`, the first run's error,
+ * with the sign-in's reason as its cause; the retry's own failure is thrown
+ * as it failed. `DeviceFlowUnavailableError` propagates unchanged.
+ */
+async function retryAfterSignIn(
+  request: RemoteGitRequest,
+  auth: Extract<BuildAuthCallbacksOpts, { kind: "device-flow" }>,
+  failure: GitCommandError,
+  gitProcess: GitProcess,
+): Promise<GitResult> {
+  const signedIn = await auth.onAuthRequired();
+  if (!signedIn.ok) {
+    // An https-auth failure carries no cause of its own.
+    failure.cause = new Error(signedIn.reason);
+    throw failure;
+  }
+
+  // AUTH-09: the line names the host and the operation, never the credential.
+  hookDebugLog(`git ${failure.operation}: signed in to ${auth.host}, running it once more`, "auth");
+  return withOneShotCredential(signedIn.cred, (pairs) =>
+    gitProcess.run({ ...request, config: [...request.config, ...pairs] }),
+  );
 }
 
 /**
@@ -768,6 +849,7 @@ export async function fetchCommit(
     options,
     operands,
     url,
+    auth: opts.auth,
   });
   try {
     await runRemote(fetchRung(["--depth", "1"], ["origin", opts.sha]), gitProcess);
@@ -911,7 +993,8 @@ export async function resolveRef(
  * names it, so the `^{}` name must be one of them. The extra lines a tail
  * match brings, such as `refs/heads/x/<ref>`, never match a name.
  *
- * GHB-01: under the base override, a failure names the URL fetched.
+ * The optional `opts.auth` bundle maps an auth failure (PROV-03, D-SG-14,
+ * GAUTH-04). GHB-01: under the base override, a failure names the URL fetched.
  */
 export async function resolveRemoteRef(
   opts: ResolveRemoteRefOptions,
@@ -922,7 +1005,13 @@ export async function resolveRemoteRef(
       ? ["HEAD"]
       : [`refs/heads/${opts.ref}`, `refs/tags/${opts.ref}^{}`, `refs/tags/${opts.ref}`, opts.ref];
   const listed = await runRemote(
-    { subcommand: "ls-remote", options: [], operands: [opts.url, ...names], url: opts.url },
+    {
+      subcommand: "ls-remote",
+      options: [],
+      operands: [opts.url, ...names],
+      url: opts.url,
+      auth: opts.auth,
+    },
     gitProcess,
   );
   const refs = advertisedRefs(listed.stdout);

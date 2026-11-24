@@ -1462,6 +1462,23 @@ describe("StoredCredentialRejectedError", () => {
       },
     );
   });
+
+  test("GAUTH-04: keeps the git failure it is given as its cause", () => {
+    // arrange
+    const failure = new GitCommandError(
+      { kind: "https-auth", detail: "rejected" },
+      { operation: "ls-remote", exitCode: 128 },
+    );
+
+    // act
+    const error = new StoredCredentialRejectedError("git.example.com", { cause: failure });
+
+    // assert
+    assert.deepStrictEqual(
+      { message: error.message, cause: error.cause },
+      { message: "git.example.com rejected the stored credential", cause: failure },
+    );
+  });
 });
 
 describe("TooManyRedirectsError", () => {

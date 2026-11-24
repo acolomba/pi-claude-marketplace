@@ -42,12 +42,14 @@ import {
   resolveTagOid,
   runWithGitAbortSignal,
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
+import { getAgentDir } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import {
   CrossOriginChallengeError,
   DeviceFlowUnavailableError,
   FetchedUrlCause,
   GitCommandError,
   InvalidGitHubBaseUrlError,
+  StoredCredentialRejectedError,
   TooManyRedirectsError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { hermeticGitEnvironment } from "../../features/lib/hermetic-git.ts";
@@ -1942,10 +1944,13 @@ async function advertisingRemote(t: TestContext): Promise<{
 }
 
 /**
- * D-SG-16: the https git host serving the repository `acme/tools`, the GitHub
- * base override pointed at it, and a git process that trusts its certificate.
+ * The https git host serving the repository `acme/tools`, and a git process
+ * that trusts its certificate, with `variables` over its environment.
  */
-async function gitHubBaseStandIn(t: TestContext): Promise<{
+async function httpsStandIn(
+  t: TestContext,
+  variables: NodeJS.ProcessEnv = {},
+): Promise<{
   readonly host: HttpsGitHost;
   readonly oid: string;
   readonly gitProcess: GitProcess;
@@ -1955,12 +1960,21 @@ async function gitHubBaseStandIn(t: TestContext): Promise<{
   t.after(() => host.close());
   const served = await createGitTestRepository(t, { boundary: "local" });
   await served.cloneBare(host.repositoryPath("tools"));
-  setGitHubBaseUrl(t, `https://${host.address}`);
   return {
     host,
     oid: served.initialOid,
-    gitProcess: await hermeticGitProcess(t, { GIT_SSL_CAINFO: host.certificatePath }),
+    gitProcess: await hermeticGitProcess(t, {
+      GIT_SSL_CAINFO: host.certificatePath,
+      ...variables,
+    }),
   };
+}
+
+/** D-SG-16: the https git host, with the GitHub base override pointed at it. */
+async function gitHubBaseStandIn(t: TestContext): ReturnType<typeof httpsStandIn> {
+  const standIn = await httpsStandIn(t);
+  setGitHubBaseUrl(t, `https://${standIn.host.address}`);
+  return standIn;
 }
 
 describe("resolveRemoteRef", () => {
@@ -2135,6 +2149,408 @@ describe("resolveRemoteRef", () => {
       return true;
     });
     assert.deepStrictEqual(recorded.requests, []);
+  });
+});
+
+/** The password the credential stand-in wants; no captured text may hold it (AUTH-09). */
+const RETRY_TOKEN = "gho_retry-token-sentinel";
+
+/** A git process that runs `systemGit` and keeps each request and the text of each outcome. */
+function tracingGitProcess(systemGit: GitProcess): {
+  readonly gitProcess: GitProcess;
+  readonly requests: GitRequest[];
+  readonly texts: string[];
+} {
+  const requests: GitRequest[] = [];
+  const texts: string[] = [];
+  return {
+    requests,
+    texts,
+    gitProcess: {
+      locate: systemGit.locate,
+      run: async (request) => {
+        requests.push(request);
+        try {
+          const result = await systemGit.run(request);
+          texts.push(result.stdout, result.stderr);
+          return result;
+        } catch (error: unknown) {
+          assert.ok(error instanceof GitCommandError);
+          texts.push(error.message, error.stderr);
+          throw error;
+        }
+      },
+    },
+  };
+}
+
+/** Turns debug logging on for one case and keeps every line it writes. */
+function captureDebugLines(t: TestContext): string[] {
+  const lines: string[] = [];
+  const previous = process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+  t.after(() => {
+    if (previous === undefined) {
+      delete process.env.PI_CLAUDE_MARKETPLACE_DEBUG;
+    } else {
+      process.env.PI_CLAUDE_MARKETPLACE_DEBUG = previous;
+    }
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_DEBUG = "1";
+  t.mock.method(console, "error", (line: string) => {
+    lines.push(line);
+  });
+  return lines;
+}
+
+/** The one-shot directories left under the user scope's extension root. */
+async function oneShotDirectoriesLeft(): Promise<string[]> {
+  const root = path.join(getAgentDir(), "pi-claude-marketplace");
+  const entries = await readdir(root).catch(() => []);
+  return entries.filter((entry) => entry.startsWith("git-credential-"));
+}
+
+/** The https git host serving `acme/tools`, armed to want `acme` and `RETRY_TOKEN`. */
+async function credentialStandIn(
+  t: TestContext,
+  helper?: string,
+): Promise<Awaited<ReturnType<typeof httpsStandIn>> & { readonly url: string }> {
+  const standIn = await httpsStandIn(
+    t,
+    helper === undefined
+      ? {}
+      : {
+          GIT_CONFIG_COUNT: "1",
+          GIT_CONFIG_KEY_0: "credential.helper",
+          GIT_CONFIG_VALUE_0: helper,
+        },
+  );
+  await standIn.host.arm("tools", { kind: "credential", user: "acme", password: RETRY_TOKEN });
+  return { ...standIn, url: standIn.host.repositoryUrl("tools") };
+}
+
+/** A user helper that answers every `get` with a password the host refuses. */
+const WRONG_PASSWORD_HELPER = "!f() { echo username=acme; echo password=wrong; }; f";
+
+/** A Device Flow bundle for `host` whose sign-in answers `result`, counting its calls. */
+function deviceFlowBundle(
+  host: string,
+  result: Awaited<ReturnType<OnAuthRequiredFn>>,
+): {
+  readonly auth: NonNullable<GitPlatform.CloneOptions["auth"]>;
+  readonly signIns: () => number;
+} {
+  let signIns = 0;
+  return {
+    auth: {
+      kind: "device-flow",
+      credentialOps: createCredentialOpsFake({ boundary: "memory" }).credentialOps,
+      host,
+      onAuthRequired: () => {
+        signIns += 1;
+        return Promise.resolve(result);
+      },
+    },
+    signIns: () => signIns,
+  };
+}
+
+/** A git process whose every remote run fails as `https-auth` with `detail`. */
+function failingAuthGitProcess(detail: "no-credential" | "rejected"): {
+  readonly gitProcess: GitProcess;
+  readonly failures: GitCommandError[];
+  readonly requests: GitRequest[];
+} {
+  const failures: GitCommandError[] = [];
+  const requests: GitRequest[] = [];
+  return {
+    failures,
+    requests,
+    gitProcess: {
+      locate: () => Promise.resolve("/usr/bin/git"),
+      run: (request) => {
+        requests.push(request);
+        if (request.subcommand === "config") {
+          return Promise.resolve({ exitCode: 0, stdout: `${REMOTE_URL}\n`, stderr: "" });
+        }
+
+        const failure = new GitCommandError(
+          { kind: "https-auth", detail },
+          { operation: request.subcommand, exitCode: 128 },
+        );
+        failures.push(failure);
+        return Promise.reject(failure);
+      },
+    },
+  };
+}
+
+/** The `-c` pairs of the one-shot helper, as the retry carries them after the request's own. */
+const ONE_SHOT_PAIRS = [
+  "credential.helper=",
+  /^credential\.helper=!f\(\) \{ test "\$1" = get && cat '[^']+\/git-credential-[^/']+\/credential'; \}; f$/,
+] as const;
+
+function assertOneShotPairs(config: readonly string[] | undefined): void {
+  assert.strictEqual(config?.length, 2);
+  assert.strictEqual(config[0], ONE_SHOT_PAIRS[0]);
+  assert.match(config[1] ?? "", ONE_SHOT_PAIRS[1]);
+}
+
+describe("D-SG-14 and GAUTH-04: an auth failure of a remote request", () => {
+  test("D-SG-14: a missing credential under a Device Flow bundle signs in once and the retry succeeds through a removed one-shot helper", async (t) => {
+    // arrange
+    const standIn = await credentialStandIn(t);
+    const traced = tracingGitProcess(standIn.gitProcess);
+    const bundle = deviceFlowBundle(standIn.host.address, {
+      ok: true,
+      cred: { username: "acme", password: RETRY_TOKEN },
+    });
+    const debugLines = captureDebugLines(t);
+
+    // act
+    const oid = await resolveRemoteRef({ url: standIn.url, auth: bundle.auth }, traced.gitProcess);
+
+    // assert
+    assert.deepStrictEqual(
+      { oid, signIns: bundle.signIns(), runs: traced.requests.length },
+      { oid: standIn.oid, signIns: 1, runs: 2 },
+    );
+    assert.deepStrictEqual(traced.requests[0]?.config, []);
+    assertOneShotPairs(traced.requests[1]?.config);
+    assert.deepStrictEqual(await oneShotDirectoriesLeft(), []);
+    const captured = JSON.stringify({ requests: traced.requests, texts: traced.texts, debugLines });
+    assert.ok(
+      !captured.includes(RETRY_TOKEN),
+      "a captured argv, output, or log line holds the token",
+    );
+    assert.ok(
+      debugLines.includes(
+        `[auth] git ls-remote: signed in to ${standIn.host.address}, running it once more`,
+      ),
+    );
+  });
+
+  test("D-SG-14: a request that succeeds signs in no time", async (t) => {
+    // arrange
+    const standIn = await httpsStandIn(t);
+    const onAuthRequired = mock<OnAuthRequiredFn>({ exactParams: true, name: "device flow" });
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+
+    // act
+    const oid = await resolveRemoteRef(
+      {
+        url: standIn.host.repositoryUrl("tools"),
+        auth: {
+          kind: "device-flow",
+          credentialOps: credentials.credentialOps,
+          host: standIn.host.address,
+          onAuthRequired,
+        },
+      },
+      standIn.gitProcess,
+    );
+
+    // assert
+    assert.strictEqual(oid, standIn.oid);
+    verify(onAuthRequired);
+  });
+
+  test("D-SG-14: a failed sign-in throws the first failure with the sign-in's reason as its cause", async (t) => {
+    // arrange
+    const standIn = await credentialStandIn(t);
+    const traced = tracingGitProcess(standIn.gitProcess);
+    const bundle = deviceFlowBundle(standIn.host.address, {
+      ok: false,
+      reason: "Device Flow cancelled.",
+    });
+
+    // act
+    const resolution = resolveRemoteRef({ url: standIn.url, auth: bundle.auth }, traced.gitProcess);
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.ok(error.cause instanceof Error);
+      assert.deepStrictEqual(
+        { failure: error.failure, cause: error.cause.message },
+        {
+          failure: { kind: "https-auth", detail: "no-credential" },
+          cause: "Device Flow cancelled.",
+        },
+      );
+      return true;
+    });
+    assert.deepStrictEqual(
+      { signIns: bundle.signIns(), runs: traced.requests.length },
+      { signIns: 1, runs: 1 },
+    );
+  });
+
+  test("D-SG-14: the retry runs once, and its own failure is the one thrown", async () => {
+    // arrange
+    const failing = failingAuthGitProcess("no-credential");
+    const bundle = deviceFlowBundle(HOST, {
+      ok: true,
+      cred: { username: "acme", password: RETRY_TOKEN },
+    });
+
+    // act
+    const resolution = resolveRemoteRef({ url: REMOTE_URL, auth: bundle.auth }, failing.gitProcess);
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => error === failing.failures[1]);
+    assert.deepStrictEqual(
+      { signIns: bundle.signIns(), failures: failing.failures.length },
+      { signIns: 1, failures: 2 },
+    );
+    assert.deepStrictEqual(await oneShotDirectoriesLeft(), []);
+  });
+
+  test("D-SG-14: a sign-in that Pi cannot show rejects with DeviceFlowUnavailableError and runs no retry", async () => {
+    // arrange
+    const failing = failingAuthGitProcess("no-credential");
+    const unavailable = new DeviceFlowUnavailableError();
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+
+    // act
+    const resolution = resolveRemoteRef(
+      {
+        url: REMOTE_URL,
+        auth: {
+          kind: "device-flow",
+          credentialOps: credentials.credentialOps,
+          host: HOST,
+          onAuthRequired: () => Promise.reject(unavailable),
+        },
+      },
+      failing.gitProcess,
+    );
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => error === unavailable);
+    assert.strictEqual(failing.requests.length, 1);
+  });
+
+  test("D-SG-14: a missing credential under a stored-credential bundle is thrown with no retry", async (t) => {
+    // arrange
+    const standIn = await credentialStandIn(t);
+    const traced = tracingGitProcess(standIn.gitProcess);
+    const credentials = storedCredentials();
+
+    // act
+    const resolution = resolveRemoteRef(
+      {
+        url: standIn.url,
+        auth: { kind: "stored-credential", credentialOps: credentials.credentialOps, host: HOST },
+      },
+      traced.gitProcess,
+    );
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.deepStrictEqual(
+        { failure: error.failure, cause: error.cause },
+        { failure: { kind: "https-auth", detail: "no-credential" }, cause: undefined },
+      );
+      return true;
+    });
+    assert.strictEqual(traced.requests.length, 1);
+  });
+
+  test("GAUTH-04: a refused stored credential throws StoredCredentialRejectedError with the git failure as its cause", async (t) => {
+    // arrange
+    const standIn = await credentialStandIn(t, WRONG_PASSWORD_HELPER);
+    const credentials = storedCredentials();
+
+    // act
+    const resolution = resolveRemoteRef(
+      {
+        url: standIn.url,
+        auth: {
+          kind: "stored-credential",
+          credentialOps: credentials.credentialOps,
+          host: standIn.host.address,
+        },
+      },
+      standIn.gitProcess,
+    );
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => {
+      assert.ok(error instanceof StoredCredentialRejectedError);
+      assert.ok(error.cause instanceof GitCommandError);
+      assert.deepStrictEqual(
+        { host: error.host, failure: error.cause.failure },
+        { host: standIn.host.address, failure: { kind: "https-auth", detail: "rejected" } },
+      );
+      return true;
+    });
+  });
+
+  test("GAUTH-04: a refused credential under a Device Flow bundle is thrown unchanged, with no sign-in", async (t) => {
+    // arrange
+    const standIn = await credentialStandIn(t, WRONG_PASSWORD_HELPER);
+    const onAuthRequired = mock<OnAuthRequiredFn>({ exactParams: true, name: "device flow" });
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+
+    // act
+    const resolution = resolveRemoteRef(
+      {
+        url: standIn.url,
+        auth: {
+          kind: "device-flow",
+          credentialOps: credentials.credentialOps,
+          host: standIn.host.address,
+          onAuthRequired,
+        },
+      },
+      standIn.gitProcess,
+    );
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.deepStrictEqual(error.failure, { kind: "https-auth", detail: "rejected" });
+      return true;
+    });
+    verify(onAuthRequired);
+  });
+
+  test("D-SG-14: a fetchCommit rung retries with the one-shot helper after its sign-in", async () => {
+    // arrange
+    const requests: GitRequest[] = [];
+    const firstFailure = new GitCommandError(
+      { kind: "https-auth", detail: "no-credential" },
+      { operation: "fetch --depth", exitCode: 128 },
+    );
+    const stubGit: GitProcess = {
+      locate: () => Promise.resolve("/usr/bin/git"),
+      run: (request) => {
+        requests.push(request);
+        if (request.subcommand === "config") {
+          return Promise.resolve({ exitCode: 0, stdout: `${REMOTE_URL}\n`, stderr: "" });
+        }
+
+        return requests.length === 2
+          ? Promise.reject(firstFailure)
+          : Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+      },
+    };
+    const bundle = deviceFlowBundle(HOST, {
+      ok: true,
+      cred: { username: "acme", password: RETRY_TOKEN },
+    });
+
+    // act
+    await fetchCommit({ dir: "/clone", sha: OID_MAIN, auth: bundle.auth }, stubGit);
+
+    // assert
+    assert.deepStrictEqual(
+      { signIns: bundle.signIns(), subcommands: requests.map((request) => request.subcommand) },
+      { signIns: 1, subcommands: ["config", "fetch", "fetch"] },
+    );
+    assertOneShotPairs(requests[2]?.config);
   });
 });
 
