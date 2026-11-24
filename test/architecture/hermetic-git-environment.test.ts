@@ -18,7 +18,9 @@
  * Pi gets the run's GitHub base override, never the
  * shell's (GHB-01), and none when the run's environment has none (D-BG-01).
  * The background update variables also stay in the shell: Pi gets the update
- * delay only from the run (D-PL8-09). A profile Pi gets
+ * delay only from the run (D-PL8-09). So do upstream's git timeout and keep
+ * variables: only a scenario's own Pi gets them, from the run (D-SG-13,
+ * D-SG-15). A profile Pi gets
  * the run's `TMPDIR`, inside the sandbox home, never the shell's (HAR-05),
  * and pi-subagents' background-child marker (D-BG-10) and its hook gate
  * (D-BG-12) only from its profile. Pi gets system git's CA file and its
@@ -440,6 +442,37 @@ describe("rpcChildEnvironment", () => {
       GIT_SSL_CAINFO: "/run/cert.pem",
       PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: "https://127.0.0.1:8443",
       PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS: "0",
+    });
+  });
+
+  test("D-SG-13, D-SG-15: adds a scenario Pi's git timeout and keep variables, not the shell's", (t) => {
+    // arrange
+    inheritVariables(t);
+    const git = {
+      NODE_EXTRA_CA_CERTS: "/run/cert.pem",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      GIT_SSL_CAINFO: "/run/cert.pem",
+      PATH: "/run/ssh-host/bin:/usr/bin",
+      CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS: "1000",
+      CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE: "true",
+    } satisfies RpcGitEnvironment;
+
+    // act
+    const environment = rpcChildEnvironment(sandbox, git);
+
+    // assert
+    assert.deepStrictEqual(environment, {
+      HOME: "/sandbox/home",
+      PI_CODING_AGENT_DIR: "/sandbox/agent",
+      PI_OFFLINE: "1",
+      PATH: "/run/ssh-host/bin:/usr/bin",
+      NODE_EXTRA_CA_CERTS: "/run/cert.pem",
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/sandbox/home/.gitconfig",
+      GIT_SSL_CAINFO: "/run/cert.pem",
+      CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS: "1000",
+      CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE: "true",
     });
   });
 

@@ -141,3 +141,36 @@ Feature: Marketplace failed add
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name  | source                            |
       | tools | https://{git host}/acme/tools.git |
+
+  Scenario: Adding a marketplace whose git host holds the clone past CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS fails as network unreachable and succeeds once the host serves it
+    Given pi runs with the environment variable "CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS" set to "1000"
+    Given the marketplace "tools" is published as a url source
+    Given the git host holds the response body for the marketplace "tools"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name                              | scope   | status | reasons             |
+      | https://{git host}/acme/tools.git | project | failed | network unreachable |
+    Then the git host receives these requests:
+      | method | path                                              | status  |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | dropped |
+    Then the project scope holds no marketplace checkout
+    Then the project scope holds no git clones
+    Then the project scope holds no marketplace record
+    Then the "claude-plugins.json" file of the project scope does not exist
+    When the git host stops holding the response body for the marketplace "tools"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                            |
+      | tools | https://{git host}/acme/tools.git |
