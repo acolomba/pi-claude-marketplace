@@ -46,7 +46,6 @@ import {
   type McpWrittenFile,
 } from "../../shared/errors-bridges.ts";
 import {
-  CrossOriginChallengeError,
   errorMessage,
   InvalidMarketplaceManifestError,
   isErrnoException,
@@ -240,16 +239,16 @@ export { runWithGitAbortSignal } from "../../platform/git.ts";
 /**
  * GAUTH-04: an auth failure that a stored credential could answer, so the
  * failure gains the `NO_STORED_CREDENTIAL_CAUSE` line. Only a
- * `stored-credential` bundle qualifies. A challenge after a cross-origin
- * redirect does not, because a credential stored for the bundle's host is
- * never sent there (Q-02). A refused credential does not either, because the
- * helper produced it and the host was sent it. Each caller places the line.
+ * `stored-credential` bundle qualifies, as for git's `https-auth` failure with
+ * the `no-credential` detail, where no helper gave git a credential. A
+ * refused credential (`StoredCredentialRejectedError`) does not qualify,
+ * because a helper produced it and the host was sent it. Each caller places
+ * the line.
  */
 export function lacksStoredCredential(err: unknown, auth: GitAuthBundle): err is Error {
   return (
     err instanceof Error &&
     auth.kind === "stored-credential" &&
-    !(err instanceof CrossOriginChallengeError) &&
     !(err instanceof StoredCredentialRejectedError) &&
     classifyGitFailure(err, { notFound: "network error" })?.reason === "authentication required"
   );

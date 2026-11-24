@@ -2424,11 +2424,14 @@ test("D-18-11: an enabled record at the same version under another root is prepa
   assert.strictEqual(prepared.installable.pluginRoot, seed.pluginRoot);
 });
 
-const offline = Object.assign(new Error("offline"), { code: "ENETUNREACH" });
 // SG-PRC-05: each refusal is the `GitCommandError` that system git's clone of
 // the source gives, with the line git prints for it.
 const refusedWith = (failure: GitFailure, stderr: string): GitCommandError =>
   new GitCommandError(failure, { operation: "clone --depth", exitCode: 128, stderr });
+const offline = refusedWith(
+  { kind: "network", curlCode: 56 },
+  "fatal: unable to access 'https://example.com/private/': Recv failure: Connection reset by peer\n",
+);
 const notFound = refusedWith(
   { kind: "repository-not-found", httpStatus: 404 },
   "fatal: repository 'https://example.com/private/' not found\n",

@@ -43,6 +43,7 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import { McpServerCollisionError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
   DependencyCascadeError,
+  GitCommandError,
   InvalidGitHubBaseUrlError,
   InvalidMarketplaceManifestError,
   MarketplaceInLocalLayerOnlyError,
@@ -13957,10 +13958,10 @@ test("plugin install authentication: classifies a providerless 401 without a cau
           sha: GIT_SOURCE_SHA,
         },
       });
-      const cloneError = Object.assign(new Error("HTTP 401 from clone"), {
-        code: "HttpError",
-        data: { statusCode: 401 },
-      });
+      const cloneError = new GitCommandError(
+        { kind: "https-auth", detail: "rejected" },
+        { operation: "clone", exitCode: 128 },
+      );
       const git = createGitOps({ cloneThrows: cloneError, fixtureSourceDir: fixtureRepoDir });
       const credentials = createCredentialOpsFake({ boundary: "memory" });
       const { ctx, notifications, run } = makeCtx();
@@ -13979,7 +13980,8 @@ test("plugin install authentication: classifies a providerless 401 without a cau
 
       // assert
       assert.deepStrictEqual(outcome, {
-        cause: "HTTP 401 from clone\n\ncause: HTTP 401 from clone",
+        cause:
+          "git clone failed: https-auth, exit code 128\n\ncause: git clone failed: https-auth, exit code 128",
         error: cloneError,
         status: "failed",
       });
@@ -14011,9 +14013,10 @@ test("plugin install authentication: names a network failure network unreachable
         pluginName: "network",
         source: { source: "url", url: "https://gitlab.example.com/o/r", sha: GIT_SOURCE_SHA },
       });
-      const cloneError = Object.assign(new Error("connect ENETUNREACH 10.0.0.1:443"), {
-        code: "ENETUNREACH",
-      });
+      const cloneError = new GitCommandError(
+        { kind: "network", curlCode: 7 },
+        { operation: "clone", exitCode: 128 },
+      );
       const git = createGitOps({ cloneThrows: cloneError, fixtureSourceDir: fixtureRepoDir });
       const credentials = createCredentialOpsFake({ boundary: "memory" });
       const { ctx, notifications, run } = makeCtx();
@@ -14032,14 +14035,15 @@ test("plugin install authentication: names a network failure network unreachable
 
       // assert
       assert.deepStrictEqual(outcome, {
-        cause: "connect ENETUNREACH 10.0.0.1:443\n\ncause: connect ENETUNREACH 10.0.0.1:443",
+        cause:
+          "git clone failed: network, exit code 128\n\ncause: git clone failed: network, exit code 128",
         error: cloneError,
         status: "failed",
       });
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ network (failed) {network unreachable}\n    cause: connect ENETUNREACH 10.0.0.1:443",
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ network (failed) {network unreachable}\n    cause: git clone failed: network, exit code 128",
           severity: "error",
         },
       ]);
@@ -14125,7 +14129,10 @@ test("plugin install authentication: classifies a cancelled Device Flow clone wi
         pluginName: "private",
         source: { source: "github", repo: "org/private", sha: GIT_SOURCE_SHA },
       });
-      const cloneError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
+      const cloneError = new GitCommandError(
+        { kind: "https-auth", detail: "no-credential" },
+        { operation: "clone", exitCode: 128 },
+      );
       const git = createGitOps({ cloneThrows: cloneError, fixtureSourceDir: fixtureRepoDir });
       const credentials = createCredentialOpsFake({ boundary: "memory" });
       const deviceFlow = installDeviceFlow();
@@ -14146,7 +14153,8 @@ test("plugin install authentication: classifies a cancelled Device Flow clone wi
 
       // assert
       assert.deepStrictEqual(outcome, {
-        cause: "cancelled\n\ncause: cancelled",
+        cause:
+          "git clone failed: https-auth, exit code 128\n\ncause: git clone failed: https-auth, exit code 128",
         error: cloneError,
         status: "failed",
       });

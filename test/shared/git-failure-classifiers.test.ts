@@ -3,7 +3,6 @@ import { describe, test } from "node:test";
 
 import {
   appendLeakToError,
-  CrossOriginChallengeError,
   GitCommandError,
   HostedManifestHttpError,
   PinnedCommitMissingError,
@@ -19,22 +18,12 @@ import {
 
 import type { GitFailure } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
-function httpFailure(statusCode: unknown): Error {
-  return Object.assign(new Error(`HTTP Error: ${String(statusCode)}`), {
-    code: "HttpError",
-    data: { statusCode },
-  });
+function hostedHttpFailure(statusCode: number): HostedManifestHttpError {
+  return new HostedManifestHttpError("https://catalog.example.com/marketplace.json", statusCode);
 }
 
 function gitCommandFailure(failure: GitFailure): GitCommandError {
   return new GitCommandError(failure, { operation: "clone", exitCode: 128 });
-}
-
-function remoteNotFound(): Error {
-  return Object.assign(new Error("Could not find stable."), {
-    code: "NotFoundError",
-    name: "NotFoundError",
-  });
 }
 
 const PLUGIN_CLONE_RULE = { notFound: "source missing" } as const;
@@ -45,196 +34,115 @@ const REMOTE_URL = "https://git.example.com/acme/mp.git";
 
 describe("classifyGitFailure", () => {
   for (const { title, createFailure, rule, remoteUrl, expected } of [
-    {
-      title: "classifies HTTP 401 as authentication required with no frame",
-      createFailure: () => httpFailure(401),
+    ...([401, 403] as const).map((statusCode) => ({
+      title: `D-PL5-10: classifies a hosted HTTP ${statusCode} as authentication required with no frame`,
+      createFailure: () => hostedHttpFailure(statusCode),
       rule: PLUGIN_CLONE_RULE,
       remoteUrl: REMOTE_URL,
       expected: { reason: "authentication required" },
-    },
-    {
-      title: "classifies HTTP 403 as authentication required with no frame",
-      createFailure: () => httpFailure(403),
-      rule: PLUGIN_CLONE_RULE,
-      remoteUrl: REMOTE_URL,
-      expected: { reason: "authentication required" },
-    },
-    {
-      title: "classifies HTTP 404 as source missing under the source-missing rule",
-      createFailure: () => httpFailure(404),
-      rule: PLUGIN_CLONE_RULE,
-      remoteUrl: undefined,
-      expected: { reason: "source missing" },
-    },
-    {
-      title: "classifies HTTP 404 as network error under the network-error rule",
-      createFailure: () => httpFailure(404),
-      rule: MARKETPLACE_REFRESH_RULE,
-      remoteUrl: undefined,
-      expected: { reason: "network error" },
-    },
-    {
-      title: "classifies HTTP 410 as source missing under the source-missing rule",
-      createFailure: () => httpFailure(410),
-      rule: PLUGIN_CLONE_RULE,
-      remoteUrl: undefined,
-      expected: { reason: "source missing" },
-    },
-    {
-      title: "classifies HTTP 410 as network error under the network-error rule",
-      createFailure: () => httpFailure(410),
-      rule: MARKETPLACE_REFRESH_RULE,
-      remoteUrl: undefined,
-      expected: { reason: "network error" },
-    },
+    })),
+    ...([404, 410] as const).flatMap((statusCode) => [
+      {
+        title: `D-PL5-10: classifies a hosted HTTP ${statusCode} as source missing under the source-missing rule`,
+        createFailure: () => hostedHttpFailure(statusCode),
+        rule: PLUGIN_CLONE_RULE,
+        remoteUrl: undefined,
+        expected: { reason: "source missing" },
+      },
+      {
+        title: `D-PL5-10: classifies a hosted HTTP ${statusCode} as network error under the network-error rule`,
+        createFailure: () => hostedHttpFailure(statusCode),
+        rule: MARKETPLACE_REFRESH_RULE,
+        remoteUrl: undefined,
+        expected: { reason: "network error" },
+      },
+    ]),
     ...[400, 408, 418, 429, 500, 502, 503].flatMap((statusCode) => [
       {
-        title: `classifies HTTP ${statusCode} as network error under the source-missing rule`,
-        createFailure: () => httpFailure(statusCode),
+        title: `D-PL5-10: classifies a hosted HTTP ${statusCode} as network error under the source-missing rule`,
+        createFailure: () => hostedHttpFailure(statusCode),
         rule: PLUGIN_CLONE_RULE,
         remoteUrl: undefined,
         expected: { reason: "network error" },
       },
       {
-        title: `classifies HTTP ${statusCode} as network error under the network-error rule`,
-        createFailure: () => httpFailure(statusCode),
+        title: `D-PL5-10: classifies a hosted HTTP ${statusCode} as network error under the network-error rule`,
+        createFailure: () => hostedHttpFailure(statusCode),
         rule: MARKETPLACE_REFRESH_RULE,
         remoteUrl: undefined,
         expected: { reason: "network error" },
       },
     ]),
     {
-      title: "frames HTTP 404 as its status on the fetched URL",
-      createFailure: () => httpFailure(404),
+      title: "ADD-10: frames a hosted HTTP 404 as its status on the requested URL",
+      createFailure: () => hostedHttpFailure(404),
       rule: PLUGIN_CLONE_RULE,
       remoteUrl: REMOTE_URL,
       expected: { reason: "source missing", frame: "404 on https://git.example.com/acme/mp.git" },
     },
     {
-      title: "frames HTTP 404 under the network-error rule",
-      createFailure: () => httpFailure(404),
-      rule: MARKETPLACE_REFRESH_RULE,
-      remoteUrl: REMOTE_URL,
-      expected: { reason: "network error", frame: "404 on https://git.example.com/acme/mp.git" },
-    },
-    {
-      title: "frames HTTP 503 as its status on the fetched URL",
-      createFailure: () => httpFailure(503),
+      title: "UPD-11: frames a hosted HTTP 503 under the network-error rule",
+      createFailure: () => hostedHttpFailure(503),
       rule: MARKETPLACE_REFRESH_RULE,
       remoteUrl: REMOTE_URL,
       expected: { reason: "network error", frame: "503 on https://git.example.com/acme/mp.git" },
     },
     {
-      title: "leaves an HTTP error without a status unclassified",
-      createFailure: () =>
-        Object.assign(new Error("HTTP transport failure"), { code: "HttpError" }),
-      rule: PLUGIN_CLONE_RULE,
-      remoteUrl: REMOTE_URL,
-      expected: undefined,
-    },
-    {
-      title: "leaves an HTTP error with a string status unclassified",
-      createFailure: () => httpFailure("500"),
-      rule: PLUGIN_CLONE_RULE,
-      remoteUrl: REMOTE_URL,
-      expected: undefined,
-    },
-    {
-      title: "classifies a ref the remote does not have as the rule's missing ref",
-      createFailure: remoteNotFound,
-      rule: MARKETPLACE_ADD_RULE,
-      remoteUrl: undefined,
-      expected: { reason: "source missing" },
-    },
-    {
-      title: "leaves a ref the remote does not have unclassified when the rule sets none",
-      createFailure: remoteNotFound,
-      rule: PLUGIN_CLONE_RULE,
-      remoteUrl: undefined,
-      expected: undefined,
-    },
-    ...(
-      ["ENETUNREACH", "ECONNREFUSED", "ENOTFOUND", "ETIMEDOUT", "ECONNRESET", "EAI_AGAIN"] as const
-    ).map((code) => ({
-      title: `classifies ${code} as network unreachable`,
-      createFailure: () => Object.assign(new Error("Git transport failure"), { code }),
-      rule: PLUGIN_CLONE_RULE,
-      remoteUrl: undefined,
-      expected: { reason: "network unreachable" },
-    })),
-    {
-      title: "frames nothing for a network code with a URL",
-      createFailure: () =>
-        Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }),
-      rule: PLUGIN_CLONE_RULE,
-      remoteUrl: REMOTE_URL,
-      expected: { reason: "network unreachable" },
-    },
-    {
-      title: "classifies a challenge after a cross-origin redirect as authentication required",
-      createFailure: () => new CrossOriginChallengeError("https://sso.example.com"),
-      rule: PLUGIN_CLONE_RULE,
-      remoteUrl: undefined,
-      expected: { reason: "authentication required" },
-    },
-    {
-      title: "classifies a stored credential the host rejected as authentication required",
+      title:
+        "GAUTH-04: classifies a stored credential the host rejected as authentication required",
       createFailure: () => new StoredCredentialRejectedError("git.example.com"),
       rule: PLUGIN_CLONE_RULE,
-      remoteUrl: undefined,
+      remoteUrl: REMOTE_URL,
       expected: { reason: "authentication required" },
     },
     {
-      title: "classifies a cancellation code as authentication required",
-      createFailure: () =>
-        Object.assign(new Error("The operation was canceled."), { code: "UserCanceledError" }),
-      rule: PLUGIN_CLONE_RULE,
-      remoteUrl: undefined,
-      expected: { reason: "authentication required" },
-    },
-    {
-      title: "classifies a cancellation name as authentication required",
-      createFailure: () =>
-        Object.assign(new Error("The operation was canceled."), { name: "UserCanceledError" }),
-      rule: PLUGIN_CLONE_RULE,
-      remoteUrl: undefined,
-      expected: { reason: "authentication required" },
-    },
-    {
-      title: "classifies a pin the fresh clone does not hold as source missing",
+      title: "INR-03: classifies a pin the fresh clone does not hold as source missing",
       createFailure: () => new PinnedCommitMissingError("0123abc"),
       rule: MARKETPLACE_REFRESH_RULE,
       remoteUrl: REMOTE_URL,
       expected: { reason: "source missing" },
     },
     {
-      title: "classifies and frames the host's answer behind a cleanup leak",
-      createFailure: () => appendLeakToError(httpFailure(404), "staging leaked"),
+      title: "INR-02: classifies and frames the host's answer behind a cleanup leak",
+      createFailure: () =>
+        appendLeakToError(
+          gitCommandFailure({ kind: "network", httpStatus: 404 }),
+          "staging leaked",
+        ),
       rule: PLUGIN_CLONE_RULE,
       remoteUrl: REMOTE_URL,
       expected: { reason: "source missing", frame: "404 on https://git.example.com/acme/mp.git" },
     },
     {
-      title: "classifies a host HTTP 502 behind a cleanup leak as network error",
-      createFailure: () => appendLeakToError(httpFailure(502), "staging leaked"),
+      title: "INR-02: classifies a hosted HTTP 502 behind a cleanup leak as network error",
+      createFailure: () => appendLeakToError(hostedHttpFailure(502), "staging leaked"),
       rule: MARKETPLACE_REFRESH_RULE,
       remoteUrl: undefined,
       expected: { reason: "network error" },
     },
     {
-      title: "classifies a ref the remote does not have behind a cleanup leak",
-      createFailure: () => appendLeakToError(remoteNotFound(), "staging leaked"),
+      title: "INR-02: classifies a ref the remote does not have behind a cleanup leak",
+      createFailure: () =>
+        appendLeakToError(gitCommandFailure({ kind: "remote-ref-missing" }), "staging leaked"),
       rule: MARKETPLACE_ADD_RULE,
       remoteUrl: undefined,
       expected: { reason: "source missing" },
     },
     {
-      title: "classifies a missing pin behind a cleanup leak",
+      title: "INR-02: classifies a missing pin behind a cleanup leak",
       createFailure: () =>
         appendLeakToError(new PinnedCommitMissingError("0123abc"), "staging leaked"),
       rule: PLUGIN_CLONE_RULE,
       remoteUrl: undefined,
       expected: { reason: "source missing" },
+    },
+    {
+      title: "INR-02: classifies a refused stored credential behind a cleanup leak",
+      createFailure: () =>
+        appendLeakToError(new StoredCredentialRejectedError("git.example.com"), "staging leaked"),
+      rule: PLUGIN_CLONE_RULE,
+      remoteUrl: undefined,
+      expected: { reason: "authentication required" },
     },
     {
       title: "leaves null unclassified",
@@ -265,8 +173,8 @@ describe("classifyGitFailure", () => {
       expected: undefined,
     },
     {
-      title: "leaves a thrown non-Error with an HTTP shape unclassified",
-      createFailure: () => ({ code: "HttpError", data: { statusCode: 500 } }),
+      title: "leaves a thrown non-Error with an HTTP status unclassified",
+      createFailure: () => ({ data: { statusCode: 500 } }),
       rule: MARKETPLACE_REFRESH_RULE,
       remoteUrl: REMOTE_URL,
       expected: undefined,
@@ -276,6 +184,13 @@ describe("classifyGitFailure", () => {
       createFailure: () => Object.assign(new Error("permission denied"), { code: "EACCES" }),
       rule: MARKETPLACE_ADD_RULE,
       remoteUrl: REMOTE_URL,
+      expected: undefined,
+    },
+    {
+      title: "leaves a filesystem error for the caller under the unknown rule",
+      createFailure: () => Object.assign(new Error("local filesystem failed"), { code: "ELOOP" }),
+      rule: UNKNOWN_RULE,
+      remoteUrl: undefined,
       expected: undefined,
     },
     {
@@ -293,91 +208,21 @@ describe("classifyGitFailure", () => {
       expected: undefined,
     },
     {
-      title: "classifies a non-integer 401 status as network error, not authentication required",
-      createFailure: () => httpFailure(401.5),
-      rule: PLUGIN_CLONE_RULE,
-      remoteUrl: undefined,
-      expected: { reason: "network error" },
-    },
-    {
-      title: "classifies matching cancellation code and name as authentication required",
-      createFailure: () =>
-        Object.assign(new Error("The operation was canceled."), {
-          code: "UserCanceledError",
-          name: "UserCanceledError",
-        }),
-      rule: PLUGIN_CLONE_RULE,
-      remoteUrl: undefined,
-      expected: { reason: "authentication required" },
-    },
-    {
-      title: "classifies a cancellation name before a network code",
-      createFailure: () =>
-        Object.assign(new Error("The operation was canceled."), {
-          code: "ENETUNREACH",
-          name: "UserCanceledError",
-        }),
-      rule: PLUGIN_CLONE_RULE,
-      remoteUrl: undefined,
-      expected: { reason: "authentication required" },
-    },
-    {
-      title: "classifies a cancellation name before a non-auth HTTP status",
-      createFailure: () =>
-        Object.assign(new Error("The operation was canceled."), {
-          code: "HttpError",
-          data: { statusCode: 404 },
-          name: "UserCanceledError",
-        }),
-      rule: PLUGIN_CLONE_RULE,
-      remoteUrl: REMOTE_URL,
-      expected: { reason: "authentication required" },
-    },
-    {
-      title: "classifies a direct network code on an error with a cause",
-      createFailure: () =>
-        Object.assign(new Error("outer failure", { cause: new Error("inner failure") }), {
-          code: "ECONNRESET",
-        }),
-      rule: PLUGIN_CLONE_RULE,
-      remoteUrl: undefined,
-      expected: { reason: "network unreachable" },
-    },
-    {
-      title: "classifies an unrecognized outer error as network error",
+      title: "classifies an unrecognized error as network error under the unknown rule",
       createFailure: () =>
         new Error("outer failure", {
           cause: Object.assign(new Error("inner failure"), { code: "ECONNRESET" }),
         }),
-      rule: { ...PLUGIN_CLONE_RULE, unknown: "network error" as const },
+      rule: UNKNOWN_RULE,
       remoteUrl: undefined,
       expected: { reason: "network error" },
     },
     {
-      title: "leaves an unrecognized filesystem errno for the caller",
-      createFailure: () => Object.assign(new Error("local filesystem failed"), { code: "ELOOP" }),
-      rule: PLUGIN_CLONE_RULE,
-      remoteUrl: undefined,
-      expected: undefined,
-    },
-    {
-      title: "classifies an unrecognized git error code under the unknown rule",
-      createFailure: () =>
-        Object.assign(new Error("invalid smart-http response"), { code: "ParseError" }),
-      rule: { ...PLUGIN_CLONE_RULE, unknown: "network error" as const },
+      title: "classifies an error whose code is not an errno under the unknown rule",
+      createFailure: () => Object.assign(new Error("unexpected answer"), { code: "BadAnswer" }),
+      rule: UNKNOWN_RULE,
       remoteUrl: undefined,
       expected: { reason: "network error" },
-    },
-    {
-      title: "classifies a transport failure behind a cleanup leak",
-      createFailure: () =>
-        appendLeakToError(
-          Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }),
-          "staging leaked",
-        ),
-      rule: PLUGIN_CLONE_RULE,
-      remoteUrl: undefined,
-      expected: { reason: "network unreachable" },
     },
     {
       title: "D-SG-07: classifies a git-missing failure as git missing",
@@ -576,9 +421,9 @@ describe("classifyGitFailure", () => {
 });
 
 describe("classifyGitHostFailure", () => {
-  test("classifies HTTP 404 as source missing", () => {
+  test("D-PL7-02: classifies a host HTTP 404 as source missing", () => {
     // arrange
-    const failure = httpFailure(404);
+    const failure = gitCommandFailure({ kind: "network", httpStatus: 404 });
 
     // act
     const reason = classifyGitHostFailure(failure);
@@ -611,17 +456,6 @@ describe("classifyGitHostFailure", () => {
 });
 
 describe("classifyGitSourceAccessFailure", () => {
-  test("classifies a ref the remote does not have as source missing", () => {
-    // arrange
-    const failure = remoteNotFound();
-
-    // act
-    const reason = classifyGitSourceAccessFailure(failure);
-
-    // assert
-    assert.strictEqual(reason, "source missing");
-  });
-
   test("ADD-09: classifies a remote ref missing as source missing", () => {
     // arrange
     const failure = gitCommandFailure({ kind: "remote-ref-missing" });
@@ -635,9 +469,9 @@ describe("classifyGitSourceAccessFailure", () => {
 });
 
 describe("hostHttpFailureFrame", () => {
-  test("frames a host HTTP answer as its status on the fetched URL", () => {
+  test("ADD-10: frames a host HTTP answer as its status on the fetched URL", () => {
     // arrange
-    const failure = httpFailure(500);
+    const failure = gitCommandFailure({ kind: "network", httpStatus: 500 });
 
     // act
     const frame = hostHttpFailureFrame(failure, "https://git.example.com/acme/mp.git");

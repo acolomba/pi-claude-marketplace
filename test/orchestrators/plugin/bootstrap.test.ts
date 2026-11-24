@@ -23,6 +23,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { GitCommandError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -580,10 +581,10 @@ test("renders a failed add as marketplace add does and never reaches the missing
   // arrange
   const { cwd, locations } = await createHermeticUserScope(t, "missing-source");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-  const cloneError = Object.assign(new Error("HTTP Error: 404"), {
-    code: "HttpError",
-    data: { statusCode: 404 },
-  });
+  const cloneError = new GitCommandError(
+    { kind: "repository-not-found", httpStatus: 404 },
+    { operation: "clone", exitCode: 128 },
+  );
   const { gitOps, clonedUrls } = createBootstrapGitOps({ cloneError });
   const completionCache = createCompletionCache();
 

@@ -10,7 +10,6 @@ import {
   cleanupFailuresFromError,
   composeErrorWithCauseChain,
   ConcurrentInstallError,
-  CrossOriginChallengeError,
   CrossPluginConflictError,
   DependencyCascadeError,
   DependencyDeclarationsUnreadableError,
@@ -1456,29 +1455,6 @@ describe("MarketplaceBaselineUnreadableError", () => {
   });
 });
 
-describe("CrossOriginChallengeError", () => {
-  test("names the challenging origin and why no credential is sent", () => {
-    // arrange
-    const origin = "https://sso.example.com";
-
-    // act
-    const error = new CrossOriginChallengeError(origin);
-
-    // assert
-    assert.ok(error instanceof CrossOriginChallengeError);
-    assert.ok(error instanceof Error);
-    assert.deepStrictEqual(
-      { name: error.name, message: error.message, cause: error.cause },
-      {
-        name: "CrossOriginChallengeError",
-        message:
-          "redirected request to https://sso.example.com asked for credentials; a credential is not sent after a redirect to another origin",
-        cause: undefined,
-      },
-    );
-  });
-});
-
 describe("StoredCredentialRejectedError", () => {
   test("names the host that rejected the stored credential", () => {
     // arrange
@@ -1520,7 +1496,7 @@ describe("StoredCredentialRejectedError", () => {
 });
 
 describe("HostedManifestHttpError", () => {
-  test("carries the status in the shape the git host ladder reads", () => {
+  test("D-PL5-10: carries the status the classifier reads and no other field", () => {
     // arrange
     const url = "https://catalog.example/acme/marketplace.json";
 
@@ -1533,17 +1509,17 @@ describe("HostedManifestHttpError", () => {
       {
         name: error.name,
         message: error.message,
-        code: error.code,
         data: error.data,
         cause: error.cause,
+        ownFields: Object.keys(error),
       },
       {
         name: "HostedManifestHttpError",
         message:
           "HTTP 404 error while downloading marketplace from https://catalog.example/acme/marketplace.json. The marketplace file may not exist at this URL.",
-        code: "HttpError",
         data: { statusCode: 404 },
         cause: undefined,
+        ownFields: ["data", "name"],
       },
     );
   });

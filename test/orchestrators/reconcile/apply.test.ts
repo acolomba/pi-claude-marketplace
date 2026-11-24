@@ -85,6 +85,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
+  GitCommandError,
   InvalidGitHubBaseUrlError,
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -1147,8 +1148,10 @@ describe("applyReconcile", () => {
       schemaVersion: 3,
       marketplaces: {},
     });
-    const unreachable = new Error("connect ENETUNREACH");
-    (unreachable as { code?: string }).code = "ENETUNREACH";
+    const unreachable = new GitCommandError(
+      { kind: "network", curlCode: 7 },
+      { operation: "clone", exitCode: 128 },
+    );
     const { gitOps, clonedUrls } = createRemoteGitOps({
       allowedRemoteUrls: ["https://github.com/acme/remote.git"],
       cloneError: unreachable,

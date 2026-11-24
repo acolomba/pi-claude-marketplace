@@ -12,6 +12,7 @@ import {
   causeChainTrailer,
   DependencyCascadeError,
   DirectoryPinUnsatisfiedError,
+  GitCommandError,
   InstallMarketplaceAddError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { notifyWithContext } from "../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
@@ -1434,10 +1435,10 @@ describe("composeCascadeFailureMessage", () => {
     const subject: CascadeFailureSubject = {
       kind: "member",
       key: "formatter@tools",
-      error: Object.assign(new Error("HTTP Error: 404 Not Found"), {
-        code: "HttpError",
-        data: { statusCode: 404 },
-      }),
+      error: new GitCommandError(
+        { kind: "repository-not-found", httpStatus: 404 },
+        { operation: "clone", exitCode: 128 },
+      ),
       rollbackPartials: [],
     };
 
@@ -1452,7 +1453,7 @@ describe("composeCascadeFailureMessage", () => {
         "",
         "● official [user]",
         "  ⊘ formatter@tools (failed) {source missing}",
-        "    cause: HTTP Error: 404 Not Found",
+        "    cause: git clone failed: repository-not-found, exit code 128",
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });

@@ -1,7 +1,8 @@
 // orchestrators/marketplace/add.ts
 //
-// MA-1..6, MA-8..11 (MA-7 does not apply per D-21 -- isomorphic-git
-// eliminates the "git not found on PATH" failure mode entirely).
+// MA-1..6, MA-8..11. D-21 set MA-7 (git not found on PATH) aside; under
+// the system git transport a missing git fails as `git missing` (D-SG-01,
+// D-SG-07).
 //
 // Flow (D-04 outer guard wraps the ENTIRE flow including network IO):
 //
@@ -1883,9 +1884,10 @@ interface CloneAuthArgs {
  * The auth bundle a github or url add clones with.
  *
  * github: AUTH-01 / D-79-05: buildAuthForHost binds the GitHub provider's
- * Device Flow as the onAuthRequired closure for this clone.
- * platform/git.ts::buildAuthCallbacks first consults credentialOps.fill(host);
- * only on a miss does it invoke the closure. AUTH-09: the closure passes ONLY
+ * Device Flow as the onAuthRequired closure for this clone. git first asks
+ * the user's credential helpers itself; only when none answers does
+ * platform/git.ts invoke the closure and run the clone once more (D-SG-14).
+ * AUTH-09: the closure passes ONLY
  * user_code + verification_uri, through initiateDeviceFlow's onDeviceCode
  * callback -- the access token is acquired LATER in the poll loop and is never
  * passed back to a notify or Error. GHB-02: buildGitHubAuth binds github.com,
@@ -1899,8 +1901,9 @@ interface CloneAuthArgs {
  * made. GAUTH-03: the host is extracted from the url and `buildAuthForHost`
  * binds a bundle to it, so a private source on any host authenticates from the
  * user's git credential helper; the provider registry decides only whether a
- * Device Flow runs on a helper miss (PROV-03). The bundle's host binding is
- * enforced by the compare in `buildAuthCallbacks.onAuth` (D-1-03, T-79-04).
+ * Device Flow runs on a helper miss (PROV-03). git asks the helpers for the
+ * host of the URL it requests, so a credential stored for one host is never
+ * sent to another (D-1-03, T-79-04).
  *
  * FTCH-06 / D-79-02: `authMemo` caps the Device Flow at once per host across
  * the command.

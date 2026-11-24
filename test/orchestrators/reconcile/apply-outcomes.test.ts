@@ -42,6 +42,7 @@ import {
   appendLeakToError,
   DependencyCascadeError,
   DirectoryPinUnsatisfiedError,
+  GitCommandError,
   InstallMarketplaceAddError,
   InvalidMarketplaceManifestError,
   PluginShapeError,
@@ -828,10 +829,10 @@ describe("classifyOrchestratorThrow", () => {
 
   test("INR-01: classifies a clone the git host refused with the host's reason", () => {
     // arrange
-    const error = Object.assign(new Error("HTTP Error: 404 Not Found"), {
-      code: "HttpError",
-      data: { statusCode: 404 },
-    });
+    const error = new GitCommandError(
+      { kind: "repository-not-found", httpStatus: 404 },
+      { operation: "clone", exitCode: 128 },
+    );
 
     // act
     const reason = classifyOrchestratorThrow(error);

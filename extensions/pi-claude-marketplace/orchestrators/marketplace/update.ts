@@ -952,8 +952,8 @@ async function installAutoupdateDependencies(
  *
  * EACCES/EPERM/ENOENT/ENOTDIR classify first since the shared classifier
  * has no opinion on them (path-source failures never reach git). The rest of
- * the ladder (authentication, network errno, and the host's HTTP status)
- * goes to the shared `classifyGitFailure` with the refresh rule, so `update`
+ * the ladder (the system git failure kinds and the host's HTTP status) goes
+ * to the shared `classifyGitFailure` with the refresh rule, so `update`
  * cannot drift from the other git surfaces.
  */
 function transportReason(err: MarketplaceUpdateError): ContentReason | undefined {

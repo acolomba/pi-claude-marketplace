@@ -66,6 +66,7 @@ import {
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { softDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import {
+  GitCommandError,
   InvalidGitHubBaseUrlError,
   StateLockCompromisedError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -97,6 +98,7 @@ import type {
   CommandInventoryItem,
   ToolInventoryItem,
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { GitFailure } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { TestContext } from "node:test";
@@ -219,6 +221,11 @@ async function withFsPromiseFault<T>(
   const actionOutcome = await action(withDefaultMcpStatus(createGetPluginInfo(reader)));
   assert.equal(faultRaised, true, `expected ${method} fault for ${targetPath}`);
   return actionOutcome;
+}
+
+/** SG-PRC-05: a system-git clone that failed as `failure`. */
+function cloneFailure(failure: GitFailure): GitCommandError {
+  return new GitCommandError(failure, { operation: "clone", exitCode: 128 });
 }
 
 function createCredentialOps() {
@@ -6663,9 +6670,7 @@ test("D-81-04: info --fetch degrades to `components: not resolved` + an existing
 
     // A network-typed clone failure: the fetch hook must catch it and fall
     // through to the componentsResolved: false arm with `network unreachable`.
-    const netErr = Object.assign(new Error("getaddrinfo ENOTFOUND example.com"), {
-      code: "ENOTFOUND",
-    });
+    const netErr = cloneFailure({ kind: "network", curlCode: 6 });
     const { gitOps } = createGitOps({ cloneThrows: netErr });
     const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
@@ -6819,9 +6824,7 @@ test("D-78-04 / D-81-04: info --fetch on an INSTALLED git plugin with a missing 
       installed: { gplug: { version: "1.0.0" } },
     });
 
-    const netErr = Object.assign(new Error("getaddrinfo ENOTFOUND example.com"), {
-      code: "ENOTFOUND",
-    });
+    const netErr = cloneFailure({ kind: "network", curlCode: 6 });
     const { gitOps } = createGitOps({ cloneThrows: netErr });
     const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
@@ -7213,7 +7216,7 @@ test("FTCH-03 / MIRR-02: info --fetch on an UNPINNED not-installed source clones
   });
 });
 
-test("FTCH-06: info --fetch folds an HttpError 401 seam throw to `{authentication required}`", async () => {
+test("FTCH-06: info --fetch folds an https-auth seam throw to `{authentication required}`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -7228,12 +7231,8 @@ test("FTCH-06: info --fetch folds an HttpError 401 seam throw to `{authenticatio
       },
     });
 
-    // The isomorphic-git HttpError shape: `.code === "HttpError"` with the
-    // status on `.data.statusCode` (duck-typed by classifyFetchFailure).
-    const authErr = Object.assign(new Error("auth"), {
-      code: "HttpError",
-      data: { statusCode: 401 },
-    });
+    // git reads a 401 answer as https-auth (SG-PRC-05).
+    const authErr = cloneFailure({ kind: "https-auth", detail: "rejected" });
     const { gitOps } = createGitOps({ cloneThrows: authErr });
     const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
@@ -7259,7 +7258,7 @@ test("FTCH-06: info --fetch folds an HttpError 401 seam throw to `{authenticatio
   });
 });
 
-test("FTCH-06: info --fetch folds a UserCanceledError (denied/expired Device Flow) to `{authentication required}`", async () => {
+test("FTCH-06: info --fetch folds a denied/expired Device Flow to `{authentication required}`", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -7274,11 +7273,9 @@ test("FTCH-06: info --fetch folds a UserCanceledError (denied/expired Device Flo
       },
     });
 
-    // isomorphic-git throws UserCanceledError when onAuth returns
-    // `{ cancel: true }` -- the shape a denied/expired Device Flow surfaces.
-    const canceledErr = Object.assign(new Error("auth canceled"), {
-      code: "UserCanceledError",
-    });
+    // D-SG-14: a denied/expired Device Flow leaves the clone's own https-auth
+    // failure with no credential.
+    const canceledErr = cloneFailure({ kind: "https-auth", detail: "no-credential" });
     const { gitOps } = createGitOps({ cloneThrows: canceledErr });
     const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();
@@ -7304,26 +7301,31 @@ test("FTCH-06: info --fetch folds a UserCanceledError (denied/expired Device Flo
   });
 });
 
-for (const { title, statusCode, installed, expectedRow } of [
+for (const { title, failure, installed, expectedRow } of [
   {
     title: "GLK-01: info --fetch reads a host 404 on a not-installed plugin as source missing",
-    statusCode: 404,
+    failure: { kind: "repository-not-found", httpStatus: 404 },
     installed: {},
     expectedRow: "  ◌ gplug v1.0.0 (remote) {source missing}",
   },
   {
     title: "GLK-01: info --fetch reads a host 503 on a not-installed plugin as network error",
-    statusCode: 503,
+    failure: { kind: "network", httpStatus: 503 },
     installed: {},
     expectedRow: "  ◌ gplug v1.0.0 (remote) {network error}",
   },
   {
     title: "GLK-01: info --fetch appends source missing to an installed plugin's row on a host 404",
-    statusCode: 404,
+    failure: { kind: "repository-not-found", httpStatus: 404 },
     installed: { gplug: { version: "1.0.0" } },
     expectedRow: "  ● gplug v1.0.0 (installed) {source missing}",
   },
-]) {
+] satisfies ReadonlyArray<{
+  title: string;
+  failure: GitFailure;
+  installed: Record<string, { version: string }>;
+  expectedRow: string;
+}>) {
   test(title, async () => {
     await withHermeticHome(async ({ home, cwd }) => {
       // arrange
@@ -7338,10 +7340,7 @@ for (const { title, statusCode, installed, expectedRow } of [
         },
         installed,
       });
-      const hostAnswer = Object.assign(new Error(`HTTP Error: ${statusCode}`), {
-        code: "HttpError",
-        data: { statusCode },
-      });
+      const hostAnswer = cloneFailure(failure);
       const { gitOps } = createGitOps({ cloneThrows: hostAnswer });
       const { credOps: credentialOps } = createCredentialOps();
       const { ctx, run, notifications } = makeCtx();
@@ -7725,9 +7724,7 @@ test("OUT-05 / OUT-03: a degraded `(remote)` row reporting a read failure carrie
       },
     });
 
-    const netErr = Object.assign(new Error("getaddrinfo ENOTFOUND example.com"), {
-      code: "ENOTFOUND",
-    });
+    const netErr = cloneFailure({ kind: "network", curlCode: 6 });
     const { gitOps } = createGitOps({ cloneThrows: netErr });
     const { credOps: credentialOps } = createCredentialOps();
     const { ctx, run, notifications } = makeCtx();

@@ -9,12 +9,15 @@
  * `<home>/github-redirect.json`, which a step writes before Pi starts, and
  * replaces `request` and `get` of `node:https` and `node:http`, for CommonJS
  * callers and ESM named imports alike, and `globalThis.fetch` in Pi's process.
- * isomorphic-git reaches the network through `simple-get`, which reads
- * `https.request` when it sends, and the product's Device Flow calls the
- * global `fetch`, so both go through the replacements. The redirect does not
- * see `net`, `tls`, or `http2` connections, a `fetch` that a module captured
- * before the redirect loaded, or a request sent before it loaded. An https request for `github.com` goes to the Device Flow
- * stand-in when its path starts with `/login/`, and to the run's git host
+ * The redirect covers Pi's own `fetch` and `https` requests: the product's
+ * Device Flow sign-in calls the global `fetch`, so it goes through the
+ * replacements. git runs as a child process and never passes through them;
+ * it reaches the git host stand-in through the CONNECT proxy in
+ * `connect-proxy.ts` (D-SG-14). The redirect does not see `net`, `tls`, or
+ * `http2` connections, a `fetch` that a module captured before the redirect
+ * loaded, or a request sent before it loaded. An https request for
+ * `github.com` goes to the Device Flow stand-in when its path starts with
+ * `/login/`, and to the run's git host
  * otherwise, with its path kept. Its host becomes `127.0.0.1`, so TLS checks
  * the git host's certificate, which both stand-ins serve. A request to a
  * loopback host passes unchanged. Any other request through the replaced

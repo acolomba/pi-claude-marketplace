@@ -431,10 +431,10 @@ describe("composeInstallFailureMessage", () => {
 
   test("classifies an HTTP authentication challenge without exposing its cause", () => {
     // arrange
-    const failure = Object.assign(new Error("HTTP 401 for private clone"), {
-      code: "HttpError",
-      data: { statusCode: 401 },
-    });
+    const failure = new GitCommandError(
+      { kind: "https-auth", detail: "rejected" },
+      { operation: "clone", exitCode: 128 },
+    );
 
     // act
     const message = composeInstallFailureMessage({
@@ -462,10 +462,10 @@ describe("composeInstallFailureMessage", () => {
   test("INR-02: keeps the cause of an authentication failure whose cleanup leaked", () => {
     // arrange
     const failure = appendLeakToError(
-      Object.assign(new Error("HTTP 401 for private clone"), {
-        code: "HttpError",
-        data: { statusCode: 401 },
-      }),
+      new GitCommandError(
+        { kind: "https-auth", detail: "rejected" },
+        { operation: "clone", exitCode: 128 },
+      ),
       "plugin clone staging left behind",
     );
 
@@ -494,9 +494,11 @@ describe("composeInstallFailureMessage", () => {
 
   test("classifies a cancelled authentication flow without exposing its cause", () => {
     // arrange
-    const failure = Object.assign(new Error("device flow cancelled"), {
-      name: "UserCanceledError",
-    });
+    const failure = new GitCommandError(
+      { kind: "https-auth", detail: "no-credential" },
+      { operation: "clone", exitCode: 128 },
+      { cause: new Error("device flow cancelled") },
+    );
 
     // act
     const message = composeInstallFailureMessage({
@@ -522,10 +524,10 @@ describe("composeInstallFailureMessage", () => {
 
   test("INS-06: classifies a git host 404 as source missing and keeps its cause", () => {
     // arrange
-    const failure = Object.assign(new Error("HTTP Error: 404 Not Found"), {
-      code: "HttpError",
-      data: { statusCode: 404 },
-    });
+    const failure = new GitCommandError(
+      { kind: "repository-not-found", httpStatus: 404 },
+      { operation: "clone", exitCode: 128 },
+    );
 
     // act
     const message = composeInstallFailureMessage({
@@ -552,10 +554,10 @@ describe("composeInstallFailureMessage", () => {
 
   test("INS-06: classifies a git host server error as network error and keeps its cause", () => {
     // arrange
-    const failure = Object.assign(new Error("HTTP Error: 503 Service Unavailable"), {
-      code: "HttpError",
-      data: { statusCode: 503 },
-    });
+    const failure = new GitCommandError(
+      { kind: "network", httpStatus: 503 },
+      { operation: "clone", exitCode: 128 },
+    );
 
     // act
     const message = composeInstallFailureMessage({
@@ -582,10 +584,10 @@ describe("composeInstallFailureMessage", () => {
 
   test("INS-06: leaves a ref the clone on disk lacks unclassified and keeps its cause", () => {
     // arrange
-    const failure = Object.assign(new Error("Could not find HEAD."), {
-      code: "NotFoundError",
-      name: "NotFoundError",
-    });
+    const failure = new GitCommandError(
+      { kind: "local-ref-missing" },
+      { operation: "checkout -f", exitCode: 128 },
+    );
 
     // act
     const message = composeInstallFailureMessage({
@@ -610,9 +612,12 @@ describe("composeInstallFailureMessage", () => {
     });
   });
 
-  test("INS-06: classifies a network errno failure as network unreachable and keeps its cause", () => {
+  test("INS-06: classifies a dropped connection as network unreachable and keeps its cause", () => {
     // arrange
-    const failure = Object.assign(new Error("socket hang up"), { code: "ECONNRESET" });
+    const failure = new GitCommandError(
+      { kind: "network", curlCode: 56 },
+      { operation: "clone", exitCode: 128 },
+    );
 
     // act
     const message = composeInstallFailureMessage({

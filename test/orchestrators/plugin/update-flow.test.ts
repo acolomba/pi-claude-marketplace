@@ -57,6 +57,7 @@ import {
   CleanupContextError,
   DependencyDeclarationsUnreadableError,
   GitCommandError,
+  HostedManifestHttpError,
   InvalidGitHubBaseUrlError,
   InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
@@ -1731,10 +1732,10 @@ test("syncClone-fail: an HTTP 401 on the marketplace sync renders {authenticatio
     try {
       // arrange
       await seedGithubMarketplaceForSync(cwd);
-      const unauthorized = Object.assign(new Error("HTTP Error: 401 Unauthorized"), {
-        code: "HttpError",
-        data: { statusCode: 401, statusMessage: "Unauthorized" },
-      });
+      const unauthorized = new GitCommandError(
+        { kind: "https-auth", detail: "rejected" },
+        { operation: "clone", exitCode: 128 },
+      );
       const { gitOps } = createGitOps({ syncThrows: unauthorized });
       const { ctx, run, notifications } = makeCtx();
 
@@ -1753,7 +1754,7 @@ test("syncClone-fail: an HTTP 401 on the marketplace sync renders {authenticatio
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● official [project]\n  ⊘ official (failed) {authentication required}\n    cause: HTTP Error: 401 Unauthorized\n\nPlugin update: 1 failure",
+            "A plugin operation has failed.\n\n● official [project]\n  ⊘ official (failed) {authentication required}\n    cause: git clone failed: https-auth, exit code 128\n\nPlugin update: 1 failure",
           severity: "error",
         },
       ]);
@@ -1841,36 +1842,33 @@ test("GLK-04: a scope lock lost during the marketplace sync fails the sync as lo
   });
 });
 
-for (const { title, seed, marketplace, status, statusMessage, message } of [
+for (const { title, seed, marketplace, failure, message } of [
   {
     title:
       "GLK-01 / D-PL7-14: an HTTP 503 on a github marketplace sync fails as network error framed with the wire url",
     seed: (cwd: string) => seedGithubMarketplaceForSync(cwd),
     marketplace: "official",
-    status: 503,
-    statusMessage: "Service Unavailable",
+    failure: { kind: "network", httpStatus: 503 },
     message:
-      "A plugin operation has failed.\n\n● official [project]\n  ⊘ official (failed) {network error}\n    cause: 503 on https://github.com/test/repo.git -> HTTP Error: 503 Service Unavailable\n\nPlugin update: 1 failure",
+      "A plugin operation has failed.\n\n● official [project]\n  ⊘ official (failed) {network error}\n    cause: 503 on https://github.com/test/repo.git -> git clone failed: network, exit code 128\n\nPlugin update: 1 failure",
   },
   {
     title:
       "GLK-01 / D-PL7-14: an HTTP 404 on a github marketplace sync fails as network error framed with the wire url",
     seed: (cwd: string) => seedGithubMarketplaceForSync(cwd),
     marketplace: "official",
-    status: 404,
-    statusMessage: "Not Found",
+    failure: { kind: "repository-not-found", httpStatus: 404 },
     message:
-      "A plugin operation has failed.\n\n● official [project]\n  ⊘ official (failed) {network error}\n    cause: 404 on https://github.com/test/repo.git -> HTTP Error: 404 Not Found\n\nPlugin update: 1 failure",
+      "A plugin operation has failed.\n\n● official [project]\n  ⊘ official (failed) {network error}\n    cause: 404 on https://github.com/test/repo.git -> git clone failed: repository-not-found, exit code 128\n\nPlugin update: 1 failure",
   },
   {
     title:
       "GLK-01 / D-PL7-14: an HTTP 502 on a url marketplace sync fails as network error framed with the source url",
     seed: (cwd: string) => seedUrlMarketplaceForSync(cwd, { hello: "1.0.0" }),
     marketplace: "mp",
-    status: 502,
-    statusMessage: "Bad Gateway",
+    failure: { kind: "network", httpStatus: 502 },
     message:
-      "A plugin operation has failed.\n\n● mp [project]\n  ⊘ mp (failed) {network error}\n    cause: 502 on https://example.com/org/repo -> HTTP Error: 502 Bad Gateway\n\nPlugin update: 1 failure",
+      "A plugin operation has failed.\n\n● mp [project]\n  ⊘ mp (failed) {network error}\n    cause: 502 on https://example.com/org/repo -> git clone failed: network, exit code 128\n\nPlugin update: 1 failure",
   },
 ] as const) {
   test(title, async () => {
@@ -1879,10 +1877,7 @@ for (const { title, seed, marketplace, status, statusMessage, message } of [
       try {
         // arrange
         await seed(cwd);
-        const answered = Object.assign(new Error(`HTTP Error: ${status} ${statusMessage}`), {
-          code: "HttpError",
-          data: { statusCode: status, statusMessage },
-        });
+        const answered = new GitCommandError(failure, { operation: "clone", exitCode: 128 });
         const { gitOps } = createGitOps({ syncThrows: answered });
         const { ctx, run, notifications } = makeCtx();
 
@@ -1937,10 +1932,10 @@ test("CR-01: an HTTP 401 on a later marketplace sync still reports the earlier t
           },
         },
       });
-      const unauthorized = Object.assign(new Error("HTTP Error: 401 Unauthorized"), {
-        code: "HttpError",
-        data: { statusCode: 401, statusMessage: "Unauthorized" },
-      });
+      const unauthorized = new GitCommandError(
+        { kind: "https-auth", detail: "rejected" },
+        { operation: "clone", exitCode: 128 },
+      );
       const { gitOps } = createGitOps({ syncThrows: unauthorized });
       const { ctx, run, notifications } = makeCtx();
 
@@ -1959,7 +1954,7 @@ test("CR-01: an HTTP 401 on a later marketplace sync still reports the earlier t
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● zzz [project]\n  ⊘ zzz (failed) {authentication required}\n    cause: HTTP Error: 401 Unauthorized\n\nPlugin update: 1 failure",
+            "A plugin operation has failed.\n\n● zzz [project]\n  ⊘ zzz (failed) {authentication required}\n    cause: git clone failed: https-auth, exit code 128\n\nPlugin update: 1 failure",
           severity: "error",
         },
         {
@@ -2185,10 +2180,10 @@ test("syncClone-fail / GAUTH-04: an HTTP 401 on a url marketplace sync names the
     try {
       // arrange
       await seedUrlMarketplaceForSync(cwd, { hello: "1.0.0" });
-      const unauthorized = Object.assign(new Error("HTTP Error: 401 Unauthorized"), {
-        code: "HttpError",
-        data: { statusCode: 401, statusMessage: "Unauthorized" },
-      });
+      const unauthorized = new GitCommandError(
+        { kind: "https-auth", detail: "rejected" },
+        { operation: "clone", exitCode: 128 },
+      );
       const { gitOps } = createGitOps({ syncThrows: unauthorized });
       const { ctx, run, notifications } = makeCtx();
 
@@ -2207,7 +2202,7 @@ test("syncClone-fail / GAUTH-04: an HTTP 401 on a url marketplace sync names the
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ mp (failed) {authentication required}\n    cause: HTTP Error: 401 Unauthorized -> no credential was obtained for example.com; store one with: printf 'protocol=https\\nhost=example.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve\n\nPlugin update: 1 failure",
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ mp (failed) {authentication required}\n    cause: git clone failed: https-auth, exit code 128 -> no credential was obtained for example.com; store one with: printf 'protocol=https\\nhost=example.com\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve\n\nPlugin update: 1 failure",
           severity: "error",
         },
       ]);
@@ -4826,9 +4821,9 @@ for (const { title, makeFailure, reason } of [
     reason: "unreadable",
   },
   {
-    title: "classifies stable network errno marketplace refresh failures",
+    title: "classifies an unreachable host on a marketplace refresh",
     makeFailure: () =>
-      Object.assign(new Error("opaque transport failure"), { code: "ENETUNREACH" }),
+      new GitCommandError({ kind: "network", curlCode: 7 }, { operation: "clone", exitCode: 128 }),
     reason: "network unreachable",
   },
   {
@@ -10486,12 +10481,14 @@ test("MIRR-01 / NFR-3 / SRC-01 vanished repo: unpinned mirror update whose clone
         recordedSha: SHA_OLD,
       });
 
-      // The upstream repo vanished: the mirror seam's cold clone throws a
-      // DNS-resolution failure (errno ENOTFOUND) -- the network-unreachable
-      // class. The mirror key has no warm dir, so the seam materializes cold and
-      // the clone throw propagates through the probe unchanged.
-      const networkError = new Error("getaddrinfo ENOTFOUND example.com") as NodeJS.ErrnoException;
-      networkError.code = "ENOTFOUND";
+      // The upstream repo vanished: the mirror seam's cold clone fails on a
+      // host it cannot resolve -- the network-unreachable class. The mirror
+      // key has no warm dir, so the seam materializes cold and the clone throw
+      // propagates through the probe unchanged.
+      const networkError = new GitCommandError(
+        { kind: "network", curlCode: 6 },
+        { operation: "clone", exitCode: 128 },
+      );
       const { gitOps } = createGitOps({
         fixtureSourceDir: fixtureRepoDir,
         cloneThrows: networkError,
@@ -10522,7 +10519,7 @@ test("MIRR-01 / NFR-3 / SRC-01 vanished repo: unpinned mirror update whose clone
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ gp v9.9.9 (failed) {network unreachable}\n    cause: getaddrinfo ENOTFOUND example.com",
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ gp v9.9.9 (failed) {network unreachable}\n    cause: git clone failed: network, exit code 128",
           severity: "error",
         },
       ]);
@@ -11120,7 +11117,7 @@ test("GHB-03: the cascade's single-plugin update rethrows an invalid base", asyn
   });
 });
 
-test("NFR-3 device-flow auth failure: a clone throw shaped UserCanceledError classifies as {authentication required}, not {no longer installable}", async () => {
+test("NFR-3 device-flow auth failure: a clone whose sign-in failed classifies as {authentication required}, not {no longer installable}", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-git-usercanceled-");
     try {
@@ -11136,10 +11133,12 @@ test("NFR-3 device-flow auth failure: a clone throw shaped UserCanceledError cla
         recordedSha: SHA_OLD,
       });
 
-      // An unsuccessful device-flow auth (denied / expired / poll network
-      // error) makes platform/git.ts's onAuth return `{ cancel: true }`, which
-      // isomorphic-git throws as `UserCanceledError` -- NOT HttpError 401/403.
-      const authError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
+      // D-SG-14: an unsuccessful device-flow auth (denied / expired / poll
+      // network error) leaves the clone's own https-auth failure.
+      const authError = new GitCommandError(
+        { kind: "https-auth", detail: "no-credential" },
+        { operation: "clone", exitCode: 128 },
+      );
       const { gitOps } = createGitOps({
         fixtureSourceDir: fixtureRepoDir,
         cloneThrows: authError,
@@ -12915,12 +12914,10 @@ for (const { title, failure, expectedReason, expectedCause } of [
   },
   {
     title: "redacts an HTTP cascade failure before constructing its cause",
-    failure: Object.assign(new Error("HTTP Error at /private/scope/token.txt"), {
-      code: "HttpError",
-      data: { statusCode: 503 },
-    }),
+    failure: new HostedManifestHttpError("/private/scope/token.txt", 503),
     expectedReason: "network error",
-    expectedCause: "HTTP Error at token.txt",
+    expectedCause:
+      "HTTP 503 error while downloading marketplace from token.txt. The marketplace file may not exist at this URL.",
   },
 ] as const) {
   test(`D-PL10-11: ${title}`, async () => {
