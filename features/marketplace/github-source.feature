@@ -21,6 +21,7 @@ Feature: Marketplace github source
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
 
   Scenario Outline: Each spelling of a GitHub URL clones and shows the same repository
     Given the marketplace "tools" is published as a github source
@@ -38,6 +39,7 @@ Feature: Marketplace github source
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
     When the user runs "/claude:plugin marketplace info tools --scope project"
     Then the marketplace info result has these fields:
@@ -82,6 +84,7 @@ Feature: Marketplace github source
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
     When the user runs "/claude:plugin marketplace info tools --scope project"
     Then the marketplace info result has these fields:
       | kind                    | marketplace-info |
@@ -123,6 +126,7 @@ Feature: Marketplace github source
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
 
   Scenario: Info on a github marketplace added at a ref that contains an @ shows that ref and its catalog

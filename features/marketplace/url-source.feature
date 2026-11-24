@@ -21,6 +21,7 @@ Feature: Marketplace url source
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
 
   Scenario: A url source is cloned at exactly the url typed
     Given the marketplace "tools" is published as a url source
@@ -38,6 +39,7 @@ Feature: Marketplace url source
     Then the git host receives these requests:
       | method | path                                          | status |
       | GET    | /acme/tools/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools/git-upload-pack                   | 200    |
       | POST   | /acme/tools/git-upload-pack                   | 200    |
 
   Scenario: Adding a url marketplace at a ref clones that ref
@@ -58,6 +60,7 @@ Feature: Marketplace url source
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
     When the user runs "/claude:plugin marketplace info tools --scope project"
     Then the marketplace info result has these fields:
@@ -108,6 +111,7 @@ Feature: Marketplace url source
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
 
   Scenario: Adding a marketplace whose ref starts with a dash is refused before git runs
     Given the marketplace "tools" is published as a url source
@@ -150,15 +154,15 @@ Feature: Marketplace url source
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name                  | marketplace scope | marketplace status | id                                | name                              | status | reasons       | scope   | leaks | rollback partial | cause chain                                                                  | cause truncated |
-      | https://{git host}/acme/tools.git | project           | failed             | https://{git host}/acme/tools.git | https://{git host}/acme/tools.git | failed | network error | project |       |                  | <status> on https://{git host}/acme/tools.git, HTTP Error: <status> <phrase> | false           |
+      | marketplace name                  | marketplace scope | marketplace status | id                                | name                              | status | reasons       | scope   | leaks | rollback partial | cause chain                                                                                  | cause truncated |
+      | https://{git host}/acme/tools.git | project           | failed             | https://{git host}/acme/tools.git | https://{git host}/acme/tools.git | failed | network error | project |       |                  | <status> on https://{git host}/acme/tools.git, git clone --depth failed: network, exit code 128 | false           |
     Then the "claude-plugins.json" file of the project scope does not exist
     Then the git host receives these requests:
       | method | path                                              | status   |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | <status> |
 
     Examples:
-      | status | phrase                |
-      | 500    | Internal Server Error |
-      | 502    | Bad Gateway           |
-      | 503    | Service Unavailable   |
+      | status |
+      | 500    |
+      | 502    |
+      | 503    |

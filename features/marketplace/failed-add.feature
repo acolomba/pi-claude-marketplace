@@ -107,6 +107,7 @@ Feature: Marketplace failed add
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
     Then the project scope holds no marketplace checkout
     Then the project scope holds no git clones
     Then the project scope holds no marketplace record

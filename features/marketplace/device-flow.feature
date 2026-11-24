@@ -1,11 +1,12 @@
 Feature: Marketplace device flow
 
   A user with no stored GitHub credential signs in through GitHub's Device Flow when a command
-  clones a private GitHub repository. Claude Code runs no Device Flow, and this extension clones
-  through isomorphic-git, which cannot prompt for a credential, so the sign-in is the project's own
-  contract (AUTH-01, D-79-04, D-79-05, GHB-02, D-BG-1101). A loopback stand-in answers GitHub's
-  sign-in endpoints, the run's git host serves GitHub's repositories, and an in-process redirect
-  sends Pi's github.com requests to them and refuses every other host.
+  clones a private GitHub repository. Claude Code runs no Device Flow, and this extension runs git
+  with its prompts turned off, so the sign-in is the project's own contract (AUTH-01, D-79-04,
+  D-79-05, GHB-02, D-BG-1101, D-SG-14). A loopback stand-in answers GitHub's sign-in endpoints, the
+  run's git host serves GitHub's repositories, an in-process redirect sends Pi's github.com
+  requests to them, and a proxy tunnels git's github.com connections to the git host. Both refuse
+  every other host.
 
   Scenario: Adding a private GitHub marketplace signs in through Device Flow and clones it
     Given the marketplace "tools" is published as a github source
@@ -27,7 +28,9 @@ Feature: Marketplace device flow
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 401    |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
     Then github's sign-in receives these requests:
       | method | path                      | form                                                                                                                      |
@@ -35,13 +38,12 @@ Feature: Marketplace device flow
       | POST   | /login/oauth/access_token | client_id=Ov23liNcyK08uGdU0mMl, device_code=stand-in-device-code, grant_type=urn:ietf:params:oauth:grant-type:device_code |
       | POST   | /login/oauth/access_token | client_id=Ov23liNcyK08uGdU0mMl, device_code=stand-in-device-code, grant_type=urn:ietf:params:oauth:grant-type:device_code |
     Then pi routes these github requests:
-      | method | url                                                                 | routed to |
-      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
-      | POST   | https://github.com/login/device/code                                | sign-in   |
-      | POST   | https://github.com/login/oauth/access_token                         | sign-in   |
-      | POST   | https://github.com/login/oauth/access_token                         | sign-in   |
-      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
-      | POST   | https://github.com/acme/tools.git/git-upload-pack                   | git host  |
+      | method  | url                                         | routed to |
+      | CONNECT | github.com:443                              | git host  |
+      | POST    | https://github.com/login/device/code        | sign-in   |
+      | POST    | https://github.com/login/oauth/access_token | sign-in   |
+      | POST    | https://github.com/login/oauth/access_token | sign-in   |
+      | CONNECT | github.com:443                              | git host  |
     Then the user's git credential store holds these credentials:
       | protocol | host       | user           | password              |
       | https    | github.com | x-access-token | stand-in-access-token |
@@ -102,11 +104,11 @@ Feature: Marketplace device flow
       | POST   | /login/oauth/access_token | client_id=Ov23liNcyK08uGdU0mMl, device_code=stand-in-device-code, grant_type=urn:ietf:params:oauth:grant-type:device_code |
       | POST   | /login/oauth/access_token | client_id=Ov23liNcyK08uGdU0mMl, device_code=stand-in-device-code, grant_type=urn:ietf:params:oauth:grant-type:device_code |
     Then pi routes these github requests:
-      | method | url                                                                 | routed to |
-      | GET    | https://github.com/acme/tools.git/info/refs?service=git-upload-pack | git host  |
-      | POST   | https://github.com/login/device/code                                | sign-in   |
-      | POST   | https://github.com/login/oauth/access_token                         | sign-in   |
-      | POST   | https://github.com/login/oauth/access_token                         | sign-in   |
+      | method  | url                                         | routed to |
+      | CONNECT | github.com:443                              | git host  |
+      | POST    | https://github.com/login/device/code        | sign-in   |
+      | POST    | https://github.com/login/oauth/access_token | sign-in   |
+      | POST    | https://github.com/login/oauth/access_token | sign-in   |
     Then the "claude-plugins.json" file of the user scope does not exist
     Then the user scope holds no marketplace record
     Then the user scope holds no marketplace checkout
@@ -144,7 +146,9 @@ Feature: Marketplace device flow
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 401    |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 401    |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
     Then github's sign-in receives these requests:
       | method | path                      | form                                                                                                                      |
@@ -152,13 +156,12 @@ Feature: Marketplace device flow
       | POST   | /login/oauth/access_token | client_id=Ov23liNcyK08uGdU0mMl, device_code=stand-in-device-code, grant_type=urn:ietf:params:oauth:grant-type:device_code |
       | POST   | /login/oauth/access_token | client_id=Ov23liNcyK08uGdU0mMl, device_code=stand-in-device-code, grant_type=urn:ietf:params:oauth:grant-type:device_code |
     Then pi routes these github requests:
-      | method | url                                                               | routed to |
-      | GET    | https://github.com/acme/ghp.git/info/refs?service=git-upload-pack | git host  |
-      | POST   | https://github.com/login/device/code                              | sign-in   |
-      | POST   | https://github.com/login/oauth/access_token                       | sign-in   |
-      | POST   | https://github.com/login/oauth/access_token                       | sign-in   |
-      | GET    | https://github.com/acme/ghp.git/info/refs?service=git-upload-pack | git host  |
-      | POST   | https://github.com/acme/ghp.git/git-upload-pack                   | git host  |
+      | method  | url                                         | routed to |
+      | CONNECT | github.com:443                              | git host  |
+      | POST    | https://github.com/login/device/code        | sign-in   |
+      | POST    | https://github.com/login/oauth/access_token | sign-in   |
+      | POST    | https://github.com/login/oauth/access_token | sign-in   |
+      | CONNECT | github.com:443                              | git host  |
 
   Scenario: Installing a pinned GitHub plugin whose clone is already cached makes no request and does not sign in
     Given the git repository "ghp" holds these plugins:
