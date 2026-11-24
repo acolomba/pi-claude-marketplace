@@ -1901,9 +1901,10 @@ interface CloneAuthArgs {
  * made. GAUTH-03: the host is extracted from the url and `buildAuthForHost`
  * binds a bundle to it, so a private source on any host authenticates from the
  * user's git credential helper; the provider registry decides only whether a
- * Device Flow runs on a helper miss (PROV-03). git asks the helpers for the
- * host of the URL it requests, so a credential stored for one host is never
- * sent to another (D-1-03, T-79-04).
+ * Device Flow runs on a helper miss (PROV-03). git asks the user's helpers for
+ * the host of the URL it requests. The bundle acts only on a failed request to
+ * its own host, and a sign-in's token reaches git through a helper keyed to
+ * that host alone (`platform/git.ts`, D-1-03, T-79-04).
  *
  * FTCH-06 / D-79-02: `authMemo` caps the Device Flow at once per host across
  * the command.

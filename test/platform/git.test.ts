@@ -1337,8 +1337,14 @@ function deviceFlowBundle(
   };
 }
 
-/** A git process whose every remote run fails as `https-auth` with `detail`. */
-function failingAuthGitProcess(detail: "no-credential" | "rejected"): {
+/**
+ * A git process whose every remote run fails as `https-auth` with `detail`,
+ * in a clone whose recorded origin is `origin`.
+ */
+function failingAuthGitProcess(
+  detail: "no-credential" | "rejected",
+  origin = REMOTE_URL,
+): {
   readonly gitProcess: GitProcess;
   readonly failures: GitCommandError[];
   readonly requests: GitRequest[];
@@ -1353,7 +1359,7 @@ function failingAuthGitProcess(detail: "no-credential" | "rejected"): {
       run: (request) => {
         requests.push(request);
         if (request.subcommand === "config") {
-          return Promise.resolve({ exitCode: 0, stdout: `${REMOTE_URL}\n`, stderr: "" });
+          return Promise.resolve({ exitCode: 0, stdout: `${origin}\n`, stderr: "" });
         }
 
         const failure = new GitCommandError(
@@ -1367,16 +1373,18 @@ function failingAuthGitProcess(detail: "no-credential" | "rejected"): {
   };
 }
 
-/** The `-c` pairs of the one-shot helper, as the retry carries them after the request's own. */
-const ONE_SHOT_PAIRS = [
-  "credential.helper=",
-  /^credential\.helper=!f\(\) \{ test "\$1" = get && cat '[^']+\/git-credential-[^/']+\/credential'; \}; f$/,
-] as const;
+/** The helper of the one-shot pairs, after its `credential.<origin>.helper=` key. */
+const ONE_SHOT_HELPER =
+  /^!f\(\) \{ test "\$1" = get && cat '[^']+\/git-credential-[^/']+\/credential'; \}; f$/;
 
-function assertOneShotPairs(config: readonly string[] | undefined): void {
+/** The `-c` pairs of the one-shot helper for `origin`, as the retry carries them after the request's own. */
+function assertOneShotPairs(config: readonly string[] | undefined, origin: string): void {
+  const key = `credential.${origin}.helper=`;
+  const helper = config?.[1] ?? "";
   assert.strictEqual(config?.length, 2);
-  assert.strictEqual(config[0], ONE_SHOT_PAIRS[0]);
-  assert.match(config[1] ?? "", ONE_SHOT_PAIRS[1]);
+  assert.strictEqual(config[0], key);
+  assert.ok(helper.startsWith(key), `${helper} is not keyed to ${origin}`);
+  assert.match(helper.slice(key.length), ONE_SHOT_HELPER);
 }
 
 describe("D-SG-14 and GAUTH-04: an auth failure of a remote request", () => {
@@ -1399,7 +1407,7 @@ describe("D-SG-14 and GAUTH-04: an auth failure of a remote request", () => {
       { oid: standIn.oid, signIns: 1, runs: 2 },
     );
     assert.deepStrictEqual(traced.requests[0]?.config, []);
-    assertOneShotPairs(traced.requests[1]?.config);
+    assertOneShotPairs(traced.requests[1]?.config, `https://${standIn.host.address}`);
     assert.deepStrictEqual(await oneShotDirectoriesLeft(), []);
     const captured = JSON.stringify({ requests: traced.requests, texts: traced.texts, debugLines });
     assert.ok(
@@ -1435,7 +1443,7 @@ describe("D-SG-14 and GAUTH-04: an auth failure of a remote request", () => {
       },
       { signIns: 1, runs: 2, head: standIn.oid },
     );
-    assertOneShotPairs(traced.requests[1]?.config);
+    assertOneShotPairs(traced.requests[1]?.config, `https://${standIn.host.address}`);
   });
 
   test("D-SG-14: a request that succeeds signs in no time", async (t) => {
@@ -1658,8 +1666,120 @@ describe("D-SG-14 and GAUTH-04: an auth failure of a remote request", () => {
       { signIns: bundle.signIns(), subcommands: requests.map((request) => request.subcommand) },
       { signIns: 1, subcommands: ["config", "fetch", "fetch"] },
     );
-    assertOneShotPairs(requests[2]?.config);
+    assertOneShotPairs(requests[2]?.config, `https://${HOST}`);
   });
+
+  test("D-1-03: a Device Flow bundle for another host signs in no time, offers no token, and throws the first failure", async (t) => {
+    // arrange
+    const standIn = await credentialStandIn(t);
+    const traced = tracingGitProcess(standIn.gitProcess);
+    const onAuthRequired = mock<OnAuthRequiredFn>({ exactParams: true, name: "device flow" });
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+
+    // act
+    const resolution = resolveRemoteRef(
+      {
+        url: standIn.url,
+        auth: {
+          kind: "device-flow",
+          credentialOps: credentials.credentialOps,
+          host: "github.com",
+          onAuthRequired,
+        },
+      },
+      traced.gitProcess,
+    );
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.deepStrictEqual(
+        { failure: error.failure, cause: error.cause },
+        { failure: { kind: "https-auth", detail: "no-credential" }, cause: undefined },
+      );
+      return true;
+    });
+    assert.deepStrictEqual(
+      traced.requests.map((request) => request.config),
+      [[]],
+    );
+    assert.deepStrictEqual(await oneShotDirectoriesLeft(), []);
+    verify(onAuthRequired);
+  });
+
+  test("D-1-03: a stored-credential bundle for another host throws a refused credential's failure unchanged", async (t) => {
+    // arrange
+    const standIn = await credentialStandIn(t, WRONG_PASSWORD_HELPER);
+    const credentials = storedCredentials();
+
+    // act
+    const resolution = resolveRemoteRef(
+      {
+        url: standIn.url,
+        auth: {
+          kind: "stored-credential",
+          credentialOps: credentials.credentialOps,
+          host: "github.com",
+        },
+      },
+      standIn.gitProcess,
+    );
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.deepStrictEqual(error.failure, { kind: "https-auth", detail: "rejected" });
+      return true;
+    });
+  });
+
+  test("D-1-03: a fetchCommit rung in a clone whose origin is another host signs in no time and throws its failure", async () => {
+    // arrange
+    const failing = failingAuthGitProcess("no-credential", OTHER_REMOTE_URL);
+    const bundle = deviceFlowBundle(HOST, {
+      ok: true,
+      cred: { username: "acme", password: RETRY_TOKEN },
+    });
+
+    // act
+    const fetching = fetchCommit(
+      { dir: "/clone", sha: OID_MAIN, auth: bundle.auth },
+      failing.gitProcess,
+    );
+
+    // assert
+    await assert.rejects(fetching, (error: unknown) => error === failing.failures[0]);
+    assert.deepStrictEqual(
+      {
+        signIns: bundle.signIns(),
+        fetchConfigs: failing.requests
+          .filter((request) => request.subcommand === "fetch")
+          .map((request) => request.config),
+      },
+      { signIns: 0, fetchConfigs: [[]] },
+    );
+  });
+
+  for (const url of [`http://${HOST}/owner/repo.git`, "/srv/git/repo.git"]) {
+    test(`D-1-03: a request to ${url} is no https request to the bundle's host, so it signs in no time`, async () => {
+      // arrange
+      const failing = failingAuthGitProcess("no-credential");
+      const bundle = deviceFlowBundle(HOST, {
+        ok: true,
+        cred: { username: "acme", password: RETRY_TOKEN },
+      });
+
+      // act
+      const resolution = resolveRemoteRef({ url, auth: bundle.auth }, failing.gitProcess);
+
+      // assert
+      await assert.rejects(resolution, (error: unknown) => error === failing.failures[0]);
+      assert.deepStrictEqual(
+        { signIns: bundle.signIns(), runs: failing.requests.length },
+        { signIns: 0, runs: 1 },
+      );
+    });
+  }
 });
 
 describe("listRemotes", () => {

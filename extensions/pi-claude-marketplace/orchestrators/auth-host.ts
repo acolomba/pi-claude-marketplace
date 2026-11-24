@@ -14,7 +14,8 @@
  * interactive half:
  *   - Provider found  -> a `device-flow` bundle whose `onAuthRequired` runs
  *     that provider's Device Flow, host-keyed (PROV-03). `platform/git.ts`
- *     calls it when no helper answered, then runs the request once more.
+ *     calls it when no helper answered a request to that host, then runs the
+ *     request once more.
  *   - No provider     -> a `stored-credential` bundle from
  *     `buildStoredCredentialAuth`, so a credential already in the user's
  *     helper still authenticates, a miss fails as git failed, and a refused
@@ -171,7 +172,9 @@ export function buildStoredCredentialAuth(
  * The bundle hands git no credential of its own: git makes every lookup in
  * the user's helpers itself, and a sign-in's token reaches git only through a
  * one-shot helper for the one retried run (`platform/git-one-shot-credential.ts`,
- * D-SG-14).
+ * D-SG-14). `platform/git.ts` runs that retry only for a request to the
+ * bundle's host and keys the helper to that host, so a request to another
+ * host never gets the token (D-1-03, T-79-04).
  */
 export function buildAuthForHost(args: {
   host: string;

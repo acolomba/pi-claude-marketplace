@@ -288,34 +288,56 @@ async function runRemote(remote: RemoteRequest, gitProcess: GitProcess): Promise
     timeoutMs: gitTimeoutMs(),
     ...(signal !== undefined && { signal }),
   };
-  return withFetchedUrlCause(gitHubWireUrl(remote.url), remote.url, () =>
-    runWithAuthBundle(request, remote.auth, gitProcess),
+  const wireUrl = gitHubWireUrl(remote.url);
+  return withFetchedUrlCause(wireUrl, remote.url, () =>
+    runWithAuthBundle(request, wireUrl, remote.auth, gitProcess),
   );
+}
+
+/**
+ * D-1-03, T-79-04: the origin git contacts for `wireUrl`, when that is an
+ * https URL of `host`, else undefined. A bundle is bound to one host, so it
+ * maps only the failure of a request to that host, and a sign-in's token goes
+ * to that origin only.
+ */
+function bundleOrigin(wireUrl: string, host: string): string | undefined {
+  if (!URL.canParse(wireUrl)) {
+    return undefined;
+  }
+
+  const url = new URL(wireUrl);
+  return url.protocol === "https:" && url.host === host ? url.origin : undefined;
 }
 
 /**
  * Runs `request` once and maps an `https-auth` failure by the bundle, reading
  * only the failure's kind and detail (SG-PRC-05). git asked the user's
- * credential helpers itself, so the bundle never answers a challenge here:
+ * credential helpers itself, so the bundle never answers a challenge here.
+ * The bundle maps only a failure of a request to its own host, `wireUrl`
+ * after the D-SG-16 rewrite (D-1-03, T-79-04):
  *   - `no-credential` under a `device-flow` bundle: no helper answered, so the
  *     sign-in runs once and the request runs once more (D-SG-14).
  *   - `rejected` under a `stored-credential` bundle: the host refused the
  *     credential a helper gave, the GAUTH-04 `StoredCredentialRejectedError`
  *     with the git failure as its cause.
- *   - anything else, a missing bundle included, is thrown as it failed. A
+ *   - anything else, a missing bundle and a request to another host
+ *     included, is thrown as it failed. A
  *     refused Device Flow token signs in no second time, and the extension
  *     erases no stored credential (git's own helpers may, as under Claude Code).
  */
 async function runWithAuthBundle(
   request: RemoteGitRequest,
+  wireUrl: string,
   auth: GitAuthBundle | undefined,
   gitProcess: GitProcess,
 ): Promise<GitResult> {
   try {
     return await gitProcess.run(request);
   } catch (error: unknown) {
+    const origin = auth === undefined ? undefined : bundleOrigin(wireUrl, auth.host);
     if (
       auth === undefined ||
+      origin === undefined ||
       !(error instanceof GitCommandError) ||
       error.failure.kind !== "https-auth"
     ) {
@@ -331,24 +353,29 @@ async function runWithAuthBundle(
       throw error;
     }
 
-    return retryAfterSignIn(request, auth, error, gitProcess);
+    return retryAfterSignIn(request, { auth, origin }, error, gitProcess);
   }
 }
 
 /**
  * D-SG-14: runs the Device Flow sign-in of `auth`, which stores the token with
  * `git credential approve` (D-BG-1102), then `request` once more with the
- * token in a one-shot helper only. The command's auth memo keeps the sign-in
+ * token in a one-shot helper only, keyed to `origin`, the bundle host's
+ * origin (D-1-03). The command's auth memo keeps the sign-in
  * to once per host. A failed sign-in throws `failure`, the first run's error,
  * with the sign-in's reason as its cause; the retry's own failure is thrown
  * as it failed. `DeviceFlowUnavailableError` propagates unchanged.
  */
 async function retryAfterSignIn(
   request: RemoteGitRequest,
-  auth: Extract<GitAuthBundle, { kind: "device-flow" }>,
+  bound: {
+    readonly auth: Extract<GitAuthBundle, { kind: "device-flow" }>;
+    readonly origin: string;
+  },
   failure: GitCommandError,
   gitProcess: GitProcess,
 ): Promise<GitResult> {
+  const { auth, origin } = bound;
   const signedIn = await auth.onAuthRequired();
   if (!signedIn.ok) {
     // An https-auth failure carries no cause of its own.
@@ -358,7 +385,7 @@ async function retryAfterSignIn(
 
   // AUTH-09: the line names the host and the operation, never the credential.
   hookDebugLog(`git ${failure.operation}: signed in to ${auth.host}, running it once more`, "auth");
-  return withOneShotCredential(signedIn.cred, (pairs) =>
+  return withOneShotCredential(signedIn.cred, origin, (pairs) =>
     gitProcess.run({ ...request, config: [...request.config, ...pairs] }),
   );
 }

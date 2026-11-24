@@ -4,10 +4,13 @@
 // request once more, and git must get the new token for that one run. The
 // token must not go into an argv, a URL, an environment variable, or a log
 // line, and git cannot call back into Node. So the token goes into a file that
-// only the current user may read, and the retry carries two `-c` pairs: an
-// empty `credential.helper`, which drops every helper configured before it,
-// then a shell helper that answers git's `get` with that file and ignores
-// `store` and `erase`. The file is removed when the retry settles.
+// only the current user may read, and the retry carries two `-c` pairs keyed
+// to the origin of the bundle's host, `credential.<origin>.helper`: an empty
+// one, which drops every helper configured before it for that origin, then a
+// shell helper that answers git's `get` with that file and ignores `store` and
+// `erase`. git asks a helper keyed to an origin only for a request to that
+// origin, so a request to any other host never gets the token (D-1-03,
+// T-79-04). The file is removed when the retry settles.
 //
 // The file lives in a fresh directory made with `mkdtemp` (mode 0700) under
 // the user scope's extension root, beside the neutral directory. The neutral
@@ -64,17 +67,33 @@ function credentialLines(credential: {
 }
 
 /**
+ * The `credential.<origin>.helper` key of `origin`. git splits a `-c` pair at
+ * its first `=`, so an origin that holds one would build another key and
+ * value; it is refused, and the error names no value.
+ */
+function helperKey(origin: string): string {
+  if (origin.includes("=")) {
+    throw new Error("a one-shot credential origin holds an equals sign");
+  }
+
+  return `credential.${origin}.helper`;
+}
+
+/**
  * Writes `credential`, the one a git run gets, with an absent value left out,
  * to a 0600 file in a fresh 0700 directory under
- * `parent()`, runs `run` with the two `-c` pairs that make git read it, and
+ * `parent()`, runs `run` with the two `-c` pairs that make git read it for a
+ * request to `origin` (such as `https://github.com`) and for no other, and
  * removes the directory once `run` settles, whether it resolved or rejected.
  * `parent` defaults to the user scope's extension root, read on every call.
  */
 export async function withOneShotCredential<T>(
   credential: { readonly username?: string | undefined; readonly password?: string | undefined },
+  origin: string,
   run: (config: readonly string[]) => Promise<T>,
   parent: () => string = extensionRoot,
 ): Promise<T> {
+  const key = helperKey(origin);
   const lines = credentialLines(credential);
   const root = parent();
   await mkdir(root, { recursive: true });
@@ -83,8 +102,8 @@ export async function withOneShotCredential<T>(
     const file = path.join(directory, FILE_NAME);
     await writeFile(file, lines, { mode: FILE_MODE, flag: "wx" });
     return await run([
-      "credential.helper=",
-      `credential.helper=!f() { test "$1" = get && cat ${shellQuoted(file)}; }; f`,
+      `${key}=`,
+      `${key}=!f() { test "$1" = get && cat ${shellQuoted(file)}; }; f`,
     ]);
   } finally {
     await rm(directory, { recursive: true, force: true });

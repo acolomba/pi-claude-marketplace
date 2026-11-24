@@ -9,6 +9,7 @@ import { getAgentDir } from "../../extensions/pi-claude-marketplace/platform/pi-
 import { createGitTestDirectory, runSystemGit } from "./git-test-repository.ts";
 
 const CREDENTIAL = { username: "x-access-token", password: "gho_one-shot-secret" } as const;
+const ORIGIN = "https://git.example.invalid";
 
 /** The file the helper pair names, read back from its single-quoted shell word. */
 function helperFile(config: readonly string[]): string {
@@ -45,12 +46,12 @@ async function seeFile(config: readonly string[]): Promise<SeenFile> {
 }
 
 describe("withOneShotCredential", () => {
-  test("D-SG-14: gives run an empty helper, then a get-only helper over a 0600 file in a fresh 0700 directory", async (t) => {
+  test("D-SG-14: gives run an empty helper, then a get-only helper over a 0600 file in a fresh 0700 directory, both keyed to the origin", async (t) => {
     // arrange
     const parent = await parentDirectory(t);
 
     // act
-    const seen = await withOneShotCredential(CREDENTIAL, seeFile, () => parent);
+    const seen = await withOneShotCredential(CREDENTIAL, ORIGIN, seeFile, () => parent);
 
     // assert
     assert.deepStrictEqual(
@@ -64,8 +65,8 @@ describe("withOneShotCredential", () => {
         directoryMode: seen.directoryMode,
       },
       {
-        first: "credential.helper=",
-        second: `credential.helper=!f() { test "$1" = get && cat '${seen.file}'; }; f`,
+        first: "credential.https://git.example.invalid.helper=",
+        second: `credential.https://git.example.invalid.helper=!f() { test "$1" = get && cat '${seen.file}'; }; f`,
         directoryParent: parent,
         directoryName: true,
         contents: "username=x-access-token\npassword=gho_one-shot-secret\n",
@@ -82,6 +83,7 @@ describe("withOneShotCredential", () => {
     // act
     const answer = await withOneShotCredential(
       CREDENTIAL,
+      ORIGIN,
       () => Promise.resolve("ran"),
       () => parent,
     );
@@ -98,6 +100,7 @@ describe("withOneShotCredential", () => {
     // act
     const running = withOneShotCredential(
       CREDENTIAL,
+      ORIGIN,
       () => Promise.reject(failure),
       () => parent,
     );
@@ -115,6 +118,7 @@ describe("withOneShotCredential", () => {
     // act
     const filled = await withOneShotCredential(
       CREDENTIAL,
+      ORIGIN,
       (config) =>
         runSystemGit(
           { cwd: home, home, input: "protocol=https\nhost=git.example.invalid\n\n" },
@@ -141,6 +145,7 @@ describe("withOneShotCredential", () => {
     // act
     const contents = await withOneShotCredential(
       CREDENTIAL,
+      ORIGIN,
       async (config) => {
         const pairs = config.flatMap((pair) => ["-c", pair]);
         await runSystemGit({ cwd: home, home, input }, ...pairs, "credential", "approve");
@@ -154,12 +159,63 @@ describe("withOneShotCredential", () => {
     assert.strictEqual(contents, "username=x-access-token\npassword=gho_one-shot-secret\n");
   });
 
+  test("D-1-03: git offers the file to the origin only, and another host keeps the user's own helper", async (t) => {
+    // arrange
+    const parent = await parentDirectory(t);
+    const home = await createGitTestDirectory(t, { boundary: "local" });
+    const ownHelper = "credential.helper=!f() { echo username=own; echo password=own-secret; }; f";
+
+    // act
+    const filled = await withOneShotCredential(
+      CREDENTIAL,
+      ORIGIN,
+      async (config) => {
+        const pairs = ["-c", ownHelper, ...config.flatMap((pair) => ["-c", pair])];
+        const fill = (host: string): Promise<string> =>
+          runSystemGit(
+            { cwd: home, home, input: `protocol=https\nhost=${host}\n\n` },
+            ...pairs,
+            "credential",
+            "fill",
+          );
+        return { origin: await fill("git.example.invalid"), other: await fill("github.com") };
+      },
+      () => parent,
+    );
+
+    // assert
+    assert.deepStrictEqual(filled, {
+      origin:
+        "protocol=https\nhost=git.example.invalid\nusername=x-access-token\npassword=gho_one-shot-secret",
+      other: "protocol=https\nhost=github.com\nusername=own\npassword=own-secret",
+    });
+  });
+
+  test("D-1-03: refuses an origin holding an equals sign without naming it, and writes nothing", async (t) => {
+    // arrange
+    const parent = await parentDirectory(t);
+
+    // act
+    const running = withOneShotCredential(
+      CREDENTIAL,
+      "https://a=b.example",
+      () => Promise.resolve("ran"),
+      () => parent,
+    );
+
+    // assert
+    await assert.rejects(running, {
+      message: "a one-shot credential origin holds an equals sign",
+    });
+    assert.deepStrictEqual(await readdir(parent), []);
+  });
+
   test("D-SG-14: leaves an absent value out of the file", async (t) => {
     // arrange
     const parent = await parentDirectory(t);
 
     // act
-    const seen = await withOneShotCredential({ password: "token" }, seeFile, () => parent);
+    const seen = await withOneShotCredential({ password: "token" }, ORIGIN, seeFile, () => parent);
 
     // assert
     assert.strictEqual(seen.contents, "password=token\n");
@@ -173,6 +229,7 @@ describe("withOneShotCredential", () => {
       // act
       const running = withOneShotCredential(
         { username: "u", password: value },
+        ORIGIN,
         () => Promise.resolve("ran"),
         () => parent,
       );
@@ -187,7 +244,7 @@ describe("withOneShotCredential", () => {
 
   test("NFR-10: the default parent is the user scope's extension root", async () => {
     // act
-    const seen = await withOneShotCredential(CREDENTIAL, seeFile);
+    const seen = await withOneShotCredential(CREDENTIAL, ORIGIN, seeFile);
 
     // assert
     assert.strictEqual(
