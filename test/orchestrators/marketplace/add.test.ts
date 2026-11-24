@@ -1926,6 +1926,207 @@ for (const source of [
   });
 }
 
+/** A 40-hex commit id with capital letters, and its lower-case form. */
+const MIXED_CASE_COMMIT_REF = "0123456789ABCDEF0123456789abcdef01234567";
+const LOWER_CASE_COMMIT_REF = "0123456789abcdef0123456789abcdef01234567";
+
+/** The SG-TRN-02 refusal text of a ref that looks like a commit id with capital letters. */
+function capitalCommitRefMessage(raw: string, ref: string): string {
+  return (
+    `Cannot add marketplace from "${raw}": the ref "${ref}" looks like a commit id with ` +
+    "capital letters, which git would read as a branch name that can move; write the id " +
+    "in lower case"
+  );
+}
+
+for (const { form, rawSource, ref, messageSource } of [
+  {
+    form: "a url fragment",
+    rawSource: `https://h.example/acme/tools.git#${MIXED_CASE_COMMIT_REF}`,
+    ref: MIXED_CASE_COMMIT_REF,
+    messageSource: `https://h.example/acme/tools.git#${MIXED_CASE_COMMIT_REF}`,
+  },
+  {
+    form: "the github shorthand",
+    rawSource: `acme/tools#${MIXED_CASE_COMMIT_REF}`,
+    ref: MIXED_CASE_COMMIT_REF,
+    messageSource: `acme/tools#${MIXED_CASE_COMMIT_REF}`,
+  },
+  {
+    form: "the github shorthand with @",
+    rawSource: `acme/tools@${MIXED_CASE_COMMIT_REF}`,
+    ref: MIXED_CASE_COMMIT_REF,
+    messageSource: `acme/tools@${MIXED_CASE_COMMIT_REF}`,
+  },
+  {
+    form: "a 64-hex url fragment",
+    rawSource: `https://h.example/acme/tools.git#${"0123456789abcdef".repeat(3)}0123456789abcdeF`,
+    ref: `${"0123456789abcdef".repeat(3)}0123456789abcdeF`,
+    messageSource: `https://h.example/acme/tools.git#${"0123456789abcdef".repeat(3)}0123456789abcdeF`,
+  },
+  {
+    form: "the object form",
+    rawSource: { source: "github", repo: "acme/tools", ref: MIXED_CASE_COMMIT_REF },
+    ref: MIXED_CASE_COMMIT_REF,
+    messageSource: "[object Object]",
+  },
+] as const) {
+  test(`SG-TRN-02: refuses a commit id ref with capital letters in ${form}`, () => {
+    // arrange
+    const expectedMessage = capitalCommitRefMessage(messageSource, ref);
+
+    // act & assert
+    assert.throws(
+      // @ts-expect-error Marketplace add parses an object source defensively at runtime.
+      () => parseAddableSource(rawSource),
+      (error: unknown) => {
+        assert.ok(error instanceof UnsupportedSourceError);
+        assert.deepStrictEqual(
+          { message: error.message, ref: "ref" in error ? error.ref : undefined },
+          { message: expectedMessage, ref },
+        );
+        return true;
+      },
+    );
+  });
+}
+
+for (const { form, ref } of [
+  { form: "a lower-case 40-hex commit id", ref: LOWER_CASE_COMMIT_REF },
+  { form: "a lower-case 64-hex commit id", ref: "0123456789abcdef".repeat(4) },
+  { form: "a 39-hex ref with capitals", ref: MIXED_CASE_COMMIT_REF.slice(0, 39) },
+  { form: "a 41-hex ref with capitals", ref: `${MIXED_CASE_COMMIT_REF}a` },
+  { form: "a 40-digit ref with no letter", ref: "0123456789".repeat(4) },
+  { form: "a tag name", ref: "v1" },
+]) {
+  test(`SG-TRN-02: leaves ${form} to git as a ref`, () => {
+    // arrange
+    const rawSource = `https://h.example/acme/tools.git#${ref}`;
+
+    // act
+    const source = parseAddableSource(rawSource);
+
+    // assert
+    assert.deepStrictEqual(source, {
+      kind: "url",
+      raw: rawSource,
+      url: "https://h.example/acme/tools",
+      ref,
+    });
+  });
+}
+
+test("SG-TRN-02: an add of a commit id ref with capital letters fails before any lock, disk, or git access", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx(0);
+    const gitOps = mock<GitOps>({ exactParams: true, name: "git ops" });
+    const rawSource = `https://gitlab.example.com/team/mp#${MIXED_CASE_COMMIT_REF}`;
+    const expectedMessage = capitalCommitRefMessage(rawSource, MIXED_CASE_COMMIT_REF);
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource,
+      gitOps,
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.ok(outcome.status === "failed");
+    assert.ok(outcome.error instanceof UnsupportedSourceError);
+    assert.deepStrictEqual(
+      {
+        reason: outcome.reason,
+        cause: outcome.cause,
+        message: outcome.error.message,
+        ref: "ref" in outcome.error ? outcome.error.ref : undefined,
+      },
+      {
+        reason: "unsupported source",
+        cause: expectedMessage,
+        message: expectedMessage,
+        ref: MIXED_CASE_COMMIT_REF,
+      },
+    );
+    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(await fs.promises.readdir(locations.extensionRoot), []);
+    verify(gitOps);
+  });
+});
+
+test("SG-TRN-02: the refused add of a commit id ref with capital letters shows the refusal as its cause line", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    const gitOps = mock<GitOps>({ exactParams: true, name: "git ops" });
+    const rawSource = `https://gitlab.example.com/team/mp#${MIXED_CASE_COMMIT_REF}`;
+
+    // act
+    await addMarketplace({ ctx, run, scope: "project", cwd, rawSource, gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n\n" +
+          `⊘ ${rawSource} [project] (failed)\n` +
+          `  ⊘ ${rawSource} (failed) {unsupported source}\n` +
+          `    cause: ${capitalCommitRefMessage(rawSource, MIXED_CASE_COMMIT_REF)}`,
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await fs.promises.readdir(locations.extensionRoot), []);
+    verify(gitOps);
+  });
+});
+
+test("SG-TRN-02: an add of a lower-case commit id ref reaches the clone and fails as source missing", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-commit-ref-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx(0);
+    const cloneThrows = remoteRefMissingError(LOWER_CASE_COMMIT_REF);
+    const { gitOps, state } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows,
+    });
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: `https://gitlab.example.com/team/mp#${LOWER_CASE_COMMIT_REF}`,
+      gitOps,
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      reason: "source missing",
+      error: cloneThrows,
+      cause: "git clone --depth failed: remote-ref-missing, exit code 128",
+    });
+    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(
+      state.cloneCalls.map(({ url, ref }) => ({ url, ref })),
+      [{ url: "https://gitlab.example.com/team/mp", ref: LOWER_CASE_COMMIT_REF }],
+    );
+    assert.deepStrictEqual(await scopeLeftovers(locations), {
+      state: { schemaVersion: 3, marketplaces: {} },
+      config: false,
+      sources: [],
+      staging: [],
+    });
+  });
+});
+
 test("NFR-5: path-source add never calls gitOps", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange

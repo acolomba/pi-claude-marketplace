@@ -127,6 +127,41 @@ Feature: Marketplace url source
     Then the "claude-plugins.json" file of the project scope does not exist
     Then the git host receives no request
 
+  Scenario: Adding a url marketplace whose ref is a commit id with capital letters is refused before git runs
+    Given the marketplace "tools" is published as a url source
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools.git#0123456789ABCDEF0123456789abcdef01234567 --scope project"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name                                                           | marketplace scope | marketplace status | id                                                                         | name                                                                       | status | reasons            | scope   | leaks | rollback partial | cause chain                                                                                                                                                                                                                                                                                    | cause truncated |
+      | https://{git host}/acme/tools.git#0123456789ABCDEF0123456789abcdef01234567 | project           | failed             | https://{git host}/acme/tools.git#0123456789ABCDEF0123456789abcdef01234567 | https://{git host}/acme/tools.git#0123456789ABCDEF0123456789abcdef01234567 | failed | unsupported source | project |       |                  | Cannot add marketplace from "https://{git host}/acme/tools.git#0123456789ABCDEF0123456789abcdef01234567": the ref "0123456789ABCDEF0123456789abcdef01234567" looks like a commit id with capital letters, which git would read as a branch name that can move; write the id in lower case | false           |
+    Then the project scope holds no marketplace record
+    Then the project scope holds no marketplace checkout
+    Then the "claude-plugins.json" file of the project scope does not exist
+    Then the git host receives no request
+
+  Scenario: Adding a url marketplace whose ref is a lower-case commit id fails as a missing ref
+    Given the marketplace "tools" is published as a url source
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools.git#0123456789abcdef0123456789abcdef01234567 --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name                                                                       | scope   | status | reasons        |
+      | https://{git host}/acme/tools.git#0123456789abcdef0123456789abcdef01234567 | project | failed | source missing |
+    Then the project scope holds no marketplace record
+    Then the project scope holds no marketplace checkout
+    Then the "claude-plugins.json" file of the project scope does not exist
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+
   Scenario: Adding a url marketplace whose connection drops fails as network unreachable
     Given the marketplace "tools" is published as a url source
     Given the git host drops the connection for the marketplace "tools"
