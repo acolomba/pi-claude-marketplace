@@ -301,6 +301,30 @@ Feature: Marketplace git source
       | github      | acme/tools                    | Failed to update marketplace "tools"., {git host} rejected the stored credential, git ls-remote failed: https-auth, exit code 128 |
       | github      | https://github.com/acme/tools | Failed to update marketplace "tools"., {git host} rejected the stored credential, git ls-remote failed: https-auth, exit code 128 |
 
+  Scenario Outline: Updating a git marketplace whose host answers 403 before any credential is sent names the command that stores one
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the user has run "/claude:plugin marketplace add <source> --scope project"
+    Given the user has stored a credential for the git host with the user "alice" and the password "s3cret"
+    Given the git host answers 403 for the marketplace "tools"
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons                 | scope   | leaks | rollback partial | cause chain   | cause truncated |
+      | tools            | project           | failed             | tools | tools | failed | authentication required | project |       |                  | <cause chain> | false           |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 403    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 403    |
+
+    @url
+    Examples:
+      | source kind | source                            | cause chain                                                                                                                                                                                                                                   |
+      | url         | https://{git host}/acme/tools.git | Failed to update marketplace "tools"., git ls-remote failed: https-auth, exit code 128, no credential was obtained for {git host}; store one with: printf 'protocol=https\\nhost={git host}\\nusername=<user>\\npassword=<token>\\n\\n' \| git credential approve |
+
   Scenario: Updating a marketplace whose checkout cannot be moved aside keeps it and warns, and the next update replaces it
     Given the marketplace "tools" is published as a url source
     Given the marketplace "tools" has the description "Tools before the update"

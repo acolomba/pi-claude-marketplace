@@ -68,18 +68,18 @@ const CORPUS: readonly CorpusRow[] = [
     failure: { kind: "https-auth", detail: "rejected" },
   },
   {
-    label: "an HTTP 401 status line",
+    label: "an HTTP 401 status line, which names no credential sent",
     exitCode: 128,
     stderr:
       "fatal: unable to access 'http://127.0.0.1:18931/auth/x.git/': The requested URL returned error: 401\n",
-    failure: { kind: "https-auth", detail: "rejected" },
+    failure: { kind: "https-auth", detail: "no-credential" },
   },
   {
-    label: "an HTTP 403",
+    label: "an HTTP 403, which names no credential sent",
     exitCode: 128,
     stderr:
       "fatal: unable to access 'http://127.0.0.1:18931/forbidden/x.git/': The requested URL returned error: 403\n",
-    failure: { kind: "https-auth", detail: "rejected" },
+    failure: { kind: "https-auth", detail: "no-credential" },
   },
   {
     label: "an HTTP 404",
@@ -450,7 +450,7 @@ const CORPUS: readonly CorpusRow[] = [
     exitCode: 128,
     stderr:
       "remote: error: RPC failed; curl 56 GnuTLS recv error\nfatal: unable to access 'https://example.test/x.git/': The requested URL returned error: 403\n",
-    failure: { kind: "https-auth", detail: "rejected" },
+    failure: { kind: "https-auth", detail: "no-credential" },
   },
   {
     label: "an HTTP 503 after a remote line that names a 401",

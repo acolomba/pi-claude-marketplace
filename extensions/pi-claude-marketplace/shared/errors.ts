@@ -1303,7 +1303,9 @@ export type GitFailure =
       /**
        * Whether git found no credential to send (`no-credential`, which the
        * D-SG-14 Device Flow retry reads) or the host refused the one a helper
-       * gave (`rejected`, which GAUTH-04 reads).
+       * gave (`rejected`, which GAUTH-04 reads). Only git's `Authentication
+       * failed for` line is `rejected`: a bare 401 or 403 status line does not
+       * show that a credential was sent, so it is `no-credential`.
        */
       readonly detail: "no-credential" | "rejected";
     }

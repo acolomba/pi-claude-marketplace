@@ -61,7 +61,7 @@ const CERTIFICATE_ARGUMENTS = [
   "subjectAltName=IP:127.0.0.1,DNS:github.com",
 ];
 
-const ARMED_STATUSES = [404, 500, 502, 503] as const;
+const ARMED_STATUSES = [403, 404, 500, 502, 503] as const;
 
 /** An error status an armed repository answers. */
 export type ArmedStatus = (typeof ARMED_STATUSES)[number];
