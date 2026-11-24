@@ -451,3 +451,25 @@ Feature: Plugin install
       | marketplace name | marketplace scope | id        | name | status      | reasons             |
       | tools            | project           | app@tools | app  | unavailable | unreadable manifest |
     Then the project scope has no installed plugins
+
+  Scenario: Installing a plugin from a git marketplace whose manifest links outside the marketplace refuses it and installs nothing
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | app  | 1.0.0   |
+    Given the published plugin "app" of the marketplace "tools" links its manifest to a file outside the marketplace
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status      | reasons             |
+      | tools            | project           | app@tools | app  | unavailable | unreadable manifest |
+    Then the project scope has no installed plugins
+    Then the file outside the marketplace that the published plugin "app" of the marketplace "tools" links its manifest to holds this text:
+      """
+      {"name":"app","version":"1.0.0"}
+      """

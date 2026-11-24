@@ -11,7 +11,8 @@
  *
  * Each clone is read with system git, pointed at the clone's own `.git` with
  * `--git-dir`, so a clone without one fails instead of git finding a parent
- * repository (SG-HRN-01).
+ * repository (SG-HRN-01). The same git gives a clone the local settings an
+ * earlier version's clones carry, and reads them back (SG-MIG-01).
  */
 
 import assert from "node:assert/strict";
@@ -88,6 +89,85 @@ async function pluginClone(
   }
 
   return { clone: "plugin", origin, revision: pin };
+}
+
+/**
+ * SG-MIG-01, D-SG-11: the local git settings of a clone that `isomorphic-git`
+ * made, as an earlier version of the extension made every clone. System git
+ * writes a link that it checks out into such a clone as a text file.
+ */
+export const EARLIER_VERSION_GIT_SETTINGS: Readonly<Record<string, string>> = {
+  "core.symlinks": "false",
+  "core.ignorecase": "true",
+  "core.filemode": "false",
+  "remote.origin.fetch": "+refs/heads/*:refs/remotes/origin/*",
+};
+
+// The values the local config of the clone at `checkout` holds for `key`,
+// one per line; an unset key holds none.
+async function localSetting(checkout: string, gitHome: string, key: string): Promise<string> {
+  try {
+    return await cloneGit(checkout, gitHome, "config", "--local", "--get-all", key);
+  } catch (error) {
+    // `git config --get-all` exits 1 when the key is unset.
+    if (error instanceof Error && "code" in error && error.code === 1) {
+      return "";
+    }
+
+    throw error;
+  }
+}
+
+/**
+ * Returns the local values the clone at `checkout` holds for each key of
+ * `EARLIER_VERSION_GIT_SETTINGS`, an empty text for an unset key. Each git runs
+ * with the scratch HOME `gitHome`.
+ */
+export async function readEarlierVersionGitSettings(
+  checkout: string,
+  gitHome: string,
+): Promise<Record<string, string>> {
+  const keys = Object.keys(EARLIER_VERSION_GIT_SETTINGS);
+  const values = await Promise.all(keys.map((key) => localSetting(checkout, gitHome, key)));
+  return Object.fromEntries(keys.map((key, index) => [key, values[index] ?? ""]));
+}
+
+/**
+ * Writes `EARLIER_VERSION_GIT_SETTINGS` into the local config of the clone at
+ * `checkout`, replacing every value a key had, as an earlier version left a
+ * clone it made. Returns the values the clone then holds. Each git runs with
+ * the scratch HOME `gitHome`.
+ */
+export async function giveEarlierVersionGitSettings(
+  checkout: string,
+  gitHome: string,
+): Promise<Record<string, string>> {
+  for (const [key, value] of Object.entries(EARLIER_VERSION_GIT_SETTINGS)) {
+    // One writer at a time: git config refuses a second while one holds the lock.
+    await cloneGit(checkout, gitHome, "config", "--local", "--replace-all", key, value);
+  }
+
+  return readEarlierVersionGitSettings(checkout, gitHome);
+}
+
+/**
+ * Returns the URL-keyed mirror under the extension root `extensionRoot` whose
+ * checkout records the origin `origin`, failing unless exactly one does. Each
+ * git runs with the scratch HOME `gitHome`.
+ */
+export async function pluginMirrorOf(
+  extensionRoot: string,
+  origin: string,
+  gitHome: string,
+): Promise<string> {
+  const clonesDirectory = path.join(extensionRoot, "plugin-clones");
+  const mirrors = (await subdirectories(clonesDirectory))
+    .filter((key) => MIRROR_KEY.test(key))
+    .map((key) => path.join(clonesDirectory, key));
+  const origins = await Promise.all(mirrors.map((mirror) => originUrl(mirror, gitHome)));
+  const matching = mirrors.filter((_mirror, index) => origins[index] === origin);
+  assert.strictEqual(matching.length, 1, `mirrors of ${origin}: ${matching.join(", ")}`);
+  return matching[0] ?? "";
 }
 
 /**

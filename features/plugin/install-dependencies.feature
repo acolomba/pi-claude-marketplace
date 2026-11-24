@@ -763,6 +763,39 @@ Feature: Plugin install dependencies
       | app@tools | 1.0.0                    | true    |
       | lib@tools | 2.0.0-{tools revision 1} | true    |
 
+  Scenario: A dependency installed at a release tag of a marketplace whose clone an earlier version made installs its linked skill as a link
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^2.0.0   |
+      | lib  | 1.0.0   |              |
+    Given the published plugin "lib" of the marketplace "tools" links a file of its skill to another file of the skill
+    Given the marketplace "tools" has a revision only the tag "lib--v2.0.0" reaches, offering these plugins:
+      | name | version |
+      | lib  | 2.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the checkout of the marketplace "tools" in the project scope has the git settings an earlier version made
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status    | reasons | scope   | version                  |
+      | tools            | project           | app@tools | app       | installed |         | project | 1.0.0                    |
+      | tools            | project           | lib@tools | lib@tools | installed |         | project | 2.0.0-{tools revision 1} |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+    Then the staged skill "lib-skill" of the project scope holds these supporting files:
+      | file       | text              |
+      | linked.txt | -> notes.txt      |
+      | notes.txt  | The notes of lib. |
+
   Scenario: Installing a plugin whose anthropic-plugin-directory dependency carries a version constraint installs the dependency's listed copy, not a release tag
     Given the git repository "dirp" holds these plugins:
       | name | version | path |

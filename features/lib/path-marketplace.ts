@@ -10,7 +10,7 @@
  * what the plugin declares.
  */
 
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { DataTable } from "@cucumber/cucumber";
@@ -107,6 +107,32 @@ export async function writePluginFiles(pluginRoot: string, plugin: OfferedPlugin
     path.join(skillDir, "SKILL.md"),
     `---\nname: ${plugin.name}-skill\ndescription: A skill of ${plugin.name} ${plugin.version}.\n---\n\nVersion ${plugin.version}.\n`,
   );
+}
+
+/** The file of a plugin's skill that `writeLinkedSkillFile` makes a link. */
+const LINKED_SKILL_FILE = "linked.txt";
+
+/** The file of the same skill that `LINKED_SKILL_FILE` links to. */
+export const LINKED_SKILL_TARGET = "notes.txt";
+
+/**
+ * Writes `LINKED_SKILL_TARGET` into the skill `writePluginFiles` wrote for the
+ * plugin `pluginName` at `pluginRoot`, with the text `The notes of
+ * <pluginName>.`, and makes `LINKED_SKILL_FILE` beside it a relative symbolic
+ * link to that file, so the link stays inside the skill wherever the skill is
+ * copied (D-SG-11). Fails when either file exists. Returns the link's path.
+ */
+export async function writeLinkedSkillFile(
+  pluginRoot: string,
+  pluginName: string,
+): Promise<string> {
+  const skillDir = path.join(pluginRoot, "skills", `${pluginName}-skill`);
+  const link = path.join(skillDir, LINKED_SKILL_FILE);
+  await writeFile(path.join(skillDir, LINKED_SKILL_TARGET), `The notes of ${pluginName}.`, {
+    flag: "wx",
+  });
+  await symlink(LINKED_SKILL_TARGET, link);
+  return link;
 }
 
 async function writePlugin(root: string, plugin: OfferedPlugin): Promise<void> {

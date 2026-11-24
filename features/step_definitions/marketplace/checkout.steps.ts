@@ -8,7 +8,9 @@
  * not retain a marketplace entry in state.json. An update moves a checkout
  * aside to `sources-backup/` before its new clone moves in (D-SG-10), so the
  * read-only folder steps make that move fail and let it succeed again, and the
- * interrupted-update step leaves a checkout there with no live checkout.
+ * interrupted-update step leaves a checkout there with no live checkout. The
+ * earlier-version steps give a checkout the git settings of a clone that an
+ * earlier version made with `isomorphic-git`, and find them kept (SG-MIG-01).
  */
 
 import assert from "node:assert/strict";
@@ -17,6 +19,12 @@ import { chmod, mkdir, readFile, readdir, rename, rm, stat, writeFile } from "no
 import path from "node:path";
 
 import { Given, Then, When } from "@cucumber/cucumber";
+
+import {
+  EARLIER_VERSION_GIT_SETTINGS,
+  giveEarlierVersionGitSettings,
+  readEarlierVersionGitSettings,
+} from "../../lib/git-clones.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -61,6 +69,25 @@ Given(
         backupManifest: existsSync(path.join(backup, ".claude-plugin", "marketplace.json")),
       },
       { checkout: false, backupManifest: true },
+    );
+  },
+);
+
+// The checkout of the marketplace `name` in the scope `scope`.
+function checkoutOf(world: ScenarioWorld, scope: string, name: string): string {
+  return path.join(extensionRootOf(world, scope), "sources", name);
+}
+
+// SG-MIG-01, D-SG-11: an `isomorphic-git` clone records `core.symlinks=false`,
+// `core.ignorecase=true`, `core.filemode=false`, and the wildcard fetch refspec
+// `+refs/heads/*:refs/remotes/origin/*` in its own config.
+Given(
+  "the checkout of the marketplace {string} in the {word} scope has the git settings an earlier version made",
+  async function (this: ScenarioWorld, name: string, scope: string) {
+    const checkout = checkoutOf(this, scope, name);
+    assert.deepStrictEqual(
+      await giveEarlierVersionGitSettings(checkout, this.gitHost.gitHome),
+      EARLIER_VERSION_GIT_SETTINGS,
     );
   },
 );
@@ -114,6 +141,18 @@ When(
     await chmod(folder, 0o755);
     assert.strictEqual((await stat(folder)).mode & 0o777, 0o755);
     assert.equal((await stat(path.join(folder, name))).isDirectory(), true);
+  },
+);
+
+// APL-D1, NFR-5: a load repairs no clone, so the settings stay until an update
+// clones the marketplace again.
+Then(
+  "the checkout of the marketplace {string} in the {word} scope keeps the git settings an earlier version made",
+  async function (this: ScenarioWorld, name: string, scope: string) {
+    assert.deepStrictEqual(
+      await readEarlierVersionGitSettings(checkoutOf(this, scope, name), this.gitHost.gitHome),
+      EARLIER_VERSION_GIT_SETTINGS,
+    );
   },
 );
 

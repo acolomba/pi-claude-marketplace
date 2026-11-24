@@ -507,3 +507,91 @@ Feature: Marketplace git source
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
       | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+
+  Scenario: Updating a marketplace whose clone an earlier version made re-clones it, and its plugin's linked skill works
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins:
+      | name      | version |
+      | formatter | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the checkout of the marketplace "tools" in the project scope has the git settings an earlier version made
+    Given the published plugin "formatter" of the marketplace "tools" links a file of its skill to another file of the skill
+    Given the marketplace "tools" has the description "Tools with a linked skill"
+    When the user starts a new pi session
+    Then the session reports no results
+    Then the git host receives no request
+    Then the checkout of the marketplace "tools" in the project scope keeps the git settings an earlier version made
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status |
+      | tools            | project           | updated            |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+    When the user runs "/claude:plugin install formatter@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id              | name      | status    | reasons | scope   | version |
+      | tools            | project           | formatter@tools | formatter | installed |         | project | 1.0.0   |
+    Then the git host receives no request
+    Then the staged skill "formatter-skill" of the project scope holds these supporting files:
+      | file       | text                    |
+      | linked.txt | -> notes.txt            |
+      | notes.txt  | The notes of formatter. |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command                | description                 |
+      | /skill:formatter-skill | A skill of formatter 1.0.0. |
+
+  Scenario: Updating a marketplace whose clone an earlier version made and whose remote has not moved reports it up to date and still serves its plugins
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins:
+      | name      | version |
+      | formatter | 1.0.0   |
+    Given the published plugin "formatter" of the marketplace "tools" links a file of its skill to another file of the skill
+    Given the marketplace "tools" is added to the project scope
+    Given the checkout of the marketplace "tools" in the project scope has the git settings an earlier version made
+    When the user starts a new pi session
+    Then the session reports no results
+    Then the git host receives no request
+    Then the checkout of the marketplace "tools" in the project scope keeps the git settings an earlier version made
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons |
+      | tools            | project           | skipped            | up-to-date          |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+    When the user runs "/claude:plugin install formatter@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id              | name      | status    | reasons | scope   | version |
+      | tools            | project           | formatter@tools | formatter | installed |         | project | 1.0.0   |
+    Then the git host receives no request
+    Then the staged skill "formatter-skill" of the project scope holds these supporting files:
+      | file       | text                    |
+      | linked.txt | -> notes.txt            |
+      | notes.txt  | The notes of formatter. |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command                | description                 |
+      | /skill:formatter-skill | A skill of formatter 1.0.0. |
