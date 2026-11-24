@@ -54,7 +54,9 @@ builtin 260/260, 376 direct-coverage records). The archive is
 - For the PR: the three Phase 6.1 CHANGELOG parent lines (Blockers/Concerns),
   the version bump offer, and the accepted fallow `weakened-tests` finding on
   `standalone-prune`.
-- Still open: Nyquist validation for all nine phases. Closed after the
+- Nyquist validation: all nine phases validated on 2026-11-24 (no gaps in 01
+  to 07 and 06.1; Phase 08 filled three with
+  `test/architecture/integration-suite-charter.test.ts`). Closed after the
   close by quick batch 261123-gtf: the `dispatch-exec.test.ts` fragility
   (261123-gtg), DIRGITTAG-01 (261123-gth), and HOOKASYNCRESUME-01
   (261123-gti); by quick task 261123-jdc: HOOKLATESS-01 (HOOKLATESS-D1);
