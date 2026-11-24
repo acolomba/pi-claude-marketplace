@@ -41,6 +41,7 @@ import type {
   GitProcess,
   GitProcessHost,
   GitRequest,
+  GitResult,
 } from "../../extensions/pi-claude-marketplace/platform/git-process.ts";
 import type { ProcessSpawn } from "../../extensions/pi-claude-marketplace/platform/process-run.ts";
 import type { GitFailure } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -432,6 +433,23 @@ async function laneFixture(t: TestContext): Promise<LaneFixture> {
     });
 
   return { root, repository, bare, git: await gitWith({}), gitWith };
+}
+
+// D-SG-16: lists `HEAD` of https://github.com/acme/tools.git with a config
+// pair that rewrites https://github.com/ to `base`, after laying the
+// fixture's repository out as `<root>/acme/tools.git`. The protocol list
+// allows only file, so a github URL that no pair rewrites is refused before
+// it can leave the machine.
+async function listRewrittenGitHubUrl(fixture: LaneFixture, base: string): Promise<GitResult> {
+  await fixture.repository.cloneBare(path.join(fixture.root, "acme", "tools.git"));
+  const git = await fixture.gitWith({ GIT_ALLOW_PROTOCOL: "file" });
+  return git.run({
+    subcommand: "ls-remote",
+    lane: "network",
+    operands: ["https://github.com/acme/tools.git", "HEAD"],
+    config: [`url.${base}.insteadOf=https://github.com/`],
+    timeoutMs: 10_000,
+  });
 }
 
 // A stand-in started in its own directory, closed before that directory goes.
@@ -1902,6 +1920,15 @@ describe("createGitProcess operands and lanes", () => {
       words: ["update-ref", "--end-of-options", "refs/heads/pinned", "abc123"],
     },
     {
+      label: "for-each-ref",
+      request: {
+        subcommand: "for-each-ref",
+        options: ["--format=%(refname:strip=2)"],
+        operands: ["refs/tags"],
+      },
+      words: ["for-each-ref", "--format=%(refname:strip=2)", "--end-of-options", "refs/tags"],
+    },
+    {
       label: "rev-parse with --verify",
       request: { subcommand: "rev-parse", options: ["--verify", "--quiet"], operands: ["HEAD"] },
       words: ["rev-parse", "--verify", "--quiet", "--end-of-options", "HEAD"],
@@ -1967,6 +1994,68 @@ describe("createGitProcess operands and lanes", () => {
       ]);
     });
   }
+
+  for (const { label, request, words } of [
+    {
+      label: "a local-lane read",
+      request: { ...LOCAL_READ, config: ["a.b=c", "d.e=f"] },
+      words: [
+        ...LOCAL_LANE,
+        ...["-c", "a.b=c", "-c", "d.e=f"],
+        ...["rev-parse", "--verify", "--end-of-options", "HEAD"],
+      ],
+    },
+    {
+      label: "a network-lane credential fill",
+      request: { ...FILL, config: ["a.b=c", "d.e=f"] },
+      words: ["-c", "a.b=c", "-c", "d.e=f", "credential", "fill"],
+    },
+    {
+      label: "a request whose pair repeats a hardening pair",
+      request: { ...FILL, config: ["core.hooksPath=/tmp/hooks"] },
+      words: ["-c", "core.hooksPath=/tmp/hooks", "credential", "fill"],
+    },
+    {
+      label: "a request with an empty list",
+      request: { ...LOCAL_READ, config: [] },
+      words: [...LOCAL_LANE, "rev-parse", "--verify", "--end-of-options", "HEAD"],
+    },
+  ] satisfies ReadonlyArray<{ label: string; request: GitRequest; words: readonly string[] }>) {
+    test(`D-SG-16, D-SG-14: passes the config pairs of ${label} after the module's own pairs`, async () => {
+      // arrange
+      const { git, control, started } = createFakeGit();
+
+      // act
+      const pending = git.run(request);
+      await started;
+      control.close(0);
+      await pending;
+
+      // assert
+      assert.deepStrictEqual(control.launches()[0]?.[1], [...hardening("/dev/null"), ...words]);
+    });
+  }
+
+  test("D-SG-09: runs a network-lane for-each-ref without the ssh read", async () => {
+    // arrange
+    const { git, launches } = createSequencedGit();
+
+    // act
+    const pending = git.run({
+      subcommand: "for-each-ref",
+      lane: "network",
+      operands: ["refs/tags"],
+      timeoutMs: 5_000,
+    });
+    (await launches.at(0)).close(0);
+    await pending;
+
+    // assert
+    assert.deepStrictEqual(
+      launches.all().map(([, args]) => args),
+      [[...hardening("/dev/null"), "for-each-ref", "--end-of-options", "refs/tags"]],
+    );
+  });
 
   for (const { label, request } of [
     {
@@ -2226,6 +2315,62 @@ describe("createGitProcess operands and lanes", () => {
 
     // assert
     assert.deepStrictEqual(fetched, { exitCode: 0, stdout: "", stderr: "" });
+  });
+
+  test("D-SG-16, SG-TRN-07: lists the local repository that a config insteadOf pair rewrites a github URL to", async (t) => {
+    // arrange
+    const fixture = await laneFixture(t);
+    const oid = fixture.repository.initialOid;
+
+    // act
+    const listed = await listRewrittenGitHubUrl(fixture, `file://${fixture.root}/`);
+
+    // assert
+    assert.deepStrictEqual(listed, { exitCode: 0, stdout: `${oid}\tHEAD\n`, stderr: "" });
+  });
+
+  test("D-SG-16, SG-TRN-07: rejects a github URL that a config insteadOf pair rewrites to a missing directory", async (t) => {
+    // arrange
+    const fixture = await laneFixture(t);
+
+    // act
+    const listed = listRewrittenGitHubUrl(fixture, `file://${path.join(fixture.root, "missing")}/`);
+
+    // assert
+    await assert.rejects(listed, rejectsAs("repository-not-found", 128));
+  });
+
+  test("D-SG-09, SG-TRN-01: lists lightweight and annotated tags with the peeled commit on the local lane", async (t) => {
+    // arrange
+    const fixture = await laneFixture(t);
+    const { repository } = fixture;
+    const initial = repository.initialOid;
+    await repository.run("tag", "p--v1.0.0");
+    const tagged = await repository.commit([{ filepath: "two.txt", contents: "two\n" }], "two");
+    await repository.run("tag", "-a", "-m", "two", "p--v2.0.0");
+    const tagObject = await repository.run("rev-parse", "refs/tags/p--v2.0.0");
+
+    // act
+    const listed = await fixture.git.run({
+      subcommand: "for-each-ref",
+      lane: "local",
+      options: ["--format=%(refname:strip=2) %(objecttype) %(objectname) %(*objectname)"],
+      operands: ["refs/tags"],
+      cwd: repository.dir,
+      timeoutMs: 10_000,
+    });
+
+    // assert
+    assert.deepStrictEqual(listed, {
+      exitCode: 0,
+      stdout: [
+        `p--v1.0.0 commit ${initial} `,
+        `p--v2.0.0 tag ${tagObject} ${tagged}`,
+        `v1.0.0 commit ${initial} `,
+        "",
+      ].join("\n"),
+      stderr: "",
+    });
   });
 
   for (const { label, request, observe, expected } of [

@@ -29,7 +29,8 @@
 // directory, because git ignores a ceiling that equals its working directory.
 // The user's own git configuration stays: HOME, the global and system config
 // files, GIT_CONFIG_COUNT and its keys, GIT_CONFIG_PARAMETERS, credential
-// helpers, and proxies.
+// helpers, and proxies. A request's own `-c` pairs (D-SG-16, D-SG-14) come
+// after the module's pairs, so none of them can undo the hardening.
 //
 // SG-PRC-03: a request without a working directory runs in the neutral
 // directory, a private, empty directory that platform/git-neutral-directory.ts
@@ -131,6 +132,7 @@ export type GitSubcommand =
   | "config"
   | "tag"
   | "update-ref"
+  | "for-each-ref"
   | "credential"
   | "version";
 
@@ -140,6 +142,13 @@ export interface GitRequest {
   readonly lane: GitLane;
   /** Pi-owned flags after the subcommand, in the order given. */
   readonly options?: readonly string[];
+  /**
+   * D-SG-16, D-SG-14: Pi-owned `-c` pairs, such as an `insteadOf` rewrite or
+   * a credential helper. They follow the module's own pairs, so a later pair
+   * can never undo the hardening placed before it. They never go through
+   * GIT_CONFIG_COUNT, which the module keeps for the user.
+   */
+  readonly config?: readonly string[];
   /**
    * SG-PRC-01: marketplace-controlled data, such as a URL, a ref, or a path.
    * The subcommand's operand rule places it after the options, where git
@@ -276,8 +285,9 @@ const BANNED_PROTOCOLS: ReadonlySet<string> = new Set(["ext", "fd", "git", "ftp"
 const NO_PROTOCOL = "/";
 
 // SG-PRC-01, E7: how a subcommand takes operands, from git 2.43's answers.
-// `clone`, `fetch`, `ls-remote`, `config`, `tag`, and `update-ref` accept
-// `--end-of-options` before the operands. `rev-parse` accepts it only with
+// `clone`, `fetch`, `ls-remote`, `config`, `tag`, `update-ref`, and
+// `for-each-ref` accept `--end-of-options` before the operands; D-SG-09 reads
+// the local tag list with `for-each-ref`. `rev-parse` accepts it only with
 // `--verify` and otherwise prints it back, so its operands need `--verify`.
 // `checkout` reads the marker as a pathspec, so an operand that starts with
 // `-` is refused and `--` ends the argv, which keeps every operand a ref.
@@ -325,6 +335,7 @@ const SUBCOMMAND_RULES: Readonly<Record<GitSubcommand, SubcommandRule>> = {
   config: { operands: MARKER_RULE, ssh: false },
   tag: { operands: MARKER_RULE, ssh: false },
   "update-ref": { operands: MARKER_RULE, ssh: false },
+  "for-each-ref": { operands: MARKER_RULE, ssh: false },
   "rev-parse": { operands: VERIFY_MARKER_RULE, ssh: false },
   checkout: { operands: DASH_REFUSED_RULE, ssh: false },
   credential: { operands: NO_OPERANDS_RULE, ssh: false },
@@ -751,7 +762,12 @@ function gitArguments(
   rules: PlatformRules,
   words: readonly string[],
 ): string[] {
-  const pairs = [...rules.config, ...PIN_PAIRS, ...LANES[request.lane].pairs];
+  const pairs = [
+    ...rules.config,
+    ...PIN_PAIRS,
+    ...LANES[request.lane].pairs,
+    ...(request.config ?? []),
+  ];
   return [...pairs.flatMap((pair) => ["-c", pair]), request.subcommand, ...words];
 }
 
