@@ -1268,6 +1268,54 @@ test("Q13: a second update of the same scope during the swap gets the held state
   });
 });
 
+test("D-PL9-10: an update carries the packages of installed plugins inside the checkout into the new one", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("project", cwd);
+    const cloneDir = await locations.sourceCloneDir("tools");
+    const insideRoot = path.join(cloneDir, "plugins", "hello");
+    await seedGithubMarketplace({
+      cwd,
+      name: "tools",
+      ref: "main",
+      plugins: {
+        hello: { ...makePluginRecord(), resolvedSource: insideRoot },
+        elsewhere: makePluginRecord(),
+        parent: { ...makePluginRecord(), resolvedSource: locations.sourcesDir },
+      },
+    });
+    await mkdir(path.join(insideRoot, "node_modules", "dep"), { recursive: true });
+    await writeFile(path.join(insideRoot, "node_modules", "dep", "index.js"), "installed\n");
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      async onRefresh(dir): Promise<void> {
+        await mkdir(path.join(dir, "plugins", "hello"), { recursive: true });
+      },
+    });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "tools",
+      scope: "project",
+      cwd,
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● tools [project] (skipped) {up-to-date}" },
+    ]);
+    assert.strictEqual(
+      await readFile(path.join(insideRoot, "node_modules", "dep", "index.js"), "utf8"),
+      "installed\n",
+    );
+    assert.deepStrictEqual(await readdir(path.join(locations.extensionRoot, "sources-backup")), []);
+  });
+});
+
 test("D-SG-10: a refresh asks and clones the URL the checkout records as its origin", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange

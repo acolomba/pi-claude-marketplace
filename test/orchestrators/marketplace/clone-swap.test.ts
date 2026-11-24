@@ -121,7 +121,13 @@ function swapArgs(
   overrides: Partial<
     Pick<
       CloneSwapArgs,
-      "ref" | "onReplaced" | "removalOps" | "renameOps" | "keepOnUnreachable" | "liveMarker"
+      | "ref"
+      | "onReplaced"
+      | "removalOps"
+      | "renameOps"
+      | "keepOnUnreachable"
+      | "liveMarker"
+      | "carryOver"
     >
   > = {},
 ): CloneSwapArgs {
@@ -134,6 +140,7 @@ function swapArgs(
     auth: AUTH,
     liveMarker: path.join(".claude-plugin", "marketplace.json"),
     keepOnUnreachable: false,
+    carryOver: [],
     removalOps: createRemovalOps(),
     renameOps: DEFAULT_RENAME_OPS,
     ...overrides,
@@ -844,3 +851,156 @@ for (const { title, remoteHead, ref, expectedKind } of [
     assert.deepStrictEqual(swapped, { kind: expectedKind });
   });
 }
+
+/** An installed plugin's packages, as its package manager left them. */
+async function writePackages(pluginRoot: string, marker: string): Promise<void> {
+  await mkdir(path.join(pluginRoot, "node_modules", "dep"), { recursive: true });
+  await writeFile(path.join(pluginRoot, "node_modules", "dep", "index.js"), marker);
+}
+
+async function packagesOf(pluginRoot: string): Promise<string> {
+  return readFile(path.join(pluginRoot, "node_modules", "dep", "index.js"), "utf8");
+}
+
+/** A remote tree that holds the plugin roots `roots`, with no packages. */
+async function remoteTreeWithPlugins(t: TestContext, roots: readonly string[]): Promise<string> {
+  const dir = await remoteTree(t, MANIFEST_B);
+  for (const pluginRoot of roots) {
+    await mkdir(path.join(dir, pluginRoot), { recursive: true });
+  }
+
+  return dir;
+}
+
+test("D-PL9-10: an installed plugin's packages move from the old checkout into the new one", async (t) => {
+  // arrange
+  const swap = await swapRoot(t);
+  await writeCheckout(swap.liveDir, MANIFEST_A);
+  await writePackages(path.join(swap.liveDir, "plugins", "pkp"), "old packages\n");
+  const git = gitAt({
+    localHead: COMMIT_A,
+    remoteHead: COMMIT_B,
+    cloneFrom: await remoteTreeWithPlugins(t, [path.join("plugins", "pkp")]),
+  });
+
+  // act
+  const swapped = await refreshCloneBySwap(
+    swapArgs(swap, git.gitOps, { carryOver: [path.join("plugins", "pkp")] }),
+  );
+
+  // assert
+  assert.deepStrictEqual(swapped, { kind: "replaced" });
+  assert.strictEqual(await manifestOf(swap.liveDir), MANIFEST_B);
+  assert.strictEqual(await packagesOf(path.join(swap.liveDir, "plugins", "pkp")), "old packages\n");
+  assert.deepStrictEqual(await entriesOf(path.dirname(swap.backupDir)), []);
+});
+
+test("D-PL9-10: packages of a plugin root the new checkout lacks are not carried", async (t) => {
+  // arrange
+  const swap = await swapRoot(t);
+  await writeCheckout(swap.liveDir, MANIFEST_A);
+  await writePackages(path.join(swap.liveDir, "plugins", "gone"), "old packages\n");
+  const git = gitAt({
+    localHead: COMMIT_A,
+    remoteHead: COMMIT_B,
+    cloneFrom: await remoteTreeWithPlugins(t, []),
+  });
+
+  // act
+  const swapped = await refreshCloneBySwap(
+    swapArgs(swap, git.gitOps, { carryOver: [path.join("plugins", "gone")] }),
+  );
+
+  // assert
+  assert.deepStrictEqual(swapped, { kind: "replaced" });
+  assert.deepStrictEqual(await entriesOf(path.join(swap.liveDir, "plugins")), []);
+  assert.deepStrictEqual(await entriesOf(path.dirname(swap.backupDir)), []);
+});
+
+test("D-PL9-10: a plugin root whose new checkout already has packages keeps its own", async (t) => {
+  // arrange
+  const swap = await swapRoot(t);
+  const pluginRoot = path.join("plugins", "pkp");
+  await writeCheckout(swap.liveDir, MANIFEST_A);
+  await writePackages(path.join(swap.liveDir, pluginRoot), "old packages\n");
+  const remote = await remoteTreeWithPlugins(t, [pluginRoot]);
+  await writePackages(path.join(remote, pluginRoot), "committed packages\n");
+  const git = gitAt({ localHead: COMMIT_A, remoteHead: COMMIT_B, cloneFrom: remote });
+
+  // act
+  const swapped = await refreshCloneBySwap(swapArgs(swap, git.gitOps, { carryOver: [pluginRoot] }));
+
+  // assert
+  assert.deepStrictEqual(swapped, { kind: "replaced" });
+  assert.strictEqual(await packagesOf(path.join(swap.liveDir, pluginRoot)), "committed packages\n");
+});
+
+test("D-PL9-10: a plugin root with no packages in the old checkout carries nothing", async (t) => {
+  // arrange
+  const swap = await swapRoot(t);
+  const pluginRoot = path.join("plugins", "pkp");
+  await writeCheckout(swap.liveDir, MANIFEST_A);
+  const git = gitAt({
+    localHead: COMMIT_A,
+    remoteHead: COMMIT_B,
+    cloneFrom: await remoteTreeWithPlugins(t, [pluginRoot]),
+  });
+
+  // act
+  const swapped = await refreshCloneBySwap(swapArgs(swap, git.gitOps, { carryOver: [pluginRoot] }));
+
+  // assert
+  assert.deepStrictEqual(swapped, { kind: "replaced" });
+  assert.deepStrictEqual(await entriesOf(path.join(swap.liveDir, pluginRoot)), []);
+});
+
+test("D-PL9-10: a packages move that fails still reports the replacement", async (t) => {
+  // arrange
+  const swap = await swapRoot(t);
+  const pluginRoot = path.join("plugins", "pkp");
+  await writeCheckout(swap.liveDir, MANIFEST_A);
+  await writePackages(path.join(swap.liveDir, pluginRoot), "old packages\n");
+  const git = gitAt({
+    localHead: COMMIT_A,
+    remoteHead: COMMIT_B,
+    cloneFrom: await remoteTreeWithPlugins(t, [pluginRoot]),
+  });
+  const packagesFrom = path.join(swap.backupDir, pluginRoot, "node_modules");
+
+  // act
+  const swapped = await refreshCloneBySwap(
+    swapArgs(swap, git.gitOps, {
+      carryOver: [pluginRoot],
+      renameOps: renameFailingFrom(packagesFrom, errnoError("EXDEV")),
+    }),
+  );
+
+  // assert
+  assert.deepStrictEqual(swapped, { kind: "replaced" });
+  assert.strictEqual(await manifestOf(swap.liveDir), MANIFEST_B);
+  assert.deepStrictEqual(await entriesOf(path.join(swap.liveDir, pluginRoot)), []);
+  assert.deepStrictEqual(await entriesOf(path.dirname(swap.backupDir)), []);
+});
+
+test("NFR-10: a plugin root outside the checkout carries nothing", async (t) => {
+  // arrange
+  const swap = await swapRoot(t);
+  await writeCheckout(swap.liveDir, MANIFEST_A);
+  const outside = path.join(swap.locations.extensionRoot, "outside");
+  await writePackages(outside, "outside packages\n");
+  const git = gitAt({
+    localHead: COMMIT_A,
+    remoteHead: COMMIT_B,
+    cloneFrom: await remoteTreeWithPlugins(t, []),
+  });
+
+  // act
+  const swapped = await refreshCloneBySwap(
+    swapArgs(swap, git.gitOps, { carryOver: [path.join("..", "..", "outside")] }),
+  );
+
+  // assert
+  assert.deepStrictEqual(swapped, { kind: "replaced" });
+  assert.strictEqual(await packagesOf(outside), "outside packages\n");
+  assert.deepStrictEqual(await entriesOf(swap.liveDir), [".claude-plugin", ".git"]);
+});

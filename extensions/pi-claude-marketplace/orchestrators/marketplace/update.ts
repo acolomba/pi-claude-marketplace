@@ -553,6 +553,26 @@ function attachStoredCredentialCause(
 }
 
 /**
+ * D-PL9-10 / NFR-10: the roots, relative to `liveDir`, of the scope's installed
+ * plugins whose plugin root lies inside that checkout, so the swap carries
+ * their packages over. A root outside the checkout is not the swap's.
+ */
+function installedRootsIn(
+  liveDir: string,
+  marketplaces: ExtensionState["marketplaces"],
+): readonly string[] {
+  return Object.values(marketplaces)
+    .flatMap((marketplace) => Object.values(marketplace.plugins))
+    .map((plugin) => path.relative(liveDir, plugin.resolvedSource))
+    .filter(
+      (pluginRoot) =>
+        pluginRoot !== ".." &&
+        !pluginRoot.startsWith(`..${path.sep}`) &&
+        !path.isAbsolute(pluginRoot),
+    );
+}
+
+/**
  * D-SG-10: refresh a github or url checkout by `ls-remote`, re-clone, and swap,
  * inside the caller's state lock (Q13). D-SG-15: a valid checkout whose remote
  * cannot be reached is kept when the keep variable is true.
@@ -560,6 +580,7 @@ function attachStoredCredentialCause(
 async function refreshGitSource(
   source: GitHubSource | UrlSource,
   args: RefreshOneArgs,
+  marketplaces: ExtensionState["marketplaces"],
   onReplaced: () => void,
 ): Promise<CloneSwapResult> {
   const { name, locations, gitOps } = args;
@@ -576,6 +597,7 @@ async function refreshGitSource(
       auth,
       liveMarker: MARKETPLACE_MANIFEST_MARKER,
       keepOnUnreachable: args.keepOnFailure,
+      carryOver: installedRootsIn(liveDir, marketplaces),
       onReplaced,
       removalOps: args.removalOps,
       renameOps: args.renameOps,
@@ -653,6 +675,7 @@ function keptRefresh(swapped: CloneSwapResult): RecordRefresh | undefined {
 
 async function refreshRecord(
   record: ExtensionState["marketplaces"][string],
+  marketplaces: ExtensionState["marketplaces"],
   args: RefreshOneArgs,
 ): Promise<RecordRefresh> {
   const { name, locations } = args;
@@ -672,7 +695,7 @@ async function refreshRecord(
     if (source.kind === "github" || source.kind === "url") {
       // MU-5: the retry hint applies once the new clone is the live checkout.
       const kept = keptRefresh(
-        await refreshGitSource(source, args, () => {
+        await refreshGitSource(source, args, marketplaces, () => {
           cloneAdvanced = true;
         }),
       );
@@ -819,7 +842,7 @@ async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapsh
         return undefined;
       }
 
-      const refreshed = await refreshRecord(record, args);
+      const refreshed = await refreshRecord(record, tx.state.marketplaces, args);
       await tx.save();
       return {
         autoupdate,

@@ -117,6 +117,12 @@ export interface CloneSwapArgs {
   readonly liveMarker: string;
   /** D-SG-15: keep a valid checkout whose remote cannot be reached. */
   readonly keepOnUnreachable: boolean;
+  /**
+   * D-PL9-10: the roots, relative to the checkout, of the installed plugins
+   * that run inside it. Their `node_modules` move from the old checkout into
+   * the new one, so a refresh never strips an installed plugin of its packages.
+   */
+  readonly carryOver: readonly string[];
   /** Runs once the new clone is the live checkout (MU-5). */
   readonly onReplaced?: () => void;
   readonly removalOps: RemovalOps;
@@ -322,9 +328,45 @@ async function restoreBackup(args: CloneSwapArgs): Promise<string | undefined> {
   }
 }
 
+/** D-PL9-10: the folder a plugin's package manager installs into. */
+const PACKAGES_DIR = "node_modules";
+
 /**
- * D-SG-10: swap the staging clone in through the backup directory, then
- * delete the backup. A backup that cannot be deleted is left for the next
+ * D-PL9-10 / NFR-10: move the `node_modules` of the plugin root `pluginRoot`
+ * from the backup into the new checkout, when the backup holds one, the new
+ * checkout has that root, and the root has no `node_modules` of its own. Both
+ * paths must lie inside their checkout. A move that fails is debug-logged and
+ * never fails the refresh: the next package install of the plugin puts the
+ * packages back.
+ */
+async function carryPackagesOf(args: CloneSwapArgs, pluginRoot: string): Promise<void> {
+  const from = path.join(args.backupDir, pluginRoot, PACKAGES_DIR);
+  const target = path.join(args.liveDir, pluginRoot);
+  const to = path.join(target, PACKAGES_DIR);
+  try {
+    await assertPathInside(args.backupDir, from, "carried plugin packages");
+    await assertPathInside(args.liveDir, to, "carried plugin packages");
+    if (!(await pathExists(from)) || !(await pathExists(target)) || (await pathExists(to))) {
+      return;
+    }
+
+    await args.renameOps.rename(from, to);
+  } catch (err) {
+    hookDebugLog(`could not carry ${from} to ${to}: ${errorMessage(err)}`, "git");
+  }
+}
+
+/** D-PL9-10: carry the packages of every installed plugin root into the new checkout. */
+async function carryPackages(args: CloneSwapArgs): Promise<void> {
+  for (const pluginRoot of args.carryOver) {
+    // eslint-disable-next-line no-await-in-loop -- a root may sit inside another, so each move reads the tree the one before it left
+    await carryPackagesOf(args, pluginRoot);
+  }
+}
+
+/**
+ * D-SG-10: swap the staging clone in through the backup directory, carry the
+ * installed plugins' packages over (D-PL9-10), then delete the backup. A backup that cannot be deleted is left for the next
  * refresh, which removes a backup beside a valid checkout.
  */
 async function swapIn(args: CloneSwapArgs, stagingDir: string): Promise<CloneSwapResult> {
@@ -338,6 +380,7 @@ async function swapIn(args: CloneSwapArgs, stagingDir: string): Promise<CloneSwa
 
   await moveStagingIn(args, stagingDir, hadLive);
   args.onReplaced?.();
+  await carryPackages(args);
   const leak = await cleanupStaging(args.removalOps, args.backupDir, "marketplace checkout backup");
   if (leak !== undefined) {
     hookDebugLog(leak, "git");
