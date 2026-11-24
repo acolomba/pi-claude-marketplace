@@ -272,7 +272,7 @@ Plans:
   3. `marketplace update` follows a moved default branch and a moved tag under the model discuss chose (Q9); an update that fails or is interrupted leaves the previous checkout usable, and the next run succeeds; with the remote unreachable and `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE` set, the existing checkout is kept as upstream keeps it; and version-range resolution still finds the right tag at the clone depth discuss chose (Q10); cucumber scenarios pin each (SG-TRN-03, SG-TRN-04, SG-TRN-06).
   4. A clone or fetch that runs past 120 s, or past the limit that `CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS` sets, fails as a timeout and leaves the scope safe to retry; `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` keeps, changes, or retires its behavior as discuss chose (Q8), and the cucumber harness still reaches its GitHub stand-in (SG-TRN-05, SG-TRN-07).
   5. A user who upgrades with marketplace and plugin clones that `isomorphic-git` made needs no manual step: the next `/reload` succeeds, and after the next operation on such a clone it has real symlinks and a correct checkout (corrected settings or a re-clone, per Q5); a cucumber scenario that starts from a clone with `isomorphic-git`'s settings pins it (SG-MIG-01).
-**Plans**: 8/17 plans executed in 9 waves
+**Plans**: 11/17 plans executed in 9 waves
 
 Plans:
 **Wave 1**
@@ -292,9 +292,9 @@ Plans:
 - [x] 03-08-PLAN.md — D-SG-09 release tags of a git marketplace read from its remote, the tag copy fetching only its commit, and scenarios for a tag present at add and one pushed after it (wave 4)
 
 **Wave 5** *(blocked on Wave 4 completion)*
-- [ ] 03-09-PLAN.md — The plugin mirror refresh and the PUP-2 marketplace sync on the same swap through `plugin-clones-backup/`, the D-14 refresh wrappers deleted, and the refresh tables re-baselined (wave 5)
-- [ ] 03-10-PLAN.md — Scenarios for the `--unshallow` fallback against a git host that refuses SHA fetches, the keep variable on an unreachable marketplace, and a clone that runs past the git timeout (wave 5)
-- [ ] 03-11-PLAN.md — A marketplace ref that looks like a commit id with capital letters refused before git runs, as Claude Code refuses it (a lower-case one reaches git and fails as a missing ref until SG-PIN-01 in Phase 7), and scenarios for a moved default branch, a moved tag, and an interrupted or dropped update (wave 5)
+- [x] 03-09-PLAN.md — The plugin mirror refresh and the PUP-2 marketplace sync on the same swap through `plugin-clones-backup/`, the D-14 refresh wrappers deleted, and the refresh tables re-baselined (wave 5)
+- [x] 03-10-PLAN.md — Scenarios for the `--unshallow` fallback against a git host that refuses SHA fetches, the keep variable on an unreachable marketplace, and a clone that runs past the git timeout (wave 5)
+- [x] 03-11-PLAN.md — A marketplace ref that looks like a commit id with capital letters refused before git runs, as Claude Code refuses it (a lower-case one reaches git and fails as a missing ref until SG-PIN-01 in Phase 7), and scenarios for a moved default branch, a moved tag, and an interrupted or dropped update (wave 5)
 
 **Wave 6** *(blocked on Wave 5 completion)*
 - [ ] 03-12-PLAN.md — The Device Flow bundle types moved into the credential module, the orchestrator tests moved off the callback builder and the D-14 members, and the BLOCK F and BLOCK C seam lists updated (wave 6)
@@ -387,7 +387,7 @@ Plans:
 | --- | --- | --- | --- |
 | 1. Harness on System Git | 8/8 | Complete    | 2026-11-23 |
 | 2. Git Process Seam and Typed Failures | 8/8 | Complete    | 2026-11-23 |
-| 3. System Git Transport and Clone Shape | 8/17 | In Progress | - |
+| 3. System Git Transport and Clone Shape | 11/17 | In Progress | - |
 | 4. SSH Sources and Transport Selection | 0/TBD | Not started | - |
 | 5. Credential Surface | 0/TBD | Not started | - |
 | 6. Failure-Message Parity | 0/TBD | Not started | - |
