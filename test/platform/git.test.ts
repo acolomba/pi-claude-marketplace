@@ -25,10 +25,8 @@ import { mock, verify } from "strong-mock";
 import {
   checkout,
   clone,
-  currentBranch,
   fetch,
   fetchCommit,
-  forceUpdateRef,
   listRemotes,
   listLocalTags,
   listRemoteTags,
@@ -806,18 +804,13 @@ function crossOriginChallengeFrom(origin: string): (error: unknown) => boolean {
   };
 }
 
+/** The branch HEAD names in `dir`, or undefined when HEAD is detached. */
+async function checkedOutBranch(dir: string): Promise<string | undefined> {
+  const branch = await gitTestCheckout(dir).run("rev-parse", "--abbrev-ref", "HEAD");
+  return branch === "HEAD" ? undefined : branch;
+}
+
 describe("local Git operations", () => {
-  test("reports the current branch after the initial commit", async (t) => {
-    // arrange
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-
-    // act
-    const branch = await currentBranch({ dir: repository.dir });
-
-    // assert
-    assert.strictEqual(branch, "main");
-  });
-
   test("resolves HEAD to the initial commit", async (t) => {
     // arrange
     const systemGit = await hermeticGitProcess(t);
@@ -872,43 +865,17 @@ describe("local Git operations", () => {
     assert.strictEqual(oid, undefined);
   });
 
-  test("force-updates the requested local ref", async (t) => {
-    // arrange
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    const nextOid = await repository.commit(
-      [{ filepath: "README.md", contents: "# next\n" }],
-      "next",
-    );
-
-    // act
-    await forceUpdateRef({
-      dir: repository.dir,
-      ref: "refs/heads/release",
-      value: nextOid,
-    });
-
-    // assert
-    assert.strictEqual(
-      await resolveRef({ dir: repository.dir, ref: "refs/heads/release" }),
-      nextOid,
-    );
-  });
-
   test("checks out an existing branch", async (t) => {
     // arrange
     const systemGit = await hermeticGitProcess(t);
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    await forceUpdateRef({
-      dir: repository.dir,
-      ref: "refs/heads/feature",
-      value: repository.initialOid,
-    });
+    await repository.run("branch", "feature", repository.initialOid);
 
     // act
     await checkout({ dir: repository.dir, ref: "feature" }, systemGit);
 
     // assert
-    assert.strictEqual(await currentBranch({ dir: repository.dir }), "feature");
+    assert.strictEqual(await checkedOutBranch(repository.dir), "feature");
   });
 
   test("SG-TRN-01: checks out the files of a commit the current branch moved to", async (t) => {
@@ -928,7 +895,7 @@ describe("local Git operations", () => {
     // assert
     assert.deepStrictEqual(
       {
-        branch: await currentBranch({ dir: repository.dir }),
+        branch: await checkedOutBranch(repository.dir),
         readme: await readFile(path.join(repository.dir, "README.md"), "utf8"),
       },
       { branch: "main", readme: "# moved\n" },
@@ -944,7 +911,7 @@ describe("local Git operations", () => {
     await checkout({ dir: repository.dir, ref: repository.initialOid }, systemGit);
 
     // assert
-    assert.strictEqual(await currentBranch({ dir: repository.dir }), undefined);
+    assert.strictEqual(await checkedOutBranch(repository.dir), undefined);
     assert.strictEqual(
       await resolveRef({ dir: repository.dir, ref: "HEAD" }),
       repository.initialOid,
@@ -1060,29 +1027,6 @@ describe("SG-PRC-06: the git-required gate", () => {
       assert.deepStrictEqual(await readdir(target), []);
     });
   }
-
-  test("SG-PRC-06: the in-process local verbs read and write a clone with no git on the path", async (t) => {
-    // arrange
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    await repository.commit([{ filepath: "next.txt", contents: "next\n" }], "next");
-    await withoutGitOnPath(t);
-    const { dir } = repository;
-
-    // act
-    await forceUpdateRef({ dir, ref: "refs/heads/feature", value: repository.initialOid });
-
-    // assert
-    assert.deepStrictEqual(
-      {
-        branch: await currentBranch({ dir }),
-        feature: await readFile(path.join(dir, ".git", "refs", "heads", "feature"), "utf8"),
-      },
-      {
-        branch: "main",
-        feature: `${repository.initialOid}\n`,
-      },
-    );
-  });
 
   test("D-SG-04: a clone succeeds once git is back on the path", async (t) => {
     // arrange

@@ -51,13 +51,13 @@ function createFakeParticipant(): GitOpsContractParticipant {
   };
 }
 
-function createNoForceUpdateGitOpsFake(): GitOpsContractParticipant {
+function createNoFetchCommitGitOpsFake(): GitOpsContractParticipant {
   const participant = createFakeParticipant();
   return {
     ...participant,
     gitOps: {
       ...participant.gitOps,
-      async forceUpdateRef() {
+      async fetchCommit() {
         await Promise.resolve();
       },
     },
@@ -140,10 +140,8 @@ describe("createGitOpsFake", () => {
       clone: [],
       fetch: [{ dir: "/memory/worktree", remote: "upstream", ref: "main" }],
       fetchCommit: [],
-      forceUpdateRef: [],
       checkout: [{ dir: "/memory/copy", ref: "feature", fromCopiedGitDir: true }],
       resolveRef: [],
-      currentBranch: [],
       resolveRemoteRef: [{ url: REMOTE_URL, ref: "main" }],
     });
   });
@@ -188,10 +186,8 @@ describe("createGitOpsFake", () => {
           auth,
         },
       ],
-      forceUpdateRef: [],
       checkout: [],
       resolveRef: [],
-      currentBranch: [],
       resolveRemoteRef: [{ url: REMOTE_URL, ref: "main", auth }],
     });
     assert.strictEqual(git.state.calls.clone[0]?.auth, auth);
@@ -248,12 +244,12 @@ describe("recordedCalls", () => {
   });
 });
 
-test("the no-force-update fake fails only the force-update invariant", async (t) => {
+test("the no-fetch-commit fake fails only the fetch-commit invariant", async (t) => {
   // arrange
   const failures: string[] = [];
   const createBrokenGitOps: GitOpsFactory = async (_t: TestContext) => {
     await Promise.resolve();
-    return createNoForceUpdateGitOpsFake();
+    return createNoFetchCommitGitOpsFake();
   };
 
   // act
@@ -274,5 +270,5 @@ test("the no-force-update fake fails only the force-update invariant", async (t)
     gitOpsContractCases.map((contractCase) => contractCase.name),
     GIT_OPS_CASE_NAMES,
   );
-  assert.deepStrictEqual(failures, ["force-updates a ref to the requested commit"]);
+  assert.deepStrictEqual(failures, ["fetches one commit the remote holds"]);
 });

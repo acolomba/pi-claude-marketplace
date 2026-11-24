@@ -39,14 +39,11 @@ export const GIT_OPS_CASE_NAMES = [
   "clones with no checkout and leaves the work tree empty",
   "fetches updated remote state without moving the worktree",
   "fetches one commit the remote holds",
-  "force-updates a ref to the requested commit",
   "checks out the requested branch and worktree",
   "checks out a commit into a copied git directory",
   "rejects a checkout of a commit the clone does not hold",
   "resolves a local ref to its commit",
   "answers undefined for a missing local ref",
-  "returns the attached current branch",
-  "returns undefined for a detached HEAD",
   "resolves the remote HEAD commit",
   "resolves a named remote branch",
   "resolves a remote annotated tag to its peeled commit",
@@ -174,31 +171,6 @@ export const gitOpsContractCases = [
     },
   },
   {
-    name: "force-updates a ref to the requested commit",
-    run: async (createGitOps, t) => {
-      // arrange
-      const participant = await createGitOps(t);
-      const options = {
-        dir: participant.worktreeDir,
-        ref: "refs/heads/main",
-        value: participant.updatedOid,
-      } as const;
-
-      // act
-      const firstUpdate = await observeVoid(participant.gitOps.forceUpdateRef(options));
-      const secondUpdate = await observeVoid(participant.gitOps.forceUpdateRef(options));
-      const oid = await participant.gitOps.resolveRef({
-        dir: participant.worktreeDir,
-        ref: "refs/heads/main",
-      });
-
-      // assert
-      assert.strictEqual(firstUpdate, undefined);
-      assert.strictEqual(secondUpdate, undefined);
-      assert.strictEqual(oid, participant.updatedOid);
-    },
-  },
-  {
     name: "checks out the requested branch and worktree",
     run: async (createGitOps, t) => {
       // arrange
@@ -208,7 +180,6 @@ export const gitOpsContractCases = [
       const checkout = await observeVoid(
         participant.gitOps.checkout({ dir: participant.worktreeDir, ref: "feature" }),
       );
-      const branch = await participant.gitOps.currentBranch({ dir: participant.worktreeDir });
       const oid = await participant.gitOps.resolveRef({
         dir: participant.worktreeDir,
         ref: "HEAD",
@@ -217,7 +188,6 @@ export const gitOpsContractCases = [
 
       // assert
       assert.strictEqual(checkout, undefined);
-      assert.strictEqual(branch, "feature");
       assert.strictEqual(oid, participant.updatedOid);
       assert.strictEqual(contents, "# updated\n");
     },
@@ -299,36 +269,6 @@ export const gitOpsContractCases = [
 
       // assert
       assert.strictEqual(oid, undefined);
-    },
-  },
-  {
-    name: "returns the attached current branch",
-    run: async (createGitOps, t) => {
-      // arrange
-      const participant = await createGitOps(t);
-
-      // act
-      const branch = await participant.gitOps.currentBranch({ dir: participant.worktreeDir });
-
-      // assert
-      assert.strictEqual(branch, "main");
-    },
-  },
-  {
-    name: "returns undefined for a detached HEAD",
-    run: async (createGitOps, t) => {
-      // arrange
-      const participant = await createGitOps(t);
-      await participant.gitOps.checkout({
-        dir: participant.worktreeDir,
-        ref: participant.updatedOid,
-      });
-
-      // act
-      const branch = await participant.gitOps.currentBranch({ dir: participant.worktreeDir });
-
-      // assert
-      assert.strictEqual(branch, undefined);
     },
   },
   {

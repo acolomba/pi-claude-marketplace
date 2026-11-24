@@ -55,18 +55,12 @@ export interface GitOpsFakeCalls {
     readonly ref?: string;
     readonly auth?: GitAuthBundle;
   }>;
-  readonly forceUpdateRef: Array<{
-    readonly dir: string;
-    readonly ref: string;
-    readonly value: string;
-  }>;
   readonly checkout: Array<{
     readonly dir: string;
     readonly ref: string;
     readonly fromCopiedGitDir?: boolean;
   }>;
   readonly resolveRef: Array<{ readonly dir: string; readonly ref: string }>;
-  readonly currentBranch: Array<{ readonly dir: string }>;
   readonly resolveRemoteRef: Array<{
     readonly url: string;
     readonly ref?: string;
@@ -168,10 +162,8 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
     clone: [],
     fetch: [],
     fetchCommit: [],
-    forceUpdateRef: [],
     checkout: [],
     resolveRef: [],
-    currentBranch: [],
     resolveRemoteRef: [],
   };
   const state: GitOpsFakeState = {
@@ -255,11 +247,6 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
 
       state.localRefs[fetchOptions.sha] = fetchOptions.sha;
     },
-    async forceUpdateRef(updateOptions) {
-      calls.forceUpdateRef.push(structuredClone(updateOptions));
-      await Promise.resolve();
-      state.localRefs[updateOptions.ref] = updateOptions.value;
-    },
     async checkout(checkoutOptions) {
       calls.checkout.push(structuredClone(checkoutOptions));
       if (options.checkoutError !== undefined) {
@@ -298,11 +285,6 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
       }
 
       return state.localRefs[resolveOptions.ref];
-    },
-    async currentBranch(branchOptions) {
-      calls.currentBranch.push(structuredClone(branchOptions));
-      await Promise.resolve();
-      return state.branch;
     },
     async resolveRemoteRef(resolveOptions) {
       calls.resolveRemoteRef.push(snapshotRemoteRefCall(resolveOptions));

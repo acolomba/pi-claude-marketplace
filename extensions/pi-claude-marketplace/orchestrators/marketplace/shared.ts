@@ -2,12 +2,11 @@
 //
 // Cross-subcommand helpers (D-01 -- shared.ts cap ~300 LOC).
 //
-//   - GitOps interface + DEFAULT_GIT_OPS (D-12, D-13). Nine primitives:
-//     clone + fetch + fetchCommit + forceUpdateRef + checkout + resolveRef +
-//     currentBranch + resolveRemoteRef + listRemotes. A marketplace checkout
-//     and a plugin mirror refresh by D-SG-10's freshness check, re-clone,
-//     and swap (`clone-swap.ts`), never by a fetch and checkout in place, so
-//     `fetch`, `forceUpdateRef`, and `currentBranch` have no refresh caller.
+//   - GitOps interface + DEFAULT_GIT_OPS (D-12, D-13). Seven primitives:
+//     clone + fetch + fetchCommit + checkout + resolveRef + resolveRemoteRef +
+//     listRemotes. A marketplace checkout and a plugin mirror refresh by
+//     D-SG-10's freshness check, re-clone, and swap (`clone-swap.ts`), never
+//     by a fetch and checkout in place, so `fetch` has no refresh caller.
 //
 //   - lacksStoredCredential (GAUTH-04): whether an auth failure gains the
 //     line that names how to store a credential.
@@ -134,11 +133,12 @@ export type { GitAuthBundle };
 /**
  * D-12, D-13: marketplace orchestrator git surface.
  *
- * Nine primitives. `clone` and `resolveRemoteRef` carry D-SG-10's refresh: the
- * freshness check asks `resolveRemoteRef`, and a stale checkout is cloned
+ * Seven primitives. `clone` and `resolveRemoteRef` carry D-SG-10's refresh:
+ * the freshness check asks `resolveRemoteRef`, and a stale checkout is cloned
  * again and swapped in. `fetchCommit` (SG-TRN-02) fetches one pinned commit,
- * `checkout` checks it out, and `resolveRef` reads a local commit. `fetch`,
- * `forceUpdateRef`, and `currentBranch` stay bound but no refresh calls them.
+ * `checkout` checks it out, and `resolveRef` reads a local commit. `fetch`
+ * stays bound but no refresh calls it. D-SG-10 removed the D-14 in-place ref
+ * update and branch read with the refresh that used them.
  * `resolveRemoteRef` (D-77-05) also lets the plugin clone-cache seam pin an
  * unpinned source's remote HEAD to a SHA without a full clone at install
  * time. `listRemotes` (D-3-03; MA-12, MA-13) lets the `marketplace add`
@@ -186,10 +186,8 @@ export interface GitOps {
     ref?: string;
     auth?: GitAuthBundle;
   }): Promise<void>;
-  /** D-14 step 2 (symbolic HEAD): force-set local branch ref to remote SHA. */
-  forceUpdateRef(opts: { dir: string; ref: string; value: string }): Promise<void>;
   /**
-   * D-14 step 3: move HEAD to ref/SHA and write its tree. D-SG-11: set
+   * Move HEAD to ref/SHA and write its tree. D-SG-11: set
    * `fromCopiedGitDir` when `dir/.git` is a copy of another clone's git
    * directory, so the clone keys an `isomorphic-git` clone carries are unset
    * before the checkout.
@@ -200,13 +198,6 @@ export interface GitOps {
    * after a fetch), or undefined when it names no commit.
    */
   resolveRef(opts: { dir: string; ref: string }): Promise<string | undefined>;
-  /**
-   * CR-01: return the symbolic name of the currently checked-out branch
-   * (e.g. "main"), or undefined when HEAD is detached. Required by the
-   * D-14 default-branch path so the caller can build
-   * `refs/heads/<branch>` for forceUpdateRef.
-   */
-  currentBranch(opts: { dir: string }): Promise<string | undefined>;
   /**
    * D-77-05 / PURL-09: resolve a remote ref (or the default-branch HEAD) to
    * its full commit SHA WITHOUT a full clone. Used by the plugin clone-cache
@@ -246,10 +237,8 @@ export const DEFAULT_GIT_OPS: GitOps = {
   clone: defaultGit.clone,
   fetch: defaultGit.fetch,
   fetchCommit: defaultGit.fetchCommit,
-  forceUpdateRef: defaultGit.forceUpdateRef,
   checkout: defaultGit.checkout,
   resolveRef: defaultGit.resolveRef,
-  currentBranch: defaultGit.currentBranch,
   resolveRemoteRef: defaultGit.resolveRemoteRef,
   listRemotes: defaultGit.listRemotes,
 };

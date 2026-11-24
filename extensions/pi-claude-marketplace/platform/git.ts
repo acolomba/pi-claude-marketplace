@@ -40,10 +40,7 @@ import type { GitHttpRequest, GitHttpResponse, HttpClient } from "isomorphic-git
  * in-process with `isomorphic-git` until the re-clone swap replaces D-14. `checkout`, `resolveRef`, and `listRemotes`
  * run system git through `NODE_GIT_PROCESS` on the local lane, which reaches
  * no transport. `resolveRef` answers undefined for a ref that names no commit, and
- * `resolveRemoteRef` for a ref the remote does not advertise. The other local
- * verbs still run in-process with pure-JS `isomorphic-git` and need no git, so
- * a path-source marketplace still reads its own release tags without one
- * (TAGS-01). Each
+ * `resolveRemoteRef` for a ref the remote does not advertise. Each
  * system-git function takes the git process as a defaulted last parameter,
  * and every request it sends takes its limit from `gitTimeoutMs()` (D-SG-13).
  *
@@ -203,16 +200,6 @@ export interface RemoteTag {
 
 export interface ListLocalTagsOptions {
   /** Working-tree directory of a local repository. */
-  dir: string;
-}
-
-export interface ForceUpdateRefOptions {
-  dir: string;
-  ref: string;
-  value: string;
-}
-
-export interface CurrentBranchOptions {
   dir: string;
 }
 
@@ -1127,47 +1114,6 @@ async function localTagCommit(
   return line.peeledType === "tag"
     ? resolveRef({ dir, ref: `${TAG_REF_PREFIX}${line.name}` }, gitProcess)
     : undefined;
-}
-
-/**
- * D-14 step 2 (symbolic HEAD): force-set a local ref to a given SHA.
- * Wraps isomorphic-git's `writeRef({ force: true })`. The
- * orchestrators call this via the GitOps interface; exposing it here
- * keeps orchestrator-tier code from importing isomorphic-git directly
- * (D-13).
- *
- * Source: node_modules/isomorphic-git/index.d.ts -- writeRef({ fs, dir,
- * ref, value, force, symbolic? }).
- */
-export async function forceUpdateRef(opts: ForceUpdateRefOptions): Promise<void> {
-  await git.writeRef({
-    fs,
-    dir: opts.dir,
-    ref: opts.ref,
-    value: opts.value,
-    force: true,
-  });
-}
-
-/**
- * Return the symbolic name of the currently checked-out branch (e.g.
- * "main"), or undefined when HEAD is detached. Wraps isomorphic-git's
- * `currentBranch({ fs, dir })`.
- *
- * CR-01: required by the D-14 default-branch path so the orchestrator
- * can `forceUpdateRef("refs/heads/<branch>", remoteSha)` instead of
- * mistakenly using the HEAD SHA as a ref name (which produced a
- * meaningless `refs/<40-hex>` write).
- *
- * Source: node_modules/isomorphic-git/index.d.ts:1283-1289 currentBranch
- * returns Promise<string | void>; we normalize void -> undefined.
- */
-export async function currentBranch(opts: CurrentBranchOptions): Promise<string | undefined> {
-  // isomorphic-git's currentBranch returns Promise<string | void>; the
-  // void variant carries no string, so the ?? funnel normalizes to
-  // undefined.
-  const branch = await git.currentBranch({ fs, dir: opts.dir });
-  return branch ?? undefined;
 }
 
 /**
