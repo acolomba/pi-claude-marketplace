@@ -25,6 +25,7 @@ Feature: Plugin git source
       | method | path                                                     | status |
       | GET    | /acme/<repository>.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/<repository>.git/git-upload-pack                   | 200    |
+      | POST   | /acme/<repository>.git/git-upload-pack                   | 200    |
     When the user starts a new pi session
     Then the session offers these skills:
       | command               | description                |
@@ -131,10 +132,10 @@ Feature: Plugin git source
     Then the session offers no skills
 
     Examples:
-      | refusal              | reason              | status  | cause chain                                                                  |
-      | answers 404          | source missing      | 404     | HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git           |
-      | drops the connection | network unreachable | dropped | socket hang up, fetched https://{git host}/acme/ghp.git                      |
-      | answers 503          | network error       | 503     | HTTP Error: 503 Service Unavailable, fetched https://{git host}/acme/ghp.git |
+      | refusal              | reason              | status  | cause chain                                                                                            |
+      | answers 404          | source missing      | 404     | git clone --depth failed: repository-not-found, exit code 128, fetched https://{git host}/acme/ghp.git |
+      | drops the connection | network unreachable | dropped | git clone --depth failed: network, exit code 128, fetched https://{git host}/acme/ghp.git              |
+      | answers 503          | network error       | 503     | git clone --depth failed: network, exit code 128, fetched https://{git host}/acme/ghp.git              |
 
   Scenario: An install fails as authentication required when the git host asks for a credential the user has not stored
     Given the git repository "ghp" holds these plugins:
@@ -194,10 +195,10 @@ Feature: Plugin git source
     Then the project scope holds no git clones
 
     Examples:
-      | refusal              | reason              | status  | cause chain                                                                  |
-      | answers 404          | source missing      | 404     | HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git           |
-      | drops the connection | network unreachable | dropped | socket hang up, fetched https://{git host}/acme/ghp.git                      |
-      | answers 503          | network error       | 503     | HTTP Error: 503 Service Unavailable, fetched https://{git host}/acme/ghp.git |
+      | refusal              | reason              | status  | cause chain                                                                                            |
+      | answers 404          | source missing      | 404     | git clone --depth failed: repository-not-found, exit code 128, fetched https://{git host}/acme/ghp.git |
+      | drops the connection | network unreachable | dropped | git clone --depth failed: network, exit code 128, fetched https://{git host}/acme/ghp.git              |
+      | answers 503          | network error       | 503     | git clone --depth failed: network, exit code 128, fetched https://{git host}/acme/ghp.git              |
 
   Scenario Outline: An install fails on a constrained dependency as <reason> when the git host <refusal> while its tags are read and installs nothing
     Given the git repository "ghp" holds these plugins:
@@ -299,8 +300,8 @@ Feature: Plugin git source
       | tally failures | 1                              |
       | tally warnings | 0                              |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status | reasons           | scope   | leaks | rollback partial | cause chain                                                        | cause truncated |
-      | gits             | project           | app@gits | app  | failed | dependency failed | project |       |                  | HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git | false           |
+      | marketplace name | marketplace scope | id       | name | status | reasons           | scope   | leaks | rollback partial | cause chain                                                                                            | cause truncated |
+      | gits             | project           | app@gits | app  | failed | dependency failed | project |       |                  | git clone --depth failed: repository-not-found, exit code 128, fetched https://{git host}/acme/ghp.git | false           |
     Then the project scope has no installed plugins
     When the user starts a new pi session
     Then the session reports these results:
@@ -335,6 +336,13 @@ Feature: Plugin git source
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
     Then the project scope has no installed plugins
     Then the project scope holds no git clones
@@ -406,7 +414,9 @@ Feature: Plugin git source
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
     Then the git-source plugin "ghp" installed in the project scope runs revision 2 of its repository
     When the user starts a new pi session
