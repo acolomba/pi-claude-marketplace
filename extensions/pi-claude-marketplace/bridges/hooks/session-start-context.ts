@@ -164,12 +164,15 @@ export function asyncAnswerHeld(
     return false;
   }
 
-  const nearest = messages
-    .map(heldContextOf)
-    .filter(
-      (held): held is HeldContext =>
-        held !== undefined && (held.hook === undefined || sameHook(held.hook, hook)),
-    )
-    .at(-1);
+  let nearest: HeldContext | undefined;
+
+  for (const message of messages) {
+    const held = heldContextOf(message);
+
+    if (held !== undefined && (held.hook === undefined || sameHook(held.hook, hook))) {
+      nearest = held;
+    }
+  }
+
   return nearest !== undefined && texts.every((text) => nearest.texts.includes(text));
 }
