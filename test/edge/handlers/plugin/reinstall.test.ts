@@ -79,7 +79,9 @@
 // first and the row renders offline. Nothing in the reachable input space turns
 // materialisation on, so no positive control is available here: the zero is a
 // regression guard on NFR-5, and the offline row beside it is what says the
-// workflow answered from disk.
+// workflow answered from disk. SG-TRN-01: a clone runs in a system-git child
+// process, which never reaches this door, so the cold git source's clone shows
+// in its cause line instead; its URL names a closed loopback port.
 //
 // This pair makes no exhaustiveness claim: the target selection is a chain of
 // `if` statements over string shapes, not a `switch` over a closed union, so a
@@ -677,12 +679,12 @@ test("D-18-04 / NFR-5 / SRC-01: a cold git source is a cache miss, so reinstall 
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ far v1.0.0 (failed)\n    cause: reinstall must not open a network connection",
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ far v1.0.0 (failed) {network unreachable}\n    cause: git clone --depth failed: network, exit code 128",
       severity: "error",
     },
   ]);
   assert.deepStrictEqual(await readFootprint(workspace), NOTHING_REINSTALLED);
-  assert.strictEqual(workspace.transportCalls(), 1);
+  assert.strictEqual(workspace.transportCalls(), 0);
   verifyBoundary();
 });
 

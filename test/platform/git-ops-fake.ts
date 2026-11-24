@@ -39,6 +39,7 @@ export interface GitOpsFakeCalls {
     readonly url: string;
     readonly ref?: string;
     readonly singleBranch?: boolean;
+    readonly noCheckout?: boolean;
     readonly auth?: GitAuthBundle;
   }>;
   readonly fetch: Array<{
@@ -183,6 +184,9 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
   }
 
   const absentCommits = new Set(options.absentCommits ?? []);
+  // SG-TRN-02: a `noCheckout` clone writes no work tree; its fixture files
+  // arrive with the first checkout of that directory.
+  const unchecked = new Map<string, string>();
 
   function updateWorktree(dir: string, oid: string): void {
     files.set(`${dir}/README.md`, oid === updatedOid ? "# updated\n" : "# local\n");
@@ -198,13 +202,19 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
 
       if (options.cloneFixture !== undefined) {
         await mkdir(cloneOptions.dir, { recursive: true });
-        await cp(options.cloneFixture.sourceDir, cloneOptions.dir, { recursive: true });
+        if (cloneOptions.noCheckout === true) {
+          unchecked.set(cloneOptions.dir, options.cloneFixture.sourceDir);
+        } else {
+          await cp(options.cloneFixture.sourceDir, cloneOptions.dir, { recursive: true });
+        }
       }
 
       state.localRefs["refs/heads/main"] = remoteHead;
       state.head = remoteHead;
       state.branch = "main";
-      updateWorktree(cloneOptions.dir, remoteHead);
+      if (cloneOptions.noCheckout !== true) {
+        updateWorktree(cloneOptions.dir, remoteHead);
+      }
     },
     async fetch(fetchOptions) {
       calls.fetch.push(snapshotFetchCall(fetchOptions));
@@ -254,6 +264,12 @@ export function createGitOpsFake(options: GitOpsFakeOptions): GitOpsFake {
           : undefined);
       if (oid === undefined) {
         throw checkoutFailure(checkoutOptions.ref);
+      }
+
+      const fixture = unchecked.get(checkoutOptions.dir);
+      if (fixture !== undefined) {
+        unchecked.delete(checkoutOptions.dir);
+        await cp(fixture, checkoutOptions.dir, { recursive: true });
       }
 
       state.head = oid;

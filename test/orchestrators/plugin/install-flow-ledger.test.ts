@@ -7873,8 +7873,11 @@ test("Orchestrated-PI-3: plugin not found -> outcome.status 'failed' with not-fo
   });
 });
 
-test("Orchestrated-PI-4: non-installable plugin -> outcome.status 'uninstallable', no notification", async () => {
+test("Orchestrated-PI-4: non-installable plugin -> outcome.status 'uninstallable', no notification", async (t) => {
   // Gap: classifyInstallFailure path for 'is not installable' branch.
+  // SG-TRN-07: the github source clones with system git, so the base points
+  // it at a closed loopback port and no request leaves the machine.
+  setGitHubBaseUrl(t, "https://127.0.0.1:9");
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-orch-pi4-"));
     try {

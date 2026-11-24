@@ -43,12 +43,14 @@
 //
 // NFR-5, scoped: the fetch flag exists to warm a clone cache, so this surface
 // is offline only while the flag is ABSENT, and the claim is stated that way.
-// The watched door is `https.request`, measured to be the one the git transport
+// The watched door is `https.request`, the one the in-process git transport
 // opens: `isomorphic-git/http/node` goes through `simple-get`, which calls
 // `https.request` and never `globalThis.fetch`, so a global-fetch spy would
 // record zero here whatever the handler did. The claim is asserted on the ONE
-// fixture where it can fail -- a cold git-source plugin, whose sibling row with
-// the flag supplied does reach that door. A path-source plugin never reaches
+// fixture where it can fail -- a cold git-source plugin. SG-TRN-01: its sibling
+// row with the flag supplied now clones in a system-git child process, which
+// never reaches that door; the row's `{network unreachable}` is git's own
+// failure to reach the closed loopback port the source names. A path-source plugin never reaches
 // the transport with or without the flag, so a zero there would be unfalsifiable
 // and none is asserted.
 //
@@ -315,7 +317,7 @@ for (const { args, label, position } of [
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "● mp [project] <no autoupdate>\n  ◌ gitp v3.0.0 (remote) {unreadable}\n    components: not resolved\n\n● mp [user] <no autoupdate>\n  ◌ gitp v3.0.0 (remote) {unreadable}\n    components: not resolved",
+          "● mp [project] <no autoupdate>\n  ◌ gitp v3.0.0 (remote) {network unreachable}\n    components: not resolved\n\n● mp [user] <no autoupdate>\n  ◌ gitp v3.0.0 (remote) {network unreachable}\n    components: not resolved",
       },
     ]);
     verifyBoundary();

@@ -36,6 +36,7 @@ interface GitOpsContractCase {
 
 export const GIT_OPS_CASE_NAMES = [
   "clones the requested branch into the requested directory",
+  "clones with no checkout and leaves the work tree empty",
   "fetches updated remote state without moving the worktree",
   "fetches one commit the remote holds",
   "force-updates a ref to the requested commit",
@@ -65,6 +66,23 @@ function observeVoid(promise: Promise<void>): Promise<unknown> {
   return promise;
 }
 
+/** Clones with `options`, then reads the clone's HEAD and its `README.md`. */
+async function cloneAndRead(
+  participant: GitOpsContractParticipant,
+  options: Omit<Parameters<GitOps["clone"]>[0], "dir" | "url">,
+): Promise<{ readonly cloning: unknown; readonly oid: unknown; readonly contents: unknown }> {
+  const cloning = await observeVoid(
+    participant.gitOps.clone({
+      dir: participant.cloneDir,
+      url: participant.remoteUrl,
+      ...options,
+    }),
+  );
+  const oid = await participant.gitOps.resolveRef({ dir: participant.cloneDir, ref: "HEAD" });
+  const contents = await participant.readFile(participant.cloneDir, "README.md");
+  return { cloning, oid, contents };
+}
+
 export const gitOpsContractCases = [
   {
     name: "clones the requested branch into the requested directory",
@@ -73,24 +91,31 @@ export const gitOpsContractCases = [
       const participant = await createGitOps(t);
 
       // act
-      const cloning = await observeVoid(
-        participant.gitOps.clone({
-          dir: participant.cloneDir,
-          url: participant.remoteUrl,
-          ref: "main",
-          singleBranch: true,
-        }),
-      );
-      const oid = await participant.gitOps.resolveRef({
-        dir: participant.cloneDir,
-        ref: "HEAD",
-      });
-      const contents = await participant.readFile(participant.cloneDir, "README.md");
+      const cloned = await cloneAndRead(participant, { ref: "main", singleBranch: true });
 
       // assert
-      assert.strictEqual(cloning, undefined);
-      assert.strictEqual(oid, participant.updatedOid);
-      assert.strictEqual(contents, "# updated\n");
+      assert.deepStrictEqual(cloned, {
+        cloning: undefined,
+        oid: participant.updatedOid,
+        contents: "# updated\n",
+      });
+    },
+  },
+  {
+    name: "clones with no checkout and leaves the work tree empty",
+    run: async (createGitOps, t) => {
+      // arrange
+      const participant = await createGitOps(t);
+
+      // act
+      const cloned = await cloneAndRead(participant, { noCheckout: true });
+
+      // assert
+      assert.deepStrictEqual(cloned, {
+        cloning: undefined,
+        oid: participant.updatedOid,
+        contents: null,
+      });
     },
   },
   {

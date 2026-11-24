@@ -161,18 +161,24 @@ export type GitAuthBundle = Readonly<BuildAuthCallbacksOpts>;
  * express because the local branch may diverge from the remote SHA.
  *
  * `clone` and `fetch` each accept an optional `auth` bundle. When
- * provided, `DEFAULT_GIT_OPS` forwards it to `platform/git.ts`, which
- * builds the isomorphic-git `onAuth`/`onAuthFailure` callbacks via
+ * provided, `DEFAULT_GIT_OPS` forwards it to `platform/git.ts`: a system-git
+ * clone maps an auth failure by it (D-SG-14, GAUTH-04), and `fetch` builds
+ * the isomorphic-git `onAuth`/`onAuthFailure` callbacks via
  * `buildAuthCallbacks`. When omitted, both primitives behave identically
  * to the public-only path (NFR-5 surfaces untouched).
  */
 export interface GitOps {
-  /** MA-5: clone url into dir, optional ref, single-branch when ref is set. */
+  /**
+   * MA-5, C5: clone url into dir at depth 1 with no submodules, optional ref,
+   * single-branch when ref is set. SG-TRN-02: `noCheckout` writes no work
+   * tree, the first rung of the pin ladder.
+   */
   clone(opts: {
     dir: string;
     url: string;
     ref?: string;
     singleBranch?: boolean;
+    noCheckout?: boolean;
     auth?: GitAuthBundle;
   }): Promise<void>;
   /** D-14 step 1: refresh remote refs (no merge, no working-tree changes). */
