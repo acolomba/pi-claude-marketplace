@@ -153,6 +153,7 @@ import {
 } from "../../transaction/phase-ledger.ts";
 import { formatRollbackError } from "../../transaction/rollback.ts";
 import {
+  buildCloneAuth,
   DEFAULT_CREDENTIAL_OPS,
   type AuthAttemptResult,
   type CredentialOps,
@@ -804,6 +805,14 @@ async function preflightInstallResolve(
   // The full sha is read AFTER the resolve for the version's sha tier
   // (VER-01) and the full-sha state field (D-77-02).
   let resolvedSha: string | undefined;
+  // AUTH-09: one auth context for the clone probe and the tag copy's fetch.
+  const auth = {
+    ctx: opts.ctx,
+    run: opts.run,
+    credentialOps: opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
+    ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+    ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
+  };
 
   // PI-4: resolveStrict + gate. Per D-04 the strict resolver consumes the
   // array-shape componentPaths (D-07 / COMP-01) and either returns an
@@ -824,13 +833,7 @@ async function preflightInstallResolve(
             : { ...gitSource, sha: opts.sourcePinOverride },
         locations,
         ...(opts.cloneCacheSeam !== undefined && { seam: opts.cloneCacheSeam }),
-        auth: {
-          ctx: opts.ctx,
-          run: opts.run,
-          credentialOps: opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
-          ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
-          ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
-        },
+        auth,
         ...(opts.cloneCandidates !== undefined && { cloneCandidates: opts.cloneCandidates }),
       });
       resolvedSha = clone.resolvedSha;
@@ -850,6 +853,9 @@ async function preflightInstallResolve(
           marketplaceName: targetMp.name,
           pathSource,
           tagOid: pin,
+          // D-SG-09: a git marketplace's tag copy fetches the tag's commit
+          // with its host's bundle, as a clone of that host authenticates.
+          resolveAuth: (cloneUrl, kind) => buildCloneAuth(cloneUrl, kind, auth),
           ...(opts.cloneCandidates !== undefined && {
             onCloneCreated: (key: string) => opts.cloneCandidates?.add(key),
           }),

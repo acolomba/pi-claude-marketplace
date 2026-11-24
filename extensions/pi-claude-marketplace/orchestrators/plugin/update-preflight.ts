@@ -328,6 +328,8 @@ type PartialableUpdateShapeError = PluginShapeError & {
 interface UpdateCloneProbe {
   readonly probe: (source: GitBackedSource) => Promise<GitPluginRootResult>;
   readonly resolvedSha: () => string | undefined;
+  /** The host-bound auth bundle the probe clones with, for the tag copy's fetch too. */
+  readonly cloneAuth: (cloneUrl: string, kind: GitBackedSource["kind"]) => GitAuthBundle;
 }
 
 /**
@@ -415,6 +417,7 @@ function makeUpdateCloneProbe(
   return {
     probe: (source) => (source.sha === undefined ? probeUnpinned(source) : probePinned(source)),
     resolvedSha: () => captured,
+    cloneAuth,
   };
 }
 
@@ -509,7 +512,7 @@ async function dropsNothingNew(
 async function resolveUpdateCandidate(
   entry: PluginEntry,
   marketplace: ExtensionState["marketplaces"][string],
-  resolveGitPluginRoot: (source: GitBackedSource) => Promise<GitPluginRootResult>,
+  clone: Pick<UpdateCloneProbe, "cloneAuth" | "probe">,
   options: {
     readonly plugin: string;
     readonly fromVersion: string;
@@ -538,7 +541,7 @@ async function resolveUpdateCandidate(
         // a constrained update. `clone.resolvedSha()` (read by the caller
         // after this call returns) already captures whatever this probe
         // resolves to, pinned or not, so nothing here needs to intercept it.
-        return resolveGitPluginRoot(
+        return clone.probe(
           options.pin === undefined ? gitSource : { ...gitSource, sha: options.pin.oid },
         );
       },
@@ -561,6 +564,9 @@ async function resolveUpdateCandidate(
               marketplaceName: marketplace.name,
               pathSource,
               tagOid: tagPin,
+              // D-SG-09: a git marketplace's tag copy fetches the tag's
+              // commit with the bundle the clone probe builds for its host.
+              resolveAuth: clone.cloneAuth,
               onCloneCreated: (key) => options.cloneCandidates?.add(key),
             }),
           );
@@ -1040,7 +1046,7 @@ async function resolvePinnedUpdateCandidate(
   // names -- threads into candidate resolution below; `unconstrained` and a
   // no-satisfying-tag `admits` both carry no pin.
   const pin = verdict.kind === "admits" ? verdict.pin : undefined;
-  const resolution = await resolveUpdateCandidate(entry, marketplace, clone.probe, {
+  const resolution = await resolveUpdateCandidate(entry, marketplace, clone, {
     ...base,
     ...(pin !== undefined && { pin }),
     ...(pathPinProbe !== undefined && { pathPinProbe }),

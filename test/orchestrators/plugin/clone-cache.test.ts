@@ -2352,7 +2352,7 @@ void test("materializeMarketplaceTagClone: materializes the tag's tree without m
   const tagClone = await materializeMarketplaceTagClone({
     locations,
     marketplaceRoot,
-    marketplaceSource: GITHUB_REPO_URL,
+    marketplaceSource: marketplaceRoot,
     marketplaceName: "marketplace",
     pathSource: pathSource("./plugins/foo"),
     tagOid,
@@ -2395,7 +2395,7 @@ void test("materializeMarketplaceTagClone: a warm-cache key skips re-copy and re
   const tagClone = await materializeMarketplaceTagClone({
     locations,
     marketplaceRoot,
-    marketplaceSource: GITHUB_REPO_URL,
+    marketplaceSource: marketplaceRoot,
     marketplaceName: "marketplace",
     pathSource: pathSource("./plugins/foo"),
     tagOid,
@@ -2432,7 +2432,7 @@ void test("materializeMarketplaceTagClone: a failed checkout cleans staging and 
     materializeMarketplaceTagClone({
       locations,
       marketplaceRoot,
-      marketplaceSource: GITHUB_REPO_URL,
+      marketplaceSource: marketplaceRoot,
       marketplaceName: "marketplace",
       pathSource: pathSource("./plugins/foo"),
       tagOid,
@@ -2460,7 +2460,7 @@ void test("materializeMarketplaceTagClone: an unreadable marketplace gitdir clea
     materializeMarketplaceTagClone({
       locations,
       marketplaceRoot,
-      marketplaceSource: GITHUB_REPO_URL,
+      marketplaceSource: marketplaceRoot,
       marketplaceName: "marketplace",
       pathSource: pathSource("./plugins/foo"),
       tagOid,
@@ -2498,7 +2498,7 @@ void test("materializeMarketplaceTagClone: a checkout failure that also fails to
     await materializeMarketplaceTagClone({
       locations,
       marketplaceRoot,
-      marketplaceSource: GITHUB_REPO_URL,
+      marketplaceSource: marketplaceRoot,
       marketplaceName: "marketplace",
       pathSource: pathSource("./plugins/foo"),
       tagOid,
@@ -2532,7 +2532,7 @@ void test("materializeMarketplaceTagClone: no directory at the path source's rel
   const tagClone = await materializeMarketplaceTagClone({
     locations,
     marketplaceRoot,
-    marketplaceSource: GITHUB_REPO_URL,
+    marketplaceSource: marketplaceRoot,
     marketplaceName: "marketplace",
     pathSource: pathSource("./plugins/missing"),
     tagOid,
@@ -2565,6 +2565,271 @@ void test("materializeMarketplaceTagClone: a marketplace checkout with no discov
 
   // assert: materialization still succeeds off the name-keyed fallback.
   assert.equal(tagClone.kind, "materialized");
+});
+
+/** One recorded tag-copy git operation, its directory read as staging or not. */
+interface TagCopyOperation {
+  readonly op: string;
+  readonly inStaging: boolean;
+  readonly copied: boolean;
+  readonly sha?: string;
+  readonly ref?: string;
+  readonly fromCopiedGitDir?: boolean;
+  readonly auth?: GitAuthBundle;
+}
+
+/**
+ * GitOps over the production checkout that records the tag copy's fetch and
+ * checkout, each with whether its directory is a staging copy holding `.git`.
+ */
+function recordingTagCopyGitOps(
+  locations: ScopedLocations,
+  fetchCommit: GitOps["fetchCommit"] = () => Promise.resolve(),
+): { readonly gitOps: GitOps; readonly operations: TagCopyOperation[] } {
+  const operations: TagCopyOperation[] = [];
+  const where = async (dir: string): Promise<Pick<TagCopyOperation, "copied" | "inStaging">> => ({
+    inStaging: dir.startsWith(path.join(locations.extensionRoot, "sources-staging")),
+    copied: await pathExists(path.join(dir, ".git", "HEAD")),
+  });
+  return {
+    operations,
+    gitOps: {
+      ...DEFAULT_GIT_OPS,
+      async fetchCommit(opts) {
+        operations.push({
+          op: "fetchCommit",
+          ...(await where(opts.dir)),
+          sha: opts.sha,
+          ...(opts.auth !== undefined && { auth: opts.auth }),
+        });
+        return fetchCommit(opts);
+      },
+      async checkout(opts) {
+        operations.push({
+          op: "checkout",
+          ...(await where(opts.dir)),
+          ref: opts.ref,
+          ...(opts.fromCopiedGitDir !== undefined && { fromCopiedGitDir: opts.fromCopiedGitDir }),
+        });
+        return DEFAULT_GIT_OPS.checkout(opts);
+      },
+    },
+  };
+}
+
+void test("D-SG-09: a github marketplace's tag copy fetches the tag's commit into the copy with its host's bundle, then checks it out", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
+    originUrl: GITHUB_REPO_URL,
+    plugins: [],
+  });
+  const tagOid = await tagMarketplaceHead(marketplaceRoot, "foo--v1.0.0");
+  const recorded = recordingTagCopyGitOps(locations);
+  const auth = publicCloneAuth();
+  const authRequests: unknown[] = [];
+
+  // act
+  const tagClone = await materializeMarketplaceTagClone({
+    locations,
+    marketplaceRoot,
+    marketplaceSource: githubSource("owner/repo"),
+    marketplaceName: "marketplace",
+    pathSource: pathSource("./plugins/foo"),
+    tagOid,
+    gitOps: recorded.gitOps,
+    resolveAuth: (cloneUrl, kind) => {
+      authRequests.push([cloneUrl, kind]);
+      return auth;
+    },
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    { kind: tagClone.kind, operations: recorded.operations, authRequests },
+    {
+      kind: "materialized",
+      operations: [
+        { op: "fetchCommit", inStaging: true, copied: true, sha: tagOid, auth },
+        { op: "checkout", inStaging: true, copied: true, ref: tagOid, fromCopiedGitDir: true },
+      ],
+      authRequests: [[GITHUB_REPO_URL, "github"]],
+    },
+  );
+});
+
+void test("D-SG-09: a url marketplace's tag copy with no auth builder fetches without a bundle", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
+    originUrl: OTHER_REPO_URL,
+    plugins: [],
+  });
+  const tagOid = await tagMarketplaceHead(marketplaceRoot, "foo--v1.0.0");
+  const recorded = recordingTagCopyGitOps(locations);
+
+  // act
+  await materializeMarketplaceTagClone({
+    locations,
+    marketplaceRoot,
+    marketplaceSource: OTHER_REPO_URL,
+    marketplaceName: "marketplace",
+    pathSource: pathSource("./plugins/foo"),
+    tagOid,
+    gitOps: recorded.gitOps,
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    recorded.operations.map(({ op, auth }) => [op, auth]),
+    [
+      ["fetchCommit", undefined],
+      ["checkout", undefined],
+    ],
+  );
+});
+
+void test("D-SG-09: a directory marketplace's tag copy fetches nothing and builds no bundle", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
+    originUrl: GITHUB_REPO_URL,
+    plugins: [],
+  });
+  const tagOid = await tagMarketplaceHead(marketplaceRoot, "foo--v1.0.0");
+  const recorded = recordingTagCopyGitOps(locations);
+
+  // act
+  const tagClone = await materializeMarketplaceTagClone({
+    locations,
+    marketplaceRoot,
+    marketplaceSource: marketplaceRoot,
+    marketplaceName: "marketplace",
+    pathSource: pathSource("./plugins/foo"),
+    tagOid,
+    gitOps: recorded.gitOps,
+    resolveAuth: () => {
+      throw new Error("a directory marketplace builds no bundle");
+    },
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    { kind: tagClone.kind, operations: recorded.operations.map(({ op }) => op) },
+    { kind: "materialized", operations: ["checkout"] },
+  );
+});
+
+void test("D-SG-09, MA-9: a failed tag fetch cleans staging, checks nothing out, and rethrows", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
+    originUrl: GITHUB_REPO_URL,
+    plugins: [],
+  });
+  const tagOid = await tagMarketplaceHead(marketplaceRoot, "foo--v1.0.0");
+  const fetchError = new GitCommandError({ kind: "network" }, { operation: "fetch --depth" });
+  const recorded = recordingTagCopyGitOps(locations, () => Promise.reject(fetchError));
+
+  // act
+  const materializing = materializeMarketplaceTagClone({
+    locations,
+    marketplaceRoot,
+    marketplaceSource: GITHUB_REPO_URL,
+    marketplaceName: "marketplace",
+    pathSource: pathSource("./plugins/foo"),
+    tagOid,
+    gitOps: recorded.gitOps,
+  });
+
+  // assert
+  await assert.rejects(materializing, (err: unknown) => err === fetchError);
+  assert.deepStrictEqual(
+    {
+      operations: recorded.operations.map(({ op }) => op),
+      staging: await stagingEntries(locations),
+      promoted: await pathExists(
+        await locations.pluginCloneDir(pluginCloneKey(GITHUB_REPO_URL, tagOid)),
+      ),
+    },
+    { operations: ["fetchCommit"], staging: [], promoted: false },
+  );
+});
+
+void test("D-SG-09: real git gives a depth-1 marketplace clone's tag copy the tree of an older tagged commit", async (t) => {
+  // arrange: the release tag names an older commit than the branch head, so
+  // a depth-1 clone of the marketplace repository does not hold it.
+  const upstream = await createGitTestRepository(t, { boundary: "local" });
+  const tagged = await upstream.commit(
+    [
+      {
+        filepath: ".claude-plugin/marketplace.json",
+        contents: '{"name":"marketplace","plugins":[]}',
+      },
+      {
+        filepath: "plugins/foo/.claude-plugin/plugin.json",
+        contents: '{"name":"foo","version":"1.0.0"}',
+      },
+    ],
+    "release foo 1.0.0",
+  );
+  await upstream.run("tag", "-a", "-m", "foo 1.0.0", "foo--v1.0.0", tagged);
+  await upstream.commit(
+    [
+      {
+        filepath: "plugins/foo/.claude-plugin/plugin.json",
+        contents: '{"name":"foo","version":"2.0.0"}',
+      },
+    ],
+    "foo 2.0.0",
+  );
+  const parent = await mkdtemp(path.join(tmpdir(), "clone-cache-tag-copy-"));
+  t.after(() => rm(parent, { recursive: true, force: true }));
+  const marketplaceRoot = path.join(parent, "marketplace");
+  const recorded = recordingGitProcess(await hermeticGitProcess(t));
+  const gitOps = systemGitOps(recorded.gitProcess);
+  await gitOps.clone({ dir: marketplaceRoot, url: `file://${upstream.dir}` });
+  const locations = await freshLocations(t);
+  recorded.requests.splice(0);
+
+  // act
+  const tagClone = await materializeMarketplaceTagClone({
+    locations,
+    marketplaceRoot,
+    marketplaceSource: "https://example.com/acme/marketplace.git",
+    marketplaceName: "marketplace",
+    pathSource: pathSource("./plugins/foo"),
+    tagOid: tagged,
+    gitOps,
+    resolveAuth: publicCloneAuth,
+  });
+
+  // assert
+  assert.ok(tagClone.kind === "materialized");
+  assert.deepStrictEqual(
+    {
+      plugin: await readFile(
+        path.join(tagClone.pluginRoot, ".claude-plugin", "plugin.json"),
+        "utf8",
+      ),
+      operations: recorded.requests.map((request) =>
+        [request.subcommand, ...(request.options ?? []).slice(0, 1)].join(" "),
+      ),
+      marketplaceHead: await gitTestCheckout(marketplaceRoot).run("rev-parse", "HEAD"),
+    },
+    {
+      plugin: '{"name":"foo","version":"1.0.0"}',
+      operations: [
+        "config --local",
+        "fetch --depth",
+        "config --local",
+        "config --local",
+        "config --local",
+        "checkout -f",
+      ],
+      marketplaceHead: await upstream.run("rev-parse", "HEAD"),
+    },
+  );
 });
 
 /**
@@ -2906,7 +3171,7 @@ void test("GIT-04: a tag clone checks out a directory that holds only a symlink"
   const tagClone = await materializeMarketplaceTagClone({
     locations,
     marketplaceRoot,
-    marketplaceSource: GITHUB_REPO_URL,
+    marketplaceSource: marketplaceRoot,
     marketplaceName: "marketplace",
     pathSource: pathSource("./plugins/foo"),
     tagOid,

@@ -1931,6 +1931,10 @@ test("UPDT-01: a path-source pin materializes through the marketplace's own tag 
   assert.strictEqual(calls[0]?.marketplaceRoot, path.join(seed.cwd, "marketplace"));
   assert.strictEqual(calls[0]?.marketplaceName, "mp");
   assert.deepStrictEqual(calls[0]?.marketplaceSource, pathSource("./marketplace"));
+  // D-SG-09: a git marketplace's tag copy fetches with the bundle the clone
+  // probe builds for the marketplace host.
+  const bundle = calls[0]?.resolveAuth?.("https://example.com/acme/marketplace", "url");
+  assert.deepStrictEqual([bundle?.kind, bundle?.host], ["stored-credential", "example.com"]);
   assert.deepStrictEqual(cloneCandidates, new Set(["path-clone"]));
 });
 
