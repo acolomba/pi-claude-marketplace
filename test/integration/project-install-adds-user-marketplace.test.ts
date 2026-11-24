@@ -250,7 +250,8 @@ test("LAYER-07: a project keeps the marketplace its install added after a user-s
     cwd: env.cwd,
   });
   const userTreeBeforeUpdate = await treeOf(env.user.extensionRoot);
-  const fetchesBeforeUpdate = double.state.calls.fetch.length;
+  const headReadsBeforeUpdate = double.state.calls.resolveRef.length;
+  const lsRemotesBeforeUpdate = double.state.calls.resolveRemoteRef.length;
   await updateMarketplace({
     completionCache: createCompletionCache(),
     ctx: boundary.ctx,
@@ -275,9 +276,14 @@ test("LAYER-07: a project keeps the marketplace its install added after a user-s
     { message: "● mp [project] <no autoupdate>\n  ● p v1.0.0 (installed)\n    skills: greet" },
     { message: "● mp [project] (skipped) {up-to-date}" },
   ]);
+  // D-SG-10: the update reads the project checkout's HEAD and asks the remote,
+  // and the user scope's tree is left as it was.
   assert.deepStrictEqual(
-    double.state.calls.fetch.slice(fetchesBeforeUpdate).map(({ dir }) => dir),
-    [projectClone],
+    [
+      double.state.calls.resolveRef.slice(headReadsBeforeUpdate),
+      double.state.calls.resolveRemoteRef.slice(lsRemotesBeforeUpdate).map(({ url }) => url),
+    ],
+    [[{ dir: projectClone, ref: "HEAD" }], [REPO_URL]],
   );
   assert.deepStrictEqual(await treeOf(env.user.extensionRoot), userTreeBeforeUpdate);
   assert.deepStrictEqual(cloneTargets(double, env), [
