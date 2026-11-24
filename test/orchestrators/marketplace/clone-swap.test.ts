@@ -6,6 +6,8 @@ import { test, type TestContext } from "node:test";
 
 import {
   DEFAULT_RENAME_OPS,
+  KEEP_MARKETPLACE_ON_FAILURE_VARIABLE,
+  keepMarketplaceOnFailure,
   ownershipMarkerPath,
   refreshCloneBySwap,
   type CloneSwapArgs,
@@ -15,6 +17,8 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import {
   CleanupLeakError,
   GitCommandError,
+  InvalidGitHubBaseUrlError,
+  type GitFailure,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
@@ -96,6 +100,7 @@ function gitAt(options: {
   readonly remoteHead: string;
   readonly cloneFrom: string;
   readonly cloneError?: Error;
+  readonly lsRemoteError?: Error;
 }) {
   return createGitOpsFake({
     boundary: "memory",
@@ -104,13 +109,21 @@ function gitAt(options: {
     remoteHead: options.remoteHead,
     cloneFixture: { boundary: "local", sourceDir: options.cloneFrom },
     ...(options.cloneError === undefined ? {} : { cloneError: options.cloneError }),
+    ...(options.lsRemoteError === undefined
+      ? {}
+      : { resolveRemoteRefError: options.lsRemoteError }),
   });
 }
 
 function swapArgs(
   swap: Swap,
   gitOps: GitOps,
-  overrides: Partial<Pick<CloneSwapArgs, "ref" | "onReplaced" | "removalOps" | "renameOps">> = {},
+  overrides: Partial<
+    Pick<
+      CloneSwapArgs,
+      "ref" | "onReplaced" | "removalOps" | "renameOps" | "keepOnUnreachable" | "liveMarker"
+    >
+  > = {},
 ): CloneSwapArgs {
   return {
     locations: swap.locations,
@@ -119,6 +132,8 @@ function swapArgs(
     url: REMOTE_URL,
     gitOps,
     auth: AUTH,
+    liveMarker: path.join(".claude-plugin", "marketplace.json"),
+    keepOnUnreachable: false,
     removalOps: createRemovalOps(),
     renameOps: DEFAULT_RENAME_OPS,
     ...overrides,
@@ -526,3 +541,306 @@ test("D-SG-10: a backup that cannot be deleted after the swap still reports the 
   assert.strictEqual(await manifestOf(swap.liveDir), MANIFEST_B);
   assert.strictEqual(await manifestOf(swap.backupDir), MANIFEST_A);
 });
+
+function lsRemoteFailure(failure: GitFailure): GitCommandError {
+  return new GitCommandError(failure, { operation: "ls-remote", exitCode: 128 });
+}
+
+test("D-SG-10 / NFR-3: a backup beside no checkout is renamed back before the freshness check", async (t) => {
+  // arrange
+  const swap = await swapRoot(t);
+  await writeCheckout(swap.backupDir, MANIFEST_A);
+  const git = gitAt({
+    localHead: COMMIT_A,
+    remoteHead: COMMIT_A,
+    cloneFrom: await remoteTree(t, MANIFEST_B),
+  });
+
+  // act
+  const swapped = await refreshCloneBySwap(swapArgs(swap, git.gitOps));
+
+  // assert
+  assert.deepStrictEqual(swapped, { kind: "current" });
+  assert.strictEqual(await manifestOf(swap.liveDir), MANIFEST_A);
+  assert.deepStrictEqual(await entriesOf(path.dirname(swap.backupDir)), []);
+  assert.deepStrictEqual(git.state.calls.clone, []);
+});
+
+test("D-SG-10 / NFR-3: a checkout without its manifest beside a backup is removed and the backup restored", async (t) => {
+  // arrange
+  const swap = await swapRoot(t);
+  await writeCheckout(swap.backupDir, MANIFEST_A);
+  await mkdir(path.join(swap.liveDir, ".git"), { recursive: true });
+  await writeFile(path.join(swap.liveDir, "half-moved.txt"), "partial\n");
+  const git = gitAt({
+    localHead: COMMIT_A,
+    remoteHead: COMMIT_A,
+    cloneFrom: await remoteTree(t, MANIFEST_B),
+  });
+
+  // act
+  const swapped = await refreshCloneBySwap(swapArgs(swap, git.gitOps));
+
+  // assert
+  assert.deepStrictEqual(swapped, { kind: "current" });
+  assert.deepStrictEqual(await entriesOf(swap.liveDir), [".claude-plugin", ".git"]);
+  assert.strictEqual(await manifestOf(swap.liveDir), MANIFEST_A);
+  assert.deepStrictEqual(await entriesOf(path.dirname(swap.backupDir)), []);
+});
+
+test("D-SG-10 / NFR-3: a backup beside a valid checkout is removed and the checkout kept", async (t) => {
+  // arrange
+  const swap = await swapRoot(t);
+  await writeCheckout(swap.liveDir, MANIFEST_B);
+  await writeCheckout(swap.backupDir, MANIFEST_A);
+  const git = gitAt({
+    localHead: COMMIT_B,
+    remoteHead: COMMIT_B,
+    cloneFrom: await remoteTree(t, MANIFEST_B),
+  });
+
+  // act
+  const swapped = await refreshCloneBySwap(swapArgs(swap, git.gitOps));
+
+  // assert
+  assert.deepStrictEqual(swapped, { kind: "current" });
+  assert.strictEqual(await manifestOf(swap.liveDir), MANIFEST_B);
+  assert.deepStrictEqual(await entriesOf(path.dirname(swap.backupDir)), []);
+});
+
+test("D-SG-10: a staging directory an earlier run left is not this run's and stays", async (t) => {
+  // arrange
+  const swap = await swapRoot(t);
+  await writeCheckout(swap.liveDir, MANIFEST_A);
+  const leftover = path.join(swap.stagingRoot, "earlier-run");
+  await writeCheckout(leftover, MANIFEST_B);
+  const git = gitAt({
+    localHead: COMMIT_A,
+    remoteHead: COMMIT_B,
+    cloneFrom: await remoteTree(t, MANIFEST_B),
+  });
+
+  // act
+  const swapped = await refreshCloneBySwap(swapArgs(swap, git.gitOps));
+
+  // assert
+  assert.deepStrictEqual(swapped, { kind: "replaced" });
+  assert.deepStrictEqual(await entriesOf(swap.stagingRoot), ["earlier-run"]);
+  assert.strictEqual(await manifestOf(leftover), MANIFEST_B);
+});
+
+for (const value of [undefined, "", "   ", "0", "false", "no", "off", "2"]) {
+  test(`D-SG-15: ${JSON.stringify(value)} reads false`, () => {
+    // arrange
+    const env = value === undefined ? {} : { [KEEP_MARKETPLACE_ON_FAILURE_VARIABLE]: value };
+
+    // act
+    const keep = keepMarketplaceOnFailure(env);
+
+    // assert
+    assert.strictEqual(keep, false);
+  });
+}
+
+for (const value of ["1", " TRUE ", "yes", "On"]) {
+  test(`D-SG-15: ${JSON.stringify(value)} reads true`, () => {
+    // arrange
+    const env = { [KEEP_MARKETPLACE_ON_FAILURE_VARIABLE]: value };
+
+    // act
+    const keep = keepMarketplaceOnFailure(env);
+
+    // assert
+    assert.strictEqual(keep, true);
+  });
+}
+
+test("D-SG-15: the keep variable is read from the process environment by default", (t) => {
+  // arrange
+  const hadValue = Object.hasOwn(process.env, KEEP_MARKETPLACE_ON_FAILURE_VARIABLE);
+  const previous = process.env[KEEP_MARKETPLACE_ON_FAILURE_VARIABLE];
+  t.after(() => {
+    if (hadValue) {
+      process.env[KEEP_MARKETPLACE_ON_FAILURE_VARIABLE] = previous;
+    } else {
+      Reflect.deleteProperty(process.env, KEEP_MARKETPLACE_ON_FAILURE_VARIABLE);
+    }
+  });
+  process.env[KEEP_MARKETPLACE_ON_FAILURE_VARIABLE] = "yes";
+
+  // act
+  const keep = keepMarketplaceOnFailure();
+
+  // assert
+  assert.strictEqual(keep, true);
+});
+
+for (const failure of [
+  { kind: "network" },
+  { kind: "timeout", timeoutMs: 120_000 },
+  { kind: "https-auth", detail: "no-credential" },
+  { kind: "repository-not-found" },
+] as const satisfies readonly GitFailure[]) {
+  test(`D-SG-15: an ls-remote failing as ${failure.kind} keeps a valid checkout and clones nothing`, async (t) => {
+    // arrange
+    const swap = await swapRoot(t);
+    await writeCheckout(swap.liveDir, MANIFEST_A);
+    const lsRemoteError = lsRemoteFailure(failure);
+    const git = gitAt({
+      localHead: COMMIT_A,
+      remoteHead: COMMIT_B,
+      cloneFrom: await remoteTree(t, MANIFEST_B),
+      lsRemoteError,
+    });
+
+    // act
+    const swapped = await refreshCloneBySwap(
+      swapArgs(swap, git.gitOps, { keepOnUnreachable: true }),
+    );
+
+    // assert
+    assert.deepStrictEqual(swapped, { kind: "kept-stale", cause: lsRemoteError });
+    assert.strictEqual(await manifestOf(swap.liveDir), MANIFEST_A);
+    assert.deepStrictEqual(git.state.calls.clone, []);
+  });
+}
+
+for (const failure of [
+  { kind: "git-missing", detail: "not-found" },
+  { kind: "refused-input" },
+  { kind: "aborted" },
+] as const satisfies readonly GitFailure[]) {
+  test(`D-SG-15: an ls-remote failing as ${failure.kind} is thrown and nothing is kept or cloned`, async (t) => {
+    // arrange
+    const swap = await swapRoot(t);
+    await writeCheckout(swap.liveDir, MANIFEST_A);
+    const lsRemoteError = lsRemoteFailure(failure);
+    const git = gitAt({
+      localHead: COMMIT_A,
+      remoteHead: COMMIT_B,
+      cloneFrom: await remoteTree(t, MANIFEST_B),
+      lsRemoteError,
+    });
+
+    // act & assert
+    await assert.rejects(
+      refreshCloneBySwap(swapArgs(swap, git.gitOps, { keepOnUnreachable: true })),
+      (error: unknown) => {
+        assert.strictEqual(error, lsRemoteError);
+        return true;
+      },
+    );
+    assert.deepStrictEqual(git.state.calls.clone, []);
+  });
+}
+
+test("GHB-03: an invalid GitHub base from the ls-remote is thrown, not kept", async (t) => {
+  // arrange
+  const swap = await swapRoot(t);
+  await writeCheckout(swap.liveDir, MANIFEST_A);
+  const lsRemoteError = new InvalidGitHubBaseUrlError(
+    "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
+    "scheme",
+  );
+  const git = gitAt({
+    localHead: COMMIT_A,
+    remoteHead: COMMIT_B,
+    cloneFrom: await remoteTree(t, MANIFEST_B),
+    lsRemoteError,
+  });
+
+  // act & assert
+  await assert.rejects(
+    refreshCloneBySwap(swapArgs(swap, git.gitOps, { keepOnUnreachable: true })),
+    (error: unknown) => {
+      assert.strictEqual(error, lsRemoteError);
+      return true;
+    },
+  );
+  assert.deepStrictEqual(git.state.calls.clone, []);
+});
+
+for (const { title, keepOnUnreachable, liveMarker } of [
+  {
+    title: "without the keep variable",
+    keepOnUnreachable: false,
+    liveMarker: path.join(".claude-plugin", "marketplace.json"),
+  },
+  {
+    title: "with the keep variable but no manifest in the checkout",
+    keepOnUnreachable: true,
+    liveMarker: path.join(".claude-plugin", "absent.json"),
+  },
+]) {
+  test(`D-SG-15: an unreachable remote ${title} is cloned again and the clone's failure thrown`, async (t) => {
+    // arrange
+    const swap = await swapRoot(t);
+    await writeCheckout(swap.liveDir, MANIFEST_A);
+    const lsRemoteError = lsRemoteFailure({ kind: "network" });
+    const cloneError = new GitCommandError(
+      { kind: "network" },
+      { operation: "clone --depth", exitCode: 128 },
+    );
+    const git = gitAt({
+      localHead: COMMIT_A,
+      remoteHead: COMMIT_B,
+      cloneFrom: await remoteTree(t, MANIFEST_B),
+      lsRemoteError,
+      cloneError,
+    });
+
+    // act & assert
+    await assert.rejects(
+      refreshCloneBySwap(swapArgs(swap, git.gitOps, { keepOnUnreachable, liveMarker })),
+      (error: unknown) => {
+        assert.strictEqual(error, cloneError);
+        return true;
+      },
+    );
+    assert.strictEqual(git.state.calls.clone.length, 1);
+    assert.strictEqual(await manifestOf(swap.liveDir), MANIFEST_A);
+  });
+}
+
+for (const { title, remoteHead, ref, expectedKind } of [
+  {
+    title: "a stale checkout is cloned again",
+    remoteHead: COMMIT_B,
+    ref: undefined,
+    expectedKind: "replaced",
+  },
+  {
+    title: "a current checkout is current",
+    remoteHead: COMMIT_A,
+    ref: undefined,
+    expectedKind: "current",
+  },
+  {
+    title: "a full-SHA ref other than HEAD is cloned again",
+    remoteHead: COMMIT_A,
+    ref: COMMIT_B,
+    expectedKind: "replaced",
+  },
+] as const) {
+  test(`D-SG-15: with the keep variable, ${title}`, async (t) => {
+    // arrange
+    const swap = await swapRoot(t);
+    await writeCheckout(swap.liveDir, MANIFEST_A);
+    const git = gitAt({
+      localHead: COMMIT_A,
+      remoteHead,
+      cloneFrom: await remoteTree(t, MANIFEST_B),
+    });
+
+    // act
+    const swapped = await refreshCloneBySwap(
+      swapArgs(swap, git.gitOps, {
+        keepOnUnreachable: true,
+        ...(ref === undefined ? {} : { ref }),
+      }),
+    );
+
+    // assert
+    assert.deepStrictEqual(swapped, { kind: expectedKind });
+  });
+}

@@ -7,6 +7,9 @@
 // moved default branch or a moved tag is followed because the clone reads the
 // remote again, and nothing here reads `refs/remotes/origin/HEAD`.
 //
+// D-SG-15: with `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE` true, a
+// checkout whose remote cannot be reached is kept as it is.
+//
 // This module is not a ledger: `update.ts` and `add.ts` import it, and it
 // imports no ledger. Every directory it renames or removes comes from a
 // `ScopedLocations` getter (NFR-10), and both renames stay under the extension
@@ -18,7 +21,13 @@ import path from "node:path";
 
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { appendLeakToError, errorMessage, isErrnoException } from "../../shared/errors.ts";
+import {
+  appendLeakToError,
+  errorMessage,
+  GitCommandError,
+  InvalidGitHubBaseUrlError,
+  isErrnoException,
+} from "../../shared/errors.ts";
 import { cleanupStaging, pathExists, type RemovalOps } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
@@ -60,16 +69,34 @@ export const DEFAULT_RENAME_OPS: RenameOps = {
   rename: (from, to) => rename(from, to),
 };
 
+/** D-SG-15: the variable that keeps a checkout whose remote cannot be reached. */
+export const KEEP_MARKETPLACE_ON_FAILURE_VARIABLE =
+  "CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE";
+
+/** D-SG-15: the values Claude Code reads as true, after trimming and lower-casing. */
+const TRUE_VALUES: ReadonlySet<string> = new Set(["1", "true", "yes", "on"]);
+
+/**
+ * D-SG-15: whether `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE` is true,
+ * as Claude Code reads it: `1`, `true`, `yes`, or `on`, trimmed, in any case.
+ */
+export function keepMarketplaceOnFailure(env: NodeJS.ProcessEnv = process.env): boolean {
+  return TRUE_VALUES.has((env[KEEP_MARKETPLACE_ON_FAILURE_VARIABLE] ?? "").trim().toLowerCase());
+}
+
 /**
  * D-SG-10: what a refresh did. `current`: the checkout already holds the
  * remote's commit, and nothing was written. `replaced`: a new clone took the
- * live checkout's place. `kept-in-use`: the live checkout could not be moved
- * aside (`EBUSY`, `EPERM`, or `EACCES`), so it was kept and the next refresh
- * tries again; `cause` is the rename's error.
+ * live checkout's place. `kept-stale`: the remote could not be reached and
+ * D-SG-15 kept the checkout; `cause` is the `ls-remote` failure.
+ * `kept-in-use`: the live checkout could not be moved aside (`EBUSY`,
+ * `EPERM`, or `EACCES`), so it was kept and the next refresh tries again;
+ * `cause` is the rename's error.
  */
 export type CloneSwapResult =
   | { readonly kind: "current" }
   | { readonly kind: "replaced" }
+  | { readonly kind: "kept-stale"; readonly cause: unknown }
   | { readonly kind: "kept-in-use"; readonly cause: Error };
 
 export interface CloneSwapArgs {
@@ -82,6 +109,14 @@ export interface CloneSwapArgs {
   readonly ref?: string;
   readonly gitOps: GitOps;
   readonly auth: GitAuthBundle;
+  /**
+   * The file, relative to the checkout, whose presence makes a checkout valid:
+   * `.claude-plugin/marketplace.json` for a marketplace, `.git/HEAD` for a
+   * mirror.
+   */
+  readonly liveMarker: string;
+  /** D-SG-15: keep a valid checkout whose remote cannot be reached. */
+  readonly keepOnUnreachable: boolean;
   /** Runs once the new clone is the live checkout (MU-5). */
   readonly onReplaced?: () => void;
   readonly removalOps: RemovalOps;
@@ -109,28 +144,97 @@ async function readLocalHead(args: CloneSwapArgs): Promise<string | undefined> {
 }
 
 /**
- * D-SG-10: whether the checkout is current. A full-SHA ref compares with
- * `HEAD` and asks the remote nothing. Otherwise `ls-remote` gives the commit of
- * `HEAD`, or of the ref as a branch, then a peeled tag, then a tag; a ref the
- * remote does not advertise, or an unreadable `HEAD`, is stale.
+ * D-SG-10: the freshness of the checkout. `unreachable` carries the
+ * `ls-remote` failure.
  */
-async function isCurrent(args: CloneSwapArgs): Promise<boolean> {
+type Freshness =
+  | { readonly kind: "current" }
+  | { readonly kind: "stale" }
+  | { readonly kind: "unreachable"; readonly cause: unknown };
+
+const CURRENT: Freshness = { kind: "current" };
+const STALE: Freshness = { kind: "stale" };
+
+/**
+ * D-SG-15: the git failures that say nothing about the remote, so a refresh
+ * stops on them rather than keeping or cloning: git is missing, Pi refused the
+ * input, or the command was aborted.
+ */
+const NOT_REMOTE_FAILURES: ReadonlySet<GitCommandError["kind"]> = new Set([
+  "git-missing",
+  "refused-input",
+  "aborted",
+]);
+
+/** D-SG-15: whether a failed `ls-remote` means the remote could not be reached. */
+function isUnreachable(err: unknown): boolean {
+  if (err instanceof InvalidGitHubBaseUrlError) {
+    return false;
+  }
+
+  return !(err instanceof GitCommandError && NOT_REMOTE_FAILURES.has(err.kind));
+}
+
+/**
+ * D-SG-10: the freshness of the checkout. A full-SHA ref compares with `HEAD`
+ * and asks the remote nothing. Otherwise `ls-remote` gives the commit of
+ * `HEAD`, or of the ref as a branch, then a peeled tag, then a tag; a ref the
+ * remote does not advertise, or an unreadable `HEAD`, is stale, and a failed
+ * `ls-remote` is unreachable.
+ */
+async function checkFreshness(args: CloneSwapArgs): Promise<Freshness> {
   const local = await readLocalHead(args);
   if (local === undefined) {
-    return false;
+    return STALE;
   }
 
   const { ref } = args;
   if (ref !== undefined && FULL_SHA_RE.test(ref)) {
-    return local === ref.toLowerCase();
+    return local === ref.toLowerCase() ? CURRENT : STALE;
   }
 
-  const remote = await args.gitOps.resolveRemoteRef({
-    url: args.url,
-    ...(ref !== undefined && { ref }),
-    auth: args.auth,
-  });
-  return remote === local;
+  let remote: string | undefined;
+  try {
+    remote = await args.gitOps.resolveRemoteRef({
+      url: args.url,
+      ...(ref !== undefined && { ref }),
+      auth: args.auth,
+    });
+  } catch (err) {
+    if (!isUnreachable(err)) {
+      throw err;
+    }
+
+    return { kind: "unreachable", cause: err };
+  }
+
+  return remote === local ? CURRENT : STALE;
+}
+
+/**
+ * D-SG-10 / NFR-3: put back what an interrupted swap left. A backup beside a
+ * valid checkout is removed. A backup beside a checkout that lacks its marker,
+ * or beside no checkout, is renamed back, after the invalid checkout is
+ * removed. A staging directory of an earlier run is not this run's and is left
+ * to the removal of its own run.
+ */
+async function recoverInterruptedSwap(args: CloneSwapArgs): Promise<void> {
+  const { liveDir, backupDir, removalOps } = args;
+  if (!(await pathExists(backupDir))) {
+    return;
+  }
+
+  if (await pathExists(liveDir)) {
+    if (await pathExists(path.join(liveDir, args.liveMarker))) {
+      await removalOps.rm(backupDir, { recursive: true, force: true });
+      return;
+    }
+
+    await removalOps.rm(liveDir, { recursive: true, force: true });
+  }
+
+  await mkdir(path.dirname(liveDir), { recursive: true });
+  await args.renameOps.rename(backupDir, liveDir);
 }
 
 /**
@@ -239,15 +343,29 @@ async function swapIn(args: CloneSwapArgs, stagingDir: string): Promise<CloneSwa
 }
 
 /**
- * D-SG-10: refresh the checkout at `liveDir` from `url`. A current checkout is
- * left alone. A stale one is cloned again into staging and swapped in; a
- * failed clone leaves the live checkout untouched, and a failed move-in puts
- * the old checkout back. The caller holds the scope's state lock around the
- * whole refresh (Q13).
+ * D-SG-10: refresh the checkout at `liveDir` from `url`. An interrupted swap
+ * is put back first. A current checkout is left alone. A stale one is cloned
+ * again into staging and swapped in; a failed clone leaves the live checkout
+ * untouched, and a failed move-in puts the old checkout back. The caller holds
+ * the scope's state lock around the whole refresh (Q13).
  */
 export async function refreshCloneBySwap(args: CloneSwapArgs): Promise<CloneSwapResult> {
-  if (await isCurrent(args)) {
+  await recoverInterruptedSwap(args);
+  const freshness = await checkFreshness(args);
+  if (freshness.kind === "current") {
     return { kind: "current" };
+  }
+
+  // D-SG-15: only an unreachable remote is kept, and only a valid checkout. A
+  // stale checkout, or one without its marker, is cloned again, and without
+  // the variable an unreachable remote is cloned again too, so the clone's
+  // failure is the one reported.
+  if (
+    freshness.kind === "unreachable" &&
+    args.keepOnUnreachable &&
+    (await pathExists(path.join(args.liveDir, args.liveMarker)))
+  ) {
+    return { kind: "kept-stale", cause: freshness.cause };
   }
 
   const stagingDir = await cloneIntoStaging(args);
