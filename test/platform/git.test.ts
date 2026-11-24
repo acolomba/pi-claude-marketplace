@@ -31,11 +31,10 @@ import {
   fetchCommit,
   forceUpdateRef,
   listRemotes,
+  listLocalTags,
   listRemoteTags,
-  listTags,
   resolveRef,
   resolveRemoteRef,
-  resolveTagOid,
   runWithGitAbortSignal,
 } from "../../extensions/pi-claude-marketplace/platform/git.ts";
 import { getAgentDir } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -1069,10 +1068,9 @@ describe("SG-PRC-06: the git-required gate", () => {
     });
   }
 
-  test("TAGS-01: the in-process local verbs read and write a clone with no git on the path", async (t) => {
+  test("SG-PRC-06: the in-process local verbs read and write a clone with no git on the path", async (t) => {
     // arrange
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    await repository.run("tag", "v1.0.0", repository.initialOid);
     await repository.commit([{ filepath: "next.txt", contents: "next\n" }], "next");
     await withoutGitOnPath(t);
     const { dir } = repository;
@@ -1085,14 +1083,10 @@ describe("SG-PRC-06: the git-required gate", () => {
       {
         branch: await currentBranch({ dir }),
         feature: await readFile(path.join(dir, ".git", "refs", "heads", "feature"), "utf8"),
-        tags: await listTags({ dir }),
-        tag: await resolveTagOid({ dir, name: "v1.0.0", cache: {} }),
       },
       {
         branch: "main",
         feature: `${repository.initialOid}\n`,
-        tags: ["v1.0.0"],
-        tag: repository.initialOid,
       },
     );
   });
@@ -3242,13 +3236,12 @@ describe("listRemotes", () => {
 });
 
 /**
- * RESV-03, SG-TRN-01: a repository served at a `file://` URL with the
- * lightweight tag `light` on the initial commit, and the annotated tag `v2`
- * and the tag of a tag `tot` on the second commit.
+ * RESV-03, SG-TRN-01, D-SG-09: a repository with the lightweight tag `light`
+ * on the initial commit, and the annotated tag `v2` and the tag of a tag
+ * `tot` on the second commit.
  */
-async function taggedRemote(t: TestContext): Promise<{
-  readonly url: string;
-  readonly initialOid: string;
+async function taggedHistory(t: TestContext): Promise<{
+  readonly repository: Awaited<ReturnType<typeof createGitTestRepository>>;
   readonly secondOid: string;
 }> {
   const repository = await createGitTestRepository(t, { boundary: "local" });
@@ -3256,6 +3249,16 @@ async function taggedRemote(t: TestContext): Promise<{
   const secondOid = await repository.commit([{ filepath: "two.txt", contents: "two\n" }], "two");
   await repository.run("tag", "-a", "-m", "v2", "v2");
   await repository.run("tag", "-a", "-m", "tot", "tot", "v2");
+  return { repository, secondOid };
+}
+
+/** The tagged history, served at a `file://` URL. */
+async function taggedRemote(t: TestContext): Promise<{
+  readonly url: string;
+  readonly initialOid: string;
+  readonly secondOid: string;
+}> {
+  const { repository, secondOid } = await taggedHistory(t);
   return { url: `file://${repository.dir}`, initialOid: repository.initialOid, secondOid };
 }
 
@@ -3404,116 +3407,92 @@ describe("listRemoteTags", () => {
   });
 });
 
-describe("listTags", () => {
-  test("lists tag names against a real local repository with no network call", async (t) => {
+/**
+ * D-SG-09: the tagged history with a lightweight and an annotated tag of the
+ * second commit's tree, and a lightweight tag of a blob.
+ */
+async function taggedRepository(t: TestContext): Promise<{
+  readonly dir: string;
+  readonly initialOid: string;
+  readonly secondOid: string;
+}> {
+  const { repository, secondOid } = await taggedHistory(t);
+  const tree = await repository.run("rev-parse", `${secondOid}^{tree}`);
+  await repository.run("tag", "tree-light", tree);
+  await repository.run("tag", "-a", "-m", "tree", "tree-annotated", tree);
+  await repository.run("update-ref", "refs/tags/blob-light", await repository.hashObject("blob"));
+  return { dir: repository.dir, initialOid: repository.initialOid, secondOid };
+}
+
+describe("listLocalTags", () => {
+  test("D-SG-09, WR-06: lists each commit-backed tag with the commit it names and drops a tree or blob tag", async (t) => {
     // arrange
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    await repository.run("tag", "v1.0.0", repository.initialOid);
-    const secondOid = await repository.commit(
-      [{ filepath: "second.txt", contents: "second\n" }],
-      "second",
-    );
-    await repository.run("tag", "v2.0.0", secondOid);
+    const repository = await taggedRepository(t);
+    const systemGit = await hermeticGitProcess(t);
 
     // act
-    const tags = await listTags({ dir: repository.dir });
+    const tags = await listLocalTags({ dir: repository.dir }, systemGit);
 
     // assert
-    assert.deepStrictEqual([...tags].sort(), ["v1.0.0", "v2.0.0"]);
+    assert.deepStrictEqual(tags, [
+      { name: "light", oid: repository.initialOid },
+      { name: "tot", oid: repository.secondOid },
+      { name: "v2", oid: repository.secondOid },
+    ]);
   });
 
-  test("a repository with no tags yields an empty list", async (t) => {
+  test("D-SG-09: a repository with no tags answers an empty list", async (t) => {
     // arrange
     const repository = await createGitTestRepository(t, { boundary: "local" });
+    const systemGit = await hermeticGitProcess(t);
 
     // act
-    const tags = await listTags({ dir: repository.dir });
+    const tags = await listLocalTags({ dir: repository.dir }, systemGit);
 
     // assert
     assert.deepStrictEqual(tags, []);
   });
-});
 
-describe("resolveTagOid", () => {
-  test("a lightweight tag resolves to the commit it points at", async (t) => {
+  test("D-SG-09, D-SG-13: lists with one local for-each-ref and peels only a tag of a tag again", async (t) => {
     // arrange
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    await repository.run("tag", "v1.0.0", repository.initialOid);
+    setGitTimeoutVariable(t, "4321");
+    const repository = await taggedRepository(t);
+    const recorded = recordingGitProcess(await hermeticGitProcess(t));
 
     // act
-    const oid = await resolveTagOid({ dir: repository.dir, name: "v1.0.0", cache: {} });
+    await listLocalTags({ dir: repository.dir }, recorded.gitProcess);
 
     // assert
-    assert.strictEqual(oid, repository.initialOid);
-  });
-
-  test("WR-01: a lightweight tag pointing at a blob resolves to undefined so the caller can drop it", async (t) => {
-    // arrange
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    const blobOid = await repository.hashObject("hello");
-    await repository.run("update-ref", "refs/tags/blob-tag", blobOid);
-
-    // act
-    const oid = await resolveTagOid({ dir: repository.dir, name: "blob-tag", cache: {} });
-
-    // assert: a lightweight tag's target is not decided by the throw alone --
-    // a commit target still resolves, so a non-commit target must be checked
-    // and dropped the same way an annotated blob/tree tag is.
-    assert.strictEqual(oid, undefined);
-  });
-
-  test("an annotated tag resolves to the commit it points at, not the tag object's own oid", async (t) => {
-    // arrange
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    await repository.run("tag", "-a", "-m", "release 2.0.0", "v2.0.0", repository.initialOid);
-    const tagObjectOid = await repository.run("rev-parse", "refs/tags/v2.0.0");
-    assert.notStrictEqual(tagObjectOid, repository.initialOid);
-
-    // act
-    const oid = await resolveTagOid({ dir: repository.dir, name: "v2.0.0", cache: {} });
-
-    // assert
-    assert.strictEqual(oid, repository.initialOid);
-  });
-
-  test("WR-06: a tag pointing at neither a commit nor another tag resolves to undefined so the caller can drop it", async (t) => {
-    // arrange
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    const blobOid = await repository.hashObject("hello");
-    await repository.run("tag", "-a", "-m", "blob-tag", "blob-tag", blobOid);
-
-    // act
-    const oid = await resolveTagOid({ dir: repository.dir, name: "blob-tag", cache: {} });
-
-    // assert: WR-06 -- a non-commit tagged type is not a checkout-able
-    // candidate, so `undefined` signals it rather than handing back an oid
-    // that would break a later checkout.
-    assert.strictEqual(oid, undefined);
-  });
-
-  test("WR-06: a tag-of-tag chain longer than the peel bound resolves to undefined instead of looping forever", async (t) => {
-    // arrange: MAX_TAG_PEEL_HOPS + 1 nested annotated tags, each pointing at
-    // the previous tag's own object oid; only the innermost points at a
-    // commit. Fully resolving needs one more hop than the bound allows.
-    const repository = await createGitTestRepository(t, { boundary: "local" });
-    let pointsAt = repository.initialOid;
-    let outermostName = "";
-    for (let hop = 0; hop < 11; hop += 1) {
-      const name = `chain-${hop.toString()}`;
-      // Sequential by necessity: each tag must point at the previous one's
-      // resolved oid.
-      await repository.run("tag", "-a", "-m", name, name, pointsAt);
-      pointsAt = await repository.run("rev-parse", `refs/tags/${name}`);
-      outermostName = name;
-    }
-
-    // act
-    const oid = await resolveTagOid({ dir: repository.dir, name: outermostName, cache: {} });
-
-    // assert: WR-06 -- hop exhaustion never reached a commit, so `undefined`
-    // signals that rather than handing back an intermediate tag-object oid a
-    // caller could mistake for a commit.
-    assert.strictEqual(oid, undefined);
+    assert.deepStrictEqual(
+      recorded.requests.map(({ subcommand, lane, cwd, options, operands, timeoutMs }) => ({
+        subcommand,
+        lane,
+        cwd,
+        options,
+        operands,
+        timeoutMs,
+      })),
+      [
+        {
+          subcommand: "for-each-ref",
+          lane: "local",
+          cwd: repository.dir,
+          options: [
+            "--format=%(refname:strip=2) %(objecttype) %(objectname) %(*objecttype) %(*objectname)",
+          ],
+          operands: ["refs/tags"],
+          timeoutMs: 4321,
+        },
+        {
+          subcommand: "rev-parse",
+          lane: "local",
+          cwd: repository.dir,
+          options: ["--verify", "--quiet"],
+          operands: ["refs/tags/tot^{commit}"],
+          timeoutMs: 4321,
+        },
+      ],
+    );
   });
 });
 

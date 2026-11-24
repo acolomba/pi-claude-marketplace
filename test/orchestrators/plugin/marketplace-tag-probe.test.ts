@@ -2,155 +2,144 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import { probeMarketplaceTags } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
+import { InvalidGitHubBaseUrlError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createGitTestRepository } from "../../platform/git-test-repository.ts";
+import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
+import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { ReleaseTagCandidate } from "../../../extensions/pi-claude-marketplace/domain/release-tag.ts";
+import type { CredentialOps } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type {
   MarketplaceTagListingSeam,
   MarketplaceTagProbeOptions,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
+import type {
+  ListLocalTagsOptions,
+  ListRemoteTagsOptions,
+  RemoteTag,
+} from "../../../extensions/pi-claude-marketplace/platform/git.ts";
+import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
 const MARKETPLACE_ROOT = "/marketplace/checkout";
+const DIRECTORY_SOURCE = "/home/user/acme-marketplace";
+const URL_SOURCE = "https://example.com/acme/marketplace.git";
+const GITHUB_SOURCE = "acme/marketplace";
 
 interface FakeSeamOptions {
-  readonly tagsByName?: Readonly<Record<string, string>>;
-  readonly listTagsThrows?: Error;
-  readonly resolveTagOidThrowsFor?: string;
+  readonly tags?: readonly RemoteTag[];
+  readonly listingThrows?: Error;
 }
 
 interface FakeSeam {
   readonly seam: MarketplaceTagListingSeam;
-  readonly listTagsCalls: { dir: string }[];
-  readonly resolveTagOidCalls: { dir: string; name: string; cache: object }[];
+  readonly remoteCalls: ListRemoteTagsOptions[];
+  readonly localCalls: ListLocalTagsOptions[];
 }
 
 function createFakeSeam(options: FakeSeamOptions = {}): FakeSeam {
-  const listTagsCalls: { dir: string }[] = [];
-  const resolveTagOidCalls: { dir: string; name: string; cache: object }[] = [];
-  const tagsByName = options.tagsByName ?? {};
+  const remoteCalls: ListRemoteTagsOptions[] = [];
+  const localCalls: ListLocalTagsOptions[] = [];
+  const answer = (): Promise<RemoteTag[]> =>
+    Promise.resolve().then(() => {
+      if (options.listingThrows !== undefined) {
+        throw options.listingThrows;
+      }
+
+      return [...(options.tags ?? [])];
+    });
 
   const seam: MarketplaceTagListingSeam = {
-    listTags: (opts) => {
-      listTagsCalls.push(opts);
-      if (options.listTagsThrows !== undefined) {
-        throw options.listTagsThrows;
-      }
-
-      return Promise.resolve(Object.keys(tagsByName));
+    listRemoteTags: (opts) => {
+      remoteCalls.push(opts);
+      return answer();
     },
-    resolveTagOid: (opts) => {
-      resolveTagOidCalls.push(opts);
-      if (options.resolveTagOidThrowsFor === opts.name) {
-        throw new Error(`cannot peel ${opts.name}`);
-      }
-
-      return Promise.resolve(tagsByName[opts.name] ?? "");
+    listLocalTags: (opts) => {
+      localCalls.push(opts);
+      return answer();
     },
   };
 
-  return { seam, listTagsCalls, resolveTagOidCalls };
+  return { seam, remoteCalls, localCalls };
+}
+
+function auth(): NonNullable<MarketplaceTagProbeOptions["auth"]> {
+  const ctx: NotificationContext = { mode: "tui", ui: { notify: () => undefined } };
+  const credentialOps: CredentialOps = {
+    approve: () => Promise.resolve(),
+    fill: () => Promise.resolve(null),
+    reject: () => Promise.resolve(),
+  };
+  return { ctx, run: runWithNothingLoaded(), credentialOps };
 }
 
 function options(overrides: Partial<MarketplaceTagProbeOptions>): MarketplaceTagProbeOptions {
   return {
     pluginName: "formatter",
     marketplaceRoot: MARKETPLACE_ROOT,
+    marketplaceSource: DIRECTORY_SOURCE,
     range: "^2.0.0",
     ...overrides,
   };
 }
 
-describe("probeMarketplaceTags", () => {
-  test("TAGS-01: pins the highest satisfying tag off the marketplace clone's own local listing", async () => {
+describe("probeMarketplaceTags on a directory marketplace", () => {
+  test("TAGS-01: pins the highest satisfying tag off the marketplace repository's local listing", async () => {
     // arrange
     const fake = createFakeSeam({
-      tagsByName: { "formatter--v1.0.0": "oid-1", "formatter--v2.1.0": "oid-2" },
+      tags: [
+        { name: "formatter--v1.0.0", oid: "oid-1" },
+        { name: "formatter--v2.1.0", oid: "oid-2" },
+      ],
     });
 
     // act
     const result = await probeMarketplaceTags(options({ seam: fake.seam }));
 
     // assert
-    assert.deepStrictEqual(result, {
-      kind: "pinned",
-      tag: "formatter--v2.1.0",
-      oid: "oid-2",
-      version: "2.1.0",
-    });
+    assert.deepStrictEqual(
+      { result, localCalls: fake.localCalls, remoteCalls: fake.remoteCalls },
+      {
+        result: { kind: "pinned", tag: "formatter--v2.1.0", oid: "oid-2", version: "2.1.0" },
+        localCalls: [{ dir: MARKETPLACE_ROOT }],
+        remoteCalls: [],
+      },
+    );
   });
 
-  test("a clone with zero tags yields the no-match arm", async () => {
-    const fake = createFakeSeam({ tagsByName: {} });
+  test("a repository with zero tags yields the no-match arm", async () => {
+    const fake = createFakeSeam({ tags: [] });
 
     const result = await probeMarketplaceTags(options({ seam: fake.seam }));
 
     assert.deepStrictEqual(result, { kind: "no-matching-tag" });
   });
 
-  test("a clone whose only tags carry another plugin's prefix yields the no-match arm", async () => {
-    const fake = createFakeSeam({ tagsByName: { "other--v9.9.9": "oid-9" } });
+  test("a repository whose only tags carry another plugin's prefix yields the no-match arm", async () => {
+    const fake = createFakeSeam({ tags: [{ name: "other--v9.9.9", oid: "oid-9" }] });
 
     const result = await probeMarketplaceTags(options({ seam: fake.seam }));
 
     assert.deepStrictEqual(result, { kind: "no-matching-tag" });
   });
 
-  test("D-07-10: every listed tag name's oid is resolved eagerly, before selection runs", async () => {
-    const fake = createFakeSeam({
-      tagsByName: { "formatter--v1.0.0": "oid-1", "formatter--v2.1.0": "oid-2" },
-    });
-
-    await probeMarketplaceTags(options({ seam: fake.seam }));
-
-    assert.deepStrictEqual(fake.resolveTagOidCalls.map((c) => c.name).sort(), [
-      "formatter--v1.0.0",
-      "formatter--v2.1.0",
-    ]);
-  });
-
-  test("WR-06: a tag whose oid resolves to undefined (a non-commit peel) is dropped, not offered as a candidate", async () => {
-    // arrange: `formatter--v1.5.0` peels to a non-commit object (a blob/tree
-    // tag, or a chain that exhausted MAX_TAG_PEEL_HOPS) -- resolveTagOid
-    // reports that with `undefined` (WR-06). It also satisfies `^1.0.0` and
-    // outranks `v1.0.0`, so without the drop it would win selection and hand
-    // a non-commit oid to a checkout.
-    const seam: MarketplaceTagListingSeam = {
-      listTags: () => Promise.resolve(["formatter--v1.0.0", "formatter--v1.5.0"]),
-      resolveTagOid: (opts) =>
-        Promise.resolve(opts.name === "formatter--v1.5.0" ? undefined : "oid-1"),
-    };
-
-    // act
-    const result = await probeMarketplaceTags(options({ seam, range: "^1.0.0" }));
-
-    // assert: the surviving candidate is the one that actually resolved.
-    assert.deepStrictEqual(result, {
-      kind: "pinned",
-      tag: "formatter--v1.0.0",
-      oid: "oid-1",
-      version: "1.0.0",
-    });
-  });
-
-  test("a listing throw returns the tag-listing-failed arm and asks the seam nothing else", async () => {
+  test("a listing throw returns the tag-listing-failed arm", async () => {
     const err = new Error("read failed");
-    const fake = createFakeSeam({ listTagsThrows: err });
+    const fake = createFakeSeam({ listingThrows: err });
 
     const result = await probeMarketplaceTags(options({ seam: fake.seam }));
 
     assert.deepStrictEqual(result, { kind: "tag-listing-failed", cause: err });
-    assert.strictEqual(fake.resolveTagOidCalls.length, 0);
   });
 
   test("wraps a listing throw that is not an Error before carrying it on the failure arm", async () => {
     const notAnError: unknown = "not an Error object";
     const seam: MarketplaceTagListingSeam = {
+      listRemoteTags: () => Promise.resolve([]),
       // Thrown rather than handed to Promise.reject so a non-Error failure --
       // the case the probe must wrap -- needs no cast to express.
-      listTags: () => {
+      listLocalTags: () => {
         throw notAnError;
       },
-      resolveTagOid: () => Promise.resolve(""),
     };
 
     const result = await probeMarketplaceTags(options({ seam }));
@@ -161,65 +150,34 @@ describe("probeMarketplaceTags", () => {
     });
   });
 
-  test("a peel throw for one tag returns the tag-listing-failed arm and stops without a second listing attempt", async () => {
+  test("D-10-18: two probes for two plugin names against the same root list once", async () => {
     const fake = createFakeSeam({
-      tagsByName: { "formatter--v1.0.0": "oid-1" },
-      resolveTagOidThrowsFor: "formatter--v1.0.0",
-    });
-
-    const result = await probeMarketplaceTags(options({ seam: fake.seam }));
-
-    // WR-11: the whole value, not just `kind` -- an implementation that
-    // swallowed the peel error and substituted a generic message would still
-    // pass a `kind`-only assertion, losing the only diagnostic this arm
-    // carries.
-    assert.deepStrictEqual(result, {
-      kind: "tag-listing-failed",
-      cause: new Error("cannot peel formatter--v1.0.0"),
-    });
-    assert.strictEqual(fake.listTagsCalls.length, 1);
-  });
-
-  test("two probes for two different plugin names against the same marketplaceRoot call listTags exactly once", async () => {
-    const fake = createFakeSeam({
-      tagsByName: { "formatter--v1.0.0": "oid-1", "linter--v1.0.0": "oid-2" },
+      tags: [
+        { name: "formatter--v1.0.0", oid: "oid-1" },
+        { name: "linter--v1.0.0", oid: "oid-2" },
+      ],
     });
     const tagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
 
     await probeMarketplaceTags(options({ pluginName: "formatter", seam: fake.seam, tagMemo }));
     await probeMarketplaceTags(options({ pluginName: "linter", seam: fake.seam, tagMemo }));
 
-    assert.strictEqual(fake.listTagsCalls.length, 1);
-  });
-
-  test("every peel of one listing shares one object cache, and each listing gets its own", async () => {
-    // arrange
-    const fake = createFakeSeam({
-      tagsByName: { "formatter--v1.0.0": "oid-1", "formatter--v2.1.0": "oid-2" },
-    });
-
-    // act
-    await probeMarketplaceTags(options({ seam: fake.seam, marketplaceRoot: "/marketplace/a" }));
-    await probeMarketplaceTags(options({ seam: fake.seam, marketplaceRoot: "/marketplace/b" }));
-
-    // assert
-    const caches = fake.resolveTagOidCalls.map((call) => call.cache);
     assert.deepStrictEqual(
-      [caches.length, caches[1] === caches[0], caches[2] === caches[0], caches[3] === caches[2]],
-      [4, true, false, true],
+      { calls: fake.localCalls.length, keys: [...tagMemo.keys()] },
+      { calls: 1, keys: [MARKETPLACE_ROOT] },
     );
   });
 
-  test("a failed listing is never memoized, so a later attempt re-lists instead of replaying the error", async () => {
+  test("D-10-18: a failed listing is never memoized, so a later attempt re-lists instead of replaying the error", async () => {
     const err = new Error("transient");
-    const failing = createFakeSeam({ listTagsThrows: err });
+    const failing = createFakeSeam({ listingThrows: err });
     const tagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
 
     const first = await probeMarketplaceTags(options({ seam: failing.seam, tagMemo }));
     assert.deepStrictEqual(first, { kind: "tag-listing-failed", cause: err });
     assert.deepStrictEqual([...tagMemo], []);
 
-    const recovered = createFakeSeam({ tagsByName: { "formatter--v1.0.0": "oid-1" } });
+    const recovered = createFakeSeam({ tags: [{ name: "formatter--v1.0.0", oid: "oid-1" }] });
     const second = await probeMarketplaceTags(
       options({ seam: recovered.seam, tagMemo, range: "^1.0.0" }),
     );
@@ -230,16 +188,15 @@ describe("probeMarketplaceTags", () => {
       oid: "oid-1",
       version: "1.0.0",
     });
-    assert.strictEqual(recovered.listTagsCalls.length, 1);
+    assert.strictEqual(recovered.localCalls.length, 1);
   });
 
   test("a failure that overlaps a concurrent success does not evict the successful entry", async () => {
-    // The exact race CR-03 named: two probes for the SAME marketplaceRoot
-    // both miss the memo before either finishes; the successful one runs to
-    // completion and SETS the memo FIRST, and only then does the failing one
-    // (which missed the memo before the set happened) reach its own catch.
-    // A `memo.delete` in that catch would remove the entry the success just
-    // wrote.
+    // The exact race CR-03 named: two probes for the SAME root both miss the
+    // memo before either finishes; the successful one runs to completion and
+    // SETS the memo FIRST, and only then does the failing one reach its own
+    // catch. A `memo.delete` in that catch would remove the entry the success
+    // just wrote.
     const tagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
     let releaseFailure: () => void = () => {
       throw new Error("releaseFailure called before assignment");
@@ -249,17 +206,14 @@ describe("probeMarketplaceTags", () => {
       releaseFailure = resolve;
     });
     const failing: MarketplaceTagListingSeam = {
-      listTags: async () => {
+      listRemoteTags: () => Promise.resolve([]),
+      listLocalTags: async () => {
         await failureGate;
         throw new Error("transient");
       },
-      resolveTagOid: () => Promise.resolve(""),
     };
-    const succeeding = createFakeSeam({ tagsByName: { "formatter--v1.0.0": "oid-1" } });
+    const succeeding = createFakeSeam({ tags: [{ name: "formatter--v1.0.0", oid: "oid-1" }] });
 
-    // Start the failing probe first so it takes the memo-miss branch and then
-    // blocks on `failureGate` -- the successful probe's whole miss/list/set
-    // run completes while the failing one is still in flight.
     const failPromise = probeMarketplaceTags(options({ seam: failing, tagMemo }));
     const successResult = await probeMarketplaceTags(
       options({ seam: succeeding.seam, tagMemo, range: "^1.0.0" }),
@@ -270,21 +224,19 @@ describe("probeMarketplaceTags", () => {
     const failResult = await failPromise;
     assert.strictEqual(failResult.kind, "tag-listing-failed");
 
-    // A third probe must hit the memo the successful call wrote -- proving
-    // the later-resolving failure did not evict it.
     const spy = createFakeSeam();
     await probeMarketplaceTags(options({ seam: spy.seam, tagMemo }));
     assert.strictEqual(
-      spy.listTagsCalls.length,
+      spy.localCalls.length,
       0,
       "the successful entry must survive a concurrent, later-failing probe",
     );
   });
 
-  test("with no seam supplied, falls through to the real listTags/resolveTagOid pair against a real local repository", async (t) => {
+  test("D-SG-09: with no seam supplied, reads a real local repository's tags with system git", async (t) => {
     // arrange
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    await repository.run("tag", "formatter--v1.0.0", repository.initialOid);
+    await repository.run("tag", "-a", "-m", "release", "formatter--v1.0.0", repository.initialOid);
 
     // act
     const result = await probeMarketplaceTags(
@@ -298,5 +250,161 @@ describe("probeMarketplaceTags", () => {
       oid: repository.initialOid,
       version: "1.0.0",
     });
+  });
+});
+
+describe("probeMarketplaceTags on a git marketplace", () => {
+  test("D-SG-09: a url marketplace lists its remote with the host's auth bundle and never reads the checkout", async () => {
+    // arrange
+    const fake = createFakeSeam({ tags: [{ name: "formatter--v2.0.0", oid: "oid-2" }] });
+
+    // act
+    const result = await probeMarketplaceTags(
+      options({ seam: fake.seam, marketplaceSource: URL_SOURCE, auth: auth() }),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        result,
+        urls: fake.remoteCalls.map((call) => call.url),
+        bundles: fake.remoteCalls.map((call) => [call.auth?.kind, call.auth?.host]),
+        localCalls: fake.localCalls,
+      },
+      {
+        result: { kind: "pinned", tag: "formatter--v2.0.0", oid: "oid-2", version: "2.0.0" },
+        urls: [URL_SOURCE],
+        bundles: [["stored-credential", "example.com"]],
+        localCalls: [],
+      },
+    );
+  });
+
+  test("D-SG-09: a github marketplace lists its wire URL with the GitHub bundle", async (t) => {
+    // arrange
+    setGitHubBaseUrl(t, undefined);
+    const fake = createFakeSeam({ tags: [{ name: "formatter--v2.0.0", oid: "oid-2" }] });
+
+    // act
+    await probeMarketplaceTags(
+      options({ seam: fake.seam, marketplaceSource: GITHUB_SOURCE, auth: auth() }),
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      fake.remoteCalls.map((call) => [call.url, call.auth?.kind, call.auth?.host]),
+      [["https://github.com/acme/marketplace.git", "device-flow", "github.com"]],
+    );
+  });
+
+  test("D-SG-09: with no auth context, the remote listing runs without a bundle", async () => {
+    const fake = createFakeSeam({ tags: [] });
+
+    await probeMarketplaceTags(options({ seam: fake.seam, marketplaceSource: URL_SOURCE }));
+
+    assert.deepStrictEqual(fake.remoteCalls, [{ url: URL_SOURCE }]);
+  });
+
+  test("D-SG-09, D-10-18: two probes of one marketplace URL list once, keyed by the URL", async () => {
+    const fake = createFakeSeam({
+      tags: [
+        { name: "formatter--v2.0.0", oid: "oid-2" },
+        { name: "linter--v2.0.0", oid: "oid-3" },
+      ],
+    });
+    const tagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
+    const probe = (pluginName: string) =>
+      probeMarketplaceTags(
+        options({ pluginName, seam: fake.seam, marketplaceSource: URL_SOURCE, tagMemo }),
+      );
+
+    await probe("formatter");
+    await probe("linter");
+
+    assert.deepStrictEqual(
+      { calls: fake.remoteCalls.length, keys: [...tagMemo.keys()] },
+      { calls: 1, keys: [URL_SOURCE] },
+    );
+  });
+
+  test("D-10-18: a failed remote listing writes no memo entry", async () => {
+    const err = new Error("network");
+    const fake = createFakeSeam({ listingThrows: err });
+    const tagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
+
+    const result = await probeMarketplaceTags(
+      options({ seam: fake.seam, marketplaceSource: URL_SOURCE, tagMemo }),
+    );
+
+    assert.deepStrictEqual(
+      { result, memo: [...tagMemo] },
+      { result: { kind: "tag-listing-failed", cause: err }, memo: [] },
+    );
+  });
+
+  test("GHB-03: an invalid GitHub base from the listing rethrows instead of folding into the fallback", async () => {
+    const invalid = new InvalidGitHubBaseUrlError(
+      "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
+      "not-a-url",
+    );
+    const fake = createFakeSeam({
+      listingThrows: new Error("listing failed", { cause: invalid }),
+    });
+
+    const probing = probeMarketplaceTags(
+      options({ seam: fake.seam, marketplaceSource: GITHUB_SOURCE }),
+    );
+
+    await assert.rejects(probing, (error: unknown) => error === invalid);
+  });
+
+  test("SG-TRN-04: the highest satisfying version wins whatever order the listing prints, a tag at the bound included", async () => {
+    const fake = createFakeSeam({
+      tags: [
+        { name: "formatter--v3.0.0", oid: "oid-3" },
+        { name: "formatter--v2.0.0", oid: "oid-2" },
+        { name: "formatter--v2.5.0", oid: "oid-25" },
+        { name: "formatter--v1.9.0", oid: "oid-19" },
+      ],
+    });
+
+    const highest = await probeMarketplaceTags(
+      options({ seam: fake.seam, marketplaceSource: URL_SOURCE, range: ">=2.0.0 <3.0.0" }),
+    );
+    const atBound = await probeMarketplaceTags(
+      options({ seam: fake.seam, marketplaceSource: URL_SOURCE, range: "<=1.9.0" }),
+    );
+
+    assert.deepStrictEqual(
+      [highest, atBound],
+      [
+        { kind: "pinned", tag: "formatter--v2.5.0", oid: "oid-25", version: "2.5.0" },
+        { kind: "pinned", tag: "formatter--v1.9.0", oid: "oid-19", version: "1.9.0" },
+      ],
+    );
+  });
+});
+
+describe("probeMarketplaceTags on a hosted marketplace", () => {
+  test("TAGS-02: a hosted catalog has no repository, so it fails the listing and calls nothing", async () => {
+    const fake = createFakeSeam();
+
+    const result = await probeMarketplaceTags(
+      options({
+        seam: fake.seam,
+        marketplaceSource: "https://example.com/catalog/marketplace.json",
+      }),
+    );
+
+    assert.deepStrictEqual(
+      { result, calls: fake.remoteCalls.length + fake.localCalls.length },
+      {
+        result: {
+          kind: "tag-listing-failed",
+          cause: new Error("the marketplace has no git repository to read release tags from"),
+        },
+        calls: 0,
+      },
+    );
   });
 });

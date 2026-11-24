@@ -184,11 +184,12 @@ export const HOOKS_SCHEMA_TARGETS = [
 ] as const;
 
 /**
- * TAGS-01 / D-07-05: the local, network-free marketplace-tag probe and the
- * shared release-tag selection module its offline gate pins the exact
- * `platform/git.ts` (and `platform/`) import surface of.
+ * D-SG-09 / D-07-05: the marketplace-tag probe, which reads a git
+ * marketplace's tags from its remote, and the shared release-tag selection
+ * module; its gate pins the exact `platform/git.ts` (and `platform/`) import
+ * surface of each.
  */
-export const MARKETPLACE_TAG_PROBE_OFFLINE_TARGETS = [
+export const MARKETPLACE_TAG_PROBE_TARGETS = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts",
   "extensions/pi-claude-marketplace/domain/release-tag.ts",
 ] as const;

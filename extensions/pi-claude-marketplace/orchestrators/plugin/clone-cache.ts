@@ -291,10 +291,18 @@ async function checkoutGitDirCopy(
   staging: string,
   ref: string,
 ): Promise<void> {
+  await copyGitDir(gitDir, staging);
+  await gitOps.checkout({ dir: staging, ref, fromCopiedGitDir: true });
+}
+
+/**
+ * The copy half of `checkoutGitDirCopy`: `gitDir` copied into the empty
+ * staging dir `staging`, symlinks verbatim, with its index dropped.
+ */
+async function copyGitDir(gitDir: string, staging: string): Promise<void> {
   await mkdir(staging, { recursive: true });
   await cp(gitDir, path.join(staging, ".git"), { recursive: true, verbatimSymlinks: true });
   await rm(path.join(staging, ".git", "index"), { force: true });
-  await gitOps.checkout({ dir: staging, ref, fromCopiedGitDir: true });
 }
 
 /**
@@ -657,6 +665,16 @@ async function deriveMarketplaceUrl(
 }
 
 /**
+ * D-SG-09: the marketplace's own git source when it is a `github` or `url`
+ * marketplace, whose checkout is a depth-1 clone that may lack a tag's
+ * commit; undefined for a directory marketplace, whose repository holds it.
+ */
+function gitMarketplaceSource(storedSource: unknown): GitHubSource | UrlSource | undefined {
+  const source = parsePluginSource(storedSource);
+  return source.kind === "github" || source.kind === "url" ? source : undefined;
+}
+
+/**
  * D-SEED-03 / NFR-1 / NFR-10: seed ONE same-repo plugin mirror by copying the
  * marketplace checkout tree (including `.git`, so the origin remote is preserved
  * BY CONSTRUCTION -- SEED-05) into a staging dir, then an atomic same-FS rename
@@ -920,7 +938,10 @@ export async function resolveGitPluginRootWithSubdir(
  *
  * Construction (D-07-04, developer-confirmed): copy ONLY the marketplace's
  * `.git` dir into an otherwise-empty staging dir, then check the tag out
- * there. The tag is checked out inside a COPY's own gitdir, never against a
+ * there. D-SG-09: a `github` or `url` marketplace is a depth-1 clone, so
+ * between the copy and the checkout the copy fetches the tag's commit
+ * (`fetch --depth 1 origin <oid>`) with the marketplace host's auth bundle; a
+ * failed fetch cleans the staging dir and fails the copy. The tag is checked out inside a COPY's own gitdir, never against a
  * `gitdir` naming the marketplace clone -- verified against the installed
  * isomorphic-git source that a checkout writes `${gitdir}/index` regardless
  * of `noUpdateHead`, which would silently desync the marketplace clone's own
@@ -951,6 +972,12 @@ export async function materializeMarketplaceTagClone(args: {
   pathSource: PathSource;
   tagOid: string;
   gitOps?: GitOps;
+  /**
+   * D-SG-09: builds the auth bundle of a git marketplace's host for the tag
+   * commit's fetch. It runs only on a cold key of a git marketplace, so a
+   * warm copy and a directory marketplace build none.
+   */
+  resolveAuth?: (cloneUrl: string, kind: GitBackedSource["kind"]) => GitAuthBundle;
   onCloneCreated?: (key: string) => void;
 }): Promise<GitPluginRootResult> {
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
@@ -969,16 +996,26 @@ export async function materializeMarketplaceTagClone(args: {
   // content): no re-copy, no re-checkout.
   if (!(await pathExists(dest))) {
     const staging = await args.locations.sourcesStagingDir(randomUUID());
-    // GIT-04: the shared step checks the tag out of a copy of the
-    // marketplace's gitdir into an empty tree, so the checkout is the only
-    // thing that writes the work tree and it writes exactly the tag's tree.
+    // GIT-04: the tag is checked out of a copy of the marketplace's gitdir
+    // into an empty tree, so the checkout is the only thing that writes the
+    // work tree and it writes exactly the tag's tree. D-SG-09: a git
+    // marketplace is a depth-1 clone, so the copy first fetches the tag's
+    // commit from the marketplace remote; a directory marketplace's
+    // repository already holds it.
+    const remote = gitMarketplaceSource(args.marketplaceSource);
     try {
-      await checkoutGitDirCopy(
-        gitOps,
-        path.join(args.marketplaceRoot, ".git"),
-        staging,
-        args.tagOid,
-      );
+      await copyGitDir(path.join(args.marketplaceRoot, ".git"), staging);
+      if (remote !== undefined) {
+        await gitOps.fetchCommit({
+          dir: staging,
+          sha: args.tagOid,
+          ...(args.resolveAuth !== undefined && {
+            auth: args.resolveAuth(canonicalCloneUrl(remote), remote.kind),
+          }),
+        });
+      }
+
+      await gitOps.checkout({ dir: staging, ref: args.tagOid, fromCopiedGitDir: true });
     } catch (err) {
       const leak = await cleanupStaging(removalOps, staging, "marketplace tag clone staging");
       throw appendLeakToError(err, leak);

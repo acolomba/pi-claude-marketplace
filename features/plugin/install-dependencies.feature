@@ -701,6 +701,68 @@ Feature: Plugin install dependencies
       | ext@tools | 1.0.0                  | true    |
       | lib@tools | 2.0.0-{lib revision 2} | true    |
 
+  Scenario: Installing a plugin installs its constrained dependency from a url marketplace at the release tag the marketplace repository holds
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^2.0.0   |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" has a revision only the tag "lib--v2.0.0" reaches, offering these plugins:
+      | name | version |
+      | lib  | 2.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status    | reasons | scope   | version                  |
+      | tools            | project           | app@tools | app       | installed |         | project | 1.0.0                    |
+      | tools            | project           | lib@tools | lib@tools | installed |         | project | 2.0.0-{tools revision 1} |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version                  | enabled |
+      | app@tools | 1.0.0                    | true    |
+      | lib@tools | 2.0.0-{tools revision 1} | true    |
+
+  Scenario: Installing a plugin finds a release tag pushed after the marketplace add for its constrained dependency from a url marketplace
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^2.0.0   |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" has a revision only the tag "lib--v2.0.0" reaches, offering these plugins:
+      | name | version |
+      | lib  | 2.0.0   |
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status    | reasons | scope   | version                  |
+      | tools            | project           | app@tools | app       | installed |         | project | 1.0.0                    |
+      | tools            | project           | lib@tools | lib@tools | installed |         | project | 2.0.0-{tools revision 1} |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version                  | enabled |
+      | app@tools | 1.0.0                    | true    |
+      | lib@tools | 2.0.0-{tools revision 1} | true    |
+
   Scenario: Installing a plugin whose anthropic-plugin-directory dependency carries a version constraint installs the dependency's listed copy, not a release tag
     Given the git repository "dirp" holds these plugins:
       | name | version | path |

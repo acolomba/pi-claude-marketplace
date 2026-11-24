@@ -45,7 +45,10 @@ import type {
   UpdateConstraintVerdict,
 } from "./constraint-fold.ts";
 import type { AddressedDependency, ScopeDeclarationDetailOptions } from "./dependency-index.ts";
-import type { DependencyTagListingFailureReason } from "./dependency-tag-probe.ts";
+import type {
+  DependencyTagListingFailureReason,
+  DependencyTagProbeOptions,
+} from "./dependency-tag-probe.ts";
 
 /**
  * The declaration-walk and tag-probe operations this leaf composes,
@@ -63,6 +66,12 @@ export interface UpdateConstraintOptions {
   readonly marketplace: string;
   readonly entry: PluginEntry;
   readonly marketplaceRoot: string;
+  /**
+   * The marketplace record's stored source, which decides whether a `path`
+   * entry's tags are read from the marketplace remote or its checkout
+   * (D-SG-09).
+   */
+  readonly marketplaceSource: unknown;
   readonly state: ExtensionState;
   readonly locations: ScopedLocations;
   readonly seam?: UpdateConstraintSeam;
@@ -190,7 +199,8 @@ async function probeGitStageOne(
   range: string,
   holders: readonly ConstraintHolder[],
 ): Promise<UpdateConstraintVerdict> {
-  if (options.auth.notification === undefined) {
+  const auth = probeAuth(options);
+  if (auth === undefined) {
     return admitsRange(range, holders);
   }
 
@@ -198,22 +208,39 @@ async function probeGitStageOne(
     pluginName: options.plugin,
     source,
     range,
-    auth: {
-      ...options.auth.notification,
-      credentialOps: options.auth.credentialOps,
-      ...(options.auth.deviceFlowHttp !== undefined && {
-        deviceFlowHttp: options.auth.deviceFlowHttp,
-      }),
-      ...(options.auth.authMemo !== undefined && { authMemo: options.auth.authMemo }),
-    },
+    auth,
     ...(options.tagMemo !== undefined && { tagMemo: options.tagMemo }),
   });
   return decodeTagProbe(range, holders, probed);
 }
 
 /**
- * Stage one on a `path` entry source: probes the marketplace clone's own
- * local release tags -- no auth, no network (TAGS-01).
+ * The tag probes' auth context, built from the caller's notification context
+ * and credential ops, or undefined when the caller threads no `ctx`.
+ */
+function probeAuth(
+  options: UpdateConstraintOptions,
+): DependencyTagProbeOptions["auth"] | undefined {
+  if (options.auth.notification === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...options.auth.notification,
+    credentialOps: options.auth.credentialOps,
+    ...(options.auth.deviceFlowHttp !== undefined && {
+      deviceFlowHttp: options.auth.deviceFlowHttp,
+    }),
+    ...(options.auth.authMemo !== undefined && { authMemo: options.auth.authMemo }),
+  };
+}
+
+/**
+ * Stage one on a `path` entry source: probes the marketplace repository's
+ * release tags, from the marketplace remote for a git marketplace and from
+ * the checkout for a directory marketplace (TAGS-01, D-SG-09). A git
+ * marketplace's listing runs without a bundle when the caller threads no
+ * `ctx`.
  */
 async function probePathStageOne(
   options: UpdateConstraintOptions,
@@ -221,14 +248,17 @@ async function probePathStageOne(
   range: string,
   holders: readonly ConstraintHolder[],
 ): Promise<UpdateConstraintVerdict> {
+  const auth = probeAuth(options);
   const probed = await seam.probeMarketplaceTags({
     pluginName: options.plugin,
     marketplaceRoot: options.marketplaceRoot,
+    marketplaceSource: options.marketplaceSource,
     range,
     ...(options.marketplaceTagMemo !== undefined && { tagMemo: options.marketplaceTagMemo }),
+    ...(auth !== undefined && { auth }),
   });
 
-  // D-10-14 / D-10-16: an unreadable local listing and an empty one are the
+  // D-10-14 / D-10-16: an unreadable listing and an empty one are the
   // same user-visible fact, so both fall back to the marketplace's CURRENT
   // copy and leave the outcome to a later stage instead of holding the
   // update the way an unreachable remote does above. The git arm's own

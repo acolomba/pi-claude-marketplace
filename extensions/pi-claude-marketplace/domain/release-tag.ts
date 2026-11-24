@@ -1,15 +1,14 @@
 // domain/release-tag.ts
 //
 // D-07-05: the release-tag selection logic. ONE evaluator serves both the
-// network-touching probe (`orchestrators/plugin/dependency-tag-probe.ts`) and
-// the local, network-free probe (`orchestrators/plugin/marketplace-tag-probe.ts`),
-// so the local probe never has to import a network leaf to reach it.
+// dependency probe (`orchestrators/plugin/dependency-tag-probe.ts`) and the
+// marketplace probe (`orchestrators/plugin/marketplace-tag-probe.ts`), so
+// neither probe has to import the other to reach it.
 //
 // `ReleaseTagCandidate` is a structural `{ name, oid }` shape rather than
-// `platform/git.ts`'s `RemoteTag` type, so this module -- and the local probe
-// that builds candidates from `listTags` + `resolveTagOid` -- stays free of
-// any transport concern. `RemoteTag` already satisfies this shape, so the
-// network probe passes its listing through unchanged.
+// `platform/git.ts`'s `RemoteTag` type, so this module stays free of any
+// transport concern. `RemoteTag` already satisfies this shape, so both probes
+// pass their listings through unchanged.
 
 import { gt, valid } from "semver";
 
