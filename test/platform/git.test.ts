@@ -1373,9 +1373,14 @@ function failingAuthGitProcess(
   };
 }
 
-/** The helper of the one-shot pairs, after its `credential.<origin>.helper=` key. */
-const ONE_SHOT_HELPER =
-  /^!f\(\) \{ test "\$1" = get && cat '[^']+\/git-credential-[^/']+\/credential'; \}; f$/;
+/** The helper of the one-shot pairs for `host`, after its `credential.<origin>.helper=` key. */
+function oneShotHelper(host: string): RegExp {
+  return new RegExp(
+    String.raw`^!f\(\) \{ test "\$1" = get \|\| return 0; h=; while .*; done; test "\$h" = '` +
+      host.replaceAll(".", String.raw`\.`) +
+      String.raw`' && cat '[^']+/git-credential-[^/']+/credential'; \}; f$`,
+  );
+}
 
 /** The `-c` pairs of the one-shot helper for `origin`, as the retry carries them after the request's own. */
 function assertOneShotPairs(config: readonly string[] | undefined, origin: string): void {
@@ -1384,7 +1389,7 @@ function assertOneShotPairs(config: readonly string[] | undefined, origin: strin
   assert.strictEqual(config?.length, 2);
   assert.strictEqual(config[0], key);
   assert.ok(helper.startsWith(key), `${helper} is not keyed to ${origin}`);
-  assert.match(helper.slice(key.length), ONE_SHOT_HELPER);
+  assert.match(helper.slice(key.length), oneShotHelper(new URL(origin).host));
 }
 
 describe("D-SG-14 and GAUTH-04: an auth failure of a remote request", () => {
@@ -1758,6 +1763,42 @@ describe("D-SG-14 and GAUTH-04: an auth failure of a remote request", () => {
       },
       { signIns: 0, fetchConfigs: [[]] },
     );
+  });
+
+  test("D-1-03: a user's insteadOf that sends a github.com request to another host gets no token from the retry", async (t) => {
+    // arrange
+    const standIn = await credentialStandIn(t);
+    const rewriting = tracingGitProcess(
+      await hermeticGitProcess(t, {
+        GIT_SSL_CAINFO: standIn.host.certificatePath,
+        GIT_CONFIG_COUNT: "1",
+        GIT_CONFIG_KEY_0: `url.${standIn.url}.insteadOf`,
+        GIT_CONFIG_VALUE_0: GITHUB_TOOLS_URL,
+      }),
+    );
+    const bundle = deviceFlowBundle("github.com", {
+      ok: true,
+      cred: { username: "acme", password: RETRY_TOKEN },
+    });
+
+    // act
+    const resolution = resolveRemoteRef(
+      { url: GITHUB_TOOLS_URL, auth: bundle.auth },
+      rewriting.gitProcess,
+    );
+
+    // assert
+    await assert.rejects(resolution, (error: unknown) => {
+      assert.ok(error instanceof GitCommandError);
+      assert.deepStrictEqual(error.failure, { kind: "https-auth", detail: "no-credential" });
+      return true;
+    });
+    assert.deepStrictEqual(
+      { signIns: bundle.signIns(), runs: rewriting.requests.length },
+      { signIns: 1, runs: 2 },
+    );
+    assertOneShotPairs(rewriting.requests[1]?.config, "https://github.com");
+    assert.deepStrictEqual(await oneShotDirectoriesLeft(), []);
   });
 
   for (const url of [`http://${HOST}/owner/repo.git`, "/srv/git/repo.git"]) {

@@ -8,9 +8,11 @@
 // to the origin of the bundle's host, `credential.<origin>.helper`: an empty
 // one, which drops every helper configured before it for that origin, then a
 // shell helper that answers git's `get` with that file and ignores `store` and
-// `erase`. git asks a helper keyed to an origin only for a request to that
-// origin, so a request to any other host never gets the token (D-1-03,
-// T-79-04). The file is removed when the retry settles.
+// `erase`. git matches a helper keyed to an origin against the URL it really
+// contacts, after an `insteadOf` rewrite or a redirect, so a request to any
+// other host never gets the token (D-1-03, T-79-04). The helper also reads the
+// `host=` line git writes to it and prints nothing unless it names the
+// origin's host. The file is removed when the retry settles.
 //
 // The file lives in a fresh directory made with `mkdtemp` (mode 0700) under
 // the user scope's extension root, beside the neutral directory. The neutral
@@ -80,6 +82,17 @@ function helperKey(origin: string): string {
 }
 
 /**
+ * The shell helper that answers git's `get` with `file`, and only when the
+ * `host=` line among the attributes git writes on stdin names `host`, the
+ * origin's `host[:port]` as git writes it. `store` and `erase` get nothing.
+ */
+function helperScript(host: string, file: string): string {
+  const readHost =
+    'h=; while IFS= read -r l && test -n "$l"; do case "$l" in host=*) h="${l#host=}";; esac; done';
+  return `!f() { test "$1" = get || return 0; ${readHost}; test "$h" = ${shellQuoted(host)} && cat ${shellQuoted(file)}; }; f`;
+}
+
+/**
  * Writes `credential`, the one a git run gets, with an absent value left out,
  * to a 0600 file in a fresh 0700 directory under
  * `parent()`, runs `run` with the two `-c` pairs that make git read it for a
@@ -94,6 +107,7 @@ export async function withOneShotCredential<T>(
   parent: () => string = extensionRoot,
 ): Promise<T> {
   const key = helperKey(origin);
+  const { host } = new URL(origin);
   const lines = credentialLines(credential);
   const root = parent();
   await mkdir(root, { recursive: true });
@@ -101,10 +115,7 @@ export async function withOneShotCredential<T>(
   try {
     const file = path.join(directory, FILE_NAME);
     await writeFile(file, lines, { mode: FILE_MODE, flag: "wx" });
-    return await run([
-      `${key}=`,
-      `${key}=!f() { test "$1" = get && cat ${shellQuoted(file)}; }; f`,
-    ]);
+    return await run([`${key}=`, `${key}=${helperScript(host, file)}`]);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

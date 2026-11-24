@@ -10,6 +10,11 @@ import { createGitTestDirectory, runSystemGit } from "./git-test-repository.ts";
 
 const CREDENTIAL = { username: "x-access-token", password: "gho_one-shot-secret" } as const;
 const ORIGIN = "https://git.example.invalid";
+const helperKey = "credential.https://git.example.invalid.helper";
+
+/** The helper's start: `get` only, then the `host=` line of git's input read into `h`. */
+const HOST_CHECKED_HELPER_START =
+  '!f() { test "$1" = get || return 0; h=; while IFS= read -r l && test -n "$l"; do case "$l" in host=*) h="${l#host=}";; esac; done; ';
 
 /** The file the helper pair names, read back from its single-quoted shell word. */
 function helperFile(config: readonly string[]): string {
@@ -66,7 +71,7 @@ describe("withOneShotCredential", () => {
       },
       {
         first: "credential.https://git.example.invalid.helper=",
-        second: `credential.https://git.example.invalid.helper=!f() { test "$1" = get && cat '${seen.file}'; }; f`,
+        second: `credential.https://git.example.invalid.helper=${HOST_CHECKED_HELPER_START}test "$h" = 'git.example.invalid' && cat '${seen.file}'; }; f`,
         directoryParent: parent,
         directoryName: true,
         contents: "username=x-access-token\npassword=gho_one-shot-secret\n",
@@ -171,6 +176,39 @@ describe("withOneShotCredential", () => {
       ORIGIN,
       async (config) => {
         const pairs = ["-c", ownHelper, ...config.flatMap((pair) => ["-c", pair])];
+        const fill = (host: string): Promise<string> =>
+          runSystemGit(
+            { cwd: home, home, input: `protocol=https\nhost=${host}\n\n` },
+            ...pairs,
+            "credential",
+            "fill",
+          );
+        return { origin: await fill("git.example.invalid"), other: await fill("github.com") };
+      },
+      () => parent,
+    );
+
+    // assert
+    assert.deepStrictEqual(filled, {
+      origin:
+        "protocol=https\nhost=git.example.invalid\nusername=x-access-token\npassword=gho_one-shot-secret",
+      other: "protocol=https\nhost=github.com\nusername=own\npassword=own-secret",
+    });
+  });
+
+  test("D-1-03: the helper itself prints nothing for a host other than the origin's", async (t) => {
+    // arrange
+    const parent = await parentDirectory(t);
+    const home = await createGitTestDirectory(t, { boundary: "local" });
+    const ownHelper = "credential.helper=!f() { echo username=own; echo password=own-secret; }; f";
+
+    // act
+    const filled = await withOneShotCredential(
+      CREDENTIAL,
+      ORIGIN,
+      async (config) => {
+        const script = (config[1] ?? "").slice(`${helperKey}=`.length);
+        const pairs = ["-c", `credential.helper=${script}`, "-c", ownHelper];
         const fill = (host: string): Promise<string> =>
           runSystemGit(
             { cwd: home, home, input: `protocol=https\nhost=${host}\n\n` },
