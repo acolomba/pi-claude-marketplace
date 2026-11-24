@@ -98,7 +98,6 @@
 //  then, when stale, a re-clone into sources-staging/ and a swap through
 //  sources-backup/. NO `pull`, NO in-place fetch.
 
-import path from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
 import { networkCloneUrl } from "../../domain/clone-key.ts";
@@ -160,9 +159,12 @@ import { surfaceCascadeStagingDiagnostics } from "../plugin/staging-diagnostics.
 
 import {
   DEFAULT_RENAME_OPS,
+  installedRootsInside,
   KEEP_MARKETPLACE_ON_FAILURE_VARIABLE,
   keepMarketplaceOnFailure,
+  MARKETPLACE_MANIFEST_MARKER,
   refreshCloneBySwap,
+  swapCloneUrl,
   type CloneSwapResult,
   type RenameOps,
 } from "./clone-swap.ts";
@@ -484,24 +486,6 @@ function parseBaseline(name: string, text: string | undefined): unknown {
   }
 }
 
-/** D-SG-10: the file whose presence makes a marketplace checkout valid. */
-const MARKETPLACE_MANIFEST_MARKER = path.join(".claude-plugin", "marketplace.json");
-
-/**
- * D-SG-10: the URL a refresh clones from: the live checkout's recorded
- * `origin`, which is the URL the checkout was cloned from, or the source's
- * clone URL when the checkout records none. An earlier version recorded some
- * url sources under a URL that is not their clone URL.
- */
-async function swapCloneUrl(
-  liveDir: string,
-  source: GitHubSource | UrlSource,
-  gitOps: GitOps,
-): Promise<string> {
-  const remotes = await gitOps.listRemotes({ dir: liveDir });
-  return remotes.kind === "origin" ? remotes.url : networkCloneUrl(source);
-}
-
 /**
  * The auth bundle a refresh of `source` asks and clones with. github: AUTH-02
  * / D-79-05: buildGitHubAuth binds github.com with the GitHub provider's
@@ -553,26 +537,6 @@ function attachStoredCredentialCause(
 }
 
 /**
- * D-PL9-10 / NFR-10: the roots, relative to `liveDir`, of the scope's installed
- * plugins whose plugin root lies inside that checkout, so the swap carries
- * their packages over. A root outside the checkout is not the swap's.
- */
-function installedRootsIn(
-  liveDir: string,
-  marketplaces: ExtensionState["marketplaces"],
-): readonly string[] {
-  return Object.values(marketplaces)
-    .flatMap((marketplace) => Object.values(marketplace.plugins))
-    .map((plugin) => path.relative(liveDir, plugin.resolvedSource))
-    .filter(
-      (pluginRoot) =>
-        pluginRoot !== ".." &&
-        !pluginRoot.startsWith(`..${path.sep}`) &&
-        !path.isAbsolute(pluginRoot),
-    );
-}
-
-/**
  * D-SG-10: refresh a github or url checkout by `ls-remote`, re-clone, and swap,
  * inside the caller's state lock (Q13). D-SG-15: a valid checkout whose remote
  * cannot be reached is kept when the keep variable is true.
@@ -597,7 +561,8 @@ async function refreshGitSource(
       auth,
       liveMarker: MARKETPLACE_MANIFEST_MARKER,
       keepOnUnreachable: args.keepOnFailure,
-      carryOver: installedRootsIn(liveDir, marketplaces),
+      ownershipMarker: true,
+      carryOver: installedRootsInside(liveDir, marketplaces),
       onReplaced,
       removalOps: args.removalOps,
       renameOps: args.renameOps,

@@ -314,8 +314,8 @@ function createGitOps(initial: GitOpsAdapterOptions = {}) {
       get cloneCalls() {
         return git.state.calls.clone;
       },
-      get fetchCalls() {
-        return git.state.calls.fetch;
+      get resolveRemoteRefCalls() {
+        return git.state.calls.resolveRemoteRef;
       },
     },
   };
@@ -4389,7 +4389,11 @@ test("plugin info manifest absent: INFO-12 / NFR-5: `info --fetch` on a manifest
 
     // assert
     assert.equal(gitState.cloneCalls.length, 0, "INFO-12: the state-only arm must not clone");
-    assert.equal(gitState.fetchCalls.length, 0, "INFO-12: the state-only arm must not fetch");
+    assert.equal(
+      gitState.resolveRemoteRefCalls.length,
+      0,
+      "INFO-12: the state-only arm must not ask the remote",
+    );
     assert.equal(
       credState.fillCalls.length,
       0,
@@ -4443,7 +4447,11 @@ test("plugin info manifest absent: INFO-12 / NFR-5: bare `info` on a manifest-ab
 
     // assert
     assert.equal(gitState.cloneCalls.length, 0, "INFO-12: bare info must not clone");
-    assert.equal(gitState.fetchCalls.length, 0, "INFO-12: bare info must not fetch");
+    assert.equal(
+      gitState.resolveRemoteRefCalls.length,
+      0,
+      "INFO-12: bare info must not ask the remote",
+    );
     assert.equal(credState.fillCalls.length, 0, "INFO-12: bare info must not read a credential");
     assert.equal(
       credState.approveCalls.length,
@@ -4489,7 +4497,11 @@ test("plugin info manifest absent: INFO-12 / NFR-5: a git-source-shaped manifest
 
     // assert
     assert.equal(gitState.cloneCalls.length, 0, "INFO-12: a remote-shaped record must not clone");
-    assert.equal(gitState.fetchCalls.length, 0, "INFO-12: a remote-shaped record must not fetch");
+    assert.equal(
+      gitState.resolveRemoteRefCalls.length,
+      0,
+      "INFO-12: a remote-shaped record must not ask the remote",
+    );
     assert.equal(
       credState.fillCalls.length,
       0,
@@ -4555,7 +4567,11 @@ test("plugin info manifest absent: ENBL-17 / NFR-5: a DISABLED manifest-absent r
 
     // assert
     assert.equal(gitState.cloneCalls.length, 0, "ENBL-17: the disabled arm must not clone");
-    assert.equal(gitState.fetchCalls.length, 0, "ENBL-17: the disabled arm must not fetch");
+    assert.equal(
+      gitState.resolveRemoteRefCalls.length,
+      0,
+      "ENBL-17: the disabled arm must not ask the remote",
+    );
     assert.equal(
       credState.fillCalls.length,
       0,
@@ -4639,9 +4655,9 @@ test("plugin info manifest absent: ENBL-17 / NFR-5: `info --fetch` on a DISABLED
       "ENBL-17: a disabled declared record must not clone",
     );
     assert.equal(
-      gitState.fetchCalls.length,
+      gitState.resolveRemoteRefCalls.length,
       0,
-      "ENBL-17: a disabled declared record must not fetch",
+      "ENBL-17: a disabled declared record must not ask the remote",
     );
     assert.equal(
       credState.fillCalls.length,
@@ -6715,7 +6731,11 @@ test("NFR-5: bare info (no --fetch) on a COLD git plugin makes ZERO git-seam cal
 
     // assert
     assert.equal(gitState.cloneCalls.length, 0, "bare info must not clone (network-free)");
-    assert.equal(gitState.fetchCalls.length, 0, "bare info must not fetch (network-free)");
+    assert.equal(
+      gitState.resolveRemoteRefCalls.length,
+      0,
+      "bare info must not ask the remote (network-free)",
+    );
     const msg = notifications[0]!.message;
     assert.match(msg, /◌ gplug v1\.0\.0 \(remote\)/, msg);
   });
@@ -6764,7 +6784,7 @@ test("OUT-05 / NFR-5 / OUT-03: a COLD git plugin whose entry declares `defaultEn
     // bytes, so the row cannot testify about its own source.
     // assert
     assert.equal(gitState.cloneCalls.length, 0, "the claim must cost no clone");
-    assert.equal(gitState.fetchCalls.length, 0, "the claim must cost no fetch");
+    assert.equal(gitState.resolveRemoteRefCalls.length, 0, "the claim must cost no ls-remote");
     assert.deepStrictEqual(notifications, [
       {
         message: [
@@ -6880,7 +6900,7 @@ test("GHB-03: info --fetch on a not-installed GitHub plugin fails the command on
 
     // assert
     assert.deepStrictEqual(gitState.cloneCalls, []);
-    assert.deepStrictEqual(gitState.fetchCalls, []);
+    assert.deepStrictEqual(gitState.resolveRemoteRefCalls, []);
     verify(ctx);
   });
 });
@@ -6931,7 +6951,7 @@ test("GHB-03: info --fetch on an installed GitHub plugin fails the command on an
 
     // assert
     assert.deepStrictEqual(gitState.cloneCalls, []);
-    assert.deepStrictEqual(gitState.fetchCalls, []);
+    assert.deepStrictEqual(gitState.resolveRemoteRefCalls, []);
     verify(ctx);
   });
 });
@@ -6979,7 +6999,7 @@ test("GHB-04 / NFR-5: bare info on a GitHub plugin ignores an invalid base", asy
       },
     ]);
     assert.deepStrictEqual(gitState.cloneCalls, []);
-    assert.deepStrictEqual(gitState.fetchCalls, []);
+    assert.deepStrictEqual(gitState.resolveRemoteRefCalls, []);
   });
 });
 
@@ -7048,7 +7068,7 @@ test("NFR-5: info --fetch on an installed pinned GitHub plugin with a warm clone
       },
     ]);
     assert.deepStrictEqual(gitState.cloneCalls, []);
-    assert.deepStrictEqual(gitState.fetchCalls, []);
+    assert.deepStrictEqual(gitState.resolveRemoteRefCalls, []);
   });
 });
 
@@ -7139,7 +7159,7 @@ test("FTCH-03 / MIRR-02: info --fetch on an UNPINNED not-installed source clones
     );
 
     // An UNPINNED source (no sha) drives the URL-keyed mirror path. The mock
-    // pre-seeds refs so refreshGitHubClone's default-branch form resolves:
+    // pre-seeds refs so the mirror's default-branch reads resolve:
     // refs/remotes/origin/HEAD + refs/heads/main + HEAD all read MIRROR_HEAD.
     const MIRROR_HEAD = "fedcba9876543210fedcba9876543210fedcba98";
     await seedPathMarketplace({
@@ -7182,7 +7202,11 @@ test("FTCH-03 / MIRR-02: info --fetch on an UNPINNED not-installed source clones
     // assert
     assert.equal(gitState.cloneCalls.length, 1);
     assert.equal(gitState.cloneCalls[0]?.url, "https://example.com/repo.git");
-    assert.equal(gitState.fetchCalls.length, 0, "a fresh clone is not fetched again (MIRR-02)");
+    assert.equal(
+      gitState.resolveRemoteRefCalls.length,
+      0,
+      "a fresh clone is not checked again (MIRR-02)",
+    );
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
     assert.match(msg, /○ gplug v1\.0\.0 \(available\)/, msg);

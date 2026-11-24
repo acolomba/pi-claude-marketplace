@@ -55,6 +55,51 @@ Feature: Plugin fetch
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+    Then the fetched copy of the plugin "ghp" in the project scope holds revision 2 of its repository
+
+  Scenario: Fetching a git-source plugin whose mirror cannot be moved aside fails as permission denied, and the next fetch replaces it
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@gits --scope project"
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 2.0.0   |      |
+    Given the folder that holds the plugin mirrors of the project scope is read-only
+    When the user runs "/claude:plugin fetch ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status | reasons           | scope   | cause chain                                                                                                                                                             | cause truncated | leaks | rollback partial |
+      | gits             | project           | ghp@gits | ghp  | failed | permission denied | project | Could not replace the plugin mirror because it is in use; the existing copy was kept and the next command will try again., {read-only plugin mirror folder rename error} | false           |       |                  |
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+    Then the git-source plugin "ghp" installed in the project scope runs revision 1 of its repository
+    When the folder that holds the plugin mirrors of the project scope becomes writable again
+    When the user runs "/claude:plugin fetch ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status    | reasons | version |
+      | gits             | project           | ghp@gits | ghp  | available |         | 2.0.0   |
     Then the fetched copy of the plugin "ghp" in the project scope holds revision 2 of its repository
 
   Scenario: A fetch installs no new version, so the plugin list shows the installed one as upgradable

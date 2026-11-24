@@ -1,6 +1,16 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs";
-import { chmod, mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
@@ -31,6 +41,7 @@ import { saveState } from "../../../extensions/pi-claude-marketplace/persistence
 import {
   GitCommandError,
   PinnedCommitMissingError,
+  PluginMirrorInUseError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { MISSING_OID } from "../../platform/git-ops-contract.ts";
@@ -46,12 +57,14 @@ import {
   systemGitOps,
 } from "../../platform/system-git-ops.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
+import { marketplaceRecord, pluginRecord } from "../scope-state-seeds.ts";
 
 import type {
   GitBackedSource,
   GitSubdirSource,
   UrlSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import type { RenameOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/clone-swap.ts";
 import type {
   GitAuthBundle,
   GitOps,
@@ -130,9 +143,12 @@ function createGitOps(initial: GitOpsAdapterOptions = {}) {
         git.state.head = DEFAULT_CLONE_OID;
         git.state.branch = "main";
       }
-    },
-    async fetch(options) {
-      await git.gitOps.fetch(options);
+
+      // A clone of a ref checks out the commit the remote advertises for it.
+      const refOid = options.ref === undefined ? undefined : git.state.remoteRefs[options.ref];
+      if (refOid !== undefined) {
+        git.state.head = refOid;
+      }
     },
     async checkout(options) {
       if (initial.checkoutThrows !== undefined) {
@@ -172,11 +188,8 @@ function createGitOps(initial: GitOpsAdapterOptions = {}) {
     gitOps,
     state: Object.assign(git.state, {
       cloneCalls: git.state.calls.clone,
-      fetchCalls: git.state.calls.fetch,
-      forceUpdateRefCalls: git.state.calls.forceUpdateRef,
       checkoutCalls: git.state.calls.checkout,
       resolveRefCalls: git.state.calls.resolveRef,
-      currentBranchCalls: git.state.calls.currentBranch,
       resolveRemoteRefCalls: git.state.calls.resolveRemoteRef,
     }),
   };
@@ -1234,10 +1247,9 @@ void test("MURL-09: materializePluginClone makes exactly one clone attempt and a
 
 const MIRROR_HEAD = "fedcba9876543210fedcba9876543210fedcba98";
 
-// A default-branch mirror mock: the mock's clone seeds refs/heads/main + head;
-// refreshGitHubClone's default-branch form (ref undefined) needs
-// refs/remotes/origin/HEAD to resolve, so seed remoteRefs accordingly. HEAD
-// reads back MIRROR_HEAD.
+// A default-branch mirror double: the double's clone seeds refs/heads/main and
+// HEAD, the remote's HEAD is the same commit, so a warm mirror is current.
+// HEAD reads back MIRROR_HEAD.
 function mirrorGitOps(): ReturnType<typeof createGitOps> {
   return createGitOps({
     head: MIRROR_HEAD,
@@ -1269,7 +1281,11 @@ void test("MIRR-01: mirror ABSENT materializes into staging then renames to plug
   assert.match(path.basename(pluginRoot), /^[0-9a-f]{12}$/, "bare 12-hex key, no sha suffix");
   assert.equal(state.cloneCalls.length, 1, "MURL-09: exactly one clone attempt");
   assert.equal(state.cloneCalls[0]?.url, "https://example.com/repo");
-  assert.equal(state.fetchCalls.length, 0, "a just-cloned mirror is not fetched again");
+  assert.equal(
+    state.resolveRemoteRefCalls.length,
+    0,
+    "a just-cloned mirror is not checked against the remote again",
+  );
   // The mirror tracks a moving ref -- it MUST NOT checkout a fixed 40-hex pin.
   assert.ok(
     !state.checkoutCalls.some((c) => /^[a-f0-9]{40}$/i.test(c.ref)),
@@ -1324,37 +1340,394 @@ void test("MURL-09: materializeOrRefreshPluginMirror makes exactly one clone att
   assert.equal(state.cloneCalls[0]?.url, "https://example.com/repo");
 });
 
-void test("MIRR-02: mirror PRESENT (warm) refreshes in place via refreshGitHubClone rather than short-circuiting", async (t) => {
+void test("MIRR-02 / D-SG-10: a warm mirror at the remote's commit is checked with one ls-remote and not cloned again", async (t) => {
+  // arrange
   const locations = await freshLocations(t);
   const { gitOps, state } = mirrorGitOps();
-
-  await materializeOrRefreshPluginMirror({
+  const mirrorArgs = {
     auth: publicCloneAuth(),
     locations,
     cloneUrl: "https://example.com/repo",
     networkUrl: "https://example.com/repo",
     gitOps,
-  });
-  const fetchesAfterFirst = state.fetchCalls.length;
-  const clonesAfterFirst = state.cloneCalls.length;
+  };
+  await materializeOrRefreshPluginMirror(mirrorArgs);
 
-  const second = await materializeOrRefreshPluginMirror({
-    auth: publicCloneAuth(),
-    locations,
-    cloneUrl: "https://example.com/repo",
-    networkUrl: "https://example.com/repo",
-    gitOps,
-  });
+  // act
+  const second = await materializeOrRefreshPluginMirror(mirrorArgs);
 
-  assert.equal(state.cloneCalls.length, clonesAfterFirst, "warm mirror does NOT re-clone");
-  assert.ok(
-    state.fetchCalls.length > fetchesAfterFirst,
-    "warm mirror refreshes: refreshGitHubClone fetched again",
+  // assert
+  assert.deepStrictEqual(
+    {
+      clones: state.cloneCalls.length,
+      checks: state.resolveRemoteRefCalls,
+      resolvedSha: second.resolvedSha,
+    },
+    {
+      clones: 1,
+      checks: [{ url: "https://example.com/repo", auth: mirrorArgs.auth }],
+      resolvedSha: MIRROR_HEAD,
+    },
   );
-  assert.equal(second.resolvedSha, MIRROR_HEAD);
 });
 
-void test("D-18-04: a present mirror read with refresh: false keeps its HEAD and fetches nothing", async (t) => {
+const MIRROR_COMMIT_A = "a".repeat(40);
+const MIRROR_COMMIT_B = "b".repeat(40);
+
+/** A mirror tree whose `tree.txt` names `revision`, with a readable `.git/HEAD`. */
+async function writeMirrorTree(dir: string, revision: string): Promise<void> {
+  await mkdir(path.join(dir, ".git"), { recursive: true });
+  await writeFile(path.join(dir, ".git", "HEAD"), "ref: refs/heads/main\n");
+  await writeFile(path.join(dir, "tree.txt"), `${revision}\n`);
+}
+
+/**
+ * D-SG-10: a warm mirror at commit A in `plugin-clones/<key>`, and a remote
+ * whose clone writes the tree of `remoteHead`, the commit its `HEAD` names.
+ */
+async function warmMirror(
+  t: TestContext,
+  options: { readonly remoteHead: string; readonly cloneError?: Error },
+): Promise<{
+  readonly locations: ScopedLocations;
+  readonly mirrorRoot: string;
+  readonly backupDir: string;
+  readonly git: ReturnType<typeof createGitOpsFake>;
+}> {
+  const locations = await freshLocations(t);
+  const key = pluginMirrorKey("https://example.com/repo");
+  const mirrorRoot = await locations.pluginCloneDir(key);
+  await writeMirrorTree(mirrorRoot, "A");
+  const remote = await mkdtemp(path.join(tmpdir(), "clone-cache-remote-"));
+  t.after(() => rm(remote, { recursive: true, force: true }));
+  await writeMirrorTree(remote, options.remoteHead === MIRROR_COMMIT_A ? "A" : "B");
+  const git = createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: ALLOWED_CLONE_CACHE_REMOTES,
+    initialOid: MIRROR_COMMIT_A,
+    remoteHead: options.remoteHead,
+    cloneFixture: { boundary: "local", sourceDir: remote },
+    ...(options.cloneError === undefined ? {} : { cloneError: options.cloneError }),
+  });
+  return { locations, mirrorRoot, backupDir: await locations.pluginCloneBackupDir(key), git };
+}
+
+async function treeOf(mirrorRoot: string): Promise<string> {
+  return readFile(path.join(mirrorRoot, "tree.txt"), "utf8");
+}
+
+async function entriesOf(dir: string): Promise<string[]> {
+  return (await pathExists(dir)) ? (await readdir(dir)).sort() : [];
+}
+
+function warmMirrorArgs(
+  mirror: Awaited<ReturnType<typeof warmMirror>>,
+  overrides: { readonly renameOps?: RenameOps } = {},
+): Parameters<typeof materializeOrRefreshPluginMirror>[0] {
+  return {
+    auth: publicCloneAuth(),
+    locations: mirror.locations,
+    cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
+    gitOps: mirror.git.gitOps,
+    ...overrides,
+  };
+}
+
+void test("D-SG-10: a warm mirror whose remote moved is cloned into staging and swapped in through its backup", async (t) => {
+  // arrange
+  const mirror = await warmMirror(t, { remoteHead: MIRROR_COMMIT_B });
+
+  // act
+  const refreshed = await materializeOrRefreshPluginMirror(warmMirrorArgs(mirror));
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      refreshed,
+      refReads: mirror.git.state.calls.resolveRef,
+      checks: mirror.git.state.calls.resolveRemoteRef.map(({ url, ref }) => ({ url, ref })),
+      cloneParents: mirror.git.state.calls.clone.map(({ dir }) => path.dirname(dir)),
+      tree: await treeOf(mirror.mirrorRoot),
+      backups: await entriesOf(path.dirname(mirror.backupDir)),
+      staging: await entriesOf(path.join(mirror.locations.extensionRoot, "sources-staging")),
+      gitEntries: await entriesOf(path.join(mirror.mirrorRoot, ".git")),
+    },
+    {
+      refreshed: { pluginRoot: mirror.mirrorRoot, resolvedSha: MIRROR_COMMIT_B },
+      refReads: [
+        { dir: mirror.mirrorRoot, ref: "HEAD" },
+        { dir: mirror.mirrorRoot, ref: "HEAD" },
+      ],
+      checks: [{ url: "https://example.com/repo", ref: undefined }],
+      cloneParents: [path.join(mirror.locations.extensionRoot, "sources-staging")],
+      tree: "B\n",
+      backups: [],
+      staging: [],
+      gitEntries: ["HEAD"],
+    },
+  );
+});
+
+void test("D-SG-10: a warm mirror with a ref asks the remote for that ref and re-clones that branch alone", async (t) => {
+  // arrange
+  const mirror = await warmMirror(t, { remoteHead: MIRROR_COMMIT_B });
+
+  // act
+  await materializeOrRefreshPluginMirror({ ...warmMirrorArgs(mirror), ref: "main" });
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      checks: mirror.git.state.calls.resolveRemoteRef.map(({ ref }) => ref),
+      clones: mirror.git.state.calls.clone.map(({ ref, singleBranch }) => ({ ref, singleBranch })),
+    },
+    { checks: ["main"], clones: [{ ref: "main", singleBranch: true }] },
+  );
+});
+
+void test("D-SG-10: a warm mirror at the remote's commit is left as it is with no clone and no write", async (t) => {
+  // arrange
+  const mirror = await warmMirror(t, { remoteHead: MIRROR_COMMIT_A });
+
+  // act
+  const refreshed = await materializeOrRefreshPluginMirror(warmMirrorArgs(mirror));
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      refreshed,
+      clones: mirror.git.state.calls.clone,
+      tree: await treeOf(mirror.mirrorRoot),
+      extensionRoot: await entriesOf(mirror.locations.extensionRoot),
+    },
+    {
+      refreshed: { pluginRoot: mirror.mirrorRoot, resolvedSha: MIRROR_COMMIT_A },
+      clones: [],
+      tree: "A\n",
+      extensionRoot: ["plugin-clones"],
+    },
+  );
+});
+
+void test("D-SG-10 / MA-9: a failed re-clone leaves the mirror untouched, removes its staging, and reaches the caller", async (t) => {
+  // arrange
+  const cloneError = new GitCommandError(
+    { kind: "network" },
+    { operation: "clone --depth", exitCode: 128 },
+  );
+  const mirror = await warmMirror(t, { remoteHead: MIRROR_COMMIT_B, cloneError });
+
+  // act & assert
+  await assert.rejects(
+    materializeOrRefreshPluginMirror(warmMirrorArgs(mirror)),
+    (error: unknown) => error === cloneError,
+  );
+  assert.deepStrictEqual(
+    {
+      tree: await treeOf(mirror.mirrorRoot),
+      staging: await entriesOf(path.join(mirror.locations.extensionRoot, "sources-staging")),
+      backups: await entriesOf(path.dirname(mirror.backupDir)),
+    },
+    { tree: "A\n", staging: [], backups: [] },
+  );
+});
+
+void test("D-SG-10: an unreachable remote re-clones the mirror, and that clone's failure is the check's", async (t) => {
+  // arrange
+  const unreachable = new GitCommandError(
+    { kind: "network" },
+    { operation: "ls-remote", exitCode: 128 },
+  );
+  const locations = await freshLocations(t);
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
+  await writeMirrorTree(mirrorRoot, "A");
+  const git = createGitOpsFake({
+    boundary: "memory",
+    allowedRemoteUrls: ALLOWED_CLONE_CACHE_REMOTES,
+    initialOid: MIRROR_COMMIT_A,
+    resolveRemoteRefError: unreachable,
+    cloneError: new Error("the re-clone fails too"),
+  });
+
+  // act & assert
+  await assert.rejects(
+    materializeOrRefreshPluginMirror({
+      auth: publicCloneAuth(),
+      locations,
+      cloneUrl: "https://example.com/repo",
+      networkUrl: "https://example.com/repo",
+      gitOps: git.gitOps,
+    }),
+    (error: unknown) => error === unreachable,
+  );
+  assert.deepStrictEqual(
+    { clones: git.state.calls.clone.length, tree: await treeOf(mirrorRoot) },
+    { clones: 1, tree: "A\n" },
+  );
+});
+
+for (const code of ["EBUSY", "EPERM", "EACCES"]) {
+  void test(`D-SG-10 / SG-TRN-03: a mirror that cannot be moved aside with ${code} fails, is never kept, and leaves no staging`, async (t) => {
+    // arrange
+    const mirror = await warmMirror(t, { remoteHead: MIRROR_COMMIT_B });
+    const renameError = Object.assign(new Error(`${code}: rename refused`), {
+      code,
+      syscall: "rename",
+    });
+    const renameOps: RenameOps = {
+      rename: (from, to) =>
+        from === mirror.mirrorRoot ? Promise.reject(renameError) : rename(from, to),
+    };
+
+    // act & assert
+    await assert.rejects(
+      materializeOrRefreshPluginMirror(warmMirrorArgs(mirror, { renameOps })),
+      (error: unknown) => {
+        assert.ok(error instanceof PluginMirrorInUseError);
+        assert.deepStrictEqual(
+          { code: error.code, cause: error.cause },
+          { code: code === "EACCES" ? "EACCES" : "EPERM", cause: renameError },
+        );
+        return true;
+      },
+    );
+    assert.deepStrictEqual(
+      {
+        tree: await treeOf(mirror.mirrorRoot),
+        staging: await entriesOf(path.join(mirror.locations.extensionRoot, "sources-staging")),
+        backups: await entriesOf(path.dirname(mirror.backupDir)),
+      },
+      { tree: "A\n", staging: [], backups: [] },
+    );
+  });
+}
+
+void test("D-SG-10 / NFR-3: a backup beside a mirror without its .git/HEAD is restored before the check", async (t) => {
+  // arrange
+  const mirror = await warmMirror(t, { remoteHead: MIRROR_COMMIT_A });
+  await mkdir(path.dirname(mirror.backupDir), { recursive: true });
+  await rename(mirror.mirrorRoot, mirror.backupDir);
+  await mkdir(mirror.mirrorRoot, { recursive: true });
+  await writeFile(path.join(mirror.mirrorRoot, "tree.txt"), "half\n");
+
+  // act
+  const refreshed = await materializeOrRefreshPluginMirror(warmMirrorArgs(mirror));
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      refreshed,
+      clones: mirror.git.state.calls.clone,
+      tree: await treeOf(mirror.mirrorRoot),
+      backups: await entriesOf(path.dirname(mirror.backupDir)),
+    },
+    {
+      refreshed: { pluginRoot: mirror.mirrorRoot, resolvedSha: MIRROR_COMMIT_A },
+      clones: [],
+      tree: "A\n",
+      backups: [],
+    },
+  );
+});
+
+void test("D-SG-10 / NFR-3: a backup beside a valid mirror is removed and the mirror kept", async (t) => {
+  // arrange
+  const mirror = await warmMirror(t, { remoteHead: MIRROR_COMMIT_A });
+  await writeMirrorTree(mirror.backupDir, "old");
+
+  // act
+  await materializeOrRefreshPluginMirror(warmMirrorArgs(mirror));
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      tree: await treeOf(mirror.mirrorRoot),
+      backups: await entriesOf(path.dirname(mirror.backupDir)),
+    },
+    { tree: "A\n", backups: [] },
+  );
+});
+
+void test("D-SG-10: a second refresh right after a replacing one is current, checks once, and writes nothing", async (t) => {
+  // arrange
+  const mirror = await warmMirror(t, { remoteHead: MIRROR_COMMIT_B });
+  await materializeOrRefreshPluginMirror(warmMirrorArgs(mirror));
+  const checksBefore = mirror.git.state.calls.resolveRemoteRef.length;
+
+  // act
+  const second = await materializeOrRefreshPluginMirror(warmMirrorArgs(mirror));
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      second,
+      checks: mirror.git.state.calls.resolveRemoteRef.length - checksBefore,
+      clones: mirror.git.state.calls.clone.length,
+      extensionRoot: await entriesOf(mirror.locations.extensionRoot),
+    },
+    {
+      second: { pluginRoot: mirror.mirrorRoot, resolvedSha: MIRROR_COMMIT_B },
+      checks: 1,
+      clones: 1,
+      extensionRoot: ["plugin-clones", "plugin-clones-backup", "sources-staging"],
+    },
+  );
+});
+
+/** Saves a record whose plugin root is `resolvedSource` into the scope's state. */
+async function saveRecordAt(locations: ScopedLocations, resolvedSource: string): Promise<void> {
+  const state: ExtensionState = {
+    schemaVersion: 3,
+    marketplaces: {
+      mp: marketplaceRecord("mp", "project", locations.extensionRoot, {
+        legacy: pluginRecord(resolvedSource, true),
+      }),
+    },
+  };
+  await saveState(locations.extensionRoot, state);
+}
+
+void test("D-PL9-10: a mirror swap carries the packages of an installed root inside the mirror", async (t) => {
+  // arrange
+  const mirror = await warmMirror(t, { remoteHead: MIRROR_COMMIT_B });
+  await mkdir(path.join(mirror.mirrorRoot, "node_modules", "dep"), { recursive: true });
+  await writeFile(path.join(mirror.mirrorRoot, "node_modules", "dep", "index.js"), "old\n");
+  await saveRecordAt(mirror.locations, mirror.mirrorRoot);
+
+  // act
+  await materializeOrRefreshPluginMirror(warmMirrorArgs(mirror));
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      tree: await treeOf(mirror.mirrorRoot),
+      packages: await readFile(
+        path.join(mirror.mirrorRoot, "node_modules", "dep", "index.js"),
+        "utf8",
+      ),
+    },
+    { tree: "B\n", packages: "old\n" },
+  );
+});
+
+void test("D-PL9-10: a state file that cannot be read carries nothing and the swap still runs", async (t) => {
+  // arrange
+  const mirror = await warmMirror(t, { remoteHead: MIRROR_COMMIT_B });
+  await mkdir(path.join(mirror.mirrorRoot, "node_modules"), { recursive: true });
+  await writeFile(mirror.locations.stateJsonPath, "{ not json");
+
+  // act
+  await materializeOrRefreshPluginMirror(warmMirrorArgs(mirror));
+
+  // assert
+  assert.deepStrictEqual(
+    { tree: await treeOf(mirror.mirrorRoot), root: await entriesOf(mirror.mirrorRoot) },
+    { tree: "B\n", root: [".git", "tree.txt"] },
+  );
+});
+
+void test("D-18-04: a present mirror read with refresh: false keeps its HEAD and asks the remote nothing", async (t) => {
   // arrange
   const locations = await freshLocations(t);
   const { gitOps, state } = mirrorGitOps();
@@ -1365,7 +1738,6 @@ void test("D-18-04: a present mirror read with refresh: false keeps its HEAD and
     networkUrl: "https://example.com/repo",
     gitOps,
   });
-  const fetchesAfterFirst = state.fetchCalls.length;
   const clonesAfterFirst = state.cloneCalls.length;
 
   // act
@@ -1381,12 +1753,12 @@ void test("D-18-04: a present mirror read with refresh: false keeps its HEAD and
   // assert
   assert.deepStrictEqual(
     {
-      fetches: state.fetchCalls.length - fetchesAfterFirst,
+      checks: state.resolveRemoteRefCalls,
       clones: state.cloneCalls.length - clonesAfterFirst,
       second,
     },
     {
-      fetches: 0,
+      checks: [],
       clones: 0,
       second: {
         pluginRoot: await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo")),
@@ -1426,17 +1798,22 @@ void test("D-18-04 / REI-04: refresh: false answers the declared ref's last fetc
     {
       mirror,
       clones: state.cloneCalls,
-      fetches: state.fetchCalls,
+      checks: state.resolveRemoteRefCalls,
       checkouts: state.checkoutCalls,
     },
     {
       mirror: { pluginRoot: mirrorRoot, resolvedSha: releaseSha },
       clones: [],
-      fetches: [],
+      checks: [],
       checkouts: [],
     },
   );
 });
+
+/** The staging parent of every clone call, so a re-clone is checked by where it went. */
+function cloneParents(state: ReturnType<typeof createGitOps>["state"]): string[] {
+  return state.cloneCalls.map(({ dir }) => path.dirname(dir));
+}
 
 void test("D-18-04: refresh: false refreshes a declared ref the mirror never fetched, as a cache miss", async (t) => {
   // arrange
@@ -1464,11 +1841,11 @@ void test("D-18-04: refresh: false refreshes a declared ref the mirror never fet
 
   // assert
   assert.deepStrictEqual(
-    { mirror, clones: state.cloneCalls, fetches: state.fetchCalls },
+    { mirror, checks: state.resolveRemoteRefCalls, clones: cloneParents(state) },
     {
       mirror: { pluginRoot: mirrorRoot, resolvedSha: devSha },
-      clones: [],
-      fetches: [{ dir: mirrorRoot, remote: "origin", ref: "dev", auth }],
+      checks: [{ url: "https://example.com/repo", ref: "dev", auth }],
+      clones: [path.join(locations.extensionRoot, "sources-staging")],
     },
   );
 });
@@ -1501,7 +1878,7 @@ void test("GLK-08 / D-PL7-10: refresh: false answers a declared tag from the mir
       mirror,
       refReads: state.resolveRefCalls,
       clones: state.cloneCalls,
-      fetches: state.fetchCalls,
+      checks: state.resolveRemoteRefCalls,
     },
     {
       mirror: { pluginRoot: mirrorRoot, resolvedSha: tagSha },
@@ -1510,7 +1887,7 @@ void test("GLK-08 / D-PL7-10: refresh: false answers a declared tag from the mir
         { dir: mirrorRoot, ref: "refs/tags/v2.0.0" },
       ],
       clones: [],
-      fetches: [],
+      checks: [],
     },
   );
 });
@@ -1523,8 +1900,8 @@ void test("GLK-08 / D-PL7-10: refresh: false refreshes a declared ref the mirror
   const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
   await mkdir(mirrorRoot, { recursive: true });
   const { gitOps, state } = createGitOps({
-    head: MIRROR_HEAD,
-    localRefs: { "refs/heads/main": MIRROR_HEAD },
+    head: "0123456789abcdef0123456789abcdef01234567",
+    localRefs: { "refs/heads/main": "0123456789abcdef0123456789abcdef01234567" },
     remoteRefs: { "v2.0.0": tagSha },
   });
 
@@ -1541,11 +1918,11 @@ void test("GLK-08 / D-PL7-10: refresh: false refreshes a declared ref the mirror
 
   // assert
   assert.deepStrictEqual(
-    { mirror, clones: state.cloneCalls, fetches: state.fetchCalls },
+    { mirror, checks: state.resolveRemoteRefCalls, clones: cloneParents(state) },
     {
       mirror: { pluginRoot: mirrorRoot, resolvedSha: tagSha },
-      clones: [],
-      fetches: [{ dir: mirrorRoot, remote: "origin", ref: "v2.0.0", auth }],
+      checks: [{ url: "https://example.com/repo", ref: "v2.0.0", auth }],
+      clones: [path.join(locations.extensionRoot, "sources-staging")],
     },
   );
 });
@@ -1582,8 +1959,8 @@ void test("GLK-08 / D-PL7-10: refresh: false propagates a local tag read that fa
     (error: unknown) => error === readFailure,
   );
   assert.deepStrictEqual(
-    { clones: state.cloneCalls, fetches: state.fetchCalls },
-    { clones: [], fetches: [] },
+    { clones: state.cloneCalls, checks: state.resolveRemoteRefCalls },
+    { clones: [], checks: [] },
   );
 });
 
@@ -1596,15 +1973,14 @@ void test("GLK-08 / D-PL7-10: refresh: false with no declared ref and no default
   const { gitOps: baseGitOps, state } = createGitOps({
     head: MIRROR_HEAD,
     localRefs: { "refs/heads/main": MIRROR_HEAD },
-    remoteRefs: { "refs/remotes/origin/main": MIRROR_HEAD },
   });
-  // The mirror has no default-branch tracking ref until the refresh fetch writes one.
+  // The mirror has no default-branch tracking ref.
   const refReads: string[] = [];
   const gitOps: GitOps = {
     ...baseGitOps,
     resolveRef: (options) => {
       refReads.push(options.ref);
-      return state.fetchCalls.length === 0 && options.ref === "refs/remotes/origin/HEAD"
+      return options.ref === "refs/remotes/origin/HEAD"
         ? Promise.resolve(undefined)
         : baseGitOps.resolveRef(options);
     },
@@ -1622,12 +1998,12 @@ void test("GLK-08 / D-PL7-10: refresh: false with no declared ref and no default
 
   // assert
   assert.deepStrictEqual(
-    { mirror, refReads, clones: state.cloneCalls, fetches: state.fetchCalls },
+    { mirror, refReads, clones: state.cloneCalls, checks: state.resolveRemoteRefCalls },
     {
       mirror: { pluginRoot: mirrorRoot, resolvedSha: MIRROR_HEAD },
-      refReads: ["refs/remotes/origin/HEAD", "refs/remotes/origin/HEAD", "HEAD"],
+      refReads: ["refs/remotes/origin/HEAD", "HEAD", "HEAD"],
       clones: [],
-      fetches: [{ dir: mirrorRoot, remote: "origin", auth }],
+      checks: [{ url: "https://example.com/repo", auth }],
     },
   );
 });
@@ -1654,11 +2030,8 @@ void test("D-18-04: refresh: false propagates a mirror ref read that fails for a
     (error: unknown) => error === readFailure,
   );
   assert.deepStrictEqual(
-    { clones: state.cloneCalls, fetches: state.fetchCalls },
-    {
-      clones: [],
-      fetches: [],
-    },
+    { clones: state.cloneCalls, checks: state.resolveRemoteRefCalls },
+    { clones: [], checks: [] },
   );
 });
 
@@ -1742,7 +2115,7 @@ void test("MIRR-01: ref-set mirror clones singleBranch with the ref hint and tra
   assert.equal(resolvedSha, TAG_HEAD);
 });
 
-void test("PROV-03: a private mirror forwards auth through clone and refresh fetch", async (t) => {
+void test("PROV-03: a private mirror forwards auth through its clone and its freshness check", async (t) => {
   // arrange
   const locations = await freshLocations(t);
   const { gitOps, state } = mirrorGitOps();
@@ -1774,14 +2147,16 @@ void test("PROV-03: a private mirror forwards auth through clone and refresh fet
     resolvedSha: MIRROR_HEAD,
   });
   assert.equal(state.cloneCalls[0]?.auth, auth);
-  assert.equal(state.fetchCalls[0]?.auth, auth);
+  assert.equal(state.resolveRemoteRefCalls[0]?.auth, auth);
 });
 
-void test("MIRR-02: the default git surface fails locally on an invalid warm mirror", async (t) => {
+void test("MIRR-02 / D-SG-10: the default git surface re-clones a warm mirror it cannot read and a failed clone leaves the mirror", async (t) => {
   // arrange
+  const unreachableUrl = "https://127.0.0.1:9/repo";
   const locations = await freshLocations(t);
-  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(unreachableUrl));
   await mkdir(mirrorRoot, { recursive: true });
+  await writeFile(path.join(mirrorRoot, "tree.txt"), "A\n");
   let refreshError: unknown;
 
   // act
@@ -1789,20 +2164,23 @@ void test("MIRR-02: the default git surface fails locally on an invalid warm mir
     await materializeOrRefreshPluginMirror({
       auth: publicCloneAuth(),
       locations,
-      cloneUrl: "https://example.com/repo",
-      networkUrl: "https://example.com/repo",
+      cloneUrl: unreachableUrl,
+      networkUrl: unreachableUrl,
     });
   } catch (error) {
     refreshError = error;
   }
 
   // assert
-  assert.ok(refreshError instanceof Error);
-  assert.deepEqual(
-    { message: refreshError.message, name: refreshError.name },
-    { message: "Could not find HEAD.", name: "NotFoundError" },
+  assert.ok(refreshError instanceof GitCommandError, String(refreshError));
+  assert.deepStrictEqual(
+    {
+      operation: refreshError.operation,
+      tree: await treeOf(mirrorRoot),
+      staging: await entriesOf(path.join(locations.extensionRoot, "sources-staging")),
+    },
+    { operation: "clone --depth", tree: "A\n", staging: [] },
   );
-  assert.equal(await pathExists(mirrorRoot), true);
 });
 
 void test("MIRR-03: a concurrent create losing the rename race treats the winner's dir as the warm mirror (no throw)", async (t) => {
@@ -1836,7 +2214,11 @@ void test("MIRR-03: a concurrent create losing the rename race treats the winner
 
   assert.equal(pluginRoot, keyDir, "returns the winner's mirror dir");
   assert.equal(resolvedSha, MIRROR_HEAD, "still reads HEAD from the winner's tree");
-  assert.equal(base.state.fetchCalls.length, 1, "the winner's tree is refreshed in place");
+  assert.equal(
+    base.state.resolveRemoteRefCalls.length,
+    1,
+    "the winner's tree is checked against the remote",
+  );
 });
 
 void test("MIRR-01/03: a clone failure cleans staging and rethrows the original error", async (t) => {
@@ -1859,6 +2241,55 @@ void test("MIRR-01/03: a clone failure cleans staging and rethrows the original 
     () => stat(stagingDir),
     { code: "ENOENT" },
     "staging dir no longer exists after rejection (MA-9)",
+  );
+});
+
+void test("D-SG-10 / D-18-04: real git moves a warm mirror to its branch's new commit, then answers it offline and stays current", async (t) => {
+  // arrange
+  const remote = await ladderRemote(t);
+  const locations = await freshLocations(t);
+  const recorded = recordingGitProcess(await hermeticGitProcess(t));
+  const mirrorArgs = {
+    auth: publicCloneAuth(),
+    locations,
+    cloneUrl: remote.url,
+    networkUrl: remote.url,
+    ref: "dev",
+    gitOps: systemGitOps(recorded.gitProcess),
+  };
+  await materializeOrRefreshPluginMirror(mirrorArgs);
+  const repository = gitTestCheckout(new URL(remote.url).pathname);
+  await repository.run("checkout", "-q", "dev");
+  await writeFile(path.join(repository.dir, "dev3.txt"), "dev3\n");
+  const moved = await repository.commitPaths("dev3", ["dev3.txt"]);
+  const operationsBefore = recorded.requests.length;
+
+  // act
+  const refreshed = await materializeOrRefreshPluginMirror(mirrorArgs);
+  const offline = await materializeOrRefreshPluginMirror({ ...mirrorArgs, refresh: false });
+  const operationsBeforeAgain = recorded.requests.length;
+  const again = await materializeOrRefreshPluginMirror(mirrorArgs);
+
+  // assert
+  const operationsOf = (start: number, end: number) =>
+    recorded.requests.slice(start, end).map((request) => request.subcommand);
+  assert.deepStrictEqual(
+    {
+      refreshed: refreshed.resolvedSha,
+      offline: offline.resolvedSha,
+      again: again.resolvedSha,
+      dev3: await readFile(path.join(refreshed.pluginRoot, "dev3.txt"), "utf8"),
+      againOperations: operationsOf(operationsBeforeAgain, recorded.requests.length),
+      refreshOperations: operationsOf(operationsBefore, operationsBeforeAgain).includes("clone"),
+    },
+    {
+      refreshed: moved,
+      offline: moved,
+      again: moved,
+      dev3: "dev3\n",
+      againOperations: ["rev-parse", "ls-remote", "rev-parse"],
+      refreshOperations: true,
+    },
   );
 });
 

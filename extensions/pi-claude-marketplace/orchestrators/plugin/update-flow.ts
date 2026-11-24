@@ -65,6 +65,7 @@ import { networkCloneUrl } from "../../domain/clone-key.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   AgentTargetOccupiedError,
   BridgeStagingError,
@@ -75,6 +76,7 @@ import {
   cleanupFailuresFromError,
   composeErrorWithCauseChain,
   DependencyDeclarationsUnreadableError,
+  errorMessage,
   InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
   MarketplaceUpdateError,
@@ -86,6 +88,7 @@ import {
   StateLockCompromisedError,
   StateLockHeldError,
 } from "../../shared/errors.ts";
+import { createRemovalOps } from "../../shared/fs-utils.ts";
 import { classifyGitFailure } from "../../shared/git-failure-classifiers.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
@@ -94,8 +97,25 @@ import { notifyUpdateNoOpWithContext, notifyWithContext } from "../../shared/not
 import { ownValue } from "../../shared/own-key.ts";
 import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
-import { DEFAULT_CREDENTIAL_OPS, buildGitHubAuth } from "../auth-host.ts";
-import { DEFAULT_GIT_OPS, refreshGitHubClone, refreshUrlClone } from "../marketplace/shared.ts";
+import {
+  DEFAULT_CREDENTIAL_OPS,
+  NO_STORED_CREDENTIAL_CAUSE,
+  buildAuthForHost,
+  buildGitHubAuth,
+  hostFromCloneUrl,
+} from "../auth-host.ts";
+import {
+  DEFAULT_RENAME_OPS,
+  installedRootsInside,
+  KEEP_MARKETPLACE_ON_FAILURE_VARIABLE,
+  keepMarketplaceOnFailure,
+  MARKETPLACE_MANIFEST_MARKER,
+  refreshCloneBySwap,
+  swapCloneUrl,
+  type CloneSwapResult,
+  type RenameOps,
+} from "../marketplace/clone-swap.ts";
+import { DEFAULT_GIT_OPS, lacksStoredCredential } from "../marketplace/shared.ts";
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
 
 import { collectPluginClonesLocked } from "./clone-gc.ts";
@@ -126,6 +146,7 @@ import type { ActiveMcpImplementation } from "../../domain/mcp-implementation.ts
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
 import type { GitHubSource, ParsedSource, UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { RemoteTag } from "../../platform/git.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -133,7 +154,8 @@ import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
-import type { AuthAttemptResult } from "../auth-host.ts";
+import type { AuthAttemptResult, CredentialOps } from "../auth-host.ts";
+import type { GitAuthBundle, GitOps } from "../marketplace/shared.ts";
 import type {
   PluginConvergeFn,
   PluginConvergeTarget,
@@ -211,19 +233,109 @@ async function refreshFramed(
 }
 
 /**
+ * D-SG-15: the debug-log line of a PUP-2 sync that kept the marketplace
+ * checkout, as `marketplace update` keeps it. The plugin update then reads the
+ * kept catalog, and the user-facing note is not worded yet, so only the debug
+ * log says why.
+ */
+function logKeptSync(mpName: string, swapped: CloneSwapResult): void {
+  if (swapped.kind === "kept-stale") {
+    hookDebugLog(
+      `plugin update kept marketplace ${mpName}: remote unreachable, keeping existing clone (${KEEP_MARKETPLACE_ON_FAILURE_VARIABLE}): ${errorMessage(swapped.cause)}`,
+      "git",
+    );
+  } else if (swapped.kind === "kept-in-use") {
+    hookDebugLog(
+      `plugin update kept marketplace ${mpName}: checkout in use, keeping existing clone: ${errorMessage(swapped.cause)}`,
+      "git",
+    );
+  }
+}
+
+/**
+ * AUTH-02 / GAUTH-03: the auth bundle a PUP-2 sync asks and clones with, the
+ * one `marketplace update` builds: github.com or the GitHub override host for
+ * a github source (GHB-02), the clone URL's host for a url source, with the
+ * run's `authMemo` (D-79-02).
+ */
+function syncAuthFor(
+  source: GitHubSource | UrlSource,
+  opts: UpdatePluginsOptions,
+  credentialOps: CredentialOps,
+): GitAuthBundle {
+  const authArgs = {
+    credentialOps,
+    ctx: opts.ctx,
+    run: opts.run,
+    ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+    ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
+  };
+  return source.kind === "github"
+    ? buildGitHubAuth(authArgs)
+    : buildAuthForHost({ ...authArgs, host: hostFromCloneUrl(source.url, "url") });
+}
+
+/**
+ * PUP-2 / D-SG-10 / D-SG-15: refresh one github or url marketplace checkout by
+ * re-clone and swap, as `marketplace update` does. GAUTH-04: a url source's
+ * auth failure that a stored credential could answer gains the
+ * `NO_STORED_CREDENTIAL_CAUSE` line as the chain's tail.
+ */
+async function syncMarketplaceBySwap(args: {
+  readonly source: GitHubSource | UrlSource;
+  readonly mpName: string;
+  readonly locations: ScopedLocations;
+  readonly marketplaces: ExtensionState["marketplaces"];
+  readonly gitOps: GitOps;
+  readonly auth: GitAuthBundle;
+  readonly keepOnUnreachable: boolean;
+  readonly renameOps: RenameOps;
+}): Promise<void> {
+  const { source, mpName, locations, gitOps, auth } = args;
+  const liveDir = await locations.sourceCloneDir(mpName);
+  try {
+    const swapped = await refreshCloneBySwap({
+      locations,
+      liveDir,
+      backupDir: await locations.sourceBackupDir(mpName),
+      url: await swapCloneUrl(liveDir, source, gitOps),
+      ...(source.ref !== undefined && { ref: source.ref }),
+      gitOps,
+      auth,
+      liveMarker: MARKETPLACE_MANIFEST_MARKER,
+      keepOnUnreachable: args.keepOnUnreachable,
+      ownershipMarker: true,
+      carryOver: installedRootsInside(liveDir, args.marketplaces),
+      removalOps: createRemovalOps(),
+      renameOps: args.renameOps,
+    });
+    logKeptSync(mpName, swapped);
+  } catch (err) {
+    if (source.kind === "url" && lacksStoredCredential(err, auth) && err.cause === undefined) {
+      err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(auth.host));
+    }
+
+    throw err;
+  }
+}
+
+/**
  * PUP-2 syncCloneOnce memoization -- one refresh per (scope, marketplace)
  * pair. Path-source marketplaces are noops (NFR-5: no network for path
- * sources); GitHub- and url-source marketplaces refresh via gitOps.fetch +
- * forceUpdateRef + checkout (the D-14 sequence), as `marketplace update`
- * does. Throws on git-side failures; a git host's HTTP answer is framed as
- * `marketplace update` frames it (`refreshFramed`).
+ * sources); GitHub- and url-source marketplaces refresh by D-SG-10's
+ * freshness check, re-clone, and swap, as `marketplace update` does
+ * (`syncMarketplaceBySwap`). D-SG-15: with
+ * `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE` true, read once per run, a
+ * valid checkout whose remote cannot be reached is kept, and so is one that
+ * cannot be moved aside; the update then reads the kept catalog, and a
+ * debug-log line says why. Throws on git-side failures; a git host's HTTP
+ * answer is framed as `marketplace update` frames it (`refreshFramed`).
  *
- * AUTH-02: the fetch carries the same host-keyed auth bundle as `marketplace
- * update` (github.com or the GitHub override host for GitHub sources, the
- * clone URL's host for url sources), plus the run's `authMemo`, so a private
- * marketplace reaches the credential helper and, on a miss, the Device Flow.
- * The GitHub bundle is built inside the github arm, so a path-only run never
- * reads PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL (GHB-02). `updatePluginsWith`
+ * AUTH-02: the check and the clone carry the same host-keyed auth bundle as
+ * `marketplace update`, plus the run's `authMemo`, so a private marketplace
+ * reaches the credential helper and, on a miss, the Device Flow. The bundle
+ * is built inside the git arms, so a path-only run never reads
+ * PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL (GHB-02). `updatePluginsWith`
  * allocates the `authMemo` when the caller supplies none and passes it here
  * (D-79-02), so that flow runs at most once per host across the marketplace
  * syncs and the plugin clones.
@@ -233,6 +345,8 @@ function makeSyncCloneOnce(
 ): (scope: Scope, mpName: string, locations: ScopedLocations) => Promise<void> {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
   const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
+  const keepOnUnreachable = keepMarketplaceOnFailure(opts.environment);
+  const renameOps = opts.renameOps ?? DEFAULT_RENAME_OPS;
   const synced = new Set<string>();
   return async (scope, mpName, locations) => {
     const key = `${scope}/${mpName}`;
@@ -249,30 +363,18 @@ function makeSyncCloneOnce(
     }
 
     const source = mp.source as ParsedSource;
-    if (source.kind === "github") {
-      const cloneDir = await locations.sourceCloneDir(mpName);
-      const auth = buildGitHubAuth({
-        credentialOps,
-        ctx: opts.ctx,
-        run: opts.run,
-        ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
-        ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
-      });
+    if (source.kind === "github" || source.kind === "url") {
+      const auth = syncAuthFor(source, opts, credentialOps);
       await refreshFramed(locations, source, () =>
-        refreshGitHubClone(cloneDir, source.ref, gitOps, undefined, auth),
-      );
-    } else if (source.kind === "url") {
-      const cloneDir = await locations.sourceCloneDir(mpName);
-      await refreshFramed(locations, source, () =>
-        refreshUrlClone({
-          cloneDir,
+        syncMarketplaceBySwap({
           source,
+          mpName,
+          locations,
+          marketplaces: state.marketplaces,
           gitOps,
-          ctx: opts.ctx,
-          run: opts.run,
-          credentialOps,
-          ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
-          ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
+          auth,
+          keepOnUnreachable,
+          renameOps,
         }),
       );
     }

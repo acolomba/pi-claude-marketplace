@@ -53,8 +53,8 @@ Feature: Plugin update
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id   | name | status | reasons       | cause chain                                             | cause truncated | leaks | rollback partial | scope   |
-      | gits             | project           | gits@gits | gits | failed | network error | Empty response from git server.                         | false           |       |                  | project |
+      | marketplace name | marketplace scope | id        | name | status | reasons       | cause chain                                 | cause truncated | leaks | rollback partial | scope   |
+      | gits             | project           | gits@gits | gits | failed | network error | git ls-remote failed: failed, exit code 128 | false           |       |                  | project |
 
   Scenario: An invalid cloned manifest does not suggest retrying
     Given the marketplace "broken" is published as a url source
