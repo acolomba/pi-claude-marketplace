@@ -29,13 +29,13 @@
 
 ### Transport (SG-TRN)
 
-- [ ] **SG-TRN-01**: Every operation `platform/git.ts` performs today (clone, fetch, checkout, ref and remote-ref resolution, tag listing and peeling, ref update, current branch, remotes) runs on system git behind the existing `GitOps` seam, and the custom HTTP redirect client and the isomorphic-git auth callbacks are gone.
-- [ ] **SG-TRN-02**: A git clone uses the upstream shape: `--depth 1`, `--branch <ref>` when a ref is given, and a SHA pin through `fetch --depth 1 origin <sha>`, falling back to `--unshallow`, then checkout, then a check that `HEAD` equals the pin. A ref that starts with `-` or a malformed SHA is refused before git runs.
-- [ ] **SG-TRN-03**: A marketplace update follows the update model chosen per discuss (Q9: keep the D-14 fetch-and-checkout refresh, or upstream's `ls-remote` freshness check then re-clone into staging and swap), stays atomic (NFR-1) and retry-safe (NFR-3), and follows a moved default branch and a moved tag.
-- [ ] **SG-TRN-04**: Version-range resolution that reads tags (TAGS-01, D-03-03) keeps working with the clone depth chosen per discuss (Q10), with NFR-5 amended if a network tag read is chosen.
-- [ ] **SG-TRN-05**: A git clone or fetch times out after 120 s by default, and `CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS` changes that limit as it does upstream (Q15).
-- [ ] **SG-TRN-06**: When the remote is unreachable during a marketplace update and `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE` is set, the existing checkout is kept as upstream keeps it.
-- [ ] **SG-TRN-07**: `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` (D-MF-01) keeps, changes, or retires its behavior per discuss (Q8), and the harness reaches its GitHub stand-in either way.
+- [x] **SG-TRN-01**: Every operation `platform/git.ts` performs today (clone, fetch, checkout, ref and remote-ref resolution, tag listing and peeling, ref update, current branch, remotes) runs on system git behind the existing `GitOps` seam, and the custom HTTP redirect client and the isomorphic-git auth callbacks are gone.
+- [x] **SG-TRN-02**: A git clone uses the upstream shape: `--depth 1`, `--branch <ref>` when a ref is given, and a SHA pin through `fetch --depth 1 origin <sha>`, falling back to `--unshallow`, then checkout, then a check that `HEAD` equals the pin. A ref that starts with `-` or a malformed SHA is refused before git runs.
+- [x] **SG-TRN-03**: A marketplace update follows the update model chosen per discuss (Q9: keep the D-14 fetch-and-checkout refresh, or upstream's `ls-remote` freshness check then re-clone into staging and swap), stays atomic (NFR-1) and retry-safe (NFR-3), and follows a moved default branch and a moved tag.
+- [x] **SG-TRN-04**: Version-range resolution that reads tags (TAGS-01, D-03-03) keeps working with the clone depth chosen per discuss (Q10), with NFR-5 amended if a network tag read is chosen.
+- [x] **SG-TRN-05**: A git clone or fetch times out after 120 s by default, and `CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS` changes that limit as it does upstream (Q15).
+- [x] **SG-TRN-06**: When the remote is unreachable during a marketplace update and `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE` is set, the existing checkout is kept as upstream keeps it.
+- [x] **SG-TRN-07**: `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` (D-MF-01) keeps, changes, or retires its behavior per discuss (Q8), and the harness reaches its GitHub stand-in either way.
 
 ### SSH and transport selection (SG-SSH)
 
@@ -59,7 +59,7 @@
 
 ### Migration (SG-MIG)
 
-- [ ] **SG-MIG-01**: A clone that isomorphic-git made before the upgrade keeps working: its `core.symlinks`, `core.filemode`, and `core.ignorecase` settings are corrected and its checkout refreshed, or it is re-cloned, per discuss (Q5), with no `/reload` failure and no manual step.
+- [x] **SG-MIG-01**: A clone that isomorphic-git made before the upgrade keeps working: its `core.symlinks`, `core.filemode`, and `core.ignorecase` settings are corrected and its checkout refreshed, or it is re-cloned, per discuss (Q5), with no `/reload` failure and no manual step.
 
 ### Submodules (SG-SUB)
 
@@ -108,14 +108,14 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SG-PRC-04 | Phase 2 | Complete |
 | SG-PRC-05 | Phase 2 | Complete |
 | SG-PRC-06 | Phase 2 | Complete |
-| SG-TRN-01 | Phase 3 | Pending |
-| SG-TRN-02 | Phase 3 | Pending |
-| SG-TRN-03 | Phase 3 | Pending |
-| SG-TRN-04 | Phase 3 | Pending |
-| SG-TRN-05 | Phase 3 | Pending |
-| SG-TRN-06 | Phase 3 | Pending |
-| SG-TRN-07 | Phase 3 | Pending |
-| SG-MIG-01 | Phase 3 | Pending |
+| SG-TRN-01 | Phase 3 | Complete |
+| SG-TRN-02 | Phase 3 | Complete |
+| SG-TRN-03 | Phase 3 | Complete |
+| SG-TRN-04 | Phase 3 | Complete |
+| SG-TRN-05 | Phase 3 | Complete |
+| SG-TRN-06 | Phase 3 | Complete |
+| SG-TRN-07 | Phase 3 | Complete |
+| SG-MIG-01 | Phase 3 | Complete |
 | SG-SSH-01 | Phase 4 | Pending |
 | SG-SSH-02 | Phase 4 | Pending |
 | SG-SSH-03 | Phase 4 | Pending |

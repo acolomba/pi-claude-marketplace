@@ -102,7 +102,7 @@ as ARCHITECTURE.md suggests, or Q2 answered early.
 
 - [x] **Phase 1: Harness on System Git** - The test suites build fixtures and run git with the system binary under a hermetic environment, and the cucumber stand-ins serve system git over HTTPS and SSH (completed 2026-11-23)
 - [x] **Phase 2: Git Process Seam and Typed Failures** - Every git process starts from one hardened module that cannot prompt, hang, or run repository code, a git failure arrives as a typed error with a kind, and a missing git gets a clear message (completed 2026-11-23)
-- [ ] **Phase 3: System Git Transport and Clone Shape** - Marketplaces and git-source plugins clone, fetch, and update with system git in Claude Code's shape, and clones made before the upgrade keep working
+- [x] **Phase 3: System Git Transport and Clone Shape** - Marketplaces and git-source plugins clone, fetch, and update with system git in Claude Code's shape, and clones made before the upgrade keep working (completed 2026-11-24)
 - [ ] **Phase 4: SSH Sources and Transport Selection** - A user adds a marketplace or installs a plugin from an SSH URL, and `owner/repo` sources choose SSH or HTTPS as Claude Code does
 - [ ] **Phase 5: Credential Surface** - Git authenticates only through what the machine holds, Device Flow is removed or kept as discuss decides, and tokens stored through it keep working
 - [ ] **Phase 6: Failure-Message Parity** - Clone and fetch failures report Claude Code's message for each failure class, and no output shows a credential
@@ -272,7 +272,7 @@ Plans:
   3. `marketplace update` follows a moved default branch and a moved tag under the model discuss chose (Q9); an update that fails or is interrupted leaves the previous checkout usable, and the next run succeeds; with the remote unreachable and `CLAUDE_CODE_PLUGIN_KEEP_MARKETPLACE_ON_FAILURE` set, the existing checkout is kept as upstream keeps it; and version-range resolution still finds the right tag at the clone depth discuss chose (Q10); cucumber scenarios pin each (SG-TRN-03, SG-TRN-04, SG-TRN-06).
   4. A clone or fetch that runs past 120 s, or past the limit that `CLAUDE_CODE_PLUGIN_GIT_TIMEOUT_MS` sets, fails as a timeout and leaves the scope safe to retry; `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` keeps, changes, or retires its behavior as discuss chose (Q8), and the cucumber harness still reaches its GitHub stand-in (SG-TRN-05, SG-TRN-07).
   5. A user who upgrades with marketplace and plugin clones that `isomorphic-git` made needs no manual step: the next `/reload` succeeds, and after the next operation on such a clone it has real symlinks and a correct checkout (corrected settings or a re-clone, per Q5); a cucumber scenario that starts from a clone with `isomorphic-git`'s settings pins it (SG-MIG-01).
-**Plans**: 17/17 plans executed in 9 waves
+**Plans**: 17/17 plans complete in 9 waves
 
 Plans:
 **Wave 1**
@@ -346,7 +346,7 @@ Plans:
 **Requirements**: SG-ERR-01, SG-ERR-02
 **Open questions**: Q4 (which of upstream's nine marketplace message classes and which plugin-clone wording to copy exactly, and whether the telemetry buckets matter; IL-4 forbids telemetry).
 **Research flag**: None (the message table is in FEATURES.md E-SG-10).
-**Notes**: The wording comes after Phase 4 because it names transports and remedies that exist only from then, and after Phase 5 because the auth remedies depend on Q2. The set includes `git is not installed ... xcode-select --install`, `Command 'git' not found or is in an unsafe location`, and the dubious-ownership message. The closed D-PL7-01 reason set is mapped from the typed failure kind of Phase 2. Messages are English only (IL-1) and go through `notify()` (IL-2).
+**Notes**: The wording comes after Phase 4 because it names transports and remedies that exist only from then, and after Phase 5 because the auth remedies depend on Q2. The set includes `git is not installed ... xcode-select --install`, `Command 'git' not found or is in an unsafe location`, and the dubious-ownership message. The closed D-PL7-01 reason set is mapped from the typed failure kind of Phase 2. Messages are English only (IL-1) and go through `notify()` (IL-2). Carried from Phase 3 (review WR-02, maintainer decision 2026-11-24): a bare `returned error: 401` or `403` line with no `Authentication failed for` line now reads `https-auth` / `no-credential`, so a 403 after a refused stored credential no longer reads `rejected`; compare this with Claude Code's wording here and keep or change it.
 **Success Criteria** (what must be TRUE):
   1. For each failure class that discuss kept (Q4), such as auth, SSH auth, not found, network, timeout, ref missing, both transports failed, and git missing, `marketplace add`, `marketplace update`, and a git-source plugin install report Claude Code's message, adapted only where Pi has no equivalent; a cucumber scenario pins each class (SG-ERR-01).
   2. The same failure gives the same reason wherever it is reported (the command's own notice, the `apply` and `import` cascades, and the background autoupdate pass), because each reason comes from the typed failure kind (SG-ERR-01).
@@ -387,7 +387,7 @@ Plans:
 | --- | --- | --- | --- |
 | 1. Harness on System Git | 8/8 | Complete    | 2026-11-23 |
 | 2. Git Process Seam and Typed Failures | 8/8 | Complete    | 2026-11-23 |
-| 3. System Git Transport and Clone Shape | 17/17 | In Progress | - |
+| 3. System Git Transport and Clone Shape | 17/17 | Complete    | 2026-11-24 |
 | 4. SSH Sources and Transport Selection | 0/TBD | Not started | - |
 | 5. Credential Surface | 0/TBD | Not started | - |
 | 6. Failure-Message Parity | 0/TBD | Not started | - |

@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: system-git
 milestone_name: System Git
-current_phase: 3
-current_phase_name: System Git Transport and Clone Shape
-status: executing
-stopped_at: Phase 2 complete, ready to plan Phase 3
-last_updated: "2026-11-24T02:22:08.285Z"
+current_phase: 4
+current_phase_name: SSH Sources and Transport Selection
+status: ready_to_plan
+stopped_at: Phase 3 complete, ready to plan Phase 4
+last_updated: "2026-11-24T16:02:37.890Z"
 last_activity: 2026-11-24
-last_activity_desc: Phase 3 execution started
-state_head: 9eb324b7897b83bd16ed992bcb53f5c01426f481
+last_activity_desc: Phase 3 complete, transitioned to Phase 4
+state_head: c020a4e079e67bcff124e9bb8388d953517d824d
 progress:
   total_phases: 8
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 33
-  completed_plans: 16
-  percent: 25
+  completed_plans: 33
+  percent: 38
 ---
 
 # Project State
@@ -27,16 +27,16 @@ See: `.planning/PROJECT.md` (updated 2026-11-23 after Phase 1)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 3 — System Git Transport and Clone Shape
+**Current focus:** Phase 4 — SSH Sources and Transport Selection
 
 ## Current Position
 
-Phase: 3 (System Git Transport and Clone Shape) — EXECUTING
-Plan: 1 of 17
-Status: Executing Phase 3
-Last activity: 2026-11-24 — Phase 3 execution started
+Phase: 4 — SSH Sources and Transport Selection
+Plan: —
+Status: Ready to plan
+Last activity: 2026-11-24 — Phase 3 complete, transitioned to Phase 4
 
-Progress: [███░░░░░░░] 25%
+Progress: [████░░░░░░] 38%
 
 
 ### system-git Phase 1 (Harness on System Git): records for Phase 3
@@ -1310,7 +1310,7 @@ Full log: PROJECT.md Key Decisions (D-MB-01..29, D-P3, D-P5 rows pending the use
 ## Session Continuity
 
 Last session: 2026-11-23
-Stopped at: Phase 2 complete, ready to verify Phase 3
+Stopped at: Phase 3 complete, ready to verify Phase 4
 Resume file: None
 
 ### Phase 2 completion-helper notes

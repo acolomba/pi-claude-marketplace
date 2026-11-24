@@ -1,7 +1,7 @@
 ---
 phase: 03-system-git-transport-and-clone-shape
 verified: 2026-11-24T18:00:00Z
-status: human_needed
+status: passed
 score: 5/5 must-haves verified
 covered_files:
   - .planning/phases/03-system-git-transport-and-clone-shape/03-01-PLAN.md
@@ -65,7 +65,7 @@ human_verification:
 
 **Phase Goal:** Marketplaces and git-source plugins clone, fetch, refresh, and update on system git in Claude Code's shape, the custom HTTP client and the `isomorphic-git` auth callbacks are gone, and a clone that `isomorphic-git` made before the upgrade keeps working with no manual step.
 **Verified:** 2026-11-24T18:00:00Z
-**Status:** human_needed
+**Status:** passed
 **Re-verification:** No, initial verification
 **HEAD:** 9a29f1e on `features/system-git`, working tree clean
 
@@ -173,3 +173,15 @@ Notes for the caller, none of which block:
 
 _Verified: 2026-11-24T18:00:00Z_
 _Verifier: Claude (gsd-verifier)_
+
+## Human Verification Outcome (2026-11-24)
+
+1. **WR-02:** the maintainer accepted the `no-credential` reading of a bare
+   401/403 for this phase, with the instruction to revisit it in Phase 6
+   (failure-message parity) against Claude Code's wording. ROADMAP Phase 6
+   carries the item.
+2. **macOS and Windows manual check:** deferred to the pull request through
+   `.planning/WINDOWS.md` (#120 to #125 and this phase's entries), as the
+   milestone rule for platform checks requires.
+
+With both items settled, the status is `passed`.
